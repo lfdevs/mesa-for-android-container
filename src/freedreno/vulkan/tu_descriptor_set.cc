@@ -491,7 +491,6 @@ tu_pipeline_layout_init(struct tu_pipeline_layout *layout)
    unsigned dynamic_offset_size = 0;
 
    for (uint32_t set = 0; set < layout->num_sets; set++) {
-      assert(set < MAX_SETS);
       layout->set[set].dynamic_offset_start = dynamic_offset_size;
 
       if (layout->set[set].layout)
@@ -548,7 +547,7 @@ tu_CreatePipelineLayout(VkDevice _device,
       TU_FROM_HANDLE(tu_descriptor_set_layout, set_layout,
                      pCreateInfo->pSetLayouts[set]);
 
-      assert(set < MAX_SETS);
+      assert(set < device->physical_device->usable_sets);
       layout->set[set].layout = set_layout;
       if (set_layout)
          vk_descriptor_set_layout_ref(&set_layout->vk);
@@ -1431,7 +1430,7 @@ tu_CreateDescriptorUpdateTemplate(
       /* descriptorSetLayout should be ignored for push descriptors
        * and instead it refers to pipelineLayout and set.
        */
-      assert(pCreateInfo->set < MAX_SETS);
+      assert(pCreateInfo->set < device->physical_device->usable_sets);
       set_layout = pipeline_layout->set[pCreateInfo->set].layout;
    } else {
       TU_FROM_HANDLE(tu_descriptor_set_layout, _set_layout,

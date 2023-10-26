@@ -56,6 +56,8 @@ typedef uint32_t xcb_window_t;
 #include <vulkan/vk_icd.h>
 
 #include "lvp_entrypoints.h"
+#include "vk_buffer.h"
+#include "vk_buffer_view.h"
 #include "vk_device.h"
 #include "vk_instance.h"
 #include "vk_image.h"
@@ -71,8 +73,10 @@ typedef uint32_t xcb_window_t;
 #include "vk_graphics_state.h"
 #include "vk_pipeline_layout.h"
 #include "vk_queue.h"
+#include "vk_sampler.h"
 #include "vk_sync.h"
 #include "vk_sync_timeline.h"
+#include "vk_ycbcr_conversion.h"
 #include "lp_jit.h"
 
 #include "wsi_common.h"
@@ -146,8 +150,6 @@ struct lvp_physical_device {
 
    struct vk_sync_timeline_type sync_timeline_type;
    const struct vk_sync_type *sync_types[3];
-
-   VkPhysicalDeviceLimits device_limits;
 
    struct wsi_device                       wsi_device;
 };
@@ -249,13 +251,21 @@ vk_sync_as_lvp_pipe_sync(struct vk_sync *sync)
    return container_of(sync, struct lvp_pipe_sync, base);
 }
 
+struct lvp_image_plane {
+   struct pipe_resource *bo;
+   struct pipe_memory_allocation *pmem;
+   VkDeviceSize plane_offset;
+   VkDeviceSize memory_offset;
+   VkDeviceSize size;
+};
+
 struct lvp_image {
    struct vk_image vk;
    VkDeviceSize size;
    uint32_t alignment;
-   struct pipe_memory_allocation *pmem;
-   unsigned memory_offset;
-   struct pipe_resource *bo;
+   bool disjoint;
+   uint8_t plane_count;
+   struct lvp_image_plane planes[3];
 };
 
 struct lvp_image_view {
@@ -264,18 +274,21 @@ struct lvp_image_view {
 
    enum pipe_format pformat;
 
-   struct pipe_sampler_view *sv;
-   struct pipe_image_view iv;
-
    struct pipe_surface *surface; /* have we created a pipe surface for this? */
    struct lvp_image_view *multisample; //VK_EXT_multisampled_render_to_single_sampled
 
-   struct lp_texture_handle *texture_handle;
-   struct lp_texture_handle *image_handle;
+   uint8_t plane_count;
+   struct {
+      unsigned image_plane;
+      struct pipe_sampler_view *sv;
+      struct pipe_image_view iv;
+      struct lp_texture_handle *texture_handle;
+      struct lp_texture_handle *image_handle;
+   } planes[3];
 };
 
 struct lvp_sampler {
-   struct vk_object_base base;
+   struct vk_sampler vk;
    struct lp_descriptor desc;
 
    struct lp_texture_handle *texture_handle;
@@ -285,6 +298,7 @@ struct lvp_descriptor_set_binding_layout {
    uint32_t descriptor_index;
    /* Number of array elements in this binding */
    VkDescriptorType type;
+   uint32_t stride; /* used for planar samplers */
    uint32_t array_size;
    bool valid;
 
@@ -294,7 +308,7 @@ struct lvp_descriptor_set_binding_layout {
    uint32_t uniform_block_size;
 
    /* Immutable samplers (or NULL if no immutable samplers) */
-   struct lp_descriptor **immutable_samplers;
+   struct lvp_sampler **immutable_samplers;
 };
 
 struct lvp_descriptor_set_layout {
@@ -454,13 +468,34 @@ struct lvp_shader {
    struct blob blob; //preserved for GetShaderBinaryDataEXT
 };
 
+enum lvp_pipeline_type {
+   LVP_PIPELINE_GRAPHICS,
+   LVP_PIPELINE_COMPUTE,
+   LVP_PIPELINE_EXEC_GRAPH,
+   LVP_PIPELINE_TYPE_COUNT,
+};
+
+static inline enum lvp_pipeline_type
+lvp_pipeline_type_from_bind_point(VkPipelineBindPoint bind_point)
+{
+   switch (bind_point) {
+   case VK_PIPELINE_BIND_POINT_GRAPHICS: return LVP_PIPELINE_GRAPHICS;
+   case VK_PIPELINE_BIND_POINT_COMPUTE: return LVP_PIPELINE_COMPUTE;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+   case VK_PIPELINE_BIND_POINT_EXECUTION_GRAPH_AMDX: return LVP_PIPELINE_EXEC_GRAPH;
+#endif
+   default: unreachable("Unsupported VkPipelineBindPoint");
+   }
+}
+
 struct lvp_pipeline {
    struct vk_object_base base;
    struct lvp_device *                          device;
    struct lvp_pipeline_layout *                 layout;
 
+   enum lvp_pipeline_type type;
+
    void *state_data;
-   bool is_compute_pipeline;
    bool force_min_sample;
    struct lvp_shader shaders[LVP_SHADER_STAGES];
    gl_shader_stage last_vertex;
@@ -473,10 +508,36 @@ struct lvp_pipeline {
    bool compiled;
    bool used;
 
+   struct {
+      const char *name;
+      const char *next_name;
+      uint32_t index;
+      uint32_t scratch_size;
+   } exec_graph;
+
    unsigned num_groups;
    unsigned num_groups_total;
    VkPipeline groups[0];
 };
+
+/* Minimum requirement by the spec. */
+#define LVP_MAX_EXEC_GRAPH_PAYLOADS 256
+
+struct lvp_exec_graph_shader_output {
+   uint32_t payload_count;
+   uint32_t node_index;
+};
+
+struct lvp_exec_graph_internal_data {
+   /* inputs */
+   void *payload_in;
+   void *payloads;
+   /* outputs */
+   struct lvp_exec_graph_shader_output outputs[LVP_MAX_EXEC_GRAPH_PAYLOADS];
+};
+
+bool
+lvp_lower_exec_graph(struct lvp_pipeline *pipeline, nir_shader *nir);
 
 void
 lvp_pipeline_shaders_compile(struct lvp_pipeline *pipeline, bool locked);
@@ -487,11 +548,7 @@ struct lvp_event {
 };
 
 struct lvp_buffer {
-   struct vk_object_base base;
-
-   VkDeviceSize                                 size;
-
-   VkBufferUsageFlags                           usage;
+   struct vk_buffer vk;
 
    struct pipe_memory_allocation *pmem;
    struct pipe_resource *bo;
@@ -500,14 +557,10 @@ struct lvp_buffer {
 };
 
 struct lvp_buffer_view {
-   struct vk_object_base base;
-   VkFormat format;
+   struct vk_buffer_view vk;
    enum pipe_format pformat;
    struct pipe_sampler_view *sv;
    struct pipe_image_view iv;
-   struct lvp_buffer *buffer;
-   uint32_t offset;
-   uint64_t range;
 
    struct lp_texture_handle *texture_handle;
    struct lp_texture_handle *image_handle;
@@ -567,9 +620,9 @@ VK_DEFINE_HANDLE_CASTS(lvp_physical_device, vk.base, VkPhysicalDevice,
                        VK_OBJECT_TYPE_PHYSICAL_DEVICE)
 VK_DEFINE_HANDLE_CASTS(lvp_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_buffer, base, VkBuffer,
+VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_buffer, vk.base, VkBuffer,
                                VK_OBJECT_TYPE_BUFFER)
-VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_buffer_view, base, VkBufferView,
+VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_buffer_view, vk.base, VkBufferView,
                                VK_OBJECT_TYPE_BUFFER_VIEW)
 VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_descriptor_pool, base, VkDescriptorPool,
                                VK_OBJECT_TYPE_DESCRIPTOR_POOL)
@@ -595,7 +648,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_pipeline_layout, vk.base, VkPipelineLayout,
                                VK_OBJECT_TYPE_PIPELINE_LAYOUT)
 VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_query_pool, base, VkQueryPool,
                                VK_OBJECT_TYPE_QUERY_POOL)
-VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_sampler, base, VkSampler,
+VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_sampler, vk.base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
 VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_indirect_command_layout, base, VkIndirectCommandsLayoutNV,
                                VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV)
@@ -608,7 +661,7 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
 size_t
 lvp_get_rendering_state_size(void);
 struct lvp_image *lvp_swapchain_get_image(VkSwapchainKHR swapchain,
-					  uint32_t index);
+                                          uint32_t index);
 
 static inline enum pipe_format
 lvp_vk_format_to_pipe_format(VkFormat format)
@@ -623,28 +676,33 @@ lvp_vk_format_to_pipe_format(VkFormat format)
        format == VK_FORMAT_R64G64B64_SFLOAT ||
        format == VK_FORMAT_A2R10G10B10_SINT_PACK32 ||
        format == VK_FORMAT_A2B10G10R10_SINT_PACK32 ||
-       format == VK_FORMAT_G8B8G8R8_422_UNORM ||
-       format == VK_FORMAT_B8G8R8G8_422_UNORM ||
-       format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM ||
-       format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
-       format == VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM ||
-       format == VK_FORMAT_G8_B8R8_2PLANE_422_UNORM ||
-       format == VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM ||
-       format == VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM ||
-       format == VK_FORMAT_G16_B16R16_2PLANE_420_UNORM ||
-       format == VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM ||
-       format == VK_FORMAT_G16_B16R16_2PLANE_422_UNORM ||
-       format == VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM ||
-       format == VK_FORMAT_D16_UNORM_S8_UINT ||
-       format == VK_FORMAT_R10X6G10X6_UNORM_2PACK16 ||
-       format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16)
+       format == VK_FORMAT_D16_UNORM_S8_UINT)
       return PIPE_FORMAT_NONE;
 
    return vk_format_to_pipe_format(format);
 }
 
+static inline uint8_t
+lvp_image_aspects_to_plane(ASSERTED const struct lvp_image *image,
+                           VkImageAspectFlags aspectMask)
+{
+   /* Verify that the aspects are actually in the image */
+   assert(!(aspectMask & ~image->vk.aspects));
+
+   /* Must only be one aspect unless it's depth/stencil */
+   assert(aspectMask == (VK_IMAGE_ASPECT_DEPTH_BIT |
+                         VK_IMAGE_ASPECT_STENCIL_BIT) ||
+          util_bitcount(aspectMask) == 1);
+
+   switch(aspectMask) {
+   case VK_IMAGE_ASPECT_PLANE_1_BIT: return 1;
+   case VK_IMAGE_ASPECT_PLANE_2_BIT: return 2;
+   default: return 0;
+   }
+}
+
 void
-lvp_pipeline_destroy(struct lvp_device *device, struct lvp_pipeline *pipeline);
+lvp_pipeline_destroy(struct lvp_device *device, struct lvp_pipeline *pipeline, bool locked);
 
 void
 queue_thread_noop(void *data, void *gdata, int thread_index);

@@ -242,5 +242,9 @@ EGL_FUNCTIONS = (
     # EGL_KHR_partial_update
     _eglFunc("eglSetDamageRegionKHR",                "display"),
 
+    # EGL_MESA_gl_interop
+    _eglFunc("eglGLInteropQueryDeviceInfoMESA",      "display"),
+    _eglFunc("eglGLInteropExportObjectMESA",         "display"),
+    _eglFunc("eglGLInteropFlushObjectsMESA",         "display"),
 )
 

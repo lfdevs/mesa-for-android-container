@@ -979,6 +979,9 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
 
    if (psc->rendererQuery)
       __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
+
+   if (psc->interop)
+      __glXEnableDirectExtension(&psc->base, "GLX_MESA_gl_interop");
 }
 
 static char *

@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -54,7 +54,7 @@ vmw_svga_winsys_surface_init(struct svga_winsys_screen *sws,
    if (data)
       goto out_mapped;
 
-   provider = vws->pools.mob_fenced;
+   provider = vws->pools.dma_fenced;
    memset(&desc, 0, sizeof(desc));
    desc.alignment = 4096;
    pb_buf = provider->create_buffer(provider, vsrf->size, &desc);
@@ -97,7 +97,6 @@ out_unlock:
    mtx_unlock(&vsrf->mutex);
 }
 
- 
  
 void *
 vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
@@ -168,7 +167,7 @@ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
       /*
        * Attempt to get a new buffer.
        */
-      provider = vws->pools.mob_fenced;
+      provider = vws->pools.dma_fenced;
       memset(&desc, 0, sizeof(desc));
       desc.alignment = 4096;
       pb_buf = provider->create_buffer(provider, vsrf->size, &desc);

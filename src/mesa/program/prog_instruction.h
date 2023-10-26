@@ -68,29 +68,6 @@
 #define SWIZZLE_ZZZZ MAKE_SWIZZLE4(SWIZZLE_Z, SWIZZLE_Z, SWIZZLE_Z, SWIZZLE_Z)
 #define SWIZZLE_WWWW MAKE_SWIZZLE4(SWIZZLE_W, SWIZZLE_W, SWIZZLE_W, SWIZZLE_W)
 
-
-/**
- * Writemask values, 1 bit per component.
- */
-/*@{*/
-#define WRITEMASK_X     0x1
-#define WRITEMASK_Y     0x2
-#define WRITEMASK_XY    0x3
-#define WRITEMASK_Z     0x4
-#define WRITEMASK_XZ    0x5
-#define WRITEMASK_YZ    0x6
-#define WRITEMASK_XYZ   0x7
-#define WRITEMASK_W     0x8
-#define WRITEMASK_XW    0x9
-#define WRITEMASK_YW    0xa
-#define WRITEMASK_XYW   0xb
-#define WRITEMASK_ZW    0xc
-#define WRITEMASK_XZW   0xd
-#define WRITEMASK_YZW   0xe
-#define WRITEMASK_XYZW  0xf
-/*@}*/
-
-
 /**
  * Per-component negation masks
  */

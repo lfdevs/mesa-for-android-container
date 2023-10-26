@@ -60,6 +60,12 @@ gfx_levels = {
         'asic_reg/gc/gc_11_0_0_sh_mask.h',
         'soc21_enum.h',
     ],
+    'gfx115': [
+        [0x00001260, 0x0000A000, 0x0001C000, 0x02402C00, 0, 0], # IP_BASE GC_BASE
+        'asic_reg/gc/gc_11_5_0_offset.h',
+        'asic_reg/gc/gc_11_5_0_sh_mask.h',
+        'soc21_enum.h',
+    ],
 }
 
 # match: #define mmSDMA0_DEC_START                              0x0000
@@ -696,6 +702,9 @@ enums_missing = {
     "VRSCombinerModeSC": VRSCombinerModeSC,
   },
   'gfx11': {
+    **missing_enums_gfx11plus,
+  },
+  'gfx115': {
     **missing_enums_gfx11plus,
   },
 }

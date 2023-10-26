@@ -26,3 +26,7 @@ dEQP-VK.binding_model.*miss.*
 dEQP-VK.binding_model.*call.*
 dEQP-VK.pipeline.*raytracing.*
 dEQP-VK.pipeline.*rt.*
+
+# This subset hangs with CTS 1.3.6.3, skip it for now until the issue is
+# figured out.
+dEQP-VK.robustness.*

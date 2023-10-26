@@ -1,5 +1,6 @@
 
 BasedOnStyle: InheritParentConfig
+DisableFormat: false
 
 ColumnLimit: 120
 SortIncludes: false

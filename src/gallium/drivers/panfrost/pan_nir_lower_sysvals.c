@@ -132,20 +132,20 @@ static bool
 lower(nir_builder *b, nir_instr *instr, void *data)
 {
    struct ctx *ctx = data;
-   nir_dest *dest = NULL;
+   nir_def *old = NULL;
    unsigned sysval = ~0, offset = 0;
    b->cursor = nir_before_instr(instr);
 
    if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-      dest = &intr->dest;
+      old = &intr->def;
       sysval = sysval_for_intrinsic(intr, &offset);
 
       if (sysval == ~0)
          return false;
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
-      dest = &tex->dest;
+      old = &tex->def;
 
       if (tex->op != nir_texop_txs)
          return false;
@@ -168,12 +168,11 @@ lower(nir_builder *b, nir_instr *instr, void *data)
    unsigned ubo_offset = (vec4_index * 16) + offset;
 
    b->cursor = nir_after_instr(instr);
-   nir_ssa_def *val =
-      nir_load_ubo(b, nir_dest_num_components(*dest), nir_dest_bit_size(*dest),
-                   nir_imm_int(b, ctx->sysval_ubo), nir_imm_int(b, ubo_offset),
-                   .align_mul = nir_dest_bit_size(*dest) / 8, .align_offset = 0,
-                   .range_base = offset, .range = nir_dest_bit_size(*dest) / 8);
-   nir_ssa_def_rewrite_uses(&dest->ssa, val);
+   nir_def *val = nir_load_ubo(
+      b, old->num_components, old->bit_size, nir_imm_int(b, ctx->sysval_ubo),
+      nir_imm_int(b, ubo_offset), .align_mul = old->bit_size / 8,
+      .align_offset = 0, .range_base = offset, .range = old->bit_size / 8);
+   nir_def_rewrite_uses(old, val);
    return true;
 }
 

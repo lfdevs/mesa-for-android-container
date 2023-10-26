@@ -393,6 +393,7 @@ nir_load_libclc_shader(unsigned ptr_bit_size,
       blob_init(&blob);
       nir_serialize(&blob, nir, false);
       disk_cache_put(disk_cache, cache_key, blob.data, blob.size, NULL);
+      blob_finish(&blob);
    }
 #endif
 

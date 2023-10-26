@@ -212,36 +212,31 @@ glsl_type_size(const struct glsl_type *type, bool bindless)
 }
 
 static bool
-midgard_nir_lower_global_load_instr(nir_builder *b, nir_instr *instr,
+midgard_nir_lower_global_load_instr(nir_builder *b, nir_intrinsic_instr *intr,
                                     void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_global &&
        intr->intrinsic != nir_intrinsic_load_shared)
       return false;
 
-   unsigned compsz = nir_dest_bit_size(intr->dest);
-   unsigned totalsz = compsz * nir_dest_num_components(intr->dest);
+   unsigned compsz = intr->def.bit_size;
+   unsigned totalsz = compsz * intr->def.num_components;
    /* 8, 16, 32, 64 and 128 bit loads don't need to be lowered */
    if (util_bitcount(totalsz) < 2 && totalsz <= 128)
       return false;
 
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
-   assert(intr->src[0].is_ssa);
-   nir_ssa_def *addr = intr->src[0].ssa;
+   nir_def *addr = intr->src[0].ssa;
 
-   nir_ssa_def *comps[MIR_VEC_COMPONENTS];
+   nir_def *comps[MIR_VEC_COMPONENTS];
    unsigned ncomps = 0;
 
    while (totalsz) {
       unsigned loadsz = MIN2(1 << (util_last_bit(totalsz) - 1), 128);
       unsigned loadncomps = loadsz / compsz;
 
-      nir_ssa_def *load;
+      nir_def *load;
       if (intr->intrinsic == nir_intrinsic_load_global) {
          load = nir_load_global(b, addr, compsz / 8, loadncomps, compsz);
       } else {
@@ -252,10 +247,10 @@ midgard_nir_lower_global_load_instr(nir_builder *b, nir_instr *instr,
          shared_load->src[0] = nir_src_for_ssa(addr);
          nir_intrinsic_set_align(shared_load, compsz / 8, 0);
          nir_intrinsic_set_base(shared_load, nir_intrinsic_base(intr));
-         nir_ssa_dest_init(&shared_load->instr, &shared_load->dest,
-                           shared_load->num_components, compsz);
+         nir_def_init(&shared_load->instr, &shared_load->def,
+                      shared_load->num_components, compsz);
          nir_builder_instr_insert(b, &shared_load->instr);
-         load = &shared_load->dest.ssa;
+         load = &shared_load->def;
       }
 
       for (unsigned i = 0; i < loadncomps; i++)
@@ -265,8 +260,8 @@ midgard_nir_lower_global_load_instr(nir_builder *b, nir_instr *instr,
       addr = nir_iadd_imm(b, addr, loadsz / 8);
    }
 
-   assert(ncomps == nir_dest_num_components(intr->dest));
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_vec(b, comps, ncomps));
+   assert(ncomps == intr->def.num_components);
+   nir_def_rewrite_uses(&intr->def, nir_vec(b, comps, ncomps));
 
    return true;
 }
@@ -274,7 +269,7 @@ midgard_nir_lower_global_load_instr(nir_builder *b, nir_instr *instr,
 static bool
 midgard_nir_lower_global_load(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       shader, midgard_nir_lower_global_load_instr,
       nir_metadata_block_index | nir_metadata_dominance, NULL);
 }
@@ -287,7 +282,7 @@ mdg_should_scalarize(const nir_instr *instr, const void *_unused)
    if (nir_src_bit_size(alu->src[0].src) == 64)
       return true;
 
-   if (nir_dest_bit_size(alu->dest.dest) == 64)
+   if (alu->def.bit_size == 64)
       return true;
 
    switch (alu->op) {
@@ -320,7 +315,7 @@ midgard_vectorize_filter(const nir_instr *instr, const void *data)
 
    const nir_alu_instr *alu = nir_instr_as_alu(instr);
    int src_bit_size = nir_src_bit_size(alu->src[0].src);
-   int dst_bit_size = nir_dest_bit_size(alu->dest.dest);
+   int dst_bit_size = alu->def.bit_size;
 
    if (src_bit_size == 64 || dst_bit_size == 64)
       return 2;
@@ -367,7 +362,6 @@ midgard_preprocess_nir(nir_shader *nir, unsigned gpu_id)
    NIR_PASS_V(nir, nir_lower_ssbo);
    NIR_PASS_V(nir, pan_nir_lower_zs_store);
 
-   NIR_PASS_V(nir, pan_nir_lower_64bit_intrin);
    NIR_PASS_V(nir, nir_lower_frexp);
    NIR_PASS_V(nir, midgard_nir_lower_global_load);
 
@@ -480,10 +474,10 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
    NIR_PASS_V(nir, nir_opt_move, move_all);
 
    /* Take us out of SSA */
-   NIR_PASS(progress, nir, nir_convert_from_ssa, true, true);
+   NIR_PASS(progress, nir, nir_convert_from_ssa, true);
 
    /* We are a vector architecture; write combine where possible */
-   NIR_PASS(progress, nir, nir_move_vec_src_uses_to_dest);
+   NIR_PASS(progress, nir, nir_move_vec_src_uses_to_dest, false);
    NIR_PASS(progress, nir, nir_lower_vec_to_regs, NULL, NULL);
 
    NIR_PASS(progress, nir, nir_opt_dce);
@@ -495,7 +489,7 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
 static void
 emit_load_const(compiler_context *ctx, nir_load_const_instr *instr)
 {
-   nir_ssa_def def = instr->def;
+   nir_def def = instr->def;
 
    midgard_constants *consts = rzalloc(ctx, midgard_constants);
 
@@ -625,8 +619,6 @@ mir_copy_src(midgard_instruction *ins, nir_alu_instr *instr, unsigned i,
 static void
 emit_alu(compiler_context *ctx, nir_alu_instr *instr)
 {
-   nir_dest *dest = &instr->dest.dest;
-
    /* Derivatives end up emitted on the texture pipe, not the ALUs. This
     * is handled elsewhere */
 
@@ -635,7 +627,7 @@ emit_alu(compiler_context *ctx, nir_alu_instr *instr)
       return;
    }
 
-   unsigned nr_components = nir_dest_num_components(*dest);
+   unsigned nr_components = instr->def.num_components;
    unsigned nr_inputs = nir_op_infos[instr->op].num_inputs;
    unsigned op = 0;
 
@@ -650,7 +642,7 @@ emit_alu(compiler_context *ctx, nir_alu_instr *instr)
    bool flip_src12 = false;
 
    ASSERTED unsigned src_bitsize = nir_src_bit_size(instr->src[0].src);
-   ASSERTED unsigned dst_bitsize = nir_dest_bit_size(*dest);
+   unsigned dst_bitsize = instr->def.bit_size;
 
    enum midgard_roundmode roundmode = MIDGARD_RTE;
 
@@ -874,12 +866,11 @@ emit_alu(compiler_context *ctx, nir_alu_instr *instr)
 
    midgard_instruction ins = {
       .type = TAG_ALU_4,
-      .dest_type =
-         nir_op_infos[instr->op].output_type | nir_dest_bit_size(*dest),
+      .dest_type = nir_op_infos[instr->op].output_type | dst_bitsize,
       .roundmode = roundmode,
    };
 
-   ins.dest = nir_dest_index_with_mask(dest, &ins.mask);
+   ins.dest = nir_def_index_with_mask(&instr->def, &ins.mask);
 
    for (unsigned i = nr_inputs; i < ARRAY_SIZE(ins.src); ++i)
       ins.src[i] = ~0;
@@ -995,7 +986,7 @@ mir_set_intr_mask(nir_instr *instr, midgard_instruction *ins, bool is_read)
       nir_mask = mask_of(nir_intrinsic_dest_components(intr));
 
       /* Extension is mandatory for 8/16-bit loads */
-      dsize = nir_dest_bit_size(intr->dest) == 64 ? 64 : 32;
+      dsize = intr->def.bit_size == 64 ? 64 : 32;
    } else {
       nir_mask = nir_intrinsic_write_mask(intr);
       dsize = OP_IS_COMMON_STORE(ins->op) ? nir_src_bit_size(intr->src[0]) : 32;
@@ -1017,10 +1008,9 @@ emit_ubo_read(compiler_context *ctx, nir_instr *instr, unsigned dest,
 {
    midgard_instruction ins;
 
-   unsigned dest_size =
-      (instr->type == nir_instr_type_intrinsic)
-         ? nir_dest_bit_size(nir_instr_as_intrinsic(instr)->dest)
-         : 32;
+   unsigned dest_size = (instr->type == nir_instr_type_intrinsic)
+                           ? nir_instr_as_intrinsic(instr)->def.bit_size
+                           : 32;
 
    unsigned bitsize = dest_size * nr_comps;
 
@@ -1056,7 +1046,7 @@ emit_ubo_read(compiler_context *ctx, nir_instr *instr, unsigned dest,
       ins.load_store.index_reg = REGISTER_LDST_ZERO;
    }
 
-   if (indirect_offset && indirect_offset->is_ssa && !indirect_shift)
+   if (indirect_offset && !indirect_shift)
       mir_set_ubo_offset(&ins, indirect_offset, offset);
 
    midgard_pack_ubo_index_imm(&ins.load_store, index);
@@ -1075,8 +1065,7 @@ emit_global(compiler_context *ctx, nir_instr *instr, bool is_read,
 
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (is_read) {
-      unsigned bitsize =
-         nir_dest_bit_size(intr->dest) * nir_dest_num_components(intr->dest);
+      unsigned bitsize = intr->def.bit_size * intr->def.num_components;
 
       switch (bitsize) {
       case 8:
@@ -1103,7 +1092,7 @@ emit_global(compiler_context *ctx, nir_instr *instr, bool is_read,
       /* For anything not aligned on 32bit, make sure we write full
        * 32 bits registers. */
       if (bitsize & 31) {
-         unsigned comps_per_32b = 32 / nir_dest_bit_size(intr->dest);
+         unsigned comps_per_32b = 32 / intr->def.bit_size;
 
          for (unsigned c = 0; c < 4 * comps_per_32b; c += comps_per_32b) {
             if (!(ins.mask & BITFIELD_RANGE(c, comps_per_32b)))
@@ -1197,7 +1186,7 @@ emit_atomic(compiler_context *ctx, nir_intrinsic_instr *instr)
    bool is_shared = (instr->intrinsic == nir_intrinsic_shared_atomic) ||
                     (instr->intrinsic == nir_intrinsic_shared_atomic_swap);
 
-   unsigned dest = nir_dest_index(&instr->dest);
+   unsigned dest = nir_def_index(&instr->def);
    unsigned val = nir_src_index(ctx, &instr->src[1]);
    unsigned bitsize = nir_src_bit_size(instr->src[1]);
    emit_explicit_constant(ctx, val);
@@ -1328,12 +1317,12 @@ emit_image_op(compiler_context *ctx, nir_intrinsic_instr *instr)
       nir_alu_type base_type = nir_alu_type_get_base_type(type);
       ins.src_types[0] = base_type | nir_src_bit_size(instr->src[3]);
    } else if (instr->intrinsic == nir_intrinsic_image_texel_address) {
-      ins = m_lea_image(nir_dest_index(&instr->dest),
-                        PACK_LDST_ATTRIB_OFS(address));
+      ins =
+         m_lea_image(nir_def_index(&instr->def), PACK_LDST_ATTRIB_OFS(address));
       ins.mask = mask_of(2); /* 64-bit memory address */
    } else {                  /* emit ld_image_* */
       nir_alu_type type = nir_intrinsic_dest_type(instr);
-      ins = ld_image(type, nir_dest_index(&instr->dest),
+      ins = ld_image(type, nir_def_index(&instr->def),
                      PACK_LDST_ATTRIB_OFS(address));
       ins.mask = mask_of(nir_intrinsic_dest_components(instr));
       ins.dest_type = type;
@@ -1461,7 +1450,7 @@ emit_fragment_store(compiler_context *ctx, unsigned src, unsigned src_z,
 static void
 emit_compute_builtin(compiler_context *ctx, nir_intrinsic_instr *instr)
 {
-   unsigned reg = nir_dest_index(&instr->dest);
+   unsigned reg = nir_def_index(&instr->def);
    midgard_instruction ins = m_ldst_mov(reg, 0);
    ins.mask = mask_of(3);
    ins.swizzle[0][3] = COMPONENT_X; /* xyzx */
@@ -1485,7 +1474,7 @@ vertex_builtin_arg(nir_intrinsic_op op)
 static void
 emit_vertex_builtin(compiler_context *ctx, nir_intrinsic_instr *instr)
 {
-   unsigned reg = nir_dest_index(&instr->dest);
+   unsigned reg = nir_def_index(&instr->def);
    emit_attr_read(ctx, reg, vertex_builtin_arg(instr->intrinsic), 1,
                   nir_type_int);
 }
@@ -1493,7 +1482,7 @@ emit_vertex_builtin(compiler_context *ctx, nir_intrinsic_instr *instr)
 static void
 emit_special(compiler_context *ctx, nir_intrinsic_instr *instr, unsigned idx)
 {
-   unsigned reg = nir_dest_index(&instr->dest);
+   unsigned reg = nir_def_index(&instr->def);
 
    midgard_instruction ld = m_ld_tilebuffer_raw(reg, 0);
    ld.op = midgard_op_ld_special_32u;
@@ -1548,21 +1537,19 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
 
    case nir_intrinsic_load_reg: {
       /* NIR guarantees that, for typical isel, this will always be fully
-       * consumed. However, we also do our own nir_ssa_scalar chasing for
+       * consumed. However, we also do our own nir_scalar chasing for
        * address arithmetic, bypassing the source chasing helpers. So we can end
        * up with unconsumed load_register instructions. Translate them here. 99%
        * of the time, these moves will be DCE'd away.
        */
-      assert(instr->src[0].is_ssa);
-      nir_ssa_def *handle = instr->src[0].ssa;
+      nir_def *handle = instr->src[0].ssa;
 
       midgard_instruction ins =
-         v_mov(nir_reg_index(handle), nir_dest_index(&instr->dest));
+         v_mov(nir_reg_index(handle), nir_def_index(&instr->def));
 
-      ins.dest_type = ins.src_types[1] =
-         nir_type_uint | nir_dest_bit_size(instr->dest);
+      ins.dest_type = ins.src_types[1] = nir_type_uint | instr->def.bit_size;
 
-      ins.mask = BITFIELD_MASK(nir_dest_num_components(instr->dest));
+      ins.mask = BITFIELD_MASK(instr->def.num_components);
       emit_mir_instruction(ctx, ins);
       break;
    }
@@ -1631,7 +1618,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
       /* We may need to apply a fractional offset */
       int component =
          (is_flat || is_interp) ? nir_intrinsic_component(instr) : 0;
-      reg = nir_dest_index(&instr->dest);
+      reg = nir_def_index(&instr->def);
 
       if (is_ubo) {
          nir_src index = instr->src[0];
@@ -1648,8 +1635,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
          emit_global(ctx, &instr->instr, true, reg, src_offset, seg);
       } else if (ctx->stage == MESA_SHADER_FRAGMENT && !ctx->inputs->is_blend) {
          emit_varying_read(ctx, reg, offset, nr_comp, component,
-                           indirect_offset, t | nir_dest_bit_size(instr->dest),
-                           is_flat);
+                           indirect_offset, t | instr->def.bit_size, is_flat);
       } else if (ctx->inputs->is_blend) {
          /* ctx->blend_input will be precoloured to r0/r2, where
           * the input is preloaded */
@@ -1678,7 +1664,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
       /* Reads 128-bit value raw off the tilebuffer during blending, tasty */
 
    case nir_intrinsic_load_raw_output_pan: {
-      reg = nir_dest_index(&instr->dest);
+      reg = nir_def_index(&instr->def);
 
       /* T720 and below use different blend opcodes with slightly
        * different semantics than T760 and up */
@@ -1711,9 +1697,9 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_load_output: {
-      reg = nir_dest_index(&instr->dest);
+      reg = nir_def_index(&instr->def);
 
-      unsigned bits = nir_dest_bit_size(instr->dest);
+      unsigned bits = instr->def.bit_size;
 
       midgard_instruction ld;
       if (bits == 16)
@@ -1776,18 +1762,14 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
          /* Dual-source blend writeout is done by leaving the
           * value in r2 for the blend shader to use. */
          if (~reg_2) {
-            if (instr->src[4].is_ssa) {
-               emit_explicit_constant(ctx, reg_2);
+            emit_explicit_constant(ctx, reg_2);
 
-               unsigned out = make_compiler_temp(ctx);
+            unsigned out = make_compiler_temp(ctx);
 
-               midgard_instruction ins = v_mov(reg_2, out);
-               emit_mir_instruction(ctx, ins);
+            midgard_instruction ins = v_mov(reg_2, out);
+            emit_mir_instruction(ctx, ins);
 
-               ctx->blend_src1 = out;
-            } else {
-               ctx->blend_src1 = reg_2;
-            }
+            ctx->blend_src1 = out;
          }
 
          emit_fragment_store(ctx, reg, reg_z, reg_s, rt, 0);
@@ -1908,7 +1890,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
       emit_special(ctx, instr, 97);
       break;
 
-   case nir_intrinsic_scoped_barrier:
+   case nir_intrinsic_barrier:
       if (nir_intrinsic_execution_scope(instr) != SCOPE_NONE) {
          schedule_barrier(ctx);
          emit_control_barrier(ctx);
@@ -2156,8 +2138,6 @@ static void
 emit_texop_native(compiler_context *ctx, nir_tex_instr *instr,
                   unsigned midgard_texop)
 {
-   nir_dest *dest = &instr->dest;
-
    int texture_index = instr->texture_index;
    int sampler_index = instr->sampler_index;
 
@@ -2172,7 +2152,7 @@ emit_texop_native(compiler_context *ctx, nir_tex_instr *instr,
    midgard_instruction ins = {
       .type = TAG_TEXTURE_4,
       .mask = 0xF,
-      .dest = nir_dest_index(dest),
+      .dest = nir_def_index(&instr->def),
       .src = {~0, ~0, ~0, ~0},
       .dest_type = instr->dest_type,
       .swizzle = SWIZZLE_IDENTITY_4,
@@ -2314,7 +2294,7 @@ emit_instr(compiler_context *ctx, struct nir_instr *instr)
       emit_jump(ctx, nir_instr_as_jump(instr));
       break;
 
-   case nir_instr_type_ssa_undef:
+   case nir_instr_type_undef:
       /* Spurious */
       break;
 

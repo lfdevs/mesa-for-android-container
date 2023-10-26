@@ -26,14 +26,15 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-#define NUM_THREADS 8
-#define STATES_PER_THREAD_LOG2 12
-#define STATES_PER_THREAD (1 << STATES_PER_THREAD_LOG2)
-
 #include "state_pool_test_helper.h"
 
-int main(void)
+void state_pool_free_list_only_test(void);
+
+void state_pool_free_list_only_test(void)
 {
+   const unsigned num_threads = 8;
+   const unsigned states_per_thread = 1 << 12;
+
    struct anv_physical_device physical_device = { };
    struct anv_device device = {};
    struct anv_state_pool state_pool;
@@ -50,17 +51,17 @@ int main(void)
     * actually ever resize anything.
     */
    {
-      struct anv_state states[NUM_THREADS * STATES_PER_THREAD];
-      for (unsigned i = 0; i < NUM_THREADS * STATES_PER_THREAD; i++) {
+      struct anv_state states[num_threads * states_per_thread];
+      for (unsigned i = 0; i < ARRAY_SIZE(states); i++) {
          states[i] = anv_state_pool_alloc(&state_pool, 16, 16);
          ASSERT(states[i].offset != 0);
       }
 
-      for (unsigned i = 0; i < NUM_THREADS * STATES_PER_THREAD; i++)
+      for (unsigned i = 0; i < ARRAY_SIZE(states); i++)
          anv_state_pool_free(&state_pool, states[i]);
    }
 
-   run_state_pool_test(&state_pool);
+   run_state_pool_test(&state_pool, num_threads, states_per_thread);
 
    anv_state_pool_finish(&state_pool);
    anv_bo_cache_finish(&device.bo_cache);

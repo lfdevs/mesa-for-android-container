@@ -10,14 +10,14 @@
 #include "nir.h"
 
 typedef struct {
-   nir_ssa_def *handle;
-   nir_ssa_def *indirect; /** < NULL for no indirect offset */
+   nir_def *handle;
+   nir_def *indirect; /** < NULL for no indirect offset */
    unsigned base_offset;
 } nir_reg_src;
 
 typedef struct {
-   nir_ssa_def *handle;
-   nir_ssa_def *indirect; /** < NULL for no indirect offset */
+   nir_def *handle;
+   nir_def *indirect; /** < NULL for no indirect offset */
    unsigned base_offset;
 } nir_reg_dest;
 
@@ -26,7 +26,7 @@ typedef struct {
 
    union {
       nir_reg_src reg;
-      nir_ssa_def *ssa;
+      nir_def *ssa;
    };
 } nir_legacy_src;
 
@@ -35,7 +35,7 @@ typedef struct {
 
    union {
       nir_reg_dest reg;
-      nir_ssa_def *ssa;
+      nir_def *ssa;
    };
 } nir_legacy_dest;
 
@@ -75,12 +75,12 @@ void nir_legacy_trivialize(nir_shader *s, bool fuse_fabs);
 
 /* Reconstruct a legacy source/destination (including registers) */
 nir_legacy_src nir_legacy_chase_src(const nir_src *src);
-nir_legacy_dest nir_legacy_chase_dest(nir_dest *dest);
+nir_legacy_dest nir_legacy_chase_dest(nir_def *def);
 
 /* Reconstruct a legacy ALU source/destination (including float modifiers) */
 nir_legacy_alu_src nir_legacy_chase_alu_src(const nir_alu_src *src,
                                             bool fuse_fabs);
-nir_legacy_alu_dest nir_legacy_chase_alu_dest(nir_dest *dest);
+nir_legacy_alu_dest nir_legacy_chase_alu_dest(nir_def *def);
 
 /* Check if a source modifier folds. If so, it may be skipped during instruction
  * selection, avoiding the need for backend dead code elimination.

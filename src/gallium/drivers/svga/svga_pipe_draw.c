@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -245,15 +245,6 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
        svga->curr.rast->templ.cull_face == PIPE_FACE_FRONT_AND_BACK)
       goto done;
 
-   /*
-    * Mark currently bound target surfaces as dirty
-    * doesn't really matter if it is done before drawing.
-    *
-    * TODO If we ever normaly return something other then
-    * true we should not mark it as dirty then.
-    */
-   svga_mark_surfaces_dirty(svga_context(pipe));
-
    if (svga->curr.reduced_prim != reduced_prim) {
       svga->curr.reduced_prim = reduced_prim;
       svga->dirty |= SVGA_NEW_REDUCED_PRIMITIVE;
@@ -372,6 +363,11 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                                  svga->patch_vertices);
       }
    }
+
+   /*
+    * Mark currently bound target surfaces as dirty after draw is completed.
+    */
+   svga_mark_surfaces_dirty(svga_context(pipe));
 
    /* XXX: Silence warnings, do something sensible here? */
    (void)ret;

@@ -40,7 +40,7 @@ import nir_opcodes
 OP_DESC_TEMPLATE = mako.template.Template("""
 <%
 def src_decl_list(num_srcs):
-   return ', '.join('nir_ssa_def *src' + str(i) for i in range(num_srcs))
+   return ', '.join('nir_def *src' + str(i) for i in range(num_srcs))
 
 def to_yn(b):
     return 'Y' if b else 'N'
@@ -68,7 +68,7 @@ ${textwrap.indent(op.const_expr, '    ')}
 
 **Builder function:**
 
-.. c:function:: nir_ssa_def *nir_${op.name}(nir_builder *, ${src_decl_list(op.num_inputs)})
+.. c:function:: nir_def *nir_${op.name}(nir_builder *, ${src_decl_list(op.num_inputs)})
 """)
 
 def parse_rst(state, parent, rst):

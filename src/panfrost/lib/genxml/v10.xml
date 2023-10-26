@@ -1133,12 +1133,19 @@
     <field name="3D" size="32" start="0" type="Plane ASTC 3D Overlay"/>
   </struct>
 
+  <struct name="Two-Plane YUV Chroma Overlay" size="8">
+    <field name="Width" size="16" start="5:0" type="uint"/>
+    <field name="Height" size="16" start="5:16" type="uint"/>
+    <field name="Secondary Pointer" size="64" start="6:0" type="address"/>
+  </struct>
+
   <struct name="Plane" size="8" align="32">
     <field name="Type" size="4" start="0:0" type="Descriptor Type" default="Plane"/>
     <field name="Plane type" size="4" start="0:4" type="Plane Type"/>
 
     <field name="AFBC" size="32" start="0:0" type="Plane AFBC Overlay"/>
     <field name="ASTC" size="32" start="0:0" type="Plane ASTC Overlay"/>
+    <field name="Two-Plane YUV Chroma" size="256" start="0:0" type="Two-Plane YUV Chroma Overlay"/>
 
     <!-- Not AFBC -->
     <field name="Clump ordering" size="4" start="0:8" type="Clump Ordering"/>
@@ -1150,6 +1157,8 @@
     <field name="Pointer" size="64" start="2:0" type="address"/>
     <field name="Row stride" size="32" start="4:0" type="uint"/>
     <field name="Slice stride" size="32" start="6:0" type="int"/>
+    <field name="Width" size="16" start="7:0" type="uint"/>
+    <field name="Height" size="16" start="7:16" type="uint"/>
   </struct>
 
   <struct name="Texture" size="8" align="32">

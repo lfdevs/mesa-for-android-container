@@ -45,7 +45,6 @@ enum operation
    OP_UNION, // unify a new definition and several source values
    OP_SPLIT, // $r0d -> { $r0, $r1 } ($r0d and $r0/$r1 will be coalesced)
    OP_MERGE, // opposite of split, e.g. combine 2 32 bit into a 64 bit value
-   OP_CONSTRAINT, // copy values into consecutive registers
    OP_MOV, // simple copy, no modifiers allowed
    OP_LOAD,
    OP_STORE,
@@ -90,12 +89,9 @@ enum operation
    OP_SIN,
    OP_COS,
    OP_EX2,
-   OP_EXP, // exponential (base M_E)
-   OP_LOG, // natural logarithm
    OP_PRESIN,
    OP_PREEX2,
    OP_SQRT,
-   OP_POW,
    OP_BRA,
    OP_CALL,
    OP_RET,
@@ -145,7 +141,6 @@ enum operation
    OP_DFDX,
    OP_DFDY,
    OP_RDSV, // read system value
-   OP_WRSV, // write system value
    OP_PIXLD, // get info about raster object or surfaces
    OP_QUADOP,
    OP_QUADON,
@@ -427,8 +422,6 @@ enum TexTarget
 
 enum ImgFormat
 {
-   FMT_NONE,
-
    FMT_RGBA32F,
    FMT_RGBA16F,
    FMT_RG32F,
@@ -660,6 +653,8 @@ public:
    ValueRef(const ValueRef&);
    ~ValueRef();
 
+   ValueRef& operator=(const ValueRef&) = delete;
+
    inline bool exists() const { return value != NULL; }
 
    void set(Value *);
@@ -697,6 +692,8 @@ public:
    ValueDef(const ValueDef&);
    ~ValueDef();
 
+   ValueDef& operator=(const ValueDef&) = delete;
+
    inline bool exists() const { return value != NULL; }
 
    inline Value *get() const { return value; }
@@ -725,6 +722,9 @@ class Value
 public:
    Value();
    virtual ~Value() { }
+
+   Value(const Value&) = delete;
+   Value& operator=(const Value&) = delete;
 
    virtual Value *clone(ClonePolicy<Function>&) const = 0;
 
@@ -861,6 +861,9 @@ public:
    Instruction();
    Instruction(Function *, operation, DataType);
    virtual ~Instruction();
+
+   Instruction(const Instruction&) = delete;
+   Instruction& operator=(const Instruction&) = delete;
 
    virtual Instruction *clone(ClonePolicy<Function>&,
                               Instruction * = NULL) const;
@@ -1166,6 +1169,9 @@ public:
    BasicBlock(Function *);
    ~BasicBlock();
 
+   BasicBlock(const BasicBlock&) = delete;
+   BasicBlock& operator=(const BasicBlock&) = delete;
+
    BasicBlock *clone(ClonePolicy<Function>&) const;
 
    inline int getId() const { return id; }
@@ -1244,6 +1250,9 @@ public:
    Function(Program *, const char *name, uint32_t label);
    ~Function();
 
+   Function(const Function&) = delete;
+   Function& operator=(const Function&) = delete;
+
    static inline Function *get(Graph::Node *node);
 
    inline Program *getProgram() const { return prog; }
@@ -1267,7 +1276,6 @@ public:
    inline LValue *getLValue(int id);
 
    void buildLiveSets();
-   void buildDefSets();
    bool convertToSSA();
 
 public:
@@ -1288,8 +1296,6 @@ public:
 
    uint32_t binPos;
    uint32_t binSize;
-
-   Value *stackPtr;
 
    uint32_t tlsBase; // base address for l[] space (if no stack pointer is used)
    uint32_t tlsSize;
@@ -1332,6 +1338,9 @@ public:
    Program(Type type, Target *targ);
    ~Program();
 
+   Program(const Program&) = delete;
+   Program& operator=(const Program&) = delete;
+
    void print();
 
    Type getType() const { return progType; }
@@ -1342,8 +1351,6 @@ public:
 
    bool makeFromNIR(struct nv50_ir_prog_info *,
                     struct nv50_ir_prog_info_out *);
-   bool makeFromTGSI(struct nv50_ir_prog_info *,
-                     struct nv50_ir_prog_info_out *);
    bool convertToSSA();
    bool optimizeSSA(int level);
    bool optimizePostRA(int level);

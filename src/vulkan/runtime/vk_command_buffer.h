@@ -27,6 +27,7 @@
 #include "vk_cmd_queue.h"
 #include "vk_graphics_state.h"
 #include "vk_log.h"
+#include "vk_meta.h"
 #include "vk_object.h"
 #include "util/list.h"
 #include "util/u_dynarray.h"
@@ -119,6 +120,9 @@ struct vk_command_buffer {
 
    /** Command list for emulated secondary command buffers */
    struct vk_cmd_queue cmd_queue;
+
+   /** Object list for meta objects */
+   struct vk_meta_object_list meta_objects;
 
    /**
     * VK_EXT_debug_utils

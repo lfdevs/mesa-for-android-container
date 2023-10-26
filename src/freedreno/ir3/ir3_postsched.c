@@ -691,6 +691,10 @@ sched_block(struct ir3_postsched_ctx *ctx, struct ir3_block *block)
       if (instr->opc == OPC_META_TEX_PREFETCH)
          schedule(ctx, instr);
 
+   foreach_instr_safe (instr, &ctx->unscheduled_list)
+      if (instr->opc == OPC_PUSH_CONSTS_LOAD_MACRO)
+         schedule(ctx, instr);
+
    while (!list_is_empty(&ctx->unscheduled_list)) {
       struct ir3_instruction *instr = choose_instr(ctx);
 

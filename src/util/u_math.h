@@ -619,26 +619,6 @@ util_memcpy_cpu_to_le32(void * restrict dest, const void * restrict src, size_t 
 }
 
 /**
- * Clamp X to [MIN, MAX].
- * This is a macro to allow float, int, uint, etc. types.
- * We arbitrarily turn NaN into MIN.
- */
-#define CLAMP( X, MIN, MAX )  ( (X)>(MIN) ? ((X)>(MAX) ? (MAX) : (X)) : (MIN) )
-
-/* Syntax sugar occuring frequently in graphics code */
-#define SATURATE( X ) CLAMP(X, 0.0f, 1.0f)
-
-#define MIN2( A, B )   ( (A)<(B) ? (A) : (B) )
-#define MAX2( A, B )   ( (A)>(B) ? (A) : (B) )
-
-#define MIN3( A, B, C ) ((A) < (B) ? MIN2(A, C) : MIN2(B, C))
-#define MAX3( A, B, C ) ((A) > (B) ? MAX2(A, C) : MAX2(B, C))
-
-#define MIN4( A, B, C, D ) ((A) < (B) ? MIN3(A, C, D) : MIN3(B, C, D))
-#define MAX4( A, B, C, D ) ((A) > (B) ? MAX3(A, C, D) : MAX3(B, C, D))
-
-
-/**
  * Align a value up to an alignment value
  *
  * If \c value is not already aligned to the requested alignment value, it

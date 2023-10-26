@@ -26,24 +26,24 @@
 
 static void
 build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
-                         nir_ssa_def *value, unsigned component)
+                         nir_def *value, unsigned component)
 {
    assert(value->num_components == 1);
    unsigned num_components = glsl_get_components(vec_deref->type);
    assert(num_components > 1 && num_components <= NIR_MAX_VEC_COMPONENTS);
 
-   nir_ssa_def *u = nir_ssa_undef(b, 1, value->bit_size);
-   nir_ssa_def *comps[NIR_MAX_VEC_COMPONENTS];
+   nir_def *u = nir_undef(b, 1, value->bit_size);
+   nir_def *comps[NIR_MAX_VEC_COMPONENTS];
    for (unsigned i = 0; i < num_components; i++)
       comps[i] = (i == component) ? value : u;
 
-   nir_ssa_def *vec = nir_vec(b, comps, num_components);
+   nir_def *vec = nir_vec(b, comps, num_components);
    nir_store_deref(b, vec_deref, vec, (1u << component));
 }
 
 static void
 build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
-                          nir_ssa_def *value, nir_ssa_def *index,
+                          nir_def *value, nir_def *index,
                           unsigned start, unsigned end)
 {
    if (start == end - 1) {
@@ -106,8 +106,7 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
          b.cursor = nir_after_instr(&intrin->instr);
 
          if (intrin->intrinsic == nir_intrinsic_store_deref) {
-            assert(intrin->src[1].is_ssa);
-            nir_ssa_def *value = intrin->src[1].ssa;
+            nir_def *value = intrin->src[1].ssa;
 
             if (nir_src_is_const(deref->arr.index)) {
                if (!(options & nir_lower_direct_array_deref_of_vec_store))
@@ -123,7 +122,7 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
                if (!(options & nir_lower_indirect_array_deref_of_vec_store))
                   continue;
 
-               nir_ssa_def *index = nir_ssa_for_src(&b, deref->arr.index, 1);
+               nir_def *index = deref->arr.index.ssa;
                build_write_masked_stores(&b, vec_deref, value, index,
                                          0, num_components);
             }
@@ -140,22 +139,21 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
             }
 
             /* Turn the load into a vector load */
-            nir_instr_rewrite_src(&intrin->instr, &intrin->src[0],
-                                  nir_src_for_ssa(&vec_deref->dest.ssa));
-            intrin->dest.ssa.num_components = num_components;
+            nir_src_rewrite(&intrin->src[0], &vec_deref->def);
+            intrin->def.num_components = num_components;
             intrin->num_components = num_components;
 
-            nir_ssa_def *index = nir_ssa_for_src(&b, deref->arr.index, 1);
-            nir_ssa_def *scalar =
-               nir_vector_extract(&b, &intrin->dest.ssa, index);
-            if (scalar->parent_instr->type == nir_instr_type_ssa_undef) {
-               nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        scalar);
+            nir_def *index = deref->arr.index.ssa;
+            nir_def *scalar =
+               nir_vector_extract(&b, &intrin->def, index);
+            if (scalar->parent_instr->type == nir_instr_type_undef) {
+               nir_def_rewrite_uses(&intrin->def,
+                                    scalar);
                nir_instr_remove(&intrin->instr);
             } else {
-               nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa,
-                                              scalar,
-                                              scalar->parent_instr);
+               nir_def_rewrite_uses_after(&intrin->def,
+                                          scalar,
+                                          scalar->parent_instr);
             }
             progress = true;
          }
@@ -164,7 +162,7 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+                                     nir_metadata_dominance);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }

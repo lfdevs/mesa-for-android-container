@@ -8,24 +8,24 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-static nir_ssa_def *
-try_extract_additions(nir_builder *b, nir_ssa_scalar scalar, uint64_t *out_const,
-                      nir_ssa_def **out_offset)
+static nir_def *
+try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
+                      nir_def **out_offset)
 {
-   if (!nir_ssa_scalar_is_alu(scalar) || nir_ssa_scalar_alu_op(scalar) != nir_op_iadd)
+   if (!nir_scalar_is_alu(scalar) || nir_scalar_alu_op(scalar) != nir_op_iadd)
       return NULL;
 
    nir_alu_instr *alu = nir_instr_as_alu(scalar.def->parent_instr);
-   nir_ssa_scalar src0 = nir_ssa_scalar_chase_alu_src(scalar, 0);
-   nir_ssa_scalar src1 = nir_ssa_scalar_chase_alu_src(scalar, 1);
+   nir_scalar src0 = nir_scalar_chase_alu_src(scalar, 0);
+   nir_scalar src1 = nir_scalar_chase_alu_src(scalar, 1);
 
    for (unsigned i = 0; i < 2; ++i) {
-      nir_ssa_scalar src = i ? src1 : src0;
-      if (nir_ssa_scalar_is_const(src)) {
-         *out_const += nir_ssa_scalar_as_uint(src);
-      } else if (nir_ssa_scalar_is_alu(src) && nir_ssa_scalar_alu_op(src) == nir_op_u2u64) {
-         nir_ssa_scalar offset_scalar = nir_ssa_scalar_chase_alu_src(src, 0);
-         nir_ssa_def *offset = nir_channel(b, offset_scalar.def, offset_scalar.comp);
+      nir_scalar src = i ? src1 : src0;
+      if (nir_scalar_is_const(src)) {
+         *out_const += nir_scalar_as_uint(src);
+      } else if (nir_scalar_is_alu(src) && nir_scalar_alu_op(src) == nir_op_u2u64) {
+         nir_scalar offset_scalar = nir_scalar_chase_alu_src(src, 0);
+         nir_def *offset = nir_channel(b, offset_scalar.def, offset_scalar.comp);
          if (*out_offset)
             *out_offset = nir_iadd(b, *out_offset, offset);
          else
@@ -34,13 +34,13 @@ try_extract_additions(nir_builder *b, nir_ssa_scalar scalar, uint64_t *out_const
          continue;
       }
 
-      nir_ssa_def *replace_src =
+      nir_def *replace_src =
          try_extract_additions(b, i == 1 ? src0 : src1, out_const, out_offset);
       return replace_src ? replace_src : nir_ssa_for_alu_src(b, alu, 1 - i);
    }
 
-   nir_ssa_def *replace_src0 = try_extract_additions(b, src0, out_const, out_offset);
-   nir_ssa_def *replace_src1 = try_extract_additions(b, src1, out_const, out_offset);
+   nir_def *replace_src0 = try_extract_additions(b, src0, out_const, out_offset);
+   nir_def *replace_src1 = try_extract_additions(b, src1, out_const, out_offset);
    if (!replace_src0 && !replace_src1)
       return NULL;
 
@@ -50,13 +50,8 @@ try_extract_additions(nir_builder *b, nir_ssa_scalar scalar, uint64_t *out_const
 }
 
 static bool
-process_instr(nir_builder *b, nir_instr *instr, void *_)
+process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *_)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
    nir_intrinsic_op op;
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_global:
@@ -80,10 +75,10 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
    nir_src *addr_src = &intrin->src[addr_src_idx];
 
    uint64_t off_const = 0;
-   nir_ssa_def *offset = NULL;
-   nir_ssa_scalar src = {addr_src->ssa, 0};
+   nir_def *offset = NULL;
+   nir_scalar src = {addr_src->ssa, 0};
    b->cursor = nir_after_instr(addr_src->ssa->parent_instr);
-   nir_ssa_def *addr = try_extract_additions(b, src, &off_const, &offset);
+   nir_def *addr = try_extract_additions(b, src, &off_const, &offset);
    addr = addr ? addr : addr_src->ssa;
 
    b->cursor = nir_before_instr(&intrin->instr);
@@ -98,9 +93,8 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
    new_intrin->num_components = intrin->num_components;
 
    if (op != nir_intrinsic_store_global_amd)
-      nir_ssa_dest_init(&new_intrin->instr, &new_intrin->dest,
-                        intrin->dest.ssa.num_components,
-                        intrin->dest.ssa.bit_size);
+      nir_def_init(&new_intrin->instr, &new_intrin->def,
+                   intrin->def.num_components, intrin->def.bit_size);
 
    unsigned num_src = nir_intrinsic_infos[intrin->intrinsic].num_srcs;
    for (unsigned i = 0; i < num_src; i++)
@@ -122,7 +116,7 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
 
    nir_builder_instr_insert(b, &new_intrin->instr);
    if (op != nir_intrinsic_store_global_amd)
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, &new_intrin->dest.ssa);
+      nir_def_rewrite_uses(&intrin->def, &new_intrin->def);
    nir_instr_remove(&intrin->instr);
 
    return true;
@@ -131,6 +125,6 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
 bool
 ac_nir_lower_global_access(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader, process_instr,
+   return nir_shader_intrinsics_pass(shader, process_instr,
                                        nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

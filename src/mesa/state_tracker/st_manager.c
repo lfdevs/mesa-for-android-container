@@ -978,8 +978,15 @@ st_api_create_context(struct pipe_frontend_screen *fscreen,
    if (attribs->flags & ST_CONTEXT_FLAG_NO_ERROR)
       no_error = true;
 
+   /* OpenGL ES 2.0+ does not support sampler state LOD bias. If we are creating
+    * a GLES context, communicate that to the the driver to allow optimization.
+    */
+   bool is_gles = attribs->profile == API_OPENGLES2;
+   unsigned lod_bias_flag = is_gles ? PIPE_CONTEXT_NO_LOD_BIAS : 0;
+
    pipe = fscreen->screen->context_create(fscreen->screen, NULL,
                                           PIPE_CONTEXT_PREFER_THREADED |
+                                          lod_bias_flag |
                                           attribs->context_flags);
    if (!pipe) {
       *error = ST_CONTEXT_ERROR_NO_MEMORY;

@@ -428,7 +428,7 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 
          OUT_PKT0(ring, REG_A3XX_VFD_FETCH(j), 2);
          OUT_RING(ring, A3XX_VFD_FETCH_INSTR_0_FETCHSIZE(fs - 1) |
-                           A3XX_VFD_FETCH_INSTR_0_BUFSTRIDE(vb->stride) |
+                           A3XX_VFD_FETCH_INSTR_0_BUFSTRIDE(elem->src_stride) |
                            COND(switchnext, A3XX_VFD_FETCH_INSTR_0_SWITCHNEXT) |
                            A3XX_VFD_FETCH_INSTR_0_INDEXCODE(j) |
                            COND(elem->instance_divisor,
@@ -728,8 +728,8 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
       OUT_PKT0(ring, REG_A3XX_RB_Z_CLAMP_MIN, 2);
       if (depth == 32) {
-         OUT_RING(ring, (uint32_t)(zmin * 0xffffffff));
-         OUT_RING(ring, (uint32_t)(zmax * 0xffffffff));
+         OUT_RING(ring, (uint32_t)(zmin * (float)0xffffffff));
+         OUT_RING(ring, (uint32_t)(zmax * (float)0xffffffff));
       } else if (depth == 16) {
          OUT_RING(ring, (uint32_t)(zmin * 0xffff));
          OUT_RING(ring, (uint32_t)(zmax * 0xffff));

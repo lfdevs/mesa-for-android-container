@@ -24,11 +24,11 @@ if [[ $arch == "arm64" ]]; then
     pushd /baremetal-files
 
     curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-	-O "${ARTIFACTS_URL}"/Image
+	-O "${KERNEL_IMAGE_BASE}"/arm64/Image
     curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-        -O "${ARTIFACTS_URL}"/Image.gz
+        -O "${KERNEL_IMAGE_BASE}"/arm64/Image.gz
     curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-        -O "${ARTIFACTS_URL}"/cheza-kernel
+        -O "${KERNEL_IMAGE_BASE}"/arm64/cheza-kernel
 
     DEVICE_TREES=""
     DEVICE_TREES="$DEVICE_TREES apq8016-sbc.dtb"
@@ -38,7 +38,7 @@ if [[ $arch == "arm64" ]]; then
 
     for DTB in $DEVICE_TREES; do
 	curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-            -O "${ARTIFACTS_URL}/$DTB"
+            -O "${KERNEL_IMAGE_BASE}/arm64/$DTB"
     done
 
     popd
@@ -47,7 +47,7 @@ elif [[ $arch == "armhf" ]]; then
     pushd /baremetal-files
 
     curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-        -O "${ARTIFACTS_URL}"/zImage
+        -O "${KERNEL_IMAGE_BASE}"/armhf/zImage
 
     DEVICE_TREES=""
     DEVICE_TREES="$DEVICE_TREES imx6q-cubox-i.dtb"
@@ -55,7 +55,7 @@ elif [[ $arch == "armhf" ]]; then
 
     for DTB in $DEVICE_TREES; do
 	curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-            -O "${ARTIFACTS_URL}/$DTB"
+            -O "${KERNEL_IMAGE_BASE}/armhf/$DTB"
     done
 
     popd

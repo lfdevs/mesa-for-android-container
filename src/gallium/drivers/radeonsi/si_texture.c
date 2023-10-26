@@ -65,6 +65,42 @@ static void si_copy_region_with_blit(struct pipe_context *pipe, struct pipe_reso
    }
 }
 
+/* Copy all planes of multi-plane texture */
+static bool si_copy_multi_plane_texture(struct pipe_context *ctx, struct pipe_resource *dst,
+                                        unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz,
+                                        struct pipe_resource *src, unsigned src_level,
+                                        const struct pipe_box *src_box)
+{
+   unsigned i, dx, dy;
+   struct si_texture *src_tex = (struct si_texture *)src;
+   struct si_texture *dst_tex = (struct si_texture *)dst;
+   struct pipe_box sbox;
+
+   if (src_tex->multi_plane_format == PIPE_FORMAT_NONE || src_tex->plane_index != 0)
+      return false;
+
+   assert(src_tex->multi_plane_format == dst_tex->multi_plane_format);
+   assert(dst_tex->plane_index == 0 && src_tex->num_planes == dst_tex->num_planes);
+
+   sbox = *src_box;
+
+   for (i = 0; i < src_tex->num_planes && src && dst; ++i) {
+      dx = util_format_get_plane_width(src_tex->multi_plane_format, i, dstx);
+      dy = util_format_get_plane_height(src_tex->multi_plane_format, i, dsty);
+      sbox.x = util_format_get_plane_width(src_tex->multi_plane_format, i, src_box->x);
+      sbox.y = util_format_get_plane_height(src_tex->multi_plane_format, i, src_box->y);
+      sbox.width = util_format_get_plane_width(src_tex->multi_plane_format, i, src_box->width);
+      sbox.height = util_format_get_plane_height(src_tex->multi_plane_format, i, src_box->height);
+
+      si_resource_copy_region(ctx, dst, dst_level, dx, dy, dstz, src, src_level, &sbox);
+
+      src = src->next;
+      dst = dst->next;
+   }
+
+   return true;
+}
+
 /* Copy from a full GPU texture to a transfer's staging one. */
 static void si_copy_to_staging_texture(struct pipe_context *ctx, struct si_transfer *stransfer)
 {
@@ -78,6 +114,9 @@ static void si_copy_to_staging_texture(struct pipe_context *ctx, struct si_trans
       si_copy_region_with_blit(ctx, dst, 0, 0, 0, 0, 0, src, src_level, &transfer->box);
       return;
    }
+
+   if (si_copy_multi_plane_texture(ctx, dst, 0, 0, 0, 0, src, src_level, &transfer->box))
+      return;
 
    si_resource_copy_region(ctx, dst, 0, 0, 0, 0, src, src_level, &transfer->box);
 }
@@ -100,6 +139,10 @@ static void si_copy_from_staging_texture(struct pipe_context *ctx, struct si_tra
                                transfer->box.z, src, 0, &sbox);
       return;
    }
+
+   if (si_copy_multi_plane_texture(ctx, dst, transfer->level, transfer->box.x, transfer->box.y,
+                                   transfer->box.z, src, 0, &sbox))
+      return;
 
    if (util_format_is_compressed(dst->format)) {
       sbox.width = util_format_get_nblocksx(dst->format, sbox.width);
@@ -216,6 +259,10 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
           ptex->format == PIPE_FORMAT_R9G9B9E5_FLOAT)
          flags |= RADEON_SURF_DISABLE_DCC;
 
+      /* If constant (non-data-dependent) format is requested, disable DCC: */
+      if (ptex->bind & PIPE_BIND_CONST_BW)
+         flags |= RADEON_SURF_DISABLE_DCC;
+
       switch (sscreen->info.gfx_level) {
       case GFX8:
          /* Stoney: 128bpp MSAA textures randomly fail piglit tests with DCC. */
@@ -244,6 +291,7 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
          break;
 
       case GFX11:
+      case GFX11_5:
          break;
 
       default:
@@ -459,7 +507,6 @@ static void si_reallocate_texture_inplace(struct si_context *sctx, struct si_tex
    tex->buffer.b.b.bind = templ.bind;
    radeon_bo_reference(sctx->screen->ws, &tex->buffer.buf, new_tex->buffer.buf);
    tex->buffer.gpu_address = new_tex->buffer.gpu_address;
-   tex->buffer.memory_usage_kb = new_tex->buffer.memory_usage_kb;
    tex->buffer.bo_size = new_tex->buffer.bo_size;
    tex->buffer.bo_alignment_log2 = new_tex->buffer.bo_alignment_log2;
    tex->buffer.domains = new_tex->buffer.domains;
@@ -656,7 +703,7 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
    bool flush = false;
 
    ctx = threaded_context_unwrap_sync(ctx);
-   sctx = ctx ? (struct si_context *)ctx : si_get_aux_context(sscreen);
+   sctx = ctx ? (struct si_context *)ctx : si_get_aux_context(&sscreen->aux_context.general);
 
    if (resource->target != PIPE_BUFFER) {
       unsigned plane = whandle->plane;
@@ -675,7 +722,7 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
        */
       if (resource->nr_samples > 1 || tex->is_depth) {
          if (!ctx)
-            si_put_aux_context_flush(sscreen);
+            si_put_aux_context_flush(&sscreen->aux_context.general);
          return false;
       }
 
@@ -683,7 +730,7 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
 
       if (plane) {
          if (!ctx)
-            si_put_aux_context_flush(sscreen);
+            si_put_aux_context_flush(&sscreen->aux_context.general);
          whandle->offset = ac_surface_get_plane_offset(sscreen->info.gfx_level,
                                                        &tex->surface, plane, 0);
          whandle->stride = ac_surface_get_plane_stride(sscreen->info.gfx_level,
@@ -765,7 +812,7 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
          struct pipe_resource *newb = screen->resource_create(screen, &templ);
          if (!newb) {
             if (!ctx)
-               si_put_aux_context_flush(sscreen);
+               si_put_aux_context_flush(&sscreen->aux_context.general);
             return false;
          }
 
@@ -803,7 +850,7 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
    if (flush && ctx)
       sctx->b.flush(&sctx->b, NULL, 0);
    if (!ctx)
-      si_put_aux_context_flush(sscreen);
+      si_put_aux_context_flush(&sscreen->aux_context.general);
 
    whandle->stride = stride;
    whandle->offset = offset + slice_size * whandle->layer;
@@ -943,7 +990,6 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
       resource->bo_alignment_log2 = plane0->buffer.bo_alignment_log2;
       resource->flags = plane0->buffer.flags;
       resource->domains = plane0->buffer.domains;
-      resource->memory_usage_kb = plane0->buffer.memory_usage_kb;
 
       radeon_bo_reference(sscreen->ws, &resource->buf, plane0->buffer.buf);
       resource->gpu_address = plane0->buffer.gpu_address;
@@ -964,7 +1010,6 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
       resource->bo_size = imported_buf->size;
       resource->bo_alignment_log2 = imported_buf->alignment_log2;
       resource->domains = sscreen->ws->buffer_get_initial_domain(resource->buf);
-      resource->memory_usage_kb = MAX2(1, resource->bo_size / 1024);
       if (sscreen->ws->buffer_get_flags)
          resource->flags = sscreen->ws->buffer_get_flags(resource->buf);
    }
@@ -1149,8 +1194,8 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
 
    /* Execute the clears. */
    if (num_clears) {
-      si_execute_clears(si_get_aux_context(sscreen), clears, num_clears, 0);
-      si_put_aux_context_flush(sscreen);
+      si_execute_clears(si_get_aux_context(&sscreen->aux_context.general), clears, num_clears, 0);
+      si_put_aux_context_flush(&sscreen->aux_context.general);
    }
 
    /* Initialize the CMASK base register value. */
@@ -1330,6 +1375,9 @@ si_texture_create_with_modifier(struct pipe_screen *screen,
       if (i == 0 && !is_zs && sscreen->debug_flags & DBG(EXTRA_METADATA))
          si_set_tex_bo_metadata(sscreen, tex);
    }
+
+   if (num_planes >= 2)
+      plane0->multi_plane_format = templ->format;
 
    return (struct pipe_resource *)plane0;
 }
@@ -1753,8 +1801,12 @@ static void si_init_temp_resource_from_box(struct pipe_resource *res, struct pip
                                            const struct pipe_box *box, unsigned level,
                                            unsigned usage, unsigned flags)
 {
+   struct si_texture *tex = (struct si_texture *)orig;
+   enum pipe_format orig_format = tex->multi_plane_format != PIPE_FORMAT_NONE ?
+      tex->multi_plane_format : orig->format;
+
    memset(res, 0, sizeof(*res));
-   res->format = orig->format;
+   res->format = orig_format;
    res->width0 = box->width;
    res->height0 = box->height;
    res->depth0 = 1;
@@ -1762,11 +1814,11 @@ static void si_init_temp_resource_from_box(struct pipe_resource *res, struct pip
    res->usage = usage;
    res->flags = flags;
 
-   if (flags & SI_RESOURCE_FLAG_FORCE_LINEAR && util_format_is_compressed(orig->format)) {
+   if (flags & SI_RESOURCE_FLAG_FORCE_LINEAR && util_format_is_compressed(orig_format)) {
       /* Transfer resources are allocated with linear tiling, which is
        * not supported for compressed formats.
        */
-      unsigned blocksize = util_format_get_blocksize(orig->format);
+      unsigned blocksize = util_format_get_blocksize(orig_format);
 
       if (blocksize == 8) {
          res->format = PIPE_FORMAT_R16G16B16A16_UINT;
@@ -1775,8 +1827,8 @@ static void si_init_temp_resource_from_box(struct pipe_resource *res, struct pip
          res->format = PIPE_FORMAT_R32G32B32A32_UINT;
       }
 
-      res->width0 = util_format_get_nblocksx(orig->format, box->width);
-      res->height0 = util_format_get_nblocksy(orig->format, box->height);
+      res->width0 = util_format_get_nblocksx(orig_format, box->width);
+      res->height0 = util_format_get_nblocksy(orig_format, box->height);
    }
 
    /* We must set the correct texture target and dimensions for a 3D box. */

@@ -305,6 +305,7 @@ vl_bicubic_filter_init(struct vl_bicubic_filter *filter, struct pipe_context *pi
    ve.instance_divisor = 0;
    ve.vertex_buffer_index = 0;
    ve.src_format = PIPE_FORMAT_R32G32_FLOAT;
+   ve.src_stride = sizeof(struct vertex2f);
    filter->ves = pipe->create_vertex_elements_state(pipe, 1, &ve);
    if (!filter->ves)
       goto error_ves;
@@ -460,7 +461,7 @@ vl_bicubic_filter_render(struct vl_bicubic_filter *filter,
    filter->pipe->bind_fs_state(filter->pipe, filter->fs);
    filter->pipe->set_framebuffer_state(filter->pipe, &fb_state);
    filter->pipe->set_viewport_states(filter->pipe, 0, 1, &viewport);
-   filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, 0, false, &filter->quad);
+   filter->pipe->set_vertex_buffers(filter->pipe, 1, 0, false, &filter->quad);
    filter->pipe->bind_vertex_elements_state(filter->pipe, filter->ves);
 
    util_draw_arrays(filter->pipe, MESA_PRIM_QUADS, 0, 4);

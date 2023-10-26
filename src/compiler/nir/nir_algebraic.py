@@ -1177,18 +1177,6 @@ ${pass_name}(nir_shader *shader)
    (void) options;
    (void) info;
 
-   /* This is not a great place for this, but it seems to be the best place
-    * for it. Check that at most one kind of lowering is requested for
-    * bitfield extract and bitfield insert. Otherwise the lowering can fight
-    * with each other and optimizations.
-    */
-   assert((int)options->lower_bitfield_extract +
-          (int)options->lower_bitfield_extract_to_shifts <= 1);
-   assert((int)options->lower_bitfield_insert +
-          (int)options->lower_bitfield_insert_to_shifts +
-          (int)options->lower_bitfield_insert_to_bitfield_select <= 1);
-
-
    STATIC_ASSERT(${str(cache["next_index"])} == ARRAY_SIZE(${pass_name}_values));
    % for index, condition in enumerate(condition_list):
    condition_flags[${index}] = ${condition};

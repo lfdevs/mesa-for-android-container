@@ -206,7 +206,7 @@ void TargetNVC0::initOpInfo()
 
    static const operation noDest[] =
    {
-      OP_STORE, OP_WRSV, OP_EXPORT, OP_BRA, OP_CALL, OP_RET, OP_EXIT,
+      OP_STORE, OP_EXPORT, OP_BRA, OP_CALL, OP_RET, OP_EXIT,
       OP_DISCARD, OP_CONT, OP_BREAK, OP_PRECONT, OP_PREBREAK, OP_PRERET,
       OP_JOIN, OP_JOINAT, OP_BRKPT, OP_MEMBAR, OP_EMIT, OP_RESTART,
       OP_QUADON, OP_QUADPOP, OP_TEXBAR, OP_SUSTB, OP_SUSTP, OP_SUREDP,
@@ -265,9 +265,18 @@ void TargetNVC0::initOpInfo()
 unsigned int
 TargetNVC0::getFileSize(DataFile file) const
 {
-   const unsigned int gprs = (chipset >= NVISA_GK20A_CHIPSET) ? 255 : 63;
    const unsigned int smregs = (chipset >= NVISA_GK104_CHIPSET) ? 65536 : 32768;
    const unsigned int bs = (chipset >= NVISA_GV100_CHIPSET) ? 16 : 0;
+   unsigned int gprs;
+
+   /* probably because of ugprs? */
+   if (chipset >= NVISA_GV100_CHIPSET)
+      gprs = 253;
+   else if (chipset >= NVISA_GK20A_CHIPSET)
+      gprs = 255;
+   else
+      gprs = 63;
+
    switch (file) {
    case FILE_NULL:          return 0;
    case FILE_GPR:           return MIN2(gprs, smregs / threads);
@@ -473,7 +482,7 @@ TargetNVC0::isOpSupported(operation op, DataType ty) const
 {
    if (op == OP_SAD && ty != TYPE_S32 && ty != TYPE_U32)
       return false;
-   if (op == OP_POW || op == OP_SQRT || op == OP_DIV || op == OP_MOD)
+   if (op == OP_SQRT || op == OP_DIV || op == OP_MOD)
       return false;
    if (op == OP_XMAD)
       return false;

@@ -23,6 +23,7 @@ extern "C" {
  */
 struct agx_attribute {
    uint32_t divisor;
+   uint32_t stride;
    uint16_t src_offset;
    uint8_t buf;
 
@@ -32,7 +33,6 @@ struct agx_attribute {
 
 struct agx_vbufs {
    unsigned count;
-   uint32_t strides[AGX_MAX_VBUFS];
    struct agx_attribute attributes[AGX_MAX_ATTRIBS];
 };
 

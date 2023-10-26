@@ -22,7 +22,7 @@ inc_broadcom = include_directories('.', 'cle')
 
 subdir('cle')
 
-v3d_versions = ['33', '41', '42']
+v3d_versions = ['33', '41', '42', '71']
 v3d_libs = []
 
 if with_gallium_v3d or with_broadcom_vk

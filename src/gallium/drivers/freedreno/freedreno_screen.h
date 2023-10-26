@@ -129,6 +129,8 @@ struct fd_screen {
    unsigned (*tile_mode)(const struct pipe_resource *prsc);
    int (*layout_resource_for_modifier)(struct fd_resource *rsc,
                                        uint64_t modifier);
+   bool (*is_format_supported)(struct pipe_screen *pscreen,
+                               enum pipe_format fmt, uint64_t modifier);
 
    /* indirect-branch emit: */
    void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringbuffer *target);

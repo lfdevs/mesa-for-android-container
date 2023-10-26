@@ -267,24 +267,23 @@ VkResult
 vn_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
 {
    VN_TRACE_FUNC();
-   struct vn_queue *queue = vn_queue_from_handle(_queue);
+   struct vk_queue *queue_vk = vk_queue_from_handle(_queue);
+   struct vn_device *dev = (void *)queue_vk->base.device;
 
-   VkResult result =
-      wsi_common_queue_present(&queue->device->physical_device->wsi_device,
-                               vn_device_to_handle(queue->device), _queue,
-                               queue->family, pPresentInfo);
+   VkResult result = wsi_common_queue_present(
+      &dev->physical_device->wsi_device, vn_device_to_handle(dev), _queue,
+      queue_vk->queue_family_index, pPresentInfo);
    if (VN_DEBUG(WSI) && result != VK_SUCCESS) {
       for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
          const VkResult r =
             pPresentInfo->pResults ? pPresentInfo->pResults[i] : result;
-         vn_log(queue->device->instance,
-                "swapchain %p: presented image %d: %s",
+         vn_log(dev->instance, "swapchain %p: presented image %d: %s",
                 VN_WSI_PTR(pPresentInfo->pSwapchains[i]),
                 pPresentInfo->pImageIndices[i], vk_Result_to_str(r));
       }
    }
 
-   return vn_result(queue->device->instance, result);
+   return vn_result(dev->instance, result);
 }
 
 VkResult

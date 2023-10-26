@@ -32,6 +32,7 @@ CHIPS = [
     Object(name='gfx10', disambiguation='GFX10'),
     Object(name='gfx103', disambiguation='GFX103'),
     Object(name='gfx11', disambiguation='GFX11'),
+    Object(name='gfx115', disambiguation='GFX115'),
 ]
 
 ######### END HARDCODED CONFIGURATION

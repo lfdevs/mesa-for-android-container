@@ -255,9 +255,8 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
                 return V3D_MAX_ARRAY_LAYERS;
 
-                /* Render targets. */
         case PIPE_CAP_MAX_RENDER_TARGETS:
-                return 4;
+                return V3D_MAX_RENDER_TARGETS(screen->devinfo.ver);
 
         case PIPE_CAP_VENDOR_ID:
                 return 0x14E4;
@@ -433,7 +432,6 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type s
         case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
         case PIPE_SHADER_CAP_INT16:
         case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
-        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
         case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
@@ -699,8 +697,8 @@ static const nir_shader_compiler_options v3d_nir_options = {
         .lower_extract_word = true,
         .lower_insert_byte = true,
         .lower_insert_word = true,
-        .lower_bitfield_insert_to_shifts = true,
-        .lower_bitfield_extract_to_shifts = true,
+        .lower_bitfield_insert = true,
+        .lower_bitfield_extract = true,
         .lower_bitfield_reverse = true,
         .lower_bit_count = true,
         .lower_cs_local_id_to_index = true,
@@ -734,6 +732,7 @@ static const nir_shader_compiler_options v3d_nir_options = {
         .lower_rotate = true,
         .lower_to_scalar = true,
         .lower_int64_options = nir_lower_imul_2x32_64,
+        .lower_fquantize2f16 = true,
         .has_fsub = true,
         .has_isub = true,
         .divergence_analysis_options =

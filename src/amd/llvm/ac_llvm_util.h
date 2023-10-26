@@ -58,7 +58,6 @@ struct ac_llvm_compiler {
 };
 
 LLVMTargetRef ac_get_llvm_target(const char *triple);
-const char *ac_get_llvm_processor_name(enum radeon_family family);
 void ac_llvm_run_atexit_for_destructors(void);
 bool ac_is_llvm_processor_supported(LLVMTargetMachineRef tm, const char *processor);
 void ac_reset_llvm_all_options_occurrences();

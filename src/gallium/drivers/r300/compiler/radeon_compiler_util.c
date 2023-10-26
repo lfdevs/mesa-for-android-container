@@ -758,3 +758,13 @@ unsigned int rc_get_scalar_src_swz(unsigned int swizzle)
 	assert(swz != RC_SWIZZLE_UNUSED);
 	return swz;
 }
+
+bool rc_inst_has_three_diff_temp_srcs(struct rc_instruction *inst)
+{
+	return (inst->U.I.SrcReg[0].File == RC_FILE_TEMPORARY &&
+		inst->U.I.SrcReg[1].File == RC_FILE_TEMPORARY &&
+		inst->U.I.SrcReg[2].File == RC_FILE_TEMPORARY &&
+		inst->U.I.SrcReg[0].Index != inst->U.I.SrcReg[1].Index &&
+		inst->U.I.SrcReg[1].Index != inst->U.I.SrcReg[2].Index &&
+		inst->U.I.SrcReg[0].Index != inst->U.I.SrcReg[2].Index);
+}

@@ -350,7 +350,11 @@ do {                       \
 /** Compute ceiling of integer quotient of A divided by B. */
 #define DIV_ROUND_UP( A, B )  ( ((A) + (B) - 1) / (B) )
 
-/** Clamp X to [MIN,MAX].  Turn NaN into MIN, arbitrarily. */
+/**
+ * Clamp X to [MIN, MAX].
+ * This is a macro to allow float, int, unsigned, etc. types.
+ * We arbitrarily turn NaN into MIN.
+ */
 #define CLAMP( X, MIN, MAX )  ( (X)>(MIN) ? ((X)>(MAX) ? (MAX) : (X)) : (MIN) )
 
 /* Syntax sugar occuring frequently in graphics code */
@@ -362,9 +366,17 @@ do {                       \
 /** Maximum of two values: */
 #define MAX2( A, B )   ( (A)>(B) ? (A) : (B) )
 
-/** Minimum and maximum of three values: */
+/** Minimum of three values: */
 #define MIN3( A, B, C ) ((A) < (B) ? MIN2(A, C) : MIN2(B, C))
+
+/** Maximum of three values: */
 #define MAX3( A, B, C ) ((A) > (B) ? MAX2(A, C) : MAX2(B, C))
+
+/** Minimum of four values: */
+#define MIN4( A, B, C, D ) ((A) < (B) ? MIN3(A, C, D) : MIN3(B, C, D))
+
+/** Maximum of four values: */
+#define MAX4( A, B, C, D ) ((A) > (B) ? MAX3(A, C, D) : MAX3(B, C, D))
 
 /** Align a value to a power of two */
 #define ALIGN_POT(x, pot_align) (((x) + (pot_align) - 1) & ~((pot_align) - 1))
@@ -376,7 +388,7 @@ do {                       \
 #define BITFIELD_BIT(b)      (1u << (b))
 /** Set all bits up to excluding bit b */
 #define BITFIELD_MASK(b)      \
-   ((b) == 32 ? (~0u) : BITFIELD_BIT((b) % 32) - 1)
+   ((b) == 32 ? (~0u) : BITFIELD_BIT((b) & 31) - 1)
 /** Set count bits starting from bit b  */
 #define BITFIELD_RANGE(b, count) \
    (BITFIELD_MASK((b) + (count)) & ~BITFIELD_MASK(b))
@@ -385,7 +397,7 @@ do {                       \
 #define BITFIELD64_BIT(b)      (1ull << (b))
 /** Set all bits up to excluding bit b */
 #define BITFIELD64_MASK(b)      \
-   ((b) == 64 ? (~0ull) : BITFIELD64_BIT(b) - 1)
+   ((b) == 64 ? (~0ull) : BITFIELD64_BIT((b) & 63) - 1)
 /** Set count bits starting from bit b  */
 #define BITFIELD64_RANGE(b, count) \
    (BITFIELD64_MASK((b) + (count)) & ~BITFIELD64_MASK(b))

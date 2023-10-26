@@ -1,17 +1,3 @@
-# Fails on both radv and anv:
-# "Valid format used but glReadPixels failed for input = [GL_RED, GL_BYTE] output = [GL_RGBA, GL_UNSIGNED_BYTE]"
-# Conclusion is it's an ext spec+test bug
-# https://gitlab.khronos.org/opengl/API/-/issues/180
-KHR-GLES3.packed_pixels.pbo_rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.pbo_rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.pbo_rectangle.rgba8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.rgba8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.rgba8_snorm,Fail
-
 # ANGLE marks non-shadow linear-filtered textures incomplete (see GLES 3.2 spec
 # 8.17 Texture Completeness), so you get a fallback texture sample, while Mesa
 # incorrectly marks it complete.  The CTS incorrectly expects texture
@@ -20,10 +6,3 @@ KHR-GLES3.packed_pixels.varied_rectangle.rgba8_snorm,Fail
 # https://bugs.chromium.org/p/angleproject/issues/detail?id=7877
 KHR-GLES31.core.texture_border_clamp.Texture2DDC16Linear,Fail
 KHR-GLES31.core.texture_border_clamp.Texture2DDC32FLinear,Fail
-
-# Regression between ANGLE db67df60f8c8020017c36b2dd446bc3d86614ffe and
-# 82f1cee01a9ea24960e8f23b24d348fccbe0aae0
-# Fails the same, with no validation complaints on ADL.  Doesn't fail on CFL.
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_scissored,Fail
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_scissored_masked,Fail
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored,Fail

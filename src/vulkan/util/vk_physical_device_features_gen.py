@@ -366,7 +366,8 @@ def get_feature_structs(doc, api, beta):
             continue
 
         # Skip extensions with a define for now
-        if required[_type.attrib['name']].guard is not None:
+        guard = required[_type.attrib['name']].guard
+        if guard is not None and (guard != "VK_ENABLE_BETA_EXTENSIONS" or not beta):
             continue
 
         # find Vulkan structure type

@@ -73,8 +73,8 @@ struct gbm_dri_device {
 
    const __DRIcoreExtension   *core;
    const __DRImesaCoreExtension   *mesa;
-   const __DRIdri2Extension   *dri2;
    const __DRIimageExtension  *image;
+   const __DRIimageDriverExtension  *image_driver;
    const __DRIswrastExtension *swrast;
    const __DRIkopperExtension *kopper;
    const __DRI2flushExtension *flush;
@@ -88,15 +88,7 @@ struct gbm_dri_device {
    __DRIimage *(*lookup_image_validated)(void *image, void *data);
    void *lookup_user_data;
 
-   __DRIbuffer *(*get_buffers)(__DRIdrawable * driDrawable,
-                               int *width, int *height,
-                               unsigned int *attachments, int count,
-                               int *out_count, void *data);
    void (*flush_front_buffer)(__DRIdrawable * driDrawable, void *data);
-   __DRIbuffer *(*get_buffers_with_format)(__DRIdrawable * driDrawable,
-			     int *width, int *height,
-			     unsigned int *attachments, int count,
-			     int *out_count, void *data);
    int (*image_get_buffers)(__DRIdrawable *driDrawable,
                             unsigned int format,
                             uint32_t *stamp,

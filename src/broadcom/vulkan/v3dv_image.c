@@ -28,6 +28,9 @@
 #include "util/u_math.h"
 #include "vk_util.h"
 #include "vulkan/wsi/wsi_common.h"
+#ifdef ANDROID
+#include "vk_android.h"
+#endif
 
 /**
  * Computes the HW's UIFblock padding for a given height/cpp.
@@ -91,13 +94,12 @@ v3d_get_dimension_mpad(uint32_t dimension, uint32_t level, uint32_t block_dimens
    return u_minify(padded_dim, level - 1);
 }
 
-static void
+static bool
 v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
-                       uint32_t plane_offset)
+                       uint32_t plane_offset,
+                       const VkSubresourceLayout *plane_layouts)
 {
    assert(image->planes[plane].cpp > 0);
-   /* Texture Base Address needs to be 64-byte aligned */
-   assert(plane_offset % 64 == 0);
 
    uint32_t width = image->planes[plane].width;
    uint32_t height = image->planes[plane].height;
@@ -136,7 +138,20 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
    assert(depth > 0);
    assert(image->vk.mip_levels >= 1);
 
-   uint32_t offset = plane_offset;
+   /* Texture Base Address needs to be 64-byte aligned. If we have an explicit
+    * plane layout we will return false to fail image creation with appropriate
+    * error code.
+    */
+   uint32_t offset;
+   if (plane_layouts) {
+      offset = plane_layouts[plane].offset;
+      if (offset % 64 != 0)
+         return false;
+   } else {
+      offset = plane_offset;
+   }
+   assert(plane_offset % 64 == 0);
+
    for (int32_t i = image->vk.mip_levels - 1; i >= 0; i--) {
       struct v3d_resource_slice *slice = &image->planes[plane].slices[i];
 
@@ -209,6 +224,18 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
 
       slice->offset = offset;
       slice->stride = level_width * image->planes[plane].cpp;
+
+      /* We assume that rowPitch in the plane layout refers to level 0 */
+      if (plane_layouts && i == 0) {
+         if (plane_layouts[plane].rowPitch < slice->stride)
+            return false;
+         if (plane_layouts[plane].rowPitch % image->planes[plane].cpp)
+            return false;
+         if (image->tiled && (plane_layouts[plane].rowPitch % (4 * uif_block_w)))
+            return false;
+         slice->stride = plane_layouts[plane].rowPitch;
+      }
+
       slice->padded_height = level_height;
       if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
           slice->tiling == V3D_TILING_UIF_XOR) {
@@ -252,7 +279,8 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
       image->planes[plane].alignment = 4096;
    } else {
       image->planes[plane].alignment =
-         (image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? 64 : image->planes[plane].cpp;
+         (image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ?
+            64 : image->planes[plane].cpp;
    }
 
    uint32_t align_offset =
@@ -273,15 +301,36 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
       image->planes[plane].cube_map_stride =
          align(image->planes[plane].slices[0].offset +
                image->planes[plane].slices[0].size, 64);
+
+      if (plane_layouts && image->vk.array_layers > 1) {
+         if (plane_layouts[plane].arrayPitch % 64 != 0)
+            return false;
+         if (plane_layouts[plane].arrayPitch <
+             image->planes[plane].cube_map_stride) {
+            return false;
+         }
+         image->planes[plane].cube_map_stride = plane_layouts[plane].arrayPitch;
+      }
+
       image->planes[plane].size += image->planes[plane].cube_map_stride *
                                    (image->vk.array_layers - 1);
    } else {
       image->planes[plane].cube_map_stride = image->planes[plane].slices[0].size;
+      if (plane_layouts) {
+         /* We assume that depthPitch in the plane layout refers to level 0 */
+         if (plane_layouts[plane].depthPitch !=
+             image->planes[plane].slices[0].size) {
+               return false;
+         }
+      }
    }
+
+   return true;
 }
 
-static void
-v3d_setup_slices(struct v3dv_image *image, bool disjoint)
+static bool
+v3d_setup_slices(struct v3dv_image *image, bool disjoint,
+                 const VkSubresourceLayout *plane_layouts)
 {
    if (disjoint && image->plane_count == 1)
       disjoint = false;
@@ -289,11 +338,15 @@ v3d_setup_slices(struct v3dv_image *image, bool disjoint)
    uint32_t offset = 0;
    for (uint8_t plane = 0; plane < image->plane_count; plane++) {
       offset = disjoint ? 0 : offset;
-      v3d_setup_plane_slices(image, plane, offset);
+      if (!v3d_setup_plane_slices(image, plane, offset, plane_layouts)) {
+         assert(plane_layouts);
+         return false;
+      }
       offset += align(image->planes[plane].size, 64);
    }
 
    image->non_disjoint_size = disjoint ? 0 : offset;
+   return true;
 }
 
 uint32_t
@@ -307,6 +360,34 @@ v3dv_layer_offset(const struct v3dv_image *image, uint32_t level, uint32_t layer
    else
       return image->planes[plane].mem_offset + slice->offset +
          layer * image->planes[plane].cube_map_stride;
+}
+
+VkResult
+v3dv_update_image_layout(struct v3dv_device *device,
+                         struct v3dv_image *image,
+                         uint64_t modifier,
+                         bool disjoint,
+                         const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info)
+{
+   assert(!explicit_mod_info ||
+          image->plane_count == explicit_mod_info->drmFormatModifierPlaneCount);
+
+   assert(!explicit_mod_info ||
+          modifier == explicit_mod_info->drmFormatModifier);
+
+   image->tiled = modifier != DRM_FORMAT_MOD_LINEAR;
+
+   image->vk.drm_format_mod = modifier;
+
+   bool ok =
+      v3d_setup_slices(image, disjoint,
+                       explicit_mod_info ? explicit_mod_info->pPlaneLayouts : NULL);
+   if (!ok) {
+      assert(explicit_mod_info);
+      return VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT;
+   }
+
+   return VK_SUCCESS;
 }
 
 VkResult
@@ -326,11 +407,20 @@ v3dv_image_init(struct v3dv_device *device,
     */
    VkImageTiling tiling = pCreateInfo->tiling;
    uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+   const VkImageDrmFormatModifierListCreateInfoEXT *mod_info = NULL;
+   const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info = NULL;
+#ifdef ANDROID
+   if (image->is_native_buffer_memory) {
+      assert(image->android_explicit_layout);
+      explicit_mod_info = image->android_explicit_layout;
+      modifier = explicit_mod_info->drmFormatModifier;
+   }
+#endif
    if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
-      const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
+      mod_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
-      const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info =
+      explicit_mod_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
       assert(mod_info || explicit_mod_info);
@@ -357,35 +447,20 @@ v3dv_image_init(struct v3dv_device *device,
       tiling = VK_IMAGE_TILING_LINEAR;
    }
 
-#ifdef ANDROID
-   const VkNativeBufferANDROID *native_buffer =
-      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
-
-   int native_buf_fd = -1;
-   int native_buf_stride = 0;
-   int native_buf_size = 0;
-
-   if (native_buffer != NULL) {
-      VkResult result = v3dv_gralloc_info(device, native_buffer, &native_buf_fd,
-                                          &native_buf_stride, &native_buf_size,
-                                          &modifier);
-      if (result != VK_SUCCESS)
-         return result;
-
-      if (modifier != DRM_FORMAT_MOD_BROADCOM_UIF)
-         tiling = VK_IMAGE_TILING_LINEAR;
-   }
-#endif
+   if (modifier == DRM_FORMAT_MOD_INVALID)
+      modifier = (tiling == VK_IMAGE_TILING_OPTIMAL) ? DRM_FORMAT_MOD_BROADCOM_UIF
+                                                     : DRM_FORMAT_MOD_LINEAR;
 
    const struct v3dv_format *format =
-      v3dv_X(device, get_format)(pCreateInfo->format);
+      v3dv_X(device, get_format)(image->vk.format);
    v3dv_assert(format != NULL && format->plane_count);
 
    assert(pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT ||
           pCreateInfo->samples == VK_SAMPLE_COUNT_4_BIT);
 
    image->format = format;
-   image->plane_count = vk_format_get_plane_count(pCreateInfo->format);
+
+   image->plane_count = vk_format_get_plane_count(image->vk.format);
 
    const struct vk_format_ycbcr_info *ycbcr_info =
       vk_format_get_ycbcr_info(image->vk.format);
@@ -408,12 +483,6 @@ v3dv_image_init(struct v3dv_device *device,
             ycbcr_info->planes[plane].denominator_scales[1];
       }
    }
-   image->tiled = tiling == VK_IMAGE_TILING_OPTIMAL ||
-                  (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-                   modifier != DRM_FORMAT_MOD_LINEAR);
-
-   image->vk.tiling = tiling;
-   image->vk.drm_format_mod = modifier;
 
    /* Our meta paths can create image views with compatible formats for any
     * image, so always set this flag to keep the common Vulkan image code
@@ -421,26 +490,18 @@ v3dv_image_init(struct v3dv_device *device,
     */
    image->vk.create_flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
-   bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
-   v3d_setup_slices(image, disjoint);
-
 #ifdef ANDROID
-   if (native_buffer != NULL) {
-      assert(image->plane_count == 1);
-      image->planes[0].slices[0].stride = native_buf_stride;
-      image->non_disjoint_size =
-         image->planes[0].slices[0].size =
-         image->planes[0].size = native_buf_size;
-
-      VkResult result = v3dv_import_native_buffer_fd(v3dv_device_to_handle(device),
-                                                     native_buf_fd, pAllocator,
-                                                     v3dv_image_to_handle(image));
-      if (result != VK_SUCCESS)
-         return result;
-   }
+   /* At this time, an AHB handle is not yet provided.
+    * Image layout will be filled up during vkBindImageMemory2
+    */
+   if (image->is_ahb)
+      return VK_SUCCESS;
 #endif
 
-   return VK_SUCCESS;
+   bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
+
+   return v3dv_update_image_layout(device, image, modifier, disjoint,
+                                   explicit_mod_info);
 }
 
 static VkResult
@@ -449,21 +510,92 @@ create_image(struct v3dv_device *device,
              const VkAllocationCallbacks *pAllocator,
              VkImage *pImage)
 {
+   VkResult result;
    struct v3dv_image *image = NULL;
 
    image = vk_image_create(&device->vk, pCreateInfo, pAllocator, sizeof(*image));
    if (image == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   VkResult result = v3dv_image_init(device, pCreateInfo, pAllocator, image);
-   if (result != VK_SUCCESS) {
-      vk_image_destroy(&device->vk, pAllocator, &image->vk);
-      return result;
+#ifdef ANDROID
+   const VkExternalMemoryImageCreateInfo *external_info =
+      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
+
+   const VkNativeBufferANDROID *native_buffer =
+      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
+
+   if (native_buffer != NULL)
+      image->is_native_buffer_memory = true;
+
+   image->is_ahb = external_info && (external_info->handleTypes &
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID);
+
+   assert(!(image->is_ahb && image->is_native_buffer_memory));
+
+   if (image->is_ahb || image->is_native_buffer_memory) {
+      image->android_explicit_layout = vk_alloc2(&device->vk.alloc, pAllocator,
+                                                 sizeof(VkImageDrmFormatModifierExplicitCreateInfoEXT),
+                                                 8,
+                                                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!image->android_explicit_layout) {
+         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+         goto fail;
+      }
+
+      image->android_plane_layouts = vk_alloc2(&device->vk.alloc, pAllocator,
+         sizeof(VkSubresourceLayout) * V3DV_MAX_PLANE_COUNT,
+         8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!image->android_plane_layouts) {
+         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+         goto fail;
+      }
    }
+
+   if (image->is_native_buffer_memory) {
+      struct u_gralloc_buffer_handle gr_handle = {
+         .handle = native_buffer->handle,
+         .hal_format = native_buffer->format,
+         .pixel_stride = native_buffer->stride,
+      };
+
+      result = v3dv_gralloc_to_drm_explicit_layout(device->gralloc,
+                                                   &gr_handle,
+                                                   image->android_explicit_layout,
+                                                   image->android_plane_layouts,
+                                                   V3DV_MAX_PLANE_COUNT);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+#endif
+
+   result = v3dv_image_init(device, pCreateInfo, pAllocator, image);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+#ifdef ANDROID
+   if (image->is_native_buffer_memory) {
+      result = v3dv_import_native_buffer_fd(v3dv_device_to_handle(device),
+                                            native_buffer->handle->data[0], pAllocator,
+                                            v3dv_image_to_handle(image));
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+#endif
 
    *pImage = v3dv_image_to_handle(image);
 
    return VK_SUCCESS;
+
+fail:
+#ifdef ANDROID
+   if (image->android_explicit_layout)
+      vk_free2(&device->vk.alloc, pAllocator, image->android_explicit_layout);
+   if (image->android_plane_layouts)
+      vk_free2(&device->vk.alloc, pAllocator, image->android_plane_layouts);
+#endif
+
+   vk_image_destroy(&device->vk, pAllocator, &image->vk);
+   return result;
 }
 
 static VkResult
@@ -564,8 +696,10 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
       v3dv_layer_offset(image, subresource->mipLevel, subresource->arrayLayer,
                         plane) - image->planes[plane].mem_offset;
    layout->rowPitch = slice->stride;
-   layout->depthPitch = image->planes[plane].cube_map_stride;
-   layout->arrayPitch = image->planes[plane].cube_map_stride;
+   layout->depthPitch = image->vk.image_type == VK_IMAGE_TYPE_3D ?
+                        image->planes[plane].cube_map_stride : 0;
+   layout->arrayPitch = image->vk.array_layers > 1 ?
+                        image->planes[plane].cube_map_stride : 0;
 
    if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
       layout->size = slice->size;
@@ -597,12 +731,33 @@ v3dv_DestroyImage(VkDevice _device,
    if (image == NULL)
       return;
 
+   /* If we have created a shadow tiled image for this image we must also free
+    * it (along with its memory allocation).
+    */
+   if (image->shadow) {
+      bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
+      for (int i = 0; i < (disjoint ? image->plane_count : 1); i++) {
+         if (image->shadow->planes[i].mem) {
+            v3dv_FreeMemory(_device,
+                            v3dv_device_memory_to_handle(image->shadow->planes[i].mem),
+                            pAllocator);
+         }
+      }
+      v3dv_DestroyImage(_device, v3dv_image_to_handle(image->shadow),
+                        pAllocator);
+      image->shadow = NULL;
+   }
+
 #ifdef ANDROID
-   assert(image->plane_count == 1);
    if (image->is_native_buffer_memory)
       v3dv_FreeMemory(_device,
                       v3dv_device_memory_to_handle(image->planes[0].mem),
                       pAllocator);
+
+   if (image->android_explicit_layout)
+      vk_free2(&device->vk.alloc, pAllocator, image->android_explicit_layout);
+   if (image->android_plane_layouts)
+      vk_free2(&device->vk.alloc, pAllocator, image->android_plane_layouts);
 #endif
 
    vk_image_destroy(&device->vk, pAllocator, &image->vk);
@@ -671,8 +826,7 @@ create_image_view(struct v3dv_device *device,
     * makes sense to implement swizzle composition using VkSwizzle directly.
     */
    VkFormat format;
-   uint8_t image_view_swizzle[4];
-   if (pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT &&
+   if (image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
        range->aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
       format = VK_FORMAT_R8G8B8A8_UINT;
       uint8_t stencil_aspect_swizzle[4] = {
@@ -682,11 +836,11 @@ create_image_view(struct v3dv_device *device,
       vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle, view_swizzle);
 
       util_format_compose_swizzles(stencil_aspect_swizzle, view_swizzle,
-                                   image_view_swizzle);
+                                   iview->view_swizzle);
    } else {
-      format = pCreateInfo->format;
+      format = iview->vk.format;
       vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle,
-                                           image_view_swizzle);
+                                           iview->view_swizzle);
    }
 
    iview->vk.view_format = format;
@@ -711,7 +865,7 @@ create_image_view(struct v3dv_device *device,
 
       const uint8_t *format_swizzle =
          v3dv_get_format_swizzle(device, format, plane);
-      util_format_compose_swizzles(format_swizzle, image_view_swizzle,
+      util_format_compose_swizzles(format_swizzle, iview->view_swizzle,
                                    iview->planes[plane].swizzle);
 
       iview->planes[plane].swap_rb = v3dv_format_swizzle_needs_rb_swap(format_swizzle);
@@ -754,6 +908,13 @@ v3dv_DestroyImageView(VkDevice _device,
 
    if (image_view == NULL)
       return;
+
+   if (image_view->shadow) {
+      v3dv_DestroyImageView(_device,
+                            v3dv_image_view_to_handle(image_view->shadow),
+                            pAllocator);
+      image_view->shadow = NULL;
+   }
 
    vk_image_view_destroy(&device->vk, pAllocator, &image_view->vk);
 }

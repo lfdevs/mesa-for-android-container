@@ -35,11 +35,11 @@ lower_coord_shift_normalized(nir_builder *b, nir_tex_instr *tex)
 {
    b->cursor = nir_before_instr(&tex->instr);
 
-   nir_ssa_def *size = nir_i2f32(b, nir_get_texture_size(b, tex));
-   nir_ssa_def *scale = nir_frcp(b, size);
+   nir_def *size = nir_i2f32(b, nir_get_texture_size(b, tex));
+   nir_def *scale = nir_frcp(b, size);
 
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   nir_ssa_def *corr = nullptr;
+   nir_def *corr = nullptr;
    if (unlikely(tex->array_is_lowered_cube)) {
       auto corr2 = nir_fadd(b,
                             nir_trim_vector(b, tex->src[coord_index].src.ssa, 2),
@@ -54,7 +54,7 @@ lower_coord_shift_normalized(nir_builder *b, nir_tex_instr *tex)
                       tex->src[coord_index].src.ssa);
    }
 
-   nir_instr_rewrite_src(&tex->instr, &tex->src[coord_index].src, nir_src_for_ssa(corr));
+   nir_src_rewrite(&tex->src[coord_index].src, corr);
    return true;
 }
 
@@ -63,7 +63,7 @@ lower_coord_shift_unnormalized(nir_builder *b, nir_tex_instr *tex)
 {
    b->cursor = nir_before_instr(&tex->instr);
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   nir_ssa_def *corr = nullptr;
+   nir_def *corr = nullptr;
    if (unlikely(tex->array_is_lowered_cube)) {
       auto corr2 = nir_fadd_imm(b,
                                 nir_trim_vector(b, tex->src[coord_index].src.ssa, 2),
@@ -75,7 +75,7 @@ lower_coord_shift_unnormalized(nir_builder *b, nir_tex_instr *tex)
    } else {
       corr = nir_fadd_imm(b, tex->src[coord_index].src.ssa, -0.5f);
    }
-   nir_instr_rewrite_src(&tex->instr, &tex->src[coord_index].src, nir_src_for_ssa(corr));
+   nir_src_rewrite(&tex->src[coord_index].src, corr);
    return true;
 }
 
@@ -158,20 +158,20 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
    int min_lod_idx = nir_tex_instr_src_index(tex, nir_tex_src_min_lod);
    assert(lod_idx >= 0 || bias_idx >= 0);
 
-   nir_ssa_def *size = nir_i2f32(b, nir_get_texture_size(b, tex));
-   nir_ssa_def *lod = (lod_idx >= 0) ? nir_ssa_for_src(b, tex->src[lod_idx].src, 1)
+   nir_def *size = nir_i2f32(b, nir_get_texture_size(b, tex));
+   nir_def *lod = (lod_idx >= 0) ? tex->src[lod_idx].src.ssa
                                      : nir_get_texture_lod(b, tex);
 
    if (bias_idx >= 0)
-      lod = nir_fadd(b, lod, nir_ssa_for_src(b, tex->src[bias_idx].src, 1));
+      lod = nir_fadd(b, lod, tex->src[bias_idx].src.ssa);
 
    if (min_lod_idx >= 0)
-      lod = nir_fmax(b, lod, nir_ssa_for_src(b, tex->src[min_lod_idx].src, 1));
+      lod = nir_fmax(b, lod, tex->src[min_lod_idx].src.ssa);
 
    /* max lod? */
 
-   nir_ssa_def *lambda_exp = nir_fexp2(b, lod);
-   nir_ssa_def *scale = NULL;
+   nir_def *lambda_exp = nir_fexp2(b, lod);
+   nir_def *scale = NULL;
 
    if (tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) {
       unsigned int swizzle[NIR_MAX_VEC_COMPONENTS] = {0, 0, 0, 0};
@@ -182,7 +182,7 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
       scale = nir_frcp(b, nir_channels(b, size, (nir_component_mask_t)cmp_mask));
    }
 
-   nir_ssa_def *grad = nir_fmul(b, lambda_exp, scale);
+   nir_def *grad = nir_fmul(b, lambda_exp, scale);
 
    if (lod_idx >= 0)
       nir_tex_instr_remove_src(tex, lod_idx);
@@ -190,8 +190,8 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
       nir_tex_instr_remove_src(tex, bias_idx);
    if (min_lod_idx >= 0)
       nir_tex_instr_remove_src(tex, min_lod_idx);
-   nir_tex_instr_add_src(tex, nir_tex_src_ddx, nir_src_for_ssa(grad));
-   nir_tex_instr_add_src(tex, nir_tex_src_ddy, nir_src_for_ssa(grad));
+   nir_tex_instr_add_src(tex, nir_tex_src_ddx, grad);
+   nir_tex_instr_add_src(tex, nir_tex_src_ddy, grad);
 
    tex->op = nir_texop_txd;
    return true;
@@ -256,7 +256,7 @@ r600_nir_lower_cube_to_2darray_filer(const nir_instr *instr, const void *_option
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_options)
 {
    b->cursor = nir_before_instr(instr);
@@ -272,7 +272,7 @@ r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_opt
                       nir_frcp(b, nir_fabs(b, nir_channel(b, cubed, 2))),
                       nir_imm_float(b, 1.5));
 
-   nir_ssa_def *z = nir_channel(b, cubed, 3);
+   nir_def *z = nir_channel(b, cubed, 3);
    if (tex->is_array && tex->op != nir_texop_lod) {
       auto slice = nir_fround_even(b, nir_channel(b, tex->src[coord_idx].src.ssa, 3));
       z =
@@ -281,24 +281,16 @@ r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_opt
 
    if (tex->op == nir_texop_txd) {
       int ddx_idx = nir_tex_instr_src_index(tex, nir_tex_src_ddx);
-      nir_instr_rewrite_src(
-         &tex->instr,
-         &tex->src[ddx_idx].src,
-         nir_src_for_ssa(
-            nir_fmul_imm(b, nir_ssa_for_src(b, tex->src[ddx_idx].src, 3), 0.5)));
+      nir_src_rewrite(&tex->src[ddx_idx].src,
+                      nir_fmul_imm(b, tex->src[ddx_idx].src.ssa, 0.5));
 
       int ddy_idx = nir_tex_instr_src_index(tex, nir_tex_src_ddy);
-      nir_instr_rewrite_src(
-         &tex->instr,
-         &tex->src[ddy_idx].src,
-         nir_src_for_ssa(
-            nir_fmul_imm(b, nir_ssa_for_src(b, tex->src[ddy_idx].src, 3), 0.5)));
+      nir_src_rewrite(&tex->src[ddy_idx].src,
+                      nir_fmul_imm(b, tex->src[ddy_idx].src.ssa, 0.5));
    }
 
    auto new_coord = nir_vec3(b, nir_channel(b, xy, 0), nir_channel(b, xy, 1), z);
-   nir_instr_rewrite_src(&tex->instr,
-                         &tex->src[coord_idx].src,
-                         nir_src_for_ssa(new_coord));
+   nir_src_rewrite(&tex->src[coord_idx].src, new_coord);
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    tex->is_array = true;
    tex->array_is_lowered_cube = true;

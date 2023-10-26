@@ -96,7 +96,3 @@ div.citation > p:last-of-type:after {
 }
 
 {%- endif %}
-
-[data-bs-theme="dark"] {
-  --bs-body-color: #dee2e6 /* $gray-300 */;
-}

@@ -41,7 +41,6 @@ struct leaf_args {
    VOID_REF indices;
    VOID_REF transform;
 
-   uint32_t dst_offset;
    uint32_t first_id;
    uint32_t geometry_type;
    uint32_t geometry_id;

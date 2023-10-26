@@ -33,7 +33,7 @@ libamd_common_llvm = static_library(
   'amd_common_llvm',
   [amd_common_llvm_files],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_compiler, inc_amd, inc_amd_common
+    inc_include, inc_src, inc_amd, inc_amd_common
   ],
   link_with: [
     libamd_common

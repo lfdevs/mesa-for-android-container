@@ -34,9 +34,11 @@
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 #include "spirv/nir_spirv.h"
+#include "util/blend.h"
 #include "util/mesa-sha1.h"
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
+#include "vk_blend.h"
 #include "vk_format.h"
 #include "vk_util.h"
 
@@ -391,126 +393,6 @@ panvk_pipeline_builder_parse_input_assembly(
       builder->create_info.gfx->pInputAssemblyState->topology);
 }
 
-static enum pipe_logicop
-translate_logicop(VkLogicOp in)
-{
-   switch (in) {
-   case VK_LOGIC_OP_CLEAR:
-      return PIPE_LOGICOP_CLEAR;
-   case VK_LOGIC_OP_AND:
-      return PIPE_LOGICOP_AND;
-   case VK_LOGIC_OP_AND_REVERSE:
-      return PIPE_LOGICOP_AND_REVERSE;
-   case VK_LOGIC_OP_COPY:
-      return PIPE_LOGICOP_COPY;
-   case VK_LOGIC_OP_AND_INVERTED:
-      return PIPE_LOGICOP_AND_INVERTED;
-   case VK_LOGIC_OP_NO_OP:
-      return PIPE_LOGICOP_NOOP;
-   case VK_LOGIC_OP_XOR:
-      return PIPE_LOGICOP_XOR;
-   case VK_LOGIC_OP_OR:
-      return PIPE_LOGICOP_OR;
-   case VK_LOGIC_OP_NOR:
-      return PIPE_LOGICOP_NOR;
-   case VK_LOGIC_OP_EQUIVALENT:
-      return PIPE_LOGICOP_EQUIV;
-   case VK_LOGIC_OP_INVERT:
-      return PIPE_LOGICOP_INVERT;
-   case VK_LOGIC_OP_OR_REVERSE:
-      return PIPE_LOGICOP_OR_REVERSE;
-   case VK_LOGIC_OP_COPY_INVERTED:
-      return PIPE_LOGICOP_COPY_INVERTED;
-   case VK_LOGIC_OP_OR_INVERTED:
-      return PIPE_LOGICOP_OR_INVERTED;
-   case VK_LOGIC_OP_NAND:
-      return PIPE_LOGICOP_NAND;
-   case VK_LOGIC_OP_SET:
-      return PIPE_LOGICOP_SET;
-   default:
-      unreachable("Invalid logicop");
-   }
-}
-
-static enum blend_func
-translate_blend_op(VkBlendOp in)
-{
-   switch (in) {
-   case VK_BLEND_OP_ADD:
-      return BLEND_FUNC_ADD;
-   case VK_BLEND_OP_SUBTRACT:
-      return BLEND_FUNC_SUBTRACT;
-   case VK_BLEND_OP_REVERSE_SUBTRACT:
-      return BLEND_FUNC_REVERSE_SUBTRACT;
-   case VK_BLEND_OP_MIN:
-      return BLEND_FUNC_MIN;
-   case VK_BLEND_OP_MAX:
-      return BLEND_FUNC_MAX;
-   default:
-      unreachable("Invalid blend op");
-   }
-}
-
-static enum blend_factor
-translate_blend_factor(VkBlendFactor in, bool dest_has_alpha)
-{
-   switch (in) {
-   case VK_BLEND_FACTOR_ZERO:
-   case VK_BLEND_FACTOR_ONE:
-      return BLEND_FACTOR_ZERO;
-   case VK_BLEND_FACTOR_SRC_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR:
-      return BLEND_FACTOR_SRC_COLOR;
-   case VK_BLEND_FACTOR_DST_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR:
-      return BLEND_FACTOR_DST_COLOR;
-   case VK_BLEND_FACTOR_SRC_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
-      return BLEND_FACTOR_SRC_ALPHA;
-   case VK_BLEND_FACTOR_DST_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA:
-      return dest_has_alpha ? BLEND_FACTOR_DST_ALPHA : BLEND_FACTOR_ZERO;
-   case VK_BLEND_FACTOR_CONSTANT_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR:
-      return BLEND_FACTOR_CONSTANT_COLOR;
-   case VK_BLEND_FACTOR_CONSTANT_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA:
-      return BLEND_FACTOR_CONSTANT_ALPHA;
-   case VK_BLEND_FACTOR_SRC1_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-      return BLEND_FACTOR_SRC1_COLOR;
-   case VK_BLEND_FACTOR_SRC1_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-      return BLEND_FACTOR_SRC1_ALPHA;
-   case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
-      return BLEND_FACTOR_SRC_ALPHA_SATURATE;
-   default:
-      unreachable("Invalid blend factor");
-   }
-}
-
-static bool
-inverted_blend_factor(VkBlendFactor in, bool dest_has_alpha)
-{
-   switch (in) {
-   case VK_BLEND_FACTOR_ONE:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-      return true;
-   case VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA:
-      return dest_has_alpha ? true : false;
-   case VK_BLEND_FACTOR_DST_ALPHA:
-      return !dest_has_alpha ? true : false;
-   default:
-      return false;
-   }
-}
-
 bool
 panvk_per_arch(blend_needs_lowering)(const struct panfrost_device *dev,
                                      const struct pan_blend_state *state,
@@ -548,7 +430,7 @@ panvk_pipeline_builder_parse_color_blend(struct panvk_pipeline_builder *builder,
    pipeline->blend.state.logicop_enable =
       builder->create_info.gfx->pColorBlendState->logicOpEnable;
    pipeline->blend.state.logicop_func =
-      translate_logicop(builder->create_info.gfx->pColorBlendState->logicOp);
+      vk_logic_op_to_pipe(builder->create_info.gfx->pColorBlendState->logicOp);
    pipeline->blend.state.rt_count =
       util_last_bit(builder->active_color_attachments);
    memcpy(pipeline->blend.state.constants,
@@ -568,24 +450,28 @@ panvk_pipeline_builder_parse_color_blend(struct panvk_pipeline_builder *builder,
          builder->create_info.gfx->pMultisampleState->rasterizationSamples;
       out->equation.blend_enable = in->blendEnable;
       out->equation.color_mask = in->colorWriteMask;
-      out->equation.rgb_func = translate_blend_op(in->colorBlendOp);
+      out->equation.rgb_func = vk_blend_op_to_pipe(in->colorBlendOp);
       out->equation.rgb_src_factor =
-         translate_blend_factor(in->srcColorBlendFactor, dest_has_alpha);
-      out->equation.rgb_invert_src_factor =
-         inverted_blend_factor(in->srcColorBlendFactor, dest_has_alpha);
+         vk_blend_factor_to_pipe(in->srcColorBlendFactor);
       out->equation.rgb_dst_factor =
-         translate_blend_factor(in->dstColorBlendFactor, dest_has_alpha);
-      out->equation.rgb_invert_dst_factor =
-         inverted_blend_factor(in->dstColorBlendFactor, dest_has_alpha);
-      out->equation.alpha_func = translate_blend_op(in->alphaBlendOp);
+         vk_blend_factor_to_pipe(in->dstColorBlendFactor);
+      out->equation.alpha_func = vk_blend_op_to_pipe(in->alphaBlendOp);
       out->equation.alpha_src_factor =
-         translate_blend_factor(in->srcAlphaBlendFactor, dest_has_alpha);
-      out->equation.alpha_invert_src_factor =
-         inverted_blend_factor(in->srcAlphaBlendFactor, dest_has_alpha);
+         vk_blend_factor_to_pipe(in->srcAlphaBlendFactor);
       out->equation.alpha_dst_factor =
-         translate_blend_factor(in->dstAlphaBlendFactor, dest_has_alpha);
-      out->equation.alpha_invert_dst_factor =
-         inverted_blend_factor(in->dstAlphaBlendFactor, dest_has_alpha);
+         vk_blend_factor_to_pipe(in->dstAlphaBlendFactor);
+
+      if (!dest_has_alpha) {
+         out->equation.rgb_src_factor =
+            util_blend_dst_alpha_to_one(out->equation.rgb_src_factor);
+         out->equation.rgb_dst_factor =
+            util_blend_dst_alpha_to_one(out->equation.rgb_dst_factor);
+
+         out->equation.alpha_src_factor =
+            util_blend_dst_alpha_to_one(out->equation.alpha_src_factor);
+         out->equation.alpha_dst_factor =
+            util_blend_dst_alpha_to_one(out->equation.alpha_dst_factor);
+      }
 
       pipeline->blend.reads_dest |= pan_blend_reads_dest(out->equation);
 

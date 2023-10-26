@@ -111,9 +111,10 @@ v3d_create_rasterizer_state(struct pipe_context *pctx,
 #endif
         }
 
-        /* The HW treats polygon offset units based on a Z24 buffer, so we
+        /* V3d 4.x treats polygon offset units based on a Z24 buffer, so we
          * need to scale up offset_units if we're only Z16.
          */
+#if V3D_VERSION <= 42
         v3dx_pack(&so->depth_offset_z16, DEPTH_OFFSET, depth) {
                 depth.depth_offset_factor = cso->offset_scale;
                 depth.depth_offset_units = cso->offset_units * 256.0;
@@ -121,6 +122,7 @@ v3d_create_rasterizer_state(struct pipe_context *pctx,
                 depth.limit = cso->offset_clamp;
 #endif
         }
+#endif
 
         return so;
 }
@@ -138,8 +140,9 @@ v3d_create_blend_state(struct pipe_context *pctx,
 
         so->base = *cso;
 
+        uint32_t max_rts = V3D_MAX_RENDER_TARGETS(V3D_VERSION);
         if (cso->independent_blend_enable) {
-                for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
+                for (int i = 0; i < max_rts; i++) {
                         so->blend_enables |= cso->rt[i].blend_enable << i;
 
                         /* V3D 4.x is when we got independent blend enables. */
@@ -148,7 +151,7 @@ v3d_create_blend_state(struct pipe_context *pctx,
                 }
         } else {
                 if (cso->rt[0].blend_enable)
-                        so->blend_enables = (1 << V3D_MAX_DRAW_BUFFERS) - 1;
+                        so->blend_enables = (1 << max_rts) - 1;
         }
 
         return so;
@@ -296,7 +299,7 @@ v3d_set_viewport_states(struct pipe_context *pctx,
 
 static void
 v3d_set_vertex_buffers(struct pipe_context *pctx,
-                       unsigned start_slot, unsigned count,
+                       unsigned count,
                        unsigned unbind_num_trailing_slots,
                        bool take_ownership,
                        const struct pipe_vertex_buffer *vb)
@@ -305,8 +308,7 @@ v3d_set_vertex_buffers(struct pipe_context *pctx,
         struct v3d_vertexbuf_stateobj *so = &v3d->vertexbuf;
 
         util_set_vertex_buffers_mask(so->vb, &so->enabled_mask, vb,
-                                     start_slot, count,
-                                     unbind_num_trailing_slots,
+                                     count, unbind_num_trailing_slots,
                                      take_ownership);
         so->count = util_last_bit(so->enabled_mask);
 
@@ -335,6 +337,20 @@ v3d_zsa_state_bind(struct pipe_context *pctx, void *hwcso)
         struct v3d_context *v3d = v3d_context(pctx);
         v3d->zsa = hwcso;
         v3d->dirty |= V3D_DIRTY_ZSA;
+}
+
+
+static bool
+needs_default_attribute_values(void)
+{
+#if V3D_VERSION <= 42
+        /* FIXME: on vulkan we are able to refine even further, as we know in
+         * advance when we create the pipeline if we have an integer vertex
+         * attrib. Pending to check if we could do something similar here.
+         */
+        return true;
+#endif
+        return false;
 }
 
 static void *
@@ -414,24 +430,29 @@ v3d_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                 }
         }
 
-        /* Set up the default attribute values in case any of the vertex
-         * elements use them.
-         */
-        uint32_t *attrs;
-        u_upload_alloc(v3d->state_uploader, 0,
-                       V3D_MAX_VS_INPUTS * sizeof(float), 16,
-                       &so->defaults_offset, &so->defaults, (void **)&attrs);
+        if (needs_default_attribute_values()) {
+                /* Set up the default attribute values in case any of the vertex
+                 * elements use them.
+                 */
+                uint32_t *attrs;
+                u_upload_alloc(v3d->state_uploader, 0,
+                               V3D_MAX_VS_INPUTS * sizeof(float), 16,
+                               &so->defaults_offset, &so->defaults, (void **)&attrs);
 
-        for (int i = 0; i < V3D_MAX_VS_INPUTS / 4; i++) {
-                attrs[i * 4 + 0] = 0;
-                attrs[i * 4 + 1] = 0;
-                attrs[i * 4 + 2] = 0;
-                if (i < so->num_elements &&
-                    util_format_is_pure_integer(so->pipe[i].src_format)) {
-                        attrs[i * 4 + 3] = 1;
-                } else {
-                        attrs[i * 4 + 3] = fui(1.0);
+                for (int i = 0; i < V3D_MAX_VS_INPUTS / 4; i++) {
+                        attrs[i * 4 + 0] = 0;
+                        attrs[i * 4 + 1] = 0;
+                        attrs[i * 4 + 2] = 0;
+                        if (i < so->num_elements &&
+                            util_format_is_pure_integer(so->pipe[i].src_format)) {
+                                attrs[i * 4 + 3] = 1;
+                        } else {
+                                attrs[i * 4 + 3] = fui(1.0);
+                        }
                 }
+        } else {
+                so->defaults = NULL;
+                so->defaults_offset = 0;
         }
 
         u_upload_unmap(v3d->state_uploader);
@@ -699,21 +720,22 @@ v3d_upload_sampler_state_variant(void *map,
                                 break;
                         }
 
-                        if (variant >= V3D_SAMPLER_STATE_32) {
-                                sampler.border_color_word_0 = border.ui[0];
-                                sampler.border_color_word_1 = border.ui[1];
-                                sampler.border_color_word_2 = border.ui[2];
-                                sampler.border_color_word_3 = border.ui[3];
-                        } else {
-                                sampler.border_color_word_0 =
-                                        _mesa_float_to_half(border.f[0]);
-                                sampler.border_color_word_1 =
-                                        _mesa_float_to_half(border.f[1]);
-                                sampler.border_color_word_2 =
-                                        _mesa_float_to_half(border.f[2]);
-                                sampler.border_color_word_3 =
-                                        _mesa_float_to_half(border.f[3]);
+#if V3D_VERSION <= 42
+                        /* The TMU in V3D 7.x always takes 32-bit floats and handles conversions
+                         * for us. In V3D 4.x we need to manually convert floating point color
+                         * values to the expected format.
+                         */
+                        if (variant < V3D_SAMPLER_STATE_32) {
+                                border.ui[0] = _mesa_float_to_half(border.f[0]);
+                                border.ui[1] = _mesa_float_to_half(border.f[1]);
+                                border.ui[2] = _mesa_float_to_half(border.f[2]);
+                                border.ui[3] = _mesa_float_to_half(border.f[3]);
                         }
+#endif
+                        sampler.border_color_word_0 = border.ui[0];
+                        sampler.border_color_word_1 = border.ui[1];
+                        sampler.border_color_word_2 = border.ui[2];
+                        sampler.border_color_word_3 = border.ui[3];
                 }
         }
 }
@@ -869,7 +891,8 @@ v3d_setup_texture_shader_state_from_buffer(struct V3DX(TEXTURE_SHADER_STATE) *te
 }
 
 static void
-v3d_setup_texture_shader_state(struct V3DX(TEXTURE_SHADER_STATE) *tex,
+v3d_setup_texture_shader_state(const struct v3d_device_info *devinfo,
+                               struct V3DX(TEXTURE_SHADER_STATE) *tex,
                                struct pipe_resource *prsc,
                                int base_level, int last_level,
                                int first_layer, int last_layer,
@@ -917,18 +940,28 @@ v3d_setup_texture_shader_state(struct V3DX(TEXTURE_SHADER_STATE) *tex,
         }
 
         tex->base_level = base_level;
+
 #if V3D_VERSION >= 40
         tex->max_level = last_level;
         /* Note that we don't have a job to reference the texture's sBO
          * at state create time, so any time this sampler view is used
          * we need to add the texture to the job.
          */
-        tex->texture_base_pointer =
-                cl_address(NULL,
-                           rsc->bo->offset +
-                           v3d_layer_offset(prsc, 0, first_layer));
+        const uint32_t base_offset = rsc->bo->offset +
+                v3d_layer_offset(prsc, 0, first_layer);
+
+        tex->texture_base_pointer = cl_address(NULL, base_offset);
 #endif
+
         tex->array_stride_64_byte_aligned = rsc->cube_map_stride / 64;
+
+#if V3D_VERSION >= 71
+        tex->chroma_offset_x = 1;
+        tex->chroma_offset_y = 1;
+        /* See comment in XML field definition for rationale of the shifts */
+        tex->texture_base_pointer_cb = base_offset >> 6;
+        tex->texture_base_pointer_cr = base_offset >> 6;
+#endif
 
         /* Since other platform devices may produce UIF images even
          * when they're not big enough for V3D to assume they're UIF,
@@ -977,7 +1010,8 @@ v3dX(create_texture_shader_state_bo)(struct v3d_context *v3d,
 
         v3dx_pack(map, TEXTURE_SHADER_STATE, tex) {
                 if (prsc->target != PIPE_BUFFER) {
-                        v3d_setup_texture_shader_state(&tex, prsc,
+                        v3d_setup_texture_shader_state(&v3d->screen->devinfo,
+                                                       &tex, prsc,
                                                        cso->u.tex.first_level,
                                                        cso->u.tex.last_level,
                                                        cso->u.tex.first_layer,
@@ -990,7 +1024,13 @@ v3dX(create_texture_shader_state_bo)(struct v3d_context *v3d,
                                                                    cso->u.buf.size);
                 }
 
-                tex.srgb = util_format_is_srgb(cso->format);
+                bool is_srgb = util_format_is_srgb(cso->format);
+#if V3D_VERSION <= 42
+                tex.srgb = is_srgb;
+#endif
+#if V3D_VERSION >= 71
+                tex.transfer_func = is_srgb ? TRANSFER_FUNC_SRGB : TRANSFER_FUNC_NONE;
+#endif
 
 #if V3D_VERSION >= 40
                 tex.swizzle_r = v3d_translate_pipe_swizzle(so->swizzle[0]);
@@ -1040,7 +1080,10 @@ v3dX(create_texture_shader_state_bo)(struct v3d_context *v3d,
                          * shader code if we wanted to read an MSAA sRGB
                          * texture without sRGB decode.
                          */
+#if V3D_VERSION <= 42
                         tex.srgb = false;
+#endif
+
                 } else {
                         tex.texture_type = v3d_get_tex_format(&screen->devinfo,
                                                               cso->format);
@@ -1404,7 +1447,8 @@ v3d_create_image_view_texture_shader_state(struct v3d_context *v3d,
 
         v3dx_pack(map, TEXTURE_SHADER_STATE, tex) {
                 if (prsc->target != PIPE_BUFFER) {
-                        v3d_setup_texture_shader_state(&tex, prsc,
+                        v3d_setup_texture_shader_state(&v3d->screen->devinfo,
+                                                       &tex, prsc,
                                                        iview->base.u.tex.level,
                                                        iview->base.u.tex.level,
                                                        iview->base.u.tex.first_layer,

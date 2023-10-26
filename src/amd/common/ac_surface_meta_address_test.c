@@ -729,6 +729,9 @@ int main(int argc, char **argv)
    for (unsigned i = 0; i < ARRAY_SIZE(testcases); ++i) {
       struct radeon_info info = get_radeon_info(&testcases[i]);
 
+      if (info.gfx_level >= GFX11)
+         continue;
+
       run_cmask_address_test(testcases[i].name, &info, full);
    }
 

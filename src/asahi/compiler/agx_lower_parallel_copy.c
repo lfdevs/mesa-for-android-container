@@ -36,6 +36,23 @@ do_swap(agx_builder *b, const struct agx_copy *copy)
    if (copy->dest == copy->src.value)
       return;
 
+   /* We can swap lo/hi halves of a 32-bit register with a 32-bit extr */
+   if (copy->src.size == AGX_SIZE_16 &&
+       (copy->dest >> 1) == (copy->src.value >> 1)) {
+
+      assert(((copy->dest & 1) == (1 - (copy->src.value & 1))) &&
+             "no trivial swaps, and only 2 halves of a register");
+
+      /* r0 = extr r0, r0, #16
+       *    = (((r0 << 32) | r0) >> 16) & 0xFFFFFFFF
+       *    = (((r0 << 32) >> 16) & 0xFFFFFFFF) | (r0 >> 16)
+       *    = (r0l << 16) | r0h
+       */
+      agx_index reg32 = agx_register(copy->dest & ~1, AGX_SIZE_32);
+      agx_extr_to(b, reg32, reg32, reg32, agx_immediate(16), 0);
+      return;
+   }
+
    agx_index x = agx_register(copy->dest, copy->src.size);
    agx_index y = copy->src;
 
@@ -141,8 +158,43 @@ agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies,
 
          /* Copies should not have overlapping destinations. */
          assert(!ctx->physreg_dest[entry->dest + j]);
-         ctx->physreg_dest[entry->dest + j] = entry;
+         ctx->physreg_dest[entry->dest + j] = &ctx->entries[i];
       }
+   }
+
+   /* Try to vectorize aligned 16-bit copies to use 32-bit operations instead */
+   for (unsigned i = 0; i < ctx->entry_count; i++) {
+      struct agx_copy *entry = &ctx->entries[i];
+      if (entry->src.size != AGX_SIZE_16)
+         continue;
+
+      if ((entry->dest & 1) || (entry->src.value & 1))
+         continue;
+
+      if (entry->src.type != AGX_INDEX_UNIFORM &&
+          entry->src.type != AGX_INDEX_REGISTER)
+         continue;
+
+      unsigned next_dest = entry->dest + 1;
+      assert(next_dest < ARRAY_SIZE(ctx->physreg_dest) && "aligned reg");
+
+      struct agx_copy *next_copy = ctx->physreg_dest[next_dest];
+      if (!next_copy)
+         continue;
+
+      assert(next_copy->dest == next_dest && "data structure invariant");
+      assert(next_copy->src.size == AGX_SIZE_16 && "unaligned copy");
+
+      if (next_copy->src.type != entry->src.type)
+         continue;
+
+      if (next_copy->src.value != (entry->src.value + 1))
+         continue;
+
+      /* Vectorize the copies */
+      ctx->physreg_dest[next_dest] = entry;
+      entry->src.size = AGX_SIZE_32;
+      next_copy->done = true;
    }
 
    bool progress = true;

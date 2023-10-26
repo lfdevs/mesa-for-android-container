@@ -1059,6 +1059,14 @@ vk_common_GetRenderAreaGranularity(VkDevice device,
                                    VkRenderPass renderPass,
                                    VkExtent2D *pGranularity)
 {
+   *pGranularity = (VkExtent2D){1, 1};
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_GetRenderingAreaGranularityKHR(
+   VkDevice _device, const VkRenderingAreaInfoKHR *pRenderingAreaInfo,
+   VkExtent2D *pGranularity)
+{
    *pGranularity = (VkExtent2D) { 1, 1 };
 }
 

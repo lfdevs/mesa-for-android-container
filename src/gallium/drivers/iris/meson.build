@@ -71,7 +71,7 @@ files_libiris = files(
 )
 
 iris_per_hw_ver_libs = []
-foreach v : ['80', '90', '110', '120', '125']
+foreach v : ['80', '90', '110', '120', '125', '200']
   iris_per_hw_ver_libs += static_library(
     'iris_per_hw_ver@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],

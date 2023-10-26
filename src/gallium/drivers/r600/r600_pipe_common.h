@@ -113,12 +113,6 @@ enum r600_coherency {
 	R600_COHERENCY_CB_META,
 };
 
-#if UTIL_ARCH_BIG_ENDIAN
-#define R600_BIG_ENDIAN 1
-#else
-#define R600_BIG_ENDIAN 0
-#endif
-
 struct r600_common_context;
 struct r600_perfcounters;
 struct tgsi_shader_info;

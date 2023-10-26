@@ -96,12 +96,12 @@
    radeon_emit(((reg) - SI_SH_REG_OFFSET) >> 2); \
 } while (0)
 
-#define radeon_set_sh_reg_idx3_seq(sctx, reg, num) do { \
+#define radeon_set_sh_reg_idx_seq(sctx, reg, idx, num) do { \
    assert((reg) >= SI_SH_REG_OFFSET && (reg) < SI_SH_REG_END); \
    if ((sctx)->screen->info.uses_kernel_cu_mask) { \
       assert((sctx)->gfx_level >= GFX10); \
       radeon_emit(PKT3(PKT3_SET_SH_REG_INDEX, num, 0)); \
-      radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | (3 << 28)); \
+      radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | ((idx) << 28)); \
    } else { \
       radeon_emit(PKT3(PKT3_SET_SH_REG, num, 0)); \
       radeon_emit(((reg) - SI_SH_REG_OFFSET) >> 2); \
@@ -113,8 +113,8 @@
    radeon_emit(value); \
 } while (0)
 
-#define radeon_set_sh_reg_idx3(sctx, reg, value) do { \
-   radeon_set_sh_reg_idx3_seq(sctx, reg, 1); \
+#define radeon_set_sh_reg_idx(sctx, reg, idx, value) do { \
+   radeon_set_sh_reg_idx_seq(sctx, reg, idx, 1); \
    radeon_emit(value); \
 } while (0)
 
@@ -143,11 +143,12 @@
 
 #define radeon_opt_push_gfx_sh_reg(offset, reg, val) do { \
    unsigned __value = val; \
-   if (((sctx->tracked_regs.other_reg_saved_mask >> (reg)) & 0x1) != 0x1 || \
-       sctx->tracked_regs.other_reg_value[reg] != __value) { \
+   unsigned __reg = reg; \
+   if (((sctx->tracked_regs.other_reg_saved_mask >> (__reg)) & 0x1) != 0x1 || \
+       sctx->tracked_regs.other_reg_value[__reg] != __value) { \
       radeon_push_gfx_sh_reg(offset, __value); \
-      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD64_BIT(reg); \
-      sctx->tracked_regs.other_reg_value[reg] = __value; \
+      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD_BIT(__reg); \
+      sctx->tracked_regs.other_reg_value[__reg] = __value; \
    } \
 } while (0)
 
@@ -156,7 +157,7 @@
    if (((sctx->tracked_regs.other_reg_saved_mask >> (reg)) & 0x1) != 0x1 || \
        sctx->tracked_regs.other_reg_value[reg] != __value) { \
       radeon_push_compute_sh_reg(offset, __value); \
-      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD64_BIT(reg); \
+      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD_BIT(reg); \
       sctx->tracked_regs.other_reg_value[reg] = __value; \
    } \
 } while (0)
@@ -315,7 +316,7 @@
    if (((sctx->tracked_regs.other_reg_saved_mask >> (reg)) & 0x1) != 0x1 || \
        sctx->tracked_regs.other_reg_value[reg] != __value) { \
       radeon_set_sh_reg(offset, __value); \
-      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD64_BIT(reg); \
+      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD_BIT(reg); \
       sctx->tracked_regs.other_reg_value[reg] = __value; \
    } \
 } while (0)
@@ -357,12 +358,12 @@
    } \
 } while (0)
 
-#define radeon_opt_set_sh_reg_idx3(sctx, offset, reg, val) do { \
+#define radeon_opt_set_sh_reg_idx(sctx, offset, reg, idx, val) do { \
    unsigned __value = val; \
    if (((sctx->tracked_regs.other_reg_saved_mask >> (reg)) & 0x1) != 0x1 || \
        sctx->tracked_regs.other_reg_value[reg] != __value) { \
-      radeon_set_sh_reg_idx3(sctx, offset, __value); \
-      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD64_BIT(reg); \
+      radeon_set_sh_reg_idx(sctx, offset, idx, __value); \
+      sctx->tracked_regs.other_reg_saved_mask |= BITFIELD_BIT(reg); \
       sctx->tracked_regs.other_reg_value[reg] = __value; \
    } \
 } while (0)
@@ -417,7 +418,7 @@ si_get_user_data_base(enum amd_gfx_level gfx_level, enum si_has_tess has_tess,
 {
    switch (shader) {
    case PIPE_SHADER_VERTEX:
-      /* VS can be bound as VS, ES, or LS. */
+      /* VS can be bound as VS, ES, LS, or GS. */
       if (has_tess) {
          if (gfx_level >= GFX10) {
             return R_00B430_SPI_SHADER_USER_DATA_HS_0;

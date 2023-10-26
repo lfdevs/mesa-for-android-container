@@ -102,7 +102,7 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    view->pview = (struct pan_image_view){
-      .image = &image->pimage,
+      .planes[0] = &image->pimage,
       .format = vk_format_to_pipe_format(view->vk.view_format),
       .dim = panvk_view_type_to_mali_tex_dim(view->vk.view_type),
       .nr_samples = image->pimage.layout.nr_samples,

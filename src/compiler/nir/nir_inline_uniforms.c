@@ -72,9 +72,6 @@ nir_collect_src_uniforms(const nir_src *src, int component,
                          uint32_t *uni_offsets, uint8_t *num_offsets,
                          unsigned max_num_bo, unsigned max_offset)
 {
-   if (!src->is_ssa)
-      return false;
-
    assert(max_num_bo > 0 && max_num_bo <= MAX_NUM_BO);
    assert(component < src->ssa->num_components);
 
@@ -85,7 +82,12 @@ nir_collect_src_uniforms(const nir_src *src, int component,
       nir_alu_instr *alu = nir_instr_as_alu(instr);
 
       /* Vector ops only need to check the corresponding component. */
-      if (nir_op_is_vec(alu->op)) {
+      if (alu->op == nir_op_mov) {
+         return nir_collect_src_uniforms(&alu->src[0].src,
+                                         alu->src[0].swizzle[component],
+                                         uni_offsets, num_offsets,
+                                         max_num_bo, max_offset);
+      } else if (nir_op_is_vec(alu->op)) {
          nir_alu_src *alu_src = alu->src + component;
          return nir_collect_src_uniforms(&alu_src->src, alu_src->swizzle[0],
                                          uni_offsets, num_offsets,
@@ -113,7 +115,7 @@ nir_collect_src_uniforms(const nir_src *src, int component,
                if (!nir_collect_src_uniforms(&alu_src->src, alu_src->swizzle[j],
                                              uni_offsets, num_offsets,
                                              max_num_bo, max_offset))
-               return false;
+                  return false;
             }
          }
       }
@@ -131,7 +133,7 @@ nir_collect_src_uniforms(const nir_src *src, int component,
           nir_src_is_const(intr->src[1]) &&
           nir_src_as_uint(intr->src[1]) <= max_offset &&
           /* TODO: Can't handle other bit sizes for now. */
-          intr->dest.ssa.bit_size == 32) {
+          intr->def.bit_size == 32) {
          /* num_offsets can be NULL if-and-only-if uni_offsets is NULL. */
          assert((num_offsets == NULL) == (uni_offsets == NULL));
 
@@ -177,9 +179,6 @@ is_induction_variable(const nir_src *src, int component, nir_loop_info *info,
                       uint32_t *uni_offsets, uint8_t *num_offsets,
                       unsigned max_num_bo, unsigned max_offset)
 {
-   if (!src->is_ssa)
-      return false;
-
    assert(component < src->ssa->num_components);
 
    /* Return true for induction variable (ie. i in for loop) */
@@ -234,14 +233,14 @@ nir_add_inlinable_uniforms(const nir_src *cond, nir_loop_info *info,
 
    /* Allow induction variable which means a loop terminator. */
    if (info) {
-      nir_ssa_scalar cond_scalar = {cond->ssa, 0};
+      nir_scalar cond_scalar = { cond->ssa, 0 };
 
       /* Limit terminator condition to loop unroll support case which is a simple
        * comparison (ie. "i < count" is supported, but "i + 1 < count" is not).
        */
       if (nir_is_supported_terminator_condition(cond_scalar)) {
-         if (nir_ssa_scalar_alu_op(cond_scalar) == nir_op_inot)
-            cond_scalar = nir_ssa_scalar_chase_alu_src(cond_scalar, 0);
+         if (nir_scalar_alu_op(cond_scalar) == nir_op_inot)
+            cond_scalar = nir_scalar_chase_alu_src(cond_scalar, 0);
 
          nir_alu_instr *alu = nir_instr_as_alu(cond_scalar.def->parent_instr);
 
@@ -405,8 +404,8 @@ nir_inline_uniforms(nir_shader *shader, unsigned num_uniforms,
                 nir_src_as_uint(intr->src[0]) == 0 &&
                 nir_src_is_const(intr->src[1]) &&
                 /* TODO: Can't handle other bit sizes for now. */
-                intr->dest.ssa.bit_size == 32) {
-               int num_components = intr->dest.ssa.num_components;
+                intr->def.bit_size == 32) {
+               int num_components = intr->def.num_components;
                uint32_t offset = nir_src_as_uint(intr->src[1]) / 4;
 
                if (num_components == 1) {
@@ -414,8 +413,8 @@ nir_inline_uniforms(nir_shader *shader, unsigned num_uniforms,
                   for (unsigned i = 0; i < num_uniforms; i++) {
                      if (offset == uniform_dw_offsets[i]) {
                         b.cursor = nir_before_instr(&intr->instr);
-                        nir_ssa_def *def = nir_imm_int(&b, uniform_values[i]);
-                        nir_ssa_def_rewrite_uses(&intr->dest.ssa, def);
+                        nir_def *def = nir_imm_int(&b, uniform_values[i]);
+                        nir_def_rewrite_uses(&intr->def, def);
                         nir_instr_remove(&intr->instr);
                         break;
                      }
@@ -425,7 +424,7 @@ nir_inline_uniforms(nir_shader *shader, unsigned num_uniforms,
                    * found component load with constant load.
                    */
                   uint32_t max_offset = offset + num_components;
-                  nir_ssa_def *components[NIR_MAX_VEC_COMPONENTS] = {0};
+                  nir_def *components[NIR_MAX_VEC_COMPONENTS] = { 0 };
                   bool found = false;
 
                   b.cursor = nir_before_instr(&intr->instr);
@@ -447,7 +446,7 @@ nir_inline_uniforms(nir_shader *shader, unsigned num_uniforms,
                   for (unsigned i = 0; i < num_components; i++) {
                      if (!components[i]) {
                         uint32_t scalar_offset = (offset + i) * 4;
-                        components[i] = nir_load_ubo(&b, 1, intr->dest.ssa.bit_size,
+                        components[i] = nir_load_ubo(&b, 1, intr->def.bit_size,
                                                      intr->src[0].ssa,
                                                      nir_imm_int(&b, scalar_offset));
                         nir_intrinsic_instr *load =
@@ -459,15 +458,15 @@ nir_inline_uniforms(nir_shader *shader, unsigned num_uniforms,
                   }
 
                   /* Replace the original uniform load. */
-                  nir_ssa_def_rewrite_uses(&intr->dest.ssa,
-                                           nir_vec(&b, components, num_components));
+                  nir_def_rewrite_uses(&intr->def,
+                                       nir_vec(&b, components, num_components));
                   nir_instr_remove(&intr->instr);
                }
             }
          }
 
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+                                        nir_metadata_dominance);
       }
    }
 }

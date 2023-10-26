@@ -1,3 +1,77 @@
+.panfrost-midgard-rules:
+  stage: arm
+  rules:
+    - !reference [.collabora-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - changes: &panfrost_gallium_file_list
+      - src/gallium/drivers/panfrost/**/*
+      - src/gallium/winsys/panfrost/**/*
+      when: on_success
+    - changes: &panfrost_common_file_list
+      - src/panfrost/ci/*
+      - src/panfrost/include/*
+      - src/panfrost/lib/*
+      - src/panfrost/shared/*
+      - src/panfrost/util/*
+      when: on_success
+    - changes:
+      - src/panfrost/midgard/**/*
+      when: on_success
+
+.panfrost-midgard-manual-rules:
+  stage: arm
+  retry: !reference [.scheduled_pipeline-rules, retry]
+  rules:
+    - !reference [.collabora-farm-manual-rules, rules]
+    - !reference [.gl-manual-rules, rules]
+    - changes: *panfrost_gallium_file_list
+      when: manual
+    - changes: *panfrost_common_file_list
+      when: manual
+    - changes:
+      - src/panfrost/midgard/**/*
+      when: manual
+
+.panfrost-bifrost-rules:
+  stage: arm
+  rules:
+    - !reference [.collabora-farm-rules, rules]
+    - !reference [.vulkan-rules, rules]
+    - !reference [.gl-rules, rules]
+    - changes:
+        *panfrost_common_file_list
+      when: on_success
+    - changes:
+        *panfrost_gallium_file_list
+      when: on_success
+    - changes: &panfrost_vulkan_file_list
+      - src/panfrost/vulkan/*
+      when: on_success
+    - changes: &panfrost_bifrost_file_list
+      - src/panfrost/compiler/**/*
+      when: on_success
+
+.panfrost-bifrost-manual-rules:
+  stage: arm
+  retry: !reference [.scheduled_pipeline-rules, retry]
+  rules:
+    - !reference [.collabora-farm-manual-rules, rules]
+    - !reference [.vulkan-manual-rules, rules]
+    - !reference [.gl-manual-rules, rules]
+    - changes:
+        *panfrost_common_file_list
+      when: manual
+    - changes:
+        *panfrost_gallium_file_list
+      when: manual
+    - changes:
+        *panfrost_vulkan_file_list
+      when: manual
+    - changes:
+        *panfrost_bifrost_file_list
+      when: manual
+
+
 .panfrost-test:
   variables:
     FLAKES_CHANNEL: "#panfrost-ci"
@@ -12,7 +86,6 @@
     MESA_GLSL_VERSION_OVERRIDE: 330
     EGL_PLATFORM: surfaceless
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-panfrost.yml"
-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
 # 2 machines, but shared with KernelCI (2022-10-24)
 .lava-rk3288-veyron-jaq:
@@ -42,17 +115,19 @@ panfrost-t720-gles2:arm64:
 
 # We only have two machines, which we share with KernelCI.
 # Keep the second t760 job manual.
-panfrost-t760-gles2:arm32:
+panfrost-t760-gles:arm32:
   extends:
     - .lava-test-deqp:arm32
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3288-veyron-jaq
+  variables:
+    JOB_TIMEOUT: 60
 
-.panfrost-t760-traces:arm32:
+panfrost-t760-traces:arm32:
   extends:
     - .lava-piglit-traces:arm32
-    - .panfrost-midgard-rules
+    - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3288-veyron-jaq
     - .panfrost-traces
@@ -87,9 +162,10 @@ panfrost-t860-egl:arm64:
     HWCI_START_WESTON: 1
     DEQP_SUITE: panfrost-t860-egl
 
-.panfrost-t860-traces:arm64:
+panfrost-t860-traces:arm64:
   extends:
     - .lava-piglit-traces:arm64
+    - .panfrost-midgard-manual-rules
     - .lava-rk3399-gru-kevin
     - .panfrost-traces
 
@@ -113,10 +189,11 @@ panfrost-g52-gl:arm64:
     DEQP_SUITE: panfrost-g52
     PAN_MESA_DEBUG: "deqp,sync,indirect"
 
-.panfrost-g52-vk:arm64:
+panfrost-g52-vk:arm64:
   extends:
     - .lava-test-deqp:arm64
     - .lava-meson-g12b-a311d-khadas-vim3
+    - .panfrost-bifrost-manual-rules
   variables:
     VK_DRIVER: panfrost
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
@@ -152,15 +229,22 @@ panfrost-g72-gl:arm64:
   variables:
     DEQP_SUITE: panfrost-g72
 
-.panfrost-t820-gles2:arm64:
+.lava-mt8192-asurada-spherion-r0:
   extends:
-    - .lava-test-deqp:arm64
-    - .panfrost-midgard-rules
+    - .panfrost-bifrost-rules
     - .panfrost-test
   variables:
-    DEVICE_TYPE: meson-gxm-khadas-vim2
-    DTB: $DEVICE_TYPE
-    GPU_VERSION: panfrost-t820
-    FDO_CI_CONCURRENT: 6
-    DEQP_SUITE: panfrost-t720
-    RUNNER_TAG: mesa-ci-aarch64-lava-baylibre
+    DEVICE_TYPE: mt8192-asurada-spherion-r0
+    DTB: mt8192-asurada-spherion-r0
+    BOOT_METHOD: depthcharge
+    KERNEL_IMAGE_TYPE: ""
+    GPU_VERSION: panfrost-g57
+    RUNNER_TAG: mesa-ci-x86-64-lava-mt8192-asurada-spherion-r0
+
+panfrost-g57-gl:arm64:
+  extends:
+    - .lava-test-deqp:arm64
+    - .lava-mt8192-asurada-spherion-r0
+  parallel: 6
+  variables:
+    DEQP_SUITE: panfrost-g57

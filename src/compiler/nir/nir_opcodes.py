@@ -150,6 +150,7 @@ def type_base_type(type_):
 _2src_commutative = "2src_commutative "
 associative = "associative "
 selection = "selection "
+derivative = "derivative "
 
 # global dictionary of opcodes
 opcodes = {}
@@ -164,8 +165,9 @@ def opcode(name, output_size, output_type, input_sizes, input_types,
 def unop_convert(name, out_type, in_type, const_expr, description = ""):
    opcode(name, 0, out_type, [0], [in_type], False, "", const_expr, description)
 
-def unop(name, ty, const_expr, description = ""):
-   opcode(name, 0, ty, [0], [ty], False, "", const_expr, description)
+def unop(name, ty, const_expr, description = "", algebraic_properties = ""):
+   opcode(name, 0, ty, [0], [ty], False, algebraic_properties, const_expr,
+          description)
 
 def unop_horiz(name, output_size, output_type, input_size, input_type,
                const_expr, description = ""):
@@ -249,7 +251,9 @@ for src_t in [tint, tuint, tfloat, tbool]:
               for rnd_mode in rnd_modes:
                   if rnd_mode == '_rtne':
                       conv_expr = """
-                      if (bit_size > 16) {
+                      if (bit_size > 32) {
+                         dst = _mesa_half_to_float(_mesa_double_to_float16_rtne(src0));
+                      } else if (bit_size > 16) {
                          dst = _mesa_half_to_float(_mesa_float_to_float16_rtne(src0));
                       } else {
                          dst = src0;
@@ -257,14 +261,30 @@ for src_t in [tint, tuint, tfloat, tbool]:
                       """
                   elif rnd_mode == '_rtz':
                       conv_expr = """
-                      if (bit_size > 16) {
+                      if (bit_size > 32) {
+                         dst = _mesa_half_to_float(_mesa_double_to_float16_rtz(src0));
+                      } else if (bit_size > 16) {
                          dst = _mesa_half_to_float(_mesa_float_to_float16_rtz(src0));
                       } else {
                          dst = src0;
                       }
                       """
                   else:
-                      conv_expr = "src0"
+                      conv_expr = """
+                      if (bit_size > 32) {
+                         if (nir_is_rounding_mode_rtz(execution_mode, 16))
+                            dst = _mesa_half_to_float(_mesa_double_to_float16_rtz(src0));
+                         else
+                            dst = _mesa_half_to_float(_mesa_double_to_float16_rtne(src0));
+                      } else if (bit_size > 16) {
+                         if (nir_is_rounding_mode_rtz(execution_mode, 16))
+                            dst = _mesa_half_to_float(_mesa_float_to_float16_rtz(src0));
+                         else
+                            dst = _mesa_half_to_float(_mesa_float_to_float16_rtne(src0));
+                      } else {
+                         dst = src0;
+                      }
+                      """
 
                   unop_numeric_convert("{0}2{1}{2}{3}".format(src_t[0],
                                                               dst_t[0],
@@ -332,12 +352,13 @@ unop_convert("frexp_sig", tfloat, tfloat, "int n; dst = frexp(src0, &n);")
 deriv_template = """
 Calculate the screen-space partial derivative using {} derivatives of the input
 with respect to the {}-axis. The constant folding is trivial as the derivative
-of a constant is 0.
+of a constant is 0 if the constant is not Inf or NaN.
 """
 
 for mode, suffix in [("either fine or coarse", ""), ("fine", "_fine"), ("coarse", "_coarse")]:
     for axis in ["x", "y"]:
-        unop(f"fdd{axis}{suffix}", tfloat, "0.0",
+        unop(f"fdd{axis}{suffix}", tfloat, "isfinite(src0) ? 0.0 : NAN",
+             algebraic_properties = derivative,
              description = deriv_template.format(mode, axis.upper()))
 
 # Floating point pack and unpack operations.
@@ -671,9 +692,8 @@ else
 """, description = """
 Unlike :nir:alu-op:`fmul`, anything (even infinity or NaN) multiplied by zero is
 always zero. ``fmulz(0.0, inf)`` and ``fmulz(0.0, nan)`` must be +/-0.0, even
-if ``SIGNED_ZERO_INF_NAN_PRESERVE`` is not used. If
-``SIGNED_ZERO_INF_NAN_PRESERVE`` is used, then the result must be a positive
-zero if either operand is zero.
+if ``INF_PRESERVE/NAN_PRESERVE`` is not used. If ``SIGNED_ZERO_PRESERVE`` is
+used, then the result must be a positive zero if either operand is zero.
 """)
 
 
@@ -999,8 +1019,8 @@ Floating-point multiply-add with modified zero handling.
 
 Unlike :nir:alu-op:`ffma`, anything (even infinity or NaN) multiplied by zero is
 always zero. ``ffmaz(0.0, inf, src2)`` and ``ffmaz(0.0, nan, src2)`` must be
-``+/-0.0 + src2``, even if ``SIGNED_ZERO_INF_NAN_PRESERVE`` is not used. If
-``SIGNED_ZERO_INF_NAN_PRESERVE`` is used, then the result must be a positive
+``+/-0.0 + src2``, even if ``INF_PRESERVE/NAN_PRESERVE`` is not used. If
+``SIGNED_ZERO_PRESERVE`` is used, then the result must be a positive
 zero plus src2 if either src0 or src1 is zero.
 """)
 
@@ -1406,8 +1426,8 @@ opcode("b32fcsel_mdg", 0, tuint, [0, 0, 0],
        """)
 
 # Magnitude equal to fddx/y, sign undefined. Derivative of a constant is zero.
-unop("fddx_must_abs_mali", tfloat, "0.0")
-unop("fddy_must_abs_mali", tfloat, "0.0")
+unop("fddx_must_abs_mali", tfloat, "0.0", algebraic_properties = "derivative")
+unop("fddy_must_abs_mali", tfloat, "0.0", algebraic_properties = "derivative")
 
 # DXIL specific double [un]pack
 # DXIL doesn't support generic [un]pack instructions, so we want those

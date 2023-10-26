@@ -59,6 +59,7 @@
 #include "main/shaderobj.h"
 #include "ir.h"
 #include "ir_builder.h"
+#include "linker_util.h"
 #include "builtin_functions.h"
 
 using namespace ir_builder;
@@ -911,7 +912,7 @@ validate_assignment(struct _mesa_glsl_parse_state *state,
                     "%s of type %s cannot be assigned to "
                     "variable of type %s",
                     is_initializer ? "initializer" : "value",
-                    rhs->type->name, lhs->type->name);
+                    glsl_get_type_name(rhs->type), glsl_get_type_name(lhs->type));
 
    return NULL;
 }
@@ -1187,11 +1188,13 @@ do_comparison(void *mem_ctx, int operation, ir_rvalue *op0, ir_rvalue *op1)
    case GLSL_TYPE_INTERFACE:
    case GLSL_TYPE_ATOMIC_UINT:
    case GLSL_TYPE_SUBROUTINE:
-   case GLSL_TYPE_FUNCTION:
       /* I assume a comparison of a struct containing a sampler just
        * ignores the sampler present in the type.
        */
       break;
+
+   case GLSL_TYPE_COOPERATIVE_MATRIX:
+      unreachable("unsupported base type cooperative matrix");
    }
 
    if (cmp == NULL)
@@ -1538,8 +1541,8 @@ ast_expression::do_hir(exec_list *instructions,
        */
 
       if (op[0]->type == glsl_type::void_type || op[1]->type == glsl_type::void_type) {
-         _mesa_glsl_error(& loc, state, "`%s':  wrong operand types: "
-                         "no operation `%1$s' exists that takes a left-hand "
+         _mesa_glsl_error(& loc, state, "wrong operand types: "
+                         "no operation `%s' exists that takes a left-hand "
                          "operand of type 'void' or a right operand of type "
                          "'void'", (this->oper == ast_equal) ? "==" : "!=");
          error_emitted = true;
@@ -1715,7 +1718,7 @@ ast_expression::do_hir(exec_list *instructions,
       if (type != orig_type) {
          _mesa_glsl_error(& loc, state,
                           "could not implicitly convert "
-                          "%s to %s", type->name, orig_type->name);
+                          "%s to %s", glsl_get_type_name(type), glsl_get_type_name(orig_type));
          type = glsl_type::error_type;
       }
 
@@ -1756,7 +1759,7 @@ ast_expression::do_hir(exec_list *instructions,
       if (type != orig_type) {
          _mesa_glsl_error(& loc, state,
                           "could not implicitly convert "
-                          "%s to %s", type->name, orig_type->name);
+                          "%s to %s", glsl_get_type_name(type), glsl_get_type_name(orig_type));
          type = glsl_type::error_type;
       }
 
@@ -1823,7 +1826,7 @@ ast_expression::do_hir(exec_list *instructions,
       if (type != orig_type) {
          _mesa_glsl_error(& loc, state,
                           "could not implicitly convert "
-                          "%s to %s", type->name, orig_type->name);
+                          "%s to %s", glsl_get_type_name(type), glsl_get_type_name(orig_type));
          type = glsl_type::error_type;
       }
 
@@ -1902,7 +1905,7 @@ ast_expression::do_hir(exec_list *instructions,
       if (type->contains_opaque()) {
          if (!(state->has_bindless() && (type->is_image() || type->is_sampler()))) {
             _mesa_glsl_error(&loc, state, "variables of type %s cannot be "
-                             "operands of the ?: operator", type->name);
+                             "operands of the ?: operator", glsl_get_type_name(type));
             error_emitted = true;
          }
       }
@@ -2718,7 +2721,7 @@ select_gles_precision(unsigned qual_precision,
       if (precision == ast_precision_none) {
          _mesa_glsl_error(loc, state,
                           "No precision specified in this scope for type `%s'",
-                          type->name);
+                          glsl_get_type_name(type));
       }
    }
 
@@ -3677,14 +3680,15 @@ static inline void
 validate_array_dimensions(const glsl_type *t,
                           struct _mesa_glsl_parse_state *state,
                           YYLTYPE *loc) {
+   const glsl_type *top = t;
    if (t->is_array()) {
       t = t->fields.array;
       while (t->is_array()) {
          if (t->is_unsized_array()) {
             _mesa_glsl_error(loc, state,
                              "only the outermost array dimension can "
-                             "be unsized",
-                             t->name);
+                             "be unsized, but got %s",
+                             glsl_get_type_name(top));
             break;
          }
          t = t->fields.array;
@@ -3752,6 +3756,22 @@ apply_bindless_qualifier_to_variable(const struct ast_type_qualifier *qual,
                         qual->flags.q.bound_image ||
                         state->bound_sampler_specified ||
                         state->bound_image_specified;
+   }
+
+   /* ARB_bindless_texture spec says:
+    *
+    *    "When used as shader inputs, outputs, uniform block members,
+    *     or temporaries, the value of the sampler is a 64-bit unsigned
+    *     integer handle and never refers to a texture image unit."
+    *
+    * The spec doesn't reference images defined inside structs but it was
+    * clarified with the authors that bindless images are allowed in structs.
+    * So we treat these images as implicitly bindless just like the types
+    * in the spec quote above.
+    */
+   if (!var->data.bindless && var->type->is_struct() &&
+       var->type->contains_image()) {
+      var->data.bindless = true;
    }
 }
 
@@ -5509,7 +5529,7 @@ ast_declarator_list::hir(exec_list *instructions,
                                 "vertex shader input / attribute cannot have "
                                 "type %s`%s'",
                                 var->type->is_array() ? "array of " : "",
-                                check_type->name);
+                                glsl_get_type_name(check_type));
             } else if (var->type->is_array() &&
                 !state->check_version(150, 0, &loc,
                                       "vertex shader input / attribute "
@@ -5549,7 +5569,7 @@ ast_declarator_list::hir(exec_list *instructions,
                    check_type->contains_opaque()) {
                   _mesa_glsl_error(&loc, state,
                                    "fragment shader input cannot have type %s",
-                                   check_type->name);
+                                   glsl_get_type_name(check_type));
                }
                if (var->type->is_array() &&
                    var->type->fields.array->is_array()) {
@@ -5606,7 +5626,7 @@ ast_declarator_list::hir(exec_list *instructions,
             default:
                _mesa_glsl_error(&loc, state,
                                 "fragment shader output cannot have "
-                                "type %s", check_type->name);
+                                "type %s", glsl_get_type_name(check_type));
             }
          }
 
@@ -6495,7 +6515,7 @@ ast_function_definition::hir(exec_list *instructions,
       _mesa_glsl_error(& loc, state, "function `%s' has non-void return type "
                        "%s, but no return statement",
                        signature->function_name(),
-                       signature->return_type->name);
+                       glsl_get_type_name(signature->return_type));
    }
 
    /* Function definitions do not have r-values.
@@ -6541,16 +6561,16 @@ ast_jump_statement::hir(exec_list *instructions,
                   _mesa_glsl_error(& loc, state,
                                    "could not implicitly convert return value "
                                    "to %s, in function `%s'",
-                                   state->current_function->return_type->name,
+                                   glsl_get_type_name(state->current_function->return_type),
                                    state->current_function->function_name());
                }
             } else {
                _mesa_glsl_error(& loc, state,
                                 "`return' with wrong type %s, in function `%s' "
                                 "returning %s",
-                                ret_type->name,
+                                glsl_get_type_name(ret_type),
                                 state->current_function->function_name(),
-                                state->current_function->return_type->name);
+                                glsl_get_type_name(state->current_function->return_type));
             }
          } else if (state->current_function->return_type->base_type ==
                     GLSL_TYPE_VOID) {
@@ -7116,7 +7136,7 @@ ast_case_label::hir(exec_list *instructions,
               !integer_conversion_supported) {
             _mesa_glsl_error(&loc, state, "type mismatch with switch "
                              "init-expression and case label (%s != %s)",
-                             type_a->name, type_b->name);
+                             glsl_get_type_name(type_a), glsl_get_type_name(type_b));
          } else {
             /* Conversion of the case label. */
             if (type_a->base_type == GLSL_TYPE_INT) {
@@ -7732,7 +7752,7 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
                   if (qual_offset % base_alignment) {
                      _mesa_glsl_error(&loc, state, "layout qualifier offset "
                                       "must be a multiple of the base "
-                                      "alignment of %s", field_type->name);
+                                      "alignment of %s", glsl_get_type_name(field_type));
                   }
                   fields[i].offset = qual_offset;
                   next_offset = qual_offset + size;
@@ -8380,7 +8400,7 @@ ast_interface_block::hir(exec_list *instructions,
    validate_xfb_offset_qualifier(&loc, state, xfb_offset, block_type,
                                  component_size);
 
-   if (!state->symbols->add_interface(block_type->name, block_type, var_mode)) {
+   if (!state->symbols->add_interface(glsl_get_type_name(block_type), block_type, var_mode)) {
       YYLTYPE loc = this->get_location();
       _mesa_glsl_error(&loc, state, "interface block `%s' with type `%s' "
                        "already taken in the current scope",

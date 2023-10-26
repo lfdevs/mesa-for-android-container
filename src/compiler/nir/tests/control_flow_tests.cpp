@@ -20,31 +20,16 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-#include <gtest/gtest.h>
-#include "nir.h"
-#include "nir_builder.h"
 
-class nir_cf_test : public ::testing::Test {
+#include "nir_test.h"
+
+class nir_cf_test : public nir_test {
 protected:
-   nir_cf_test();
-   ~nir_cf_test();
-
-   nir_builder b;
+   nir_cf_test()
+      : nir_test::nir_test("nir_cf_test")
+   {
+   }
 };
-
-nir_cf_test::nir_cf_test()
-{
-   glsl_type_singleton_init_or_ref();
-
-   static const nir_shader_compiler_options options = { };
-   b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, &options, "cf test");
-}
-
-nir_cf_test::~nir_cf_test()
-{
-   ralloc_free(b.shader);
-   glsl_type_singleton_decref();
-}
 
 TEST_F(nir_cf_test, delete_break_in_loop)
 {
@@ -52,13 +37,13 @@ TEST_F(nir_cf_test, delete_break_in_loop)
     *
     * while (...) { break; }
     */
-   nir_loop *loop = nir_loop_create(b.shader);
-   nir_cf_node_insert(nir_after_cf_list(&b.impl->body), &loop->cf_node);
+   nir_loop *loop = nir_loop_create(b->shader);
+   nir_cf_node_insert(nir_after_cf_list(&b->impl->body), &loop->cf_node);
 
-   b.cursor = nir_after_cf_list(&loop->body);
+   b->cursor = nir_after_cf_list(&loop->body);
 
-   nir_jump_instr *jump = nir_jump_instr_create(b.shader, nir_jump_break);
-   nir_builder_instr_insert(&b, &jump->instr);
+   nir_jump_instr *jump = nir_jump_instr_create(b->shader, nir_jump_break);
+   nir_builder_instr_insert(b, &jump->instr);
 
    /* At this point, we should have:
     *
@@ -78,10 +63,10 @@ TEST_F(nir_cf_test, delete_break_in_loop)
     *         block block_3:
     * }
     */
-   nir_block *block_0 = nir_start_block(b.impl);
+   nir_block *block_0 = nir_start_block(b->impl);
    nir_block *block_1 = nir_loop_first_block(loop);
    nir_block *block_2 = nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
-   nir_block *block_3 = b.impl->end_block;
+   nir_block *block_3 = b->impl->end_block;
    ASSERT_EQ(nir_cf_node_block, block_0->cf_node.type);
    ASSERT_EQ(nir_cf_node_block, block_1->cf_node.type);
    ASSERT_EQ(nir_cf_node_block, block_2->cf_node.type);
@@ -143,5 +128,5 @@ TEST_F(nir_cf_test, delete_break_in_loop)
    EXPECT_FALSE(_mesa_set_search(block_2->predecessors, block_1));
    EXPECT_TRUE(_mesa_set_search(block_3->predecessors, block_2));
 
-   nir_metadata_require(b.impl, nir_metadata_dominance);
+   nir_metadata_require(b->impl, nir_metadata_dominance);
 }

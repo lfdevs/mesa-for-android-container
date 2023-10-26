@@ -252,7 +252,6 @@ svga_vbuf_submit_state(struct svga_vbuf_render *svga_render)
       vb.is_user_buffer = false;
       vb.buffer.resource = svga_render->vbuf;
       vb.buffer_offset = svga_render->vdecl_offset;
-      vb.stride = vdecl[0].array.stride;
       svga_hwtnl_vertex_buffers(svga->hwtnl, 1, &vb);
    }
 

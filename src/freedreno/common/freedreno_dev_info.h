@@ -49,128 +49,156 @@ struct fd_dev_info {
 
    uint32_t num_vsc_pipes;
 
+   uint32_t cs_shared_mem_size;
+
+   int wave_granularity;
+
+   /* Information for private memory calculations */
+   uint32_t fibers_per_sp;
+
    /* number of CCU is always equal to the number of SP */
    union {
       uint32_t num_sp_cores;
       uint32_t num_ccu;
    };
 
-   union {
+   struct {
+      uint32_t reg_size_vec4;
+
+      /* The size (in instrlen units (128 bytes)) of instruction cache where
+       * we preload a shader. Loading more than this could trigger a hang
+       * on gen3 and later.
+       */
+      uint32_t instr_cache_size;
+
+      bool has_hw_multiview;
+
+      bool has_fs_tex_prefetch;
+
+      /* Whether the PC_MULTIVIEW_MASK register exists. */
+      bool supports_multiview_mask;
+
+      /* info for setting RB_CCU_CNTL */
+      bool concurrent_resolve;
+      bool has_z24uint_s8uint;
+
+      bool tess_use_shared;
+
+      /* Does the hw support GL_QCOM_shading_rate? */
+      bool has_shading_rate;
+
+      /* newer a6xx allows using 16-bit descriptor for both 16-bit
+       * and 32-bit access
+       */
+      bool storage_16bit;
+
+      /* The latest known a630_sqe.fw fails to wait for WFI before
+       * reading the indirect buffer when using CP_DRAW_INDIRECT_MULTI,
+       * so we have to fall back to CP_WAIT_FOR_ME except for a650
+       * which has a fixed firmware.
+       *
+       * TODO: There may be newer a630_sqe.fw released in the future
+       * which fixes this, if so we should detect it and avoid this
+       * workaround.  Once we have uapi to query fw version, we can
+       * replace this with minimum fw version.
+       */
+      bool indirect_draw_wfm_quirk;
+
+      /* On some GPUs, the depth test needs to be enabled when the
+       * depth bounds test is enabled and the depth attachment uses UBWC.
+       */
+      bool depth_bounds_require_depth_test_quirk;
+
+      bool has_tex_filter_cubic;
+      bool has_separate_chroma_filter;
+
+      bool has_sample_locations;
+
+      /* The firmware on newer a6xx drops CP_REG_WRITE support as we
+       * can now use direct register writes for these regs.
+       */
+      bool has_cp_reg_write;
+
+      bool has_8bpp_ubwc;
+
+      bool has_lpac;
+
+      bool has_getfiberid;
+
+      bool has_dp2acc;
+      bool has_dp4acc;
+
+      /* LRZ fast-clear works on all gens, however blob disables it on
+       * gen1 and gen2. We also elect to disable fast-clear on these gens
+       * because for close to none gains it adds complexity and seem to work
+       * a bit differently from gen3+. Which creates at least one edge case:
+       * if first draw which uses LRZ fast-clear doesn't lock LRZ direction
+       * the fast-clear value is undefined. For details see
+       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/6829
+       */
+      bool enable_lrz_fast_clear;
+      bool has_lrz_dir_tracking;
+      bool lrz_track_quirk;
+
+      /* Some generations have a bit to add the multiview index to the
+       * viewport index, which lets us implement different scaling for
+       * different views.
+       */
+      bool has_per_view_viewport;
+      bool has_gmem_fast_clear;
+
+      /* Per CCU GMEM amount reserved for each of DEPTH and COLOR caches
+       * in sysmem rendering. */
+      uint32_t sysmem_per_ccu_cache_size;
+      /* Per CCU GMEM amount reserved for color cache used by GMEM resolves
+       * which require color cache (non-BLIT event case).
+       * The size is expressed as a fraction of ccu cache used by sysmem
+       * rendering. If a GMEM resolve requires color cache, the driver needs
+       * to make sure it will not overwrite pixel data in GMEM that is still
+       * needed.
+       */
+      /* see enum a6xx_ccu_color_cache_size */
+      uint32_t gmem_ccu_color_cache_fraction;
+
+      /* Corresponds to HLSQ_CONTROL_1_REG::PRIMALLOCTHRESHOLD */
+      uint32_t prim_alloc_threshold;
+
+      uint32_t vs_max_inputs_count;
+
+      bool supports_double_threadsize;
+
+      bool has_sampler_minmax;
       struct {
-         /* Information for private memory calculations */
-         uint32_t fibers_per_sp;
+         uint32_t PC_POWER_CNTL;
+         uint32_t TPL1_DBG_ECO_CNTL;
+         uint32_t GRAS_DBG_ECO_CNTL;
+         uint32_t SP_CHICKEN_BITS;
+         uint32_t UCHE_CLIENT_PF;
+         uint32_t PC_MODE_CNTL;
+         uint32_t SP_DBG_ECO_CNTL;
+         uint32_t RB_DBG_ECO_CNTL;
+         uint32_t RB_DBG_ECO_CNTL_blit;
+         uint32_t HLSQ_DBG_ECO_CNTL;
+         uint32_t RB_UNKNOWN_8E01;
+         uint32_t VPC_DBG_ECO_CNTL;
+         uint32_t UCHE_UNKNOWN_0E12;
+      } magic;
 
-         uint32_t reg_size_vec4;
+      struct {
+            uint32_t reg;
+            uint32_t value;
+      } magic_raw[32];
 
-         /* The size (in instrlen units (128 bytes)) of instruction cache where
-          * we preload a shader. Loading more than this could trigger a hang
-          * on gen3 and later.
-          */
-         uint32_t instr_cache_size;
+      /* maximum number of descriptor sets */
+      uint32_t max_sets;
+   } a6xx;
 
-         /* Whether the PC_MULTIVIEW_MASK register exists. */
-         bool supports_multiview_mask;
-
-         /* info for setting RB_CCU_CNTL */
-         bool concurrent_resolve;
-         bool has_z24uint_s8uint;
-
-         bool tess_use_shared;
-
-         /* Does the hw support GL_QCOM_shading_rate? */
-         bool has_shading_rate;
-
-         /* newer a6xx allows using 16-bit descriptor for both 16-bit
-          * and 32-bit access
-          */
-         bool storage_16bit;
-
-         /* The latest known a630_sqe.fw fails to wait for WFI before
-          * reading the indirect buffer when using CP_DRAW_INDIRECT_MULTI,
-          * so we have to fall back to CP_WAIT_FOR_ME except for a650
-          * which has a fixed firmware.
-          *
-          * TODO: There may be newer a630_sqe.fw released in the future
-          * which fixes this, if so we should detect it and avoid this
-          * workaround.  Once we have uapi to query fw version, we can
-          * replace this with minimum fw version.
-          */
-         bool indirect_draw_wfm_quirk;
-
-         /* On some GPUs, the depth test needs to be enabled when the
-          * depth bounds test is enabled and the depth attachment uses UBWC.
-          */
-         bool depth_bounds_require_depth_test_quirk;
-
-         bool has_tex_filter_cubic;
-         bool has_separate_chroma_filter;
-
-         bool has_sample_locations;
-
-         /* The firmware on newer a6xx drops CP_REG_WRITE support as we
-          * can now use direct register writes for these regs.
-          */
-         bool has_cp_reg_write;
-
-         bool has_8bpp_ubwc;
-
-         /* a650 seems to be affected by a bug where flushing CCU color into
-          * depth or vice-versa requires a WFI. In particular, clearing a
-          * depth attachment (which writes to it as a color attachment) then
-          * using it as a normal depth attachment requires a WFI in addition
-          * to the expected CCU_FLUSH_COLOR + CCU_INVALIDATE_DEPTH, even
-          * though all those operations happen in the same stage. As this is
-          * usually the only scenario where a CCU flush doesn't require a WFI
-          * we just insert a WFI after every CCU flush.
-          *
-          * Tests affected include
-          * dEQP-VK.renderpass.suballocation.formats.d16_unorm.* in sysmem
-          * mode (a few tests flake when the entire series is run).
-          */
-         bool has_ccu_flush_bug;
-
-         bool has_lpac;
-
-         bool has_getfiberid;
-
-         bool has_dp2acc;
-         bool has_dp4acc;
-
-         /* LRZ fast-clear works on all gens, however blob disables it on
-          * gen1 and gen2. We also elect to disable fast-clear on these gens
-          * because for close to none gains it adds complexity and seem to work
-          * a bit differently from gen3+. Which creates at least one edge case:
-          * if first draw which uses LRZ fast-clear doesn't lock LRZ direction
-          * the fast-clear value is undefined. For details see
-          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/6829
-          */
-         bool enable_lrz_fast_clear;
-         bool has_lrz_dir_tracking;
-         bool lrz_track_quirk;
-
-         /* Some generations have a bit to add the multiview index to the
-          * viewport index, which lets us implement different scaling for
-          * different views.
-          */
-         bool has_per_view_viewport;
-
-         struct {
-            uint32_t PC_POWER_CNTL;
-            uint32_t TPL1_DBG_ECO_CNTL;
-            uint32_t GRAS_DBG_ECO_CNTL;
-            uint32_t SP_CHICKEN_BITS;
-            uint32_t UCHE_CLIENT_PF;
-            uint32_t PC_MODE_CNTL;
-            uint32_t SP_DBG_ECO_CNTL;
-            uint32_t RB_DBG_ECO_CNTL;
-            uint32_t RB_DBG_ECO_CNTL_blit;
-            uint32_t HLSQ_DBG_ECO_CNTL;
-            uint32_t RB_UNKNOWN_8E01;
-            uint32_t VPC_DBG_ECO_CNTL;
-            uint32_t UCHE_UNKNOWN_0E12;
-         } magic;
-      } a6xx;
-   };
+   struct {
+      /* stsc may need to be done twice for the same range to workaround
+       * _something_, observed in blob's disassembly.
+       */
+      bool stsc_duplication_quirk;
+   } a7xx;
 };
 
 struct fd_dev_id {

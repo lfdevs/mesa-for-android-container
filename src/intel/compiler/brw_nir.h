@@ -116,7 +116,7 @@ struct brw_nir_compiler_opts {
 static inline bool
 brw_nir_ubo_surface_index_is_pushable(nir_src src)
 {
-   nir_intrinsic_instr *intrin = src.is_ssa &&
+   nir_intrinsic_instr *intrin =
       src.ssa->parent_instr->type == nir_instr_type_intrinsic ?
       nir_instr_as_intrinsic(src.ssa->parent_instr) : NULL;
 
@@ -191,6 +191,8 @@ bool brw_nir_lower_conversions(nir_shader *nir);
 
 bool brw_nir_lower_shading_rate_output(nir_shader *nir);
 
+bool brw_nir_lower_sparse_intrinsics(nir_shader *nir);
+
 struct brw_nir_lower_storage_image_opts {
    const struct intel_device_info *devinfo;
 
@@ -214,7 +216,7 @@ bool brw_nir_cleanup_resource_intel(nir_shader *shader);
 void brw_postprocess_nir(nir_shader *nir,
                          const struct brw_compiler *compiler,
                          bool debug_enabled,
-                         bool robust_buffer_access);
+                         enum brw_robustness_flags robust_flags);
 
 bool brw_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader);
 
@@ -226,6 +228,8 @@ bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 bool brw_nir_limit_trig_input_range_workaround(nir_shader *nir);
 
 void brw_nir_apply_tcs_quads_workaround(nir_shader *nir);
+
+bool brw_nir_lower_non_uniform_barycentric_at_sample(nir_shader *nir);
 
 void brw_nir_apply_key(nir_shader *nir,
                        const struct brw_compiler *compiler,
@@ -278,13 +282,15 @@ bool brw_nir_pulls_at_sample(nir_shader *shader);
 #define BRW_NIR_FRAG_OUTPUT_LOCATION_MASK INTEL_MASK(31, 1)
 
 bool brw_nir_move_interpolation_to_top(nir_shader *nir);
-nir_ssa_def *brw_nir_load_global_const(nir_builder *b,
+nir_def *brw_nir_load_global_const(nir_builder *b,
                                        nir_intrinsic_instr *load_uniform,
-                                       nir_ssa_def *base_addr,
+                                       nir_def *base_addr,
                                        unsigned off);
 
 const struct glsl_type *brw_nir_get_var_type(const struct nir_shader *nir,
                                              nir_variable *var);
+
+void brw_nir_adjust_payload(nir_shader *shader, const struct brw_compiler *compiler);
 
 #ifdef __cplusplus
 }

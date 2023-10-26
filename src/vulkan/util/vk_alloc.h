@@ -185,7 +185,7 @@ struct vk_multialloc {
 };
 
 #define VK_MULTIALLOC(_name) \
-   struct vk_multialloc _name = { 0, }
+   struct vk_multialloc _name = { .align = 1 }
 
 static ALWAYS_INLINE void
 vk_multialloc_add_size_align(struct vk_multialloc *ma,

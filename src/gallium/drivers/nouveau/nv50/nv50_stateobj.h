@@ -52,10 +52,12 @@ struct nv50_vertex_element {
 struct nv50_vertex_stateobj {
    uint32_t min_instance_div[PIPE_MAX_ATTRIBS];
    uint16_t vb_access_size[PIPE_MAX_ATTRIBS];
+   uint16_t strides[PIPE_MAX_ATTRIBS];
    struct translate *translate;
    unsigned num_elements;
    uint32_t instance_elts;
    uint32_t instance_bufs;
+   uint32_t vbo_constant;
    bool need_conversion;
    unsigned vertex_size;
    unsigned packet_vertex_limit;

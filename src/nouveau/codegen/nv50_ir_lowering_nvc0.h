@@ -129,13 +129,11 @@ public:
 
 protected:
    bool handleRDSV(Instruction *);
-   bool handleWRSV(Instruction *);
    bool handleEXPORT(Instruction *);
    bool handleOUT(Instruction *);
    bool handleDIV(Instruction *);
    bool handleMOD(Instruction *);
    bool handleSQRT(Instruction *);
-   bool handlePOW(Instruction *);
    bool handleTEX(TexInstruction *);
    bool handleTXD(TexInstruction *);
    bool handleTXQ(TexInstruction *);

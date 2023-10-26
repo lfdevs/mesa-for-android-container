@@ -52,6 +52,11 @@ void ac_add_return(struct ac_shader_args *info, enum ac_arg_regfile regfile)
    info->return_count++;
 }
 
+void ac_add_preserved(struct ac_shader_args *info, const struct ac_arg *arg)
+{
+   info->args[arg->arg_index].preserved = true;
+}
+
 void ac_compact_ps_vgpr_args(struct ac_shader_args *info, uint32_t spi_ps_input)
 {
    /* LLVM optimizes away unused FS inputs and computes spi_ps_input_addr itself and then

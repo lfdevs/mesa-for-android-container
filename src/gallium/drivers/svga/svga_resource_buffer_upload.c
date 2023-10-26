@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -204,10 +204,30 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
 
       if (sbuf->b.flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) {
          /* This surface can be mapped persistently. We use
-          * coherent memory to avoid implementing memory barriers for
-          * persistent non-coherent memory for now.
+          * coherent memory if available to avoid implementing memory barriers
+          * for persistent non-coherent memory for now.
           */
-         sbuf->key.coherent = 1;
+         sbuf->key.coherent = ss->sws->have_coherent;
+
+         if (ss->sws->have_gl43) {
+            /* Set the persistent bit so if the buffer is to be bound
+             * as constant buffer, we'll access it as raw buffer
+             * instead of copying the content back and forth between the
+             * mapped buffer surface and the constant buffer surface.
+             */
+            sbuf->key.persistent = 1;
+
+            /* Set the raw views bind flag only if the mapped buffer surface
+             * is not already bound as constant buffer since constant buffer
+             * surface cannot have other bind flags.
+             */
+            if ((bind_flags & PIPE_BIND_CONSTANT_BUFFER) == 0) {
+	       sbuf->key.flags |= SVGA3D_SURFACE_BIND_UAVIEW |
+                                  SVGA3D_SURFACE_BIND_RAW_VIEWS;
+               bind_flags = bind_flags | PIPE_BIND_SHADER_BUFFER;
+               //sbuf->key.flags |= SVGA3D_SURFACE_BIND_RAW_VIEWS;
+            }
+         }
       }
 
       sbuf->key.size.width = sbuf->b.width0;

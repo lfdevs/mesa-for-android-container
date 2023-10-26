@@ -541,7 +541,7 @@ update_tex_combine(struct gl_context *ctx,
    }
    else {
       const struct gl_texture_object *texObj = texUnit->_Current;
-      GLenum format = texObj->Image[0][texObj->Attrib.BaseLevel]->_BaseFormat;
+      GLenum format = _mesa_base_tex_image(texObj)->_BaseFormat;
 
       if (format == GL_DEPTH_COMPONENT || format == GL_DEPTH_STENCIL_EXT) {
          format = texObj->Attrib.DepthMode;

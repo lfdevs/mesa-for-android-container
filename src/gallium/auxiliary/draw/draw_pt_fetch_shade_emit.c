@@ -110,12 +110,9 @@ fse_prepare(struct draw_pt_middle_end *middle,
        */
       fse->key.element[i].in.buffer = src->vertex_buffer_index;
       fse->key.element[i].in.offset = src->src_offset;
+      if (src->src_stride == 0)
+         fse->key.const_vbuffers |= (1<<src->vertex_buffer_index);
       nr_vbs = MAX2(nr_vbs, src->vertex_buffer_index + 1);
-   }
-
-   for (unsigned i = 0; i < 5 && i < nr_vbs; i++) {
-      if (draw->pt.vertex_buffer[i].stride == 0)
-         fse->key.const_vbuffers |= (1<<i);
    }
 
    if (0) debug_printf("%s: lookup const_vbuffers: %x\n",
@@ -160,7 +157,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
                               i,
                               ((const uint8_t *) draw->pt.user.vbuffer[i].map +
                                draw->pt.vertex_buffer[i].buffer_offset),
-                              draw->pt.vertex_buffer[i].stride,
+                              draw->pt.vertex_strides[i],
                               draw->pt.max_index);
    }
 

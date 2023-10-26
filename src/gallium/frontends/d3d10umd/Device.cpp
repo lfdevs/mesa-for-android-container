@@ -132,6 +132,7 @@ CreateDevice(D3D10DDI_HADAPTER hAdapter,                 // IN
    struct pipe_screen *screen = pAdapter->screen;
    struct pipe_context *pipe = screen->context_create(screen, NULL, 0);
    pDevice->pipe = pipe;
+   pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);
 
    pDevice->empty_vs = CreateEmptyShader(pDevice, PIPE_SHADER_VERTEX);
    pDevice->empty_fs = CreateEmptyShader(pDevice, PIPE_SHADER_FRAGMENT);
@@ -334,6 +335,7 @@ DestroyDevice(D3D10DDI_HDEVICE hDevice)   // IN
 
    pipe->bind_fs_state(pipe, NULL);
    pipe->bind_vs_state(pipe, NULL);
+   cso_destroy_context(pDevice->cso);
 
    DeleteEmptyShader(pDevice, PIPE_SHADER_FRAGMENT, pDevice->empty_fs);
    DeleteEmptyShader(pDevice, PIPE_SHADER_VERTEX, pDevice->empty_vs);

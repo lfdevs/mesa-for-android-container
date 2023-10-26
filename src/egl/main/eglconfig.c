@@ -699,10 +699,11 @@ _eglSortConfigs(const _EGLConfig **configs, EGLint count,
  * A helper function for implementing eglChooseConfig.  See _eglFilterArray and
  * _eglSortConfigs for the meanings of match and compare.
  */
-EGLBoolean
+static EGLBoolean
 _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs, EGLint config_size,
                       EGLint *num_configs,
-                      EGLBoolean (*match)(const _EGLConfig *, void *),
+                      EGLBoolean (*match)(const _EGLConfig *,
+                                          const _EGLConfig *),
                       EGLint (*compare)(const _EGLConfig *, const _EGLConfig *,
                                         void *),
                       void *priv_data)
@@ -741,12 +742,6 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs, EGLint config_size,
    return EGL_TRUE;
 }
 
-static EGLBoolean
-_eglFallbackMatch(const _EGLConfig *conf, void *priv_data)
-{
-   return _eglMatchConfig(conf, (const _EGLConfig *)priv_data);
-}
-
 static EGLint
 _eglFallbackCompare(const _EGLConfig *conf1, const _EGLConfig *conf2,
                     void *priv_data)
@@ -769,7 +764,7 @@ _eglChooseConfig(_EGLDisplay *disp, const EGLint *attrib_list,
       return _eglError(EGL_BAD_ATTRIBUTE, "eglChooseConfig");
 
    result = _eglFilterConfigArray(disp->Configs, configs, config_size,
-                                  num_configs, _eglFallbackMatch,
+                                  num_configs, _eglMatchConfig,
                                   _eglFallbackCompare, (void *)&criteria);
 
    if (result && (_eglGetLogLevel() == _EGL_DEBUG))

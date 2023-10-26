@@ -41,7 +41,7 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
                                             nir_instr *instr,
                                             UNUSED void *cb_data)
 {
-   nir_ssa_def *image_size = NULL;
+   nir_def *image_size = NULL;
 
    switch (instr->type) {
    case nir_instr_type_intrinsic: {
@@ -53,7 +53,7 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
          if (!nir_intrinsic_image_array(intr))
             break;
 
-         image_size = &intr->dest.ssa;
+         image_size = &intr->def;
          break;
 
       case nir_intrinsic_image_deref_size: {
@@ -64,7 +64,7 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
          if (!glsl_sampler_type_is_array(deref->type))
             break;
 
-         image_size = &intr->dest.ssa;
+         image_size = &intr->def;
          break;
       }
 
@@ -82,7 +82,7 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
       if (!tex_instr->is_array)
          break;
 
-      image_size = &tex_instr->dest.ssa;
+      image_size = &tex_instr->def;
       break;
    }
 
@@ -95,17 +95,17 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
 
    b->cursor = nir_after_instr(instr);
 
-   nir_ssa_def *components[4];
+   nir_def *components[4];
    /* OR all the sizes for all components but the last. */
-   nir_ssa_def *or_components = nir_imm_int(b, 0);
+   nir_def *or_components = nir_imm_int(b, 0);
    for (int i = 0; i < image_size->num_components; i++) {
       if (i == (image_size->num_components - 1)) {
-         nir_ssa_def *null_or_size[2] = {
+         nir_def *null_or_size[2] = {
             nir_imm_int(b, 0),
             nir_imax(b, nir_channel(b, image_size, i),
                          nir_imm_int(b, 1)),
          };
-         nir_ssa_def *vec2_null_or_size = nir_vec(b, null_or_size, 2);
+         nir_def *vec2_null_or_size = nir_vec(b, null_or_size, 2);
 
          /* Using the ORed sizes select either the element 0 or 1
           * from this vec2. For NULL textures which have a size of
@@ -121,12 +121,12 @@ brw_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
          or_components = nir_ior(b, components[i], or_components);
       }
    }
-   nir_ssa_def *image_size_replacement =
+   nir_def *image_size_replacement =
       nir_vec(b, components, image_size->num_components);
 
    b->cursor = nir_after_instr(instr);
 
-   nir_ssa_def_rewrite_uses_after(image_size,
+   nir_def_rewrite_uses_after(image_size,
                                   image_size_replacement,
                                   image_size_replacement->parent_instr);
 

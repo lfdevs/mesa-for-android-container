@@ -57,6 +57,7 @@ zink_create_vertex_elements_state(struct pipe_context *pctx,
    uint32_t size8 = 0;
    uint32_t size16 = 0;
    uint32_t size32 = 0;
+   uint16_t strides[PIPE_MAX_ATTRIBS];
    for (i = 0; i < num_elements; ++i) {
       const struct pipe_vertex_element *elem = elements + i;
 
@@ -112,12 +113,14 @@ zink_create_vertex_elements_state(struct pipe_context *pctx,
          ves->hw_state.dynattribs[i].binding = binding;
          ves->hw_state.dynattribs[i].location = i;
          ves->hw_state.dynattribs[i].format = format;
+         strides[binding] = elem->src_stride;
          assert(ves->hw_state.dynattribs[i].format != VK_FORMAT_UNDEFINED);
          ves->hw_state.dynattribs[i].offset = elem->src_offset;
       } else {
          ves->hw_state.attribs[i].binding = binding;
          ves->hw_state.attribs[i].location = i;
          ves->hw_state.attribs[i].format = format;
+         ves->hw_state.b.strides[binding] = elem->src_stride;
          assert(ves->hw_state.attribs[i].format != VK_FORMAT_UNDEFINED);
          ves->hw_state.attribs[i].offset = elem->src_offset;
          ves->min_stride[binding] = MAX2(ves->min_stride[binding], elem->src_offset + vk_format_get_blocksize(format));
@@ -154,6 +157,7 @@ zink_create_vertex_elements_state(struct pipe_context *pctx,
          ves->hw_state.dynbindings[i].sType = VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT;
          ves->hw_state.dynbindings[i].binding = ves->bindings[i].binding;
          ves->hw_state.dynbindings[i].inputRate = ves->bindings[i].inputRate;
+         ves->hw_state.dynbindings[i].stride = strides[i];
          if (ves->divisor[i])
             ves->hw_state.dynbindings[i].divisor = ves->divisor[i];
          else
@@ -752,7 +756,7 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
       if (!ctx->primitives_generated_active)
          zink_set_rasterizer_discard(ctx, false);
       else if (rasterizer_discard != ctx->rast_state->base.rasterizer_discard)
-         zink_set_color_write_enables(ctx);
+         zink_set_null_fs(ctx);
 
       if (ctx->rast_state->base.point_quad_rasterization ||
           ctx->rast_state->base.point_quad_rasterization != point_quad_rasterization)
@@ -803,10 +807,6 @@ zink_create_vertex_state(struct pipe_screen *pscreen,
    struct zink_context ctx;
    ctx.base.screen = pscreen;
    struct zink_vertex_elements_state *elems = zink_create_vertex_elements_state(&ctx.base, num_elements, elements);
-   for (unsigned i = 0; i < elems->hw_state.num_bindings; i++) {
-      if (zink_screen(pscreen)->info.have_EXT_vertex_input_dynamic_state)
-         elems->hw_state.dynbindings[i].stride = buffer->stride;
-   }
    zstate->velems = *elems;
    zink_delete_vertex_elements_state(&ctx.base, elems);
 

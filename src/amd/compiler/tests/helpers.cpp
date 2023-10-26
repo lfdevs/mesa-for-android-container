@@ -137,7 +137,7 @@ setup_cs(const char* input_spec, enum amd_gfx_level gfx_level, enum radeon_famil
 }
 
 void
-finish_program(Program* prog)
+finish_program(Program* prog, bool endpgm)
 {
    for (Block& BB : prog->blocks) {
       for (unsigned idx : BB.linear_preds)
@@ -146,10 +146,12 @@ finish_program(Program* prog)
          prog->blocks[idx].logical_succs.emplace_back(BB.index);
    }
 
-   for (Block& block : prog->blocks) {
-      if (block.linear_succs.size() == 0) {
-         block.kind |= block_kind_uniform;
-         Builder(prog, &block).sopp(aco_opcode::s_endpgm);
+   if (endpgm) {
+      for (Block& block : prog->blocks) {
+         if (block.linear_succs.size() == 0) {
+            block.kind |= block_kind_uniform;
+            Builder(prog, &block).sopp(aco_opcode::s_endpgm);
+         }
       }
    }
 }
@@ -249,9 +251,9 @@ finish_waitcnt_test()
 }
 
 void
-finish_insert_nops_test()
+finish_insert_nops_test(bool endpgm)
 {
-   finish_program(program.get());
+   finish_program(program.get(), endpgm);
    aco::insert_NOPs(program.get());
    aco_print_program(program.get(), output);
 }
@@ -269,7 +271,7 @@ finish_assembler_test()
 {
    finish_program(program.get());
    std::vector<uint32_t> binary;
-   unsigned exec_size = emit_program(program.get(), binary, NULL);
+   unsigned exec_size = emit_program(program.get(), binary);
 
    /* we could use CLRX for disassembly but that would require it to be
     * installed */
@@ -498,7 +500,7 @@ get_vk_device(enum amd_gfx_level gfx_level)
    case GFX9: family = CHIP_VEGA10; break;
    case GFX10: family = CHIP_NAVI10; break;
    case GFX10_3: family = CHIP_NAVI21; break;
-   case GFX11: family = CHIP_GFX1100; break;
+   case GFX11: family = CHIP_NAVI31; break;
    default: family = CHIP_UNKNOWN; break;
    }
    return get_vk_device(family);

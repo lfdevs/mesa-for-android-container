@@ -325,7 +325,7 @@ impl SPIRVBin {
             environment: nir_spirv_execution_environment::NIR_SPIRV_OPENCL,
             clc_shader: clc_shader,
             float_controls_execution_mode: float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32
-                as u16,
+                as u32,
 
             caps: spirv_supported_capabilities {
                 address: true,

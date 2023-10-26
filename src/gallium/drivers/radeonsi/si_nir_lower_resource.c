@@ -25,10 +25,10 @@ struct lower_resource_state {
    struct si_shader_args *args;
 };
 
-static nir_ssa_def *load_ubo_desc_fast_path(nir_builder *b, nir_ssa_def *addr_lo,
+static nir_def *load_ubo_desc_fast_path(nir_builder *b, nir_def *addr_lo,
                                             struct si_shader_selector *sel)
 {
-   nir_ssa_def *addr_hi =
+   nir_def *addr_hi =
       nir_imm_int(b, S_008F04_BASE_ADDRESS_HI(sel->screen->info.address32_hi));
 
    uint32_t rsrc3 =
@@ -49,23 +49,23 @@ static nir_ssa_def *load_ubo_desc_fast_path(nir_builder *b, nir_ssa_def *addr_lo
                    nir_imm_int(b, rsrc3));
 }
 
-static nir_ssa_def *clamp_index(nir_builder *b, nir_ssa_def *index, unsigned max)
+static nir_def *clamp_index(nir_builder *b, nir_def *index, unsigned max)
 {
    if (util_is_power_of_two_or_zero(max))
       return nir_iand_imm(b, index, max - 1);
    else {
-      nir_ssa_def *clamp = nir_imm_int(b, max - 1);
-      nir_ssa_def *cond = nir_uge(b, clamp, index);
+      nir_def *clamp = nir_imm_int(b, max - 1);
+      nir_def *cond = nir_uge(b, clamp, index);
       return nir_bcsel(b, cond, index, clamp);
    }
 }
 
-static nir_ssa_def *load_ubo_desc(nir_builder *b, nir_ssa_def *index,
+static nir_def *load_ubo_desc(nir_builder *b, nir_def *index,
                                   struct lower_resource_state *s)
 {
    struct si_shader_selector *sel = s->shader->selector;
 
-   nir_ssa_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
+   nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
 
    if (sel->info.base.num_ubos == 1 && sel->info.base.num_ssbos == 0)
       return load_ubo_desc_fast_path(b, addr, sel);
@@ -73,11 +73,11 @@ static nir_ssa_def *load_ubo_desc(nir_builder *b, nir_ssa_def *index,
    index = clamp_index(b, index, sel->info.base.num_ubos);
    index = nir_iadd_imm(b, index, SI_NUM_SHADER_BUFFERS);
 
-   nir_ssa_def *offset = nir_ishl_imm(b, index, 4);
+   nir_def *offset = nir_ishl_imm(b, index, 4);
    return nir_load_smem_amd(b, 4, addr, offset);
 }
 
-static nir_ssa_def *load_ssbo_desc(nir_builder *b, nir_src *index,
+static nir_def *load_ssbo_desc(nir_builder *b, nir_src *index,
                                    struct lower_resource_state *s)
 {
    struct si_shader_selector *sel = s->shader->selector;
@@ -89,15 +89,15 @@ static nir_ssa_def *load_ssbo_desc(nir_builder *b, nir_src *index,
          return ac_nir_load_arg(b, &s->args->ac, s->args->cs_shaderbuf[slot]);
    }
 
-   nir_ssa_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
-   nir_ssa_def *slot = clamp_index(b, index->ssa, sel->info.base.num_ssbos);
+   nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
+   nir_def *slot = clamp_index(b, index->ssa, sel->info.base.num_ssbos);
    slot = nir_isub_imm(b, SI_NUM_SHADER_BUFFERS - 1, slot);
 
-   nir_ssa_def *offset = nir_ishl_imm(b, slot, 4);
+   nir_def *offset = nir_ishl_imm(b, slot, 4);
    return nir_load_smem_amd(b, 4, addr, offset);
 }
 
-static nir_ssa_def *fixup_image_desc(nir_builder *b, nir_ssa_def *rsrc, bool uses_store,
+static nir_def *fixup_image_desc(nir_builder *b, nir_def *rsrc, bool uses_store,
                                      struct lower_resource_state *s)
 {
    struct si_shader_selector *sel = s->shader->selector;
@@ -117,7 +117,7 @@ static nir_ssa_def *fixup_image_desc(nir_builder *b, nir_ssa_def *rsrc, bool use
    if (uses_store &&
        screen->info.gfx_level <= GFX9 &&
        screen->info.gfx_level >= GFX8) {
-      nir_ssa_def *tmp = nir_channel(b, rsrc, 6);
+      nir_def *tmp = nir_channel(b, rsrc, 6);
       tmp = nir_iand_imm(b, tmp, C_008F28_COMPRESSION_EN);
       rsrc = nir_vector_insert_imm(b, rsrc, tmp, 6);
    }
@@ -125,7 +125,7 @@ static nir_ssa_def *fixup_image_desc(nir_builder *b, nir_ssa_def *rsrc, bool use
    if (!uses_store &&
        screen->info.has_image_load_dcc_bug &&
        screen->always_allow_dcc_stores) {
-      nir_ssa_def *tmp = nir_channel(b, rsrc, 6);
+      nir_def *tmp = nir_channel(b, rsrc, 6);
       tmp = nir_iand_imm(b, tmp, C_00A018_WRITE_COMPRESS_ENABLE);
       rsrc = nir_vector_insert_imm(b, rsrc, tmp, 6);
    }
@@ -136,12 +136,12 @@ static nir_ssa_def *fixup_image_desc(nir_builder *b, nir_ssa_def *rsrc, bool use
 /* AC_DESC_FMASK is handled exactly like AC_DESC_IMAGE. The caller should
  * adjust "index" to point to FMASK.
  */
-static nir_ssa_def *load_image_desc(nir_builder *b, nir_ssa_def *list, nir_ssa_def *index,
+static nir_def *load_image_desc(nir_builder *b, nir_def *list, nir_def *index,
                                     enum ac_descriptor_type desc_type, bool uses_store,
                                     struct lower_resource_state *s)
 {
    /* index is in uvec8 unit, convert to offset in bytes */
-   nir_ssa_def *offset = nir_ishl_imm(b, index, 5);
+   nir_def *offset = nir_ishl_imm(b, index, 5);
 
    unsigned num_channels;
    if (desc_type == AC_DESC_BUFFER) {
@@ -152,7 +152,7 @@ static nir_ssa_def *load_image_desc(nir_builder *b, nir_ssa_def *list, nir_ssa_d
       num_channels = 8;
    }
 
-   nir_ssa_def *rsrc = nir_load_smem_amd(b, num_channels, list, offset);
+   nir_def *rsrc = nir_load_smem_amd(b, num_channels, list, offset);
 
    if (desc_type == AC_DESC_IMAGE)
       rsrc = fixup_image_desc(b, rsrc, uses_store, s);
@@ -160,14 +160,14 @@ static nir_ssa_def *load_image_desc(nir_builder *b, nir_ssa_def *list, nir_ssa_d
    return rsrc;
 }
 
-static nir_ssa_def *deref_to_index(nir_builder *b,
+static nir_def *deref_to_index(nir_builder *b,
                                    nir_deref_instr *deref,
                                    unsigned max_slots,
-                                   nir_ssa_def **dynamic_index_ret,
+                                   nir_def **dynamic_index_ret,
                                    unsigned *const_index_ret)
 {
    unsigned const_index = 0;
-   nir_ssa_def *dynamic_index = NULL;
+   nir_def *dynamic_index = NULL;
    while (deref->deref_type != nir_deref_type_var) {
       assert(deref->deref_type == nir_deref_type_array);
       unsigned array_size = MAX2(glsl_get_aoa_size(deref->type), 1);
@@ -175,7 +175,7 @@ static nir_ssa_def *deref_to_index(nir_builder *b,
       if (nir_src_is_const(deref->arr.index)) {
          const_index += array_size * nir_src_as_uint(deref->arr.index);
       } else {
-         nir_ssa_def *tmp = nir_imul_imm(b, deref->arr.index.ssa, array_size);
+         nir_def *tmp = nir_imul_imm(b, deref->arr.index.ssa, array_size);
          dynamic_index = dynamic_index ? nir_iadd(b, dynamic_index, tmp) : tmp;
       }
 
@@ -189,7 +189,7 @@ static nir_ssa_def *deref_to_index(nir_builder *b,
    if (const_index >= max_slots)
       const_index = base_index;
 
-   nir_ssa_def *index = nir_imm_int(b, const_index);
+   nir_def *index = nir_imm_int(b, const_index);
    if (dynamic_index) {
       index = nir_iadd(b, dynamic_index, index);
 
@@ -213,16 +213,16 @@ static nir_ssa_def *deref_to_index(nir_builder *b,
    return index;
 }
 
-static nir_ssa_def *load_deref_image_desc(nir_builder *b, nir_deref_instr *deref,
+static nir_def *load_deref_image_desc(nir_builder *b, nir_deref_instr *deref,
                                           enum ac_descriptor_type desc_type, bool is_load,
                                           struct lower_resource_state *s)
 {
    unsigned const_index;
-   nir_ssa_def *dynamic_index;
-   nir_ssa_def *index = deref_to_index(b, deref, s->shader->selector->info.base.num_images,
+   nir_def *dynamic_index;
+   nir_def *index = deref_to_index(b, deref, s->shader->selector->info.base.num_images,
                                        &dynamic_index, &const_index);
 
-   nir_ssa_def *desc;
+   nir_def *desc;
    if (!dynamic_index && desc_type != AC_DESC_FMASK &&
        const_index < s->shader->selector->cs_num_images_in_user_sgprs) {
       /* Fast path if the image is in user SGPRs. */
@@ -237,14 +237,14 @@ static nir_ssa_def *load_deref_image_desc(nir_builder *b, nir_deref_instr *deref
 
       index = nir_isub_imm(b, SI_NUM_IMAGE_SLOTS - 1, index);
 
-      nir_ssa_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
+      nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
       desc = load_image_desc(b, list, index, desc_type, !is_load, s);
    }
 
    return desc;
 }
 
-static nir_ssa_def *load_bindless_image_desc(nir_builder *b, nir_ssa_def *index,
+static nir_def *load_bindless_image_desc(nir_builder *b, nir_def *index,
                                              enum ac_descriptor_type desc_type, bool is_load,
                                              struct lower_resource_state *s)
 {
@@ -255,7 +255,7 @@ static nir_ssa_def *load_bindless_image_desc(nir_builder *b, nir_ssa_def *index,
    if (desc_type == AC_DESC_FMASK)
       index = nir_iadd_imm(b, index, 1);
 
-   nir_ssa_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
+   nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
    return load_image_desc(b, list, index, desc_type, !is_load, s);
 }
 
@@ -266,8 +266,8 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    case nir_intrinsic_load_ubo: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
-      nir_ssa_def *desc = load_ubo_desc(b, intrin->src[0].ssa, s);
-      nir_instr_rewrite_src_ssa(&intrin->instr, &intrin->src[0], desc);
+      nir_def *desc = load_ubo_desc(b, intrin->src[0].ssa, s);
+      nir_src_rewrite(&intrin->src[0], desc);
       break;
    }
    case nir_intrinsic_load_ssbo:
@@ -275,23 +275,23 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    case nir_intrinsic_ssbo_atomic_swap: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
-      nir_ssa_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
-      nir_instr_rewrite_src_ssa(&intrin->instr, &intrin->src[0], desc);
+      nir_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
+      nir_src_rewrite(&intrin->src[0], desc);
       break;
    }
    case nir_intrinsic_store_ssbo: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
-      nir_ssa_def *desc = load_ssbo_desc(b, &intrin->src[1], s);
-      nir_instr_rewrite_src_ssa(&intrin->instr, &intrin->src[1], desc);
+      nir_def *desc = load_ssbo_desc(b, &intrin->src[1], s);
+      nir_src_rewrite(&intrin->src[1], desc);
       break;
    }
    case nir_intrinsic_get_ssbo_size: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
-      nir_ssa_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
-      nir_ssa_def *size = nir_channel(b, desc, 2);
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, size);
+      nir_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
+      nir_def *size = nir_channel(b, desc, 2);
+      nir_def_rewrite_uses(&intrin->def, size);
       nir_instr_remove(&intrin->instr);
       break;
    }
@@ -320,10 +320,10 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
          intrin->intrinsic == nir_intrinsic_image_deref_fragment_mask_load_amd ||
          intrin->intrinsic == nir_intrinsic_image_deref_descriptor_amd;
 
-      nir_ssa_def *desc = load_deref_image_desc(b, deref, desc_type, is_load, s);
+      nir_def *desc = load_deref_image_desc(b, deref, desc_type, is_load, s);
 
       if (intrin->intrinsic == nir_intrinsic_image_deref_descriptor_amd) {
-         nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
+         nir_def_rewrite_uses(&intrin->def, desc);
          nir_instr_remove(&intrin->instr);
       } else {
          nir_intrinsic_set_image_dim(intrin, glsl_get_sampler_dim(deref->type));
@@ -354,15 +354,15 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
          intrin->intrinsic == nir_intrinsic_bindless_image_fragment_mask_load_amd ||
          intrin->intrinsic == nir_intrinsic_bindless_image_descriptor_amd;
 
-      nir_ssa_def *index = nir_u2u32(b, intrin->src[0].ssa);
+      nir_def *index = nir_u2u32(b, intrin->src[0].ssa);
 
-      nir_ssa_def *desc = load_bindless_image_desc(b, index, desc_type, is_load, s);
+      nir_def *desc = load_bindless_image_desc(b, index, desc_type, is_load, s);
 
       if (intrin->intrinsic == nir_intrinsic_bindless_image_descriptor_amd) {
-         nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
+         nir_def_rewrite_uses(&intrin->def, desc);
          nir_instr_remove(&intrin->instr);
       } else {
-         nir_instr_rewrite_src(&intrin->instr, &intrin->src[0], nir_src_for_ssa(desc));
+         nir_src_rewrite(&intrin->src[0], desc);
       }
       break;
    }
@@ -373,11 +373,11 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    return true;
 }
 
-static nir_ssa_def *load_sampler_desc(nir_builder *b, nir_ssa_def *list, nir_ssa_def *index,
+static nir_def *load_sampler_desc(nir_builder *b, nir_def *list, nir_def *index,
                                       enum ac_descriptor_type desc_type)
 {
    /* index is in 16 dword unit, convert to offset in bytes */
-   nir_ssa_def *offset = nir_ishl_imm(b, index, 6);
+   nir_def *offset = nir_ishl_imm(b, index, 6);
 
    unsigned num_channels = 0;
    switch (desc_type) {
@@ -408,18 +408,18 @@ static nir_ssa_def *load_sampler_desc(nir_builder *b, nir_ssa_def *list, nir_ssa
    return nir_load_smem_amd(b, num_channels, list, offset);
 }
 
-static nir_ssa_def *load_deref_sampler_desc(nir_builder *b, nir_deref_instr *deref,
+static nir_def *load_deref_sampler_desc(nir_builder *b, nir_deref_instr *deref,
                                             enum ac_descriptor_type desc_type,
                                             struct lower_resource_state *s,
                                             bool return_descriptor)
 {
    unsigned max_slots = BITSET_LAST_BIT(b->shader->info.textures_used);
-   nir_ssa_def *index = deref_to_index(b, deref, max_slots, NULL, NULL);
+   nir_def *index = deref_to_index(b, deref, max_slots, NULL, NULL);
    index = nir_iadd_imm(b, index, SI_NUM_IMAGE_SLOTS / 2);
 
    /* return actual desc when required by caller */
    if (return_descriptor) {
-      nir_ssa_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
+      nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
       return load_sampler_desc(b, list, index, desc_type);
    }
 
@@ -430,11 +430,11 @@ static nir_ssa_def *load_deref_sampler_desc(nir_builder *b, nir_deref_instr *der
    return index;
 }
 
-static nir_ssa_def *load_bindless_sampler_desc(nir_builder *b, nir_ssa_def *index,
+static nir_def *load_bindless_sampler_desc(nir_builder *b, nir_def *index,
                                                enum ac_descriptor_type desc_type,
                                                struct lower_resource_state *s)
 {
-   nir_ssa_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
+   nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
 
    /* 64 bit to 32 bit */
    index = nir_u2u32(b, index);
@@ -442,9 +442,9 @@ static nir_ssa_def *load_bindless_sampler_desc(nir_builder *b, nir_ssa_def *inde
    return load_sampler_desc(b, list, index, desc_type);
 }
 
-static nir_ssa_def *fixup_sampler_desc(nir_builder *b,
+static nir_def *fixup_sampler_desc(nir_builder *b,
                                        nir_tex_instr *tex,
-                                       nir_ssa_def *sampler,
+                                       nir_def *sampler,
                                        struct lower_resource_state *s)
 {
    const struct si_shader_selector *sel = s->shader->selector;
@@ -453,7 +453,7 @@ static nir_ssa_def *fixup_sampler_desc(nir_builder *b,
       return sampler;
 
    /* Set TRUNC_COORD=0 for textureGather(). */
-   nir_ssa_def *dword0 = nir_channel(b, sampler, 0);
+   nir_def *dword0 = nir_channel(b, sampler, 0);
    dword0 = nir_iand_imm(b, dword0, C_008F30_TRUNC_COORD);
    sampler = nir_vector_insert_imm(b, sampler, dword0, 0);
    return sampler;
@@ -464,8 +464,8 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
 {
    nir_deref_instr *texture_deref = NULL;
    nir_deref_instr *sampler_deref = NULL;
-   nir_ssa_def *texture_handle = NULL;
-   nir_ssa_def *sampler_handle = NULL;
+   nir_def *texture_handle = NULL;
+   nir_def *sampler_handle = NULL;
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {
       switch (tex->src[i].src_type) {
@@ -493,32 +493,32 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
       desc_type = tex->sampler_dim == GLSL_SAMPLER_DIM_BUF ? AC_DESC_BUFFER : AC_DESC_IMAGE;
 
    if (tex->op == nir_texop_descriptor_amd) {
-      nir_ssa_def *image;
+      nir_def *image;
       if (texture_deref)
          image = load_deref_sampler_desc(b, texture_deref, desc_type, s, true);
       else
          image = load_bindless_sampler_desc(b, texture_handle, desc_type, s);
-      nir_ssa_def_rewrite_uses(&tex->dest.ssa, image);
+      nir_def_rewrite_uses(&tex->def, image);
       nir_instr_remove(&tex->instr);
       return true;
    }
 
    if (tex->op == nir_texop_sampler_descriptor_amd) {
-      nir_ssa_def *sampler;
+      nir_def *sampler;
       if (sampler_deref)
          sampler = load_deref_sampler_desc(b, sampler_deref, AC_DESC_SAMPLER, s, true);
       else
          sampler = load_bindless_sampler_desc(b, sampler_handle, AC_DESC_SAMPLER, s);
-      nir_ssa_def_rewrite_uses(&tex->dest.ssa, sampler);
+      nir_def_rewrite_uses(&tex->def, sampler);
       nir_instr_remove(&tex->instr);
       return true;
    }
 
-   nir_ssa_def *image = texture_deref ?
+   nir_def *image = texture_deref ?
       load_deref_sampler_desc(b, texture_deref, desc_type, s, !tex->texture_non_uniform) :
       load_bindless_sampler_desc(b, texture_handle, desc_type, s);
 
-   nir_ssa_def *sampler = NULL;
+   nir_def *sampler = NULL;
    if (sampler_deref)
       sampler = load_deref_sampler_desc(b, sampler_deref, AC_DESC_SAMPLER, s, !tex->sampler_non_uniform);
    else if (sampler_handle)
@@ -533,13 +533,13 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
          tex->src[i].src_type = nir_tex_src_texture_handle;
          FALLTHROUGH;
       case nir_tex_src_texture_handle:
-         nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, image);
+         nir_src_rewrite(&tex->src[i].src, image);
          break;
       case nir_tex_src_sampler_deref:
          tex->src[i].src_type = nir_tex_src_sampler_handle;
          FALLTHROUGH;
       case nir_tex_src_sampler_handle:
-         nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, sampler);
+         nir_src_rewrite(&tex->src[i].src, sampler);
          break;
       default:
          break;

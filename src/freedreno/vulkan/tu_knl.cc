@@ -105,7 +105,7 @@ tu_device_check_status(struct vk_device *vk_device)
 }
 
 int
-tu_drm_submitqueue_new(const struct tu_device *dev,
+tu_drm_submitqueue_new(struct tu_device *dev,
                        int priority,
                        uint32_t *queue_id)
 {
@@ -113,7 +113,7 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
 }
 
 void
-tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id)
+tu_drm_submitqueue_close(struct tu_device *dev, uint32_t queue_id)
 {
    dev->instance->knl->submitqueue_close(dev, queue_id);
 }
@@ -173,8 +173,10 @@ tu_physical_device_try_create(struct vk_instance *vk_instance,
    struct tu_instance *instance =
       container_of(vk_instance, struct tu_instance, vk);
 
-   if (!(drm_device->available_nodes & (1 << DRM_NODE_RENDER)) ||
-       drm_device->bustype != DRM_BUS_PLATFORM)
+   /* Note that "msm" is a platform device, but "virtio_gpu" is a pci
+    * device.  In general we shouldn't care about the bus type.
+    */
+   if (!(drm_device->available_nodes & (1 << DRM_NODE_RENDER)))
       return VK_ERROR_INCOMPATIBLE_DRIVER;
 
    const char *primary_path = drm_device->nodes[DRM_NODE_PRIMARY];
@@ -204,6 +206,10 @@ tu_physical_device_try_create(struct vk_instance *vk_instance,
 #ifdef TU_HAS_MSM
       result = tu_knl_drm_msm_load(instance, fd, version, &device);
 #endif
+   } else if (strcmp(version->name, "virtio_gpu") == 0) {
+#ifdef TU_HAS_VIRTIO
+      result = tu_knl_drm_virtio_load(instance, fd, version, &device);
+#endif
    } else {
       result = vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                                  "device %s (%s) is not compatible with turnip",
@@ -214,6 +220,22 @@ tu_physical_device_try_create(struct vk_instance *vk_instance,
       goto out;
 
    assert(device);
+
+#ifdef _SC_LEVEL1_DCACHE_LINESIZE
+   if (DETECT_ARCH_AARCH64 || DETECT_ARCH_X86 || DETECT_ARCH_X86_64) {
+      long l1_dcache;
+#if defined(ANDROID) && DETECT_ARCH_AARCH64
+      /* Bionic does not implement _SC_LEVEL1_DCACHE_LINESIZE properly: */
+      uint64_t ctr_el0;
+      asm("mrs\t%x0, ctr_el0" : "=r"(ctr_el0));
+      l1_dcache = 4 << ((ctr_el0 >> 16) & 0xf);
+#else
+      l1_dcache = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+#endif
+      device->has_cached_non_coherent_memory = l1_dcache > 0;
+      device->level1_dcache_size = l1_dcache;
+   }
+#endif
 
    if (instance->vk.enabled_extensions.KHR_display) {
       master_fd = open(primary_path, O_RDWR | O_CLOEXEC);

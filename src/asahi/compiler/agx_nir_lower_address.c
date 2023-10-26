@@ -8,8 +8,7 @@
 
 /* Results of pattern matching */
 struct match {
-   nir_ssa_scalar base, offset;
-   bool has_offset;
+   nir_scalar base, offset;
    bool sign_extend;
 
    /* Signed shift. A negative shift indicates that the offset needs ushr
@@ -25,18 +24,18 @@ struct match {
  * variables. Otherwise, returns false.
  */
 static bool
-match_imul_imm(nir_ssa_scalar scalar, nir_ssa_scalar *variable, uint32_t *imm)
+match_imul_imm(nir_scalar scalar, nir_scalar *variable, uint32_t *imm)
 {
-   if (!nir_ssa_scalar_is_alu(scalar))
+   if (!nir_scalar_is_alu(scalar))
       return false;
 
-   nir_op op = nir_ssa_scalar_alu_op(scalar);
+   nir_op op = nir_scalar_alu_op(scalar);
    if (op != nir_op_imul && op != nir_op_ishl)
       return false;
 
-   nir_ssa_scalar inputs[] = {
-      nir_ssa_scalar_chase_alu_src(scalar, 0),
-      nir_ssa_scalar_chase_alu_src(scalar, 1),
+   nir_scalar inputs[] = {
+      nir_scalar_chase_alu_src(scalar, 0),
+      nir_scalar_chase_alu_src(scalar, 1),
    };
 
    /* For imul check both operands for an immediate, since imul is commutative.
@@ -45,12 +44,12 @@ match_imul_imm(nir_ssa_scalar scalar, nir_ssa_scalar *variable, uint32_t *imm)
    bool commutes = (op == nir_op_imul);
 
    for (unsigned i = commutes ? 0 : 1; i < ARRAY_SIZE(inputs); ++i) {
-      if (!nir_ssa_scalar_is_const(inputs[i]))
+      if (!nir_scalar_is_const(inputs[i]))
          continue;
 
       *variable = inputs[1 - i];
 
-      uint32_t value = nir_ssa_scalar_as_uint(inputs[i]);
+      uint32_t value = nir_scalar_as_uint(inputs[i]);
 
       if (op == nir_op_imul)
          *imm = value;
@@ -75,17 +74,17 @@ match_imul_imm(nir_ssa_scalar scalar, nir_ssa_scalar *variable, uint32_t *imm)
 static bool
 match_soa(nir_builder *b, struct match *match, unsigned format_shift)
 {
-   if (!nir_ssa_scalar_is_alu(match->offset) ||
-       nir_ssa_scalar_alu_op(match->offset) != nir_op_iadd)
+   if (!nir_scalar_is_alu(match->offset) ||
+       nir_scalar_alu_op(match->offset) != nir_op_iadd)
       return false;
 
-   nir_ssa_scalar summands[] = {
-      nir_ssa_scalar_chase_alu_src(match->offset, 0),
-      nir_ssa_scalar_chase_alu_src(match->offset, 1),
+   nir_scalar summands[] = {
+      nir_scalar_chase_alu_src(match->offset, 0),
+      nir_scalar_chase_alu_src(match->offset, 1),
    };
 
    for (unsigned i = 0; i < ARRAY_SIZE(summands); ++i) {
-      if (!nir_ssa_scalar_is_const(summands[i]))
+      if (!nir_scalar_is_const(summands[i]))
          continue;
 
       /* Note: This is treated as signed regardless of the sign of the match.
@@ -104,8 +103,8 @@ match_soa(nir_builder *b, struct match *match, unsigned format_shift)
        * TODO: We need to confirm how the hardware handles 32-bit overflow when
        * applying the format shift, which might need rework here again.
        */
-      int offset = nir_ssa_scalar_as_int(summands[i]);
-      nir_ssa_scalar variable;
+      int offset = nir_scalar_as_int(summands[i]);
+      nir_scalar variable;
       uint32_t multiplier;
 
       /* The other operand must multiply */
@@ -123,12 +122,12 @@ match_soa(nir_builder *b, struct match *match, unsigned format_shift)
          return false;
 
       /* Otherwise, rewrite! */
-      nir_ssa_def *unmultiplied = nir_vec_scalars(b, &variable, 1);
+      nir_def *unmultiplied = nir_vec_scalars(b, &variable, 1);
 
-      nir_ssa_def *rewrite = nir_iadd_imm(
+      nir_def *rewrite = nir_iadd_imm(
          b, nir_imul_imm(b, unmultiplied, multiplier_shifted), offset_shifted);
 
-      match->offset = nir_get_ssa_scalar(rewrite, 0);
+      match->offset = nir_get_scalar(rewrite, 0);
       match->shift = 0;
       return true;
    }
@@ -138,48 +137,47 @@ match_soa(nir_builder *b, struct match *match, unsigned format_shift)
 
 /* Try to pattern match address calculation */
 static struct match
-match_address(nir_builder *b, nir_ssa_scalar base, int8_t format_shift)
+match_address(nir_builder *b, nir_scalar base, int8_t format_shift)
 {
    struct match match = {.base = base};
 
    /* All address calculations are iadd at the root */
-   if (!nir_ssa_scalar_is_alu(base) ||
-       nir_ssa_scalar_alu_op(base) != nir_op_iadd)
+   if (!nir_scalar_is_alu(base) || nir_scalar_alu_op(base) != nir_op_iadd)
       return match;
 
    /* Only 64+32 addition is supported, look for an extension */
-   nir_ssa_scalar summands[] = {
-      nir_ssa_scalar_chase_alu_src(base, 0),
-      nir_ssa_scalar_chase_alu_src(base, 1),
+   nir_scalar summands[] = {
+      nir_scalar_chase_alu_src(base, 0),
+      nir_scalar_chase_alu_src(base, 1),
    };
 
    for (unsigned i = 0; i < ARRAY_SIZE(summands); ++i) {
       /* We can add a small constant to the 64-bit base for free */
-      if (nir_ssa_scalar_is_const(summands[i]) &&
-          nir_ssa_scalar_as_uint(summands[i]) < (1ull << 32)) {
+      if (nir_scalar_is_const(summands[i]) &&
+          nir_scalar_as_uint(summands[i]) < (1ull << 32)) {
 
-         uint32_t value = nir_ssa_scalar_as_uint(summands[i]);
+         uint32_t value = nir_scalar_as_uint(summands[i]);
 
          return (struct match){
             .base = summands[1 - i],
-            .offset = nir_get_ssa_scalar(nir_imm_int(b, value), 0),
+            .offset = nir_get_scalar(nir_imm_int(b, value), 0),
             .shift = -format_shift,
             .sign_extend = false,
          };
       }
 
       /* Otherwise, we can only add an offset extended from 32-bits */
-      if (!nir_ssa_scalar_is_alu(summands[i]))
+      if (!nir_scalar_is_alu(summands[i]))
          continue;
 
-      nir_op op = nir_ssa_scalar_alu_op(summands[i]);
+      nir_op op = nir_scalar_alu_op(summands[i]);
 
       if (op != nir_op_u2u64 && op != nir_op_i2i64)
          continue;
 
       /* We've found a summand, commit to it */
       match.base = summands[1 - i];
-      match.offset = nir_ssa_scalar_chase_alu_src(summands[i], 0);
+      match.offset = nir_scalar_chase_alu_src(summands[i], 0);
       match.sign_extend = (op == nir_op_i2i64);
 
       /* Undo the implicit shift from using as offset */
@@ -192,7 +190,7 @@ match_address(nir_builder *b, nir_ssa_scalar base, int8_t format_shift)
       return match;
 
    /* But if we did, we can try to fold in in a multiply */
-   nir_ssa_scalar multiplied;
+   nir_scalar multiplied;
    uint32_t multiplier;
 
    if (match_imul_imm(match.offset, &multiplied, &multiplier)) {
@@ -211,12 +209,12 @@ match_address(nir_builder *b, nir_ssa_scalar base, int8_t format_shift)
          return match;
       }
 
-      nir_ssa_def *multiplied_ssa = nir_vec_scalars(b, &multiplied, 1);
+      nir_def *multiplied_ssa = nir_vec_scalars(b, &multiplied, 1);
 
       /* Only fold in if we wouldn't overflow the lsl field */
       if (new_shift <= 2) {
          match.offset =
-            nir_get_ssa_scalar(nir_imul_imm(b, multiplied_ssa, multiplier), 0);
+            nir_get_scalar(nir_imul_imm(b, multiplied_ssa, multiplier), 0);
          match.shift = new_shift;
       } else if (new_shift > 0) {
          /* For large shifts, we do need a multiply, but we can
@@ -224,10 +222,10 @@ match_address(nir_builder *b, nir_ssa_scalar base, int8_t format_shift)
           */
          assert(new_shift >= 3);
 
-         nir_ssa_def *rewrite =
+         nir_def *rewrite =
             nir_imul_imm(b, multiplied_ssa, multiplier << new_shift);
 
-         match.offset = nir_get_ssa_scalar(rewrite, 0);
+         match.offset = nir_get_scalar(rewrite, 0);
          match.shift = 0;
       }
    } else {
@@ -254,12 +252,8 @@ format_for_bitsize(unsigned bitsize)
 }
 
 static bool
-pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
+pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_global &&
        intr->intrinsic != nir_intrinsic_load_global_constant &&
        intr->intrinsic != nir_intrinsic_global_atomic &&
@@ -267,22 +261,21 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
        intr->intrinsic != nir_intrinsic_store_global)
       return false;
 
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
    unsigned bitsize = intr->intrinsic == nir_intrinsic_store_global
                          ? nir_src_bit_size(intr->src[0])
-                         : nir_dest_bit_size(intr->dest);
+                         : intr->def.bit_size;
    enum pipe_format format = format_for_bitsize(bitsize);
    unsigned format_shift = util_logbase2(util_format_get_blocksize(format));
 
    nir_src *orig_offset = nir_get_io_offset_src(intr);
-   nir_ssa_scalar base = nir_ssa_scalar_resolved(orig_offset->ssa, 0);
+   nir_scalar base = nir_scalar_resolved(orig_offset->ssa, 0);
    struct match match = match_address(b, base, format_shift);
 
-   nir_ssa_def *offset =
-      match.offset.def != NULL
-         ? nir_channel(b, match.offset.def, match.offset.comp)
-         : nir_imm_int(b, 0);
+   nir_def *offset = match.offset.def != NULL
+                        ? nir_channel(b, match.offset.def, match.offset.comp)
+                        : nir_imm_int(b, 0);
 
    /* If we were unable to fold in the shift, insert a right-shift now to undo
     * the implicit left shift of the instruction.
@@ -309,12 +302,12 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
    }
 
    assert(match.shift >= 0);
-   nir_ssa_def *new_base = nir_channel(b, match.base.def, match.base.comp);
+   nir_def *new_base = nir_channel(b, match.base.def, match.base.comp);
 
-   nir_ssa_def *repl = NULL;
+   nir_def *repl = NULL;
    bool has_dest = (intr->intrinsic != nir_intrinsic_store_global);
-   unsigned num_components = has_dest ? nir_dest_num_components(intr->dest) : 0;
-   unsigned bit_size = has_dest ? nir_dest_bit_size(intr->dest) : 0;
+   unsigned num_components = has_dest ? intr->def.num_components : 0;
+   unsigned bit_size = has_dest ? intr->def.bit_size : 0;
 
    if (intr->intrinsic == nir_intrinsic_load_global) {
       repl =
@@ -346,15 +339,15 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
    }
 
    if (repl)
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
+      nir_def_rewrite_uses(&intr->def, repl);
 
-   nir_instr_remove(instr);
+   nir_instr_remove(&intr->instr);
    return true;
 }
 
 bool
 agx_nir_lower_address(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       shader, pass, nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

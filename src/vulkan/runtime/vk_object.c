@@ -168,7 +168,6 @@ vk_private_data_slot_destroy(struct vk_device *device,
    vk_free2(&device->alloc, pAllocator, slot);
 }
 
-#ifdef ANDROID
 static VkResult
 get_swapchain_private_data_locked(struct vk_device *device,
                                   uint64_t objectHandle,
@@ -176,8 +175,8 @@ get_swapchain_private_data_locked(struct vk_device *device,
                                   uint64_t **private_data)
 {
    if (unlikely(device->swapchain_private == NULL)) {
-      /* Even though VkSwapchain is a non-dispatchable object, we know a
-       * priori that Android swapchains are actually pointers so we can use
+      /* Even though VkSwapchain/Surface are non-dispatchable objects, we know
+       * a priori that these are actually pointers so we can use
        * the pointer hash table for them.
        */
       device->swapchain_private = _mesa_pointer_hash_table_create(NULL);
@@ -205,7 +204,6 @@ get_swapchain_private_data_locked(struct vk_device *device,
 
    return VK_SUCCESS;
 }
-#endif /* ANDROID */
 
 static VkResult
 vk_object_base_private_data(struct vk_device *device,
@@ -216,7 +214,6 @@ vk_object_base_private_data(struct vk_device *device,
 {
    VK_FROM_HANDLE(vk_private_data_slot, slot, privateDataSlot);
 
-#ifdef ANDROID
    /* There is an annoying spec corner here on Android.  Because WSI is
     * implemented in the Vulkan loader which doesn't know about the
     * VK_EXT_private_data extension, we have to handle VkSwapchainKHR in the
@@ -225,14 +222,18 @@ vk_object_base_private_data(struct vk_device *device,
     * vkGet/SetPrivateDataEXT call on a swapchain because the loader will
     * handle it.
     */
-   if (objectType == VK_OBJECT_TYPE_SWAPCHAIN_KHR) {
+#ifdef ANDROID
+   if (objectType == VK_OBJECT_TYPE_SWAPCHAIN_KHR ||
+       objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
+#else
+   if (objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
+#endif
       mtx_lock(&device->swapchain_private_mtx);
       VkResult result = get_swapchain_private_data_locked(device, objectHandle,
                                                           slot, private_data);
       mtx_unlock(&device->swapchain_private_mtx);
       return result;
    }
-#endif /* ANDROID */
 
    struct vk_object_base *obj =
       vk_object_base_from_u64_handle(objectHandle, objectType);

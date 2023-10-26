@@ -196,7 +196,7 @@ static bool ac_eliminate_duplicated_output(struct ac_out_info *outputs,
       sem.no_sysval_output = 1;
 
       /* Write just one component. */
-      prev_chan->store_intr = nir_store_output(b, nir_instr_ssa_def(cur_chan->value),
+      prev_chan->store_intr = nir_store_output(b, nir_instr_def(cur_chan->value),
                                                nir_imm_int(b, 0),
                                                .base = prev->base,
                                                .component = i % 4,
@@ -271,7 +271,7 @@ bool ac_nir_optimize_outputs(nir_shader *nir, bool sprite_tex_disallowed,
          /* nir_lower_io_to_scalar is required before this */
          assert(intr->src[0].ssa->num_components == 1);
          /* No intrinsic should store undef. */
-         assert(intr->src[0].ssa->parent_instr->type != nir_instr_type_ssa_undef);
+         assert(intr->src[0].ssa->parent_instr->type != nir_instr_type_undef);
 
          /* Gather the output. */
          struct ac_out_info *out_info = &outputs[sem.location];

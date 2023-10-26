@@ -46,7 +46,7 @@ setup_reduce_temp(Program* program)
    for (Block& block : program->blocks) {
       for (aco_ptr<Instruction>& instr : block.instructions) {
          if (instr->opcode == aco_opcode::p_interp_gfx11 ||
-             instr->opcode == aco_opcode::p_bpermute_gfx11w64) {
+             instr->opcode == aco_opcode::p_bpermute_permlane) {
             maxSize = MAX2(maxSize, 1);
             hasReductions[block.index] = true;
          } else if (instr->format == Format::PSEUDO_REDUCTION) {
@@ -101,7 +101,7 @@ setup_reduce_temp(Program* program)
          Instruction* instr = (*it).get();
          if (instr->format != Format::PSEUDO_REDUCTION &&
              instr->opcode != aco_opcode::p_interp_gfx11 &&
-             instr->opcode != aco_opcode::p_bpermute_gfx11w64)
+             instr->opcode != aco_opcode::p_bpermute_permlane)
             continue;
 
          if ((int)last_top_level_block_idx != inserted_at) {
@@ -173,7 +173,7 @@ setup_reduce_temp(Program* program)
                instr->operands[2] = Operand(vtmp);
          } else {
             assert(instr->opcode == aco_opcode::p_interp_gfx11 ||
-                   instr->opcode == aco_opcode::p_bpermute_gfx11w64);
+                   instr->opcode == aco_opcode::p_bpermute_permlane);
             instr->operands[0] = Operand(reduceTmp);
             instr->operands[0].setLateKill(true);
          }

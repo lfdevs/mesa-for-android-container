@@ -35,7 +35,7 @@
 static unsigned
 get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
               unsigned *element_index, unsigned *xfb_offset,
-              nir_ssa_def **array_index)
+              nir_def **array_index)
 {
    nir_deref_path path;
    nir_deref_path_init(&path, deref, NULL);
@@ -47,7 +47,7 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
     * inputs), skip the outermost array index.  Process the rest normally.
     */
    if (nir_is_arrayed_io(var, b->shader->info.stage)) {
-      *array_index = nir_ssa_for_src(b, (*p)->arr.index, 1);
+      *array_index = (*p)->arr.index.ssa;
       p++;
    }
 
@@ -63,11 +63,9 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
 
          *xfb_offset += index * glsl_get_component_slots((*p)->type) * 4;
 
-         unsigned num_elements = glsl_type_is_array((*p)->type) ?
-            glsl_get_aoa_size((*p)->type) : 1;
+         unsigned num_elements = glsl_type_is_array((*p)->type) ? glsl_get_aoa_size((*p)->type) : 1;
 
-         num_elements *= glsl_type_is_matrix(glsl_without_array((*p)->type)) ?
-            glsl_get_matrix_columns(glsl_without_array((*p)->type)) : 1;
+         num_elements *= glsl_type_is_matrix(glsl_without_array((*p)->type)) ? glsl_get_matrix_columns(glsl_without_array((*p)->type)) : 1;
 
          *element_index += num_elements * index;
       } else if ((*p)->deref_type == nir_deref_type_struct) {
@@ -94,16 +92,14 @@ get_array_elements(struct hash_table *ht, nir_variable *var,
          type = glsl_get_array_element(type);
       }
 
-      unsigned num_elements = glsl_type_is_array(type) ?
-         glsl_get_aoa_size(type) : 1;
+      unsigned num_elements = glsl_type_is_array(type) ? glsl_get_aoa_size(type) : 1;
 
-      num_elements *= glsl_type_is_matrix(glsl_without_array(type)) ?
-         glsl_get_matrix_columns(glsl_without_array(type)) : 1;
+      num_elements *= glsl_type_is_matrix(glsl_without_array(type)) ? glsl_get_matrix_columns(glsl_without_array(type)) : 1;
 
-      elements = (nir_variable **) calloc(num_elements, sizeof(nir_variable *));
+      elements = (nir_variable **)calloc(num_elements, sizeof(nir_variable *));
       _mesa_hash_table_insert(ht, var, elements);
    } else {
-      elements = (nir_variable **) entry->data;
+      elements = (nir_variable **)entry->data;
    }
 
    return elements;
@@ -118,10 +114,10 @@ lower_array(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
    if (nir_deref_instr_is_known_out_of_bounds(nir_src_as_deref(intr->src[0]))) {
       /* See Section 5.11 (Out-of-Bounds Accesses) of the GLSL 4.60 */
       if (intr->intrinsic != nir_intrinsic_store_deref) {
-         nir_ssa_def *zero = nir_imm_zero(b, intr->dest.ssa.num_components,
-                                          intr->dest.ssa.bit_size);
-         nir_ssa_def_rewrite_uses(&intr->dest.ssa,
-                                  zero);
+         nir_def *zero = nir_imm_zero(b, intr->def.num_components,
+                                      intr->def.bit_size);
+         nir_def_rewrite_uses(&intr->def,
+                              zero);
       }
       nir_instr_remove(&intr->instr);
       return;
@@ -130,7 +126,7 @@ lower_array(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
    nir_variable **elements =
       get_array_elements(varyings, var, b->shader->info.stage);
 
-   nir_ssa_def *array_index = NULL;
+   nir_def *array_index = NULL;
    unsigned elements_index = 0;
    unsigned xfb_offset = 0;
    unsigned io_offset = get_io_offset(b, nir_src_as_deref(intr->src[0]),
@@ -139,27 +135,27 @@ lower_array(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
 
    nir_variable *element = elements[elements_index];
    if (!element) {
-         element = nir_variable_clone(var, b->shader);
-         element->data.location =  var->data.location + io_offset;
+      element = nir_variable_clone(var, b->shader);
+      element->data.location = var->data.location + io_offset;
 
-         if (var->data.explicit_offset)
-            element->data.offset = var->data.offset + xfb_offset;
+      if (var->data.explicit_offset)
+         element->data.offset = var->data.offset + xfb_offset;
 
-         const struct glsl_type *type = glsl_without_array(element->type);
+      const struct glsl_type *type = glsl_without_array(element->type);
 
-         /* This pass also splits matrices so we need give them a new type. */
-         if (glsl_type_is_matrix(type))
-            type = glsl_get_column_type(type);
+      /* This pass also splits matrices so we need give them a new type. */
+      if (glsl_type_is_matrix(type))
+         type = glsl_get_column_type(type);
 
-         if (nir_is_arrayed_io(var, b->shader->info.stage)) {
-            type = glsl_array_type(type, glsl_get_length(element->type),
-                                   glsl_get_explicit_stride(element->type));
-         }
+      if (nir_is_arrayed_io(var, b->shader->info.stage)) {
+         type = glsl_array_type(type, glsl_get_length(element->type),
+                                glsl_get_explicit_stride(element->type));
+      }
 
-         element->type = type;
-         elements[elements_index] = element;
+      element->type = type;
+      elements[elements_index] = element;
 
-         nir_shader_add_variable(b->shader, element);
+      nir_shader_add_variable(b->shader, element);
    }
 
    nir_deref_instr *element_deref = nir_build_deref_var(b, element);
@@ -172,26 +168,24 @@ lower_array(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
    nir_intrinsic_instr *element_intr =
       nir_intrinsic_instr_create(b->shader, intr->intrinsic);
    element_intr->num_components = intr->num_components;
-   element_intr->src[0] = nir_src_for_ssa(&element_deref->dest.ssa);
+   element_intr->src[0] = nir_src_for_ssa(&element_deref->def);
 
    if (intr->intrinsic != nir_intrinsic_store_deref) {
-      nir_ssa_dest_init(&element_intr->instr, &element_intr->dest,
-                        intr->num_components, intr->dest.ssa.bit_size);
+      nir_def_init(&element_intr->instr, &element_intr->def,
+                   intr->num_components, intr->def.bit_size);
 
       if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset ||
           intr->intrinsic == nir_intrinsic_interp_deref_at_sample ||
           intr->intrinsic == nir_intrinsic_interp_deref_at_vertex) {
-         nir_src_copy(&element_intr->src[1], &intr->src[1],
-                      &element_intr->instr);
+         element_intr->src[1] = nir_src_for_ssa(intr->src[1].ssa);
       }
 
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa,
-                               &element_intr->dest.ssa);
+      nir_def_rewrite_uses(&intr->def,
+                           &element_intr->def);
    } else {
       nir_intrinsic_set_write_mask(element_intr,
                                    nir_intrinsic_write_mask(intr));
-      nir_src_copy(&element_intr->src[1], &intr->src[1],
-                   &element_intr->instr);
+      element_intr->src[1] = nir_src_for_ssa(intr->src[1].ssa);
    }
 
    nir_builder_instr_insert(b, &element_intr->instr);
@@ -263,7 +257,7 @@ create_indirects_mask(nir_shader *shader,
             nir_deref_path_finish(&path);
          }
       }
-}
+   }
 }
 
 static void
@@ -321,7 +315,7 @@ lower_io_arrays_to_elements(nir_shader *shader, nir_variable_mode mask,
              *
              * TODO: Add support for struct splitting.
              */
-            if ((!glsl_type_is_array(type) && !glsl_type_is_matrix(type))||
+            if ((!glsl_type_is_array(type) && !glsl_type_is_matrix(type)) ||
                 glsl_type_is_struct_or_ifc(glsl_without_array(type)))
                continue;
 
@@ -363,7 +357,7 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
    struct hash_table *split_inputs = _mesa_pointer_hash_table_create(NULL);
    struct hash_table *split_outputs = _mesa_pointer_hash_table_create(NULL);
 
-   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {0};
+   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = { 0 };
 
    lower_io_arrays_to_elements(shader, nir_var_shader_out,
                                indirects, split_outputs, true);
@@ -374,7 +368,7 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
 
       /* Remove old input from the shaders inputs list */
       hash_table_foreach(split_inputs, entry) {
-         nir_variable *var = (nir_variable *) entry->key;
+         nir_variable *var = (nir_variable *)entry->key;
          exec_node_remove(&var->node);
 
          free(entry->data);
@@ -383,7 +377,7 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
 
    /* Remove old output from the shaders outputs list */
    hash_table_foreach(split_outputs, entry) {
-      nir_variable *var = (nir_variable *) entry->key;
+      nir_variable *var = (nir_variable *)entry->key;
       exec_node_remove(&var->node);
 
       free(entry->data);
@@ -401,7 +395,7 @@ nir_lower_io_arrays_to_elements(nir_shader *producer, nir_shader *consumer)
    struct hash_table *split_inputs = _mesa_pointer_hash_table_create(NULL);
    struct hash_table *split_outputs = _mesa_pointer_hash_table_create(NULL);
 
-   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {0};
+   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = { 0 };
 
    create_indirects_mask(producer, indirects, nir_var_shader_out);
    create_indirects_mask(consumer, indirects, nir_var_shader_in);
@@ -414,7 +408,7 @@ nir_lower_io_arrays_to_elements(nir_shader *producer, nir_shader *consumer)
 
    /* Remove old input from the shaders inputs list */
    hash_table_foreach(split_inputs, entry) {
-      nir_variable *var = (nir_variable *) entry->key;
+      nir_variable *var = (nir_variable *)entry->key;
       exec_node_remove(&var->node);
 
       free(entry->data);
@@ -422,7 +416,7 @@ nir_lower_io_arrays_to_elements(nir_shader *producer, nir_shader *consumer)
 
    /* Remove old output from the shaders outputs list */
    hash_table_foreach(split_outputs, entry) {
-      nir_variable *var = (nir_variable *) entry->key;
+      nir_variable *var = (nir_variable *)entry->key;
       exec_node_remove(&var->node);
 
       free(entry->data);

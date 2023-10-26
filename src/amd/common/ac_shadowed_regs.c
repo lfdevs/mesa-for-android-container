@@ -622,7 +622,7 @@ static const struct ac_reg_range Gfx11CsShShadowRange[] =
 {
    /* First register                            Count * 4      Last register */
    { R_00B810_COMPUTE_START_X,                     6  * 4}, // COMPUTE_NUM_THREAD_Z
-   { R_00B82C_COMPUTE_PERFCOUNT_ENABLE,            3  * 4}, // COMPUTE_PGM_HI
+   { R_00B82C_COMPUTE_PERFCOUNT_ENABLE,            5  * 4}, // COMPUTE_DISPATCH_PKT_ADDR_HI
    { R_00B840_COMPUTE_DISPATCH_SCRATCH_BASE_LO,    4  * 4}, // COMPUTE_PGM_RSRC2
    { R_00B854_COMPUTE_RESOURCE_LIMITS,             6  * 4}, // COMPUTE_STATIC_THREAD_MGMT_SE3
    { R_00B878_COMPUTE_THREAD_TRACE_ENABLE,         1  * 4}, // COMPUTE_THREAD_TRACE_ENABLE

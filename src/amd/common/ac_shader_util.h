@@ -170,8 +170,7 @@ enum ac_image_dim ac_get_image_dim(enum amd_gfx_level gfx_level, enum glsl_sampl
                                    bool is_array);
 
 unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
-                                  signed char *face_vgpr_index, signed char *ancillary_vgpr_index,
-                                  signed char *sample_coverage_vgpr_index_ptr);
+                                  uint8_t *num_pos_inputs);
 
 uint16_t ac_get_ps_iter_mask(unsigned ps_iter_samples);
 
@@ -225,6 +224,8 @@ union ac_hw_cache_flags ac_get_hw_cache_flags(const struct radeon_info *info,
                                               enum gl_access_qualifier access);
 
 unsigned ac_get_all_edge_flag_bits(void);
+
+unsigned ac_shader_io_get_unique_index_patch(unsigned semantic);
 
 #ifdef __cplusplus
 }

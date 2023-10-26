@@ -191,11 +191,6 @@ xmlconfig_test::drirc_init(const char *driver, const char *drm,
                            const char *app, int appver,
                            const char *engine, int enginever)
 {
-   /* Make the parser look in the directory of config files for the test,
-    * passed in by meson.build.
-    */
-   driInjectDataDir(getenv("DRIRC_CONFIGDIR"));
-
    driInjectExecName(exec_name);
 
    driOptionDescription driconf[] = {

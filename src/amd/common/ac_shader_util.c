@@ -620,14 +620,10 @@ enum ac_image_dim ac_get_image_dim(enum amd_gfx_level gfx_level, enum glsl_sampl
 }
 
 unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
-                                  signed char *face_vgpr_index_ptr,
-                                  signed char *ancillary_vgpr_index_ptr,
-                                  signed char *sample_coverage_vgpr_index_ptr)
+                                  uint8_t *num_pos_inputs)
 {
    unsigned num_input_vgprs = 0;
-   signed char face_vgpr_index = -1;
-   signed char ancillary_vgpr_index = -1;
-   signed char sample_coverage_vgpr_index = -1;
+   unsigned pos_inputs = 0;
 
    if (G_0286CC_PERSP_SAMPLE_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 2;
@@ -645,35 +641,33 @@ unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
       num_input_vgprs += 2;
    if (G_0286CC_LINE_STIPPLE_TEX_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 1;
-   if (G_0286CC_POS_X_FLOAT_ENA(config->spi_ps_input_addr))
+   if (G_0286CC_POS_X_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
-   if (G_0286CC_POS_Y_FLOAT_ENA(config->spi_ps_input_addr))
-      num_input_vgprs += 1;
-   if (G_0286CC_POS_Z_FLOAT_ENA(config->spi_ps_input_addr))
-      num_input_vgprs += 1;
-   if (G_0286CC_POS_W_FLOAT_ENA(config->spi_ps_input_addr))
-      num_input_vgprs += 1;
-   if (G_0286CC_FRONT_FACE_ENA(config->spi_ps_input_addr)) {
-      face_vgpr_index = num_input_vgprs;
-      num_input_vgprs += 1;
+      pos_inputs++;
    }
-   if (G_0286CC_ANCILLARY_ENA(config->spi_ps_input_addr)) {
-      ancillary_vgpr_index = num_input_vgprs;
+   if (G_0286CC_POS_Y_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
+      pos_inputs++;
    }
-   if (G_0286CC_SAMPLE_COVERAGE_ENA(config->spi_ps_input_addr)) {
-      sample_coverage_vgpr_index = num_input_vgprs;
+   if (G_0286CC_POS_Z_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
+      pos_inputs++;
    }
+   if (G_0286CC_POS_W_FLOAT_ENA(config->spi_ps_input_addr)) {
+      num_input_vgprs += 1;
+      pos_inputs++;
+   }
+   if (G_0286CC_FRONT_FACE_ENA(config->spi_ps_input_addr))
+      num_input_vgprs += 1;
+   if (G_0286CC_ANCILLARY_ENA(config->spi_ps_input_addr))
+      num_input_vgprs += 1;
+   if (G_0286CC_SAMPLE_COVERAGE_ENA(config->spi_ps_input_addr))
+      num_input_vgprs += 1;
    if (G_0286CC_POS_FIXED_PT_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 1;
 
-   if (face_vgpr_index_ptr)
-      *face_vgpr_index_ptr = face_vgpr_index;
-   if (ancillary_vgpr_index_ptr)
-      *ancillary_vgpr_index_ptr = ancillary_vgpr_index;
-   if (sample_coverage_vgpr_index_ptr)
-      *sample_coverage_vgpr_index_ptr = sample_coverage_vgpr_index;
+   if (num_pos_inputs)
+      *num_pos_inputs = pos_inputs;
 
    return num_input_vgprs;
 }
@@ -1158,4 +1152,26 @@ unsigned ac_get_all_edge_flag_bits(void)
 {
    /* This will be extended in the future. */
    return (1u << 9) | (1u << 19) | (1u << 29);
+}
+
+/**
+ * Returns a unique index for a per-patch semantic name and index. The index
+ * must be less than 32, so that a 32-bit bitmask of used inputs or outputs
+ * can be calculated.
+ */
+unsigned
+ac_shader_io_get_unique_index_patch(unsigned semantic)
+{
+   switch (semantic) {
+   case VARYING_SLOT_TESS_LEVEL_OUTER:
+      return 0;
+   case VARYING_SLOT_TESS_LEVEL_INNER:
+      return 1;
+   default:
+      if (semantic >= VARYING_SLOT_PATCH0 && semantic < VARYING_SLOT_PATCH0 + 30)
+         return 2 + (semantic - VARYING_SLOT_PATCH0);
+
+      assert(!"invalid semantic");
+      return 0;
+   }
 }

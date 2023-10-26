@@ -133,6 +133,7 @@ enum class instr_class : uint8_t {
    vmem = 17,
    waitcnt = 18,
    other = 19,
+   wmma = 20,
    count,
 };
 
@@ -283,6 +284,8 @@ struct wait_imm {
    bool combine(const wait_imm& other);
 
    bool empty() const;
+
+   void print(FILE* output) const;
 };
 
 /* s_wait_event immediate bits. */
@@ -1050,7 +1053,16 @@ struct Instruction {
    constexpr bool reads_exec() const noexcept
    {
       for (const Operand& op : operands) {
-         if (op.isFixed() && op.physReg() == exec)
+         if (op.isFixed() && (op.physReg() == exec_lo || op.physReg() == exec_hi))
+            return true;
+      }
+      return false;
+   }
+
+   constexpr bool writes_exec() const noexcept
+   {
+      for (const Definition& def : definitions) {
+         if (def.isFixed() && (def.physReg() == exec_lo || def.physReg() == exec_hi))
             return true;
       }
       return false;
@@ -1445,14 +1457,17 @@ struct DPP16_instruction : public VALU_instruction {
    uint8_t row_mask : 4;
    uint8_t bank_mask : 4;
    bool bound_ctrl : 1;
-   uint8_t padding3 : 7;
+   uint8_t fetch_inactive : 1;
+   uint8_t padding3 : 6;
 };
 static_assert(sizeof(DPP16_instruction) == sizeof(VALU_instruction) + 4, "Unexpected padding");
 
 struct DPP8_instruction : public VALU_instruction {
-   uint8_t lane_sel[8];
+   uint32_t lane_sel : 24;
+   uint32_t fetch_inactive : 1;
+   uint32_t padding : 7;
 };
-static_assert(sizeof(DPP8_instruction) == sizeof(VALU_instruction) + 8, "Unexpected padding");
+static_assert(sizeof(DPP8_instruction) == sizeof(VALU_instruction) + 4, "Unexpected padding");
 
 struct SubdwordSel {
    enum sdwa_sel : uint8_t {
@@ -1885,9 +1900,9 @@ enum block_kind {
    block_kind_invert = 1 << 10,
    block_kind_discard_early_exit = 1 << 11,
    block_kind_uses_discard = 1 << 12,
-   block_kind_needs_lowering = 1 << 13,
-   block_kind_resume = 1 << 14,
-   block_kind_export_end = 1 << 15,
+   block_kind_resume = 1 << 13,
+   block_kind_export_end = 1 << 14,
+   block_kind_end_with_regs = 1 << 15,
 };
 
 struct RegisterDemand {
@@ -2121,6 +2136,7 @@ public:
    bool has_smem_buffer_or_global_loads = false;
    bool has_pops_overlapped_waves_wait = false;
    bool has_color_exports = false;
+   bool is_prolog = false;
 
    std::vector<uint8_t> constant_data;
    Temp private_segment_buffer;
@@ -2144,6 +2160,9 @@ public:
    unsigned next_uniform_if_depth = 0;
 
    std::vector<Definition> args_pending_vmem;
+
+   /* For shader part with previous shader part that has lds access. */
+   bool pending_lds_access = false;
 
    struct {
       FILE* output = stderr;
@@ -2228,8 +2247,20 @@ void select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo,
                       ac_shader_config* config, const struct aco_compiler_options* options,
                       const struct aco_shader_info* info, const struct ac_shader_args* args);
 
-void select_ps_epilog(Program* program, const struct aco_ps_epilog_info* epilog_info,
-                      ac_shader_config* config, const struct aco_compiler_options* options,
+void select_ps_epilog(Program* program, void* pinfo, ac_shader_config* config,
+                      const struct aco_compiler_options* options,
+                      const struct aco_shader_info* info, const struct ac_shader_args* args);
+
+void select_tcs_epilog(Program* program, void* pinfo, ac_shader_config* config,
+                       const struct aco_compiler_options* options,
+                       const struct aco_shader_info* info, const struct ac_shader_args* args);
+
+void select_gl_vs_prolog(Program* program, void* pinfo, ac_shader_config* config,
+                         const struct aco_compiler_options* options,
+                         const struct aco_shader_info* info, const struct ac_shader_args* args);
+
+void select_ps_prolog(Program* program, void* pinfo, ac_shader_config* config,
+                      const struct aco_compiler_options* options,
                       const struct aco_shader_info* info, const struct ac_shader_args* args);
 
 void lower_phis(Program* program);
@@ -2255,7 +2286,7 @@ bool dealloc_vgprs(Program* program);
 void insert_NOPs(Program* program);
 void form_hard_clauses(Program* program);
 unsigned emit_program(Program* program, std::vector<uint32_t>& code,
-                      std::vector<struct aco_symbol>* symbols);
+                      std::vector<struct aco_symbol>* symbols = NULL, bool append_endpgm = true);
 /**
  * Returns true if print_asm can disassemble the given program for the current build/runtime
  * configuration

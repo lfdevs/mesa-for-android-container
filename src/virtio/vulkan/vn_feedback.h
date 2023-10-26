@@ -137,16 +137,11 @@ vn_feedback_event_cmd_record(VkCommandBuffer cmd_handle,
                              bool sync2);
 
 void
-vn_feedback_query_copy_cmd_record(VkCommandBuffer commandBuffer,
-                                  VkQueryPool queryPool,
-                                  uint32_t query,
-                                  uint32_t queryCount);
-
-void
-vn_feedback_query_reset_cmd_record(VkCommandBuffer commandBuffer,
-                                   VkQueryPool queryPool,
-                                   uint32_t query,
-                                   uint32_t queryCount);
+vn_feedback_query_cmd_record(VkCommandBuffer cmd_handle,
+                             VkQueryPool pool_handle,
+                             uint32_t query,
+                             uint32_t count,
+                             bool copy);
 
 VkResult
 vn_feedback_cmd_alloc(VkDevice dev_handle,

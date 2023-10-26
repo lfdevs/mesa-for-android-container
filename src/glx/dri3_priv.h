@@ -120,6 +120,8 @@ struct dri3_drawable {
    unsigned frames;
 };
 
+bool
+dri3_check_multibuffer(Display * dpy, bool *err);
 
 _X_HIDDEN int
 dri3_query_renderer_integer(struct glx_screen *base, int attribute,

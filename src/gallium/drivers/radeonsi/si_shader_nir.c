@@ -15,9 +15,8 @@ bool si_alu_to_scalar_packed_math_filter(const nir_instr *instr, const void *dat
    if (instr->type == nir_instr_type_alu) {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
 
-      if (alu->dest.dest.is_ssa &&
-          alu->dest.dest.ssa.bit_size == 16 &&
-          alu->dest.dest.ssa.num_components == 2)
+      if (alu->def.bit_size == 16 &&
+          alu->def.num_components == 2)
          return false;
    }
 
@@ -30,7 +29,7 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
       return 0;
 
    nir_alu_instr *alu = nir_instr_as_alu(instr);
-   if (nir_dest_bit_size(alu->dest.dest) == 16) {
+   if (alu->def.bit_size == 16) {
       switch (alu->op) {
       case nir_op_unpack_32_2x16_split_x:
       case nir_op_unpack_32_2x16_split_y:
@@ -53,7 +52,7 @@ static unsigned si_lower_bit_size_callback(const nir_instr *instr, void *data)
    switch (alu->op) {
    case nir_op_imul_high:
    case nir_op_umul_high:
-      if (nir_dest_bit_size(alu->dest.dest) < 32)
+      if (alu->def.bit_size < 32)
          return 32;
       break;
    default:
@@ -223,7 +222,7 @@ lower_intrinsic_filter(const nir_instr *instr, const void *dummy)
    return instr->type == nir_instr_type_intrinsic;
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_intrinsic_instr(nir_builder *b, nir_instr *instr, void *dummy)
 {
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
@@ -255,6 +254,7 @@ const nir_lower_subgroups_options si_nir_subgroups_options = {
    .lower_subgroup_masks = true,
    .lower_vote_trivial = false,
    .lower_vote_eq = true,
+   .lower_inverse_ballot = true,
 };
 
 /**
@@ -306,7 +306,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_TESS_EVAL ||
        nir->info.stage == MESA_SHADER_GEOMETRY)
-      NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_out);
+      NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_out, NULL, NULL);
 
    if (nir->info.stage == MESA_SHADER_GEOMETRY) {
       unsigned flags = nir_lower_gs_intrinsics_per_stream;
@@ -403,7 +403,7 @@ static bool si_mark_divergent_texture_non_uniform(struct nir_shader *nir)
          }
 
          /* If dest is already divergent, divergence won't change. */
-         divergence_changed |= !tex->dest.ssa.divergent &&
+         divergence_changed |= !tex->def.divergent &&
             (tex->texture_non_uniform || tex->sampler_non_uniform);
       }
    }

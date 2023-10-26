@@ -577,6 +577,16 @@ BEGIN_TEST(insert_nops.lds_direct_vmem)
    bld.sopp(aco_opcode::s_waitcnt, -1, 0x3ff);
    bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
+   //! p_unit_test 14
+   //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
+   //! s1: %0:null = s_waitcnt_vscnt imm:0
+   //! s_waitcnt_depctr vm_vsrc(0)
+   //! v1: %0:v[0] = lds_direct_load %0:m0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(14));
+   create_mubuf(0, PhysReg(256), PhysReg(257));
+   bld.sopk(aco_opcode::s_waitcnt_vscnt, Definition(sgpr_null, s1), 0);
+   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
    finish_insert_nops_test();
 END_TEST
 
@@ -998,3 +1008,324 @@ BEGIN_TEST(insert_nops.valu_mask_write)
 
    finish_insert_nops_test();
 END_TEST
+
+BEGIN_TEST(insert_nops.setpc_gfx6)
+   if (!setup_cs(NULL, GFX6))
+      return;
+
+   /* SGPR->SMEM hazards */
+   //>> p_unit_test 0
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_nop imm:2
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   //! p_unit_test 1
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_nop imm:2
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sopp(aco_opcode::s_nop, -1, 2);
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   finish_insert_nops_test();
+
+   /* This hazard can't be tested using s_setpc_b64, because the s_setpc_b64 itself resolves it. */
+
+   /* VINTRP->v_readlane_b32/etc */
+   //>> p_unit_test 2
+   //! v1: %0:v[0] = v_interp_mov_f32 2, %0:m0 attr0.x
+   //! s_nop
+   create_program(GFX6, compute_cs, 64, CHIP_UNKNOWN);
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.vintrp(aco_opcode::v_interp_mov_f32, Definition(PhysReg(256), v1), Operand::c32(2u),
+              Operand(m0, s1), 0, 0);
+   finish_insert_nops_test(false);
+END_TEST
+
+BEGIN_TEST(insert_nops.setpc_gfx7)
+   for (amd_gfx_level gfx : {GFX7, GFX9}) {
+      if (!setup_cs(NULL, gfx))
+         continue;
+
+      //>> p_unit_test 0
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* Break up SMEM clauses: resolved by the s_setpc_b64 itself */
+      //! p_unit_test 1
+      //! s1: %0:s[0] = s_load_dword %0:s[0-1]
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+      bld.smem(aco_opcode::s_load_dword, Definition(PhysReg(0), s1), Operand(PhysReg(0), s2));
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* SALU and GDS hazards */
+      //! p_unit_test 2
+      //! s_setreg_imm32_b32 0x0 imm:14337
+      //! s_nop
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+      bld.sopk(aco_opcode::s_setreg_imm32_b32, Operand::literal32(0), (7 << 11) | 1);
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* VALU writes vcc -> vccz/v_div_fmas */
+      //! p_unit_test 3
+      //! s2: %0:vcc = v_cmp_eq_u32 0, 0
+      //! s_nop imm:3
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+      bld.vopc_e64(aco_opcode::v_cmp_eq_u32, Definition(vcc, s2), Operand::zero(), Operand::zero());
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* VALU writes exec -> execz/DPP */
+      //! p_unit_test 4
+      //! s2: %0:exec = v_cmpx_eq_u32 0, 0
+      //! s_nop imm:3
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+      bld.vopc_e64(aco_opcode::v_cmpx_eq_u32, Definition(exec, s2), Operand::zero(),
+                   Operand::zero());
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* VALU->DPP */
+      //! p_unit_test 5
+      //! v1: %0:v[0] = v_mov_b32 0
+      //~gfx9! s_nop
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      /* VALU->v_readlane_b32/VMEM/etc */
+      //! p_unit_test 6
+      //! s1: %0:s[0] = v_readfirstlane_b32 %0:v[0]
+      //! s_nop imm:3
+      //! s_setpc_b64 0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+      bld.vop1(aco_opcode::v_readfirstlane_b32, Definition(PhysReg(0), s1),
+               Operand(PhysReg(256), v1));
+      bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+      finish_insert_nops_test();
+
+      /* These hazards can't be tested using s_setpc_b64, because the s_setpc_b64 itself resolves
+       * them. */
+
+      //>> p_unit_test 7
+      //! buffer_store_dwordx3 %0:s[0-3], %0:v[0], 0, %0:v[0-2] offen
+      //! s_nop
+      create_program(gfx, compute_cs, 64, CHIP_UNKNOWN);
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+      bld.mubuf(aco_opcode::buffer_store_dwordx3, Operand(PhysReg(0), s4),
+                Operand(PhysReg(256), v1), Operand::zero(), Operand(PhysReg(256), v3), 0, true);
+      finish_insert_nops_test(false);
+
+      //>> p_unit_test 8
+      //! s1: %0:m0 = s_mov_b32 0
+      //! s_nop
+      create_program(gfx, compute_cs, 64, CHIP_UNKNOWN);
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(m0), s1), Operand::zero());
+      finish_insert_nops_test(false);
+
+      /* Break up SMEM clauses */
+      //>> p_unit_test 9
+      //! s1: %0:s[0] = s_load_dword %0:s[0-1]
+      //! s_nop
+      create_program(gfx, compute_cs, 64, CHIP_UNKNOWN);
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+      bld.smem(aco_opcode::s_load_dword, Definition(PhysReg(0), s1), Operand(PhysReg(0), s2));
+      finish_insert_nops_test(false);
+   }
+END_TEST
+
+BEGIN_TEST(insert_nops.setpc_gfx10)
+   if (!setup_cs(NULL, GFX10))
+      return;
+
+   //>> p_unit_test 0
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VcmpxPermlaneHazard */
+   //! p_unit_test 1
+   //! s2: %0:exec = v_cmpx_eq_u32 0, 0
+   //! v1: %0:v[0] = v_mov_b32 %0:v[0]
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.vopc_e64(aco_opcode::v_cmpx_eq_u32, Definition(exec, s2), Operand::zero(), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VMEMtoScalarWriteHazard */
+   //! p_unit_test 2
+   //! v1: %0:v[0] = ds_read_b32 %0:v[0]
+   //! s1: %0:null = s_waitcnt_vscnt imm:0
+   //! s_waitcnt_depctr vm_vsrc(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.sopk(aco_opcode::s_waitcnt_vscnt, Definition(sgpr_null, s1),
+            0); /* reset LdsBranchVmemWARHazard */
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VcmpxExecWARHazard */
+   //! p_unit_test 3
+   //! s1: %0:s[0] = s_mov_b32 %0:s[127]
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand(exec_hi, s1));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* LdsBranchVmemWARHazard */
+   //! p_unit_test 4
+   //! v1: %0:v[0] = ds_read_b32 %0:v[0]
+   //! v_nop
+   //! s_branch
+   //! s1: %0:null = s_waitcnt_vscnt imm:0
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.vop1(aco_opcode::v_nop); /* reset VMEMtoScalarWriteHazard */
+   bld.sopp(aco_opcode::s_branch, -1, 0);
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   //! p_unit_test 5
+   //! v1: %0:v[0] = ds_read_b32 %0:v[0]
+   //! v_nop
+   //! s1: %0:null = s_waitcnt_vscnt imm:0
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.vop1(aco_opcode::v_nop); /* reset VMEMtoScalarWriteHazard */
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* waNsaCannotFollowWritelane: resolved by the s_setpc_b64 */
+   //! p_unit_test 6
+   //! v1: %0:v[0] = v_writelane_b32_e64 %0:v[1], 0, %0:v[0]
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+   bld.vop3(aco_opcode::v_writelane_b32_e64, Definition(PhysReg(256), v1),
+            Operand(PhysReg(257), v1), Operand::zero(4), Operand(PhysReg(256), v1));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   finish_insert_nops_test();
+
+   /* These hazards can't be tested using s_setpc_b64, because the s_setpc_b64 itself resolves them.
+    */
+
+   /* SMEMtoVectorWriteHazard */
+   //>> p_unit_test 7
+   //! s1: %0:s[0] = s_load_dword %0:s[0-1]
+   //! s1: %0:null = s_mov_b32 0
+   create_program(GFX10, compute_cs, 64, CHIP_UNKNOWN);
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+   bld.smem(aco_opcode::s_load_dword, Definition(PhysReg(0), s1), Operand(PhysReg(0), s2));
+   finish_insert_nops_test(false);
+
+   /* NSAToVMEMBug is already resolved indirectly through VMEMtoScalarWriteHazard and
+    * LdsBranchVmemWARHazard. */
+   //>> p_unit_test 8
+   //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2], %0:v[4], %0:v[6], %0:v[8], %0:v[10] 2d
+   //! s_waitcnt_depctr vm_vsrc(0)
+   //! s1: %0:null = s_waitcnt_vscnt imm:0
+   create_program(GFX10, compute_cs, 64, CHIP_UNKNOWN);
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+   create_mimg(true, 6, 4);
+   finish_insert_nops_test(false);
+
+   /* waNsaCannotFollowWritelane */
+   //>> p_unit_test 9
+   //! v1: %0:v[0] = v_writelane_b32_e64 %0:v[1], 0, %0:v[0]
+   //! s_nop
+   create_program(GFX10, compute_cs, 64, CHIP_UNKNOWN);
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+   bld.vop3(aco_opcode::v_writelane_b32_e64, Definition(PhysReg(256), v1),
+            Operand(PhysReg(257), v1), Operand::zero(4), Operand(PhysReg(256), v1));
+   finish_insert_nops_test(false);
+END_TEST
+
+BEGIN_TEST(insert_nops.setpc_gfx11)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   //>> p_unit_test 0
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* LdsDirectVALUHazard */
+   //! p_unit_test 1
+   //! s2: %0:vcc = v_cmp_eq_u32 %0:v[0], 0
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.vopc_e64(aco_opcode::v_cmp_eq_u32, Definition(vcc, s2), Operand(PhysReg(256), v1),
+                Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VALUPartialForwardingHazard */
+   //! p_unit_test 2
+   //! v1: %0:v[0] = v_mov_b32 0
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VcmpxPermlaneHazard */
+   //! p_unit_test 2
+   //! s2: %0:exec = v_cmpx_eq_u32 0, 0
+   //! v1: %0:v[0] = v_mov_b32 %0:v[0]
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.vopc_e64(aco_opcode::v_cmpx_eq_u32, Definition(exec, s2), Operand::zero(), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VALUTransUseHazard */
+   //! p_unit_test 3
+   //! v1: %0:v[0] = v_rcp_f32 0
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   bld.vop1(aco_opcode::v_rcp_f32, Definition(PhysReg(256), v1), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VALUMaskWriteHazard */
+   //! p_unit_test 4
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:vcc
+   //! s_waitcnt_depctr va_vdst(0) sa_sdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+   bld.vop2(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+            Operand::zero(), Operand(vcc, s2));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   //! p_unit_test 5
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:vcc
+   //! s2: %0:vcc = s_mov_b64 0
+   //! s_waitcnt_depctr va_vdst(0) sa_sdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.vop2(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+            Operand::zero(), Operand(vcc, s2));
+   bld.sop1(aco_opcode::s_mov_b64, Definition(vcc, s2), Operand::zero(8));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* LdsDirectVMEMHazard */
+   //! p_unit_test 6
+   //! v1: %0:v[0] = ds_read_b32 %0:v[0]
+   //! s_waitcnt_depctr vm_vsrc(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   finish_insert_nops_test(true);
+}

@@ -9,6 +9,9 @@
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
 
+/* 32 user varyings + some system values */
+#define AGX_MAX_VARYING_SLOTS (48)
+
 struct agx_varyings_vs {
    /* The number of user varyings of each type. The varyings must be allocated
     * in this order ({smooth, flat, linear} × {32, 16}), which may require
@@ -39,13 +42,18 @@ struct agx_varyings_vs {
     *
     * If the slot is not written, this must be ~0.
     */
-   unsigned slots[VARYING_SLOT_MAX];
+   unsigned slots[AGX_MAX_VARYING_SLOTS];
+
+   /* Slot for the combined layer/viewport 32-bit sysval output, or ~0 if none
+    * is written. What's at slots[VARYING_SLOT_LAYER] is the varying output.
+    */
+   unsigned layer_viewport_slot;
 };
 
 /* Conservative bound, * 4 due to offsets (TODO: maybe worth eliminating
  * coefficient register aliasing?)
  */
-#define AGX_MAX_CF_BINDINGS (VARYING_SLOT_MAX * 4)
+#define AGX_MAX_CF_BINDINGS (AGX_MAX_VARYING_SLOTS * 4)
 
 struct agx_varyings_fs {
    /* Number of coefficient registers used */
@@ -98,6 +106,9 @@ struct agx_shader_info {
    /* Number of uniforms */
    unsigned push_count;
 
+   /* Local memory allocation in bytes */
+   unsigned local_size;
+
    /* Does the shader have a preamble? If so, it is at offset preamble_offset.
     * The main shader is at offset main_offset. The preamble is executed first.
     */
@@ -109,6 +120,9 @@ struct agx_shader_info {
 
    /* Does the shader write point size? */
    bool writes_psiz;
+
+   /* Does the shader write layer and/or viewport index? Written together */
+   bool writes_layer_viewport;
 
    /* Does the shader control the sample mask? */
    bool writes_sample_mask;
@@ -125,11 +139,12 @@ struct agx_shader_info {
    /* Shader is incompatible with triangle merging */
    bool disable_tri_merging;
 
-   /* Shader needs a dummy sampler (for txf reads) */
-   bool needs_dummy_sampler;
+   /* Shader uses txf, requiring a workaround sampler in the given location */
+   bool uses_txf;
+   unsigned txf_sampler;
 
-   /* Number of bindful textures used */
-   unsigned nr_bindful_textures;
+   /* Number of bindful textures, images used */
+   unsigned nr_bindful_textures, nr_bindful_images;
 
    /* Number of 16-bit registers used by the main shader and preamble
     * respectively.
@@ -193,21 +208,41 @@ struct agx_shader_key {
    /* Number of reserved preamble slots at the start */
    unsigned reserved_preamble;
 
+   /* Does the target GPU need explicit cluster coherency for atomics?
+    * Only used on G13X.
+    */
+   bool needs_g13x_coherency;
+
    union {
       struct agx_vs_shader_key vs;
       struct agx_fs_shader_key fs;
    };
 };
 
+/* Texture backend flags */
+#define AGX_TEXTURE_FLAG_NO_CLAMP (1 << 0)
+
+bool agx_nir_lower_texture_early(nir_shader *s);
+
 void agx_preprocess_nir(nir_shader *nir, bool support_lod_bias,
+                        bool allow_mediump,
                         struct agx_uncompiled_shader_info *out);
 
 bool agx_nir_lower_discard_zs_emit(nir_shader *s);
+
+bool agx_nir_needs_texture_crawl(nir_instr *instr);
 
 void agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
                             struct util_debug_callback *debug,
                             struct util_dynarray *binary,
                             struct agx_shader_info *out);
+
+struct agx_occupancy {
+   unsigned max_registers;
+   unsigned max_threads;
+};
+
+struct agx_occupancy agx_occupancy_for_register_count(unsigned halfregs);
 
 static const nir_shader_compiler_options agx_nir_options = {
    .lower_fdiv = true,
@@ -217,11 +252,12 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_flrp32 = true,
    .lower_fpow = true,
    .lower_fmod = true,
-   .lower_bitfield_insert_to_shifts = true,
+   .lower_bitfield_insert = true,
    .lower_ifind_msb = true,
    .lower_find_lsb = true,
    .lower_uadd_carry = true,
    .lower_usub_borrow = true,
+   .lower_fisnormal = true,
    .lower_scmp = true,
    .lower_isign = true,
    .lower_fsign = true,
@@ -235,8 +271,8 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_extract_byte = true,
    .lower_insert_byte = true,
    .lower_insert_word = true,
-   .lower_cs_local_index_to_id = true,
    .has_cs_global_id = true,
+   .lower_hadd = true,
    .vectorize_io = true,
    .use_interpolated_input_intrinsics = true,
    .lower_rotate = true,
@@ -250,6 +286,7 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_int64_options =
       (nir_lower_int64_options) ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),
    .lower_doubles_options = nir_lower_dmod,
+   .lower_fquantize2f16 = true,
 };
 
 #endif

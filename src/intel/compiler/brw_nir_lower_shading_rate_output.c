@@ -47,13 +47,9 @@
 #include "compiler/nir/nir_builder.h"
 
 static bool
-lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
+lower_shading_rate_output_instr(nir_builder *b, nir_intrinsic_instr *intrin,
                                 UNUSED void *_state)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    nir_intrinsic_op op = intrin->intrinsic;
 
    if (op != nir_intrinsic_load_output &&
@@ -69,36 +65,34 @@ lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
    bool is_store = op == nir_intrinsic_store_output ||
                    op == nir_intrinsic_store_per_primitive_output;
 
-   b->cursor = is_store ? nir_before_instr(instr) : nir_after_instr(instr);
+   b->cursor = is_store ? nir_before_instr(&intrin->instr) : nir_after_instr(&intrin->instr);
 
    if (is_store) {
-      assert(intrin->src[0].is_ssa);
-      nir_ssa_def *bit_field = intrin->src[0].ssa;
-      nir_ssa_def *fp16_x =
+      nir_def *bit_field = intrin->src[0].ssa;
+      nir_def *fp16_x =
          nir_i2f16(b,
                    nir_ishl(b, nir_imm_int(b, 1),
                             nir_ishr_imm(b, bit_field, 2)));
-      nir_ssa_def *fp16_y =
+      nir_def *fp16_y =
          nir_i2f16(b,
                    nir_ishl(b, nir_imm_int(b, 1),
                             nir_iand_imm(b, bit_field, 0x3)));
-      nir_ssa_def *packed_fp16_xy = nir_pack_32_2x16_split(b, fp16_x, fp16_y);
+      nir_def *packed_fp16_xy = nir_pack_32_2x16_split(b, fp16_x, fp16_y);
 
-      nir_instr_rewrite_src(instr, &intrin->src[0],
-                            nir_src_for_ssa(packed_fp16_xy));
+      nir_src_rewrite(&intrin->src[0], packed_fp16_xy);
    } else {
-      nir_ssa_def *packed_fp16_xy = &intrin->dest.ssa;
+      nir_def *packed_fp16_xy = &intrin->def;
 
-      nir_ssa_def *u32_x =
+      nir_def *u32_x =
          nir_i2i32(b, nir_unpack_32_2x16_split_x(b, packed_fp16_xy));
-      nir_ssa_def *u32_y =
+      nir_def *u32_y =
          nir_i2i32(b, nir_unpack_32_2x16_split_y(b, packed_fp16_xy));
 
-      nir_ssa_def *bit_field =
+      nir_def *bit_field =
          nir_ior(b, nir_ishl_imm(b, nir_ushr_imm(b, u32_x, 1), 2),
                     nir_ushr_imm(b, u32_y, 1));
 
-      nir_ssa_def_rewrite_uses_after(packed_fp16_xy, bit_field,
+      nir_def_rewrite_uses_after(packed_fp16_xy, bit_field,
                                      bit_field->parent_instr);
    }
 
@@ -108,7 +102,7 @@ lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
 bool
 brw_nir_lower_shading_rate_output(nir_shader *nir)
 {
-   return nir_shader_instructions_pass(nir, lower_shading_rate_output_instr,
+   return nir_shader_intrinsics_pass(nir, lower_shading_rate_output_instr,
                                        nir_metadata_block_index |
                                        nir_metadata_dominance, NULL);
 }

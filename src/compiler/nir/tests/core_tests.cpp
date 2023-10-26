@@ -21,51 +21,27 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <gtest/gtest.h>
-
-#include "nir.h"
-#include "nir_builder.h"
+#include "nir_test.h"
 
 namespace {
 
-class nir_core_test : public ::testing::Test {
+class nir_core_test : public nir_test {
 protected:
-   nir_core_test();
-   ~nir_core_test();
-
-   bool shader_contains_def(nir_ssa_def *def);
-
-   nir_builder *b, _b;
-};
-
-nir_core_test::nir_core_test()
-{
-   glsl_type_singleton_init_or_ref();
-
-   static const nir_shader_compiler_options options = { };
-   _b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &options, "builder test");
-   b = &_b;
-}
-
-nir_core_test::~nir_core_test()
-{
-   if (HasFailure()) {
-      printf("\nShader from the failed test:\n\n");
-      nir_print_shader(b->shader, stdout);
+   nir_core_test()
+      : nir_test::nir_test("nir_core_test")
+   {
    }
 
-   ralloc_free(b->shader);
-
-   glsl_type_singleton_decref();
-}
+   bool shader_contains_def(nir_def *def);
+};
 
 struct contains_def_state {
-   nir_ssa_def *def;
+   nir_def *def;
    bool found;
 };
 
 static bool
-contains_def_cb(nir_ssa_def *def, void *_state)
+contains_def_cb(nir_def *def, void *_state)
 {
    struct contains_def_state *state = (struct contains_def_state *)_state;
    if (def == state->def)
@@ -75,14 +51,14 @@ contains_def_cb(nir_ssa_def *def, void *_state)
 }
 
 bool
-nir_core_test::shader_contains_def(nir_ssa_def *def)
+nir_core_test::shader_contains_def(nir_def *def)
 {
    nir_foreach_block(block, b->impl) {
       nir_foreach_instr(instr, block) {
          struct contains_def_state state = {
             def, false
          };
-         nir_foreach_ssa_def(instr, contains_def_cb, &state);
+         nir_foreach_def(instr, contains_def_cb, &state);
          if (state.found)
             return true;
       }
@@ -92,10 +68,10 @@ nir_core_test::shader_contains_def(nir_ssa_def *def)
 
 TEST_F(nir_core_test, nir_instr_free_and_dce_test)
 {
-   nir_ssa_def *zero = nir_imm_int(b, 0);
-   nir_ssa_def *one = nir_imm_int(b, 1);
-   nir_ssa_def *add01 = nir_iadd(b, zero, one);
-   nir_ssa_def *add11 = nir_iadd(b, one, one);
+   nir_def *zero = nir_imm_int(b, 0);
+   nir_def *one = nir_imm_int(b, 1);
+   nir_def *add01 = nir_iadd(b, zero, one);
+   nir_def *add11 = nir_iadd(b, one, one);
 
    nir_cursor c = nir_instr_free_and_dce(add01->parent_instr);
    ASSERT_FALSE(shader_contains_def(add01));
@@ -110,8 +86,8 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_test)
 
 TEST_F(nir_core_test, nir_instr_free_and_dce_all_test)
 {
-   nir_ssa_def *one = nir_imm_int(b, 1);
-   nir_ssa_def *add = nir_iadd(b, one, one);
+   nir_def *one = nir_imm_int(b, 1);
+   nir_def *add = nir_iadd(b, one, one);
 
    nir_cursor c = nir_instr_free_and_dce(add->parent_instr);
    ASSERT_FALSE(shader_contains_def(add));
@@ -124,12 +100,12 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_all_test)
 
 TEST_F(nir_core_test, nir_instr_free_and_dce_multiple_src_test)
 {
-   nir_ssa_def *one = nir_imm_int(b, 1);
-   nir_ssa_def *add = nir_iadd(b, one, one);
+   nir_def *one = nir_imm_int(b, 1);
+   nir_def *add = nir_iadd(b, one, one);
 
    /* This risks triggering removing add multiple times, which can segfault in
     * nir_instr_remove for instructions with srcs. */
-   nir_ssa_def *add2 = nir_iadd(b, add, add);
+   nir_def *add2 = nir_iadd(b, add, add);
 
    nir_cursor c = nir_instr_free_and_dce(add2->parent_instr);
    ASSERT_FALSE(shader_contains_def(add2));

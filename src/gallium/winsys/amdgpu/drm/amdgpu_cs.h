@@ -24,8 +24,14 @@ struct amdgpu_ctx {
    amdgpu_bo_handle user_fence_bo;
    uint64_t *user_fence_cpu_address_base;
    int refcount;
-   unsigned initial_num_total_rejected_cs;
-   bool rejected_any_cs;
+
+   /* If true, report lost contexts and skip command submission.
+    * If false, terminate the process.
+    */
+   bool allow_context_lost;
+
+   /* Lost context status due to ioctl and allocation failures. */
+   enum pipe_reset_status sw_status;
 };
 
 struct amdgpu_cs_buffer {
@@ -138,7 +144,6 @@ struct amdgpu_cs {
    /* Flush CS. */
    void (*flush_cs)(void *ctx, unsigned flags, struct pipe_fence_handle **fence);
    void *flush_data;
-   bool allow_context_lost;
    bool noop;
    bool has_chaining;
 

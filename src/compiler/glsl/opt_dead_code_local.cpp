@@ -169,7 +169,7 @@ public:
  * of a variable to a variable.
  */
 static bool
-process_assignment(void *lin_ctx, ir_assignment *ir, exec_list *assignments)
+process_assignment(linear_ctx *lin_ctx, ir_assignment *ir, exec_list *assignments)
 {
    ir_variable *var = NULL;
    bool progress = false;
@@ -310,7 +310,7 @@ dead_code_local_basic_block(ir_instruction *first,
    bool progress = false;
 
    void *ctx = ralloc_context(NULL);
-   void *lin_ctx = linear_alloc_parent(ctx, 0);
+   linear_ctx *lin_ctx = linear_context(ctx);
 
    /* Safe looping, since process_assignment */
    for (ir = first, ir_next = (ir_instruction *)first->next;;

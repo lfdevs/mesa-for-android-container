@@ -47,11 +47,12 @@
 #define INSTR_4XX(i, d, ...) { .gpu_id = 420, .instr = #i, .expected = d, __VA_ARGS__ }
 #define INSTR_5XX(i, d, ...) { .gpu_id = 540, .instr = #i, .expected = d, __VA_ARGS__ }
 #define INSTR_6XX(i, d, ...) { .gpu_id = 630, .instr = #i, .expected = d, __VA_ARGS__ }
-#define INSTR_7XX(i, d, ...) { .gpu_id = 730, .instr = #i, .expected = d, __VA_ARGS__ }
+#define INSTR_7XX(i, d, ...) { .chip_id = 0x07030001, .instr = #i, .expected = d, __VA_ARGS__ }
 /* clang-format on */
 
 static const struct test {
    int gpu_id;
+   int chip_id;
    const char *instr;
    const char *expected;
    /**
@@ -64,6 +65,7 @@ static const struct test {
    /* cat0 */
    INSTR_6XX(00000000_00000000, "nop"),
    INSTR_6XX(00000200_00000000, "(rpt2)nop"),
+   INSTR_6XX(00010000_00000000, "(eq)nop"),
    INSTR_6XX(03000000_00000000, "end"),
    INSTR_6XX(00800000_00000004, "br p0.x, #4"),
    INSTR_6XX(00800000_fffffffc, "br p0.x, #-4"),
@@ -177,7 +179,10 @@ static const struct test {
    INSTR_6XX(a0c81108_e2000001, "sam.base0 (f32)(x)r2.x, r0.x, s#16, a1.x"),
    INSTR_6XX(a048d107_cc080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, t#6"),
    INSTR_6XX(a048d107_e0080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, a1.x"),
+   INSTR_6XX(a1481606_e4803035, "saml.base0 (f32)(yz)r1.z, r6.z, r6.x, s#36, a1.x"),
 
+   INSTR_7XX(a0081f02_e2000001, "isam.base0 (f32)(xyzw)r0.z, r0.x, t#16, a1.x"),
+   INSTR_7XX(a148310d_e028302c, "saml.base2 (u32)(x)r3.y, hr5.z, hr6.x, t#1, a1.x"),
 
    /* dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float */
    INSTR_6XX(a7c03102_00100003, "brcst.active.w8 (u32)(x)r0.z, r0.y"), /* brcst.active.w8 (u32)(xOOO)r0.z, r0.y */
@@ -444,6 +449,8 @@ static const struct test {
    INSTR_6XX(f0420000_00000000, "(sy)bar.g"),
    INSTR_6XX(e1080000_00000000, "sleep.l"),
    INSTR_6XX(e2080000_00000000, "dccln.all"),
+   /* dEQP-VK.memory_model.message_passing.core11.u32.coherent.fence_fence.atomicwrite.device.payload_local.buffer.guard_local.buffer.comp */
+   INSTR_7XX(e2d20000_00000000, "ccinv"),
 
    INSTR_7XX(e3c20000_00000000, "lock"),
    INSTR_7XX(fbc21000_00000000, "(sy)(ss)(jp)lock"),
@@ -485,6 +492,13 @@ main(int argc, char **argv)
       printf("Testing a%d %s: \"%s\"...\n", test->gpu_id, test->instr,
              test->expected);
 
+      struct fd_dev_id dev_id = {
+         .gpu_id = test->gpu_id,
+         .chip_id = test->chip_id,
+      };
+
+      const struct fd_dev_info *dev_info = fd_dev_info(&dev_id);
+
       rewind(fdisasm);
       memset(disasm_output, 0, output_size);
 
@@ -496,9 +510,9 @@ main(int argc, char **argv)
          strtoll(&test->instr[9], NULL, 16),
          strtoll(&test->instr[0], NULL, 16),
       };
-      isa_decode(code, 8, fdisasm,
+      isa_disasm(code, 8, fdisasm,
                  &(struct isa_decode_options){
-                    .gpu_id = test->gpu_id,
+                    .gpu_id = dev_info->chip * 100,
                     .show_errors = true,
                     .no_match_cb = print_raw,
                  });
@@ -518,19 +532,18 @@ main(int argc, char **argv)
        * Test assembly, which should result in the identical binary:
        */
 
-      unsigned gen = test->gpu_id / 100;
-      if (!compilers[gen]) {
-         dev_ids[gen].gpu_id = test->gpu_id;
-         dev_ids[gen].chip_id = 0;
-         compilers[gen] = ir3_compiler_create(NULL, &dev_ids[gen],
-                                              &(struct ir3_compiler_options){});
+      if (!compilers[dev_info->chip]) {
+         dev_ids[dev_info->chip].gpu_id = test->gpu_id;
+         dev_ids[dev_info->chip].chip_id = test->chip_id;
+         compilers[dev_info->chip] = ir3_compiler_create(
+            NULL, &dev_ids[dev_info->chip], &(struct ir3_compiler_options){});
       }
 
       FILE *fasm =
          fmemopen((void *)test->expected, strlen(test->expected), "r");
 
       struct ir3_kernel_info info = {};
-      struct ir3_shader *shader = ir3_parse_asm(compilers[gen], &info, fasm);
+      struct ir3_shader *shader = ir3_parse_asm(compilers[dev_info->chip], &info, fasm);
       fclose(fasm);
       if (!shader) {
          printf("FAIL: %sexpected assembler fail\n",

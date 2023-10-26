@@ -221,9 +221,9 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info,
                                          vb->buffer_offset, NOUVEAU_BO_RD);
 
       if (apply_bias)
-         data += draw->index_bias * vb->stride;
+         data += draw->index_bias * nv30->vertex->strides[i];
 
-      ctx.translate->set_buffer(ctx.translate, i, data, vb->stride, ~0);
+      ctx.translate->set_buffer(ctx.translate, i, data, nv30->vertex->strides[i], ~0);
    }
 
    if (info->index_size) {

@@ -39,14 +39,18 @@
 static void
 radv_suspend_queries(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer)
 {
-   /* Pipeline statistics queries. */
-   if (cmd_buffer->state.active_pipeline_queries > 0) {
+   const uint32_t num_pipeline_stat_queries = radv_get_num_pipeline_stat_queries(cmd_buffer);
+
+   if (num_pipeline_stat_queries > 0) {
       cmd_buffer->state.flush_bits &= ~RADV_CMD_FLAG_START_PIPELINE_STATS;
       cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_STOP_PIPELINE_STATS;
+   }
 
+   /* Pipeline statistics queries. */
+   if (cmd_buffer->state.active_pipeline_queries > 0) {
       state->active_pipeline_gds_queries = cmd_buffer->state.active_pipeline_gds_queries;
       cmd_buffer->state.active_pipeline_gds_queries = 0;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 
    /* Occlusion queries. */
@@ -66,27 +70,31 @@ radv_suspend_queries(struct radv_meta_saved_state *state, struct radv_cmd_buffer
    if (cmd_buffer->state.active_prims_gen_gds_queries) {
       state->active_prims_gen_gds_queries = cmd_buffer->state.active_prims_gen_gds_queries;
       cmd_buffer->state.active_prims_gen_gds_queries = 0;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 
    /* Transform feedback queries (NGG). */
    if (cmd_buffer->state.active_prims_xfb_gds_queries) {
       state->active_prims_xfb_gds_queries = cmd_buffer->state.active_prims_xfb_gds_queries;
       cmd_buffer->state.active_prims_xfb_gds_queries = 0;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 }
 
 static void
 radv_resume_queries(const struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer)
 {
-   /* Pipeline statistics queries. */
-   if (cmd_buffer->state.active_pipeline_queries > 0) {
+   const uint32_t num_pipeline_stat_queries = radv_get_num_pipeline_stat_queries(cmd_buffer);
+
+   if (num_pipeline_stat_queries > 0) {
       cmd_buffer->state.flush_bits &= ~RADV_CMD_FLAG_STOP_PIPELINE_STATS;
       cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_START_PIPELINE_STATS;
+   }
 
+   /* Pipeline statistics queries. */
+   if (cmd_buffer->state.active_pipeline_queries > 0) {
       cmd_buffer->state.active_pipeline_gds_queries = state->active_pipeline_gds_queries;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 
    /* Occlusion queries. */
@@ -104,13 +112,13 @@ radv_resume_queries(const struct radv_meta_saved_state *state, struct radv_cmd_b
    /* Primitives generated queries (NGG). */
    if (state->active_prims_gen_gds_queries) {
       cmd_buffer->state.active_prims_gen_gds_queries = state->active_prims_gen_gds_queries;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 
    /* Transform feedback queries (NGG). */
    if (state->active_prims_xfb_gds_queries) {
       cmd_buffer->state.active_prims_xfb_gds_queries = state->active_prims_xfb_gds_queries;
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
    }
 }
 
@@ -498,6 +506,10 @@ radv_device_init_meta(struct radv_device *device)
    if (result != VK_SUCCESS)
       goto fail_etc_decode;
 
+   result = radv_device_init_meta_astc_decode_state(device, on_demand);
+   if (result != VK_SUCCESS)
+      goto fail_astc_decode;
+
    if (device->uses_device_generated_commands) {
       result = radv_device_init_dgc_prepare_state(device);
       if (result != VK_SUCCESS)
@@ -531,6 +543,8 @@ fail_accel_struct:
    radv_device_finish_accel_struct_build_state(device);
 fail_dgc:
    radv_device_finish_dgc_prepare_state(device);
+fail_astc_decode:
+   radv_device_finish_meta_astc_decode_state(device);
 fail_etc_decode:
    radv_device_finish_meta_etc_decode_state(device);
 fail_fmask_copy:
@@ -570,6 +584,7 @@ radv_device_finish_meta(struct radv_device *device)
 {
    radv_device_finish_dgc_prepare_state(device);
    radv_device_finish_meta_etc_decode_state(device);
+   radv_device_finish_meta_astc_decode_state(device);
    radv_device_finish_accel_struct_build_state(device);
    radv_device_finish_meta_clear_state(device);
    radv_device_finish_meta_resolve_state(device);
@@ -604,9 +619,6 @@ nir_builder PRINTFLIKE(3, 4)
    }
 
    b.shader->options = &dev->physical_device->nir_options[stage];
-   b.shader->info.workgroup_size[0] = 1;
-   b.shader->info.workgroup_size[1] = 1;
-   b.shader->info.workgroup_size[2] = 1;
 
    return b;
 }
@@ -621,7 +633,7 @@ radv_meta_build_nir_vs_generate_vertices(struct radv_device *dev)
 
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_VERTEX, "meta_vs_gen_verts");
 
-   nir_ssa_def *outvec = nir_gen_rect_vertices(&b, NULL, NULL);
+   nir_def *outvec = nir_gen_rect_vertices(&b, NULL, NULL);
 
    v_position = nir_variable_create(b.shader, nir_var_shader_out, vec4, "gl_Position");
    v_position->data.location = VARYING_SLOT_POS;
@@ -639,10 +651,10 @@ radv_meta_build_nir_fs_noop(struct radv_device *dev)
 
 void
 radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer, int samples,
-                                    nir_variable *input_img, nir_variable *color, nir_ssa_def *img_coord)
+                                    nir_variable *input_img, nir_variable *color, nir_def *img_coord)
 {
    nir_deref_instr *input_img_deref = nir_build_deref_var(b, input_img);
-   nir_ssa_def *sample0 = nir_txf_ms_deref(b, input_img_deref, img_coord, nir_imm_int(b, 0));
+   nir_def *sample0 = nir_txf_ms_deref(b, input_img_deref, img_coord, nir_imm_int(b, 0));
 
    if (is_integer || samples <= 1) {
       nir_store_var(b, color, sample0, 0xf);
@@ -650,13 +662,13 @@ radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, 
    }
 
    if (device->physical_device->use_fmask) {
-      nir_ssa_def *all_same = nir_samples_identical_deref(b, input_img_deref, img_coord);
+      nir_def *all_same = nir_samples_identical_deref(b, input_img_deref, img_coord);
       nir_push_if(b, nir_inot(b, all_same));
    }
 
-   nir_ssa_def *accum = sample0;
+   nir_def *accum = sample0;
    for (int i = 1; i < samples; i++) {
-      nir_ssa_def *sample = nir_txf_ms_deref(b, input_img_deref, img_coord, nir_imm_int(b, i));
+      nir_def *sample = nir_txf_ms_deref(b, input_img_deref, img_coord, nir_imm_int(b, i));
       accum = nir_fadd(b, accum, sample);
    }
 
@@ -670,21 +682,21 @@ radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, 
    }
 }
 
-nir_ssa_def *
+nir_def *
 radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding)
 {
-   nir_ssa_def *rsrc = nir_vulkan_resource_index(b, 3, 32, nir_imm_int(b, 0), .desc_set = desc_set, .binding = binding);
+   nir_def *rsrc = nir_vulkan_resource_index(b, 3, 32, nir_imm_int(b, 0), .desc_set = desc_set, .binding = binding);
    return nir_trim_vector(b, rsrc, 2);
 }
 
-nir_ssa_def *
+nir_def *
 get_global_ids(nir_builder *b, unsigned num_components)
 {
    unsigned mask = BITFIELD_MASK(num_components);
 
-   nir_ssa_def *local_ids = nir_channels(b, nir_load_local_invocation_id(b), mask);
-   nir_ssa_def *block_ids = nir_channels(b, nir_load_workgroup_id(b, 32), mask);
-   nir_ssa_def *block_size =
+   nir_def *local_ids = nir_channels(b, nir_load_local_invocation_id(b), mask);
+   nir_def *block_ids = nir_channels(b, nir_load_workgroup_id(b), mask);
+   nir_def *block_size =
       nir_channels(b,
                    nir_imm_ivec4(b, b->shader->info.workgroup_size[0], b->shader->info.workgroup_size[1],
                                  b->shader->info.workgroup_size[2], 0),
@@ -694,9 +706,9 @@ get_global_ids(nir_builder *b, unsigned num_components)
 }
 
 void
-radv_break_on_count(nir_builder *b, nir_variable *var, nir_ssa_def *count)
+radv_break_on_count(nir_builder *b, nir_variable *var, nir_def *count)
 {
-   nir_ssa_def *counter = nir_load_var(b, var);
+   nir_def *counter = nir_load_var(b, var);
 
    nir_push_if(b, nir_uge(b, counter, count));
    nir_jump(b, nir_jump_break);

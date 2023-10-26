@@ -32,11 +32,10 @@ class vec4_vs_visitor : public vec4_visitor
 {
 public:
    vec4_vs_visitor(const struct brw_compiler *compiler,
-                   void *log_data,
+                   const struct brw_compile_params *params,
                    const struct brw_vs_prog_key *key,
                    struct brw_vs_prog_data *vs_prog_data,
                    const nir_shader *shader,
-                   void *mem_ctx,
                    bool debug_enabled);
 
 protected:

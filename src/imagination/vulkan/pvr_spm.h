@@ -59,8 +59,6 @@ struct pvr_spm_scratch_buffer_store {
 };
 
 struct pvr_spm_eot_state {
-   uint32_t pbe_cs_words[PVR_MAX_COLOR_ATTACHMENTS]
-                        [ROGUE_NUM_PBESTATE_STATE_WORDS];
    uint64_t pbe_reg_words[PVR_MAX_COLOR_ATTACHMENTS]
                          [ROGUE_NUM_PBESTATE_REG_WORDS];
 

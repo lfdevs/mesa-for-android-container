@@ -608,7 +608,7 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
 
    /* Allocate new memory for vertices. */
    u_upload_alloc(c->pipe->stream_uploader, 0,
-                  c->vertex_buf.stride * VL_COMPOSITOR_MAX_LAYERS * 4, /* size */
+                  VL_COMPOSITOR_VB_STRIDE * VL_COMPOSITOR_MAX_LAYERS * 4, /* size */
                   4, /* alignment */
                   &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer.resource,
                   (void **)&vb);
@@ -643,6 +643,27 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
    }
 
    u_upload_unmap(c->pipe->stream_uploader);
+}
+
+static void
+set_csc_matrix(struct vl_compositor_state *s)
+{
+   struct pipe_transfer *buf_transfer;
+
+   float *ptr = pipe_buffer_map(s->pipe, s->shader_params,
+                                PIPE_MAP_WRITE | PIPE_MAP_DISCARD_WHOLE_RESOURCE,
+                                &buf_transfer);
+
+   if (!ptr)
+     return;
+
+   memcpy(ptr, &s->csc_matrix, sizeof(vl_csc_matrix));
+
+   ptr += sizeof(vl_csc_matrix) / sizeof(float);
+   *ptr++ = s->luma_min;
+   *ptr++ = s->luma_max;
+
+   pipe_buffer_unmap(s->pipe, buf_transfer);
 }
 
 static void
@@ -705,6 +726,7 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
    c->pipe->set_scissor_states(c->pipe, 0, 1, &s->scissor);
 
    gen_vertex_data(c, s, dirty_area);
+   set_csc_matrix(s);
 
    if (clear_dirty && dirty_area &&
        (dirty_area->x0 < dirty_area->x1 || dirty_area->y0 < dirty_area->y1)) {
@@ -717,7 +739,7 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
 
    c->pipe->set_framebuffer_state(c->pipe, &c->fb_state);
    c->pipe->bind_vs_state(c->pipe, c->vs);
-   c->pipe->set_vertex_buffers(c->pipe, 0, 1, 0, false, &c->vertex_buf);
+   c->pipe->set_vertex_buffers(c->pipe, 1, 0, false, &c->vertex_buf);
    c->pipe->bind_vertex_elements_state(c->pipe, c->vertex_elems_state);
    pipe_set_constant_buffer(c->pipe, PIPE_SHADER_FRAGMENT, 0, s->shader_params);
    c->pipe->bind_rasterizer_state(c->pipe, c->rast);

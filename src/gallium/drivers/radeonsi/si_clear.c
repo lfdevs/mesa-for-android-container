@@ -55,6 +55,8 @@ void si_execute_clears(struct si_context *sctx, struct si_clear_info *info,
    if (sctx->gfx_level <= GFX8)
       sctx->flags |= SI_CONTEXT_INV_L2;
 
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+
    /* Execute clears. */
    for (unsigned i = 0; i < num_clears; i++) {
       if (info[i].is_dcc_msaa) {
@@ -83,6 +85,8 @@ void si_execute_clears(struct si_context *sctx, struct si_clear_info *info,
    /* GFX6-8: CB and DB don't use L2. */
    if (sctx->gfx_level <= GFX8)
       sctx->flags |= SI_CONTEXT_WB_L2;
+
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
 }
 
 static bool si_alloc_separate_cmask(struct si_screen *sscreen, struct si_texture *tex)
@@ -1171,8 +1175,10 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
          si_mark_atom_dirty(sctx, &sctx->atoms.s.db_render_state);
       }
 
-      if (needs_db_flush)
+      if (needs_db_flush) {
          sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_DB;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+      }
    }
 
    if (unlikely(sctx->sqtt_enabled)) {

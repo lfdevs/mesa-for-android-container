@@ -108,6 +108,7 @@ agx_batch_init(struct agx_context *ctx,
    util_dynarray_init(&batch->scissor, ctx);
    util_dynarray_init(&batch->depth_bias, ctx);
    util_dynarray_init(&batch->occlusion_queries, ctx);
+   util_dynarray_init(&batch->nonocclusion_queries, ctx);
 
    batch->clear = 0;
    batch->draw = 0;
@@ -118,6 +119,7 @@ agx_batch_init(struct agx_context *ctx,
    batch->varyings = 0;
    batch->any_draws = false;
    batch->initialized = false;
+   batch->draws = 0;
 
    /* We need to emit prim state at the start. Max collides with all. */
    batch->reduced_prim = MESA_PRIM_COUNT;
@@ -145,7 +147,7 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
 
    assert(ctx->batch != batch);
 
-   agx_finish_batch_occlusion_queries(batch);
+   agx_finish_batch_queries(batch);
    batch->occlusion_buffer.cpu = NULL;
    batch->occlusion_buffer.gpu = 0;
 
@@ -181,9 +183,7 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
    util_dynarray_fini(&batch->scissor);
    util_dynarray_fini(&batch->depth_bias);
    util_dynarray_fini(&batch->occlusion_queries);
-   util_unreference_framebuffer_state(&batch->key);
-
-   agx_batch_mark_complete(batch);
+   util_dynarray_fini(&batch->nonocclusion_queries);
 
    if (!(dev->debug & (AGX_DBG_TRACE | AGX_DBG_SYNC))) {
       agx_batch_print_stats(dev, batch);
@@ -478,35 +478,6 @@ agx_batch_writes(struct agx_batch *batch, struct agx_resource *rsrc)
       /* Assume BOs written by the GPU are fully valid */
       rsrc->valid_buffer_range.start = 0;
       rsrc->valid_buffer_range.end = ~0;
-   }
-}
-
-/*
- * The OpenGL specification says that
- *
- *    It must always be true that if any query object returns a result
- *    available of TRUE, all queries of the same type issued prior to that
- *    query must also return TRUE.
- *
- * To implement this, we need to be able to flush all batches writing occlusion
- * queries so we ensure ordering.
- */
-void
-agx_flush_occlusion_queries(struct agx_context *ctx)
-{
-   unsigned i;
-   foreach_active(ctx, i) {
-      struct agx_batch *other = &ctx->batches.slots[i];
-
-      if (other->occlusion_queries.size != 0)
-         agx_flush_batch_for_reason(ctx, other, "Occlusion query ordering");
-   }
-
-   foreach_submitted(ctx, i) {
-      struct agx_batch *other = &ctx->batches.slots[i];
-
-      if (other->occlusion_queries.size != 0)
-         agx_sync_batch_for_reason(ctx, other, "Occlusion query ordering");
    }
 }
 

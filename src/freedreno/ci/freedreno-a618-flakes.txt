@@ -197,9 +197,10 @@ KHR-GL46.buffer_storage.map_persistent_dispatch
 # recent flakes, first occurence 09-02-2023
 KHR-GL46.buffer_storage.map_persistent_flush
 
-# very rare flake (once two weeks), first occurence 21-02-2023 (8i.samples_4.mask_3)
+# very rare flake (once two weeks), first occurence 21-02-2023
 KHR-GL46.sample_variables.mask.rgba8ui.samples_0.mask_2
 KHR-GL46.sample_variables.mask.rgba8i.samples_4.mask_3
+KHR-GL46.sample_variables.mask.rgba32f.samples_0.mask_2
 KHR-GL46.sample_variables.mask.rgba32f.samples_4.mask_3
 
 # these flake basically everywhere

@@ -68,26 +68,17 @@ build_vbo_state(struct fd6_emit *emit) assert_dt
 {
    const struct fd_vertex_state *vtx = &emit->ctx->vtx;
 
-   /* Limit PKT4 size, because at max count (32) we would overflow the
-    * size of the PKT4 size field:
-    */
-   const unsigned maxcnt = 16;
    const unsigned cnt = vtx->vertexbuf.count;
-   const unsigned dwords = (cnt * 4) /* per vbo: reg64 + two reg32 */
-               + (1 + cnt / maxcnt); /* PKT4 hdr every 16 vbo's */
+   const unsigned dwords = cnt * 4;  /* per vbo: reg64 + one reg32 + pkt hdr */
 
    struct fd_ringbuffer *ring = fd_submit_new_ringbuffer(
       emit->ctx->batch->submit, 4 * dwords, FD_RINGBUFFER_STREAMING);
 
    for (int32_t j = 0; j < cnt; j++) {
-      if ((j % maxcnt) == 0) {
-         unsigned sz = MIN2(maxcnt, cnt - j);
-         OUT_PKT4(ring, REG_A6XX_VFD_FETCH(j), 4 * sz);
-      }
+      OUT_PKT4(ring, REG_A6XX_VFD_FETCH(j), 3);
       const struct pipe_vertex_buffer *vb = &vtx->vertexbuf.vb[j];
       struct fd_resource *rsc = fd_resource(vb->buffer.resource);
       if (rsc == NULL) {
-         OUT_RING(ring, 0);
          OUT_RING(ring, 0);
          OUT_RING(ring, 0);
          OUT_RING(ring, 0);
@@ -97,7 +88,6 @@ build_vbo_state(struct fd6_emit *emit) assert_dt
 
          OUT_RELOC(ring, rsc->bo, off, 0, 0);
          OUT_RING(ring, size);       /* VFD_FETCH[j].SIZE */
-         OUT_RING(ring, vb->stride); /* VFD_FETCH[j].STRIDE */
       }
    }
 
@@ -259,7 +249,8 @@ build_lrz(struct fd6_emit *emit) assert_dt
    OUT_REG(ring,
            A6XX_GRAS_LRZ_CNTL(.enable = lrz.enable, .lrz_write = lrz.write,
                               .greater = lrz.direction == FD_LRZ_GREATER,
-                              .z_test_enable = lrz.test, ));
+                              .z_test_enable = lrz.test,
+                              .z_bounds_enable = lrz.z_bounds_enable, ));
    OUT_REG(ring, A6XX_RB_LRZ_CNTL(.enable = lrz.enable, ));
 
    OUT_REG(ring, A6XX_RB_DEPTH_PLANE_CNTL(.z_mode = lrz.z_mode, ));
@@ -358,6 +349,45 @@ build_blend_color(struct fd6_emit *emit) assert_dt
            A6XX_RB_BLEND_GREEN_F32(bcolor->color[1]),
            A6XX_RB_BLEND_BLUE_F32(bcolor->color[2]),
            A6XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
+
+   return ring;
+}
+
+static struct fd_ringbuffer *
+build_sample_locations(struct fd6_emit *emit)
+   assert_dt
+{
+   struct fd_context *ctx = emit->ctx;
+
+   if (!ctx->sample_locations_enabled) {
+      struct fd6_context *fd6_ctx = fd6_context(ctx);
+      return fd_ringbuffer_ref(fd6_ctx->sample_locations_disable_stateobj);
+   }
+
+   struct fd_ringbuffer *ring = fd_submit_new_ringbuffer(
+      ctx->batch->submit, 9 * 4, FD_RINGBUFFER_STREAMING);
+
+   uint32_t sample_locations = 0;
+   for (int i = 0; i < 4; i++) {
+      float x = (ctx->sample_locations[i] & 0xf) / 16.0f;
+      float y = (16 - (ctx->sample_locations[i] >> 4)) / 16.0f;
+
+      x = CLAMP(x, 0.0f, 0.9375f);
+      y = CLAMP(y, 0.0f, 0.9375f);
+
+      sample_locations |=
+         (A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_X(x) |
+          A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_Y(y)) << i*8;
+   }
+
+   OUT_REG(ring, A6XX_GRAS_SAMPLE_CONFIG(.location_enable = true),
+                 A6XX_GRAS_SAMPLE_LOCATION_0(.dword = sample_locations));
+
+   OUT_REG(ring, A6XX_RB_SAMPLE_CONFIG(.location_enable = true),
+                 A6XX_RB_SAMPLE_LOCATION_0(.dword = sample_locations));
+
+   OUT_REG(ring, A6XX_SP_TP_SAMPLE_CONFIG(.location_enable = true),
+                 A6XX_SP_TP_SAMPLE_LOCATION_0(.dword = sample_locations));
 
    return ring;
 }
@@ -613,6 +643,10 @@ fd6_emit_3d_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
          state = build_blend_color(emit);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_BLEND_COLOR);
          break;
+      case FD6_GROUP_SAMPLE_LOCATIONS:
+         state = build_sample_locations(emit);
+         fd6_state_take_group(&emit->state, state, FD6_GROUP_SAMPLE_LOCATIONS);
+         break;
       case FD6_GROUP_VS_BINDLESS:
          state = fd6_build_bindless_state<CHIP>(ctx, PIPE_SHADER_VERTEX, false);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_VS_BINDLESS);
@@ -746,16 +780,23 @@ fd6_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 void
 fd6_emit_ccu_cntl(struct fd_ringbuffer *ring, struct fd_screen *screen, bool gmem)
 {
+   enum a6xx_ccu_color_cache_size cache_size = (a6xx_ccu_color_cache_size)(screen->info->a6xx.gmem_ccu_color_cache_fraction);
    uint32_t offset = gmem ? screen->ccu_offset_gmem : screen->ccu_offset_bypass;
    uint32_t offset_hi = offset >> 21;
    offset &= 0x1fffff;
 
-   OUT_REG(ring, A6XX_RB_CCU_CNTL(
-         .concurrent_resolve = gmem && screen->info->a6xx.concurrent_resolve,
-         .color_offset_hi = offset_hi,
-         .gmem = gmem,
-         .color_offset = offset,
-   ));
+   OUT_REG(ring,
+           A6XX_RB_CCU_CNTL(.gmem_fast_clear_disable =
+                               !screen->info->a6xx.has_gmem_fast_clear,
+                            .concurrent_resolve =
+                               screen->info->a6xx.concurrent_resolve,
+                            .depth_offset_hi = 0,
+                            .color_offset_hi = offset_hi,
+                            .depth_cache_size = 0,
+                            .depth_offset = 0,
+                            .color_cache_size = cache_size,
+                            .color_offset = offset,
+                            ));
 }
 
 template void fd6_emit_cs_state<A6XX>(struct fd_context *ctx, struct fd_ringbuffer *ring, struct fd6_compute_state *cs);
@@ -792,28 +833,30 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
    WRITE(REG_A6XX_RB_DBG_ECO_CNTL, screen->info->a6xx.magic.RB_DBG_ECO_CNTL);
    WRITE(REG_A6XX_SP_FLOAT_CNTL, A6XX_SP_FLOAT_CNTL_F16_NO_INF);
-   WRITE(REG_A6XX_SP_DBG_ECO_CNTL, 0);
+   WRITE(REG_A6XX_SP_DBG_ECO_CNTL, screen->info->a6xx.magic.SP_DBG_ECO_CNTL);
    WRITE(REG_A6XX_SP_PERFCTR_ENABLE, 0x3f);
    WRITE(REG_A6XX_TPL1_UNKNOWN_B605, 0x44);
    WRITE(REG_A6XX_TPL1_DBG_ECO_CNTL, screen->info->a6xx.magic.TPL1_DBG_ECO_CNTL);
    WRITE(REG_A6XX_HLSQ_UNKNOWN_BE00, 0x80);
    WRITE(REG_A6XX_HLSQ_UNKNOWN_BE01, 0);
 
-   WRITE(REG_A6XX_VPC_DBG_ECO_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_DBG_ECO_CNTL, 0x880);
-   WRITE(REG_A6XX_HLSQ_DBG_ECO_CNTL, 0x80000);
-   WRITE(REG_A6XX_SP_CHICKEN_BITS, 0x1430);
+   WRITE(REG_A6XX_VPC_DBG_ECO_CNTL, screen->info->a6xx.magic.VPC_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_GRAS_DBG_ECO_CNTL, screen->info->a6xx.magic.GRAS_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_HLSQ_DBG_ECO_CNTL, screen->info->a6xx.magic.HLSQ_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_SP_CHICKEN_BITS, screen->info->a6xx.magic.SP_CHICKEN_BITS);
    WRITE(REG_A6XX_SP_IBO_COUNT, 0);
    WRITE(REG_A6XX_SP_UNKNOWN_B182, 0);
    WRITE(REG_A6XX_HLSQ_SHARED_CONSTS, 0);
-   WRITE(REG_A6XX_UCHE_UNKNOWN_0E12, 0x3200000);
-   WRITE(REG_A6XX_UCHE_CLIENT_PF, 4);
-   WRITE(REG_A6XX_RB_UNKNOWN_8E01, 0x1);
+   WRITE(REG_A6XX_UCHE_UNKNOWN_0E12, screen->info->a6xx.magic.UCHE_UNKNOWN_0E12);
+   WRITE(REG_A6XX_UCHE_CLIENT_PF, screen->info->a6xx.magic.UCHE_CLIENT_PF);
+   WRITE(REG_A6XX_RB_UNKNOWN_8E01, screen->info->a6xx.magic.RB_UNKNOWN_8E01);
+   WRITE(REG_A6XX_SP_UNKNOWN_A9A8, 0);
    WRITE(REG_A6XX_SP_MODE_CONTROL,
          A6XX_SP_MODE_CONTROL_CONSTANT_DEMOTION_ENABLE | 4);
    WRITE(REG_A6XX_VFD_ADD_OFFSET, A6XX_VFD_ADD_OFFSET_VERTEX);
+   WRITE(REG_A6XX_VPC_UNKNOWN_9107, 0);
    WRITE(REG_A6XX_RB_UNKNOWN_8811, 0x00000010);
-   WRITE(REG_A6XX_PC_MODE_CNTL, 0x1f);
+   WRITE(REG_A6XX_PC_MODE_CNTL, screen->info->a6xx.magic.PC_MODE_CNTL);
 
    WRITE(REG_A6XX_GRAS_LRZ_PS_INPUT_CNTL, 0);
    WRITE(REG_A6XX_GRAS_SAMPLE_CNTL, 0);
@@ -847,16 +890,12 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
    WRITE(REG_A6XX_VPC_UNKNOWN_9211, 0);
    WRITE(REG_A6XX_VPC_UNKNOWN_9602, 0);
    WRITE(REG_A6XX_PC_UNKNOWN_9E72, 0);
-   WRITE(REG_A6XX_SP_TP_SAMPLE_CONFIG, 0);
    /* NOTE blob seems to (mostly?) use 0xb2 for SP_TP_MODE_CNTL
     * but this seems to kill texture gather offsets.
     */
    WRITE(REG_A6XX_SP_TP_MODE_CNTL, 0xa0 |
          A6XX_SP_TP_MODE_CNTL_ISAMMODE(ISAMMODE_GL));
-   WRITE(REG_A6XX_RB_SAMPLE_CONFIG, 0);
-   WRITE(REG_A6XX_GRAS_SAMPLE_CONFIG, 0);
-   WRITE(REG_A6XX_RB_Z_BOUNDS_MIN, 0);
-   WRITE(REG_A6XX_RB_Z_BOUNDS_MAX, 0);
+
    OUT_REG(ring, HLSQ_CONTROL_5_REG(
          CHIP,
          .linelengthregid = INVALID_REG,
@@ -913,15 +952,12 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
    struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
    struct fd_bo *bcolor_mem = fd6_ctx->bcolor_mem;
+
    OUT_PKT4(ring, REG_A6XX_SP_TP_BORDER_COLOR_BASE_ADDR, 2);
    OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
 
    OUT_PKT4(ring, REG_A6XX_SP_PS_TP_BORDER_COLOR_BASE_ADDR, 2);
    OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
-
-   fd_ringbuffer_attach_bo(ring, bcolor_mem);
-
-   fd_ringbuffer_attach_bo(ring, fd6_ctx->control_mem);
 
    if (!batch->nondraw) {
       trace_end_state_restore(&batch->trace, ring);
@@ -940,6 +976,9 @@ fd6_mem_to_mem(struct fd_ringbuffer *ring, struct pipe_resource *dst,
    struct fd_bo *dst_bo = fd_resource(dst)->bo;
    unsigned i;
 
+   fd_ringbuffer_attach_bo(ring, dst_bo);
+   fd_ringbuffer_attach_bo(ring, src_bo);
+
    for (i = 0; i < sizedwords; i++) {
       OUT_PKT7(ring, CP_MEM_TO_MEM, 5);
       OUT_RING(ring, 0x00000000);
@@ -949,8 +988,6 @@ fd6_mem_to_mem(struct fd_ringbuffer *ring, struct pipe_resource *dst,
       dst_off += 4;
       src_off += 4;
    }
-   fd_ringbuffer_attach_bo(ring, dst_bo);
-   fd_ringbuffer_attach_bo(ring, src_bo);
 }
 
 void

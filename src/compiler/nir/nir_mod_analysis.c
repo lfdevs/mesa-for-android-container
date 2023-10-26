@@ -30,11 +30,11 @@ nir_alu_src_type(const nir_alu_instr *instr, unsigned src)
           nir_src_bit_size(instr->src[src].src);
 }
 
-static nir_ssa_scalar
+static nir_scalar
 nir_alu_arg(const nir_alu_instr *alu, unsigned arg, unsigned comp)
 {
    const nir_alu_src *src = &alu->src[arg];
-   return nir_get_ssa_scalar(src->src.ssa, src->swizzle[comp]);
+   return nir_get_scalar(src->src.ssa, src->swizzle[comp]);
 }
 
 /* Tries to determine the value of expression "val % div", assuming that val
@@ -45,7 +45,7 @@ nir_alu_arg(const nir_alu_instr *alu, unsigned arg, unsigned comp)
  * Tests are in mod_analysis_tests.cpp.
  */
 bool
-nir_mod_analysis(nir_ssa_scalar val, nir_alu_type val_type, unsigned div, unsigned *mod)
+nir_mod_analysis(nir_scalar val, nir_alu_type val_type, unsigned div, unsigned *mod)
 {
    if (div == 1) {
       *mod = 0;
@@ -55,129 +55,129 @@ nir_mod_analysis(nir_ssa_scalar val, nir_alu_type val_type, unsigned div, unsign
    assert(util_is_power_of_two_nonzero(div));
 
    switch (val.def->parent_instr->type) {
-      case nir_instr_type_load_const: {
-         nir_load_const_instr *load =
-               nir_instr_as_load_const(val.def->parent_instr);
-         nir_alu_type base_type = nir_alu_type_get_base_type(val_type);
+   case nir_instr_type_load_const: {
+      nir_load_const_instr *load =
+         nir_instr_as_load_const(val.def->parent_instr);
+      nir_alu_type base_type = nir_alu_type_get_base_type(val_type);
 
-         if (base_type == nir_type_uint) {
-            assert(val.comp < load->def.num_components);
-            uint64_t ival = nir_const_value_as_uint(load->value[val.comp],
-                                                    load->def.bit_size);
-            *mod = ival % div;
-            return true;
-         } else if (base_type == nir_type_int) {
-            assert(val.comp < load->def.num_components);
-            int64_t ival = nir_const_value_as_int(load->value[val.comp],
-                                                  load->def.bit_size);
+      if (base_type == nir_type_uint) {
+         assert(val.comp < load->def.num_components);
+         uint64_t ival = nir_const_value_as_uint(load->value[val.comp],
+                                                 load->def.bit_size);
+         *mod = ival % div;
+         return true;
+      } else if (base_type == nir_type_int) {
+         assert(val.comp < load->def.num_components);
+         int64_t ival = nir_const_value_as_int(load->value[val.comp],
+                                               load->def.bit_size);
 
-            /* whole analysis collapses the moment we allow negative values */
-            if (ival < 0)
+         /* whole analysis collapses the moment we allow negative values */
+         if (ival < 0)
+            return false;
+
+         *mod = ((uint64_t)ival) % div;
+         return true;
+      }
+
+      break;
+   }
+
+   case nir_instr_type_alu: {
+      nir_alu_instr *alu = nir_instr_as_alu(val.def->parent_instr);
+
+      if (alu->def.num_components != 1)
+         return false;
+
+      switch (alu->op) {
+      case nir_op_ishr: {
+         if (nir_src_is_const(alu->src[1].src)) {
+            assert(alu->src[1].src.ssa->num_components == 1);
+            uint64_t shift = nir_src_as_uint(alu->src[1].src);
+
+            if (util_last_bit(div) + shift > 32)
+               break;
+
+            nir_alu_type type0 = nir_alu_src_type(alu, 0);
+            if (!nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div << shift, mod))
                return false;
 
-            *mod = ((uint64_t)ival) % div;
+            *mod >>= shift;
             return true;
          }
-
          break;
       }
 
-      case nir_instr_type_alu: {
-         nir_alu_instr *alu = nir_instr_as_alu(val.def->parent_instr);
-
-         if (alu->dest.dest.ssa.num_components != 1)
+      case nir_op_iadd: {
+         unsigned mod0;
+         nir_alu_type type0 = nir_alu_src_type(alu, 0);
+         if (!nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div, &mod0))
             return false;
 
-         switch (alu->op) {
-            case nir_op_ishr: {
-               if (nir_src_is_const(alu->src[1].src)) {
-                  assert(alu->src[1].src.ssa->num_components == 1);
-                  uint64_t shift = nir_src_as_uint(alu->src[1].src);
+         unsigned mod1;
+         nir_alu_type type1 = nir_alu_src_type(alu, 1);
+         if (!nir_mod_analysis(nir_alu_arg(alu, 1, val.comp), type1, div, &mod1))
+            return false;
 
-                  if (util_last_bit(div) + shift > 32)
-                     break;
+         *mod = (mod0 + mod1) % div;
+         return true;
+      }
 
-                  nir_alu_type type0 = nir_alu_src_type(alu, 0);
-                  if (!nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div << shift, mod))
-                     return false;
+      case nir_op_ishl: {
+         if (nir_src_is_const(alu->src[1].src)) {
+            assert(alu->src[1].src.ssa->num_components == 1);
+            uint64_t shift = nir_src_as_uint(alu->src[1].src);
 
-                  *mod >>= shift;
-                  return true;
-               }
-               break;
-            }
-
-            case nir_op_iadd: {
-               unsigned mod0;
-               nir_alu_type type0 = nir_alu_src_type(alu, 0);
-               if (!nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div, &mod0))
-                  return false;
-
-               unsigned mod1;
-               nir_alu_type type1 = nir_alu_src_type(alu, 1);
-               if (!nir_mod_analysis(nir_alu_arg(alu, 1, val.comp), type1, div, &mod1))
-                  return false;
-
-               *mod = (mod0 + mod1) % div;
+            if ((div >> shift) == 0) {
+               *mod = 0;
                return true;
             }
-
-            case nir_op_ishl: {
-               if (nir_src_is_const(alu->src[1].src)) {
-                  assert(alu->src[1].src.ssa->num_components == 1);
-                  uint64_t shift = nir_src_as_uint(alu->src[1].src);
-
-                  if ((div >> shift) == 0) {
-                     *mod = 0;
-                     return true;
-                  }
-                  nir_alu_type type0 = nir_alu_src_type(alu, 0);
-                  return nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div >> shift, mod);
-               }
-               break;
-            }
-
-            case nir_op_imul_32x16: /* multiply 32-bits with low 16-bits */
-            case nir_op_imul: {
-               unsigned mod0;
-               nir_alu_type type0 = nir_alu_src_type(alu, 0);
-               bool s1 = nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div, &mod0);
-
-               if (s1 && (mod0 == 0)) {
-                  *mod = 0;
-                  return true;
-               }
-
-               /* if divider is larger than 2nd source max (interpreted) value
-                * then modulo of multiplication is unknown
-                */
-               if (alu->op == nir_op_imul_32x16 && div > (1u << 16))
-                  return false;
-
-               unsigned mod1;
-               nir_alu_type type1 = nir_alu_src_type(alu, 1);
-               bool s2 = nir_mod_analysis(nir_alu_arg(alu, 1, val.comp), type1, div, &mod1);
-
-               if (s2 && (mod1 == 0)) {
-                  *mod = 0;
-                  return true;
-               }
-
-               if (!s1 || !s2)
-                  return false;
-
-               *mod = (mod0 * mod1) % div;
-               return true;
-            }
-
-            default:
-               break;
+            nir_alu_type type0 = nir_alu_src_type(alu, 0);
+            return nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div >> shift, mod);
          }
          break;
+      }
+
+      case nir_op_imul_32x16: /* multiply 32-bits with low 16-bits */
+      case nir_op_imul: {
+         unsigned mod0;
+         nir_alu_type type0 = nir_alu_src_type(alu, 0);
+         bool s1 = nir_mod_analysis(nir_alu_arg(alu, 0, val.comp), type0, div, &mod0);
+
+         if (s1 && (mod0 == 0)) {
+            *mod = 0;
+            return true;
+         }
+
+         /* if divider is larger than 2nd source max (interpreted) value
+          * then modulo of multiplication is unknown
+          */
+         if (alu->op == nir_op_imul_32x16 && div > (1u << 16))
+            return false;
+
+         unsigned mod1;
+         nir_alu_type type1 = nir_alu_src_type(alu, 1);
+         bool s2 = nir_mod_analysis(nir_alu_arg(alu, 1, val.comp), type1, div, &mod1);
+
+         if (s2 && (mod1 == 0)) {
+            *mod = 0;
+            return true;
+         }
+
+         if (!s1 || !s2)
+            return false;
+
+         *mod = (mod0 * mod1) % div;
+         return true;
       }
 
       default:
          break;
+      }
+      break;
+   }
+
+   default:
+      break;
    }
 
    return false;

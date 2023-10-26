@@ -83,11 +83,10 @@ mkdir -p /nfs/results
 
 rm -rf /tftp/*
 if echo "$BM_KERNEL" | grep -q http; then
-  apt-get install -y curl
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       $BM_KERNEL -o /tftp/vmlinuz
 else
-  cp $BM_KERNEL /tftp/vmlinuz
+  cp /baremetal-files/"$BM_KERNEL" /tftp/vmlinuz
 fi
 echo "$BM_CMDLINE" > /tftp/cmdline
 

@@ -69,7 +69,7 @@ static const struct {
    [CHIP_VANGOGH] = {0x163F, 8, false},
    [CHIP_NAVI22] = {0x73C0, 8, true},
    [CHIP_NAVI23] = {0x73E0, 8, true},
-   [CHIP_GFX1100] = {0x744C, 24, true},
+   [CHIP_NAVI31] = {0x744C, 24, true},
    /* clang-format on */
 };
 
@@ -88,7 +88,7 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
          info->family = i;
          info->name = ac_get_family_name(i);
 
-         if (info->family >= CHIP_GFX1100)
+         if (info->family >= CHIP_NAVI31)
             info->gfx_level = GFX11;
          else if (i >= CHIP_NAVI21)
             info->gfx_level = GFX10_3;
@@ -132,7 +132,7 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
    info->has_3d_cube_border_color_mipmap = true;
    info->has_image_opcodes = true;
 
-   if (info->family == CHIP_GFX1100 || info->family == CHIP_GFX1101)
+   if (info->family == CHIP_NAVI31 || info->family == CHIP_NAVI32)
       info->num_physical_wave64_vgprs_per_simd = 768;
    else if (info->gfx_level >= GFX10)
       info->num_physical_wave64_vgprs_per_simd = 512;

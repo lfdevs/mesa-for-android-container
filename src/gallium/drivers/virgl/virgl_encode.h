@@ -38,6 +38,7 @@ struct virgl_transfer;
 struct virgl_sampler_view;
 struct virgl_video_codec;
 struct virgl_video_buffer;
+struct virgl_vertex_elements_state;
 
 struct virgl_surface {
    struct pipe_surface base;

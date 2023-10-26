@@ -27,6 +27,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 
 #include "pvr_bo.h"
@@ -224,7 +225,6 @@ VkResult pvr_GetQueryPoolResults(VkDevice _device,
    for (uint32_t i = 0; i < queryCount; i++) {
       bool is_available = pvr_query_is_available(pool, firstQuery + i);
       uint64_t count = 0;
-      uint32_t idx = 0;
 
       if (flags & VK_QUERY_RESULT_WAIT_BIT && !is_available) {
          result = pvr_wait_for_available(device, pool, firstQuery + i);
@@ -238,12 +238,12 @@ VkResult pvr_GetQueryPoolResults(VkDevice _device,
          count += query_results[pool->result_stride * j + firstQuery + i];
 
       if (is_available || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
-         pvr_write_query_to_buffer(data, flags, idx++, count);
+         pvr_write_query_to_buffer(data, flags, 0, count);
       else
          result = VK_NOT_READY;
 
       if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-         pvr_write_query_to_buffer(data, flags, idx++, count);
+         pvr_write_query_to_buffer(data, flags, 1, is_available);
 
       data += stride;
    }
@@ -277,6 +277,18 @@ void pvr_CmdResetQueryPool(VkCommandBuffer commandBuffer,
    query_info.reset_query_pool.query_count = queryCount;
 
    pvr_add_query_program(cmd_buffer, &query_info);
+}
+
+void pvr_ResetQueryPool(VkDevice _device,
+                        VkQueryPool queryPool,
+                        uint32_t firstQuery,
+                        uint32_t queryCount)
+{
+   PVR_FROM_HANDLE(pvr_query_pool, pool, queryPool);
+   uint32_t *availability =
+      pvr_bo_suballoc_get_map_addr(pool->availability_buffer);
+
+   memset(availability + firstQuery, 0, sizeof(uint32_t) * queryCount);
 }
 
 void pvr_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,

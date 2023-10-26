@@ -855,7 +855,7 @@ update_draw_auto(struct d3d12_context *ctx,
    auto so_arg = indirect_in->count_from_stream_output;
    d3d12_stream_output_target *target = (d3d12_stream_output_target *)so_arg;
 
-   ctx->transform_state_vars[0] = ctx->vbs[0].stride;
+   ctx->transform_state_vars[0] = ctx->gfx_pipeline_state.ves->strides[0];
    ctx->transform_state_vars[1] = ctx->vbs[0].buffer_offset - so_arg->buffer_offset;
    
    pipe_shader_buffer new_cs_ssbo;
@@ -1123,8 +1123,17 @@ d3d12_draw_vbo(struct pipe_context *pctx,
             d3d12_batch_reference_resource(batch, res, false);
       }
    }
-   if (ctx->cmdlist_dirty & D3D12_DIRTY_VERTEX_BUFFERS)
+   if (ctx->cmdlist_dirty & (D3D12_DIRTY_VERTEX_BUFFERS | D3D12_DIRTY_VERTEX_ELEMENTS)) {
+      uint16_t *strides = ctx->gfx_pipeline_state.ves ? ctx->gfx_pipeline_state.ves->strides : NULL;
+      if (strides) {
+         for (unsigned i = 0; i < ctx->num_vbs; i++)
+            ctx->vbvs[i].StrideInBytes = strides[i];
+      } else {
+         for (unsigned i = 0; i < ctx->num_vbs; i++)
+            ctx->vbvs[i].StrideInBytes = 0;
+      }
       ctx->cmdlist->IASetVertexBuffers(0, ctx->num_vbs, ctx->vbvs);
+   }
 
    if (index_buffer) {
       D3D12_INDEX_BUFFER_VIEW ibv;

@@ -36,6 +36,7 @@
 #include <drm-uapi/i915_drm.h>
 
 #include "common/intel_gem.h"
+#include "common/i915/intel_gem.h"
 
 #include "dev/intel_debug.h"
 #include "dev/intel_device_info.h"

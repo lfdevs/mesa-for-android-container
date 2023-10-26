@@ -27,7 +27,9 @@
 #include "nir_builder.h"
 #include "radv_cs.h"
 
+#include "radix_sort/common/vk/barrier.h"
 #include "radix_sort/radv_radix_sort.h"
+#include "radix_sort/shaders/push.h"
 
 #include "bvh/build_interface.h"
 #include "bvh/bvh.h"
@@ -76,6 +78,7 @@ static const uint32_t header_spv[] = {
 };
 
 #define KEY_ID_PAIR_SIZE 8
+#define MORTON_BIT_SIZE  24
 
 enum internal_build_type {
    INTERNAL_BUILD_TYPE_LBVH,
@@ -106,6 +109,7 @@ struct scratch_layout {
    uint32_t lbvh_node_offset;
 
    uint32_t ir_offset;
+   uint32_t internal_node_offset;
 };
 
 static struct build_config
@@ -229,6 +233,8 @@ get_build_layout(struct radv_device *device, uint32_t leaf_count,
 
       scratch->ir_offset = offset;
       offset += ir_leaf_size * leaf_count;
+
+      scratch->internal_node_offset = offset;
       offset += sizeof(struct radv_ir_box_node) * internal_count;
 
       scratch->size = offset;
@@ -382,17 +388,6 @@ cleanup:
    return result;
 }
 
-static void
-radix_sort_fill_buffer(VkCommandBuffer commandBuffer, radix_sort_vk_buffer_info_t const *buffer_info,
-                       VkDeviceSize offset, VkDeviceSize size, uint32_t data)
-{
-   RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
-
-   assert(size != VK_WHOLE_SIZE);
-
-   radv_fill_buffer(cmd_buffer, NULL, NULL, buffer_info->devaddr + buffer_info->offset + offset, size, data);
-}
-
 VkResult
 radv_device_init_null_accel_struct(struct radv_device *device)
 {
@@ -412,8 +407,12 @@ radv_device_init_null_accel_struct(struct radv_device *device)
 
    VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .pNext =
+         &(VkBufferUsageFlags2CreateInfoKHR){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR,
+            .usage = VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+         },
       .size = size,
-      .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
    };
 
@@ -572,12 +571,6 @@ radv_device_init_accel_struct_build_state(struct radv_device *device)
 
    device->meta_state.accel_struct_build.radix_sort =
       radv_create_radix_sort_u64(radv_device_to_handle(device), &device->meta_state.alloc, device->meta_state.cache);
-
-   struct radix_sort_vk_sort_devaddr_info *radix_sort_info = &device->meta_state.accel_struct_build.radix_sort_info;
-   radix_sort_info->ext = NULL;
-   radix_sort_info->key_bits = 24;
-   radix_sort_info->fill_buffer = radix_sort_fill_buffer;
-
 exit:
    mtx_unlock(&device->meta_state.mtx);
    return result;
@@ -597,7 +590,6 @@ radv_device_init_accel_struct_copy_state(struct radv_device *device)
 }
 
 struct bvh_state {
-   uint32_t internal_node_base;
    uint32_t node_count;
    uint32_t scratch_offset;
 
@@ -608,6 +600,13 @@ struct bvh_state {
    struct acceleration_structure_layout accel_struct;
    struct scratch_layout scratch;
    struct build_config config;
+
+   /* Radix sort state */
+   uint32_t scatter_blocks;
+   uint32_t count_ru_scatter;
+   uint32_t histo_blocks;
+   uint32_t count_ru_histo;
+   struct rs_push_scatter push_scatter;
 };
 
 static uint32_t
@@ -634,7 +633,6 @@ build_leaves(VkCommandBuffer commandBuffer, uint32_t infoCount,
          .bvh = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.ir_offset,
          .header = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.header_offset,
          .ids = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[0],
-         .dst_offset = 0,
       };
 
       for (unsigned j = 0; j < pInfos[i].geometryCount; ++j) {
@@ -647,7 +645,7 @@ build_leaves(VkCommandBuffer commandBuffer, uint32_t infoCount,
 
          leaf_consts.geometry_type = geom->geometryType;
          leaf_consts.geometry_id = pack_geometry_id_and_flags(j, geom->flags);
-         unsigned prim_size;
+
          switch (geom->geometryType) {
          case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
             assert(pInfos[i].type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
@@ -668,16 +666,12 @@ build_leaves(VkCommandBuffer commandBuffer, uint32_t infoCount,
             leaf_consts.stride = geom->geometry.triangles.vertexStride;
             leaf_consts.vertex_format = geom->geometry.triangles.vertexFormat;
             leaf_consts.index_format = geom->geometry.triangles.indexType;
-
-            prim_size = sizeof(struct radv_ir_triangle_node);
             break;
          case VK_GEOMETRY_TYPE_AABBS_KHR:
             assert(pInfos[i].type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
 
             leaf_consts.data = geom->geometry.aabbs.data.deviceAddress + buildRangeInfo->primitiveOffset;
             leaf_consts.stride = geom->geometry.aabbs.stride;
-
-            prim_size = sizeof(struct radv_ir_aabb_node);
             break;
          case VK_GEOMETRY_TYPE_INSTANCES_KHR:
             assert(pInfos[i].type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR);
@@ -688,8 +682,6 @@ build_leaves(VkCommandBuffer commandBuffer, uint32_t infoCount,
                leaf_consts.stride = 8;
             else
                leaf_consts.stride = sizeof(VkAccelerationStructureInstanceKHR);
-
-            prim_size = sizeof(struct radv_ir_instance_node);
             break;
          default:
             unreachable("Unknown geometryType");
@@ -699,12 +691,9 @@ build_leaves(VkCommandBuffer commandBuffer, uint32_t infoCount,
                                VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(leaf_consts), &leaf_consts);
          radv_unaligned_dispatch(cmd_buffer, buildRangeInfo->primitiveCount, 1, 1);
 
-         leaf_consts.dst_offset += prim_size * buildRangeInfo->primitiveCount;
-
          bvh_states[i].leaf_node_count += buildRangeInfo->primitiveCount;
          bvh_states[i].node_count += buildRangeInfo->primitiveCount;
       }
-      bvh_states[i].internal_node_base = leaf_consts.dst_offset;
    }
 
    cmd_buffer->state.flush_bits |= flush_bits;
@@ -739,32 +728,213 @@ morton_sort(VkCommandBuffer commandBuffer, uint32_t infoCount,
             const VkAccelerationStructureBuildGeometryInfoKHR *pInfos, struct bvh_state *bvh_states,
             enum radv_cmd_flush_bits flush_bits)
 {
+   /* Copyright 2019 The Fuchsia Authors. */
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   radix_sort_vk_t *rs = cmd_buffer->device->meta_state.accel_struct_build.radix_sort;
+
+   /*
+    * OVERVIEW
+    *
+    *   1. Pad the keyvals in `scatter_even`.
+    *   2. Zero the `histograms` and `partitions`.
+    *      --- BARRIER ---
+    *   3. HISTOGRAM is dispatched before PREFIX.
+    *      --- BARRIER ---
+    *   4. PREFIX is dispatched before the first SCATTER.
+    *      --- BARRIER ---
+    *   5. One or more SCATTER dispatches.
+    *
+    * Note that the `partitions` buffer can be zeroed anytime before the first
+    * scatter.
+    */
+
+   /* How many passes? */
+   uint32_t keyval_bytes = rs->config.keyval_dwords * (uint32_t)sizeof(uint32_t);
+   uint32_t keyval_bits = keyval_bytes * 8;
+   uint32_t key_bits = MIN2(MORTON_BIT_SIZE, keyval_bits);
+   uint32_t passes = (key_bits + RS_RADIX_LOG2 - 1) / RS_RADIX_LOG2;
+
    for (uint32_t i = 0; i < infoCount; ++i) {
-      struct radix_sort_vk_memory_requirements requirements;
-      radix_sort_vk_get_memory_requirements(cmd_buffer->device->meta_state.accel_struct_build.radix_sort,
-                                            bvh_states[i].node_count, &requirements);
+      if (bvh_states[i].node_count)
+         bvh_states[i].scratch_offset = bvh_states[i].scratch.sort_buffer_offset[passes & 1];
+      else
+         bvh_states[i].scratch_offset = bvh_states[i].scratch.sort_buffer_offset[0];
+   }
 
-      struct radix_sort_vk_sort_devaddr_info info = cmd_buffer->device->meta_state.accel_struct_build.radix_sort_info;
-      info.count = bvh_states[i].node_count;
+   /*
+    * PAD KEYVALS AND ZERO HISTOGRAM/PARTITIONS
+    *
+    * Pad fractional blocks with max-valued keyvals.
+    *
+    * Zero the histograms and partitions buffer.
+    *
+    * This assumes the partitions follow the histograms.
+    */
 
-      info.keyvals_even.buffer = VK_NULL_HANDLE;
-      info.keyvals_even.offset = 0;
-      info.keyvals_even.devaddr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[0];
+   /* FIXME(allanmac): Consider precomputing some of these values and hang them off `rs`. */
 
-      info.keyvals_odd = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[1];
+   /* How many scatter blocks? */
+   uint32_t scatter_wg_size = 1 << rs->config.scatter.workgroup_size_log2;
+   uint32_t scatter_block_kvs = scatter_wg_size * rs->config.scatter.block_rows;
 
-      info.internal.buffer = VK_NULL_HANDLE;
-      info.internal.offset = 0;
-      info.internal.devaddr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_internal_offset;
+   /*
+    * How many histogram blocks?
+    *
+    * Note that it's OK to have more max-valued digits counted by the histogram
+    * than sorted by the scatters because the sort is stable.
+    */
+   uint32_t histo_wg_size = 1 << rs->config.histogram.workgroup_size_log2;
+   uint32_t histo_block_kvs = histo_wg_size * rs->config.histogram.block_rows;
 
-      VkDeviceAddress result_addr;
-      radix_sort_vk_sort_devaddr(cmd_buffer->device->meta_state.accel_struct_build.radix_sort, &info,
-                                 radv_device_to_handle(cmd_buffer->device), commandBuffer, &result_addr);
+   uint32_t pass_idx = (keyval_bytes - passes);
 
-      assert(result_addr == info.keyvals_even.devaddr || result_addr == info.keyvals_odd);
+   for (uint32_t i = 0; i < infoCount; ++i) {
+      if (!bvh_states[i].node_count)
+         continue;
 
-      bvh_states[i].scratch_offset = (uint32_t)(result_addr - pInfos[i].scratchData.deviceAddress);
+      uint64_t keyvals_even_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[0];
+      uint64_t internal_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_internal_offset;
+
+      bvh_states[i].scatter_blocks = (bvh_states[i].node_count + scatter_block_kvs - 1) / scatter_block_kvs;
+      bvh_states[i].count_ru_scatter = bvh_states[i].scatter_blocks * scatter_block_kvs;
+
+      bvh_states[i].histo_blocks = (bvh_states[i].count_ru_scatter + histo_block_kvs - 1) / histo_block_kvs;
+      bvh_states[i].count_ru_histo = bvh_states[i].histo_blocks * histo_block_kvs;
+
+      /* Fill with max values */
+      if (bvh_states[i].count_ru_histo > bvh_states[i].node_count) {
+         radv_fill_buffer(cmd_buffer, NULL, NULL, keyvals_even_addr + bvh_states[i].node_count * keyval_bytes,
+                          (bvh_states[i].count_ru_histo - bvh_states[i].node_count) * keyval_bytes, 0xFFFFFFFF);
+      }
+
+      /*
+       * Zero histograms and invalidate partitions.
+       *
+       * Note that the partition invalidation only needs to be performed once
+       * because the even/odd scatter dispatches rely on the the previous pass to
+       * leave the partitions in an invalid state.
+       *
+       * Note that the last workgroup doesn't read/write a partition so it doesn't
+       * need to be initialized.
+       */
+      uint32_t histo_partition_count = passes + bvh_states[i].scatter_blocks - 1;
+
+      uint32_t fill_base = pass_idx * (RS_RADIX_SIZE * sizeof(uint32_t));
+
+      radv_fill_buffer(cmd_buffer, NULL, NULL, internal_addr + rs->internal.histograms.offset + fill_base,
+                       histo_partition_count * (RS_RADIX_SIZE * sizeof(uint32_t)), 0);
+   }
+
+   /*
+    * Pipeline: HISTOGRAM
+    *
+    * TODO(allanmac): All subgroups should try to process approximately the same
+    * number of blocks in order to minimize tail effects.  This was implemented
+    * and reverted but should be reimplemented and benchmarked later.
+    */
+   vk_barrier_transfer_w_to_compute_r(commandBuffer);
+
+   radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, rs->pipelines.named.histogram);
+
+   for (uint32_t i = 0; i < infoCount; ++i) {
+      if (!bvh_states[i].node_count)
+         continue;
+
+      uint64_t keyvals_even_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[0];
+      uint64_t internal_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_internal_offset;
+
+      /* Dispatch histogram */
+      struct rs_push_histogram push_histogram = {
+         .devaddr_histograms = internal_addr + rs->internal.histograms.offset,
+         .devaddr_keyvals = keyvals_even_addr,
+         .passes = passes,
+      };
+
+      radv_CmdPushConstants(commandBuffer, rs->pipeline_layouts.named.histogram, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                            sizeof(push_histogram), &push_histogram);
+
+      vk_common_CmdDispatch(commandBuffer, bvh_states[i].histo_blocks, 1, 1);
+   }
+
+   /*
+    * Pipeline: PREFIX
+    *
+    * Launch one workgroup per pass.
+    */
+   vk_barrier_compute_w_to_compute_r(commandBuffer);
+
+   radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, rs->pipelines.named.prefix);
+
+   for (uint32_t i = 0; i < infoCount; ++i) {
+      if (!bvh_states[i].node_count)
+         continue;
+
+      uint64_t internal_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_internal_offset;
+
+      struct rs_push_prefix push_prefix = {
+         .devaddr_histograms = internal_addr + rs->internal.histograms.offset,
+      };
+
+      radv_CmdPushConstants(commandBuffer, rs->pipeline_layouts.named.prefix, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                            sizeof(push_prefix), &push_prefix);
+
+      vk_common_CmdDispatch(commandBuffer, passes, 1, 1);
+   }
+
+   /* Pipeline: SCATTER */
+   vk_barrier_compute_w_to_compute_r(commandBuffer);
+
+   uint32_t histogram_offset = pass_idx * (RS_RADIX_SIZE * sizeof(uint32_t));
+
+   for (uint32_t i = 0; i < infoCount; i++) {
+      uint64_t keyvals_even_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[0];
+      uint64_t keyvals_odd_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_buffer_offset[1];
+      uint64_t internal_addr = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.sort_internal_offset;
+
+      bvh_states[i].push_scatter = (struct rs_push_scatter){
+         .devaddr_keyvals_even = keyvals_even_addr,
+         .devaddr_keyvals_odd = keyvals_odd_addr,
+         .devaddr_partitions = internal_addr + rs->internal.partitions.offset,
+         .devaddr_histograms = internal_addr + rs->internal.histograms.offset + histogram_offset,
+      };
+   }
+
+   bool is_even = true;
+
+   while (true) {
+      uint32_t pass_dword = pass_idx / 4;
+
+      /* Bind new pipeline */
+      VkPipeline p =
+         is_even ? rs->pipelines.named.scatter[pass_dword].even : rs->pipelines.named.scatter[pass_dword].odd;
+      radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, p);
+
+      /* Update push constants that changed */
+      VkPipelineLayout pl = is_even ? rs->pipeline_layouts.named.scatter[pass_dword].even
+                                    : rs->pipeline_layouts.named.scatter[pass_dword].odd;
+
+      for (uint32_t i = 0; i < infoCount; i++) {
+         if (!bvh_states[i].node_count)
+            continue;
+
+         bvh_states[i].push_scatter.pass_offset = (pass_idx & 3) * RS_RADIX_LOG2;
+
+         radv_CmdPushConstants(commandBuffer, pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(struct rs_push_scatter),
+                               &bvh_states[i].push_scatter);
+
+         vk_common_CmdDispatch(commandBuffer, bvh_states[i].scatter_blocks, 1, 1);
+
+         bvh_states[i].push_scatter.devaddr_histograms += (RS_RADIX_SIZE * sizeof(uint32_t));
+      }
+
+      /* Continue? */
+      if (++pass_idx >= keyval_bytes)
+         break;
+
+      vk_barrier_compute_w_to_compute_r(commandBuffer);
+
+      is_even ^= true;
    }
 
    cmd_buffer->state.flush_bits |= flush_bits;
@@ -790,7 +960,7 @@ lbvh_build_internal(VkCommandBuffer commandBuffer, uint32_t infoCount,
          .src_ids = pInfos[i].scratchData.deviceAddress + src_scratch_offset,
          .node_info = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.lbvh_node_offset,
          .id_count = bvh_states[i].node_count,
-         .internal_node_base = bvh_states[i].internal_node_base,
+         .internal_node_base = bvh_states[i].scratch.internal_node_offset - bvh_states[i].scratch.ir_offset,
       };
 
       radv_CmdPushConstants(commandBuffer, cmd_buffer->device->meta_state.accel_struct_build.lbvh_main_p_layout,
@@ -813,7 +983,7 @@ lbvh_build_internal(VkCommandBuffer commandBuffer, uint32_t infoCount,
          .bvh = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.ir_offset,
          .node_info = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.lbvh_node_offset,
          .header = pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.header_offset,
-         .internal_node_base = bvh_states[i].internal_node_base,
+         .internal_node_base = bvh_states[i].scratch.internal_node_offset - bvh_states[i].scratch.ir_offset,
       };
 
       radv_CmdPushConstants(commandBuffer, cmd_buffer->device->meta_state.accel_struct_build.lbvh_generate_ir_p_layout,
@@ -838,16 +1008,6 @@ ploc_build_internal(VkCommandBuffer commandBuffer, uint32_t infoCount,
       if (bvh_states[i].config.extended_sah != extended_sah)
          continue;
 
-      struct radv_global_sync_data initial_sync_data = {
-         .current_phase_end_counter = TASK_INDEX_INVALID,
-         /* Will be updated by the first PLOC shader invocation */
-         .task_counts = {TASK_INDEX_INVALID, TASK_INDEX_INVALID},
-      };
-      radv_update_buffer_cp(cmd_buffer,
-                            pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.header_offset +
-                               offsetof(struct radv_ir_header, sync_data),
-                            &initial_sync_data, sizeof(struct radv_global_sync_data));
-
       uint32_t src_scratch_offset = bvh_states[i].scratch_offset;
       uint32_t dst_scratch_offset = (src_scratch_offset == bvh_states[i].scratch.sort_buffer_offset[0])
                                        ? bvh_states[i].scratch.sort_buffer_offset[1]
@@ -860,7 +1020,7 @@ ploc_build_internal(VkCommandBuffer commandBuffer, uint32_t infoCount,
          .ids_1 = pInfos[i].scratchData.deviceAddress + dst_scratch_offset,
          .prefix_scan_partitions =
             pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.ploc_prefix_sum_partition_offset,
-         .internal_node_offset = bvh_states[i].internal_node_base,
+         .internal_node_offset = bvh_states[i].scratch.internal_node_offset - bvh_states[i].scratch.ir_offset,
       };
 
       radv_CmdPushConstants(commandBuffer, cmd_buffer->device->meta_state.accel_struct_build.ploc_p_layout,
@@ -1065,13 +1225,17 @@ radv_CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t i
          .max_bounds = {0x80000000, 0x80000000, 0x80000000},
          .dispatch_size_y = 1,
          .dispatch_size_z = 1,
+         .sync_data =
+            {
+               .current_phase_end_counter = TASK_INDEX_INVALID,
+               /* Will be updated by the first PLOC shader invocation */
+               .task_counts = {TASK_INDEX_INVALID, TASK_INDEX_INVALID},
+            },
       };
 
       radv_update_buffer_cp(cmd_buffer, pInfos[i].scratchData.deviceAddress + bvh_states[i].scratch.header_offset,
                             &header, sizeof(header));
    }
-
-   cmd_buffer->state.flush_bits |= flush_bits;
 
    build_leaves(commandBuffer, infoCount, pInfos, ppBuildRangeInfos, bvh_states, flush_bits);
 

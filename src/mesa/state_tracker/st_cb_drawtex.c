@@ -269,6 +269,7 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
       velems.velems[i].vertex_buffer_index = 0;
       velems.velems[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
       velems.velems[i].dual_slot = false;
+      velems.velems[i].src_stride = numAttribs * 4 * sizeof(float);
    }
    velems.count = numAttribs;
 
@@ -295,7 +296,7 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
       cso_set_viewport(cso, &vp);
    }
 
-   util_draw_vertex_buffer(pipe, cso, vbuffer, 0,
+   util_draw_vertex_buffer(pipe, cso, vbuffer,
                            offset,  /* offset */
                            MESA_PRIM_TRIANGLE_FAN,
                            4,  /* verts */

@@ -27,6 +27,7 @@
 
 #include "compiler/nir/nir.h"
 #include "draw/draw_context.h"
+#include "nir/nir_to_tgsi.h"
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
 #include "util/os_misc.h"
@@ -37,6 +38,7 @@
 
 #include "i915_context.h"
 #include "i915_debug.h"
+#include "i915_fpc.h"
 #include "i915_public.h"
 #include "i915_reg.h"
 #include "i915_resource.h"
@@ -134,8 +136,8 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .lower_flrp32 = true,
    .lower_flrp64 = true,
    .lower_fsat = true,
-   .lower_bitfield_insert_to_shifts = true,
-   .lower_bitfield_extract_to_shifts = true,
+   .lower_bitfield_insert = true,
+   .lower_bitfield_extract = true,
    .lower_fdph = true,
    .lower_ffma16 = true,
    .lower_ffma32 = true,
@@ -203,7 +205,9 @@ i915_optimize_nir(struct nir_shader *s)
       NIR_PASS(progress, s, nir_opt_dead_cf);
       NIR_PASS(progress, s, nir_opt_cse);
       NIR_PASS(progress, s, nir_opt_find_array_copies);
-      NIR_PASS(progress, s, nir_opt_if, nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
+      NIR_PASS(progress, s, nir_opt_if,
+               nir_opt_if_aggressive_last_continue |
+                  nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, s, nir_opt_peephole_select, ~0 /* flatten all IFs. */,
                true, true);
       NIR_PASS(progress, s, nir_opt_algebraic);
@@ -218,9 +222,15 @@ i915_optimize_nir(struct nir_shader *s)
 
    NIR_PASS(progress, s, nir_remove_dead_variables, nir_var_function_temp,
             NULL);
+
+   /* Group texture loads together to try to avoid hitting the
+    * texture indirection phase limit.
+    */
+   NIR_PASS_V(s, nir_group_loads, nir_group_all, ~0);
 }
 
-static char *i915_check_control_flow(nir_shader *s)
+static char *
+i915_check_control_flow(nir_shader *s)
 {
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
       nir_function_impl *impl = nir_shader_get_entrypoint(s);
@@ -230,9 +240,11 @@ static char *i915_check_control_flow(nir_shader *s)
       if (next) {
          switch (next->type) {
          case nir_cf_node_if:
-            return "if/then statements not supported by i915 fragment shaders, should have been flattened by peephole_select.";
+            return "if/then statements not supported by i915 fragment shaders, "
+                   "should have been flattened by peephole_select.";
          case nir_cf_node_loop:
-            return "looping not supported i915 fragment shaders, all loops must be statically unrollable.";
+            return "looping not supported i915 fragment shaders, all loops "
+                   "must be statically unrollable.";
          default:
             return "Unknown control flow type";
          }
@@ -256,8 +268,7 @@ i915_finalize_nir(struct pipe_screen *pscreen, void *nir)
     * because they're needed for YUV variant lowering.
     */
    nir_remove_dead_derefs(s);
-   nir_foreach_uniform_variable_safe(var, s)
-   {
+   nir_foreach_uniform_variable_safe (var, s) {
       if (var->data.mode == nir_var_uniform &&
           (glsl_type_get_image_count(var->type) ||
            glsl_type_get_sampler_count(var->type)))
@@ -270,10 +281,18 @@ i915_finalize_nir(struct pipe_screen *pscreen, void *nir)
    nir_sweep(s);
 
    char *msg = i915_check_control_flow(s);
-   if (msg)
+   if (msg) {
+      if (I915_DBG_ON(DBG_FS) && (!s->info.internal || NIR_DEBUG(PRINT_INTERNAL))) {
+         mesa_logi("failing shader:");
+         nir_log_shaderi(s);
+      }
       return strdup(msg);
+   }
 
-   return NULL;
+   if (s->info.stage == MESA_SHADER_FRAGMENT)
+      return i915_test_fragment_shader_compile(pscreen, s);
+   else
+      return NULL;
 }
 
 static int
@@ -362,7 +381,6 @@ i915_get_shader_param(struct pipe_screen *screen, enum pipe_shader_type shader,
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return I915_TEX_UNITS;
-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
@@ -672,8 +690,8 @@ i915_screen_create(struct i915_winsys *iws)
       break;
 
    default:
-      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n",
-                   __func__, iws->pci_id);
+      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n", __func__,
+                   iws->pci_id);
       FREE(is);
       return NULL;
    }

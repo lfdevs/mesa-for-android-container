@@ -506,10 +506,11 @@ static VkResult pvr_sub_cmd_gfx_per_job_fragment_programs_create_and_upload(
 
    assert(emit_count > 0);
 
-   pvr_uscgen_per_job_eot(emit_count,
-                          pbe_cs_words,
-                          &usc_temp_count,
-                          &eot_program_bin);
+   pvr_uscgen_eot("per-job EOT",
+                  emit_count,
+                  pbe_cs_words,
+                  &usc_temp_count,
+                  &eot_program_bin);
 
    result = pvr_cmd_buffer_upload_usc(cmd_buffer,
                                       eot_program_bin.data,
@@ -972,6 +973,9 @@ static void pvr_setup_pbe_state(
    surface_params.addr =
       PVR_DEV_ADDR_OFFSET(image->vma->dev_addr,
                           image->mip_levels[iview->vk.base_mip_level].offset);
+   surface_params.addr =
+      PVR_DEV_ADDR_OFFSET(surface_params.addr,
+                          iview->vk.base_array_layer * image->layer_size);
 
    surface_params.mem_layout = image->memlayout;
    surface_params.stride = pvr_stride_from_pitch(level_pitch, iview->vk.format);
@@ -1016,16 +1020,18 @@ static void pvr_setup_pbe_state(
       break;
    }
 
+#define PVR_DEC_IF_NOT_ZERO(_v) (((_v) > 0) ? (_v)-1 : 0)
+
    render_params.min_x_clip = MAX2(0, render_area->offset.x);
    render_params.min_y_clip = MAX2(0, render_area->offset.y);
-   render_params.max_x_clip =
-      MIN2(framebuffer->width,
-           render_area->offset.x + render_area->extent.width) -
-      1;
-   render_params.max_y_clip =
-      MIN2(framebuffer->height,
-           render_area->offset.y + render_area->extent.height) -
-      1;
+   render_params.max_x_clip = MIN2(
+      framebuffer->width - 1,
+      PVR_DEC_IF_NOT_ZERO(render_area->offset.x + render_area->extent.width));
+   render_params.max_y_clip = MIN2(
+      framebuffer->height - 1,
+      PVR_DEC_IF_NOT_ZERO(render_area->offset.y + render_area->extent.height));
+
+#undef PVR_DEC_IF_NOT_ZERO
 
    render_params.slice = 0;
    render_params.mrt_index = mrt_index;
@@ -1301,7 +1307,7 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
                      struct pvr_render_pass_info *render_pass_info,
                      struct pvr_emit_state *emit_state)
 {
-   assert(hw_render->eot_surface_count < PVR_MAX_COLOR_ATTACHMENTS);
+   assert(hw_render->pbe_emits <= PVR_NUM_PBE_EMIT_REGS);
 
    if (hw_render->eot_surface_count == 0) {
       emit_state->emit_count = 1;
@@ -1313,45 +1319,62 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
       return;
    }
 
-   emit_state->emit_count = hw_render->eot_surface_count;
+   static_assert(USC_MRT_RESOURCE_TYPE_OUTPUT_REG + 1 ==
+                    USC_MRT_RESOURCE_TYPE_MEMORY,
+                 "The loop below needs adjusting.");
 
-   for (uint32_t i = 0; i < hw_render->eot_surface_count; i++) {
-      const struct pvr_framebuffer *framebuffer = render_pass_info->framebuffer;
-      const struct pvr_renderpass_hwsetup_eot_surface *surface =
-         &hw_render->eot_surfaces[i];
-      const struct pvr_image_view *iview =
-         render_pass_info->attachments[surface->attachment_idx];
-      const struct usc_mrt_resource *mrt_resource =
-         &hw_render->eot_setup.mrt_resources[surface->mrt_idx];
-      uint32_t samples = 1;
+   emit_state->emit_count = 0;
+   for (uint32_t resource_type = USC_MRT_RESOURCE_TYPE_OUTPUT_REG;
+        resource_type <= USC_MRT_RESOURCE_TYPE_MEMORY;
+        resource_type++) {
+      for (uint32_t i = 0; i < hw_render->eot_surface_count; i++) {
+         const struct pvr_framebuffer *framebuffer =
+            render_pass_info->framebuffer;
+         const struct pvr_renderpass_hwsetup_eot_surface *surface =
+            &hw_render->eot_surfaces[i];
+         const struct pvr_image_view *iview =
+            render_pass_info->attachments[surface->attachment_idx];
+         const struct usc_mrt_resource *mrt_resource =
+            &hw_render->eot_setup.mrt_resources[surface->mrt_idx];
+         uint32_t samples = 1;
 
-      if (surface->need_resolve) {
-         const struct pvr_image_view *resolve_src =
-            render_pass_info->attachments[surface->src_attachment_idx];
-
-         /* Attachments that are the destination of resolve operations must
-          * be loaded before their next use.
-          */
-         render_pass_info->enable_bg_tag = true;
-         render_pass_info->process_empty_tiles = true;
-
-         if (surface->resolve_type != PVR_RESOLVE_TYPE_PBE)
+         if (mrt_resource->type != resource_type)
             continue;
 
-         samples = (uint32_t)resolve_src->vk.image->samples;
-      }
+         if (surface->need_resolve) {
+            const struct pvr_image_view *resolve_src =
+               render_pass_info->attachments[surface->src_attachment_idx];
 
-      pvr_setup_pbe_state(dev_info,
-                          framebuffer,
-                          surface->mrt_idx,
-                          mrt_resource,
-                          iview,
-                          &render_pass_info->render_area,
-                          surface->need_resolve,
-                          samples,
-                          emit_state->pbe_cs_words[i],
-                          emit_state->pbe_reg_words[i]);
+            /* Attachments that are the destination of resolve operations must
+             * be loaded before their next use.
+             */
+            render_pass_info->enable_bg_tag = true;
+            render_pass_info->process_empty_tiles = true;
+
+            if (surface->resolve_type != PVR_RESOLVE_TYPE_PBE)
+               continue;
+
+            samples = (uint32_t)resolve_src->vk.image->samples;
+         }
+
+         assert(emit_state->emit_count < ARRAY_SIZE(emit_state->pbe_cs_words));
+         assert(emit_state->emit_count < ARRAY_SIZE(emit_state->pbe_reg_words));
+
+         pvr_setup_pbe_state(dev_info,
+                             framebuffer,
+                             emit_state->emit_count,
+                             mrt_resource,
+                             iview,
+                             &render_pass_info->render_area,
+                             surface->need_resolve,
+                             samples,
+                             emit_state->pbe_cs_words[emit_state->emit_count],
+                             emit_state->pbe_reg_words[emit_state->emit_count]);
+         emit_state->emit_count += 1;
+      }
    }
+
+   assert(emit_state->emit_count == hw_render->pbe_emits);
 }
 
 static inline bool
@@ -1386,36 +1409,56 @@ static VkResult pvr_sub_cmd_gfx_job_init(const struct pvr_device_info *dev_info,
    struct pvr_framebuffer *framebuffer = render_pass_info->framebuffer;
    struct pvr_spm_bgobj_state *spm_bgobj_state =
       &framebuffer->spm_bgobj_state_per_render[sub_cmd->hw_render_idx];
-   struct pvr_emit_state emit_state = { 0 };
    struct pvr_render_target *render_target;
    VkResult result;
 
-   pvr_setup_emit_state(dev_info, hw_render, render_pass_info, &emit_state);
+   if (sub_cmd->barrier_store) {
+      /* There can only ever be one frag job running on the hardware at any one
+       * time, and a context switch is not allowed mid-tile, so instead of
+       * allocating a new scratch buffer we can reuse the SPM scratch buffer to
+       * perform the store.
+       * So use the SPM EOT program with the SPM PBE reg words in order to store
+       * the render to the SPM scratch buffer.
+       */
 
-   memcpy(job->pbe_reg_words,
-          emit_state.pbe_reg_words,
-          sizeof(emit_state.pbe_reg_words));
+      memcpy(job->pbe_reg_words,
+             &framebuffer->spm_eot_state_per_render[0].pbe_reg_words,
+             sizeof(job->pbe_reg_words));
+      job->pds_pixel_event_data_offset =
+         framebuffer->spm_eot_state_per_render[0]
+            .pixel_event_program_data_offset;
+   } else {
+      struct pvr_emit_state emit_state = { 0 };
 
-   result = pvr_sub_cmd_gfx_per_job_fragment_programs_create_and_upload(
-      cmd_buffer,
-      emit_state.emit_count,
-      emit_state.pbe_cs_words[0],
-      &pds_pixel_event_program);
-   if (result != VK_SUCCESS)
-      return result;
+      pvr_setup_emit_state(dev_info, hw_render, render_pass_info, &emit_state);
 
-   job->pds_pixel_event_data_offset = pds_pixel_event_program.data_offset;
+      memcpy(job->pbe_reg_words,
+             emit_state.pbe_reg_words,
+             sizeof(job->pbe_reg_words));
+
+      result = pvr_sub_cmd_gfx_per_job_fragment_programs_create_and_upload(
+         cmd_buffer,
+         emit_state.emit_count,
+         emit_state.pbe_cs_words[0],
+         &pds_pixel_event_program);
+      if (result != VK_SUCCESS)
+         return result;
+
+      job->pds_pixel_event_data_offset = pds_pixel_event_program.data_offset;
+   }
 
    if (sub_cmd->barrier_load) {
       job->enable_bg_tag = true;
       job->process_empty_tiles = true;
+
+      /* Load the previously stored render from the SPM scratch buffer. */
 
       STATIC_ASSERT(ARRAY_SIZE(job->pds_bgnd_reg_values) ==
                     ARRAY_SIZE(spm_bgobj_state->pds_reg_values));
       typed_memcpy(job->pds_bgnd_reg_values,
                    spm_bgobj_state->pds_reg_values,
                    ARRAY_SIZE(spm_bgobj_state->pds_reg_values));
-   } else if (render_pass_info->enable_bg_tag) {
+   } else if (hw_render->load_op) {
       const struct pvr_load_op *load_op = hw_render->load_op;
       struct pvr_pds_upload load_op_program;
 
@@ -1437,6 +1480,22 @@ static VkResult pvr_sub_cmd_gfx_job_init(const struct pvr_device_info *dev_info,
                               &load_op_program,
                               job->pds_bgnd_reg_values);
    }
+
+   /* TODO: In some cases a PR can be removed by storing to the color attachment
+    * and have the background object load directly from it instead of using the
+    * scratch buffer. In those cases we can also set this to "false" and avoid
+    * extra fw overhead.
+    */
+   /* The scratch buffer is always needed and allocated to avoid data loss in
+    * case SPM is hit so set the flag unconditionally.
+    */
+   job->requires_spm_scratch_buffer = true;
+
+   memcpy(job->pr_pbe_reg_words,
+          &framebuffer->spm_eot_state_per_render[0].pbe_reg_words,
+          sizeof(job->pbe_reg_words));
+   job->pr_pds_pixel_event_data_offset =
+      framebuffer->spm_eot_state_per_render[0].pixel_event_program_data_offset;
 
    STATIC_ASSERT(ARRAY_SIZE(job->pds_pr_bgnd_reg_values) ==
                  ARRAY_SIZE(spm_bgobj_state->pds_reg_values));
@@ -1673,20 +1732,6 @@ static VkResult pvr_sub_cmd_gfx_job_init(const struct pvr_device_info *dev_info,
    job->run_frag = true;
    job->geometry_terminate = true;
 
-   /* TODO: In some cases a PR can be removed by storing to the color attachment
-    * and have the background object load directly from it instead of using the
-    * scratch buffer. In those cases we can also set this to "false" and avoid
-    * extra fw overhead.
-    */
-   /* The scratch buffer is always needed and allocated to avoid data loss in
-    * case SPM is hit so set the flag unconditionally.
-    */
-   job->requires_spm_scratch_buffer = true;
-   /* FIXME: We should be using the SPM PBE reg words and the SPM EOT PDS data
-    * section instead of the regular, but for now we don't have an actual
-    * SPM EOT USC shader so that would cause problems.
-    */
-
    return VK_SUCCESS;
 }
 
@@ -1717,7 +1762,7 @@ pvr_compute_flat_slot_size(const struct pvr_physical_device *pdevice,
    uint32_t max_avail_coeff_regs =
       dev_runtime_info->cdm_max_local_mem_size_regs;
    uint32_t localstore_chunks_count =
-      DIV_ROUND_UP(coeff_regs_count << 2,
+      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs_count),
                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
 
    /* Ensure that we cannot have more workgroups in a slot than the available
@@ -1919,9 +1964,9 @@ pvr_compute_generate_idfwdf(struct pvr_cmd_buffer *cmd_buffer,
    struct pvr_compute_kernel_info info = {
       .indirect_buffer_addr = PVR_DEV_ADDR_INVALID,
       .global_offsets_present = false,
-      .usc_common_size =
-         DIV_ROUND_UP(cmd_buffer->device->idfwdf_state.usc_shareds << 2,
-                      PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE)),
+      .usc_common_size = DIV_ROUND_UP(
+         PVR_DW_TO_BYTES(cmd_buffer->device->idfwdf_state.usc_shareds),
+         PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE)),
       .usc_unified_size = 0U,
       .pds_temp_size = 0U,
       .pds_data_size =
@@ -3390,7 +3435,8 @@ pvr_setup_vertex_buffers(struct pvr_cmd_buffer *cmd_buffer,
 
          if (binding->buffer->vk.size <
              (attribute->offset + attribute->component_size_in_bytes)) {
-            /* Replace with load from robustness buffer when no attribute is in range
+            /* Replace with load from robustness buffer when no attribute is in
+             * range
              */
             addr = PVR_DEV_ADDR_OFFSET(
                cmd_buffer->device->robustness_buffer->vma->dev_addr,
@@ -4401,7 +4447,7 @@ void pvr_compute_update_kernel_private(
       .sd_type = PVRX(CDMCTRL_SD_TYPE_NONE),
 
       .usc_unified_size =
-         DIV_ROUND_UP(pipeline->coeff_regs_count << 2U,
+         DIV_ROUND_UP(pipeline->unified_store_regs_count << 2U,
                       PVRX(CDMCTRL_KERNEL0_USC_UNIFIED_SIZE_UNIT_SIZE)),
 
       /* clang-format off */
@@ -4427,7 +4473,7 @@ void pvr_compute_update_kernel_private(
    }
 
    info.usc_common_size =
-      DIV_ROUND_UP(coeff_regs << 2U,
+      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs),
                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
 
    /* Use a whole slot per workgroup. */
@@ -4510,7 +4556,7 @@ static void pvr_compute_update_kernel(
    }
 
    info.usc_common_size =
-      DIV_ROUND_UP(coeff_regs << 2U,
+      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs),
                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
 
    /* Use a whole slot per workgroup. */
@@ -4827,9 +4873,9 @@ pvr_setup_isp_faces_and_control(struct pvr_cmd_buffer *const cmd_buffer,
    const uint32_t subpass_idx = pass_info->subpass_idx;
    const uint32_t depth_stencil_attachment_idx =
       pass_info->pass->subpasses[subpass_idx].depth_stencil_attachment;
-   const struct pvr_image_view *const attachment =
+   const struct pvr_render_pass_attachment *const attachment =
       depth_stencil_attachment_idx != VK_ATTACHMENT_UNUSED
-         ? pass_info->attachments[depth_stencil_attachment_idx]
+         ? &pass_info->pass->attachments[depth_stencil_attachment_idx]
          : NULL;
 
    const enum PVRX(TA_OBJTYPE)
@@ -4837,7 +4883,7 @@ pvr_setup_isp_faces_and_control(struct pvr_cmd_buffer *const cmd_buffer,
 
    const VkImageAspectFlags ds_aspects =
       (!rasterizer_discard && attachment)
-         ? vk_format_aspects(attachment->vk.format) &
+         ? vk_format_aspects(attachment->vk_format) &
               (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
          : VK_IMAGE_ASPECT_NONE;
 
@@ -5380,7 +5426,8 @@ pvr_setup_fragment_state_pointers(struct pvr_cmd_buffer *const cmd_buffer,
 
    const uint32_t max_tiles_in_flight =
       pvr_calc_fscommon_size_and_tiles_in_flight(
-         pdevice,
+         &pdevice->dev_info,
+         &pdevice->dev_runtime_info,
          usc_shared_size *
             PVRX(TA_STATE_PDS_SIZEINFO2_USC_SHAREDSIZE_UNIT_SIZE),
          1);
@@ -5896,7 +5943,7 @@ pvr_ppp_state_update_required(const struct pvr_cmd_buffer *cmd_buffer)
           header->pres_wclamp || header->pres_outselects ||
           header->pres_varying_word0 || header->pres_varying_word1 ||
           header->pres_varying_word2 || header->pres_stream_out_program ||
-          state->dirty.fragment_descriptors ||
+          state->dirty.fragment_descriptors || state->dirty.vis_test ||
           state->dirty.gfx_pipeline_binding || state->dirty.isp_userpass ||
           state->push_constants.dirty_stages & VK_SHADER_STAGE_FRAGMENT_BIT ||
           BITSET_TEST(dynamic_dirty, MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK) ||
@@ -7045,7 +7092,7 @@ pvr_execute_deferred_cmd_buffer(struct pvr_cmd_buffer *cmd_buffer,
             prim_db_elems + cmd->dbsc2.state.depthbias_index;
 
          uint32_t *const addr =
-            pvr_bo_suballoc_get_map_addr(cmd->dbsc2.ppp_cs_bo) +
+            (uint32_t *)pvr_bo_suballoc_get_map_addr(cmd->dbsc2.ppp_cs_bo) +
             cmd->dbsc2.patch_offset;
 
          assert(pvr_bo_suballoc_get_map_addr(cmd->dbsc2.ppp_cs_bo));
@@ -7524,7 +7571,7 @@ pvr_stencil_has_self_dependency(const struct pvr_cmd_buffer_state *const state)
 }
 
 static bool pvr_is_stencil_store_load_needed(
-   const struct pvr_cmd_buffer_state *const state,
+   const struct pvr_cmd_buffer *const cmd_buffer,
    VkPipelineStageFlags2 vk_src_stage_mask,
    VkPipelineStageFlags2 vk_dst_stage_mask,
    uint32_t memory_barrier_count,
@@ -7532,6 +7579,7 @@ static bool pvr_is_stencil_store_load_needed(
    uint32_t image_barrier_count,
    const VkImageMemoryBarrier2 *const image_barriers)
 {
+   const struct pvr_cmd_buffer_state *const state = &cmd_buffer->state;
    const uint32_t fragment_test_stages =
       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
@@ -7551,7 +7599,12 @@ static bool pvr_is_stencil_store_load_needed(
    if (hw_render->ds_attach_idx == VK_ATTACHMENT_UNUSED)
       return false;
 
-   attachment = attachments[hw_render->ds_attach_idx];
+   if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
+      attachment = attachments[hw_render->ds_attach_idx];
+   } else {
+      assert(!attachments);
+      attachment = NULL;
+   }
 
    if (!(vk_src_stage_mask & fragment_test_stages) &&
        vk_dst_stage_mask & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
@@ -7768,7 +7821,7 @@ void pvr_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
    }
 
    is_stencil_store_load_needed =
-      pvr_is_stencil_store_load_needed(state,
+      pvr_is_stencil_store_load_needed(cmd_buffer,
                                        vk_src_stage_mask,
                                        vk_dst_stage_mask,
                                        pDependencyInfo->memoryBarrierCount,

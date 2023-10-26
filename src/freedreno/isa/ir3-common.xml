@@ -350,8 +350,8 @@ SOFTWARE.
 	<value val="2"  display="y"/>
 	<value val="3"  display="xy"/>
 	<value val="4"  display="z"/>
-	<value val="5"  display="zx"/>
-	<value val="6"  display="zy"/>
+	<value val="5"  display="xz"/>
+	<value val="6"  display="yz"/>
 	<value val="7"  display="xyz"/>
 	<value val="8"  display="w"/>
 	<value val="9"  display="xw"/>

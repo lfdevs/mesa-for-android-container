@@ -471,8 +471,8 @@ class Context(Dispatcher):
         # XXX: deprecated
         self._state.vs.sampler_views = views
 
-    def set_vertex_buffers(self, start_slot, num_buffers, unbind_num_trailing_slots, take_ownership, buffers):
-        self._update(self._state.vertex_buffers, start_slot, num_buffers, buffers)
+    def set_vertex_buffers(self, num_buffers, unbind_num_trailing_slots, take_ownership, buffers):
+        self._update(self._state.vertex_buffers, 0, num_buffers, buffers)
 
     def create_vertex_elements_state(self, num_elements, elements):
         return elements[0:num_elements]

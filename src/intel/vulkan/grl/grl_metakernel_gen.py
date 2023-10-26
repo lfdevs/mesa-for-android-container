@@ -822,6 +822,9 @@ class MetaKernel(object):
 
         w.write('struct mi_builder b;\n')
         w.write('mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);\n')
+        w.write('/* TODO: use anv_mocs? */\n');
+        w.write('const uint32_t mocs = isl_mocs(&cmd_buffer->device->isl_dev, 0, false);\n');
+        w.write('mi_builder_set_mocs(&b, mocs);\n');
         w.write('\n')
 
         for r in self.m.regs.values():

@@ -39,3 +39,6 @@ intel_device_info_i915_update_from_masks(struct intel_device_info *devinfo,
                                          uint32_t slice_mask,
                                          uint32_t subslice_mask,
                                          uint32_t n_eus);
+
+void *
+intel_device_info_i915_query_hwconfig(int fd, int32_t *len);

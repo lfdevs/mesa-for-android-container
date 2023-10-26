@@ -89,6 +89,10 @@ svga_bind_compute_state(struct pipe_context *pipe, void *shader)
 
    svga->curr.cs = cs;
    svga->dirty |= SVGA_NEW_CS;
+
+   /* Check if the shader uses samplers */
+   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_COMPUTE,
+                                          svga_shader_use_samplers(&cs->base));
 }
 
 

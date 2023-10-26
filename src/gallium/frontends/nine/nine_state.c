@@ -869,6 +869,8 @@ update_vertex_elements(struct NineDevice9 *device)
     int dummy_vbo_stream = -1;
     BOOL need_dummy_vbo = false;
     struct cso_velems_state ve;
+    unsigned vtxbuf_mask;
+    unsigned vtxbuf_holes_map[PIPE_MAX_ATTRIBS];
 
     context->stream_usage_mask = 0;
     memset(vdecl_index_map, -1, 16);
@@ -897,19 +899,29 @@ update_vertex_elements(struct NineDevice9 *device)
 
     if (need_dummy_vbo) {
         u_foreach_bit(bit, BITFIELD_MASK(device->caps.MaxStreams) & ~used_streams) {
-                dummy_vbo_stream = bit;
-                break;
+            dummy_vbo_stream = bit;
+            break;
         }
     }
-    /* there are less vertex shader inputs than stream slots,
+    /* there are fewer vertex shader inputs than stream slots,
      * so if we need a slot for the dummy vbo, we should have found one */
     assert (!need_dummy_vbo || dummy_vbo_stream != -1);
+
+    /* calculate vtxbuf_holes_map to match for update_vertex_buffers() function */
+    i = 0;
+    vtxbuf_mask = context->vtxbuf_mask |
+        (need_dummy_vbo ? BITFIELD_BIT(dummy_vbo_stream) : 0);
+    u_foreach_bit(bit, vtxbuf_mask)
+        vtxbuf_holes_map[bit] = i++;
 
     for (n = 0; n < vs->num_inputs; ++n) {
         index = vdecl_index_map[n];
         if (index >= 0) {
             ve.velems[n] = vdecl->elems[index];
+            ve.velems[n].vertex_buffer_index =
+                vtxbuf_holes_map[ve.velems[n].vertex_buffer_index];
             b = ve.velems[n].vertex_buffer_index;
+            ve.velems[n].src_stride = context->vtxstride[b];
             context->stream_usage_mask |= 1 << b;
             /* XXX wine just uses 1 here: */
             if (context->stream_freq[b] & D3DSTREAMSOURCE_INSTANCEDATA)
@@ -919,9 +931,10 @@ update_vertex_elements(struct NineDevice9 *device)
              * vertex shader needs, we bind a dummy vbo with 0 0 0 0.
              * This is not precised by the spec, but is the behaviour
              * tested on win */
-            ve.velems[n].vertex_buffer_index = dummy_vbo_stream;
+            ve.velems[n].vertex_buffer_index = vtxbuf_holes_map[dummy_vbo_stream];
             ve.velems[n].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
             ve.velems[n].src_offset = 0;
+            ve.velems[n].src_stride = 0;
             ve.velems[n].instance_divisor = 0;
             ve.velems[n].dual_slot = false;
         }
@@ -930,10 +943,8 @@ update_vertex_elements(struct NineDevice9 *device)
     if (context->dummy_vbo_bound_at != dummy_vbo_stream) {
         if (context->dummy_vbo_bound_at >= 0)
             context->changed.vtxbuf |= 1 << context->dummy_vbo_bound_at;
-        if (dummy_vbo_stream >= 0) {
+        if (dummy_vbo_stream >= 0)
             context->changed.vtxbuf |= 1 << dummy_vbo_stream;
-            context->vbo_bound_done = false;
-        }
         context->dummy_vbo_bound_at = dummy_vbo_stream;
     }
 
@@ -946,34 +957,35 @@ update_vertex_buffers(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
     struct pipe_context *pipe = context->pipe;
-    struct pipe_vertex_buffer dummy_vtxbuf;
-    uint32_t mask = context->changed.vtxbuf;
-    unsigned i;
+    struct pipe_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
+    unsigned vtxbuf_count;
+    unsigned trailing_count;
+    unsigned mask, i, vtxbuf_i;
+
+    mask = context->vtxbuf_mask |
+        ((context->dummy_vbo_bound_at >= 0) ? BITFIELD_BIT(context->dummy_vbo_bound_at) : 0);
+    vtxbuf_count = util_bitcount(mask);
 
     DBG("mask=%x\n", mask);
-
-    if (context->dummy_vbo_bound_at >= 0) {
-        if (!context->vbo_bound_done) {
-            dummy_vtxbuf.buffer.resource = device->dummy_vbo;
-            dummy_vtxbuf.stride = 0;
-            dummy_vtxbuf.is_user_buffer = false;
-            dummy_vtxbuf.buffer_offset = 0;
-            pipe->set_vertex_buffers(pipe, context->dummy_vbo_bound_at,
-                                     1, 0, false, &dummy_vtxbuf);
-            context->vbo_bound_done = true;
-        }
-        mask &= ~(1 << context->dummy_vbo_bound_at);
-    }
-
-    for (i = 0; mask; mask >>= 1, ++i) {
-        if (mask & 1) {
-            if (context->vtxbuf[i].buffer.resource)
-                pipe->set_vertex_buffers(pipe, i, 1, 0, false, &context->vtxbuf[i]);
-            else
-                pipe->set_vertex_buffers(pipe, i, 0, 1, false, NULL);
+    for (i = 0; mask; i++) {
+        vtxbuf_i = u_bit_scan(&mask);
+        if (vtxbuf_i == context->dummy_vbo_bound_at) {
+            vbuffer[i].buffer.resource = device->dummy_vbo;
+            vbuffer[i].is_user_buffer = false;
+            vbuffer[i].buffer_offset = 0;
+        } else {
+            memcpy(&vbuffer[i], &context->vtxbuf[vtxbuf_i], sizeof(struct pipe_vertex_buffer));
         }
     }
 
+    trailing_count = (context->last_vtxbuf_count <= vtxbuf_count) ? 0 :
+        context->last_vtxbuf_count - vtxbuf_count;
+    if (vtxbuf_count)
+        pipe->set_vertex_buffers(pipe, vtxbuf_count, trailing_count, false, vbuffer);
+    else
+        pipe->set_vertex_buffers(pipe, 0, trailing_count, false, NULL);
+
+    context->last_vtxbuf_count = vtxbuf_count;
     context->changed.vtxbuf = 0;
 }
 
@@ -1604,14 +1616,21 @@ CSMT_ITEM_NO_WAIT(nine_context_set_stream_source_apply,
      * but not for *Up draws */
     if (context->vtxbuf[i].buffer.resource == res &&
         context->vtxbuf[i].buffer_offset == OffsetInBytes &&
-        context->vtxbuf[i].stride == Stride)
+        context->vtxstride[i] == Stride)
         return;
 
-    context->vtxbuf[i].stride = Stride;
+    if (context->vtxstride[i] != Stride) {
+        context->vtxstride[i] = Stride;
+        context->changed.group |= NINE_STATE_VDECL;
+    }
     context->vtxbuf[i].buffer_offset = OffsetInBytes;
     pipe_resource_reference(&context->vtxbuf[i].buffer.resource, res);
 
     context->changed.vtxbuf |= 1 << StreamNumber;
+    if (res)
+        context->vtxbuf_mask |= 1 << StreamNumber;
+    else
+        context->vtxbuf_mask &= ~(1 << StreamNumber);
 }
 
 void
@@ -2130,7 +2149,7 @@ nine_context_apply_stateblock(struct NineDevice9 *device,
         uint32_t m = src->changed.vtxbuf | src->changed.stream_freq;
         for (i = 0; m; ++i, m >>= 1) {
             if (src->changed.vtxbuf & (1 << i))
-                nine_context_set_stream_source(device, i, src->stream[i], src->vtxbuf[i].buffer_offset, src->vtxbuf[i].stride);
+                nine_context_set_stream_source(device, i, src->stream[i], src->vtxbuf[i].buffer_offset, src->vtxstride[i]);
             if (src->changed.stream_freq & (1 << i))
                 nine_context_set_stream_source_freq(device, i, src->stream_freq[i]);
         }
@@ -2490,6 +2509,7 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
                   ARG_VAL(UINT, MinVertexIndex),
                   ARG_VAL(UINT, NumVertices),
                   ARG_VAL(UINT, PrimitiveCount),
+                  ARG_VAL(UINT, vbuf_stride),
                   ARG_BIND_VBUF(struct pipe_vertex_buffer, vbuf),
                   ARG_BIND_RES(struct pipe_resource, ibuf),
                   ARG_VAL(void *, user_ibuf),
@@ -2502,6 +2522,14 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
 
     if (context->vs && context->vs->swvp_only && !context->swvp)
         return;
+
+    if (context->vtxstride[0] != vbuf_stride) {
+        context->vtxstride[0] = vbuf_stride;
+        /* force elements update for stride.
+         * We don't need to restore the old value,
+         * as the caller set its to 0 after the call */
+        context->changed.group |= NINE_STATE_VDECL;
+    }
 
     nine_update_state(device);
 
@@ -2518,7 +2546,7 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
     else
         info.index.user = user_ibuf;
 
-    context->pipe->set_vertex_buffers(context->pipe, 0, 1, 0, false, vbuf);
+    context->pipe->set_vertex_buffers(context->pipe, 1, 0, false, vbuf);
     context->changed.vtxbuf |= 1;
 
     context->pipe->draw_vbo(context->pipe, &info, 0, NULL, &draw, 1);
@@ -2980,10 +3008,8 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
     for (s = 0; s < NINE_MAX_SAMPLERS; ++s)
         context->changed.sampler[s] = ~0;
 
-    if (!is_reset) {
+    if (!is_reset)
         context->dummy_vbo_bound_at = -1;
-        context->vbo_bound_done = false;
-    }
 }
 
 void
@@ -3022,6 +3048,8 @@ nine_context_clear(struct NineDevice9 *device)
     if (!pipe || !cso)
         return;
 
+    context->vtxbuf_mask = 0;
+
     pipe->bind_vs_state(pipe, NULL);
     pipe->bind_fs_state(pipe, NULL);
 
@@ -3039,7 +3067,7 @@ nine_context_clear(struct NineDevice9 *device)
     pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 0,
                             NINE_MAX_SAMPLERS_PS, false, NULL);
 
-    pipe->set_vertex_buffers(pipe, 0, 0, device->caps.MaxStreams, false, NULL);
+    pipe->set_vertex_buffers(pipe, 0, device->caps.MaxStreams, false, NULL);
 
     for (i = 0; i < ARRAY_SIZE(context->rt); ++i)
        nine_bind(&context->rt[i], NULL);
@@ -3099,20 +3127,21 @@ nine_state_init_sw(struct NineDevice9 *device)
 /* There is duplication with update_vertex_elements.
  * TODO: Share the code */
 
-static void
+static int
 update_vertex_elements_sw(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
     const struct NineVertexDeclaration9 *vdecl = device->state.vdecl;
     const struct NineVertexShader9 *vs;
-    unsigned n, b, i;
+    unsigned n, b, i, j;
     int index;
     int8_t vdecl_index_map[16]; /* vs->num_inputs <= 16 */
     int8_t used_streams[device->caps.MaxStreams];
-    int dummy_vbo_stream = -1;
     BOOL need_dummy_vbo = false;
+    int dummy_vbo_stream = -1;
     struct cso_velems_state ve;
     bool programmable_vs = state->vs && !(state->vdecl && state->vdecl->position_t);
+    unsigned vtxbuf_holes_map[PIPE_MAX_ATTRIBS];
 
     memset(vdecl_index_map, -1, 16);
     memset(used_streams, 0, device->caps.MaxStreams);
@@ -3140,20 +3169,32 @@ update_vertex_elements_sw(struct NineDevice9 *device)
     }
 
     if (need_dummy_vbo) {
-        for (i = 0; i < device->caps.MaxStreams; i++ ) {
+        for (i = 0; i < device->caps.MaxStreams; i++) {
             if (!used_streams[i]) {
                 dummy_vbo_stream = i;
                 break;
             }
         }
     }
-    /* TODO handle dummy_vbo */
-    assert (!need_dummy_vbo);
+    /* there are less vertex shader inputs than stream slots,
+     * so if we need a slot for the dummy vbo, we should have found one */
+    assert (!need_dummy_vbo || dummy_vbo_stream != -1);
+
+    /* calculate vtxbuf_holes_map to match for update_vertex_buffers_sw() function */
+    j = 0;
+    for (i = 0; i < device->caps.MaxStreams; i++) {
+        if (state->stream[i] || (need_dummy_vbo && dummy_vbo_stream == i)) {
+            vtxbuf_holes_map[i] = j;
+            j++;
+        }
+    }
 
     for (n = 0; n < vs->num_inputs; ++n) {
         index = vdecl_index_map[n];
         if (index >= 0) {
             ve.velems[n] = vdecl->elems[index];
+            ve.velems[n].vertex_buffer_index =
+                vtxbuf_holes_map[ve.velems[n].vertex_buffer_index];
             b = ve.velems[n].vertex_buffer_index;
             /* XXX wine just uses 1 here: */
             if (state->stream_freq[b] & D3DSTREAMSOURCE_INSTANCEDATA)
@@ -3163,7 +3204,7 @@ update_vertex_elements_sw(struct NineDevice9 *device)
              * vertex shader needs, we bind a dummy vbo with 0 0 0 0.
              * This is not precised by the spec, but is the behaviour
              * tested on win */
-            ve.velems[n].vertex_buffer_index = dummy_vbo_stream;
+            ve.velems[n].vertex_buffer_index = vtxbuf_holes_map[dummy_vbo_stream];
             ve.velems[n].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
             ve.velems[n].src_offset = 0;
             ve.velems[n].instance_divisor = 0;
@@ -3173,63 +3214,67 @@ update_vertex_elements_sw(struct NineDevice9 *device)
 
     ve.count = vs->num_inputs;
     cso_set_vertex_elements(device->cso_sw, &ve);
+    return dummy_vbo_stream;
 }
 
 static void
-update_vertex_buffers_sw(struct NineDevice9 *device, int start_vertice, int num_vertices)
+update_vertex_buffers_sw(struct NineDevice9 *device, int dummy_vbo_stream,
+                         int start_vertice, int num_vertices)
 {
     struct pipe_context *pipe = nine_context_get_pipe_acquire(device);
     struct pipe_context *pipe_sw = device->pipe_sw;
     struct nine_state *state = &device->state;
     struct nine_state_sw_internal *sw_internal = &device->state_sw_internal;
-    struct pipe_vertex_buffer vtxbuf;
-    uint32_t mask = 0xf;
-    unsigned i;
+    struct pipe_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
+    unsigned vtxbuf_count = 0;
+    unsigned i, j = 0;
 
-    DBG("mask=%x\n", mask);
+    for (i = 0; i < device->caps.MaxStreams; i++) {
+        if (dummy_vbo_stream == i) {
+            vbuffer[j].buffer.resource = NULL;
+            pipe_resource_reference(&vbuffer[j].buffer.resource, device->dummy_vbo_sw);
+            vbuffer[j].is_user_buffer = false;
+            vbuffer[j].buffer_offset = 0;
+            j++;
+        } else if (state->stream[i]) {
+            unsigned offset;
+            struct pipe_resource *buf;
+            struct pipe_box box;
+            void *userbuf;
 
-    /* TODO: handle dummy_vbo_bound_at */
+            vbuffer[j] = state->vtxbuf[i];
+            buf = NineVertexBuffer9_GetResource(state->stream[i], &offset);
 
-    for (i = 0; mask; mask >>= 1, ++i) {
-        if (mask & 1) {
-            if (state->stream[i]) {
-                unsigned offset;
-                struct pipe_resource *buf;
-                struct pipe_box box;
-                void *userbuf;
+            DBG("Locking %p (offset %d, length %d)\n", buf,
+                vbuffer[j].buffer_offset, num_vertices * state->vtxstride[i]);
 
-                vtxbuf = state->vtxbuf[i];
-                buf = NineVertexBuffer9_GetResource(state->stream[i], &offset);
+            u_box_1d(vbuffer[j].buffer_offset + offset + start_vertice *
+                     state->vtxstride[i], num_vertices * state->vtxstride[i], &box);
 
-                DBG("Locking %p (offset %d, length %d)\n", buf,
-                    vtxbuf.buffer_offset, num_vertices * vtxbuf.stride);
+            userbuf = pipe->buffer_map(pipe, buf, 0, PIPE_MAP_READ, &box,
+                                       &(sw_internal->transfers_so[i]));
+            vbuffer[j].is_user_buffer = true;
+            vbuffer[j].buffer.user = userbuf;
 
-                u_box_1d(vtxbuf.buffer_offset + offset + start_vertice * vtxbuf.stride,
-                         num_vertices * vtxbuf.stride, &box);
-
-                userbuf = pipe->buffer_map(pipe, buf, 0, PIPE_MAP_READ, &box,
-                                             &(sw_internal->transfers_so[i]));
-                vtxbuf.is_user_buffer = true;
-                vtxbuf.buffer.user = userbuf;
-
-                if (!device->driver_caps.user_sw_vbufs) {
-                    vtxbuf.buffer.resource = NULL;
-                    vtxbuf.is_user_buffer = false;
-                    u_upload_data(device->pipe_sw->stream_uploader,
-                                  0,
-                                  box.width,
-                                  16,
-                                  userbuf,
-                                  &(vtxbuf.buffer_offset),
-                                  &(vtxbuf.buffer.resource));
-                    u_upload_unmap(device->pipe_sw->stream_uploader);
-                }
-                pipe_sw->set_vertex_buffers(pipe_sw, i, 1, 0, false, &vtxbuf);
-                pipe_vertex_buffer_unreference(&vtxbuf);
-            } else
-                pipe_sw->set_vertex_buffers(pipe_sw, i, 0, 1, false, NULL);
+            if (!device->driver_caps.user_sw_vbufs) {
+                vbuffer[j].buffer.resource = NULL;
+                vbuffer[j].is_user_buffer = false;
+                u_upload_data(device->pipe_sw->stream_uploader,
+                              0,
+                              box.width,
+                              16,
+                              userbuf,
+                              &(vbuffer[j].buffer_offset),
+                              &(vbuffer[j].buffer.resource));
+                u_upload_unmap(device->pipe_sw->stream_uploader);
+            }
+            j++;
         }
     }
+
+    vtxbuf_count = j;
+    pipe_sw->set_vertex_buffers(pipe_sw, vtxbuf_count, device->caps.MaxStreams-vtxbuf_count, true, vbuffer);
+
     nine_context_get_pipe_release(device);
 }
 
@@ -3346,14 +3391,15 @@ nine_state_prepare_draw_sw(struct NineDevice9 *device, struct NineVertexDeclarat
     struct nine_state *state = &device->state;
     bool programmable_vs = state->vs && !(state->vdecl && state->vdecl->position_t);
     struct NineVertexShader9 *vs = programmable_vs ? device->state.vs : device->ff.vs;
+    int dummy_vbo_stream;
 
     assert(programmable_vs);
 
     DBG("Preparing draw\n");
     cso_set_vertex_shader_handle(device->cso_sw,
                                  NineVertexShader9_GetVariantProcessVertices(vs, vdecl_out, so));
-    update_vertex_elements_sw(device);
-    update_vertex_buffers_sw(device, start_vertice, num_vertices);
+    dummy_vbo_stream = update_vertex_elements_sw(device);
+    update_vertex_buffers_sw(device, dummy_vbo_stream, start_vertice, num_vertices);
     update_vs_constants_sw(device);
     DBG("Preparation succeeded\n");
 }
@@ -3366,8 +3412,8 @@ nine_state_after_draw_sw(struct NineDevice9 *device)
     struct pipe_context *pipe_sw = device->pipe_sw;
     int i;
 
+    pipe_sw->set_vertex_buffers(pipe_sw, 0, device->caps.MaxStreams, false, NULL);
     for (i = 0; i < 4; i++) {
-        pipe_sw->set_vertex_buffers(pipe_sw, i, 0, 1, false, NULL);
         if (sw_internal->transfers_so[i])
             pipe->buffer_unmap(pipe, sw_internal->transfers_so[i]);
         sw_internal->transfers_so[i] = NULL;

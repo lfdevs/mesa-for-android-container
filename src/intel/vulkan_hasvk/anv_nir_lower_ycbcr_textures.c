@@ -29,14 +29,14 @@
 
 struct ycbcr_state {
    nir_builder *builder;
-   nir_ssa_def *image_size;
+   nir_def *image_size;
    nir_tex_instr *origin_tex;
    nir_deref_instr *tex_deref;
    const struct vk_ycbcr_conversion *conversion;
 };
 
 /* TODO: we should probably replace this with a push constant/uniform. */
-static nir_ssa_def *
+static nir_def *
 get_texture_size(struct ycbcr_state *state, nir_deref_instr *texture)
 {
    if (state->image_size)
@@ -53,21 +53,20 @@ get_texture_size(struct ycbcr_state *state, nir_deref_instr *texture)
    tex->dest_type = nir_type_int32;
 
    tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                     &texture->dest.ssa);
+                                     &texture->def);
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex),
-                     32);
+   nir_def_init(&tex->instr, &tex->def, nir_tex_instr_dest_size(tex), 32);
    nir_builder_instr_insert(b, &tex->instr);
 
-   state->image_size = nir_i2f32(b, &tex->dest.ssa);
+   state->image_size = nir_i2f32(b, &tex->def);
 
    return state->image_size;
 }
 
-static nir_ssa_def *
+static nir_def *
 implicit_downsampled_coord(nir_builder *b,
-                           nir_ssa_def *value,
-                           nir_ssa_def *max_value,
+                           nir_def *value,
+                           nir_def *max_value,
                            int div_scale)
 {
    return nir_fadd(b,
@@ -78,15 +77,15 @@ implicit_downsampled_coord(nir_builder *b,
                                      max_value)));
 }
 
-static nir_ssa_def *
+static nir_def *
 implicit_downsampled_coords(struct ycbcr_state *state,
-                            nir_ssa_def *old_coords,
+                            nir_def *old_coords,
                             const struct anv_format_plane *plane_format)
 {
    nir_builder *b = state->builder;
    const struct vk_ycbcr_conversion *conversion = state->conversion;
-   nir_ssa_def *image_size = get_texture_size(state, state->tex_deref);
-   nir_ssa_def *comp[4] = { NULL, };
+   nir_def *image_size = get_texture_size(state, state->tex_deref);
+   nir_def *comp[4] = { NULL, };
    int c;
 
    for (c = 0; c < ARRAY_SIZE(conversion->state.chroma_offsets); c++) {
@@ -108,7 +107,7 @@ implicit_downsampled_coords(struct ycbcr_state *state,
    return nir_vec(b, comp, old_coords->num_components);
 }
 
-static nir_ssa_def *
+static nir_def *
 create_plane_tex_instr_implicit(struct ycbcr_state *state,
                                 uint32_t plane)
 {
@@ -125,7 +124,6 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
       switch (old_tex->src[i].src_type) {
       case nir_tex_src_coord:
          if (plane_format->has_chroma && conversion->state.chroma_reconstruction) {
-            assert(old_tex->src[i].src.is_ssa);
             tex->src[i].src =
                nir_src_for_ssa(implicit_downsampled_coords(state,
                                                            old_tex->src[i].src.ssa,
@@ -134,7 +132,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
          }
          FALLTHROUGH;
       default:
-         nir_src_copy(&tex->src[i].src, &old_tex->src[i].src, &tex->instr);
+         tex->src[i].src = nir_src_for_ssa(old_tex->src[i].src.ssa);
          break;
       }
    }
@@ -153,12 +151,11 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
    tex->sampler_index = old_tex->sampler_index;
    tex->is_array = old_tex->is_array;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest,
-                     old_tex->dest.ssa.num_components,
-                     nir_dest_bit_size(old_tex->dest));
+   nir_def_init(&tex->instr, &tex->def, old_tex->def.num_components,
+                old_tex->def.bit_size);
    nir_builder_instr_insert(b, &tex->instr);
 
-   return &tex->dest.ssa;
+   return &tex->def;
 }
 
 static unsigned
@@ -263,10 +260,10 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
    uint8_t y_bpc = y_isl_layout->channels_array[0].bits;
 
    /* |ycbcr_comp| holds components in the order : Cr-Y-Cb */
-   nir_ssa_def *zero = nir_imm_float(builder, 0.0f);
-   nir_ssa_def *one = nir_imm_float(builder, 1.0f);
+   nir_def *zero = nir_imm_float(builder, 0.0f);
+   nir_def *one = nir_imm_float(builder, 1.0f);
    /* Use extra 2 channels for following swizzle */
-   nir_ssa_def *ycbcr_comp[5] = { zero, zero, zero, one, zero };
+   nir_def *ycbcr_comp[5] = { zero, zero, zero, one, zero };
 
    uint8_t ycbcr_bpcs[5];
    memset(ycbcr_bpcs, y_bpc, sizeof(ycbcr_bpcs));
@@ -278,7 +275,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
     */
    for (uint32_t p = 0; p < format->n_planes; p++) {
       const struct anv_format_plane *plane_format = &format->planes[p];
-      nir_ssa_def *plane_sample = create_plane_tex_instr_implicit(&state, p);
+      nir_def *plane_sample = create_plane_tex_instr_implicit(&state, p);
 
       for (uint32_t pc = 0; pc < 4; pc++) {
          enum isl_channel_select ycbcr_swizzle =
@@ -297,7 +294,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
    }
 
    /* Now remaps components to the order specified by the conversion. */
-   nir_ssa_def *swizzled_comp[4] = { NULL, };
+   nir_def *swizzled_comp[4] = { NULL, };
    uint32_t swizzled_bpcs[4] = { 0, };
 
    for (uint32_t i = 0; i < ARRAY_SIZE(state.conversion->state.mapping); i++) {
@@ -321,7 +318,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
       }
    }
 
-   nir_ssa_def *result = nir_vec(builder, swizzled_comp, 4);
+   nir_def *result = nir_vec(builder, swizzled_comp, 4);
    if (state.conversion->state.ycbcr_model != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY) {
       result = nir_convert_ycbcr_to_rgb(builder,
                                         state.conversion->state.ycbcr_model,
@@ -330,7 +327,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
                                         swizzled_bpcs);
    }
 
-   nir_ssa_def_rewrite_uses(&tex->dest.ssa, result);
+   nir_def_rewrite_uses(&tex->def, result);
    nir_instr_remove(&tex->instr);
 
    return true;

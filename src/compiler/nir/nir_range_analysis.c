@@ -20,14 +20,14 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <math.h>
-#include <float.h>
-#include "nir.h"
 #include "nir_range_analysis.h"
+#include <float.h>
+#include <math.h>
 #include "util/hash_table.h"
-#include "util/u_math.h"
 #include "util/u_dynarray.h"
+#include "util/u_math.h"
 #include "c99_alloca.h"
+#include "nir.h"
 
 /**
  * Analyzes a sequence of operations to determine some aspects of the range of
@@ -71,7 +71,7 @@ perform_analysis(struct analysis_state *state)
 {
    while (state->query_stack.size) {
       struct analysis_query *cur =
-         (struct analysis_query *)((char*)util_dynarray_end(&state->query_stack) - state->query_size);
+         (struct analysis_query *)((char *)util_dynarray_end(&state->query_stack) - state->query_size);
       uint32_t *result = util_dynarray_element(&state->result_stack, uint32_t, cur->result_index);
 
       uintptr_t key = state->get_key(cur);
@@ -80,13 +80,13 @@ perform_analysis(struct analysis_state *state)
        * them by testing pushed_queries.
        */
       if (cur->pushed_queries == 0 && key &&
-          (he = _mesa_hash_table_search(state->range_ht, (void*)key))) {
+          (he = _mesa_hash_table_search(state->range_ht, (void *)key))) {
          *result = (uintptr_t)he->data;
          state->query_stack.size -= state->query_size;
          continue;
       }
 
-      uint32_t *src = (uint32_t*)util_dynarray_end(&state->result_stack) - cur->pushed_queries;
+      uint32_t *src = (uint32_t *)util_dynarray_end(&state->result_stack) - cur->pushed_queries;
       state->result_stack.size -= sizeof(uint32_t) * cur->pushed_queries;
 
       uint32_t prev_num_queries = state->query_stack.size;
@@ -101,7 +101,7 @@ perform_analysis(struct analysis_state *state)
       }
 
       if (key)
-         _mesa_hash_table_insert(state->range_ht, (void*)key, (void*)(uintptr_t)*result);
+         _mesa_hash_table_insert(state->range_ht, (void *)key, (void *)(uintptr_t)*result);
 
       state->query_stack.size -= state->query_size;
    }
@@ -137,9 +137,9 @@ static struct ssa_result_range
 unpack_data(uint32_t v)
 {
    return (struct ssa_result_range){
-      .range       = v & 0xff,
+      .range = v & 0xff,
       .is_integral = (v & 0x00100) != 0,
-      .is_finite   = (v & 0x00200) != 0,
+      .is_finite = (v & 0x00200) != 0,
       .is_a_number = (v & 0x00400) != 0
    };
 }
@@ -297,52 +297,48 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
  */
 #define _______ unknown
 
-
 #if defined(__clang__)
-   /* clang wants _Pragma("unroll X") */
-   #define pragma_unroll_5 _Pragma("unroll 5")
-   #define pragma_unroll_7 _Pragma("unroll 7")
+/* clang wants _Pragma("unroll X") */
+#define pragma_unroll_5 _Pragma("unroll 5")
+#define pragma_unroll_7 _Pragma("unroll 7")
 /* gcc wants _Pragma("GCC unroll X") */
 #elif defined(__GNUC__)
-   #if __GNUC__ >= 8
-      #define pragma_unroll_5 _Pragma("GCC unroll 5")
-      #define pragma_unroll_7 _Pragma("GCC unroll 7")
-   #else
-      #pragma GCC optimize ("unroll-loops")
-      #define pragma_unroll_5
-      #define pragma_unroll_7
-   #endif
+#if __GNUC__ >= 8
+#define pragma_unroll_5 _Pragma("GCC unroll 5")
+#define pragma_unroll_7 _Pragma("GCC unroll 7")
 #else
-   /* MSVC doesn't have C99's _Pragma() */
-   #define pragma_unroll_5
-   #define pragma_unroll_7
+#pragma GCC optimize("unroll-loops")
+#define pragma_unroll_5
+#define pragma_unroll_7
+#endif
+#else
+/* MSVC doesn't have C99's _Pragma() */
+#define pragma_unroll_5
+#define pragma_unroll_7
 #endif
 
-
 #ifndef NDEBUG
-#define ASSERT_TABLE_IS_COMMUTATIVE(t)                        \
-   do {                                                       \
-      static bool first = true;                               \
-      if (first) {                                            \
-         first = false;                                       \
-         pragma_unroll_7                                      \
-         for (unsigned r = 0; r < ARRAY_SIZE(t); r++) {       \
-            pragma_unroll_7                                   \
-            for (unsigned c = 0; c < ARRAY_SIZE(t[0]); c++)   \
-               assert(t[r][c] == t[c][r]);                    \
-         }                                                    \
-      }                                                       \
+#define ASSERT_TABLE_IS_COMMUTATIVE(t)                                      \
+   do {                                                                     \
+      static bool first = true;                                             \
+      if (first) {                                                          \
+         first = false;                                                     \
+         pragma_unroll_7 for (unsigned r = 0; r < ARRAY_SIZE(t); r++)       \
+         {                                                                  \
+            pragma_unroll_7 for (unsigned c = 0; c < ARRAY_SIZE(t[0]); c++) \
+               assert(t[r][c] == t[c][r]);                                  \
+         }                                                                  \
+      }                                                                     \
    } while (false)
 
-#define ASSERT_TABLE_IS_DIAGONAL(t)                           \
-   do {                                                       \
-      static bool first = true;                               \
-      if (first) {                                            \
-         first = false;                                       \
-         pragma_unroll_7                                      \
-         for (unsigned r = 0; r < ARRAY_SIZE(t); r++)         \
-            assert(t[r][r] == r);                             \
-      }                                                       \
+#define ASSERT_TABLE_IS_DIAGONAL(t)                                   \
+   do {                                                               \
+      static bool first = true;                                       \
+      if (first) {                                                    \
+         first = false;                                               \
+         pragma_unroll_7 for (unsigned r = 0; r < ARRAY_SIZE(t); r++) \
+            assert(t[r][r] == r);                                     \
+      }                                                               \
    } while (false)
 
 #else
@@ -374,26 +370,26 @@ union_ranges(enum ssa_ranges a, enum ssa_ranges b)
 /* Verify that the 'unknown' entry in each row (or column) of the table is the
  * union of all the other values in the row (or column).
  */
-#define ASSERT_UNION_OF_OTHERS_MATCHES_UNKNOWN_2_SOURCE(t)              \
-   do {                                                                 \
-      static bool first = true;                                         \
-      if (first) {                                                      \
-         first = false;                                                 \
-         pragma_unroll_7                                                \
-         for (unsigned i = 0; i < last_range; i++) {                    \
-            enum ssa_ranges col_range = t[i][unknown + 1];              \
-            enum ssa_ranges row_range = t[unknown + 1][i];              \
-                                                                        \
-            pragma_unroll_5                                             \
-            for (unsigned j = unknown + 2; j < last_range; j++) {       \
-               col_range = union_ranges(col_range, t[i][j]);            \
-               row_range = union_ranges(row_range, t[j][i]);            \
-            }                                                           \
-                                                                        \
-            assert(col_range == t[i][unknown]);                         \
-            assert(row_range == t[unknown][i]);                         \
-         }                                                              \
-      }                                                                 \
+#define ASSERT_UNION_OF_OTHERS_MATCHES_UNKNOWN_2_SOURCE(t)                      \
+   do {                                                                         \
+      static bool first = true;                                                 \
+      if (first) {                                                              \
+         first = false;                                                         \
+         pragma_unroll_7 for (unsigned i = 0; i < last_range; i++)              \
+         {                                                                      \
+            enum ssa_ranges col_range = t[i][unknown + 1];                      \
+            enum ssa_ranges row_range = t[unknown + 1][i];                      \
+                                                                                \
+            pragma_unroll_5 for (unsigned j = unknown + 2; j < last_range; j++) \
+            {                                                                   \
+               col_range = union_ranges(col_range, t[i][j]);                    \
+               row_range = union_ranges(row_range, t[j][i]);                    \
+            }                                                                   \
+                                                                                \
+            assert(col_range == t[i][unknown]);                                 \
+            assert(row_range == t[unknown][i]);                                 \
+         }                                                                      \
+      }                                                                         \
    } while (false)
 
 /* For most operations, the union of ranges for a strict inequality and
@@ -403,24 +399,24 @@ union_ranges(enum ssa_ranges a, enum ssa_ranges b)
  * Does not apply to selection-like opcodes (bcsel, fmin, fmax, etc.).
  */
 #define ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_1_SOURCE(t) \
-   do {                                                                 \
-      assert(union_ranges(t[lt_zero], t[eq_zero]) == t[le_zero]);       \
-      assert(union_ranges(t[gt_zero], t[eq_zero]) == t[ge_zero]);       \
+   do {                                                                  \
+      assert(union_ranges(t[lt_zero], t[eq_zero]) == t[le_zero]);        \
+      assert(union_ranges(t[gt_zero], t[eq_zero]) == t[ge_zero]);        \
    } while (false)
 
-#define ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_2_SOURCE(t) \
-   do {                                                                 \
-      static bool first = true;                                         \
-      if (first) {                                                      \
-         first = false;                                                 \
-         pragma_unroll_7                                                \
-         for (unsigned i = 0; i < last_range; i++) {                    \
+#define ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_2_SOURCE(t)         \
+   do {                                                                          \
+      static bool first = true;                                                  \
+      if (first) {                                                               \
+         first = false;                                                          \
+         pragma_unroll_7 for (unsigned i = 0; i < last_range; i++)               \
+         {                                                                       \
             assert(union_ranges(t[i][lt_zero], t[i][eq_zero]) == t[i][le_zero]); \
             assert(union_ranges(t[i][gt_zero], t[i][eq_zero]) == t[i][ge_zero]); \
             assert(union_ranges(t[lt_zero][i], t[eq_zero][i]) == t[le_zero][i]); \
             assert(union_ranges(t[gt_zero][i], t[eq_zero][i]) == t[ge_zero][i]); \
-         }                                                              \
-      }                                                                 \
+         }                                                                       \
+      }                                                                          \
    } while (false)
 
 /* Several other unordered tuples span the range of "everything."  Each should
@@ -436,35 +432,35 @@ union_ranges(enum ssa_ranges a, enum ssa_ranges b)
  * possibilities, so the union of all the unions of disjoint ranges is
  * equivalent to the union of "others."
  */
-#define ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_1_SOURCE(t)            \
-   do {                                                                 \
-      assert(union_ranges(t[lt_zero], t[ge_zero]) == t[unknown]);       \
-      assert(union_ranges(t[le_zero], t[gt_zero]) == t[unknown]);       \
-      assert(union_ranges(t[eq_zero], t[ne_zero]) == t[unknown]);       \
+#define ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_1_SOURCE(t)      \
+   do {                                                           \
+      assert(union_ranges(t[lt_zero], t[ge_zero]) == t[unknown]); \
+      assert(union_ranges(t[le_zero], t[gt_zero]) == t[unknown]); \
+      assert(union_ranges(t[eq_zero], t[ne_zero]) == t[unknown]); \
    } while (false)
 
-#define ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_2_SOURCE(t)            \
-   do {                                                                 \
-      static bool first = true;                                         \
-      if (first) {                                                      \
-         first = false;                                                 \
-         pragma_unroll_7                                                \
-         for (unsigned i = 0; i < last_range; i++) {                    \
-            assert(union_ranges(t[i][lt_zero], t[i][ge_zero]) ==        \
-                   t[i][unknown]);                                      \
-            assert(union_ranges(t[i][le_zero], t[i][gt_zero]) ==        \
-                   t[i][unknown]);                                      \
-            assert(union_ranges(t[i][eq_zero], t[i][ne_zero]) ==        \
-                   t[i][unknown]);                                      \
-                                                                        \
-            assert(union_ranges(t[lt_zero][i], t[ge_zero][i]) ==        \
-                   t[unknown][i]);                                      \
-            assert(union_ranges(t[le_zero][i], t[gt_zero][i]) ==        \
-                   t[unknown][i]);                                      \
-            assert(union_ranges(t[eq_zero][i], t[ne_zero][i]) ==        \
-                   t[unknown][i]);                                      \
-         }                                                              \
-      }                                                                 \
+#define ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_2_SOURCE(t)       \
+   do {                                                            \
+      static bool first = true;                                    \
+      if (first) {                                                 \
+         first = false;                                            \
+         pragma_unroll_7 for (unsigned i = 0; i < last_range; i++) \
+         {                                                         \
+            assert(union_ranges(t[i][lt_zero], t[i][ge_zero]) ==   \
+                   t[i][unknown]);                                 \
+            assert(union_ranges(t[i][le_zero], t[i][gt_zero]) ==   \
+                   t[i][unknown]);                                 \
+            assert(union_ranges(t[i][eq_zero], t[i][ne_zero]) ==   \
+                   t[i][unknown]);                                 \
+                                                                   \
+            assert(union_ranges(t[lt_zero][i], t[ge_zero][i]) ==   \
+                   t[unknown][i]);                                 \
+            assert(union_ranges(t[le_zero][i], t[gt_zero][i]) ==   \
+                   t[unknown][i]);                                 \
+            assert(union_ranges(t[eq_zero][i], t[ne_zero][i]) ==   \
+                   t[unknown][i]);                                 \
+         }                                                         \
+      }                                                            \
    } while (false)
 
 #else
@@ -497,7 +493,7 @@ get_fp_key(struct analysis_query *q)
    struct fp_query *fp_q = (struct fp_query *)q;
    const nir_src *src = &fp_q->instr->src[fp_q->src].src;
 
-   if (!src->is_ssa || src->ssa->parent_instr->type != nir_instr_type_alu)
+   if (src->ssa->parent_instr->type != nir_instr_type_alu)
       return 0;
 
    uintptr_t type_encoding;
@@ -512,11 +508,20 @@ get_fp_key(struct analysis_query *q)
     * As a result, the number of bits does not need to be encoded here.
     */
    switch (nir_alu_type_get_base_type(fp_q->use_type)) {
-   case nir_type_int:   type_encoding = 0; break;
-   case nir_type_uint:  type_encoding = 1; break;
-   case nir_type_bool:  type_encoding = 2; break;
-   case nir_type_float: type_encoding = 3; break;
-   default: unreachable("Invalid base type.");
+   case nir_type_int:
+      type_encoding = 0;
+      break;
+   case nir_type_uint:
+      type_encoding = 1;
+      break;
+   case nir_type_bool:
+      type_encoding = 2;
+      break;
+   case nir_type_float:
+      type_encoding = 3;
+      break;
+   default:
+      unreachable("Invalid base type.");
    }
 
    return ptr | type_encoding;
@@ -543,23 +548,18 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
    unsigned src = q.src;
    nir_alu_type use_type = q.use_type;
 
-   if (!instr->src[src].src.is_ssa) {
-      *result = pack_data((struct ssa_result_range){unknown, false, false, false});
-      return;
-   }
-
    if (nir_src_is_const(instr->src[src].src)) {
       *result = pack_data(analyze_constant(instr, src, use_type));
       return;
    }
 
    if (instr->src[src].src.ssa->parent_instr->type != nir_instr_type_alu) {
-      *result = pack_data((struct ssa_result_range){unknown, false, false, false});
+      *result = pack_data((struct ssa_result_range){ unknown, false, false, false });
       return;
    }
 
    const struct nir_alu_instr *const alu =
-       nir_instr_as_alu(instr->src[src].src.ssa->parent_instr);
+      nir_instr_as_alu(instr->src[src].src.ssa->parent_instr);
 
    /* Bail if the type of the instruction generating the value does not match
     * the type the value will be interpreted as.  int/uint/bool can be
@@ -575,7 +575,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       if (use_base_type != src_base_type &&
           (use_base_type == nir_type_float ||
            src_base_type == nir_type_float)) {
-         *result = pack_data((struct ssa_result_range){unknown, false, false, false});
+         *result = pack_data((struct ssa_result_range){ unknown, false, false, false });
          return;
       }
    }
@@ -632,7 +632,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       }
    }
 
-   struct ssa_result_range r = {unknown, false, false, false};
+   struct ssa_result_range r = { unknown, false, false, false };
 
    /* ge_zero: ge_zero + ge_zero
     *
@@ -724,13 +724,12 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
    ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_2_SOURCE(fmul_table);
 
    static const enum ssa_ranges fneg_table[last_range + 1] = {
-   /* unknown  lt_zero  le_zero  gt_zero  ge_zero  ne_zero  eq_zero */
+      /* unknown  lt_zero  le_zero  gt_zero  ge_zero  ne_zero  eq_zero */
       _______, gt_zero, ge_zero, lt_zero, le_zero, ne_zero, eq_zero
    };
 
    ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_1_SOURCE(fneg_table);
    ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_1_SOURCE(fneg_table);
-
 
    switch (alu->op) {
    case nir_op_b2f32:
@@ -742,7 +741,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
        * 1.401298464324817e-45.  The latter is subnormal, but it is finite and
        * a number.
        */
-      r = (struct ssa_result_range){ge_zero, alu->op == nir_op_b2f32, true, true};
+      r = (struct ssa_result_range){ ge_zero, alu->op == nir_op_b2f32, true, true };
       break;
 
    case nir_op_bcsel: {
@@ -817,7 +816,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
        * operands is finite, then the result cannot be NaN.
        */
       r.is_a_number = left.is_a_number && right.is_a_number &&
-         (left.is_finite || right.is_finite);
+                      (left.is_finite || right.is_finite);
       break;
    }
 
@@ -827,7 +826,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
        * parameters, the result will flush to zero.
        */
       static const enum ssa_ranges table[last_range + 1] = {
-      /* unknown  lt_zero  le_zero  gt_zero  ge_zero  ne_zero  eq_zero */
+         /* unknown  lt_zero  le_zero  gt_zero  ge_zero  ne_zero  eq_zero */
          ge_zero, ge_zero, ge_zero, gt_zero, gt_zero, ge_zero, gt_zero
       };
 
@@ -1038,9 +1037,9 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
           * the other cannot be zero, then the result must be a number.
           */
          r.is_a_number = (left.is_a_number && right.is_a_number) &&
-            ((left.is_finite && right.is_finite) ||
-             (!is_not_zero(left.range) && right.is_finite) ||
-             (left.is_finite && !is_not_zero(right.range)));
+                         ((left.is_finite && right.is_finite) ||
+                          (!is_not_zero(left.range) && right.is_finite) ||
+                          (left.is_finite && !is_not_zero(right.range)));
       } else {
          /* nir_op_fmulz: unlike nir_op_fmul, 0 * ±Inf is a number. */
          r.is_a_number = left.is_a_number && right.is_a_number;
@@ -1112,7 +1111,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
 
    case nir_op_fsqrt:
    case nir_op_frsq:
-      r = (struct ssa_result_range){ge_zero, false, false, false};
+      r = (struct ssa_result_range){ ge_zero, false, false, false };
       break;
 
    case nir_op_ffloor: {
@@ -1191,7 +1190,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
    case nir_op_ult:
    case nir_op_uge:
       /* Boolean results are 0 or -1. */
-      r = (struct ssa_result_range){le_zero, false, true, false};
+      r = (struct ssa_result_range){ le_zero, false, true, false };
       break;
 
    case nir_op_fdot2:
@@ -1215,11 +1214,11 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
        * Inf-Inf in the dot-product, the result must also be a number.
        */
       if (nir_alu_srcs_equal(alu, alu, 0, 1)) {
-         r = (struct ssa_result_range){ge_zero, false, left.is_a_number, false };
+         r = (struct ssa_result_range){ ge_zero, false, left.is_a_number, false };
       } else if (nir_alu_srcs_negative_equal(alu, alu, 0, 1)) {
-         r = (struct ssa_result_range){le_zero, false, left.is_a_number, false };
+         r = (struct ssa_result_range){ le_zero, false, left.is_a_number, false };
       } else {
-         r = (struct ssa_result_range){unknown, false, false, false};
+         r = (struct ssa_result_range){ unknown, false, false, false };
       }
       break;
    }
@@ -1342,7 +1341,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
    }
 
    default:
-      r = (struct ssa_result_range){unknown, false, false, false};
+      r = (struct ssa_result_range){ unknown, false, false, false };
       break;
    }
 
@@ -1350,7 +1349,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       r.is_integral = true;
 
    /* Just like isfinite(), the is_finite flag implies the value is a number. */
-   assert((int) r.is_finite <= (int) r.is_a_number);
+   assert((int)r.is_finite <= (int)r.is_a_number);
 
    *result = pack_data(r);
 }
@@ -1377,11 +1376,14 @@ nir_analyze_range(struct hash_table *range_ht,
    return unpack_data(perform_analysis(&state));
 }
 
-static uint32_t bitmask(uint32_t size) {
+static uint32_t
+bitmask(uint32_t size)
+{
    return size >= 32 ? 0xffffffffu : ((uint32_t)1 << size) - 1u;
 }
 
-static uint64_t mul_clamp(uint32_t a, uint32_t b)
+static uint64_t
+mul_clamp(uint32_t a, uint32_t b)
 {
    if (a != 0 && (a * b) / a != b)
       return (uint64_t)UINT32_MAX + 1;
@@ -1391,7 +1393,7 @@ static uint64_t mul_clamp(uint32_t a, uint32_t b)
 
 /* recursively gather at most "buf_size" phi/bcsel sources */
 static unsigned
-search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, struct set *visited)
+search_phi_bcsel(nir_scalar scalar, nir_scalar *buf, unsigned buf_size, struct set *visited)
 {
    if (_mesa_set_search(visited, scalar.def))
       return 0;
@@ -1404,8 +1406,8 @@ search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, 
          unsigned total_added = 0;
          nir_foreach_phi_src(src, phi) {
             num_sources_left--;
-            unsigned added = search_phi_bcsel(nir_get_ssa_scalar(src->src.ssa, scalar.comp),
-               buf + total_added, buf_size - num_sources_left, visited);
+            unsigned added = search_phi_bcsel(nir_get_scalar(src->src.ssa, scalar.comp),
+                                              buf + total_added, buf_size - num_sources_left, visited);
             assert(added <= buf_size);
             buf_size -= added;
             total_added += added;
@@ -1414,12 +1416,12 @@ search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, 
       }
    }
 
-   if (nir_ssa_scalar_is_alu(scalar)) {
-      nir_op op = nir_ssa_scalar_alu_op(scalar);
+   if (nir_scalar_is_alu(scalar)) {
+      nir_op op = nir_scalar_alu_op(scalar);
 
       if ((op == nir_op_bcsel || op == nir_op_b32csel) && buf_size >= 2) {
-         nir_ssa_scalar src1 = nir_ssa_scalar_chase_alu_src(scalar, 1);
-         nir_ssa_scalar src2 = nir_ssa_scalar_chase_alu_src(scalar, 2);
+         nir_scalar src1 = nir_scalar_chase_alu_src(scalar, 1);
+         nir_scalar src2 = nir_scalar_chase_alu_src(scalar, 2);
 
          unsigned added = search_phi_bcsel(src1, buf, buf_size - 1, visited);
          buf_size -= added;
@@ -1450,28 +1452,56 @@ static const nir_unsigned_upper_bound_config default_ub_config = {
     * unbounded. On some hardware max_workgroup_count[1] and
     * max_workgroup_count[2] may be smaller.
     */
-   .max_workgroup_count = {UINT32_MAX, UINT32_MAX, UINT32_MAX},
+   .max_workgroup_count = { UINT32_MAX, UINT32_MAX, UINT32_MAX },
 
    /* max_workgroup_size is the local invocation maximum. This is generally
     * small the OpenGL 4.2 minimum maximum is 1024.
     */
-   .max_workgroup_size = {UINT16_MAX, UINT16_MAX, UINT16_MAX},
+   .max_workgroup_size = { UINT16_MAX, UINT16_MAX, UINT16_MAX },
 
    .vertex_attrib_max = {
-      UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,
-      UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,
-      UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,
-      UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
+      UINT32_MAX,
    },
 };
 
 struct uub_query {
    struct analysis_query head;
-   nir_ssa_scalar scalar;
+   nir_scalar scalar;
 };
 
 static void
-push_uub_query(struct analysis_state *state, nir_ssa_scalar scalar)
+push_uub_query(struct analysis_state *state, nir_scalar scalar)
 {
    struct uub_query *pushed_q = push_analysis_query(state, sizeof(struct uub_query));
    pushed_q->scalar = scalar;
@@ -1480,12 +1510,12 @@ push_uub_query(struct analysis_state *state, nir_ssa_scalar scalar)
 static uintptr_t
 get_uub_key(struct analysis_query *q)
 {
-   nir_ssa_scalar scalar = ((struct uub_query *)q)->scalar;
+   nir_scalar scalar = ((struct uub_query *)q)->scalar;
    /* keys can't be 0, so we have to add 1 to the index */
    unsigned shift_amount = ffs(NIR_MAX_VEC_COMPONENTS) - 1;
-   return nir_ssa_scalar_is_const(scalar)
-          ? 0
-          : ((uintptr_t)(scalar.def->index + 1) << shift_amount) | scalar.comp;
+   return nir_scalar_is_const(scalar)
+             ? 0
+             : ((uintptr_t)(scalar.def->index + 1) << shift_amount) | scalar.comp;
 }
 
 static void
@@ -1511,7 +1541,8 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       } else {
          *result = (shader->info.workgroup_size[0] *
                     shader->info.workgroup_size[1] *
-                    shader->info.workgroup_size[2]) - 1u;
+                    shader->info.workgroup_size[2]) -
+                   1u;
       }
       break;
    case nir_intrinsic_load_local_invocation_id:
@@ -1529,17 +1560,19 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
    case nir_intrinsic_load_global_invocation_id:
       if (shader->info.workgroup_size_variable) {
          *result = mul_clamp(config->max_workgroup_size[q.scalar.comp],
-                             config->max_workgroup_count[q.scalar.comp]) - 1u;
+                             config->max_workgroup_count[q.scalar.comp]) -
+                   1u;
       } else {
          *result = (shader->info.workgroup_size[q.scalar.comp] *
-                    config->max_workgroup_count[q.scalar.comp]) - 1u;
+                    config->max_workgroup_count[q.scalar.comp]) -
+                   1u;
       }
       break;
    case nir_intrinsic_load_invocation_id:
       if (shader->info.stage == MESA_SHADER_TESS_CTRL)
          *result = shader->info.tess.tcs_vertices_out
-                   ? (shader->info.tess.tcs_vertices_out - 1)
-                   : 511; /* Generous maximum output patch size of 512 */
+                      ? (shader->info.tess.tcs_vertices_out - 1)
+                      : 511; /* Generous maximum output patch size of 512 */
       break;
    case nir_intrinsic_load_subgroup_invocation:
    case nir_intrinsic_first_invocation:
@@ -1547,7 +1580,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    case nir_intrinsic_mbcnt_amd: {
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_ssa_scalar(intrin->src[1].ssa, 0));
+         push_uub_query(state, nir_get_scalar(intrin->src[1].ssa, 0));
          return;
       } else {
          uint32_t src0 = config->max_subgroup_size - 1;
@@ -1591,7 +1624,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       nir_op op = nir_intrinsic_reduction_op(intrin);
       if (op == nir_op_umin || op == nir_op_umax || op == nir_op_imin || op == nir_op_imax) {
          if (!q.head.pushed_queries) {
-            push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
+            push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
             return;
          } else {
             *result = src[0];
@@ -1612,7 +1645,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
    case nir_intrinsic_quad_swizzle_amd:
    case nir_intrinsic_masked_swizzle_amd:
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
+         push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
          return;
       } else {
          *result = src[0];
@@ -1620,8 +1653,8 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    case nir_intrinsic_write_invocation_amd:
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
-         push_uub_query(state, nir_get_ssa_scalar(intrin->src[1].ssa, q.scalar.comp));
+         push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
+         push_uub_query(state, nir_get_scalar(intrin->src[1].ssa, q.scalar.comp));
          return;
       } else {
          *result = MAX2(src[0], src[1]);
@@ -1637,7 +1670,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       if (format == PIPE_FORMAT_NONE)
          break;
 
-      const struct util_format_description* desc = util_format_description(format);
+      const struct util_format_description *desc = util_format_description(format);
       if (desc->channel[q.scalar.comp].type != UTIL_FORMAT_TYPE_UNSIGNED)
          break;
 
@@ -1665,7 +1698,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
 static void
 get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, const uint32_t *src)
 {
-   nir_op op = nir_ssa_scalar_alu_op(q.scalar);
+   nir_op op = nir_scalar_alu_op(q.scalar);
 
    /* Early exit for unsupported ALU opcodes. */
    switch (op) {
@@ -1702,7 +1735,7 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_u2u16:
    case nir_op_u2u32:
    case nir_op_f2u32:
-      if (nir_ssa_scalar_chase_alu_src(q.scalar, 0).def->bit_size > 32) {
+      if (nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size > 32) {
          /* If src is >32 bits, return max */
          return;
       }
@@ -1713,7 +1746,7 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
 
    if (!q.head.pushed_queries) {
       for (unsigned i = 0; i < nir_op_infos[op].num_inputs; i++)
-         push_uub_query(state, nir_ssa_scalar_chase_alu_src(q.scalar, i));
+         push_uub_query(state, nir_scalar_chase_alu_src(q.scalar, i));
       return;
    }
 
@@ -1745,19 +1778,19 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
          *result = src[0] * src[1];
       break;
    case nir_op_ushr: {
-      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
       uint32_t mask = q.scalar.def->bit_size - 1u;
-      if (nir_ssa_scalar_is_const(src1_scalar))
-         *result = src[0] >> (nir_ssa_scalar_as_uint(src1_scalar) & mask);
+      if (nir_scalar_is_const(src1_scalar))
+         *result = src[0] >> (nir_scalar_as_uint(src1_scalar) & mask);
       else
          *result = src[0];
       break;
    }
    case nir_op_ishr: {
-      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
       uint32_t mask = q.scalar.def->bit_size - 1u;
-      if (src[0] <= 2147483647 && nir_ssa_scalar_is_const(src1_scalar))
-         *result = src[0] >> (nir_ssa_scalar_as_uint(src1_scalar) & mask);
+      if (src[0] <= 2147483647 && nir_scalar_is_const(src1_scalar))
+         *result = src[0] >> (nir_scalar_as_uint(src1_scalar) & mask);
       else
          *result = src[0];
       break;
@@ -1770,10 +1803,11 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       *result = src[1] ? src[1] - 1 : 0;
       break;
    case nir_op_udiv: {
-      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
-      if (nir_ssa_scalar_is_const(src1_scalar))
-         *result = nir_ssa_scalar_as_uint(src1_scalar)
-                   ? src[0] / nir_ssa_scalar_as_uint(src1_scalar) : 0;
+      nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
+      if (nir_scalar_is_const(src1_scalar))
+         *result = nir_scalar_as_uint(src1_scalar)
+                      ? src[0] / nir_scalar_as_uint(src1_scalar)
+                      : 0;
       else
          *result = src[0];
       break;
@@ -1786,10 +1820,10 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       *result = bitmask(MIN2(src[2], q.scalar.def->bit_size));
       break;
    case nir_op_bfm: {
-      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
-      if (nir_ssa_scalar_is_const(src1_scalar)) {
+      nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
+      if (nir_scalar_is_const(src1_scalar)) {
          uint32_t src0 = MIN2(src[0], 31);
-         uint32_t src1 = nir_ssa_scalar_as_uint(src1_scalar) & 0x1fu;
+         uint32_t src1 = nir_scalar_as_uint(src1_scalar) & 0x1fu;
          *result = bitmask(src0) << src1;
       } else {
          uint32_t src0 = MIN2(src[0], 31);
@@ -1869,10 +1903,10 @@ get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    if (!prev || prev->type == nir_cf_node_block) {
       /* Resolve cycles by inserting max into range_ht. */
       uint32_t max = bitmask(q.scalar.def->bit_size);
-      _mesa_hash_table_insert(state->range_ht, (void*)get_uub_key(&q.head), (void*)(uintptr_t)max);
+      _mesa_hash_table_insert(state->range_ht, (void *)get_uub_key(&q.head), (void *)(uintptr_t)max);
 
       struct set *visited = _mesa_pointer_set_create(NULL);
-      nir_ssa_scalar *defs = alloca(sizeof(nir_ssa_scalar) * 64);
+      nir_scalar *defs = alloca(sizeof(nir_scalar) * 64);
       unsigned def_count = search_phi_bcsel(q.scalar, defs, 64, visited);
       _mesa_set_destroy(visited, NULL);
 
@@ -1880,7 +1914,7 @@ get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
          push_uub_query(state, defs[i]);
    } else {
       nir_foreach_phi_src(src, phi)
-         push_uub_query(state, nir_get_ssa_scalar(src->src.ssa, q.scalar.comp));
+         push_uub_query(state, nir_get_scalar(src->src.ssa, q.scalar.comp));
    }
 }
 
@@ -1891,11 +1925,11 @@ process_uub_query(struct analysis_state *state, struct analysis_query *aq, uint3
    struct uub_query q = *(struct uub_query *)aq;
 
    *result = bitmask(q.scalar.def->bit_size);
-   if (nir_ssa_scalar_is_const(q.scalar))
-      *result = nir_ssa_scalar_as_uint(q.scalar);
-   else if (q.scalar.def->parent_instr->type == nir_instr_type_intrinsic)
+   if (nir_scalar_is_const(q.scalar))
+      *result = nir_scalar_as_uint(q.scalar);
+   else if (nir_scalar_is_intrinsic(q.scalar))
       get_intrinsic_uub(state, q, result, src);
-   else if (nir_ssa_scalar_is_alu(q.scalar))
+   else if (nir_scalar_is_alu(q.scalar))
       get_alu_uub(state, q, result, src);
    else if (q.scalar.def->parent_instr->type == nir_instr_type_phi)
       get_phi_uub(state, q, result, src);
@@ -1903,8 +1937,9 @@ process_uub_query(struct analysis_state *state, struct analysis_query *aq, uint3
 
 uint32_t
 nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
-                         nir_ssa_scalar scalar,
-                         const nir_unsigned_upper_bound_config *config) {
+                         nir_scalar scalar,
+                         const nir_unsigned_upper_bound_config *config)
+{
    if (!config)
       config = &default_ub_config;
 
@@ -1928,21 +1963,21 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
 
 bool
 nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
-                            nir_ssa_scalar ssa, unsigned const_val,
+                            nir_scalar ssa, unsigned const_val,
                             const nir_unsigned_upper_bound_config *config)
 {
-   if (nir_ssa_scalar_is_alu(ssa)) {
-      nir_op alu_op = nir_ssa_scalar_alu_op(ssa);
+   if (nir_scalar_is_alu(ssa)) {
+      nir_op alu_op = nir_scalar_alu_op(ssa);
 
       /* iadd(imul(a, #b), #c) */
       if (alu_op == nir_op_imul || alu_op == nir_op_ishl) {
-         nir_ssa_scalar mul_src0 = nir_ssa_scalar_chase_alu_src(ssa, 0);
-         nir_ssa_scalar mul_src1 = nir_ssa_scalar_chase_alu_src(ssa, 1);
+         nir_scalar mul_src0 = nir_scalar_chase_alu_src(ssa, 0);
+         nir_scalar mul_src1 = nir_scalar_chase_alu_src(ssa, 1);
          uint32_t stride = 1;
-         if (nir_ssa_scalar_is_const(mul_src0))
-            stride = nir_ssa_scalar_as_uint(mul_src0);
-         else if (nir_ssa_scalar_is_const(mul_src1))
-            stride = nir_ssa_scalar_as_uint(mul_src1);
+         if (nir_scalar_is_const(mul_src0))
+            stride = nir_scalar_as_uint(mul_src0);
+         else if (nir_scalar_is_const(mul_src1))
+            stride = nir_scalar_as_uint(mul_src1);
 
          if (alu_op == nir_op_ishl)
             stride = 1u << (stride % 32u);
@@ -1953,13 +1988,13 @@ nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
 
       /* iadd(iand(a, #b), #c) */
       if (alu_op == nir_op_iand) {
-         nir_ssa_scalar and_src0 = nir_ssa_scalar_chase_alu_src(ssa, 0);
-         nir_ssa_scalar and_src1 = nir_ssa_scalar_chase_alu_src(ssa, 1);
+         nir_scalar and_src0 = nir_scalar_chase_alu_src(ssa, 0);
+         nir_scalar and_src1 = nir_scalar_chase_alu_src(ssa, 1);
          uint32_t mask = 0xffffffff;
-         if (nir_ssa_scalar_is_const(and_src0))
-            mask = nir_ssa_scalar_as_uint(and_src0);
-         else if (nir_ssa_scalar_is_const(and_src1))
-            mask = nir_ssa_scalar_as_uint(and_src1);
+         if (nir_scalar_is_const(and_src0))
+            mask = nir_scalar_as_uint(and_src0);
+         else if (nir_scalar_is_const(and_src1))
+            mask = nir_scalar_as_uint(and_src1);
          if (mask == 0 || const_val < (1u << (ffs(mask) - 1)))
             return false;
       }
@@ -1970,7 +2005,7 @@ nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
 }
 
 static uint64_t
-ssa_def_bits_used(const nir_ssa_def *def, int recur)
+ssa_def_bits_used(const nir_def *def, int recur)
 {
    uint64_t bits_used = 0;
    uint64_t all_bits = BITFIELD64_MASK(def->bit_size);
@@ -1992,9 +2027,9 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
       return all_bits;
 
    nir_foreach_use(src, def) {
-      switch (src->parent_instr->type) {
+      switch (nir_src_parent_instr(src)->type) {
       case nir_instr_type_alu: {
-         nir_alu_instr *use_alu = nir_instr_as_alu(src->parent_instr);
+         nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_parent_instr(src));
          unsigned src_idx = container_of(src, nir_alu_src, src) - use_alu->src;
 
          /* If a user of the value produces a vector result, return the
@@ -2010,7 +2045,7 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
           * question can eventually answered after the shader has been
           * scalarized.
           */
-         if (use_alu->dest.dest.ssa.num_components > 1)
+         if (use_alu->def.num_components > 1)
             return all_bits;
 
          switch (use_alu->op) {
@@ -2092,7 +2127,7 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
 
       case nir_instr_type_intrinsic: {
          nir_intrinsic_instr *use_intrin =
-            nir_instr_as_intrinsic(src->parent_instr);
+            nir_instr_as_intrinsic(nir_src_parent_instr(src));
          unsigned src_idx = src - use_intrin->src;
 
          switch (use_intrin->intrinsic) {
@@ -2106,8 +2141,7 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
          case nir_intrinsic_quad_swap_vertical:
          case nir_intrinsic_quad_swap_diagonal:
             if (src_idx == 0) {
-               assert(use_intrin->dest.is_ssa);
-               bits_used |= ssa_def_bits_used(&use_intrin->dest.ssa, recur);
+               bits_used |= ssa_def_bits_used(&use_intrin->def, recur);
             } else {
                if (use_intrin->intrinsic == nir_intrinsic_quad_broadcast) {
                   bits_used |= 3;
@@ -2128,7 +2162,7 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
             case nir_op_ior:
             case nir_op_iand:
             case nir_op_ixor:
-               bits_used |= ssa_def_bits_used(&use_intrin->dest.ssa, recur);
+               bits_used |= ssa_def_bits_used(&use_intrin->def, recur);
                break;
 
             default:
@@ -2144,8 +2178,8 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
       }
 
       case nir_instr_type_phi: {
-         nir_phi_instr *use_phi = nir_instr_as_phi(src->parent_instr);
-         bits_used |= ssa_def_bits_used(&use_phi->dest.ssa, recur);
+         nir_phi_instr *use_phi = nir_instr_as_phi(nir_src_parent_instr(src));
+         bits_used |= ssa_def_bits_used(&use_phi->def, recur);
          break;
       }
 
@@ -2163,7 +2197,7 @@ ssa_def_bits_used(const nir_ssa_def *def, int recur)
 }
 
 uint64_t
-nir_ssa_def_bits_used(const nir_ssa_def *def)
+nir_def_bits_used(const nir_def *def)
 {
    return ssa_def_bits_used(def, 2);
 }

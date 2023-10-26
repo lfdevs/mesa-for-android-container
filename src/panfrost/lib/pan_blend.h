@@ -28,7 +28,7 @@
 #include "genxml/gen_macros.h"
 
 #include "compiler/nir/nir.h"
-#include "compiler/shader_enums.h"
+#include "util/blend.h"
 #include "util/format/u_format.h"
 #include "util/u_dynarray.h"
 
@@ -38,18 +38,15 @@ struct MALI_BLEND_EQUATION;
 struct panfrost_device;
 
 struct pan_blend_equation {
-   unsigned blend_enable              : 1;
-   enum blend_func rgb_func           : 3;
-   unsigned rgb_invert_src_factor     : 1;
-   enum blend_factor rgb_src_factor   : 4;
-   unsigned rgb_invert_dst_factor     : 1;
-   enum blend_factor rgb_dst_factor   : 4;
-   enum blend_func alpha_func         : 3;
-   unsigned alpha_invert_src_factor   : 1;
-   enum blend_factor alpha_src_factor : 4;
-   unsigned alpha_invert_dst_factor   : 1;
-   enum blend_factor alpha_dst_factor : 4;
-   unsigned color_mask                : 4;
+   unsigned blend_enable                  : 1;
+   enum pipe_blend_func rgb_func          : 3;
+   enum pipe_blendfactor rgb_src_factor   : 5;
+   enum pipe_blendfactor rgb_dst_factor   : 5;
+   enum pipe_blend_func alpha_func        : 3;
+   enum pipe_blendfactor alpha_src_factor : 5;
+   enum pipe_blendfactor alpha_dst_factor : 5;
+   unsigned color_mask                    : 4;
+   unsigned padding                       : 1;
 };
 
 struct pan_blend_rt_state {

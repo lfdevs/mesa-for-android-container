@@ -27,16 +27,12 @@ rogue_compiler = executable(
   link_with : [libpowervr_rogue],
   dependencies : [idep_mesautil, idep_nir, idep_vulkan_runtime, dep_csbgen],
   include_directories : [
-    inc_mesa,
     inc_imagination,
     inc_include,
     inc_src,
-    inc_mapi,
-    inc_gallium,
-    inc_gallium_aux,
-    inc_compiler,
     inc_rogue,
   ],
+  c_args : [imagination_c_args],
   build_by_default : with_imagination_tools,
   install : false,
 )

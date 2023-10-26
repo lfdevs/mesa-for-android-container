@@ -1345,7 +1345,7 @@ namespace {
              inst->writes_accumulator_implicitly(devinfo));
       const unsigned offset = (inst->group + i) * type_sz(tx) *
          (devinfo->ver < 7 || brw_reg_type_is_floating_point(tx) ? 1 : 2);
-      return offset / REG_SIZE % 2;
+      return offset / (reg_unit(devinfo) * REG_SIZE) % 2;
    }
 
    /**

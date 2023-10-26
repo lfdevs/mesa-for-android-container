@@ -121,9 +121,9 @@ static void init_gfx103(struct radeon_info *info)
 
 static void init_gfx11(struct radeon_info *info)
 {
-   info->family = CHIP_GFX1100;
+   info->family = CHIP_NAVI31;
    info->gfx_level = GFX11;
-   info->family_id = FAMILY_GFX1100;
+   info->family_id = FAMILY_NV3;
    info->chip_external_rev = 0x01;
    info->use_display_dcc_unaligned = false;
    info->use_display_dcc_with_retile_blit = true;

@@ -23,12 +23,12 @@
  */
 
 #include "compiler/nir/nir.h"
+#include "compiler/nir/nir_builder.h"
 
 #include "util/u_debug.h"
 #include "util/u_prim.h"
 
 #include "nv50_ir.h"
-#include "nv50_ir_from_common.h"
 #include "nv50_ir_lowering_helper.h"
 #include "nv50_ir_target.h"
 #include "nv50_ir_util.h"
@@ -65,7 +65,35 @@ function_temp_type_info(const struct glsl_type *type, unsigned *size, unsigned *
    }
 }
 
-class Converter : public ConverterCommon
+bool
+nv50_nir_lower_load_user_clip_plane_cb(nir_builder *b, nir_intrinsic_instr *intrin, void *params)
+{
+   struct nv50_ir_prog_info *info = (struct nv50_ir_prog_info *)params;
+
+   if (intrin->intrinsic != nir_intrinsic_load_user_clip_plane)
+      return false;
+
+   uint16_t offset = info->io.ucpBase + nir_intrinsic_ucp_id(intrin) * 16;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+   nir_def *replacement =
+      nir_load_ubo(b, 4, 32, nir_imm_int(b, info->io.auxCBSlot),
+                   nir_imm_int(b, offset), .range = ~0u);
+
+   nir_def_rewrite_uses(&intrin->def, replacement);
+   nir_instr_remove(&intrin->instr);
+
+   return true;
+}
+
+bool
+nv50_nir_lower_load_user_clip_plane(nir_shader *nir, struct nv50_ir_prog_info *info) {
+   return nir_shader_intrinsics_pass(nir, nv50_nir_lower_load_user_clip_plane_cb,
+                                     nir_metadata_block_index | nir_metadata_dominance,
+                                     info);
+}
+
+class Converter : public BuildUtil
 {
 public:
    Converter(Program *, nir_shader *, nv50_ir_prog_info *, nv50_ir_prog_info_out *);
@@ -79,18 +107,14 @@ private:
 
    CacheMode convert(enum gl_access_qualifier);
    TexTarget convert(glsl_sampler_dim, bool isArray, bool isShadow);
-   LValues& convert(nir_alu_dest *);
    BasicBlock* convert(nir_block *);
-   LValues& convert(nir_dest *);
    SVSemantic convert(nir_intrinsic_op);
    Value* convert(nir_load_const_instr*, uint8_t);
-   LValues& convert(nir_register *);
-   LValues& convert(nir_ssa_def *);
+   LValues& convert(nir_def *);
 
    Value* getSrc(nir_alu_src *, uint8_t component = 0);
-   Value* getSrc(nir_register *, uint8_t);
    Value* getSrc(nir_src *, uint8_t, bool indirect = false);
-   Value* getSrc(nir_ssa_def *, uint8_t);
+   Value* getSrc(nir_def *, uint8_t);
 
    // returned value is the constant part of the given source (either the
    // nir_src or the selected source component of an intrinsic). Even though
@@ -107,6 +131,7 @@ private:
 
    uint32_t getSlotAddress(nir_intrinsic_instr *, uint8_t idx, uint8_t slot);
 
+   uint8_t translateInterpMode(const struct nv50_ir_varying *var, operation& op);
    void setInterpolate(nv50_ir_varying *,
                        uint8_t,
                        bool centroid,
@@ -158,13 +183,16 @@ private:
    bool visit(nir_jump_instr *);
    bool visit(nir_load_const_instr*);
    bool visit(nir_loop *);
-   bool visit(nir_ssa_undef_instr *);
+   bool visit(nir_undef_instr *);
    bool visit(nir_tex_instr *);
 
    static unsigned lowerBitSizeCB(const nir_instr *, void *);
 
    // tex stuff
    unsigned int getNIRArgCount(TexInstruction::Target&);
+
+   struct nv50_ir_prog_info *info;
+   struct nv50_ir_prog_info_out *info_out;
 
    nir_shader *nir;
 
@@ -179,7 +207,7 @@ private:
    Value *zero;
    Instruction *immInsertPos;
 
-   int clipVertexOutput;
+   Value *outBase; // base address of vertex out patch (for TCP)
 
    union {
       struct {
@@ -190,13 +218,15 @@ private:
 
 Converter::Converter(Program *prog, nir_shader *nir, nv50_ir_prog_info *info,
                      nv50_ir_prog_info_out *info_out)
-   : ConverterCommon(prog, info, info_out),
+   : BuildUtil(prog),
+     info(info),
+     info_out(info_out),
      nir(nir),
      curLoopDepth(0),
      curIfDepth(0),
      exit(NULL),
      immInsertPos(NULL),
-     clipVertexOutput(-1)
+     outBase(nullptr)
 {
    zero = mkImm((uint32_t)0);
 }
@@ -258,10 +288,7 @@ Converter::isResultSigned(nir_op op)
 DataType
 Converter::getDType(nir_alu_instr *insn)
 {
-   if (insn->dest.dest.is_ssa)
-      return getDType(insn->op, insn->dest.dest.ssa.bit_size);
-   else
-      return getDType(insn->op, insn->dest.dest.reg.reg->bit_size);
+   return getDType(insn->op, insn->def.bit_size);
 }
 
 DataType
@@ -285,10 +312,7 @@ Converter::getDType(nir_intrinsic_instr *insn)
       break;
    }
 
-   if (insn->dest.is_ssa)
-      return typeOfSize(insn->dest.ssa.bit_size / 8, isFloat, isSigned);
-   else
-      return typeOfSize(insn->dest.reg.reg->bit_size / 8, isFloat, isSigned);
+   return typeOfSize(insn->def.bit_size / 8, isFloat, isSigned);
 }
 
 DataType
@@ -325,11 +349,7 @@ Converter::getSTypes(nir_alu_instr *insn)
 DataType
 Converter::getSType(nir_src &src, bool isFloat, bool isSigned)
 {
-   uint8_t bitSize;
-   if (src.is_ssa)
-      bitSize = src.ssa->bit_size;
-   else
-      bitSize = src.reg.reg->bit_size;
+   const uint8_t bitSize = src.ssa->bit_size;
 
    DataType ty = typeOfSize(bitSize / 8, isFloat, isSigned);
    if (ty == TYPE_NONE) {
@@ -454,6 +474,7 @@ Converter::getOperation(nir_op op)
       return OP_MOD;
    case nir_op_fmul:
    case nir_op_fmulz:
+   case nir_op_amul:
    case nir_op_imul:
    case nir_op_imul_high:
    case nir_op_umul_high:
@@ -465,8 +486,6 @@ Converter::getOperation(nir_op op)
       return OP_NOT;
    case nir_op_ior:
       return OP_OR;
-   case nir_op_fpow:
-      return OP_POW;
    case nir_op_frcp:
       return OP_RCP;
    case nir_op_frsq:
@@ -693,40 +712,7 @@ Converter::getCondCode(nir_op op)
 }
 
 Converter::LValues&
-Converter::convert(nir_alu_dest *dest)
-{
-   return convert(&dest->dest);
-}
-
-Converter::LValues&
-Converter::convert(nir_dest *dest)
-{
-   if (dest->is_ssa)
-      return convert(&dest->ssa);
-   if (dest->reg.indirect) {
-      ERROR("no support for indirects.");
-      assert(false);
-   }
-   return convert(dest->reg.reg);
-}
-
-Converter::LValues&
-Converter::convert(nir_register *reg)
-{
-   assert(!reg->num_array_elems);
-
-   NirDefMap::iterator it = regDefs.find(reg->index);
-   if (it != regDefs.end())
-      return it->second;
-
-   LValues newDef(reg->num_components);
-   for (uint8_t i = 0; i < reg->num_components; i++)
-      newDef[i] = getScratch(std::max(4, reg->bit_size / 8));
-   return regDefs[reg->index] = newDef;
-}
-
-Converter::LValues&
-Converter::convert(nir_ssa_def *def)
+Converter::convert(nir_def *def)
 {
    NirDefMap::iterator it = ssaDefs.find(def->index);
    if (it != ssaDefs.end())
@@ -741,41 +727,17 @@ Converter::convert(nir_ssa_def *def)
 Value*
 Converter::getSrc(nir_alu_src *src, uint8_t component)
 {
-   if (src->abs || src->negate) {
-      ERROR("modifiers currently not supported on nir_alu_src\n");
-      assert(false);
-   }
    return getSrc(&src->src, src->swizzle[component]);
-}
-
-Value*
-Converter::getSrc(nir_register *reg, uint8_t idx)
-{
-   NirDefMap::iterator it = regDefs.find(reg->index);
-   if (it == regDefs.end())
-      return convert(reg)[idx];
-   return it->second[idx];
 }
 
 Value*
 Converter::getSrc(nir_src *src, uint8_t idx, bool indirect)
 {
-   if (src->is_ssa)
-      return getSrc(src->ssa, idx);
-
-   if (src->reg.indirect) {
-      if (indirect)
-         return getSrc(src->reg.indirect, idx);
-      ERROR("no support for indirects.");
-      assert(false);
-      return NULL;
-   }
-
-   return getSrc(src->reg.reg, idx);
+   return getSrc(src->ssa, idx);
 }
 
 Value*
-Converter::getSrc(nir_ssa_def *src, uint8_t idx)
+Converter::getSrc(nir_def *src, uint8_t idx)
 {
    ImmediateMap::iterator iit = immediates.find(src->index);
    if (iit != immediates.end())
@@ -875,6 +837,29 @@ vert_attrib_to_tgsi_semantic(gl_vert_attrib slot, unsigned *name, unsigned *inde
    }
 }
 
+uint8_t
+Converter::translateInterpMode(const struct nv50_ir_varying *var, operation& op)
+{
+   uint8_t mode = NV50_IR_INTERP_PERSPECTIVE;
+
+   if (var->flat)
+      mode = NV50_IR_INTERP_FLAT;
+   else
+   if (var->linear)
+      mode = NV50_IR_INTERP_LINEAR;
+   else
+   if (var->sc)
+      mode = NV50_IR_INTERP_SC;
+
+   op = (mode == NV50_IR_INTERP_PERSPECTIVE || mode == NV50_IR_INTERP_SC)
+      ? OP_PINTERP : OP_LINTERP;
+
+   if (var->centroid)
+      mode |= NV50_IR_INTERP_CENTROID;
+
+   return mode;
+}
+
 void
 Converter::setInterpolate(nv50_ir_varying *var,
                           uint8_t mode,
@@ -961,32 +946,17 @@ bool Converter::assignSlots() {
    uint8_t i;
    BITSET_FOREACH_SET(i, nir->info.system_values_read, SYSTEM_VALUE_MAX) {
       switch (i) {
-      case SYSTEM_VALUE_BASE_GLOBAL_INVOCATION_ID:
-         continue;
-      default:
-         info_out->sv[info_out->numSysVals].sn = tgsi_get_sysval_semantic(i);
-         info_out->sv[info_out->numSysVals].si = 0;
-         info_out->sv[info_out->numSysVals].input = 0;
-         break;
-      }
-
-      switch (i) {
       case SYSTEM_VALUE_VERTEX_ID:
-         info_out->sv[info_out->numSysVals].input = 1;
          info_out->io.vertexId = info_out->numSysVals;
          break;
       case SYSTEM_VALUE_INSTANCE_ID:
-         info_out->sv[info_out->numSysVals].input = 1;
          info_out->io.instanceId = info_out->numSysVals;
-         break;
-      case SYSTEM_VALUE_TESS_LEVEL_INNER:
-      case SYSTEM_VALUE_TESS_LEVEL_OUTER:
-         info_out->sv[info_out->numSysVals].patch = 1;
          break;
       default:
          break;
       }
 
+      info_out->sv[info_out->numSysVals].sn = (gl_system_value)i;
       info_out->numSysVals += 1;
    }
 
@@ -1037,15 +1007,51 @@ bool Converter::assignSlots() {
          return false;
       }
 
-      for (uint16_t i = 0u; i < slots; ++i, ++vary) {
-         nv50_ir_varying *v = &info_out->in[vary];
+      if (var->data.compact) {
+         assert(!(nir->info.outputs_read & 1ull << slot));
+         if (nir_is_arrayed_io(var, nir->info.stage)) {
+            assert(glsl_type_is_array(type->fields.array));
+            assert(glsl_type_is_scalar(type->fields.array->fields.array));
+            assert(slots == glsl_get_length(type->fields.array));
+         } else {
+            assert(glsl_type_is_array(type));
+            assert(glsl_type_is_scalar(type->fields.array));
+            assert(slots == glsl_get_length(type));
+         }
+         assert(!glsl_base_type_is_64bit(type->without_array()->base_type));
 
-         v->patch = var->data.patch;
-         v->sn = name;
-         v->si = index + i;
-         v->mask |= getMaskForType(type, i) << var->data.location_frac;
+         uint32_t comps = BITFIELD_RANGE(var->data.location_frac, slots);
+         assert(!(comps & ~0xff));
+
+         if (comps & 0x0f) {
+            nv50_ir_varying *v = &info_out->in[vary];
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index;
+            v->mask |= comps & 0x0f;
+            info_out->numInputs =
+               std::max<uint8_t>(info_out->numInputs, vary + 1);
+         }
+         if (comps & 0xf0) {
+            nv50_ir_varying *v = &info_out->in[vary + 1];
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index + 1;
+            v->mask |= (comps & 0xf0) >> 4;
+            info_out->numInputs =
+               std::max<uint8_t>(info_out->numInputs, vary + 2);
+         }
+      } else {
+         for (uint16_t i = 0u; i < slots; ++i, ++vary) {
+            nv50_ir_varying *v = &info_out->in[vary];
+
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index + i;
+            v->mask |= getMaskForType(type, i) << var->data.location_frac;
+         }
+         info_out->numInputs = std::max<uint8_t>(info_out->numInputs, vary);
       }
-      info_out->numInputs = std::max<uint8_t>(info_out->numInputs, vary);
    }
 
    nir_foreach_shader_out_variable(var, nir) {
@@ -1093,18 +1099,8 @@ bool Converter::assignSlots() {
             info_out->numPatchConstants = MAX2(info_out->numPatchConstants, index + slots);
 
          switch (name) {
-         case TGSI_SEMANTIC_CLIPDIST:
-            info_out->io.genUserClip = -1;
-            break;
-         case TGSI_SEMANTIC_CLIPVERTEX:
-            clipVertexOutput = vary;
-            break;
          case TGSI_SEMANTIC_EDGEFLAG:
             info_out->io.edgeFlagOut = vary;
-            break;
-         case TGSI_SEMANTIC_POSITION:
-            if (clipVertexOutput < 0)
-               clipVertexOutput = vary;
             break;
          default:
             break;
@@ -1115,30 +1111,52 @@ bool Converter::assignSlots() {
          return false;
       }
 
-      for (uint16_t i = 0u; i < slots; ++i, ++vary) {
-         nv50_ir_varying *v = &info_out->out[vary];
-         v->patch = var->data.patch;
-         v->sn = name;
-         v->si = index + i;
-         v->mask |= getMaskForType(type, i) << var->data.location_frac;
+      if (var->data.compact) {
+         assert(!(nir->info.outputs_read & 1ull << slot));
+         if (nir_is_arrayed_io(var, nir->info.stage)) {
+            assert(glsl_type_is_array(type->fields.array));
+            assert(glsl_type_is_scalar(type->fields.array->fields.array));
+            assert(slots == glsl_get_length(type->fields.array));
+         } else {
+            assert(glsl_type_is_array(type));
+            assert(glsl_type_is_scalar(type->fields.array));
+            assert(slots == glsl_get_length(type));
+         }
+         assert(!glsl_base_type_is_64bit(type->without_array()->base_type));
 
-         if (nir->info.outputs_read & 1ull << slot)
-            v->oread = 1;
-      }
-      info_out->numOutputs = std::max<uint8_t>(info_out->numOutputs, vary);
-   }
+         uint32_t comps = BITFIELD_RANGE(var->data.location_frac, slots);
+         assert(!(comps & ~0xff));
 
-   if (info_out->io.genUserClip > 0) {
-      info_out->io.clipDistances = info_out->io.genUserClip;
+         if (comps & 0x0f) {
+            nv50_ir_varying *v = &info_out->out[vary];
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index;
+            v->mask |= comps & 0x0f;
+            info_out->numOutputs =
+               std::max<uint8_t>(info_out->numOutputs, vary + 1);
+         }
+         if (comps & 0xf0) {
+            nv50_ir_varying *v = &info_out->out[vary + 1];
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index + 1;
+            v->mask |= (comps & 0xf0) >> 4;
+            info_out->numOutputs =
+               std::max<uint8_t>(info_out->numOutputs, vary + 2);
+         }
+      } else {
+         for (uint16_t i = 0u; i < slots; ++i, ++vary) {
+            nv50_ir_varying *v = &info_out->out[vary];
+            v->patch = var->data.patch;
+            v->sn = name;
+            v->si = index + i;
+            v->mask |= getMaskForType(type, i) << var->data.location_frac;
 
-      const unsigned int nOut = (info_out->io.genUserClip + 3) / 4;
-
-      for (unsigned int n = 0; n < nOut; ++n) {
-         unsigned int i = info_out->numOutputs++;
-         info_out->out[i].id = i;
-         info_out->out[i].sn = TGSI_SEMANTIC_CLIPDIST;
-         info_out->out[i].si = n;
-         info_out->out[i].mask = ((1 << info_out->io.clipDistances) - 1) >> (n * 4);
+            if (nir->info.outputs_read & 1ull << slot)
+               v->oread = 1;
+         }
+         info_out->numOutputs = std::max<uint8_t>(info_out->numOutputs, vary);
       }
    }
 
@@ -1349,11 +1367,6 @@ Converter::visit(nir_function *function)
 
    setPosition(entry, true);
 
-   if (info_out->io.genUserClip > 0) {
-      for (int c = 0; c < 4; ++c)
-         clipVtx[c] = getScratch();
-   }
-
    switch (prog->getType()) {
    case Program::TYPE_TESSELLATION_CONTROL:
       outBase = mkOp2v(
@@ -1363,8 +1376,8 @@ Converter::visit(nir_function *function)
       break;
    case Program::TYPE_FRAGMENT: {
       Symbol *sv = mkSysVal(SV_POSITION, 3);
-      fragCoord[3] = mkOp1v(OP_RDSV, TYPE_F32, getSSA(), sv);
-      fp.position = mkOp1v(OP_RCP, TYPE_F32, fragCoord[3], fragCoord[3]);
+      Value *temp = mkOp1v(OP_RDSV, TYPE_F32, getSSA(), sv);
+      fp.position = mkOp1v(OP_RCP, TYPE_F32, temp, temp);
       break;
    }
    default:
@@ -1379,11 +1392,6 @@ Converter::visit(nir_function *function)
 
    bb->cfg.attach(&exit->cfg, Graph::Edge::TREE);
    setPosition(exit, true);
-
-   if ((prog->getType() == Program::TYPE_VERTEX ||
-        prog->getType() == Program::TYPE_TESSELLATION_EVAL)
-       && info_out->io.genUserClip > 0)
-      handleUserClipPlanes();
 
    // TODO: for non main function this needs to be a OP_RETURN
    mkOp(OP_EXIT, TYPE_NONE, NULL)->terminator = 1;
@@ -1540,8 +1548,8 @@ Converter::visit(nir_instr *insn)
       return visit(nir_instr_as_jump(insn));
    case nir_instr_type_load_const:
       return visit(nir_instr_as_load_const(insn));
-   case nir_instr_type_ssa_undef:
-      return visit(nir_instr_as_ssa_undef(insn));
+   case nir_instr_type_undef:
+      return visit(nir_instr_as_undef(insn));
    case nir_instr_type_tex:
       return visit(nir_instr_as_tex(insn));
    default:
@@ -1607,6 +1615,7 @@ Converter::convert(nir_intrinsic_op intr)
    case nir_intrinsic_load_vertex_id:
       return SV_VERTEX_ID;
    case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_workgroup_id_zero_base:
       return SV_CTAID;
    case nir_intrinsic_load_work_dim:
       return SV_WORK_DIM;
@@ -1626,6 +1635,53 @@ Converter::visit(nir_intrinsic_instr *insn)
    unsigned dest_components = nir_intrinsic_dest_components(insn);
 
    switch (op) {
+   case nir_intrinsic_decl_reg: {
+      const unsigned reg_index = insn->def.index;
+      const unsigned bit_size = nir_intrinsic_bit_size(insn);
+      const unsigned num_components = nir_intrinsic_num_components(insn);
+      assert(nir_intrinsic_num_array_elems(insn) == 0);
+
+      LValues newDef(num_components);
+      for (uint8_t c = 0; c < num_components; c++)
+         newDef[c] = getScratch(std::max(4u, bit_size / 8));
+
+      assert(regDefs.find(reg_index) == regDefs.end());
+      regDefs[reg_index] = newDef;
+      break;
+   }
+
+   case nir_intrinsic_load_reg: {
+      const unsigned reg_index = insn->src[0].ssa->index;
+      NirDefMap::iterator it = regDefs.find(reg_index);
+      assert(it != regDefs.end());
+      LValues &src = it->second;
+
+      DataType dType = getDType(insn);
+      LValues &newDefs = convert(&insn->def);
+      for (uint8_t c = 0; c < insn->num_components; c++)
+         mkMov(newDefs[c], src[c], dType);
+      break;
+   }
+
+   case nir_intrinsic_store_reg: {
+      const unsigned reg_index = insn->src[1].ssa->index;
+      NirDefMap::iterator it = regDefs.find(reg_index);
+      assert(it != regDefs.end());
+      LValues &dst = it->second;
+
+      DataType dType = Converter::getSType(insn->src[0], false, false);
+
+      const nir_component_mask_t write_mask = nir_intrinsic_write_mask(insn);
+      for (uint8_t c = 0u; c < insn->num_components; c++) {
+         if (!((1u << c) & write_mask))
+            continue;
+
+         Value *src = getSrc(&insn->src[0], c);
+         mkMov(dst[c], src, dType);
+      }
+      break;
+   }
+
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_per_vertex_output: {
       Value *indirect;
@@ -1648,15 +1704,6 @@ Converter::visit(nir_intrinsic_instr *insn)
             }
             break;
          }
-         case Program::TYPE_GEOMETRY:
-         case Program::TYPE_TESSELLATION_EVAL:
-         case Program::TYPE_VERTEX: {
-            if (info_out->io.genUserClip > 0 && idx == (uint32_t)clipVertexOutput) {
-               mkMov(clipVtx[i], src);
-               src = clipVtx[i];
-            }
-            break;
-         }
          default:
             break;
          }
@@ -1668,7 +1715,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_input:
    case nir_intrinsic_load_interpolated_input:
    case nir_intrinsic_load_output: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
 
       // FBFetch
       if (prog->getType() == Program::TYPE_FRAGMENT &&
@@ -1705,7 +1752,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       const DataType dType = getDType(insn);
       Value *indirect;
       bool input = op != nir_intrinsic_load_output;
-      operation nvirOp;
+      operation nvirOp = OP_LAST;
       uint32_t mode = 0;
 
       uint32_t idx = getIndirect(insn, op == nir_intrinsic_load_interpolated_input ? 1 : 0, 0, indirect);
@@ -1779,7 +1826,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_barycentric_centroid:
    case nir_intrinsic_load_barycentric_pixel:
    case nir_intrinsic_load_barycentric_sample: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       uint32_t mode;
 
       if (op == nir_intrinsic_load_barycentric_centroid ||
@@ -1856,10 +1903,11 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_tess_level_outer:
    case nir_intrinsic_load_vertex_id:
    case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_workgroup_id_zero_base:
    case nir_intrinsic_load_work_dim: {
       const DataType dType = getDType(insn);
       SVSemantic sv = convert(op);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
 
       for (uint8_t i = 0u; i < nir_intrinsic_dest_components(insn); ++i) {
          Value *def;
@@ -1884,14 +1932,14 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    // constants
    case nir_intrinsic_load_subgroup_size: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       loadImm(newDefs[0], 32u);
       break;
    }
    case nir_intrinsic_vote_all:
    case nir_intrinsic_vote_any:
    case nir_intrinsic_vote_ieq: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *pred = getScratch(1, FILE_PREDICATE);
       mkCmp(OP_SET, CC_NE, TYPE_U32, pred, TYPE_U32, getSrc(&insn->src[0], 0), zero);
       mkOp1(OP_VOTE, TYPE_U32, pred, pred)->subOp = getSubOp(op);
@@ -1899,7 +1947,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       break;
    }
    case nir_intrinsic_ballot: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *pred = getSSA(1, FILE_PREDICATE);
       mkCmp(OP_SET, CC_NE, TYPE_U32, pred, TYPE_U32, getSrc(&insn->src[0], 0), zero);
       mkOp1(OP_VOTE, TYPE_U32, newDefs[0], pred)->subOp = NV50_IR_SUBOP_VOTE_ANY;
@@ -1907,7 +1955,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_read_first_invocation:
    case nir_intrinsic_read_invocation: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       const DataType dType = getDType(insn);
       Value *tmp = getScratch();
 
@@ -1926,7 +1974,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_load_per_vertex_input: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectVertex;
       Value *indirectOffset;
       uint32_t baseVertex = getIndirect(&insn->src[0], 0, indirectVertex);
@@ -1943,7 +1991,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_load_per_vertex_output: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectVertex;
       Value *indirectOffset;
       uint32_t baseVertex = getIndirect(&insn->src[0], 0, indirectVertex);
@@ -1965,8 +2013,6 @@ Converter::visit(nir_intrinsic_instr *insn)
       break;
    }
    case nir_intrinsic_emit_vertex: {
-      if (info_out->io.genUserClip > 0)
-         handleUserClipPlanes();
       uint32_t idx = nir_intrinsic_stream_id(insn);
       mkOp1(getOperation(op), TYPE_U32, NULL, mkImm(idx))->fixed = 1;
       break;
@@ -1980,7 +2026,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_load_ubo: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectIndex;
       Value *indirectOffset;
       uint32_t index = getIndirect(&insn->src[0], 0, indirectIndex);
@@ -1995,7 +2041,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       break;
    }
    case nir_intrinsic_get_ssbo_size: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       const DataType dType = getDType(insn);
       Value *indirectBuffer;
       uint32_t buffer = getIndirect(&insn->src[0], 0, indirectBuffer);
@@ -2027,7 +2073,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_load_ssbo: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectBuffer;
       Value *indirectOffset;
       uint32_t buffer = getIndirect(&insn->src[0], 0, indirectBuffer);
@@ -2045,7 +2091,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_shared_atomic:
    case nir_intrinsic_shared_atomic_swap: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
       Symbol *sym = mkSymbol(FILE_MEMORY_SHARED, 0, dType, offset);
@@ -2059,7 +2105,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_ssbo_atomic:
    case nir_intrinsic_ssbo_atomic_swap: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectBuffer;
       Value *indirectOffset;
       uint32_t buffer = getIndirect(&insn->src[0], 0, indirectBuffer);
@@ -2080,7 +2126,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_global_atomic:
    case nir_intrinsic_global_atomic_swap: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *address;
       uint32_t offset = getIndirect(&insn->src[0], 0, address);
 
@@ -2119,7 +2165,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint16_t location = 0;
 
       if (opInfo.has_dest) {
-         LValues &newDefs = convert(&insn->dest);
+         LValues &newDefs = convert(&insn->def);
          for (uint8_t i = 0u; i < newDefs.size(); ++i) {
             defs.push_back(newDefs[i]);
             mask |= 1 << i;
@@ -2245,7 +2291,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_scratch:
    case nir_intrinsic_load_shared: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
       if (indirectOffset)
@@ -2256,7 +2302,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       break;
    }
-   case nir_intrinsic_scoped_barrier: {
+   case nir_intrinsic_barrier: {
       mesa_scope exec_scope = nir_intrinsic_execution_scope(insn);
       mesa_scope mem_scope = nir_intrinsic_memory_scope(insn);
       nir_variable_mode modes = nir_intrinsic_memory_modes(insn);
@@ -2286,7 +2332,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_shader_clock: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
 
       loadImm(newDefs[0], 0u);
       mkOp1(OP_RDSV, dType, newDefs[1], mkSysVal(SV_CLOCK, 0))->fixed = 1;
@@ -2295,7 +2341,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_global:
    case nir_intrinsic_load_global_constant: {
       const DataType dType = getDType(insn);
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
 
@@ -2341,11 +2387,6 @@ bool
 Converter::visit(nir_jump_instr *insn)
 {
    switch (insn->type) {
-   case nir_jump_return:
-      // TODO: this only works in the main function
-      mkFlow(OP_BRA, exit, CC_ALWAYS, NULL);
-      bb->cfg.attach(&exit->cfg, Graph::Edge::CROSS);
-      break;
    case nir_jump_break:
    case nir_jump_continue: {
       bool isBreak = insn->type == nir_jump_break;
@@ -2402,12 +2443,8 @@ Converter::visit(nir_load_const_instr *insn)
 }
 
 #define DEFAULT_CHECKS \
-      if (nir_dest_num_components(insn->dest.dest) > 1) { \
+      if (insn->def.num_components > 1) { \
          ERROR("nir_alu_instr only supported with 1 component!\n"); \
-         return false; \
-      } \
-      if (insn->dest.write_mask != 1) { \
-         ERROR("nir_alu_instr only with write_mask of 1 supported!\n"); \
          return false; \
       }
 bool
@@ -2453,6 +2490,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_umod:
    case nir_op_fmul:
    case nir_op_fmulz:
+   case nir_op_amul:
    case nir_op_imul:
    case nir_op_imul_high:
    case nir_op_umul_high:
@@ -2461,7 +2499,6 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_inot:
    case nir_op_ior:
    case nir_op_pack_64_2x32_split:
-   case nir_op_fpow:
    case nir_op_frcp:
    case nir_op_frem:
    case nir_op_irem:
@@ -2475,7 +2512,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_ishl:
    case nir_op_ixor: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       operation preOp = preOperationNeeded(op);
       if (preOp != OP_NOP) {
          assert(info.num_inputs < 2);
@@ -2512,14 +2549,14 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_ifind_msb:
    case nir_op_ufind_msb: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       dType = sTypes[0];
       mkOp1(getOperation(op), dType, newDefs[0], getSrc(&insn->src[0]));
       break;
    }
    case nir_op_fround_even: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkCvt(OP_CVT, dType, newDefs[0], dType, getSrc(&insn->src[0]))->rnd = ROUND_NI;
       break;
    }
@@ -2547,7 +2584,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_u2f64:
    case nir_op_u2u64: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       DataType stype = sTypes[0];
       Instruction *i = mkOp1(getOperation(op), dType, newDefs[0], getSrc(&insn->src[0]));
       if (::isFloatType(stype) && isIntType(dType))
@@ -2579,7 +2616,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_fneu32:
    case nir_op_ine32: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Instruction *i = mkCmp(getOperation(op),
                              getCondCode(op),
                              dType,
@@ -2593,7 +2630,7 @@ Converter::visit(nir_alu_instr *insn)
       break;
    }
    case nir_op_mov: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       for (LValues::size_type c = 0u; c < newDefs.size(); ++c) {
          mkMov(newDefs[c], getSrc(&insn->src[0], c), dType);
       }
@@ -2604,7 +2641,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_vec4:
    case nir_op_vec8:
    case nir_op_vec16: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       for (LValues::size_type c = 0u; c < newDefs.size(); ++c) {
          mkMov(newDefs[c], getSrc(&insn->src[c]), dType);
       }
@@ -2612,14 +2649,14 @@ Converter::visit(nir_alu_instr *insn)
    }
    // (un)pack
    case nir_op_pack_64_2x32: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Instruction *merge = mkOp(OP_MERGE, dType, newDefs[0]);
       merge->setSrc(0, getSrc(&insn->src[0], 0));
       merge->setSrc(1, getSrc(&insn->src[0], 1));
       break;
    }
    case nir_op_pack_half_2x16_split: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *tmpH = getSSA();
       Value *tmpL = getSSA();
 
@@ -2630,24 +2667,24 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_unpack_half_2x16_split_x:
    case nir_op_unpack_half_2x16_split_y: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Instruction *cvt = mkCvt(OP_CVT, TYPE_F32, newDefs[0], TYPE_F16, getSrc(&insn->src[0]));
       if (op == nir_op_unpack_half_2x16_split_y)
          cvt->subOp = 1;
       break;
    }
    case nir_op_unpack_64_2x32: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp1(OP_SPLIT, dType, newDefs[0], getSrc(&insn->src[0]))->setDef(1, newDefs[1]);
       break;
    }
    case nir_op_unpack_64_2x32_split_x: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp1(OP_SPLIT, dType, newDefs[0], getSrc(&insn->src[0]))->setDef(1, getSSA());
       break;
    }
    case nir_op_unpack_64_2x32_split_y: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp1(OP_SPLIT, dType, getSSA(), getSrc(&insn->src[0]))->setDef(1, newDefs[0]);
       break;
    }
@@ -2661,7 +2698,7 @@ Converter::visit(nir_alu_instr *insn)
       else
          iType = TYPE_S32;
 
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       LValue *val0 = getScratch();
       LValue *val1 = getScratch();
       mkCmp(OP_SET, CC_GT, iType, val0, dType, getSrc(&insn->src[0]), zero);
@@ -2683,7 +2720,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_fcsel:
    case nir_op_b32csel: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkCmp(OP_SLCT, CC_NE, dType, newDefs[0], sTypes[0], getSrc(&insn->src[1]), getSrc(&insn->src[2]), getSrc(&insn->src[0]));
       break;
    }
@@ -2691,20 +2728,20 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_ubitfield_extract: {
       DEFAULT_CHECKS;
       Value *tmp = getSSA();
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp3(OP_INSBF, dType, tmp, getSrc(&insn->src[2]), loadImm(NULL, 0x808), getSrc(&insn->src[1]));
       mkOp2(OP_EXTBF, dType, newDefs[0], getSrc(&insn->src[0]), tmp);
       break;
    }
    case nir_op_bfm: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp2(OP_BMSK, dType, newDefs[0], getSrc(&insn->src[1]), getSrc(&insn->src[0]))->subOp = NV50_IR_SUBOP_BMSK_W;
       break;
    }
    case nir_op_bitfield_insert: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       LValue *temp = getSSA();
       mkOp3(OP_INSBF, TYPE_U32, temp, getSrc(&insn->src[3]), mkImm(0x808), getSrc(&insn->src[2]));
       mkOp3(OP_INSBF, dType, newDefs[0], getSrc(&insn->src[1]), temp, getSrc(&insn->src[0]));
@@ -2712,19 +2749,19 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_bit_count: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp2(OP_POPCNT, dType, newDefs[0], getSrc(&insn->src[0]), getSrc(&insn->src[0]));
       break;
    }
    case nir_op_bitfield_reverse: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp1(OP_BREV, TYPE_U32, newDefs[0], getSrc(&insn->src[0]));
       break;
    }
    case nir_op_find_lsb: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *tmp = getSSA();
       mkOp1(OP_BREV, TYPE_U32, tmp, getSrc(&insn->src[0]));
       mkOp1(OP_BFIND, TYPE_U32, newDefs[0], tmp)->subOp = NV50_IR_SUBOP_BFIND_SAMT;
@@ -2732,7 +2769,7 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_extract_u8: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *prmt = getSSA();
       mkOp2(OP_OR, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x4440));
       mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
@@ -2740,7 +2777,7 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_extract_i8: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *prmt = getSSA();
       mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x1111), loadImm(NULL, 0x8880));
       mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
@@ -2748,7 +2785,7 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_extract_u16: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *prmt = getSSA();
       mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x22), loadImm(NULL, 0x4410));
       mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
@@ -2756,15 +2793,23 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_extract_i16: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *prmt = getSSA();
       mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x2222), loadImm(NULL, 0x9910));
       mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
       break;
    }
+   case nir_op_fquantize2f16: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->def);
+      Value *tmp = getSSA();
+      mkCvt(OP_CVT, TYPE_F16, tmp, TYPE_F32, getSrc(&insn->src[0]))->ftz = 1;
+      mkCvt(OP_CVT, TYPE_F32, newDefs[0], TYPE_F16, tmp);
+      break;
+   }
    case nir_op_urol: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp3(OP_SHF, TYPE_U32, newDefs[0], getSrc(&insn->src[0]),
             getSrc(&insn->src[1]), getSrc(&insn->src[0]))
          ->subOp = NV50_IR_SUBOP_SHF_L |
@@ -2774,7 +2819,7 @@ Converter::visit(nir_alu_instr *insn)
    }
    case nir_op_uror: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp3(OP_SHF, TYPE_U32, newDefs[0], getSrc(&insn->src[0]),
             getSrc(&insn->src[1]), getSrc(&insn->src[0]))
          ->subOp = NV50_IR_SUBOP_SHF_R |
@@ -2785,13 +2830,13 @@ Converter::visit(nir_alu_instr *insn)
    // boolean conversions
    case nir_op_b2f32: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp2(OP_AND, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), loadImm(NULL, 1.0f));
       break;
    }
    case nir_op_b2f64: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       Value *tmp = getSSA(4);
       mkOp2(OP_AND, TYPE_U32, tmp, getSrc(&insn->src[0]), loadImm(NULL, 0x3ff00000));
       mkOp2(OP_MERGE, TYPE_U64, newDefs[0], loadImm(NULL, 0), tmp);
@@ -2801,13 +2846,13 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_b2i16:
    case nir_op_b2i32: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       mkOp2(OP_AND, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), loadImm(NULL, 1));
       break;
    }
    case nir_op_b2i64: {
       DEFAULT_CHECKS;
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       LValue *def = getScratch();
       mkOp2(OP_AND, TYPE_U32, def, getSrc(&insn->src[0]), loadImm(NULL, 1));
       mkOp2(OP_MERGE, TYPE_S64, newDefs[0], def, loadImm(NULL, 0));
@@ -2831,14 +2876,13 @@ Converter::visit(nir_alu_instr *insn)
       oldPos = oldPos->next;
       oldPos->precise = insn->exact;
    }
-   oldPos->saturate = insn->dest.saturate;
 
    return true;
 }
 #undef DEFAULT_CHECKS
 
 bool
-Converter::visit(nir_ssa_undef_instr *insn)
+Converter::visit(nir_undef_instr *insn)
 {
    LValues &newDefs = convert(&insn->def);
    for (uint8_t i = 0u; i < insn->def.num_components; ++i) {
@@ -2863,11 +2907,13 @@ Converter::convert(glsl_sampler_dim dim, bool isArray, bool isShadow)
 {
    switch (dim) {
    CASE_SAMPLER(1D);
+   case GLSL_SAMPLER_DIM_SUBPASS:
    CASE_SAMPLER(2D);
    CASE_SAMPLER(CUBE);
    case GLSL_SAMPLER_DIM_3D:
       return TEX_TARGET_3D;
    case GLSL_SAMPLER_DIM_MS:
+   case GLSL_SAMPLER_DIM_SUBPASS_MS:
       if (isArray)
          return TEX_TARGET_2D_MS_ARRAY;
       return TEX_TARGET_2D_MS;
@@ -2923,7 +2969,7 @@ Converter::visit(nir_tex_instr *insn)
    case nir_texop_txf_ms:
    case nir_texop_txl:
    case nir_texop_txs: {
-      LValues &newDefs = convert(&insn->dest);
+      LValues &newDefs = convert(&insn->def);
       std::vector<Value*> srcs;
       std::vector<Value*> defs;
       std::vector<nir_src*> offsets;
@@ -3196,21 +3242,39 @@ Converter::run()
    subgroup_options.ballot_bit_size = 32;
    subgroup_options.ballot_components = 1;
    subgroup_options.lower_elect = true;
+   subgroup_options.lower_inverse_ballot = true;
 
    unsigned lower_flrp = (nir->options->lower_flrp16 ? 16 : 0) |
                          (nir->options->lower_flrp32 ? 32 : 0) |
                          (nir->options->lower_flrp64 ? 64 : 0);
    assert(lower_flrp);
 
+   info_out->io.genUserClip = info->io.genUserClip;
+   if (info->io.genUserClip > 0) {
+      bool lowered = false;
+
+      if (nir->info.stage == MESA_SHADER_VERTEX ||
+          nir->info.stage == MESA_SHADER_TESS_EVAL)
+         NIR_PASS(lowered, nir, nir_lower_clip_vs,
+                  (1 << info->io.genUserClip) - 1, true, false, NULL);
+      else if (nir->info.stage == MESA_SHADER_GEOMETRY)
+         NIR_PASS(lowered, nir, nir_lower_clip_gs,
+                  (1 << info->io.genUserClip) - 1, false, NULL);
+
+      if (lowered) {
+         nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+         NIR_PASS_V(nir, nir_lower_io_to_temporaries, impl, true, false);
+         NIR_PASS_V(nir, nir_lower_global_vars_to_local);
+         NIR_PASS_V(nir, nv50_nir_lower_load_user_clip_plane, info);
+      } else {
+         info_out->io.genUserClip = -1;
+      }
+   }
+
    /* prepare for IO lowering */
    NIR_PASS_V(nir, nir_lower_flrp, lower_flrp, false);
    NIR_PASS_V(nir, nir_opt_deref);
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
-
-   /* codegen assumes vec4 alignment for memory */
-   NIR_PASS_V(nir, nir_lower_vars_to_explicit_types, nir_var_function_temp, function_temp_type_info);
-   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_function_temp, nir_address_format_32bit_offset);
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
    NIR_PASS_V(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
               type_size, (nir_lower_io_options)0);
@@ -3250,6 +3314,12 @@ Converter::run()
       NIR_PASS(progress, nir, nir_lower_64bit_phis);
    } while (progress);
 
+   /* codegen assumes vec4 alignment for memory */
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
+   NIR_PASS_V(nir, nir_lower_vars_to_explicit_types, nir_var_function_temp, function_temp_type_info);
+   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_function_temp, nir_address_format_32bit_offset);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
+
    NIR_PASS_V(nir, nir_opt_combine_barriers, NULL, NULL);
 
    nir_move_options move_options =
@@ -3268,10 +3338,13 @@ Converter::run()
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
    NIR_PASS_V(nir, nir_lower_bit_size, Converter::lowerBitSizeCB, this);
 
-   NIR_PASS_V(nir, nir_convert_from_ssa, true, false);
+   NIR_PASS_V(nir, nir_divergence_analysis);
+   NIR_PASS_V(nir, nir_convert_from_ssa, true);
 
    // Garbage collect dead instructions
    nir_sweep(nir);
+
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
    if (!parseNIR()) {
       ERROR("Couldn't prase NIR!\n");
@@ -3302,7 +3375,7 @@ bool
 Program::makeFromNIR(struct nv50_ir_prog_info *info,
                      struct nv50_ir_prog_info_out *info_out)
 {
-   nir_shader *nir = (nir_shader*)info->bin.source;
+   nir_shader *nir = info->bin.nir;
    Converter converter(this, nir, info, info_out);
    bool result = converter.run();
    if (!result)
@@ -3329,16 +3402,13 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
    op.lower_flrp16 = (chipset >= NVISA_GV100_CHIPSET);
    op.lower_flrp32 = true;
    op.lower_flrp64 = true;
-   op.lower_fpow = false; // TODO: nir's lowering is broken, or we could use it
+   op.lower_fpow = true;
    op.lower_fsat = false;
    op.lower_fsqrt = false; // TODO: only before gm200
    op.lower_sincos = false;
    op.lower_fmod = true;
-   op.lower_bitfield_extract = false;
-   op.lower_bitfield_extract_to_shifts = (chipset >= NVISA_GV100_CHIPSET || chipset < NVISA_GF100_CHIPSET);
-   op.lower_bitfield_insert = false;
-   op.lower_bitfield_insert_to_shifts = (chipset >= NVISA_GV100_CHIPSET || chipset < NVISA_GF100_CHIPSET);
-   op.lower_bitfield_insert_to_bitfield_select = false;
+   op.lower_bitfield_extract = (chipset >= NVISA_GV100_CHIPSET || chipset < NVISA_GF100_CHIPSET);
+   op.lower_bitfield_insert = (chipset >= NVISA_GV100_CHIPSET || chipset < NVISA_GF100_CHIPSET);
    op.lower_bitfield_reverse = (chipset < NVISA_GF100_CHIPSET);
    op.lower_bit_count = (chipset < NVISA_GF100_CHIPSET);
    op.lower_ifind_msb = (chipset < NVISA_GF100_CHIPSET);
@@ -3384,7 +3454,7 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
    op.optimize_sample_mask_in = false;
    op.lower_cs_local_index_to_id = true;
    op.lower_cs_local_id_to_index = false;
-   op.lower_device_index_to_zero = false; // TODO
+   op.lower_device_index_to_zero = true;
    op.lower_wpos_pntc = false; // TODO
    op.lower_hadd = true; // TODO
    op.lower_uadd_sat = true; // TODO

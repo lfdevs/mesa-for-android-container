@@ -115,7 +115,7 @@ clover_lower_nir_filter(const nir_instr *instr, const void *)
    return instr->type == nir_instr_type_intrinsic;
 }
 
-static nir_ssa_def *
+static nir_def *
 clover_lower_nir_instr(nir_builder *b, nir_instr *instr, void *_state)
 {
    clover_lower_nir_state *state = reinterpret_cast<clover_lower_nir_state*>(_state);
@@ -137,7 +137,7 @@ clover_lower_nir_instr(nir_builder *b, nir_instr *instr, void *_state)
       return nir_load_var(b, state->printf_buffer);
    }
    case nir_intrinsic_load_base_global_invocation_id: {
-      nir_ssa_def *loads[3];
+      nir_def *loads[3];
 
       /* create variables if we didn't do so alrady */
       if (!state->offset_vars[0]) {
@@ -165,7 +165,7 @@ clover_lower_nir_instr(nir_builder *b, nir_instr *instr, void *_state)
       }
 
       return nir_u2uN(b, nir_vec(b, loads, state->global_dims),
-                     nir_dest_bit_size(intrinsic->dest));
+                     intrinsic->def.bit_size);
    }
    case nir_intrinsic_load_constant_base_ptr: {
       return nir_load_var(b, state->constant_var);
@@ -311,7 +311,7 @@ binary clover::nir::spirv_to_nir(const binary &mod, const device &dev,
       // according to the comment on nir_inline_functions
       NIR_PASS_V(nir, nir_lower_variable_initializers, nir_var_function_temp);
       NIR_PASS_V(nir, nir_lower_returns);
-      NIR_PASS_V(nir, nir_lower_libclc, spirv_options.clc_shader);
+      NIR_PASS_V(nir, nir_link_shader_functions, spirv_options.clc_shader);
 
       NIR_PASS_V(nir, nir_inline_functions);
       NIR_PASS_V(nir, nir_copy_prop);

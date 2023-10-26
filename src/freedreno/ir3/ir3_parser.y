@@ -373,6 +373,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_SY
 %token <tok> T_SS
 %token <tok> T_JP
+%token <tok> T_EQ_FLAG
 %token <tok> T_SAT
 %token <num> T_RPT
 %token <tok> T_UL
@@ -628,11 +629,14 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_OP_DCCLN
 %token <tok> T_OP_DCINV
 %token <tok> T_OP_DCFLU
+%token <tok> T_OP_CCINV
 %token <tok> T_OP_LOCK
 %token <tok> T_OP_UNLOCK
 %token <tok> T_OP_ALIAS
 
 %token <u64> T_RAW
+
+%token <tok> T_OP_PRINT
 
 /* type qualifiers: */
 %token <tok> T_TYPE_F16
@@ -805,6 +809,7 @@ tex_header:        T_A_TEX '(' T_REGISTER ')'
 iflag:             T_SY   { iflags.flags |= IR3_INSTR_SY; }
 |                  T_SS   { iflags.flags |= IR3_INSTR_SS; }
 |                  T_JP   { iflags.flags |= IR3_INSTR_JP; }
+|                  T_EQ_FLAG { iflags.flags |= IR3_INSTR_EQ; }
 |                  T_SAT  { iflags.flags |= IR3_INSTR_SAT; }
 |                  T_RPT  { iflags.repeat = $1; }
 |                  T_UL   { iflags.flags |= IR3_INSTR_UL; }
@@ -825,6 +830,7 @@ instr:             iflags cat0_instr
 |                  iflags cat6_instr
 |                  iflags cat7_instr
 |                  raw_instr
+|                  meta_print
 |                  label
 
 label:             T_IDENTIFIER ':' { new_label($1); }
@@ -1097,11 +1103,13 @@ cat5_instr:        cat5_opc_dsxypp cat5_flags dst_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_samp ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_samp ',' cat5_a1
+|                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_tex ',' cat5_a1
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_samp
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp ',' cat5_a1
+|                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_tex ',' cat5_a1
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg
@@ -1134,7 +1142,10 @@ cat6_a6xx_global_address_pt3:
                         new_src(0, IR3_REG_IMMED)->uim_val = $3 - 2;
                         new_src(0, IR3_REG_IMMED)->uim_val = $4;
                    }
-|                  '+' cat6_reg_or_immed
+|                  '+' cat6_reg_or_immed {
+                        // Dummy src to smooth the difference between a6xx and a7xx
+                        new_src(0, IR3_REG_IMMED)->uim_val = 0;
+                   }
 
 cat6_a6xx_global_address_pt2:
                    '(' src offset ')' '<' '<' integer {
@@ -1324,6 +1335,7 @@ cat7_alias_scope: T_MOD_TEX	{ instr->cat7.alias_scope = ALIAS_TEX; }
 cat7_instr:        cat7_barrier
 |                  cat7_data_cache
 |                  T_OP_SLEEP              { new_instr(OPC_SLEEP); }
+|                  T_OP_CCINV              { new_instr(OPC_CCINV); }
 |                  T_OP_ICINV              { new_instr(OPC_ICINV); }
 |                  T_OP_LOCK               { new_instr(OPC_LOCK); }
 |                  T_OP_UNLOCK             { new_instr(OPC_UNLOCK); }
@@ -1335,6 +1347,56 @@ cat7_instr:        cat7_barrier
                    }
 
 raw_instr: T_RAW   {new_instr(OPC_META_RAW)->raw.value = $1;}
+
+meta_print: T_OP_PRINT T_REGISTER ',' T_REGISTER {
+	/* low */
+	new_instr(OPC_MOV);
+	instr->cat1.src_type = TYPE_U32;
+	instr->cat1.dst_type = TYPE_U32;
+	new_dst($2, IR3_REG_R);
+	new_src(0, IR3_REG_IMMED)->uim_val = info->shader_print_buffer_iova & 0xffffffff;
+
+	/* high */
+	new_instr(OPC_MOV);
+	instr->cat1.src_type = TYPE_U32;
+	instr->cat1.dst_type = TYPE_U32;
+	new_dst($2 + 2, IR3_REG_R);
+	new_src(0, IR3_REG_IMMED)->uim_val = info->shader_print_buffer_iova >> 32;
+
+	/* offset */
+	new_instr(OPC_MOV);
+	instr->cat1.src_type = TYPE_U32;
+	instr->cat1.dst_type = TYPE_U32;
+	new_dst($2 + 4, IR3_REG_R);
+	new_src(0, IR3_REG_IMMED)->uim_val = 4;
+
+	new_instr(OPC_NOP);
+	instr->repeat = 5;
+
+	/* Increment and get current offset into print buffer */
+	new_instr(OPC_ATOMIC_G_ADD);
+	instr->cat6.d = 1;
+	instr->cat6.typed = 0;
+	instr->cat6.type = TYPE_U32;
+	instr->cat6.iim_val = 1;
+
+	new_dst($2, IR3_REG_R);
+	new_src($2, IR3_REG_R);
+	new_src($2 + 4, IR3_REG_R);
+
+	/* Store the value */
+	new_instr(OPC_STG);
+	dummy_dst();
+	instr->cat6.type = TYPE_U32;
+	instr->flags = IR3_INSTR_SY;
+	new_src($2, IR3_REG_R);
+	new_src(0, IR3_REG_IMMED)->iim_val = 0;
+	new_src($4, IR3_REG_R);
+	new_src(0, IR3_REG_IMMED)->iim_val = 1;
+
+	new_instr(OPC_NOP);
+	instr->flags = IR3_INSTR_SY;
+}
 
 src:               T_REGISTER     { $$ = new_src($1, 0); }
 |                  T_A0           { $$ = new_src((61 << 3), IR3_REG_HALF); }

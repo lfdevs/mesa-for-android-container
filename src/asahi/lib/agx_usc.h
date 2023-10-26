@@ -67,7 +67,7 @@ static void
 agx_usc_uniform(struct agx_usc_builder *b, unsigned start_halfs,
                 unsigned size_halfs, uint64_t buffer)
 {
-   assert((start_halfs + size_halfs) < (1 << 9) && "uniform file overflow");
+   assert((start_halfs + size_halfs) <= (1 << 9) && "uniform file overflow");
    assert(size_halfs <= 64 && "caller's responsibility to split");
 
    if (start_halfs & BITFIELD_BIT(8)) {

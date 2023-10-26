@@ -22,7 +22,8 @@ struct si_context;
  * command buffer (AKA indirect buffer, AKA IB, AKA command stream, AKA CS).
  */
 struct si_atom {
-   void (*emit)(struct si_context *ctx);
+   /* The index is only used by si_pm4_emit_state. Non-pm4 atoms don't use it. */
+   void (*emit)(struct si_context *ctx, unsigned index);
 };
 
 struct si_pm4_state {
@@ -38,7 +39,6 @@ struct si_pm4_state {
    bool packed_is_padded; /* whether SET_*_REG_PAIRS_PACKED is padded to an even number of regs */
 
    /* For shader states only */
-   bool is_shader;
    struct si_atom atom;
 
    /* commands for the DE */
@@ -60,7 +60,9 @@ void si_pm4_clear_state(struct si_pm4_state *state, struct si_screen *sscreen,
                         bool is_compute_queue);
 void si_pm4_free_state(struct si_context *sctx, struct si_pm4_state *state, unsigned idx);
 
-void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state);
+void si_pm4_emit_commands(struct si_context *sctx, struct si_pm4_state *state);
+void si_pm4_emit_state(struct si_context *sctx, unsigned index);
+void si_pm4_emit_shader(struct si_context *sctx, unsigned index);
 void si_pm4_reset_emitted(struct si_context *sctx);
 struct si_pm4_state *si_pm4_create_sized(struct si_screen *sscreen, unsigned max_dw,
                                          bool is_compute_queue);

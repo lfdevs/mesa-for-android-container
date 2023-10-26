@@ -65,9 +65,6 @@ use in other instruction types like intrinsics or texture ops.
 .. doxygenstruct:: nir_alu_src
    :members:
 
-.. doxygenstruct:: nir_alu_dest
-   :members:
-
 NIR ALU Opcode Reference:
 -------------------------
 

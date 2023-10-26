@@ -29,7 +29,7 @@
  */
 
 static bool
-src_is_single_use_shuffle(nir_src src, nir_ssa_def **data, nir_ssa_def **index)
+src_is_single_use_shuffle(nir_src src, nir_def **data, nir_def **index)
 {
    nir_intrinsic_instr *shuffle = nir_src_as_intrinsic(src);
    if (shuffle == NULL || shuffle->intrinsic != nir_intrinsic_shuffle)
@@ -39,14 +39,11 @@ src_is_single_use_shuffle(nir_src src, nir_ssa_def **data, nir_ssa_def **index)
     * uses is reasonable.  If we ever want to use this from an if statement,
     * we can change it then.
     */
-   if (!list_is_singular(&shuffle->dest.ssa.uses))
+   if (!list_is_singular(&shuffle->def.uses))
       return false;
 
-   if (nir_ssa_def_used_by_if(&shuffle->dest.ssa))
+   if (nir_def_used_by_if(&shuffle->def))
       return false;
-
-   assert(shuffle->src[0].is_ssa);
-   assert(shuffle->src[1].is_ssa);
 
    *data = shuffle->src[0].ssa;
    *index = shuffle->src[1].ssa;
@@ -54,7 +51,7 @@ src_is_single_use_shuffle(nir_src src, nir_ssa_def **data, nir_ssa_def **index)
    return true;
 }
 
-static nir_ssa_def *
+static nir_def *
 try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu,
                          bool block_has_discard)
 {
@@ -71,13 +68,13 @@ try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu,
    if (!nir_alu_src_is_trivial_ssa(alu, 0))
       return NULL;
 
-   nir_ssa_def *data1, *index1;
+   nir_def *data1, *index1;
    if (!nir_alu_src_is_trivial_ssa(alu, 1) ||
        alu->src[1].src.ssa->parent_instr->block != alu->instr.block ||
        !src_is_single_use_shuffle(alu->src[1].src, &data1, &index1))
       return NULL;
 
-   nir_ssa_def *data2, *index2;
+   nir_def *data2, *index2;
    if (!nir_alu_src_is_trivial_ssa(alu, 2) ||
        alu->src[2].src.ssa->parent_instr->block != alu->instr.block ||
        !src_is_single_use_shuffle(alu->src[2].src, &data2, &index2))
@@ -86,8 +83,8 @@ try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu,
    if (data1 != data2)
       return NULL;
 
-   nir_ssa_def *index = nir_bcsel(b, alu->src[0].src.ssa, index1, index2);
-   nir_ssa_def *shuffle = nir_shuffle(b, data1, index);
+   nir_def *index = nir_bcsel(b, alu->src[0].src.ssa, index1, index2);
+   nir_def *shuffle = nir_shuffle(b, data1, index);
 
    return shuffle;
 }
@@ -131,7 +128,7 @@ src_is_alu(nir_op op, nir_src src, nir_src srcs[2])
    return true;
 }
 
-static nir_ssa_def *
+static nir_def *
 try_opt_quad_vote(nir_builder *b, nir_alu_instr *alu, bool block_has_discard)
 {
    if (block_has_discard)
@@ -218,7 +215,7 @@ static bool
 opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
                    bool block_has_discard, const struct nir_shader_compiler_options *options)
 {
-   nir_ssa_def *replacement = NULL;
+   nir_def *replacement = NULL;
 
    switch (alu->op) {
    case nir_op_bcsel:
@@ -226,7 +223,7 @@ opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
       break;
    case nir_op_iand:
    case nir_op_ior:
-      if (nir_dest_bit_size(alu->dest.dest) == 1 && options->optimize_quad_vote_to_reduce)
+      if (alu->def.bit_size == 1 && options->optimize_quad_vote_to_reduce)
          replacement = try_opt_quad_vote(b, alu, block_has_discard);
       break;
    default:
@@ -234,13 +231,62 @@ opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
    }
 
    if (replacement) {
-      nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa,
-                               replacement);
+      nir_def_rewrite_uses(&alu->def,
+                           replacement);
       nir_instr_remove(&alu->instr);
       return true;
    } else {
       return false;
    }
+}
+
+static bool
+try_opt_exclusive_scan_to_inclusive(nir_intrinsic_instr *intrin)
+{
+   if (intrin->def.num_components != 1)
+      return false;
+
+   nir_foreach_use_including_if(src, &intrin->def) {
+      if (nir_src_is_if(src) || nir_src_parent_instr(src)->type != nir_instr_type_alu)
+         return false;
+
+      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+
+      if (alu->op != (nir_op)nir_intrinsic_reduction_op(intrin))
+         return false;
+
+      /* Don't reassociate exact float operations. */
+      if (nir_alu_type_get_base_type(nir_op_infos[alu->op].output_type) == nir_type_float &&
+          alu->op != nir_op_fmax && alu->op != nir_op_fmin && alu->exact)
+         return false;
+
+      if (alu->def.num_components != 1)
+         return false;
+
+      nir_alu_src *alu_src = list_entry(src, nir_alu_src, src);
+      unsigned src_index = alu_src - alu->src;
+
+      assert(src_index < 2 && nir_op_infos[alu->op].num_inputs == 2);
+
+      nir_scalar scan_scalar = nir_scalar_resolved(intrin->src[0].ssa, 0);
+      nir_scalar op_scalar = nir_scalar_resolved(alu->src[!src_index].src.ssa,
+                                                 alu->src[!src_index].swizzle[0]);
+
+      if (!nir_scalar_equal(scan_scalar, op_scalar))
+         return false;
+   }
+
+   /* Convert to inclusive scan. */
+   intrin->intrinsic = nir_intrinsic_inclusive_scan;
+
+   nir_foreach_use_including_if_safe(src, &intrin->def) {
+      /* Remove alu. */
+      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+      nir_def_rewrite_uses(&alu->def, &intrin->def);
+      nir_instr_remove(&alu->instr);
+   }
+
+   return true;
 }
 
 static bool
@@ -257,27 +303,27 @@ opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
          return false;
 
       bool progress = false;
-      nir_foreach_use_safe(use_src, &intrin->dest.ssa) {
-         if (use_src->parent_instr->type == nir_instr_type_alu) {
-            nir_alu_instr *alu = nir_instr_as_alu(use_src->parent_instr);
+      nir_foreach_use_safe(use_src, &intrin->def) {
+         if (nir_src_parent_instr(use_src)->type == nir_instr_type_alu) {
+            nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use_src));
 
             if (alu->op == nir_op_ieq ||
                 alu->op == nir_op_ine) {
                /* Check for 0 in either operand. */
                nir_const_value *const_val =
-                   nir_src_as_const_value(alu->src[0].src);
+                  nir_src_as_const_value(alu->src[0].src);
                if (!const_val)
                   const_val = nir_src_as_const_value(alu->src[1].src);
                if (!const_val || const_val->i32 != 0)
                   continue;
 
-               nir_ssa_def *new_expr = nir_load_helper_invocation(b, 1);
+               nir_def *new_expr = nir_load_helper_invocation(b, 1);
 
                if (alu->op == nir_op_ine)
                   new_expr = nir_inot(b, new_expr);
 
-               nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa,
-                                        new_expr);
+               nir_def_rewrite_uses(&alu->def,
+                                    new_expr);
                nir_instr_remove(&alu->instr);
                progress = true;
             }
@@ -285,7 +331,8 @@ opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       }
       return progress;
    }
-
+   case nir_intrinsic_exclusive_scan:
+      return try_opt_exclusive_scan_to_inclusive(intrin);
    default:
       return false;
    }
@@ -344,7 +391,7 @@ nir_opt_intrinsics(nir_shader *shader)
       if (opt_intrinsics_impl(impl, shader->options)) {
          progress = true;
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+                                        nir_metadata_dominance);
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);
       }

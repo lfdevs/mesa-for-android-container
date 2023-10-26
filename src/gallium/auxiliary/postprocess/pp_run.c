@@ -293,7 +293,7 @@ pp_filter_misc_state(struct pp_program *p)
 void
 pp_filter_draw(struct pp_program *p)
 {
-   util_draw_vertex_buffer(p->pipe, p->cso, p->vbuf, 0, 0,
+   util_draw_vertex_buffer(p->pipe, p->cso, p->vbuf, 0,
                            MESA_PRIM_QUADS, 4, 2);
 }
 

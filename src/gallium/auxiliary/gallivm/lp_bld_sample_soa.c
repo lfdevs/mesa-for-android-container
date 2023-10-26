@@ -2877,6 +2877,8 @@ lp_build_clamp_border_color(struct lp_build_sample_context *bld,
          case PIPE_FORMAT_G8R8_G8B8_UNORM:
          case PIPE_FORMAT_G8R8_B8R8_UNORM:
          case PIPE_FORMAT_R8G8_R8B8_UNORM:
+         case PIPE_FORMAT_G8B8_G8R8_UNORM:
+         case PIPE_FORMAT_B8G8_R8G8_UNORM:
          case PIPE_FORMAT_R1_UNORM: /* doesn't make sense but ah well */
             min_clamp = vec4_bld.zero;
             max_clamp = vec4_bld.one;

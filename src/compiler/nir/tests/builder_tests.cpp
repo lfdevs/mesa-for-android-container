@@ -21,16 +21,13 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <gtest/gtest.h>
-
-#include "nir.h"
-#include "nir_builder.h"
+#include "nir_test.h"
 
 namespace {
 
-class nir_builder_test : public ::testing::Test {
+class nir_builder_test : public nir_test {
 private:
-   const glsl_type *type_for_def(nir_ssa_def *def)
+   const glsl_type *type_for_def(nir_def *def)
    {
       switch (def->bit_size) {
       case 8:  return glsl_type::u8vec(def->num_components);
@@ -42,17 +39,19 @@ private:
    }
 
 protected:
-   nir_builder_test();
-   ~nir_builder_test();
+   nir_builder_test()
+      : nir_test::nir_test("nir_builder_test")
+   {
+   }
 
-   void store_test_val(nir_ssa_def *val)
+   void store_test_val(nir_def *val)
    {
       nir_variable *var = nir_variable_create(b->shader, nir_var_mem_ssbo,
                                               type_for_def(val), NULL);
       nir_intrinsic_instr *store =
          nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_deref);
       store->num_components = val->num_components;
-      store->src[0] = nir_src_for_ssa(&nir_build_deref_var(b, var)->dest.ssa);
+      store->src[0] = nir_src_for_ssa(&nir_build_deref_var(b, var)->def);
       store->src[1] = nir_src_for_ssa(val);
       nir_intrinsic_set_write_mask(store, ((1 << val->num_components) - 1));
       nir_builder_instr_insert(b, &store->instr);
@@ -60,36 +59,13 @@ protected:
       stores.push_back(store);
    }
 
-   nir_ssa_def *test_val(unsigned idx)
+   nir_def *test_val(unsigned idx)
    {
       return stores[idx]->src[1].ssa;
    }
 
    std::vector<nir_intrinsic_instr *> stores;
-
-   nir_builder *b, _b;
 };
-
-nir_builder_test::nir_builder_test()
-{
-   glsl_type_singleton_init_or_ref();
-
-   static const nir_shader_compiler_options options = { };
-   _b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &options, "builder test");
-   b = &_b;
-}
-
-nir_builder_test::~nir_builder_test()
-{
-   if (HasFailure()) {
-      printf("\nShader from the failed test:\n\n");
-      nir_print_shader(b->shader, stdout);
-   }
-
-   ralloc_free(b->shader);
-
-   glsl_type_singleton_decref();
-}
 
 /* Allow grouping the tests while still sharing the helpers. */
 class nir_extract_bits_test : public nir_builder_test {};
@@ -99,7 +75,7 @@ class nir_extract_bits_test : public nir_builder_test {};
 // TODO: Re-enable this once we get vec8 support in NIR
 TEST_F(nir_extract_bits_test, DISABLED_unaligned8)
 {
-   nir_ssa_def *srcs[] = {
+   nir_def *srcs[] = {
       nir_imm_int(b, 0x03020100),
       nir_imm_ivec2(b, 0x07060504, 0x0b0a0908),
    };
@@ -115,7 +91,7 @@ TEST_F(nir_extract_bits_test, DISABLED_unaligned8)
 
 TEST_F(nir_extract_bits_test, unaligned16_disabled)
 {
-   nir_ssa_def *srcs[] = {
+   nir_def *srcs[] = {
       nir_imm_int(b, 0x03020100),
       nir_imm_ivec2(b, 0x07060504, 0x0b0a0908),
    };
@@ -131,7 +107,7 @@ TEST_F(nir_extract_bits_test, unaligned16_disabled)
 
 TEST_F(nir_extract_bits_test, mixed_bit_sizes)
 {
-   nir_ssa_def *srcs[] = {
+   nir_def *srcs[] = {
       nir_imm_int(b, 0x03020100),
       nir_imm_intN_t(b, 0x04, 8),
       nir_imm_intN_t(b, 0x08070605, 32),

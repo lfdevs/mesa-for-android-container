@@ -33,11 +33,14 @@
 
 using namespace brw;
 
+#define REG_CLASS_COUNT 20
+
 static void
-assign_reg(unsigned *reg_hw_locations, fs_reg *reg)
+assign_reg(const struct intel_device_info *devinfo,
+           unsigned *reg_hw_locations, fs_reg *reg)
 {
    if (reg->file == VGRF) {
-      reg->nr = reg_hw_locations[reg->nr] + reg->offset / REG_SIZE;
+      reg->nr = reg_unit(devinfo) * reg_hw_locations[reg->nr] + reg->offset / REG_SIZE;
       reg->offset %= REG_SIZE;
    }
 }
@@ -53,14 +56,15 @@ fs_visitor::assign_regs_trivial()
    hw_reg_mapping[0] = ALIGN(this->first_non_payload_grf, reg_width);
    for (i = 1; i <= this->alloc.count; i++) {
       hw_reg_mapping[i] = (hw_reg_mapping[i - 1] +
-			   this->alloc.sizes[i - 1]);
+                           DIV_ROUND_UP(this->alloc.sizes[i - 1],
+                                        reg_unit(devinfo)));
    }
    this->grf_used = hw_reg_mapping[this->alloc.count];
 
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
-      assign_reg(hw_reg_mapping, &inst->dst);
+      assign_reg(devinfo, hw_reg_mapping, &inst->dst);
       for (i = 0; i < inst->sources; i++) {
-         assign_reg(hw_reg_mapping, &inst->src[i]);
+         assign_reg(devinfo, hw_reg_mapping, &inst->src[i]);
       }
    }
 
@@ -113,21 +117,22 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
     * instruction, and on gfx4 we need 8 contiguous regs for workaround simd16
     * texturing.
     */
-   const int class_count = MAX_VGRF_SIZE;
-   int class_sizes[MAX_VGRF_SIZE];
-   for (unsigned i = 0; i < MAX_VGRF_SIZE; i++)
+   assert(REG_CLASS_COUNT == MAX_VGRF_SIZE(devinfo) / reg_unit(devinfo));
+   int class_sizes[REG_CLASS_COUNT];
+   for (unsigned i = 0; i < REG_CLASS_COUNT; i++)
       class_sizes[i] = i + 1;
 
    struct ra_regs *regs = ra_alloc_reg_set(compiler, BRW_MAX_GRF, false);
    if (devinfo->ver >= 6)
       ra_set_allocate_round_robin(regs);
-   struct ra_class **classes = ralloc_array(compiler, struct ra_class *, class_count);
+   struct ra_class **classes = ralloc_array(compiler, struct ra_class *,
+                                            REG_CLASS_COUNT);
    struct ra_class *aligned_bary_class = NULL;
 
    /* Now, make the register classes for each size of contiguous register
     * allocation we might need to make.
     */
-   for (int i = 0; i < class_count; i++) {
+   for (int i = 0; i < REG_CLASS_COUNT; i++) {
       classes[i] = ra_alloc_contig_reg_class(regs, class_sizes[i]);
 
       if (devinfo->ver <= 5 && dispatch_width >= 16) {
@@ -166,7 +171,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
    compiler->fs_reg_sets[index].regs = regs;
    for (unsigned i = 0; i < ARRAY_SIZE(compiler->fs_reg_sets[index].classes); i++)
       compiler->fs_reg_sets[index].classes[i] = NULL;
-   for (int i = 0; i < class_count; i++)
+   for (int i = 0; i < REG_CLASS_COUNT; i++)
       compiler->fs_reg_sets[index].classes[class_sizes[i] - 1] = classes[i];
    compiler->fs_reg_sets[index].aligned_bary_class = aligned_bary_class;
 }
@@ -203,13 +208,13 @@ count_to_loop_end(const bblock_t *block)
    unreachable("not reached");
 }
 
-void fs_visitor::calculate_payload_ranges(int payload_node_count,
+void fs_visitor::calculate_payload_ranges(unsigned payload_node_count,
                                           int *payload_last_use_ip) const
 {
    int loop_depth = 0;
    int loop_end_ip = 0;
 
-   for (int i = 0; i < payload_node_count; i++)
+   for (unsigned i = 0; i < payload_node_count; i++)
       payload_last_use_ip[i] = -1;
 
    int ip = 0;
@@ -245,23 +250,29 @@ void fs_visitor::calculate_payload_ranges(int payload_node_count,
        */
       for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == FIXED_GRF) {
-            int node_nr = inst->src[i].nr;
-            if (node_nr >= payload_node_count)
+            unsigned reg_nr = inst->src[i].nr;
+            if (reg_nr / reg_unit(devinfo) >= payload_node_count)
                continue;
 
-            for (unsigned j = 0; j < regs_read(inst, i); j++) {
-               payload_last_use_ip[node_nr + j] = use_ip;
-               assert(node_nr + j < unsigned(payload_node_count));
+            for (unsigned j = reg_nr / reg_unit(devinfo);
+                 j < DIV_ROUND_UP(reg_nr + regs_read(inst, i),
+                                  reg_unit(devinfo));
+                 j++) {
+               payload_last_use_ip[j] = use_ip;
+               assert(j < payload_node_count);
             }
          }
       }
 
       if (inst->dst.file == FIXED_GRF) {
-         int node_nr = inst->dst.nr;
-         if (node_nr < payload_node_count) {
-            for (unsigned j = 0; j < regs_written(inst); j++) {
-               payload_last_use_ip[node_nr + j] = use_ip;
-               assert(node_nr + j < unsigned(payload_node_count));
+         unsigned reg_nr = inst->dst.nr;
+         if (reg_nr / reg_unit(devinfo) < payload_node_count) {
+            for (unsigned j = reg_nr / reg_unit(devinfo);
+                 j < DIV_ROUND_UP(reg_nr + regs_written(inst),
+                                  reg_unit(devinfo));
+                 j++) {
+               payload_last_use_ip[j] = use_ip;
+               assert(j < payload_node_count);
             }
          }
       }
@@ -623,7 +634,8 @@ fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
    if (inst->eot) {
       const int vgrf = inst->opcode == SHADER_OPCODE_SEND ?
                        inst->src[2].nr : inst->src[0].nr;
-      int reg = BRW_MAX_GRF - fs->alloc.sizes[vgrf];
+      const int size = DIV_ROUND_UP(fs->alloc.sizes[vgrf], reg_unit(devinfo));
+      int reg = BRW_MAX_GRF - size;
 
       if (first_mrf_hack_node >= 0) {
          /* If something happened to spill, we want to push the EOT send
@@ -642,7 +654,7 @@ fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
 
       if (inst->ex_mlen > 0) {
          const int vgrf = inst->src[3].nr;
-         reg -= fs->alloc.sizes[vgrf];
+         reg -= DIV_ROUND_UP(fs->alloc.sizes[vgrf], reg_unit(devinfo));
          ra_set_node_reg(g, first_vgrf_node + vgrf, reg);
       }
    }
@@ -706,7 +718,7 @@ fs_reg_alloc::build_interference_graph(bool allow_spilling)
 
    /* Specify the classes of each virtual register. */
    for (unsigned i = 0; i < fs->alloc.count; i++) {
-      unsigned size = fs->alloc.sizes[i];
+      unsigned size = DIV_ROUND_UP(fs->alloc.sizes[i], reg_unit(devinfo));
 
       assert(size <= ARRAY_SIZE(compiler->fs_reg_sets[rsi].classes) &&
              "Register allocation relies on split_virtual_grfs()");
@@ -849,7 +861,7 @@ fs_reg_alloc::emit_unspill(const fs_builder &bld,
                                            LSC_DATA_SIZE_D32,
                                            use_transpose ? reg_size * 8 : 1 /* num_channels */,
                                            use_transpose,
-                                           LSC_CACHE_LOAD_L1STATE_L3MOCS,
+                                           LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS),
                                            true /* has_dest */);
          unspill_inst->header_size = 0;
          unspill_inst->mlen =
@@ -946,7 +958,7 @@ fs_reg_alloc::emit_spill(const fs_builder &bld,
                                          LSC_DATA_SIZE_D32,
                                          1 /* num_channels */,
                                          false /* transpose */,
-                                         LSC_CACHE_LOAD_L1STATE_L3MOCS,
+                                         LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS),
                                          false /* has_dest */);
          spill_inst->header_size = 0;
          spill_inst->mlen = lsc_msg_desc_src0_len(devinfo, spill_inst->desc);
@@ -1111,8 +1123,9 @@ fs_reg_alloc::alloc_scratch_header()
 fs_reg
 fs_reg_alloc::alloc_spill_reg(unsigned size, int ip)
 {
-   int vgrf = fs->alloc.allocate(size);
-   int n = ra_add_node(g, compiler->fs_reg_sets[rsi].classes[size - 1]);
+   int vgrf = fs->alloc.allocate(ALIGN(size, reg_unit(devinfo)));
+   int class_idx = DIV_ROUND_UP(size, reg_unit(devinfo)) - 1;
+   int n = ra_add_node(g, compiler->fs_reg_sets[rsi].classes[class_idx]);
    assert(n == first_vgrf_node + vgrf);
    assert(n == first_spill_node + spill_node_count);
 
@@ -1254,9 +1267,10 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
           * exceeding the maximum number of (fake) MRF registers reserved for
           * spills.
           */
-         const unsigned width = 8 * MIN2(
-            DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE),
-            spill_max_size(fs));
+         const unsigned width = 8 * reg_unit(devinfo) *
+            DIV_ROUND_UP(MIN2(inst->dst.component_size(inst->exec_size),
+                              spill_max_size(fs) * REG_SIZE),
+                         reg_unit(devinfo) * REG_SIZE);
 
          /* Spills should only write data initialized by the instruction for
           * whichever channels are enabled in the execution mask.  If that's
@@ -1308,7 +1322,7 @@ fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
 {
    build_interference_graph(fs->spilled_any_registers || spill_all);
 
-   bool spilled = false;
+   unsigned spilled = 0;
    while (1) {
       /* Debug of register spilling: Go spill everything. */
       if (unlikely(spill_all)) {
@@ -1325,24 +1339,33 @@ fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
       if (!allow_spilling)
          return false;
 
-      /* Failed to allocate registers.  Spill a reg, and the caller will
+      /* Failed to allocate registers.  Spill some regs, and the caller will
        * loop back into here to try again.
        */
-      int reg = choose_spill_reg();
-      if (reg == -1)
-         return false;
+      unsigned nr_spills = 1;
+      if (compiler->spilling_rate)
+         nr_spills = MAX2(1, spilled / compiler->spilling_rate);
 
-      /* If we're going to spill but we've never spilled before, we need to
-       * re-build the interference graph with MRFs enabled to allow spilling.
-       */
-      if (!fs->spilled_any_registers) {
-         discard_interference_graph();
-         build_interference_graph(true);
+      for (unsigned j = 0; j < nr_spills; j++) {
+         int reg = choose_spill_reg();
+         if (reg == -1) {
+            if (j == 0)
+               return false; /* Nothing to spill */
+            break;
+         }
+
+         /* If we're going to spill but we've never spilled before, we need
+          * to re-build the interference graph with MRFs enabled to allow
+          * spilling.
+          */
+         if (!fs->spilled_any_registers) {
+            discard_interference_graph();
+            build_interference_graph(true);
+         }
+
+         spill_reg(reg);
+         spilled++;
       }
-
-      spilled = true;
-
-      spill_reg(reg);
    }
 
    if (spilled)
@@ -1359,13 +1382,14 @@ fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
 
       hw_reg_mapping[i] = reg;
       fs->grf_used = MAX2(fs->grf_used,
-			  hw_reg_mapping[i] + fs->alloc.sizes[i]);
+			  hw_reg_mapping[i] + DIV_ROUND_UP(fs->alloc.sizes[i],
+                                                           reg_unit(devinfo)));
    }
 
    foreach_block_and_inst(block, fs_inst, inst, fs->cfg) {
-      assign_reg(hw_reg_mapping, &inst->dst);
+      assign_reg(devinfo, hw_reg_mapping, &inst->dst);
       for (int i = 0; i < inst->sources; i++) {
-         assign_reg(hw_reg_mapping, &inst->src[i]);
+         assign_reg(devinfo, hw_reg_mapping, &inst->src[i]);
       }
    }
 

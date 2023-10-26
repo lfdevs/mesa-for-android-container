@@ -29,6 +29,38 @@ precision highp uimage2D;
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#ifdef VULKAN
+
+precision highp utextureBuffer;
+precision highp utexture2DArray;
+precision highp uimage2DArray;
+precision highp uimage3D;
+precision highp utexture3D;
+
+#extension GL_EXT_samplerless_texture_functions : require
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 4) in;
+
+layout(set = 0, binding = 0) writeonly uniform uimage2DArray OutputImage2Darray;
+layout(set = 0, binding = 0) writeonly uniform uimage3D OutputImage3D;
+layout(set = 0, binding = 1) uniform utexture2DArray PayloadInput2Darray;
+layout(set = 0, binding = 1) uniform utexture3D PayloadInput3D;
+layout(set = 0, binding = 2) uniform utextureBuffer LUTRemainingBitsToEndpointQuantizer;
+layout(set = 0, binding = 3) uniform utextureBuffer LUTEndpointUnquantize;
+layout(set = 0, binding = 4) uniform utextureBuffer LUTWeightQuantizer;
+layout(set = 0, binding = 5) uniform utextureBuffer LUTWeightUnquantize;
+layout(set = 0, binding = 6) uniform utextureBuffer LUTTritQuintDecode;
+layout(set = 0, binding = 7) uniform utextureBuffer LUTPartitionTable;
+
+layout(constant_id = 2) const bool DECODE_8BIT = false;
+
+layout(push_constant, std430) uniform pc {
+   ivec2 texel_blk_start;
+   ivec2 texel_end;
+   bool is_3Dimage;
+};
+
+#else /* VULKAN */
+
 layout(local_size_x = %u, local_size_y = %u, local_size_z = 4) in;
 
 #define utextureBuffer usamplerBuffer
@@ -44,6 +76,8 @@ layout(binding = 6) uniform utexture2D PayloadInput;
 
 layout(rgba8ui, binding = 7) writeonly uniform uimage2D OutputImage;
 const bool DECODE_8BIT = true;
+
+#endif /* VULKAN */
 
 const int MODE_LDR = 0;
 const int MODE_HDR = 1;
@@ -123,6 +157,9 @@ ivec4 build_coord()
     ivec2 payload_coord = ivec2(gl_WorkGroupID.xy) * 2;
     payload_coord.x += int(gl_LocalInvocationID.z) & 1;
     payload_coord.y += (int(gl_LocalInvocationID.z) >> 1) & 1;
+#ifdef VULKAN
+    payload_coord += texel_blk_start;
+#endif /* VULKAN */
     ivec2 coord = payload_coord * ivec2(gl_WorkGroupSize.xy);
     coord += ivec2(gl_LocalInvocationID.xy);
     return ivec4(coord, payload_coord);
@@ -502,8 +539,7 @@ int decode_integer_sequence(uvec4 payload, int start_bit, int index, ivec3 quant
 
 ivec2 normalize_coord(ivec2 pixel_coord)
 {
-    // This resolves to a compile-time constant.
-    const ivec2 D = ivec2((vec2((1024 + ivec2(gl_WorkGroupSize.xy >> 1u))) + 0.5) / vec2(gl_WorkGroupSize.xy - 1u));
+    ivec2 D = ivec2((vec2((1024 + ivec2(gl_WorkGroupSize.xy >> 1u))) + 0.5) / vec2(gl_WorkGroupSize.xy - 1u));
     ivec2 c = D * pixel_coord;
     return c;
 }
@@ -1118,7 +1154,14 @@ void decode_endpoint(out ivec4 ep0, out ivec4 ep1, out int decode_mode,
 
 void emit_decode_error(ivec2 coord)
 {
+#ifdef VULKAN
+    if (is_3Dimage)
+        imageStore(OutputImage3D, ivec3(coord, gl_WorkGroupID.z), error_color);
+    else
+        imageStore(OutputImage2Darray, ivec3(coord, gl_WorkGroupID.z), error_color);
+#else /* VULKAN */
     imageStore(OutputImage, coord, error_color);
+#endif /* VULKAN */
 }
 
 int compute_num_endpoint_pairs(int num_partitions, int cem)
@@ -1211,12 +1254,25 @@ ivec4 void_extent_color(uvec4 payload, out int decode_mode)
 void main()
 {
     ivec4 coord = build_coord();
+#ifdef VULKAN
+    if (any(greaterThanEqual(coord.xy, texel_end.xy)))
+        return;
+#else /* VULKAN */
     if (any(greaterThanEqual(coord.xy, imageSize(OutputImage))))
         return;
+#endif /* VULKAN */
 
     ivec2 pixel_coord = ivec2(gl_LocalInvocationID.xy);
     int linear_pixel = int(gl_WorkGroupSize.x) * pixel_coord.y + pixel_coord.x;
-    uvec4 payload = texelFetch(PayloadInput, coord.zw, 0);
+    uvec4 payload;
+#ifdef VULKAN
+    if (is_3Dimage)
+        payload = texelFetch(PayloadInput3D, ivec3(coord.zw, gl_WorkGroupID.z), 0);
+    else
+        payload = texelFetch(PayloadInput2Darray,ivec3(coord.zw, gl_WorkGroupID.z), 0);
+#else /* VULKAN */
+    payload = texelFetch(PayloadInput, coord.zw, 0);
+#endif /* VULKAN */
 
     BlockMode block_mode = decode_block_mode(payload);
     CHECK_DECODE_ERROR();
@@ -1238,7 +1294,12 @@ void main()
         {
             int lut_x = pixel_coord.x + int(gl_WorkGroupSize.x) * (block_mode.seed & 31);
             int lut_y = pixel_coord.y + int(gl_WorkGroupSize.y) * (block_mode.seed >> 5);
+#ifdef VULKAN
+            int lut_width = int(gl_WorkGroupSize.x) * 32;
+            partition_index = int(texelFetch(LUTPartitionTable, lut_y * lut_width + lut_x).x);
+#else /* VULKAN */
             partition_index = int(texelFetch(LUTPartitionTable, ivec2(lut_x, lut_y), 0).x);
+#endif /* VULKAN */
             partition_index = (partition_index >> (2 * block_mode.num_partitions - 4)) & 3;
         }
 
@@ -1293,7 +1354,14 @@ void main()
 
     if (DECODE_8BIT)
     {
+#ifdef VULKAN
+        if (is_3Dimage)
+            imageStore(OutputImage3D, ivec3(coord.xy, gl_WorkGroupID.z), uvec4(final_color >> 8));
+        else
+            imageStore(OutputImage2Darray, ivec3(coord.xy, gl_WorkGroupID.z), uvec4(final_color >> 8));
+#else /* VULKAN */
         imageStore(OutputImage, coord.xy, uvec4(final_color >> 8));
+#endif /* VULKAN */
     }
     else
     {
@@ -1302,6 +1370,13 @@ void main()
             encoded = uvec4(final_color);
         else
             encoded = decode_fp16(final_color, decode_mode);
+#ifdef VULKAN
+        if (is_3Dimage)
+            imageStore(OutputImage3D, ivec3(coord.xy, gl_WorkGroupID.z), encoded);
+        else
+            imageStore(OutputImage2Darray, ivec3(coord.xy, gl_WorkGroupID.z), encoded);
+#else /* VULKAN */
         imageStore(OutputImage, coord.xy, encoded);
+#endif /* VULKAN */
     }
 }

@@ -2107,8 +2107,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x8113" name="GRAS_UNKNOWN_8113" variants="A7XX-" usage="rp_blit"/>
 
 	<!-- Always written together and always equal 09510840 00000a62 -->
-	<reg32 offset="0x8120" name="GRAS_UNKNOWN_8120" variants="A7XX-"/>
-	<reg32 offset="0x8121" name="GRAS_UNKNOWN_8121" variants="A7XX-"/>
+	<reg32 offset="0x8120" name="GRAS_UNKNOWN_8120" variants="A7XX-" usage="cmd"/>
+	<reg32 offset="0x8121" name="GRAS_UNKNOWN_8121" variants="A7XX-" usage="cmd"/>
 
 	<!-- 0x8112-0x83ff invalid -->
 
@@ -2281,7 +2281,7 @@ to upconvert to 32b float internally?
 		<bitfield name="DITHER_MODE_MRT3" low="6"  high="7"  type="adreno_rb_dither_mode"/>
 		<bitfield name="DITHER_MODE_MRT4" low="8"  high="9"  type="adreno_rb_dither_mode"/>
 		<bitfield name="DITHER_MODE_MRT5" low="10" high="11" type="adreno_rb_dither_mode"/>
-		<bitfield name="DITHER_MODE_MRT6" low="12" high="12" type="adreno_rb_dither_mode"/>
+		<bitfield name="DITHER_MODE_MRT6" low="12" high="13" type="adreno_rb_dither_mode"/>
 		<bitfield name="DITHER_MODE_MRT7" low="14" high="15" type="adreno_rb_dither_mode"/>
 	</reg32>
 	<reg32 offset="0x880f" name="RB_SRGB_CNTL" usage="rp_blit">
@@ -2573,7 +2573,7 @@ to upconvert to 32b float internally?
 		</reg32>
 	</array>
 	<!-- 0x891b-0x8926 invalid -->
-	<reg64 offset="0x8927" name="RB_SAMPLE_COUNT_ADDR" type="waddress" align="16" usage="cmd"/>
+	<reg64 offset="0x8927" name="RB_SAMPLE_COUNT_ADDR" type="waddress" align="16" variants="A6XX" usage="cmd"/>
 	<!-- 0x8929-0x89ff invalid -->
 
 	<!-- TODO: there are some registers in the 0x8a00-0x8bff range -->
@@ -2638,18 +2638,25 @@ to upconvert to 32b float internally?
 	<!-- 0x8e00-0x8e03 invalid -->
 	<reg32 offset="0x8e04" name="RB_DBG_ECO_CNTL" usage="cmd"/> <!-- TODO: valid mask 0xfffffeff -->
 	<reg32 offset="0x8e05" name="RB_ADDR_MODE_CNTL" pos="0" type="a5xx_address_mode"/>
-
 	<!-- 0x02080000 in GMEM, zero otherwise?  -->
 	<reg32 offset="0x8e06" name="RB_UNKNOWN_8E06" variants="A7XX-" usage="cmd"/>
+	<enum name="a6xx_ccu_color_cache_size">
+		<value value="0x0" name="CCU_COLOR_CACHE_SIZE_FULL"/>
+		<value value="0x1" name="CCU_COLOR_CACHE_SIZE_HALF"/>
+		<value value="0x2" name="CCU_COLOR_CACHE_SIZE_QUARTER"/>
+		<value value="0x3" name="CCU_COLOR_CACHE_SIZE_EIGHTH"/>
+	</enum>
 
 	<reg32 offset="0x8e07" name="RB_CCU_CNTL" usage="cmd">
+		<bitfield name="GMEM_FAST_CLEAR_DISABLE" pos="0" type="boolean"/>
 		<!-- concurrent resolves are apparently a 2-bit enum on a650+ -->
 		<bitfield name="CONCURRENT_RESOLVE" pos="2" type="boolean"/>
 		<bitfield name="DEPTH_OFFSET_HI" pos="7" type="hex"/>
 		<bitfield name="COLOR_OFFSET_HI" pos="9" type="hex"/>
+		<bitfield name="DEPTH_CACHE_SIZE" low="10" high="11" type="uint"/>
 		<!-- GMEM offset of CCU depth cache -->
 		<bitfield name="DEPTH_OFFSET" low="12" high="20" shr="12" type="hex"/>
-		<bitfield name="GMEM" pos="22" type="boolean"/> <!-- set for GMEM path -->
+		<bitfield name="COLOR_CACHE_SIZE" low="21" high="22" type="a6xx_ccu_color_cache_size"/>
 		<!-- GMEM offset of CCU color cache
 			for GMEM rendering, we set it to GMEM size minus the minimum
 			CCU color cache size. CCU color cache will be needed in some
@@ -2933,8 +2940,9 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0x9805" name="PC_POWER_CNTL" low="0" high="2" usage="rp_blit"/>
 
-	<!-- probably a mirror of VFD_CONTROL_6 -->
-	<reg32 offset="0x9806" name="PC_PRIMID_PASSTHRU" pos="0" type="boolean" usage="rp_blit"/>
+	<reg32 offset="0x9806" name="PC_PS_CNTL" usage="rp_blit">
+		<bitfield name="PRIMITIVEIDEN" pos="0" type="boolean"/>
+	</reg32>
 
 	<!-- New in a6xx gen3+ -->
 	<reg32 offset="0x9808" name="PC_SO_STREAM_CNTL" usage="rp_blit">
@@ -3115,11 +3123,9 @@ to upconvert to 32b float internally?
 	</reg32>
 	<reg32 offset="0xa006" name="VFD_CONTROL_6" usage="rp_blit">
 		<!--
-			True if gl_PrimitiveID is read via the FS and there is
-			no matching write from the GS, and therefore it needs to
-			be passed through via fixed-function logic.
+			True if gl_PrimitiveID is read via the FS
 		-->
-		<bitfield name="PRIMID_PASSTHRU" pos="0" type="boolean"/>
+		<bitfield name="PRIMID4PSEN" pos="0" type="boolean"/>
 	</reg32>
 
 	<reg32 offset="0xa007" name="VFD_MODE_CNTL" usage="cmd">
@@ -3577,25 +3583,18 @@ to upconvert to 32b float internally?
 		<bitfield name="COUNT" low="0" high="2" type="uint"/>
 		<bitfield name="IJ_WRITE_DISABLE" pos="3" type="boolean"/>
 		<doc>
-			Seem to break derivatives when there is a helper invocation
-			in the quad. Though from tests it doesn't seem to be
-			"disable helper invocations" flag.
+			Similar to "(eq)" flag but disables helper invocations
+			after the texture prefetch.
 		</doc>
-		<bitfield name="UNK4" pos="4" type="boolean" />
+		<bitfield name="ENDOFQUAD" pos="4" type="boolean" />
 		<doc>
-			Bypass writing to regs and overwrite output with tex color.
-			TODO: How does it work with multiple prefetches?
+			Bypass writing to regs and overwrite output with color from
+			CONSTSLOTID const regs.
 		</doc>
 		<bitfield name="WRITE_COLOR_TO_OUTPUT" pos="5" type="boolean"/>
-		<doc>
-			Doesn't seem to be a reg, size doesn't match and it doesn't do
-			anything observable.
-		</doc>
-		<bitfield name="UNK6" low="6" high="14" type="uint"/>
-		<doc>
-			Same as UNK6?
-		</doc>
-		<bitfield name="UNK16" low="16" high="24" type="uint"/>
+		<bitfield name="CONSTSLOTID" low="6" high="14" type="uint"/>
+		<!-- Blob never uses it -->
+		<bitfield name="CONSTSLOTID4COORD" low="16" high="24" type="uint" variants="A7XX-"/>
 	</reg32>
 	<array offset="0xa99f" name="SP_FS_PREFETCH" stride="1" length="4" variants="A6XX" usage="rp_blit">
 		<reg32 offset="0" name="CMD" variants="A6XX">
@@ -3684,7 +3683,7 @@ to upconvert to 32b float internally?
 		<bitfield name="LOCALIDREGID" low="24" high="31" type="a3xx_regid"/>
 	</reg32>
 	<!-- new in a6xx gen4, matches HLSQ_CS_CNTL_1 -->
-	<reg32 offset="0xa9c3" name="SP_CS_CNTL_1" usage="cmd">
+	<reg32 offset="0xa9c3" name="SP_CS_CNTL_1" variants="A6XX" usage="cmd">
 		<!-- gl_LocalInvocationIndex -->
 		<bitfield name="LINEARLOCALIDREGID" low="0" high="7" type="a3xx_regid"/>
 		<!-- a650 has 6 "SP cores" (but 3 "SP"). this makes it use only
@@ -3694,11 +3693,20 @@ to upconvert to 32b float internally?
 		<bitfield name="THREADSIZE" pos="9" type="a6xx_threadsize"/>
 		<!-- 1 thread per wave (ignored if bit9 set) -->
 		<bitfield name="THREADSIZE_SCALAR" pos="10" type="boolean"/>
+	</reg32>
+
+	<reg32 offset="0xa9c3" name="SP_CS_CNTL_1" variants="A7XX-" usage="cmd">
+		<!-- gl_LocalInvocationIndex -->
+		<bitfield name="LINEARLOCALIDREGID" low="0" high="7" type="a3xx_regid"/>
+		<!-- Must match SP_CS_CTRL -->
+		<bitfield name="THREADSIZE" pos="8" type="a6xx_threadsize"/>
+		<!-- 1 thread per wave (would hang if THREAD128 is also set) -->
+		<bitfield name="THREADSIZE_SCALAR" pos="9" type="boolean"/>
 
 		<!-- Affects getone. If enabled, getone sometimes executed 1? less times
 		     than there are subgroups.
 		 -->
-		<bitfield name="UNK15" pos="15" type="boolean" variants="A7XX"/>
+		<bitfield name="UNK15" pos="15" type="boolean"/>
 	</reg32>
 
 	<!-- TODO: two 64kb aligned addresses at a9d0/a9d2 -->
@@ -3968,7 +3976,7 @@ to upconvert to 32b float internally?
 	<bitset name="a6xx_hlsq_xs_cntl" inline="yes">
 		<bitfield name="CONSTLEN" low="0" high="7" shr="2" type="uint"/>
 		<bitfield name="ENABLED" pos="8" type="boolean"/>
-		<bitfield name="UNK9" pos="9" type="boolean" variants="A7XX-"/>
+		<bitfield name="READ_IMM_SHARED_CONSTS" pos="9" type="boolean" variants="A7XX-"/>
 	</bitset>
 
 	<reg32 offset="0xb800" name="HLSQ_VS_CNTL" type="a6xx_hlsq_xs_cntl" variants="A6XX" usage="rp_blit"/>
@@ -3992,7 +4000,7 @@ to upconvert to 32b float internally?
 	<!-- Used in VK_KHR_fragment_shading_rate -->
 	<reg32 offset="0xa9ad" name="HLSQ_UNKNOWN_A9AD" variants="A7XX-"/>
 
-	<reg32 offset="0xa9ae" name="HLSQ_UNKNOWN_A9AE" variants="A7XX-">
+	<reg32 offset="0xa9ae" name="HLSQ_UNKNOWN_A9AE" variants="A7XX-" usage="cmd">
 		<bitfield name="UNK0" low="0" high="7" type="uint"/>
 		<bitfield name="UNK8" pos="8" type="boolean"/>
 	</reg32>
@@ -4029,7 +4037,10 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xb980" type="a6xx_hlsq_fs_cntl_0" name="HLSQ_FS_CNTL_0" variants="A6XX" usage="rp_blit"/>
 	<reg32 offset="0xb981" name="HLSQ_UNKNOWN_B981" pos="0" type="boolean" variants="A6XX"/> <!-- never used by blob -->
 	<reg32 offset="0xb982" name="HLSQ_CONTROL_1_REG" low="0" high="2" variants="A6XX" usage="rp_blit">
-		<!-- TODO: have test cases with either 0x3 or 0x7 -->
+		<!-- Sets the maximum number of primitives allowed in one FS wave minus one, similarly to the
+				 A3xx field, except that it's not necessary to set it to anything but the maximum, since
+				 the hardware will simply emit smaller waves when it runs out of space.	-->
+		<bitfield name="PRIMALLOCTHRESHOLD" low="0" high="2" type="uint"/>
 	</reg32>
 	<reg32 offset="0xb983" name="HLSQ_CONTROL_2_REG" variants="A6XX" usage="rp_blit">
 		<bitfield name="FACEREGID" low="0" high="7" type="a3xx_regid"/>
@@ -4042,13 +4053,11 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xb985" type="a6xx_hlsq_control_4_reg" name="HLSQ_CONTROL_4_REG" variants="A6XX" usage="rp_blit"/>
 	<reg32 offset="0xb986" type="a6xx_hlsq_control_5_reg" name="HLSQ_CONTROL_5_REG" variants="A6XX" usage="rp_blit"/>
 	<reg32 offset="0xb987" name="HLSQ_CS_CNTL" type="a6xx_hlsq_xs_cntl" variants="A6XX" usage="cmd"/>
-
 	<!-- Either 0 or 0x401, the non-zero value is only in a few of dEQP-VK.ssbo.phys.layout.3_level_*.*8vec4 -->
 	<reg32 offset="0xa9c5" name="HLSQ_UNKNOWN_A9C5" variants="A7XX-" usage="cmd"/>
-
 	<reg32 offset="0xa9c6" type="a6xx_hlsq_fs_cntl_0" name="HLSQ_FS_CNTL_0" variants="A7XX-" usage="rp_blit"/>
 	<reg32 offset="0xa9c7" name="HLSQ_CONTROL_1_REG" low="0" high="2" variants="A7XX-" usage="rp_blit">
-		<!-- TODO: have test cases with either 0x3 or 0x7 -->
+			<bitfield name="PRIMALLOCTHRESHOLD" low="0" high="2" type="uint"/>
 	</reg32>
 	<reg32 offset="0xa9c8" name="HLSQ_CONTROL_2_REG" variants="A7XX-" usage="rp_blit">
 		<bitfield name="FACEREGID" low="0" high="7" type="a3xx_regid"/>
@@ -4145,13 +4154,22 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa9dd" name="HLSQ_CS_KERNEL_GROUP_Y" variants="A7XX-" usage="rp_blit"/>
 	<reg32 offset="0xa9de" name="HLSQ_CS_KERNEL_GROUP_Z" variants="A7XX-" usage="rp_blit"/>
 
-	<reg32 offset="0xa9db" name="HLSQ_CS_UNKNOWN_A9DB" variants="A7XX-" usage="rp_blit">
+	<enum name="a7xx_cs_yalign">
+		<value name="CS_YALIGN_1" value="8"/>
+		<value name="CS_YALIGN_2" value="4"/>
+		<value name="CS_YALIGN_4" value="2"/>
+		<value name="CS_YALIGN_8" value="1"/>
+	</enum>
+
+	<reg32 offset="0xa9db" name="HLSQ_CS_CNTL_1" variants="A7XX-" usage="rp_blit">
+		<!-- gl_LocalInvocationIndex -->
 		<bitfield name="LINEARLOCALIDREGID" low="0" high="7" type="a3xx_regid"/>
+		<!-- Must match SP_CS_CTRL -->
 		<bitfield name="THREADSIZE" pos="9" type="a6xx_threadsize"/>
 		<bitfield name="UNK11" pos="11" type="boolean"/>
 		<bitfield name="UNK22" pos="22" type="boolean"/>
-		<bitfield name="UNK27" low="27" high="30" type="uint" variants="A7XX"/>
-		<!-- TODO: other bits -->
+		<bitfield name="UNK26" pos="26" type="boolean"/>
+		<bitfield name="YALIGN" low="27" high="30" type="a7xx_cs_yalign"/>
 	</reg32>
 
 	<reg32 offset="0xa9df" name="HLSQ_CS_LOCAL_SIZE" variants="A7XX-" usage="cmd">
@@ -4248,7 +4266,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xbb10" name="HLSQ_FS_CNTL" type="a6xx_hlsq_xs_cntl" variants="A6XX" usage="rp_blit"/>
 	<reg32 offset="0xab03" name="HLSQ_FS_CNTL" type="a6xx_hlsq_xs_cntl" variants="A7XX-" usage="rp_blit"/>
 
-	<array offset="0xab40" name="HLSQ_SHARED_CONSTS_IMM" stride="1" length="32" variants="A7XX-"/>
+	<array offset="0xab40" name="HLSQ_SHARED_CONSTS_IMM" stride="1" length="64" variants="A7XX-"/>
 
 	<reg32 offset="0xbb11" name="HLSQ_SHARED_CONSTS" variants="A6XX" usage="cmd">
 		<doc>
@@ -4453,7 +4471,7 @@ to upconvert to 32b float internally?
 		layer size at the point that it stops being reduced moving to
 		higher (smaller) mipmap levels
 		 -->
-		<bitfield name="ARRAY_PITCH" low="0" high="13" shr="12" type="uint"/>
+		<bitfield name="ARRAY_PITCH" low="0" high="22" shr="12" type="uint"/>
 		<bitfield name="MIN_LAYERSZ" low="23" high="26" shr="12"/>
 		<!--
 		by default levels with w < 16 are linear

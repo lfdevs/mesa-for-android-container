@@ -259,15 +259,6 @@ struct r600_gs_rings_state {
 /* This must start from 16. */
 /* features */
 #define DBG_NO_CP_DMA		(1 << 30)
-/* shader backend */
-#define DBG_NO_SB		(1 << 21)
-#define DBG_SB_DRY_RUN	(1 << 23)
-#define DBG_SB_STAT		(1 << 24)
-#define DBG_SB_DUMP		(1 << 25)
-#define DBG_SB_NO_FALLBACK	(1 << 26)
-#define DBG_SB_DISASM	(1 << 27)
-#define DBG_SB_SAFEMATH	(1 << 28)
-#define DBG_NIR_SB	(1 << 28)
 
 struct r600_screen {
 	struct r600_common_screen	b;
@@ -443,6 +434,8 @@ struct r600_cso_state
 struct r600_fetch_shader {
 	struct r600_resource		*buffer;
 	unsigned			offset;
+	uint32_t                        buffer_mask;
+	unsigned                        strides[PIPE_MAX_ATTRIBS];
 };
 
 struct r600_shader_state {
@@ -595,7 +588,6 @@ struct r600_context {
 	enum mesa_prim		last_rast_prim;
 	unsigned			last_start_instance;
 
-	void				*sb_context;
 	struct r600_isa		*isa;
 	float sample_positions[4 * 16];
 	float tess_state[8];

@@ -338,6 +338,7 @@ typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT_EXT = 235,
     VK_COMMAND_TYPE_vkGetCalibratedTimestampsEXT_EXT = 236,
     VK_COMMAND_TYPE_vkCmdSetLineStippleEXT_EXT = 237,
+    VK_COMMAND_TYPE_vkCmdSetVertexInputEXT_EXT = 255,
     VK_COMMAND_TYPE_vkCmdSetPatchControlPointsEXT_EXT = 233,
     VK_COMMAND_TYPE_vkCmdSetLogicOpEXT_EXT = 234,
     VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT = 254,

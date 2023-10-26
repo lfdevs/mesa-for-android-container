@@ -97,13 +97,13 @@ TCSShader::process_stage_intrinsic(nir_intrinsic_instr *instr)
 {
    switch (instr->intrinsic) {
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
-      return emit_simple_mov(instr->dest, 0, m_rel_patch_id);
+      return emit_simple_mov(instr->def, 0, m_rel_patch_id);
    case nir_intrinsic_load_invocation_id:
-      return emit_simple_mov(instr->dest, 0, m_invocation_id);
+      return emit_simple_mov(instr->def, 0, m_invocation_id);
    case nir_intrinsic_load_primitive_id:
-      return emit_simple_mov(instr->dest, 0, m_primitive_id);
+      return emit_simple_mov(instr->def, 0, m_primitive_id);
    case nir_intrinsic_load_tcs_tess_factor_base_r600:
-      return emit_simple_mov(instr->dest, 0, m_tess_factor_base);
+      return emit_simple_mov(instr->def, 0, m_tess_factor_base);
    case nir_intrinsic_store_tf_r600:
       return store_tess_factor(instr);
    default:
@@ -176,7 +176,7 @@ TESShader::do_scan_instruction(nir_instr *instr)
    auto intr = nir_instr_as_intrinsic(instr);
 
    switch (intr->intrinsic) {
-   case nir_intrinsic_load_tess_coord_r600:
+   case nir_intrinsic_load_tess_coord_xy:
       m_sv_values.set(es_tess_coord);
       break;
    case nir_intrinsic_load_primitive_id:
@@ -245,13 +245,13 @@ bool
 TESShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
 {
    switch (intr->intrinsic) {
-   case nir_intrinsic_load_tess_coord_r600:
-      return emit_simple_mov(intr->dest, 0, m_tess_coord[0], pin_none) &&
-             emit_simple_mov(intr->dest, 1, m_tess_coord[1], pin_none);
+   case nir_intrinsic_load_tess_coord_xy:
+      return emit_simple_mov(intr->def, 0, m_tess_coord[0], pin_none) &&
+             emit_simple_mov(intr->def, 1, m_tess_coord[1], pin_none);
    case nir_intrinsic_load_primitive_id:
-      return emit_simple_mov(intr->dest, 0, m_primitive_id);
+      return emit_simple_mov(intr->def, 0, m_primitive_id);
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
-      return emit_simple_mov(intr->dest, 0, m_rel_patch_id);
+      return emit_simple_mov(intr->def, 0, m_rel_patch_id);
    case nir_intrinsic_store_output:
       return m_export_processor->store_output(*intr);
    default:

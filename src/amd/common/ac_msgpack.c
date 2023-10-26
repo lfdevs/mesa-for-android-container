@@ -123,7 +123,7 @@ void ac_msgpack_add_fixarray_op(struct ac_msgpack *msgpack, uint32_t n)
    }
 }
 
-void ac_msgpack_add_fixstr(struct ac_msgpack *msgpack, char *str)
+void ac_msgpack_add_fixstr(struct ac_msgpack *msgpack, const char *str)
 {
    uint32_t n;
 

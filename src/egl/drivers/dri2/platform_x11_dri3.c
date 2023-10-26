@@ -550,6 +550,11 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
    xcb_generic_error_t *error;
    const xcb_query_extension_reply_t *extension;
 
+   dri2_dpy->dri3_major_version = 0;
+   dri2_dpy->dri3_minor_version = 0;
+   dri2_dpy->present_major_version = 0;
+   dri2_dpy->present_minor_version = 0;
+
    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_dri3_id);
    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_present_id);
    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_xfixes_id);
@@ -627,7 +632,8 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
    loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
                                 &dri2_dpy->fd_display_gpu);
 
-   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
+   if (!dri2_dpy->driver_name)
+      dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (!dri2_dpy->driver_name) {
       _eglLog(_EGL_WARNING, "DRI3: No driver found");
       close(dri2_dpy->fd_render_gpu);

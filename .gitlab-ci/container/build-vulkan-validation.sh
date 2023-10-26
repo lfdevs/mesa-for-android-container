@@ -7,7 +7,7 @@
 
 set -ex
 
-VALIDATION_TAG="v1.3.251"
+VALIDATION_TAG="v1.3.263"
 
 git clone -b "$VALIDATION_TAG" --single-branch --depth 1 https://github.com/KhronosGroup/Vulkan-ValidationLayers.git
 pushd Vulkan-ValidationLayers

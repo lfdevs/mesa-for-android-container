@@ -168,6 +168,7 @@ class Inliner(states.Inliner):
                 break
         # Quote all original backslashes
         checked = re.sub('\x00', "\\\x00", checked)
+        checked = re.sub('@', '\\@', checked)
         return docutils.utils.unescape(checked, 1)
 
 inliner = Inliner();

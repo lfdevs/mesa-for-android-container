@@ -276,9 +276,9 @@ nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info,
          data = vb->buffer.user;
 
       if (apply_bias && likely(!(nv50->vertex->instance_bufs & (1 << i))))
-         data += (ptrdiff_t)(info->index_size ? draw->index_bias : 0) * vb->stride;
+         data += (ptrdiff_t)(info->index_size ? draw->index_bias : 0) * nv50->vertex->strides[i];
 
-      ctx.translate->set_buffer(ctx.translate, i, data, vb->stride, ~0);
+      ctx.translate->set_buffer(ctx.translate, i, data, nv50->vertex->strides[i], ~0);
    }
 
    if (info->index_size) {

@@ -12,11 +12,26 @@ import time
 from typing import Optional
 
 
+def pretty_duration(seconds):
+    """Pretty print duration"""
+    hours, rem = divmod(seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f"{hours:0.0f}h{minutes:0.0f}m{seconds:0.0f}s"
+    if minutes:
+        return f"{minutes:0.0f}m{seconds:0.0f}s"
+    return f"{seconds:0.0f}s"
+
+
 def get_gitlab_project(glab, name: str):
     """Finds a specified gitlab project for given user"""
-    glab.auth()
-    username = glab.user.username
-    return glab.projects.get(f"{username}/{name}")
+    if "/" in name:
+        project_path = name
+    else:
+        glab.auth()
+        username = glab.user.username
+        project_path = f"{username}/{name}"
+    return glab.projects.get(project_path)
 
 
 def read_token(token_arg: Optional[str]) -> str:
@@ -30,13 +45,19 @@ def read_token(token_arg: Optional[str]) -> str:
     )
 
 
-def wait_for_pipeline(project, sha: str):
+def wait_for_pipeline(projects, sha: str, timeout=None):
     """await until pipeline appears in Gitlab"""
-    print("⏲ for the pipeline to appear..", end="")
+    project_names = [project.path_with_namespace for project in projects]
+    print(f"⏲ for the pipeline to appear in {project_names}..", end="")
+    start_time = time.time()
     while True:
-        pipelines = project.pipelines.list(sha=sha)
-        if pipelines:
-            print("", flush=True)
-            return pipelines[0]
+        for project in projects:
+            pipelines = project.pipelines.list(sha=sha)
+            if pipelines:
+                print("", flush=True)
+                return (pipelines[0], project)
         print("", end=".", flush=True)
+        if timeout and time.time() - start_time > timeout:
+            print(" not found", flush=True)
+            return (None, None)
         time.sleep(1)

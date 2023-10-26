@@ -25,11 +25,18 @@
 
 using namespace brw;
 
-vs_thread_payload::vs_thread_payload()
+vs_thread_payload::vs_thread_payload(const fs_visitor &v)
 {
-   urb_handles = brw_ud8_grf(1, 0);
+   unsigned r = 0;
 
-   num_regs = 2;
+   /* R0: Thread header. */
+   r += reg_unit(v.devinfo);
+
+   /* R1: URB handles. */
+   urb_handles = brw_ud8_grf(r, 0);
+   r += reg_unit(v.devinfo);
+
+   num_regs = r;
 }
 
 tcs_thread_payload::tcs_thread_payload(const fs_visitor &v)
@@ -50,35 +57,46 @@ tcs_thread_payload::tcs_thread_payload(const fs_visitor &v)
       assert(vue_prog_data->dispatch_mode == DISPATCH_MODE_TCS_MULTI_PATCH);
       assert(tcs_key->input_vertices <= BRW_MAX_TCS_INPUT_VERTICES);
 
-      patch_urb_output = brw_ud8_grf(1, 0);
+      unsigned r = 0;
 
-      unsigned r = 2;
+      r += reg_unit(v.devinfo);
 
-      if (tcs_prog_data->include_primitive_id)
-         primitive_id = brw_vec8_grf(r++, 0);
+      patch_urb_output = brw_ud8_grf(r, 0);
+      r += reg_unit(v.devinfo);
+
+      if (tcs_prog_data->include_primitive_id) {
+         primitive_id = brw_vec8_grf(r, 0);
+         r += reg_unit(v.devinfo);
+      }
 
       /* ICP handles occupy the next 1-32 registers. */
       icp_handle_start = brw_ud8_grf(r, 0);
-      r += brw_tcs_prog_key_input_vertices(tcs_key);
+      r += brw_tcs_prog_key_input_vertices(tcs_key) * reg_unit(v.devinfo);
 
       num_regs = r;
    }
 }
 
-tes_thread_payload::tes_thread_payload()
+tes_thread_payload::tes_thread_payload(const fs_visitor &v)
 {
+   unsigned r = 0;
+
    /* R0: Thread Header. */
    patch_urb_input = retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UD);
    primitive_id = brw_vec1_grf(0, 1);
+   r += reg_unit(v.devinfo);
 
    /* R1-3: gl_TessCoord.xyz. */
-   for (unsigned i = 0; i < 3; i++)
-      coords[i] = brw_vec8_grf(1 + i, 0);
+   for (unsigned i = 0; i < 3; i++) {
+      coords[i] = brw_vec8_grf(r, 0);
+      r += reg_unit(v.devinfo);
+   }
 
    /* R4: URB output handles. */
-   urb_output = brw_ud8_grf(4, 0);
+   urb_output = brw_ud8_grf(r, 0);
+   r += reg_unit(v.devinfo);
 
-   num_regs = 5;
+   num_regs = r;
 }
 
 gs_thread_payload::gs_thread_payload(const fs_visitor &v)
@@ -87,15 +105,17 @@ gs_thread_payload::gs_thread_payload(const fs_visitor &v)
    struct brw_gs_prog_data *gs_prog_data = brw_gs_prog_data(v.prog_data);
 
    /* R0: thread header. */
-   unsigned r = 1;
+   unsigned r = reg_unit(v.devinfo);
 
    /* R1: output URB handles. */
-   urb_handles = brw_ud8_grf(r, 0);
-   r++;
+   urb_handles = v.bld.vgrf(BRW_REGISTER_TYPE_UD);
+   v.bld.AND(urb_handles, brw_ud8_grf(r, 0),
+         v.devinfo->ver >= 20 ? brw_imm_ud(0xFFFFFF) : brw_imm_ud(0xFFFF));
+   r += reg_unit(v.devinfo);
 
    if (gs_prog_data->include_primitive_id) {
       primitive_id = brw_ud8_grf(r, 0);
-      r++;
+      r += reg_unit(v.devinfo);
    }
 
    /* Always enable VUE handles so we can safely use pull model if needed.
@@ -108,7 +128,7 @@ gs_thread_payload::gs_thread_payload(const fs_visitor &v)
 
    /* R3..RN: ICP Handles for each incoming vertex (when using pull model) */
    icp_handle_start = brw_ud8_grf(r, 0);
-   r += v.nir->info.gs.vertices_in;
+   r += v.nir->info.gs.vertices_in * reg_unit(v.devinfo);
 
    num_regs = r;
 
@@ -372,7 +392,8 @@ cs_thread_payload::cs_thread_payload(const fs_visitor &v)
       subgroup_id_ = brw_ud1_grf(0, 2);
 
    /* TODO: Fill out uses_btd_stack_ids automatically */
-   num_regs = 1 + brw_cs_prog_data(v.prog_data)->uses_btd_stack_ids;
+   num_regs = (1 + brw_cs_prog_data(v.prog_data)->uses_btd_stack_ids) *
+              reg_unit(v.devinfo);
 }
 
 void
@@ -420,12 +441,16 @@ task_mesh_thread_payload::task_mesh_thread_payload(const fs_visitor &v)
    assert(subgroup_id_.file != BAD_FILE);
    extended_parameter_0 = retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD);
 
-   urb_output = v.bld.vgrf(BRW_REGISTER_TYPE_UD);
-   /* In both mesh and task shader payload, lower 16 bits of g0.6 is
-    * an offset within Slice's Local URB, which says where shader is
-    * supposed to output its data.
-    */
-   v.bld.AND(urb_output, brw_ud1_grf(0, 6), brw_imm_ud(0xFFFF));
+   if (v.devinfo->ver >= 20) {
+      urb_output = brw_ud1_grf(1, 0);
+   } else {
+      urb_output = v.bld.vgrf(BRW_REGISTER_TYPE_UD);
+      /* In both mesh and task shader payload, lower 16 bits of g0.6 is
+       * an offset within Slice's Local URB, which says where shader is
+       * supposed to output its data.
+       */
+      v.bld.AND(urb_output, brw_ud1_grf(0, 6), brw_imm_ud(0xFFFF));
+   }
 
    if (v.stage == MESA_SHADER_MESH) {
       /* g0.7 is Task Shader URB Entry Offset, which contains both an offset
@@ -436,30 +461,35 @@ task_mesh_thread_payload::task_mesh_thread_payload(const fs_visitor &v)
        */
       task_urb_input = brw_ud1_grf(0, 7);
    }
-   r++;
+   r += reg_unit(v.devinfo);
 
-   local_index = brw_uw8_grf(1, 0);
-   r++;
-   if (v.dispatch_width == 32)
-      r++;
+   local_index = brw_uw8_grf(r, 0);
+   r += reg_unit(v.devinfo);
+   if (v.devinfo->ver < 20 && v.dispatch_width == 32)
+      r += reg_unit(v.devinfo);
 
    inline_parameter = brw_ud1_grf(r, 0);
-   r++;
+   r += reg_unit(v.devinfo);
 
    num_regs = r;
 }
 
-bs_thread_payload::bs_thread_payload()
+bs_thread_payload::bs_thread_payload(const fs_visitor &v)
 {
+   unsigned r = 0;
+
    /* R0: Thread header. */
+   r += reg_unit(v.devinfo);
 
    /* R1: Stack IDs. */
+   r += reg_unit(v.devinfo);
 
-   /* R2: Argument addresses. */
-   global_arg_ptr = brw_ud1_grf(2, 0);
-   local_arg_ptr = brw_ud1_grf(2, 2);
+   /* R2: Inline Parameter.  Used for argument addresses. */
+   global_arg_ptr = brw_ud1_grf(r, 0);
+   local_arg_ptr = brw_ud1_grf(r, 2);
+   r += reg_unit(v.devinfo);
 
-   num_regs = 3;
+   num_regs = r;
 }
 
 void

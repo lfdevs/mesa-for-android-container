@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2086 # we want word splitting
 
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# DEBIAN_BUILD_TAG
+
 set -e
 set -o xtrace
 
@@ -74,12 +78,7 @@ rm -rf $XORGMACROS_VERSION
 
 . .gitlab-ci/container/build-wayland.sh
 
-pushd /usr/local
-git clone https://gitlab.freedesktop.org/mesa/shader-db.git --depth 1
-rm -rf shader-db/.git
-cd shader-db
-make
-popd
+. .gitlab-ci/container/build-shader-db.sh
 
 git clone https://github.com/microsoft/DirectX-Headers -b v1.711.3-preview --depth 1
 pushd DirectX-Headers
@@ -93,6 +92,7 @@ python3 -m pip install --break-system-packages -r .gitlab-ci/lava/requirements.t
 # install bindgen
 RUSTFLAGS='-L native=/usr/local/lib' cargo install \
   bindgen-cli --version 0.62.0 \
+  --locked \
   -j ${FDO_CI_CONCURRENT:-4} \
   --root /usr/local
 

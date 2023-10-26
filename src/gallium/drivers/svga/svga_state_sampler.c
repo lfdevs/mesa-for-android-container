@@ -75,6 +75,9 @@ svga_check_sampler_view_resource_collision(const struct svga_context *svga,
       return false;
    }
 
+   if (!svga_curr_shader_use_samplers(svga, shader))
+      return false;
+
    for (i = 0; i < svga->curr.num_sampler_views[shader]; i++) {
       struct svga_pipe_sampler_view *sv =
          svga_pipe_sampler_view(svga->curr.sampler_views[shader][i]);
@@ -551,8 +554,12 @@ update_cs_sampler_resources(struct svga_context *svga, uint64_t dirty)
    unsigned count;
    unsigned nviews;
    unsigned i;
+   struct svga_compute_shader *cs = svga->curr.cs;
 
    count = svga->curr.num_sampler_views[shader];
+   if (!cs || !cs->base.info.uses_samplers)
+      count = 0;
+
    for (i = 0; i < count; i++) {
       struct svga_pipe_sampler_view *sv =
          svga_pipe_sampler_view(svga->curr.sampler_views[shader][i]);

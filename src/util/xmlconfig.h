@@ -159,7 +159,6 @@ float driQueryOptionf(const driOptionCache *cache, const char *name);
 char *driQueryOptionstr(const driOptionCache *cache, const char *name);
 
 /* Overrides for the unit tests to control drirc parsing. */
-void driInjectDataDir(const char *dir);
 void driInjectExecName(const char *exec);
 
 /**

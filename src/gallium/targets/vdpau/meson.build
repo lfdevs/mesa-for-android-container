@@ -31,8 +31,8 @@ if with_ld_version_script
   vdpau_link_depends += files('vdpau.sym')
 endif
 if with_ld_dynamic_list
-  vdpau_link_args += ['-Wl,--dynamic-list', join_paths(meson.current_source_dir(), '../dri-vdpau.dyn')]
-  vdpau_link_depends += files('../dri-vdpau.dyn')
+  vdpau_link_args += ['-Wl,--dynamic-list', join_paths(meson.current_source_dir(), '../dri.dyn')]
+  vdpau_link_depends += files('../dri.dyn')
 endif
 
 link_with_libvdpau_gallium = [
@@ -80,4 +80,5 @@ meson.add_install_script(
   libvdpau_gallium.full_path(),
   vdpau_drivers_path,
   vdpau_drivers,
+  install_tag : 'runtime',
 )

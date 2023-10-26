@@ -118,11 +118,10 @@ lower_deref_instr(nir_builder *b, nir_intrinsic_instr *instr,
    else
       range_base = var->data.offset;
 
-   nir_ssa_def *offset = nir_imm_int(b, offset_value);
+   nir_def *offset = nir_imm_int(b, offset_value);
    for (nir_deref_instr *d = deref; d->deref_type != nir_deref_type_var;
         d = nir_deref_instr_parent(d)) {
       assert(d->deref_type == nir_deref_type_array);
-      assert(d->arr.index.is_ssa);
 
       unsigned array_stride = ATOMIC_COUNTER_SIZE;
       if (glsl_type_is_array(d->type))
@@ -139,8 +138,7 @@ lower_deref_instr(nir_builder *b, nir_intrinsic_instr *instr,
    instr->intrinsic = op;
    nir_intrinsic_set_range_base(instr, range_base);
 
-   nir_instr_rewrite_src(&instr->instr, &instr->src[0],
-                         nir_src_for_ssa(offset));
+   nir_src_rewrite(&instr->src[0], offset);
    nir_intrinsic_set_base(instr, idx);
 
    nir_deref_instr_remove_if_unused(deref);

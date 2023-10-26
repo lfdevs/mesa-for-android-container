@@ -1,5 +1,6 @@
 
 BasedOnStyle: InheritParentConfig
+DisableFormat: false
 
 AlwaysBreakAfterReturnType: TopLevel
 AllowShortEnumsOnASingleLine: false

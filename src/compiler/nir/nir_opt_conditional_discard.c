@@ -80,8 +80,7 @@ nir_opt_conditional_discard_block(nir_builder *b, nir_block *block)
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    nir_intrinsic_op op = intrin->intrinsic;
-   assert(if_stmt->condition.is_ssa);
-   nir_ssa_def *cond = if_stmt->condition.ssa;
+   nir_def *cond = if_stmt->condition.ssa;
    b->cursor = nir_before_cf_node(prev_node);
 
    switch (intrin->intrinsic) {
@@ -97,7 +96,6 @@ nir_opt_conditional_discard_block(nir_builder *b, nir_block *block)
    case nir_intrinsic_discard_if:
    case nir_intrinsic_demote_if:
    case nir_intrinsic_terminate_if:
-      assert(intrin->src[0].is_ssa);
       cond = nir_iand(b, cond, intrin->src[0].ssa);
       break;
    default:

@@ -10,27 +10,26 @@ deqp_args = [
 version_check = "GL ES 2.0.*git"
 renderer_check = "Mali450"
 
-# deqp-egl temporarily disabled due to regression causing unstable timeouts
-## wayland
-#[[deqp]]
-#deqp = "/deqp/modules/egl/deqp-egl-wayland"
-#caselists = ["/deqp/mustpass/egl-master.txt"]
-#tests_per_group = 250
-#deqp_args = [
-#    "--deqp-surface-width=256", "--deqp-surface-height=256",
-#    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
-#    "--deqp-gl-config-name=rgba8888d24s8ms0",
-#]
-#prefix = "wayland-"
+# wayland
+[[deqp]]
+deqp = "/deqp/modules/egl/deqp-egl-wayland"
+caselists = ["/deqp/mustpass/egl-master.txt"]
+tests_per_group = 250
+deqp_args = [
+    "--deqp-surface-width=256", "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+]
+prefix = "wayland-"
 
-## x11
-#[[deqp]]
-#deqp = "/deqp/modules/egl/deqp-egl-x11"
-#caselists = ["/deqp/mustpass/egl-master.txt"]
-#tests_per_group = 250
-#deqp_args = [
-#    "--deqp-surface-width=256", "--deqp-surface-height=256",
-#    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
-#    "--deqp-gl-config-name=rgba8888d24s8ms0",
-#]
-#prefix = "x11-"
+# x11
+[[deqp]]
+deqp = "/deqp/modules/egl/deqp-egl-x11"
+caselists = ["/deqp/mustpass/egl-master.txt"]
+tests_per_group = 250
+deqp_args = [
+    "--deqp-surface-width=256", "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+]
+prefix = "x11-"

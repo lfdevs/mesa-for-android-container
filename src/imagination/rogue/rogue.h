@@ -237,6 +237,7 @@ struct rogue_regarray_cache_key {
          uint32_t start_index;
          enum rogue_reg_class class;
          uint16_t size;
+         uint8_t __pad;
       } PACKED;
 
       uint64_t val;

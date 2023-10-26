@@ -105,7 +105,7 @@ nir_lower_ubo_test::count_intrinsic(nir_intrinsic_op op)
 
 TEST_F(nir_lower_ubo_test, nothing_to_lower)
 {
-   nir_ssa_def *offset = nir_imm_int(&b, 4);
+   nir_def *offset = nir_imm_int(&b, 4);
 
    nir_load_uniform(&b, 1, 32, offset);
 
@@ -120,7 +120,7 @@ TEST_F(nir_lower_ubo_test, nothing_to_lower)
 
 TEST_F(nir_lower_ubo_test, basic)
 {
-   nir_ssa_def *offset = nir_imm_int(&b, 4);
+   nir_def *offset = nir_imm_int(&b, 4);
    nir_load_uniform(&b, 1, 32, offset);
 
    nir_lower_uniforms_to_ubo(b.shader, false, false);
@@ -137,8 +137,8 @@ TEST_F(nir_lower_ubo_test, basic)
 
 TEST_F(nir_lower_ubo_test, index_not_null)
 {
-   nir_ssa_def *index = nir_imm_int(&b, 1);
-   nir_ssa_def *offset = nir_imm_int(&b, 4);
+   nir_def *index = nir_imm_int(&b, 1);
+   nir_def *offset = nir_imm_int(&b, 4);
 
    nir_load_ubo(&b, 1, 32, index, offset, .align_mul = 16, .align_offset = 0, .range_base = 0, .range = 8);
 
@@ -151,9 +151,9 @@ TEST_F(nir_lower_ubo_test, index_not_null)
 
 TEST_F(nir_lower_ubo_test, indirect_index)
 {
-   nir_ssa_def *one = nir_imm_int(&b, 1);
-   nir_ssa_def *index = nir_fadd(&b, one, one);
-   nir_ssa_def *offset = nir_imm_int(&b, 4);
+   nir_def *one = nir_imm_int(&b, 1);
+   nir_def *index = nir_fadd(&b, one, one);
+   nir_def *offset = nir_imm_int(&b, 4);
 
    nir_load_ubo(&b, 1, 32, index, offset, .align_mul = 16, .align_offset = 0, .range_base = 0, .range = 8);
 
@@ -168,9 +168,9 @@ TEST_F(nir_lower_ubo_test, indirect_index)
 
 TEST_F(nir_lower_ubo_test, indirect_offset)
 {
-   nir_ssa_def *one = nir_imm_int(&b, 1);
-   nir_ssa_def *index = nir_imm_int(&b, 0);
-   nir_ssa_def *offset = nir_fadd(&b, one, one);
+   nir_def *one = nir_imm_int(&b, 1);
+   nir_def *index = nir_imm_int(&b, 0);
+   nir_def *offset = nir_fadd(&b, one, one);
 
    nir_load_ubo(&b, 1, 32, index, offset, .align_mul = 16, .align_offset = 0, .range_base = 0, .range = 8);
 

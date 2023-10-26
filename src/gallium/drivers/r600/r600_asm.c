@@ -29,11 +29,10 @@
 #include <errno.h>
 #include "util/u_bitcast.h"
 #include "util/u_dump.h"
+#include "util/u_endian.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "pipe/p_shader_tokens.h"
-
-#include "sb/sb_public.h"
 
 #define NUM_OF_CYCLES 3
 #define NUM_OF_COMPONENTS 4
@@ -1211,7 +1210,7 @@ static int load_ar_r6xx(struct r600_bytecode *bc, bool for_src)
 		return 0;
 
 	/* hack to avoid making MOVA the last instruction in the clause */
-	if ((bc->cf_last->ndw>>1) >= 110)
+	if (bc->cf_last == NULL || (bc->cf_last->ndw>>1) >= 110)
 		bc->force_add_cf = 1;
    else if (for_src) {
       insert_nop_r6xx(bc, 4);
@@ -1246,7 +1245,7 @@ int r600_load_ar(struct r600_bytecode *bc, bool for_src)
 		return 0;
 
 	/* hack to avoid making MOVA the last instruction in the clause */
-	if ((bc->cf_last->ndw>>1) >= 110)
+	if (bc->cf_last == NULL || (bc->cf_last->ndw>>1) >= 110)
 		bc->force_add_cf = 1;
 
 	memset(&alu, 0, sizeof(alu));
@@ -1285,13 +1284,16 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		 	(bc->cf_last->op == CF_OP_ALU_PUSH_BEFORE && type == CF_OP_ALU)) {
 		 	LIST_FOR_EACH_ENTRY(lalu, &bc->cf_last->alu, list) {
 		 		if (lalu->execute_mask) {
+                                        assert(bc->force_add_cf || !"no force cf");
 					bc->force_add_cf = 1;
 					break;
 				}
 		 		type = CF_OP_ALU_PUSH_BEFORE;
 			}
-		} else
+		} else  {
+                   assert(bc->force_add_cf ||!"no force cf");
 			bc->force_add_cf = 1;
+                }
 	}
 
 	/* cf can contains only alu or only vtx or only tex */
@@ -1306,11 +1308,10 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	}
 	bc->cf_last->op = type;
 
-	/* Load index register if required */
 	if (bc->gfx_level >= EVERGREEN) {
 		for (i = 0; i < 3; i++)
 			if (nalu->src[i].kc_bank &&  nalu->src[i].kc_rel)
-				egcm_load_index_reg(bc, nalu->src[i].kc_rel - 1, true);
+				assert(bc->index_loaded[nalu->src[i].kc_rel - 1]);
 	}
 
 	/* Check AR usage and load it if required */
@@ -1333,14 +1334,14 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	}
 	/* number of gpr == the last gpr used in any alu */
 	for (i = 0; i < 3; i++) {
-		if (nalu->src[i].sel >= bc->ngpr && nalu->src[i].sel < 124) {
+		if (nalu->src[i].sel >= bc->ngpr && nalu->src[i].sel < 123) {
 			bc->ngpr = nalu->src[i].sel + 1;
 		}
 		if (nalu->src[i].sel == V_SQ_ALU_SRC_LITERAL)
 			r600_bytecode_special_constants(nalu->src[i].value,
 				&nalu->src[i].sel);
 	}
-	if (nalu->dst.write && nalu->dst.sel >= bc->ngpr && nalu->dst.sel < 124) {
+	if (nalu->dst.write && nalu->dst.sel >= bc->ngpr && nalu->dst.sel < 123) {
 		bc->ngpr = nalu->dst.sel + 1;
 	}
 	list_addtail(&nalu->list, &bc->cf_last->alu);
@@ -1385,12 +1386,6 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 			}
 		}
 		bc->cf_last->ndw += align(nliteral, 2);
-
-		/* at most 128 slots, one add alu can add 5 slots + 4 constants(2 slots)
-		 * worst case */
-		if ((bc->cf_last->ndw >> 1) >= 120) {
-			bc->force_add_cf = 1;
-		}
 
 		bc->cf_last->prev2_bs_head = bc->cf_last->prev_bs_head;
 		bc->cf_last->prev_bs_head = bc->cf_last->curr_bs_head;
@@ -1461,10 +1456,9 @@ static int r600_bytecode_add_vtx_internal(struct r600_bytecode *bc, const struct
 		return -ENOMEM;
 	memcpy(nvtx, vtx, sizeof(struct r600_bytecode_vtx));
 
-	/* Load index register if required */
 	if (bc->gfx_level >= EVERGREEN) {
-		if (vtx->buffer_index_mode)
-			egcm_load_index_reg(bc, vtx->buffer_index_mode - 1, false);
+		assert(!vtx->buffer_index_mode ||
+		       bc->index_loaded[vtx->buffer_index_mode - 1]);
 	}
 
 
@@ -1529,10 +1523,11 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 		return -ENOMEM;
 	memcpy(ntex, tex, sizeof(struct r600_bytecode_tex));
 
-	/* Load index register if required */
 	if (bc->gfx_level >= EVERGREEN) {
-		if (tex->sampler_index_mode || tex->resource_index_mode)
-			egcm_load_index_reg(bc, tex->resource_index_mode - 1, false);
+		assert(!tex->sampler_index_mode ||
+		       bc->index_loaded[tex->sampler_index_mode - 1]);
+		assert(!tex->resource_index_mode ||
+                       bc->index_loaded[tex->resource_index_mode - 1]);
 	}
 
 	/* we can't fetch data und use it as texture lookup address in the same TEX clause */
@@ -1603,8 +1598,8 @@ int r600_bytecode_add_gds(struct r600_bytecode *bc, const struct r600_bytecode_g
 	memcpy(ngds, gds, sizeof(struct r600_bytecode_gds));
 
 	if (bc->gfx_level >= EVERGREEN) {
-		if (gds->uav_index_mode)
-			egcm_load_index_reg(bc, gds->uav_index_mode - 1, false);
+		assert(!gds->uav_index_mode ||
+		       bc->index_loaded[gds->uav_index_mode - 1]);
 	}
 
 	if (bc->cf_last == NULL ||
@@ -2032,14 +2027,14 @@ static int print_dst(struct r600_bytecode_alu *alu)
 	int o = 0;
 	unsigned sel = alu->dst.sel;
 	char reg_char = 'R';
-	if (sel > 128 - 4) { /* clause temporary gpr */
+	if (sel >= 128 - 4) { /* clause temporary gpr */
 		sel -= 128 - 4;
 		reg_char = 'T';
 	}
 
 	if (alu_writes(alu)) {
 		o += fprintf(stderr, "%c", reg_char);
-		o += print_sel(alu->dst.sel, alu->dst.rel, alu->index_mode, 0);
+		o += print_sel(sel, alu->dst.rel, alu->index_mode, 0);
 	} else {
 		o += fprintf(stderr, "__");
 	}
@@ -2513,11 +2508,16 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 			o += print_swizzle(tex->src_sel_z);
 			o += print_swizzle(tex->src_sel_w);
 
-			o += fprintf(stderr, ",  RID:%d", tex->resource_id);
+			o += fprintf(stderr, ",  RID:%d ", tex->resource_id);
+                        if (tex->resource_index_mode)
+				fprintf(stderr, "RQ_%s", index_mode[tex->resource_index_mode]);
+
 			o += fprintf(stderr, ", SID:%d  ", tex->sampler_id);
 
 			if (tex->sampler_index_mode)
 				fprintf(stderr, "SQ_%s ", index_mode[tex->sampler_index_mode]);
+
+
 
 			if (tex->lod_bias)
 				fprintf(stderr, "LB:%d ", tex->lod_bias);
@@ -2819,9 +2819,9 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 	unsigned format, num_format, format_comp, endian;
 	uint32_t *bytecode;
 	int i, j, r, fs_size;
+	uint32_t buffer_mask = 0;
 	struct r600_fetch_shader *shader;
-	unsigned no_sb = rctx->screen->b.debug_flags & (DBG_NO_SB | DBG_NIR);
-	unsigned sb_disasm = !no_sb || (rctx->screen->b.debug_flags & DBG_SB_DISASM);
+	unsigned strides[PIPE_MAX_ATTRIBS];
 
 	assert(count < 32);
 
@@ -2869,6 +2869,8 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 				}
 			}
 		}
+		strides[elements[i].vertex_buffer_index] = elements[i].src_stride;
+		buffer_mask |= BITFIELD_BIT(elements[i].vertex_buffer_index);
 	}
 
 	for (i = 0; i < count; i++) {
@@ -2922,13 +2924,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 			fprintf(stderr, "\n");
 		}
 
-		if (!sb_disasm) {
-			r600_bytecode_disasm(&bc);
-
-			fprintf(stderr, "______________________________________________________________\n");
-		} else {
-			r600_sb_bytecode_process(rctx, &bc, NULL, 1 /*dump*/, 0 /*optimize*/);
-		}
+                r600_bytecode_disasm(&bc);
 	}
 
 	fs_size = bc.ndw*4;
@@ -2939,6 +2935,8 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 		r600_bytecode_clear(&bc);
 		return NULL;
 	}
+	memcpy(shader->strides, strides, sizeof(strides));
+	shader->buffer_mask = buffer_mask;
 
 	u_suballocator_alloc(&rctx->allocator_fetch_shader, fs_size, 256,
 			     &shader->offset,
@@ -2954,7 +2952,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 		PIPE_MAP_WRITE | PIPE_MAP_UNSYNCHRONIZED | RADEON_MAP_TEMPORARY);
 	bytecode += shader->offset / 4;
 
-	if (R600_BIG_ENDIAN) {
+	if (UTIL_ARCH_BIG_ENDIAN) {
 		for (i = 0; i < fs_size / 4; ++i) {
 			bytecode[i] = util_cpu_to_le32(bc.bytecode[i]);
 		}

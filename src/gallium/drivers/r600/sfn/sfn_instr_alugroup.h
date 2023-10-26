@@ -98,6 +98,8 @@ public:
 
    void set_origin(AluInstr *o) { m_origin = o;}
 
+   AluGroup *as_alu_group() override { return this;}
+
 private:
    void forward_set_blockid(int id, int index) override;
    bool do_ready() const override;

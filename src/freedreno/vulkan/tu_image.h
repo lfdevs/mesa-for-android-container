@@ -90,6 +90,7 @@ enum pipe_format tu_format_for_aspect(enum pipe_format format,
 void
 tu_cs_image_ref(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer);
 
+template <chip CHIP>
 void
 tu_cs_image_ref_2d(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer, bool src);
 

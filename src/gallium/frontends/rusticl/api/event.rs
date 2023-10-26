@@ -49,12 +49,12 @@ impl CLInfo<cl_profiling_info> for cl_event {
         }
 
         Ok(match *q {
-            // TODO
-            CL_PROFILING_COMMAND_QUEUED => cl_prop::<cl_ulong>(0),
-            CL_PROFILING_COMMAND_SUBMIT => cl_prop::<cl_ulong>(1),
-            CL_PROFILING_COMMAND_START => cl_prop::<cl_ulong>(2),
-            CL_PROFILING_COMMAND_END => cl_prop::<cl_ulong>(3),
-            CL_PROFILING_COMMAND_COMPLETE => cl_prop::<cl_ulong>(3),
+            CL_PROFILING_COMMAND_QUEUED => cl_prop::<cl_ulong>(event.get_time(EventTimes::Queued)),
+            CL_PROFILING_COMMAND_SUBMIT => cl_prop::<cl_ulong>(event.get_time(EventTimes::Submit)),
+            CL_PROFILING_COMMAND_START => cl_prop::<cl_ulong>(event.get_time(EventTimes::Start)),
+            CL_PROFILING_COMMAND_END => cl_prop::<cl_ulong>(event.get_time(EventTimes::End)),
+            // For now, we treat Complete the same as End
+            CL_PROFILING_COMMAND_COMPLETE => cl_prop::<cl_ulong>(event.get_time(EventTimes::End)),
             _ => return Err(CL_INVALID_VALUE),
         })
     }
@@ -115,25 +115,21 @@ fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLResult
 fn set_event_callback(
     event: cl_event,
     command_exec_callback_type: cl_int,
-    pfn_event_notify: Option<EventCB>,
+    pfn_event_notify: Option<FuncEventCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<()> {
     let e = event.get_ref()?;
 
-    // CL_INVALID_VALUE if pfn_event_notify is NULL
-    // or if command_exec_callback_type is not CL_SUBMITTED, CL_RUNNING, or CL_COMPLETE.
-    if pfn_event_notify.is_none()
-        || ![CL_SUBMITTED, CL_RUNNING, CL_COMPLETE]
-            .contains(&(command_exec_callback_type as cl_uint))
-    {
+    // CL_INVALID_VALUE [...] if command_exec_callback_type is not CL_SUBMITTED, CL_RUNNING, or CL_COMPLETE.
+    if ![CL_SUBMITTED, CL_RUNNING, CL_COMPLETE].contains(&(command_exec_callback_type as cl_uint)) {
         return Err(CL_INVALID_VALUE);
     }
 
-    e.add_cb(
-        command_exec_callback_type,
-        pfn_event_notify.unwrap(),
-        user_data,
-    );
+    // SAFETY: The requirements on `EventCB::new` match the requirements
+    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
+    let cb = unsafe { EventCB::new(pfn_event_notify, user_data)? };
+
+    e.add_cb(command_exec_callback_type, cb);
 
     Ok(())
 }

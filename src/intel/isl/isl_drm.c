@@ -47,8 +47,10 @@ isl_tiling_to_i915_tiling(enum isl_tiling tiling)
       return I915_TILING_Y;
 
    case ISL_TILING_W:
-   case ISL_TILING_Yf:
-   case ISL_TILING_Ys:
+   case ISL_TILING_SKL_Yf:
+   case ISL_TILING_SKL_Ys:
+   case ISL_TILING_ICL_Yf:
+   case ISL_TILING_ICL_Ys:
    case ISL_TILING_4:
    case ISL_TILING_64:
    case ISL_TILING_GFX12_CCS:
@@ -97,28 +99,28 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_Y_TILED_CCS,
       .name = "I915_FORMAT_MOD_Y_TILED_CCS",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_MC,
+      .supports_media_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = true,
    },
    {
@@ -130,42 +132,42 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
       .name = "I915_FORMAT_MOD_4_TILED_DG2_RC_CCS",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_4_TILED_DG2_MC_CCS,
       .name = "I915_FORMAT_MOD_4_TILED_DG2_MC_CCS",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_MC,
+      .supports_media_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC,
       .name = "I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = true,
    },
    {
       .modifier = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS,
       .name = "I915_FORMAT_MOD_4_TILED_MTL_RC_CCS",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = false,
    },
    {
       .modifier = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC,
       .name = "I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_render_compression = true,
       .supports_clear_color = true,
    },
    {
       .modifier = I915_FORMAT_MOD_4_TILED_MTL_MC_CCS,
       .name = "I915_FORMAT_MOD_4_TILED_MTL_MC_CCS",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_MC,
+      .supports_media_compression = true,
       .supports_clear_color = false,
    },
    {
@@ -202,12 +204,6 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
          return 0;
 
       return 3;
-   case I915_FORMAT_MOD_4_TILED:
-      /* Gfx12.5 introduces Tile4. */
-      if (devinfo->verx10 < 125)
-         return 0;
-
-      return 3;
    case I915_FORMAT_MOD_Y_TILED_CCS:
       /* Not supported before Gfx9 and also Gfx12's CCS layout differs from
        * Gfx9-11.
@@ -219,5 +215,64 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
          return 0;
 
       return 4;
+   case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+      if (devinfo->verx10 != 120)
+         return 0;
+
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
+         return 0;
+
+      return 4;
+   case I915_FORMAT_MOD_4_TILED:
+      /* Gfx12.5 introduces Tile4. */
+      if (devinfo->verx10 < 125)
+         return 0;
+
+      return 3;
+   case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS:
+      if (!intel_device_info_is_dg2(devinfo))
+         return 0;
+
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
+         return 0;
+
+      return 4;
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+      if (!intel_device_info_is_mtl(devinfo))
+         return 0;
+
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
+         return 0;
+
+      return 4;
+   }
+}
+
+uint32_t
+isl_drm_modifier_get_plane_count(const struct intel_device_info *devinfo,
+                                 uint64_t modifier,
+                                 uint32_t fmt_planes)
+{
+   /* This function could return the wrong value if the modifier is not
+    * supported by the device.
+    */
+   assert(isl_drm_modifier_get_score(devinfo, modifier) > 0);
+
+   /* Planar images don't support clear color. */
+   if (isl_drm_modifier_get_info(modifier)->supports_clear_color)
+      assert(fmt_planes == 1);
+
+   if (devinfo->has_flat_ccs) {
+      if (isl_drm_modifier_get_info(modifier)->supports_clear_color)
+         return 2 * fmt_planes;
+      else
+         return 1 * fmt_planes;
+   } else {
+      if (isl_drm_modifier_get_info(modifier)->supports_clear_color)
+         return 3 * fmt_planes;
+      else if (isl_drm_modifier_has_aux(modifier))
+         return 2 * fmt_planes;
+      else
+         return 1 * fmt_planes;
    }
 }

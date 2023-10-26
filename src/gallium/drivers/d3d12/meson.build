@@ -71,8 +71,7 @@ if with_gallium_d3d12_video
     'd3d12_video_dec_vp9.cpp',
   ]
 
-  # // TODO: Remove this and #ifdef checks for AV1 encode when header version is release 6xx
-  if dep_dxheaders.version().version_compare('>= 1.711.3')
+  if (dep_dxheaders.version().version_compare('>= 1.611.0') and dep_dxheaders.version().version_compare('< 1.700.0')) or dep_dxheaders.version().version_compare('>= 1.712.0')
   files_libd3d12 += [
     'd3d12_video_enc_av1.cpp',
     'd3d12_video_encoder_references_manager_av1.cpp',

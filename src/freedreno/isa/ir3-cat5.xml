@@ -637,7 +637,7 @@ SOFTWARE.
 </bitset>
 
 <bitset name="#cat5-samp-s2en-bindless-a1" size="8">
-	<doc>s2en (indirect) / bindless case with a1.x has 8b samp</doc>
+	<doc>s2en (indirect) / bindless case with tex in a1.x</doc>
 	<override>
 		<expr>{HAS_SAMP}</expr>
 		<display>
@@ -649,6 +649,22 @@ SOFTWARE.
 	<assert low="0" high="7">00000000</assert>
 	<encode type="struct ir3_instruction *">
 		<map name="SAMP">src->cat5.samp</map>
+	</encode>
+</bitset>
+
+<bitset name="#cat5-tex-s2en-bindless-a1" size="8">
+	<doc>s2en (indirect) / bindless case with samp in a1.x</doc>
+	<override>
+		<expr>{HAS_TEX}</expr>
+		<display>
+			, t#{TEX}
+		</display>
+		<field name="TEX" low="0" high="7" type="uint"/>
+	</override>
+	<display/>
+	<assert low="0" high="7">00000000</assert>
+	<encode type="struct ir3_instruction *">
+		<map name="TEX">src->cat5.tex</map>
 	</encode>
 </bitset>
 
@@ -790,6 +806,20 @@ SOFTWARE.
 	({DESC_MODE} == 7) /* CAT5_BINDLESS_A1_IMM */
 </expr>
 
+<expr name="#cat5-s2enb-uses_a1-gen6">
+	ISA_GPU_ID() &gt;= 600 &amp;&amp; ISA_GPU_ID() &lt; 700 &amp;&amp;
+	(({DESC_MODE} == 1) /* CAT5_BINDLESS_A1_UNIFORM */ ||
+	 ({DESC_MODE} == 3) /* CAT5_BINDLESS_A1_NONUNIFORM */ ||
+	 ({DESC_MODE} == 7))/* CAT5_BINDLESS_A1_IMM */
+</expr>
+
+<expr name="#cat5-s2enb-uses_a1-gen7">
+	ISA_GPU_ID() &gt;= 700 &amp;&amp;
+	(({DESC_MODE} == 1) /* CAT5_BINDLESS_A1_UNIFORM */ ||
+	 ({DESC_MODE} == 3) /* CAT5_BINDLESS_A1_NONUNIFORM */ ||
+	 ({DESC_MODE} == 7))/* CAT5_BINDLESS_A1_IMM */
+</expr>
+
 <!-- Helper to map s2en/bindless DESC_MODE to whether it is uniform (flow control) mode -->
 <expr name="#cat5-s2enb-is-uniform">
 	({DESC_MODE} == 0) /* CAT5_UNIFORM */ ||
@@ -815,7 +845,7 @@ SOFTWARE.
 			<expr>!{BINDLESS}</expr>
 		</derived>
 	</override>
-	<override expr="#cat5-s2enb-uses_a1">
+	<override expr="#cat5-s2enb-uses_a1-gen6">
 		<doc>
 			In the case that a1.x is used, all 8 bits encode sampler
 		</doc>
@@ -824,6 +854,17 @@ SOFTWARE.
 		</display>
 		<field name="SAMP" low="0" high="7" type="#cat5-samp-s2en-bindless-a1">
 			<param name="HAS_SAMP"/>
+		</field>
+	</override>
+	<override expr="#cat5-s2enb-uses_a1-gen7">
+		<doc>
+			In the case that a1.x is used, all 8 bits encode texture
+		</doc>
+		<display>
+			{TEX}
+		</display>
+		<field name="TEX" low="0" high="7" type="#cat5-tex-s2en-bindless-a1">
+			<param name="HAS_TEX"/>
 		</field>
 	</override>
 	<display>

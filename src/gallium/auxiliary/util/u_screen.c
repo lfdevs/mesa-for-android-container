@@ -334,7 +334,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_LEGACY_MATH_RULES:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_TGSI_TEX_TXF_LZ:
    case PIPE_CAP_SHADER_CLOCK:
    case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
@@ -548,6 +547,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_VALIDATE_ALL_DIRTY_STATES:
    case PIPE_CAP_NULL_TEXTURES:
    case PIPE_CAP_ASTC_VOID_EXTENTS_NEED_DENORM_FLUSH:
+   case PIPE_CAP_HAS_CONST_BW:
       return 0;
 
    default:

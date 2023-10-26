@@ -72,7 +72,7 @@ wsi_device_init(struct wsi_device *wsi,
 
    WSI_DEBUG = parse_debug_string(getenv("MESA_VK_WSI_DEBUG"), debug_control);
 
-   util_perfetto_init();
+   util_cpu_trace_init();
 
    memset(wsi, 0, sizeof(*wsi));
 
@@ -1947,17 +1947,18 @@ wsi_configure_buffer_image(UNUSED const struct wsi_swapchain *chain,
 
    const uint32_t cpp = vk_format_get_blocksize(pCreateInfo->imageFormat);
    info->linear_stride = pCreateInfo->imageExtent.width * cpp;
-   info->linear_stride = ALIGN_POT(info->linear_stride, stride_align);
+   info->linear_stride = align(info->linear_stride, stride_align);
 
    /* Since we can pick the stride to be whatever we want, also align to the
     * device's optimalBufferCopyRowPitchAlignment so we get efficient copies.
     */
    assert(wsi->optimalBufferCopyRowPitchAlignment > 0);
-   info->linear_stride = ALIGN_POT(info->linear_stride,
-                                   wsi->optimalBufferCopyRowPitchAlignment);
+   info->linear_stride = align(info->linear_stride,
+                               wsi->optimalBufferCopyRowPitchAlignment);
 
-   info->linear_size = info->linear_stride * pCreateInfo->imageExtent.height;
-   info->linear_size = ALIGN_POT(info->linear_size, size_align);
+   info->linear_size = (uint64_t)info->linear_stride *
+                       pCreateInfo->imageExtent.height;
+   info->linear_size = align64(info->linear_size, size_align);
 
    info->finish_create = wsi_finish_create_blit_context;
 }

@@ -34,6 +34,7 @@
 #include "util/bitpack_helpers.h"
 #include "util/compiler.h"
 #include "util/format/format_utils.h"
+#include "util/format/u_formats.h"
 #include "util/half_float.h"
 #include "util/log.h"
 #include "util/macros.h"
@@ -227,6 +228,85 @@ static const struct pvr_format pvr_format_table[] = {
 };
 
 #undef FORMAT
+#undef FORMAT_DEPTH_STENCIL
+#undef FORMAT_COMPRESSED
+
+#define FORMAT(tex_fmt, pipe_fmt_int, pipe_fmt_float) \
+   [PVRX(TEXSTATE_FORMAT_##tex_fmt)] = {                    \
+      .desc = {                                             \
+         .tex_format = PVRX(TEXSTATE_FORMAT_##tex_fmt),     \
+         .pipe_format_int = PIPE_FORMAT_##pipe_fmt_int,     \
+         .pipe_format_float = PIPE_FORMAT_##pipe_fmt_float, \
+      },                                                    \
+      .present = true,                                      \
+   }
+
+static const struct pvr_tex_format_table_entry {
+   struct pvr_tex_format_description desc;
+   bool present;
+} pvr_tex_format_table[PVR_TEX_FORMAT_COUNT] = {
+   /*   0 */ FORMAT(U8, R8_UINT, R8_UNORM),
+   /*   1 */ FORMAT(S8, R8_SINT, R8_SNORM),
+   /*   2 */ FORMAT(A4R4G4B4, NONE, A4R4G4B4_UNORM),
+   /*   4 */ FORMAT(A1R5G5B5, NONE, B5G5R5A1_UNORM),
+   /*   5 */ FORMAT(R5G6B5, NONE, B5G6R5_UNORM),
+   /*   7 */ FORMAT(U8U8, R8G8_UINT, R8G8_UNORM),
+   /*   8 */ FORMAT(S8S8, R8G8_SINT, R8G8_SNORM),
+   /*   9 */ FORMAT(U16, R16_UINT, R16_UNORM),
+   /*  10 */ FORMAT(S16, R16_SINT, R16_SNORM),
+   /*  11 */ FORMAT(F16, NONE, R16_FLOAT),
+   /*  12 */ FORMAT(U8U8U8U8, R8G8B8A8_UINT, R8G8B8A8_UNORM),
+   /*  13 */ FORMAT(S8S8S8S8, R8G8B8A8_SINT, R8G8B8A8_SNORM),
+   /*  14 */ FORMAT(A2R10B10G10, R10G10B10A2_UINT, R10G10B10A2_UNORM),
+   /*  15 */ FORMAT(U16U16, R16G16_UINT, R16G16_UNORM),
+   /*  16 */ FORMAT(S16S16, R16G16_SINT, R16G16_SNORM),
+   /*  17 */ FORMAT(F16F16, NONE, R16G16_FLOAT),
+   /*  18 */ FORMAT(F32, NONE, R32_FLOAT),
+   /*  22 */ FORMAT(ST8U24, Z24_UNORM_S8_UINT, Z24_UNORM_S8_UINT),
+   /*  24 */ FORMAT(U32, R32_UINT, NONE),
+   /*  25 */ FORMAT(S32, R32_SINT, NONE),
+   /*  26 */ FORMAT(SE9995, NONE, R9G9B9E5_FLOAT),
+   /*  28 */ FORMAT(F16F16F16F16, NONE, R16G16B16A16_FLOAT),
+   /*  29 */ FORMAT(U16U16U16U16, R16G16B16A16_UINT, R16G16B16A16_UNORM),
+   /*  30 */ FORMAT(S16S16S16S16, R16G16B16A16_SINT, R16G16B16A16_SNORM),
+   /*  34 */ FORMAT(F32F32, NONE, R32G32_FLOAT),
+   /*  35 */ FORMAT(U32U32, R32G32_UINT, NONE),
+   /*  36 */ FORMAT(S32S32, R32G32_SINT, NONE),
+   /*  61 */ FORMAT(F32F32F32F32, NONE, R32G32B32A32_FLOAT),
+   /*  62 */ FORMAT(U32U32U32U32, R32G32B32A32_UINT, NONE),
+   /*  63 */ FORMAT(S32S32S32S32, R32G32B32A32_SINT, NONE),
+   /*  64 */ FORMAT(F32F32F32, NONE, R32G32B32_FLOAT),
+   /*  65 */ FORMAT(U32U32U32, R32G32B32_UINT, NONE),
+   /*  66 */ FORMAT(S32S32S32, R32G32B32_SINT, NONE),
+   /*  88 */ FORMAT(F10F11F11, NONE, R11G11B10_FLOAT),
+};
+
+#undef FORMAT
+
+#define FORMAT(tex_fmt, pipe_fmt, tex_fmt_simple) \
+   [PVRX(TEXSTATE_FORMAT_COMPRESSED_##tex_fmt)] = {                   \
+      .desc = {                                                       \
+         .tex_format = PVRX(TEXSTATE_FORMAT_COMPRESSED_##tex_fmt),    \
+         .pipe_format = PIPE_FORMAT_##pipe_fmt,                       \
+         .tex_format_simple = PVRX(TEXSTATE_FORMAT_##tex_fmt_simple), \
+      },                                                              \
+      .present = true,                                                \
+   }
+
+static const struct pvr_tex_format_compressed_table_entry {
+   struct pvr_tex_format_compressed_description desc;
+   bool present;
+} pvr_tex_format_compressed_table[PVR_TEX_FORMAT_COUNT] = {
+   /*  68 */ FORMAT(ETC2_RGB, ETC2_RGB8, U8U8U8U8),
+   /*  69 */ FORMAT(ETC2A_RGBA, ETC2_RGBA8, U8U8U8U8),
+   /*  70 */ FORMAT(ETC2_PUNCHTHROUGHA, ETC2_RGB8A1, U8U8U8U8),
+   /*  71 */ FORMAT(EAC_R11_UNSIGNED, ETC2_R11_UNORM, U16U16U16U16),
+   /*  72 */ FORMAT(EAC_R11_SIGNED, ETC2_R11_SNORM, S16S16S16S16),
+   /*  73 */ FORMAT(EAC_RG11_UNSIGNED, ETC2_RG11_UNORM, U16U16U16U16),
+   /*  74 */ FORMAT(EAC_RG11_SIGNED, ETC2_RG11_SNORM, S16S16S16S16),
+};
+
+#undef FORMAT
 
 static inline const struct pvr_format *pvr_get_format(VkFormat vk_format)
 {
@@ -238,6 +318,58 @@ static inline const struct pvr_format *pvr_get_format(VkFormat vk_format)
    mesa_logd("Format %s(%d) not supported\n",
              vk_Format_to_str(vk_format),
              vk_format);
+
+   return NULL;
+}
+
+bool pvr_tex_format_is_supported(const uint32_t tex_format)
+{
+   return tex_format < ARRAY_SIZE(pvr_tex_format_table) &&
+          pvr_tex_format_table[tex_format].present;
+}
+
+const struct pvr_tex_format_description *
+pvr_get_tex_format_description(const uint32_t tex_format)
+{
+   if (pvr_tex_format_is_supported(tex_format))
+      return &pvr_tex_format_table[tex_format].desc;
+
+   mesa_logd("Tex format %s (%d) not supported\n",
+             PVRX(TEXSTATE_FORMAT_to_str)(tex_format),
+             tex_format);
+
+   return NULL;
+}
+
+bool pvr_tex_format_compressed_is_supported(uint32_t tex_format)
+{
+   /* In some contexts, the sequence of compressed tex format ids are appended
+    * to the normal tex format ids; in that case, we need to remove that offset
+    * before lookup.
+    */
+   if (tex_format >= PVR_TEX_FORMAT_COUNT)
+      tex_format -= PVR_TEX_FORMAT_COUNT;
+
+   return tex_format < ARRAY_SIZE(pvr_tex_format_compressed_table) &&
+          pvr_tex_format_compressed_table[tex_format].present;
+}
+
+const struct pvr_tex_format_compressed_description *
+pvr_get_tex_format_compressed_description(uint32_t tex_format)
+{
+   /* In some contexts, the sequence of compressed tex format ids are appended
+    * to the normal tex format ids; in that case, we need to remove that offset
+    * before lookup.
+    */
+   if (tex_format >= PVR_TEX_FORMAT_COUNT)
+      tex_format -= PVR_TEX_FORMAT_COUNT;
+
+   if (pvr_tex_format_compressed_is_supported(tex_format))
+      return &pvr_tex_format_compressed_table[tex_format].desc;
+
+   mesa_logd("Compressed tex format %s (%d) not supported\n",
+             PVRX(TEXSTATE_FORMAT_COMPRESSED_to_str)(tex_format),
+             tex_format);
 
    return NULL;
 }
@@ -461,12 +593,11 @@ void pvr_get_hw_clear_color(
 #undef f32_to_snorm16
 #undef f32_to_f16
 
-/* TODO: This currently only sets up Vulkan 1.0 flags. */
 static VkFormatFeatureFlags2
 pvr_get_image_format_features2(const struct pvr_format *pvr_format,
                                VkImageTiling vk_tiling)
 {
-   VkFormatFeatureFlags flags = 0;
+   VkFormatFeatureFlags2 flags = 0;
    VkFormat vk_format;
 
    if (!pvr_format)
@@ -509,7 +640,8 @@ pvr_get_image_format_features2(const struct pvr_format *pvr_format,
       }
    } else if (vk_format_is_depth_or_stencil(vk_format)) {
       flags |= VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT |
-               VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
+               VK_FORMAT_FEATURE_2_BLIT_DST_BIT |
+               VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT;
    }
 
    if (vk_tiling == VK_IMAGE_TILING_OPTIMAL) {
@@ -566,6 +698,11 @@ pvr_get_image_format_features2(const struct pvr_format *pvr_format,
       }
    }
 
+   if (flags & VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT) {
+      flags |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |
+               VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+   }
+
    return flags;
 }
 
@@ -576,7 +713,6 @@ const uint8_t *pvr_get_format_swizzle(VkFormat vk_format)
    return vf->swizzle;
 }
 
-/* TODO: This currently only sets up Vulkan 1.0 flags. */
 static VkFormatFeatureFlags2
 pvr_get_buffer_format_features2(const struct pvr_format *pvr_format)
 {
@@ -650,6 +786,11 @@ pvr_get_buffer_format_features2(const struct pvr_format *pvr_format)
       break;
    }
 
+   if (flags & VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT) {
+      flags |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |
+               VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+   }
+
    return flags;
 }
 
@@ -673,7 +814,18 @@ void pvr_GetPhysicalDeviceFormatProperties2(
    };
 
    vk_foreach_struct (ext, pFormatProperties->pNext) {
-      pvr_debug_ignored_stype(ext->sType);
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
+         VkFormatProperties3 *pFormatProperties3 = (VkFormatProperties3 *)ext;
+         pFormatProperties3->linearTilingFeatures = linear2;
+         pFormatProperties3->optimalTilingFeatures = optimal2;
+         pFormatProperties3->bufferFeatures = buffer2;
+         break;
+      }
+      default:
+         pvr_debug_ignored_stype(ext->sType);
+         break;
+      }
    }
 }
 
@@ -701,6 +853,11 @@ pvr_get_image_format_properties(struct pvr_physical_device *pdevice,
 
    tiling_features2 = pvr_get_image_format_features2(pvr_format, info->tiling);
    if (tiling_features2 == 0) {
+      result = vk_error(pdevice, VK_ERROR_FORMAT_NOT_SUPPORTED);
+      goto err_unsupported_format;
+   }
+
+   if (info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
       result = vk_error(pdevice, VK_ERROR_FORMAT_NOT_SUPPORTED);
       goto err_unsupported_format;
    }

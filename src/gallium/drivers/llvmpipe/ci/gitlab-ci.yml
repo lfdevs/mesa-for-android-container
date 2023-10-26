@@ -1,33 +1,5 @@
-.llvmpipe-test:
-  extends:
-    - .llvmpipe-rules
-  variables:
-    LIBGL_ALWAYS_SOFTWARE: "true"
-    GALLIUM_DRIVER: "llvmpipe"
-    FLAKES_CHANNEL: "#mesa-swrast-ci"
-    GPU_VERSION: llvmpipe
-
-.llvmpipe-piglit-cl:
-  extends:
-    - .test-cl
-    - .deqp-test
-    - .llvmpipe-test
-  variables:
-    LP_NUM_THREADS: 1
-    PIGLIT_PROFILES: cl
-
-# TODO: remove together with Clover
-.llvmpipe-piglit-clover:
-  extends:
-    - .llvmpipe-piglit-cl
-    - .llvmpipe-clover-rules
-  needs:
-    - .debian-clover-testing
-    - debian/x86_64_test-gl
-  variables:
-    LP_CL: 1
-    DEQP_SUITE: llvmpipe-clover
-    GPU_VERSION: llvmpipe-clover
+include:
+  - local: 'src/gallium/drivers/llvmpipe/ci/gitlab-ci-inc.yml'
 
 llvmpipe-piglit-rusticl:
   extends:
@@ -52,14 +24,6 @@ llvmpipe-traces:
     PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-llvmpipe.yml"
     PIGLIT_REPLAY_DEVICE_NAME: "gl-vmware-llvmpipe"
     PIGLIT_RESULTS: "llvmpipe-replay"
-
-.llvmpipe-deqp-test:
-  variables:
-    GALLIVM_PERF: "nopt"
-  extends:
-    - .test-gl
-    - .deqp-test
-    - .llvmpipe-test
 
 llvmpipe:
   variables:

@@ -6,7 +6,7 @@
   rules:
     - if: &is-scheduled-pipeline '$CI_PIPELINE_SOURCE == "schedule"'
       when: on_success
-  retry: &scheduled-pipeline-retries
+  retry:
     max: 1
     # Don't retry on script_failure, job_execution_timeout, runner_unsupported,
     # stale_schedule, archived_failure, or unmet_prerequisites
@@ -35,7 +35,7 @@
 .restricted-rules:
   rules:
     # If the triggerer has access to the restricted traces and if it is pre-merge
-    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias|gallo|kwg|majanes|llanderwelin|zmike)$/") &&
+    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias|gallo|kwg|majanes|llanderwelin|zmike|vigneshraman)$/") &&
            ($GITLAB_USER_LOGIN != "marge-bot" || $CI_COMMIT_BRANCH)'
       when: never
 
@@ -55,7 +55,6 @@
       - src/drm-shim/**/*
       - src/gbm/**/*
       - src/gtest/**/*
-      - src/include/**/*
       # Some src/util and src/compiler files use headers from mesa/ (e.g.
       # mtypes.h).  We should clean that up.
       - src/mesa/**/*.h
@@ -65,7 +64,7 @@
 
 # Same core dependencies for doing manual runs.
 .core-manual-rules:
-  retry: *scheduled-pipeline-retries
+  retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
     # We only want manual jobs to show up when it's not marge's pre-merge CI
     # run, otherwise she'll wait until her timeout.  The exception is
@@ -98,7 +97,7 @@
   extends:
     - .performance-rules
   variables:
-    LAVA_JOB_PRIORITY: 40
+    JOB_PRIORITY: 40
     PIGLIT_REPLAY_SUBCOMMAND: "profile"
     PIGLIT_REPLAY_EXTRA_ARGS: "--db-path ${CI_PROJECT_DIR}/replayer-db/"
     # More than this can hit OOM due to BOs leaked during the replay of the last frame
@@ -106,7 +105,7 @@
     # We don't want for more than one workload to be submitted to the GPU at a time
     FDO_CI_CONCURRENT: 1
     # Piglit is very sparse in its status output and downloads of big traces can take a while
-    LAVA_DEVICE_HANGING_TIMEOUT_SEC: 600
+    DEVICE_HANGING_TIMEOUT_SEC: 600
     GIT_STRATEGY: none
     HWCI_FREQ_MAX: "true"
     # Always use the same device
@@ -134,6 +133,21 @@
     - debian-release
 
 # Mesa source file dependencies that may impact any GL driver test job.
+.gallium-core-rules:
+  rules:
+    - !reference [.core-rules, rules]
+    - changes: &gallium_core_file_list
+      - src/gallium/*
+      - src/gallium/auxiliary/**/*
+      - src/gallium/drivers/*
+      - src/gallium/include/**/*
+      - src/gallium/frontends/dri/*
+      - src/gallium/frontends/glx/**/*
+      - src/gallium/targets/**/*
+      - src/gallium/tests/**/*
+      - src/gallium/winsys/*
+      when: on_success
+
 .gl-rules:
   rules:
     - !reference [.core-rules, rules]
@@ -154,20 +168,10 @@
       - src/mesa/x86/**/*
       - src/mesa/x86-64/**/*
       when: on_success
-    - changes: &gallium_core_file_list
-      - src/gallium/*
-      - src/gallium/auxiliary/**/*
-      - src/gallium/drivers/*
-      - src/gallium/include/**/*
-      - src/gallium/frontends/dri/*
-      - src/gallium/frontends/glx/**/*
-      - src/gallium/targets/**/*
-      - src/gallium/tests/**/*
-      - src/gallium/winsys/*
-      when: on_success
+    - !reference [.gallium-core-rules, rules]
 
 .gl-manual-rules:
-  retry: *scheduled-pipeline-retries
+  retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
     - !reference [.core-manual-rules, rules]
     - changes:
@@ -186,780 +190,11 @@
       when: on_success
 
 .vulkan-manual-rules:
-  retry: *scheduled-pipeline-retries
+  retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
     - !reference [.core-manual-rules, rules]
     - changes:
         *vulkan_file_list
-      when: manual
-
-.softpipe-rules:
-  stage: software-renderer
-  rules:
-    - !reference [.gl-rules, rules]
-    - changes: &softpipe_file_list
-      - src/gallium/drivers/softpipe/**/*
-      - src/gallium/winsys/sw/**/*
-      when: on_success
-
-.llvmpipe-rules:
-  stage: software-renderer
-  rules:
-    - !reference [.gl-rules, rules]
-    - changes: &llvmpipe_file_list
-      - src/gallium/drivers/llvmpipe/**/*
-      - src/gallium/winsys/sw/**/*
-      when: on_success
-
-.lavapipe-rules:
-  stage: software-renderer
-  rules:
-    - !reference [.vulkan-rules, rules]
-    # One could probably be a little more clever here and skip non-gallium Mesa changes (see also .llvmpipe-cl-rules).
-    - !reference [.gl-rules, rules]
-    - changes: &lavapipe_file_list
-      - src/gallium/drivers/llvmpipe/**/*
-      - src/gallium/frontends/lavapipe/**/*
-      - src/gallium/winsys/sw/**/*
-      when: on_success
-
-.lavapipe-manual-rules:
-  stage: software-renderer
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.vulkan-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes: *lavapipe_file_list
-      when: manual
-
-.llvmpipe-cl-rules:
-  stage: software-renderer
-  rules:
-    - !reference [.no_scheduled_pipelines-rules, rules]
-    - changes: &llvmpipe_cl_files
-      - .gitlab-ci.yml
-      - .gitlab-ci/**/*
-      - meson.build
-      - .gitattributes
-      - include/**/*
-      - src/compiler/**/*
-      - src/include/**/*
-      - src/util/**/*
-      when: on_success
-    - changes:
-        *gallium_core_file_list
-      when: on_success
-    - changes:
-        *llvmpipe_file_list
-      when: on_success
-
-# TODO: remove together with Clover
-.llvmpipe-clover-rules:
-  rules:
-    - !reference [.llvmpipe-cl-rules, rules]
-    - changes:
-      - src/gallium/frontends/clover/**/*
-      when: on_success
-
-.llvmpipe-rusticl-rules:
-  rules:
-    - !reference [.llvmpipe-cl-rules, rules]
-    - changes:
-      - src/gallium/frontends/rusticl/**/*
-      when: on_success
-
-# Rules for changes that impact either freedreno or turnip.
-.freedreno-common-rules:
-  rules:
-    - !reference [.no_scheduled_pipelines-rules, rules]
-    - !reference [.freedreno-farm-rules, rules]
-    - changes: &freedreno_core_file_list
-      - src/freedreno/ci/**/*
-      - src/freedreno/common/**/*
-      - src/freedreno/drm/**/*
-      - src/freedreno/fdl/**/*
-      - src/freedreno/ir3/**/*
-      - src/freedreno/isa/**/*
-      - src/freedreno/registers/**/*
-      when: on_success
-
-.freedreno-common-manual-rules:
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.freedreno-farm-manual-rules, rules]
-    - !reference [.core-manual-rules, rules]
-    - changes:
-        *freedreno_core_file_list
-      when: manual
-
-.freedreno-rules:
-  stage: freedreno
-  rules:
-    - !reference [.freedreno-common-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &freedreno_gl_file_list
-      - src/freedreno/ir2/**/*
-      - src/gallium/drivers/freedreno/**/*
-      - src/gallium/winsys/freedreno/**/*
-      when: on_success
-
-.freedreno-manual-rules:
-  stage: freedreno
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.freedreno-common-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *freedreno_gl_file_list
-      when: manual
-
-.turnip-rules:
-  stage: freedreno
-  rules:
-    - !reference [.freedreno-common-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes: &freedreno_vulkan_file_list
-      - src/freedreno/vulkan/**/*
-      when: on_success
-
-.turnip-manual-rules:
-  stage: freedreno
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.freedreno-common-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - changes:
-        *freedreno_vulkan_file_list
-      when: manual
-
-# For piglit and skqp test jobs that run both GL and VK tests.
-.freedreno-turnip-rules:
-  rules:
-    - !reference [.freedreno-rules, rules]
-    - !reference [.turnip-rules, rules]
-
-.freedreno-rules-restricted:
-  stage: freedreno
-  rules:
-    - !reference [.restricted-rules, rules]
-    - !reference [.freedreno-rules, rules]
-
-.freedreno-rules-performance:
-  stage: freedreno
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.performance-rules, rules]
-    - !reference [.freedreno-manual-rules, rules]
-  allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
-  variables:
-    LAVA_JOB_PRIORITY: 40
-    # Ensure that we are using the release build artifact
-    S3_ARTIFACT_NAME: mesa-arm64-default-release
-  needs:
-    - debian/arm64_test
-    - debian-arm64-release
-  dependencies: null
-
-.nouveau-rules:
-  stage: nouveau
-  rules:
-    - !reference [.anholt-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &nouveau_file_list
-      - src/nouveau/**/*
-      - src/gallium/drivers/nouveau/**/*
-      - src/gallium/winsys/kmsro/**/*
-      - src/gallium/winsys/nouveau/**/*
-      when: on_success
-
-.nouveau-manual-rules:
-  stage: nouveau
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.anholt-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *nouveau_file_list
-      when: manual
-
-.panfrost-midgard-rules:
-  stage: arm
-  rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &panfrost_gallium_file_list
-      - src/gallium/drivers/panfrost/**/*
-      - src/gallium/winsys/panfrost/**/*
-      when: on_success
-    - changes: &panfrost_common_file_list
-      - src/panfrost/ci/*
-      - src/panfrost/include/*
-      - src/panfrost/lib/*
-      - src/panfrost/shared/*
-      - src/panfrost/util/*
-      when: on_success
-    - changes:
-      - src/panfrost/midgard/**/*
-      when: on_success
-
-.panfrost-midgard-manual-rules:
-  stage: arm
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes: *panfrost_gallium_file_list
-      when: manual
-    - changes: *panfrost_common_file_list
-      when: manual
-    - changes:
-      - src/panfrost/midgard/**/*
-      when: manual
-
-.panfrost-bifrost-rules:
-  stage: arm
-  rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes:
-        *panfrost_common_file_list
-      when: on_success
-    - changes:
-        *panfrost_gallium_file_list
-      when: on_success
-    - changes: &panfrost_vulkan_file_list
-      - src/panfrost/vulkan/*
-      when: on_success
-    - changes: &panfrost_bifrost_file_list
-      - src/panfrost/compiler/**/*
-      when: on_success
-
-.panfrost-bifrost-manual-rules:
-  stage: arm
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *panfrost_common_file_list
-      when: manual
-    - changes:
-        *panfrost_gallium_file_list
-      when: manual
-    - changes:
-        *panfrost_vulkan_file_list
-      when: manual
-    - changes:
-        *panfrost_bifrost_file_list
-      when: manual
-
-.broadcom-common-rules:
-  rules:
-    - changes: &broadcom_file_list
-      - src/broadcom/meson.build
-      - src/broadcom/ci/**/*
-      - src/broadcom/cle/**/*
-      - src/broadcom/clif/**/*
-      - src/broadcom/common/**/*
-      - src/broadcom/compiler/**/*
-      - src/broadcom/drm-shim/**/*
-      - src/broadcom/qpu/**/*
-      - src/broadcom/simulator/**/*
-      when: on_success
-
-.vc4-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - !reference [.broadcom-common-rules, rules]
-    - changes:
-      - src/gallium/drivers/vc4/**/*
-      - src/gallium/winsys/vc4/**/*
-      - src/gallium/auxiliary/renderonly/**/*
-      - src/gallium/winsys/kmsro/**/*
-      when: on_success
-
-.v3d-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - !reference [.broadcom-common-rules, rules]
-    - changes: &v3d_file_list
-      - src/gallium/drivers/v3d/**/*
-      - src/gallium/winsys/v3d/**/*
-      - src/gallium/auxiliary/renderonly/**/*
-      - src/gallium/winsys/kmsro/**/*
-      when: on_success
-
-.v3d-manual-rules:
-  stage: broadcom
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.igalia-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *broadcom_file_list
-      when: manual
-    - changes:
-        *v3d_file_list
-      when: manual
-
-.v3dv-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/broadcom/**/*
-      when: on_success
-
-.lima-rules:
-  stage: arm
-  rules:
-    - !reference [.lima-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes:
-      - src/gallium/drivers/lima/**/*
-      - src/gallium/winsys/lima/**/*
-      - src/lima/**/*
-      when: on_success
-
-.radv-rules:
-  stage: amd
-  rules:
-    - !reference [.vulkan-rules, rules]
-    - changes: &radv_file_list
-      - src/amd/**/*
-      - src/vulkan/**/*
-      when: on_success
-
-.radv-collabora-rules:
-  stage: amd
-  rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.radv-rules, rules]
-
-.radv-valve-rules:
-  stage: amd
-  rules:
-    - !reference [.valve-farm-rules, rules]
-    - !reference [.radv-rules, rules]
-
-.radv-valve-manual-rules:
-  stage: amd
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.valve-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - changes:
-        *radv_file_list
-      when: manual
-
-.venus-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.lavapipe-rules, rules]
-    - changes: &venus_file_list
-      - src/virtio/**/*
-      when: on_success
-    - when: never
-
-.radeonsi-rules:
-  stage: amd
-  rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &radeonsi_file_list
-      - src/gallium/drivers/radeonsi/**/*
-      - src/gallium/include/winsys/**/*
-      - src/gallium/winsys/amdgpu/**/*
-      - src/amd/*
-      - src/amd/addrlib/**/*
-      - src/amd/ci/*
-      - src/amd/common/**/*
-      - src/amd/llvm/**/*
-      - src/amd/registers/**/*
-      when: on_success
-
-.radeonsi+radv-rules:
-  stage: amd
-  rules:
-    - !reference [.radeonsi-rules, rules]
-    - !reference [.radv-rules, rules]
-
-.radeonsi-vaapi-rules:
-  stage: amd
-  rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes:
-        *radeonsi_file_list
-      when: on_success
-    - changes: &radeon_vcn_file_list
-      - src/gallium/frontends/va/**/*
-      - src/gallium/targets/va/**/*
-      when: on_success
-
-.radeonsi-vaapi-manual-rules:
-  stage: amd
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *radeon_vcn_file_list
-      when: manual
-
-.radeonsi-valve-rules:
-  stage: amd
-  rules:
-    - !reference [.valve-farm-rules, rules]
-    - !reference [.radeonsi-rules, rules]
-
-.radeonsi-valve-manual-rules:
-  stage: amd
-  rules:
-    - !reference [.valve-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - changes:
-        *radeonsi_file_list
-      when: manual
-
-.i915g-rules:
-  stage: intel
-  rules:
-    - !reference [.gl-rules, rules]
-    - changes: &i915g_file_list
-      - src/gallium/drivers/i915/**/*
-      - src/gallium/winsys/i915/**/*
-      - src/intel/**/*
-      when: on_success
-
-.i915g-manual-rules:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *i915g_file_list
-      when: manual
-
-.crocus-rules:
-  stage: intel
-  rules:
-    - !reference [.anholt-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &crocus_file_list
-      - src/gallium/drivers/crocus/**/*
-      - src/gallium/winsys/crocus/**/*
-      - src/intel/**/*
-      when: on_success
-
-.crocus-manual-rules:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.anholt-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *crocus_file_list
-      when: manual
-
-.iris-rules:
-  stage: intel
-  rules:
-    - !reference [.no_scheduled_pipelines-rules, rules]
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &iris_file_list
-      - src/gallium/drivers/iris/**/*
-      - src/gallium/winsys/iris/**/*
-      - src/intel/**/*
-      when: on_success
-
-.iris-manual-rules:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *iris_file_list
-      when: manual
-
-# Unfortunately we can't sed the on_success from another rules set, so we have
-# to do duplicate the files lists to set the job to manual (see
-# .performance-rules)
-.iris-rules-performance:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.performance-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *iris_file_list
-      when: manual
-  allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
-  variables:
-    LAVA_JOB_PRIORITY: 40
-    S3_ARTIFACT_NAME: "mesa-x86_64-default-release"
-  needs:
-    - kernel+rootfs_x86_64
-    - debian-release
-
-.anv-rules:
-  stage: intel
-  rules:
-    - !reference [.no_scheduled_pipelines-rules, rules]
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/intel/**/*
-      when: on_success
-
-.anv-manual-rules:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - changes:
-      - src/intel/**/*
-      when: manual
-
-.hasvk-rules:
-  stage: intel
-  rules:
-    - !reference [.anholt-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/intel/**/*
-      when: on_success
-
-.hasvk-manual-rules:
-  stage: intel
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.anholt-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
-    - changes:
-      - src/intel/**/*
-      when: on_success
-
-# ruleset to trigger on changes affecting either anv or iris, for jobs using both (piglit, skqp)
-.intel-rules:
-  stage: intel
-  rules:
-    - !reference [.iris-rules, rules]
-    - !reference [.anv-rules, rules]
-
-.intel-manual-rules:
-  stage: intel
-  rules:
-    - !reference [.iris-manual-rules, rules]
-    - !reference [.anv-manual-rules, rules]
-
-.virgl-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.gl-rules, rules]
-    - changes:
-        *llvmpipe_file_list
-      when: on_success
-    - changes: &virgl_file_list
-      - src/gallium/drivers/virgl/**/*
-      - src/gallium/winsys/virgl/**/*
-      when: on_success
-
-.virgl-iris-manual-rules:
-  stage: layered-backends
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *virgl_file_list
-      when: manual
-    - changes:
-        *iris_file_list
-      when: manual
-
-.virgl-iris-rules-performance:
-  stage: layered-backends
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.collabora-farm-manual-rules, rules]
-    - !reference [.performance-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *llvmpipe_file_list
-      when: manual
-    - changes:
-        *virgl_file_list
-      when: manual
-  allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
-  variables:
-    LAVA_JOB_PRIORITY: 40
-    S3_ARTIFACT_NAME: "mesa-x86_64-default-release"
-  needs:
-    - kernel+rootfs_x86_64
-    - debian-release
-
-.zink-common-rules:
-  rules:
-    - !reference [.gl-rules, rules]
-    - changes:
-      - src/gallium/drivers/zink/**/*
-      when: on_success
-
-.zink-common-manual-rules:
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-      - src/gallium/drivers/zink/**/*
-      when: manual
-
-.zink-lvp-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.lavapipe-rules, rules]
-    - !reference [.zink-common-rules, rules]
-
-.zink-anv-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.anv-rules, rules]
-    - !reference [.zink-common-rules, rules]
-
-.zink-anv-manual-rules:
-  stage: layered-backends
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.anv-manual-rules, rules]
-    - !reference [.zink-common-manual-rules, rules]
-
-.zink-anv-rules-restricted:
-  stage: layered-backends
-  rules:
-    - !reference [.restricted-rules, rules]
-    - !reference [.anv-rules, rules]
-    - !reference [.zink-common-rules, rules]
-
-.zink-turnip-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.turnip-rules, rules]
-    - !reference [.zink-common-rules, rules]
-
-.zink-turnip-manual-rules:
-  stage: layered-backends
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.turnip-manual-rules, rules]
-    - !reference [.zink-common-manual-rules, rules]
-
-.zink-radv-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.radv-valve-rules, rules]
-    - !reference [.zink-common-rules, rules]
-
-.zink-radv-manual-rules:
-  stage: layered-backends
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.radv-valve-manual-rules, rules]
-    - !reference [.zink-common-manual-rules, rules]
-    - changes:
-      - .gitlab-ci/container/build-piglit.sh
-      when: manual
-
-# Unfortunately YAML doesn't let us concatenate arrays, so we have to do the
-# rules duplication manually
-.windows-build-rules:
-  rules:
-    - !reference [.microsoft-farm-rules, rules]
-    - !reference [.zink-common-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-        *softpipe_file_list
-      when: on_success
-    - changes:
-        *lavapipe_file_list
-      when: on_success
-    - changes: &d3d12_file_list
-      - src/gallium/drivers/d3d12/**/*
-      - src/gallium/frontends/wgl/*
-      - src/gallium/winsys/d3d12/wgl/*
-      - src/gallium/targets/libgl-gdi/*
-      - src/gallium/targets/libgl-d3d12/*
-      when: on_success
-    - changes:
-      - src/microsoft/**/*
-      - src/gallium/frontends/va/*
-      - src/gallium/targets/va/*
-      when: on_success
-    - changes:
-        *radv_file_list
-      when: on_success
-
-.glon12-test-rules:
-  rules:
-    - !reference [.microsoft-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: *d3d12_file_list
-      when: on_success
-    - changes:
-      - src/microsoft/compiler/*
-      when: on_success
-
-.spirv2dxil-test-rules:
-  rules:
-    - !reference [.microsoft-farm-rules, rules]
-    - !reference [.core-rules, rules]
-    - changes: &spirv2dxil_file_list
-      - src/microsoft/ci/*
-      - src/microsoft/compiler/*
-      - src/microsoft/spirv_to_dxil/*
-      when: on_success
-
-.dozen-test-rules:
-  rules:
-    - !reference [.microsoft-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-        *spirv2dxil_file_list
-      when: on_success
-    - changes:
-      - src/microsoft/vulkan/*
-      when: on_success
-
-.etnaviv-rules:
-  stage: etnaviv
-  rules:
-    - !reference [.austriancoder-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes: &etnaviv_file_list
-      - src/etnaviv/**/*
-      - src/gallium/drivers/etnaviv/**/*
-      - src/gallium/winsys/etnaviv/**/*
-      - src/gallium/auxiliary/renderonly/**/*
-      - src/gallium/winsys/kmsro/**/*
-      when: on_success
-
-.etnaviv-manual-rules:
-  stage: etnaviv
-  retry: *scheduled-pipeline-retries
-  rules:
-    - !reference [.austriancoder-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *etnaviv_file_list
       when: manual
 
 # Rules for unusual architectures that only build a subset of drivers
@@ -967,42 +202,21 @@
    rules:
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.zink-common-rules, rules]
-    - changes:
-        *softpipe_file_list
-      when: on_success
-    - changes:
-        *llvmpipe_file_list
-      when: on_success
-    - changes:
-        *lavapipe_file_list
-      when: on_success
-    - changes:
-        *radv_file_list
-      when: on_success
-    - changes:
-        *radeonsi_file_list
-      when: on_success
-    - changes:
-        *virgl_file_list
-      when: on_success
-    - changes:
-      - src/gallium/drivers/nouveau/**/*
-      - src/gallium/winsys/nouveau/**/*
-      when: on_success
+    - !reference [.softpipe-rules, rules]
+    - !reference [.llvmpipe-rules, rules]
+    - !reference [.lavapipe-rules, rules]
+    - !reference [.radv-rules, rules]
+    - !reference [.radeonsi-rules, rules]
+    - !reference [.virgl-rules, rules]
+    - !reference [.nouveau-rules, rules]
 
 .s390x-rules:
    rules:
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.zink-common-rules, rules]
-    - changes:
-        *softpipe_file_list
-      when: on_success
-    - changes:
-        *llvmpipe_file_list
-      when: on_success
-    - changes:
-        *lavapipe_file_list
-      when: on_success
+    - !reference [.softpipe-rules, rules]
+    - !reference [.llvmpipe-rules, rules]
+    - !reference [.lavapipe-rules, rules]
 
 # Rules for linters
 .lint-rustfmt-rules:

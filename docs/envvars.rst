@@ -183,7 +183,8 @@ Core Mesa environment variables
 
    if set to ``true``, disables the on-disk shader cache. If set to
    ``false``, enables the on-disk shader cache when it is disabled by
-   default.
+   default.  Note that EGL_ANDROID_blob_cache is still enabled even
+   if on-disk shader cache is disabled.
 
 .. envvar:: MESA_SHADER_CACHE_MAX_SIZE
 
@@ -392,13 +393,22 @@ Core Mesa environment variables
    and Vulkan (in this case "select" means the GPU will be first in the reported
    physical devices list). The supported syntaxes are:
 
-   - ``DRI_PRIME=1``: selects the first non-default GPU.
+   - ``DRI_PRIME=N``: selects the Nth non-default GPU (N > 0).
    - ``DRI_PRIME=pci-0000_02_00_0``: selects the GPU connected to this PCIe bus
-   - ``DRI_PRIME=vendor_id:device_id``: selects the first GPU matching these ids
+   - ``DRI_PRIME=vendor_id:device_id``: selects the first GPU matching these ids.
+
+   For Vulkan it's possible to append ``!``, in which case only the selected GPU
+   will be exposed to the application (eg: DRI_PRIME=1!).
 
    .. note::
 
       ``lspci -nn | grep VGA`` can be used to know the PCIe bus or ids to use.
+
+.. envvar:: DRIRC_CONFIGDIR
+
+   If set, overrides the global search-directories used when searching for
+   drirc config files. The user-local one will still be used. Mostly useful for
+   internal debugging.
 
 NIR passes environment variables
 --------------------------------
@@ -516,6 +526,12 @@ Intel driver environment variables
    ``do32``
       generate compute shader SIMD32 programs even if workgroup size
       doesn't exceed the SIMD16 limit
+   ``draw_bkp``
+      Add semaphore wait before/after draw call count.
+      ``INTEL_DEBUG_BKP_BEFORE_DRAW_COUNT`` or
+      ``INTEL_DEBUG_BKP_AFTER_DRAW_COUNT`` can control draw call number.
+      To make test wait forever, we need to set preempt_timeout_ms and
+      i915.enable_hangcheck to zero.
    ``fall``
       emit messages about performance issues (same as ``perf``)
    ``fs``
@@ -571,6 +587,8 @@ Intel driver environment variables
       the SF program)
    ``soft64``
       enable implementation of software 64bit floating point support
+   ``sparse``
+      dump usage of sparse resources
    ``spill_fs``
       force spilling of all registers in the scalar backend (useful to
       debug spilling code)
@@ -705,6 +723,22 @@ Intel driver environment variables
    if set to 1, true or yes, then the driver prefers accuracy over
    performance in trig functions.
 
+.. envvar:: INTEL_SHADER_OPTIMIZER_PATH
+
+   if set, determines the directory to be used for overriding shader
+   assembly. The binaries with custom assembly should be placed in
+   this folder and have a name formatted as ``sha1_of_assembly.bin``.
+   The SHA-1 of a shader assembly is printed when assembly is dumped via
+   corresponding :envvar:`INTEL_DEBUG` flag (e.g. ``vs`` for vertex shader).
+   A binary could be generated from a dumped assembly by ``i965_asm``.
+   For :envvar:`INTEL_SHADER_ASM_READ_PATH` to work it is necessary to enable
+   dumping of corresponding shader stages via :envvar:`INTEL_DEBUG`.
+   It is advised to use ``nocompact`` flag of :envvar:`INTEL_DEBUG` when
+   dumping and overriding shader assemblies.
+   The success of assembly override would be signified by "Successfully
+   overrode shader with sha1 <SHA-1>" in stderr replacing the original
+   assembly.
+
 .. envvar:: INTEL_SHADER_ASM_READ_PATH
 
    if set, determines the directory to be used for overriding shader
@@ -776,6 +810,8 @@ Vulkan mesa device select layer environment variables
    when set to "vid:did" number from PCI device. That PCI device is
    selected as default. The default device is returned as the first
    device in vkEnumeratePhysicalDevices API.
+   Using "vid:did!" will have the same effect as using the
+   ``MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE`` variable.
 
 .. envvar:: MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE
 
@@ -1016,6 +1052,7 @@ Rusticl environment variables
    - ``allow_invalid_spirv`` disables validation of any input SPIR-V
    - ``clc`` dumps all OpenCL C source being compiled
    - ``program`` dumps compilation logs to stderr
+   - ``sync`` waits on the GPU to complete after every event
 
 .. _clc-env-var:
 
@@ -1254,8 +1291,6 @@ RADV driver environment variables
       display info at startup
    ``syncshaders``
       synchronize shaders after all draws/dispatches
-   ``vmfaults``
-      check for VM memory faults via dmesg
    ``zerovram``
       initialize all memory allocated in VRAM as zero
 
@@ -1386,9 +1421,7 @@ RadeonSI driver environment variables
    ``nodccmsaa``
       Disable DCC for MSAA
    ``nodpbb``
-      Disable DPBB.
-   ``nodfsm``
-      Disable DFSM.
+      Disable DPBB. Overrules the dpbb enable option.
    ``notiling``
       Disable tiling
    ``nofmask``
@@ -1462,9 +1495,7 @@ RadeonSI driver environment variables
    ``nooutoforder``
       Disable out-of-order rasterization
    ``dpbb``
-      Enable DPBB.
-   ``dfsm``
-      Enable DFSM.
+      Enable DPBB. Enable DPBB for gfx9 dGPU. Default enabled for gfx9 APU and >= gfx10.
    ``extra_md``
       add extra information in bo metadatas to help tools (umr)
 

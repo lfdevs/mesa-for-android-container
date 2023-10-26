@@ -23,6 +23,13 @@
    } while (0)
 
 static inline void
+extr_swap(agx_builder *b, agx_index x)
+{
+   x.size = AGX_SIZE_32;
+   agx_extr_to(b, x, x, x, agx_immediate(16), 0);
+}
+
+static inline void
 xor_swap(agx_builder *b, agx_index x, agx_index y)
 {
    agx_xor_to(b, x, x, y);
@@ -161,9 +168,7 @@ TEST_F(LowerParallelCopy, Swap)
       {.dest = 1, .src = agx_register(0, AGX_SIZE_16)},
    };
 
-   CASE(test_2, {
-      xor_swap(b, agx_register(0, AGX_SIZE_16), agx_register(1, AGX_SIZE_16));
-   });
+   CASE(test_2, { extr_swap(b, agx_register(0, AGX_SIZE_16)); });
 }
 
 TEST_F(LowerParallelCopy, Cycle3)
@@ -174,9 +179,8 @@ TEST_F(LowerParallelCopy, Cycle3)
       {.dest = 2, .src = agx_register(0, AGX_SIZE_16)},
    };
 
-   /* XXX: requires 6 instructions. if we had a temp free, could do it in 4 */
    CASE(test, {
-      xor_swap(b, agx_register(0, AGX_SIZE_16), agx_register(1, AGX_SIZE_16));
+      extr_swap(b, agx_register(0, AGX_SIZE_16));
       xor_swap(b, agx_register(1, AGX_SIZE_16), agx_register(2, AGX_SIZE_16));
    });
 }
@@ -194,6 +198,22 @@ TEST_F(LowerParallelCopy, TwoSwaps)
    CASE(test, {
       xor_swap(b, agx_register(4, AGX_SIZE_32), agx_register(2, AGX_SIZE_32));
       xor_swap(b, agx_register(6, AGX_SIZE_32), agx_register(2, AGX_SIZE_32));
+   });
+}
+
+TEST_F(LowerParallelCopy, VectorizeAlignedHalfRegs)
+{
+   struct agx_copy test[] = {
+      {.dest = 0, .src = agx_register(10, AGX_SIZE_16)},
+      {.dest = 1, .src = agx_register(11, AGX_SIZE_16)},
+      {.dest = 2, .src = agx_uniform(8, AGX_SIZE_16)},
+      {.dest = 3, .src = agx_uniform(9, AGX_SIZE_16)},
+   };
+
+   CASE(test, {
+      agx_mov_to(b, agx_register(0, AGX_SIZE_32),
+                 agx_register(10, AGX_SIZE_32));
+      agx_mov_to(b, agx_register(2, AGX_SIZE_32), agx_uniform(8, AGX_SIZE_32));
    });
 }
 

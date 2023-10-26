@@ -40,6 +40,7 @@
 #include "vk_instance.h"
 #include "vk_object.h"
 #include "vk_physical_device.h"
+#include "vk_queue.h"
 #include "vk_util.h"
 
 #include "vn_entrypoints.h"
@@ -54,8 +55,6 @@
 #define vn_result(instance, result)                                          \
    ((result) >= VK_SUCCESS ? (result) : vn_error((instance), (result)))
 
-#define VN_TRACE_BEGIN(name) MESA_TRACE_BEGIN(name)
-#define VN_TRACE_END() MESA_TRACE_END()
 #define VN_TRACE_SCOPE(name) MESA_TRACE_SCOPE(name)
 #define VN_TRACE_FUNC() MESA_TRACE_SCOPE(__func__)
 
@@ -104,6 +103,8 @@ enum vn_debug {
    VN_DEBUG_NO_ABORT = 1ull << 4,
    VN_DEBUG_LOG_CTX_INFO = 1ull << 5,
    VN_DEBUG_CACHE = 1ull << 6,
+   VN_DEBUG_NO_SPARSE = 1ull << 7,
+   VN_DEBUG_GPL = 1ull << 8,
 };
 
 enum vn_perf {
@@ -116,6 +117,7 @@ enum vn_perf {
    VN_PERF_NO_CMD_BATCHING = 1ull << 6,
    VN_PERF_NO_TIMELINE_SEM_FEEDBACK = 1ull << 7,
    VN_PERF_NO_QUERY_FEEDBACK = 1ull << 8,
+   VN_PERF_NO_ASYNC_MEM_ALLOC = 1ull << 9,
 };
 
 typedef uint64_t vn_object_id;
@@ -135,6 +137,12 @@ struct vn_physical_device_base {
 /* base class of vn_device */
 struct vn_device_base {
    struct vk_device base;
+   vn_object_id id;
+};
+
+/* base class of vn_queue */
+struct vn_queue_base {
+   struct vk_queue base;
    vn_object_id id;
 };
 
@@ -276,7 +284,7 @@ vn_physical_device_base_init(
 {
    VkResult result =
       vk_physical_device_init(&physical_dev->base, &instance->base,
-                              supported_extensions, NULL, dispatch_table);
+                              supported_extensions, NULL, NULL, dispatch_table);
    physical_dev->id = (uintptr_t)physical_dev;
    return result;
 }
@@ -304,6 +312,24 @@ static inline void
 vn_device_base_fini(struct vn_device_base *dev)
 {
    vk_device_finish(&dev->base);
+}
+
+static inline VkResult
+vn_queue_base_init(struct vn_queue_base *queue,
+                   struct vn_device_base *dev,
+                   const VkDeviceQueueCreateInfo *queue_info,
+                   uint32_t queue_index)
+{
+   VkResult result =
+      vk_queue_init(&queue->base, &dev->base, queue_info, queue_index);
+   queue->id = (uintptr_t)queue;
+   return result;
+}
+
+static inline void
+vn_queue_base_fini(struct vn_queue_base *queue)
+{
+   vk_queue_finish(&queue->base);
 }
 
 static inline void
@@ -335,6 +361,9 @@ vn_object_set_id(void *obj, vn_object_id id, VkObjectType type)
    case VK_OBJECT_TYPE_DEVICE:
       ((struct vn_device_base *)obj)->id = id;
       break;
+   case VK_OBJECT_TYPE_QUEUE:
+      ((struct vn_queue_base *)obj)->id = id;
+      break;
    default:
       ((struct vn_object_base *)obj)->id = id;
       break;
@@ -352,6 +381,8 @@ vn_object_get_id(const void *obj, VkObjectType type)
       return ((struct vn_physical_device_base *)obj)->id;
    case VK_OBJECT_TYPE_DEVICE:
       return ((struct vn_device_base *)obj)->id;
+   case VK_OBJECT_TYPE_QUEUE:
+      return ((struct vn_queue_base *)obj)->id;
    default:
       return ((struct vn_object_base *)obj)->id;
    }

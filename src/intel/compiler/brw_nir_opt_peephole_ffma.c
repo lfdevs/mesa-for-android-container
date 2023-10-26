@@ -30,13 +30,13 @@
  */
 
 static inline bool
-are_all_uses_fadd(nir_ssa_def *def)
+are_all_uses_fadd(nir_def *def)
 {
    nir_foreach_use_including_if(use_src, def) {
-      if (use_src->is_if)
+      if (nir_src_is_if(use_src))
          return false;
 
-      nir_instr *use_instr = use_src->parent_instr;
+      nir_instr *use_instr = nir_src_parent_instr(use_src);
       if (use_instr->type != nir_instr_type_alu)
          return false;
 
@@ -48,8 +48,7 @@ are_all_uses_fadd(nir_ssa_def *def)
       case nir_op_mov:
       case nir_op_fneg:
       case nir_op_fabs:
-         assert(use_alu->dest.dest.is_ssa);
-         if (!are_all_uses_fadd(&use_alu->dest.dest.ssa))
+         if (!are_all_uses_fadd(&use_alu->def))
             return false;
          break;
 
@@ -66,7 +65,6 @@ get_mul_for_src(nir_alu_src *src, unsigned num_components,
                 uint8_t *swizzle, bool *negate, bool *abs)
 {
    uint8_t swizzle_tmp[NIR_MAX_VEC_COMPONENTS];
-   assert(src->src.is_ssa && !src->abs && !src->negate);
 
    nir_instr *instr = src->src.ssa->parent_instr;
    if (instr->type != nir_instr_type_alu)
@@ -86,18 +84,18 @@ get_mul_for_src(nir_alu_src *src, unsigned num_components,
 
    switch (alu->op) {
    case nir_op_mov:
-      alu = get_mul_for_src(&alu->src[0], alu->dest.dest.ssa.num_components,
+      alu = get_mul_for_src(&alu->src[0], alu->def.num_components,
                             swizzle, negate, abs);
       break;
 
    case nir_op_fneg:
-      alu = get_mul_for_src(&alu->src[0], alu->dest.dest.ssa.num_components,
+      alu = get_mul_for_src(&alu->src[0], alu->def.num_components,
                             swizzle, negate, abs);
       *negate = !*negate;
       break;
 
    case nir_op_fabs:
-      alu = get_mul_for_src(&alu->src[0], alu->dest.dest.ssa.num_components,
+      alu = get_mul_for_src(&alu->src[0], alu->def.num_components,
                             swizzle, negate, abs);
       *negate = false;
       *abs = true;
@@ -108,7 +106,7 @@ get_mul_for_src(nir_alu_src *src, unsigned num_components,
        * operations.  This prevents us from being too aggressive with our
        * fusing which can actually lead to more instructions.
        */
-      if (!are_all_uses_fadd(&alu->dest.dest.ssa))
+      if (!are_all_uses_fadd(&alu->def))
          return NULL;
       break;
 
@@ -167,11 +165,9 @@ brw_nir_opt_peephole_ffma_instr(nir_builder *b,
    if (add->op != nir_op_fadd)
       return false;
 
-   assert(add->dest.dest.is_ssa);
    if (add->exact)
       return false;
 
-   assert(add->src[0].src.is_ssa && add->src[1].src.is_ssa);
 
    /* This, is the case a + a.  We would rather handle this with an
     * algebraic reduction than fuse it.  Also, we want to only fuse
@@ -192,7 +188,7 @@ brw_nir_opt_peephole_ffma_instr(nir_builder *b,
       abs = false;
 
       mul = get_mul_for_src(&add->src[add_mul_src],
-                            add->dest.dest.ssa.num_components,
+                            add->def.num_components,
                             swizzle, &negate, &abs);
 
       if (mul != NULL)
@@ -202,9 +198,9 @@ brw_nir_opt_peephole_ffma_instr(nir_builder *b,
    if (mul == NULL)
       return false;
 
-   unsigned bit_size = add->dest.dest.ssa.bit_size;
+   unsigned bit_size = add->def.bit_size;
 
-   nir_ssa_def *mul_src[2];
+   nir_def *mul_src[2];
    mul_src[0] = mul->src[0].src.ssa;
    mul_src[1] = mul->src[1].src.ssa;
 
@@ -228,24 +224,20 @@ brw_nir_opt_peephole_ffma_instr(nir_builder *b,
       mul_src[0] = nir_fneg(b, mul_src[0]);
 
    nir_alu_instr *ffma = nir_alu_instr_create(b->shader, nir_op_ffma);
-   ffma->dest.saturate = add->dest.saturate;
-   ffma->dest.write_mask = add->dest.write_mask;
 
    for (unsigned i = 0; i < 2; i++) {
       ffma->src[i].src = nir_src_for_ssa(mul_src[i]);
-      for (unsigned j = 0; j < add->dest.dest.ssa.num_components; j++)
+      for (unsigned j = 0; j < add->def.num_components; j++)
          ffma->src[i].swizzle[j] = mul->src[i].swizzle[swizzle[j]];
    }
-   nir_alu_src_copy(&ffma->src[2], &add->src[1 - add_mul_src], ffma);
+   nir_alu_src_copy(&ffma->src[2], &add->src[1 - add_mul_src]);
 
-   assert(add->dest.dest.is_ssa);
-
-   nir_ssa_dest_init(&ffma->instr, &ffma->dest.dest,
-                     add->dest.dest.ssa.num_components, bit_size);
-   nir_ssa_def_rewrite_uses(&add->dest.dest.ssa, &ffma->dest.dest.ssa);
+   nir_def_init(&ffma->instr, &ffma->def,
+                add->def.num_components, bit_size);
+   nir_def_rewrite_uses(&add->def, &ffma->def);
 
    nir_builder_instr_insert(b, &ffma->instr);
-   assert(list_is_empty(&add->dest.dest.ssa.uses));
+   assert(list_is_empty(&add->def.uses));
    nir_instr_remove(&add->instr);
 
    return true;

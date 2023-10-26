@@ -36,13 +36,13 @@ struct lower_state {
    unsigned num_point_coords;
    nir_variable *varying_out[VARYING_SLOT_MAX];
 
-   nir_ssa_def *point_dir_imm[4];
-   nir_ssa_def *point_coord_imm[4];
+   nir_def *point_dir_imm[4];
+   nir_def *point_coord_imm[4];
 
    /* Current point primitive */
-   nir_ssa_def *point_pos;
-   nir_ssa_def *point_size;
-   nir_ssa_def *varying[VARYING_SLOT_MAX];
+   nir_def *point_pos;
+   nir_def *point_size;
+   nir_def *varying[VARYING_SLOT_MAX];
    unsigned varying_write_mask[VARYING_SLOT_MAX];
 
    bool sprite_origin_lower_left;
@@ -68,7 +68,7 @@ find_outputs(nir_shader *shader, struct lower_state *state)
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 get_point_dir(nir_builder *b, struct lower_state *state, unsigned i)
 {
    if (state->point_dir_imm[0] == NULL) {
@@ -81,7 +81,7 @@ get_point_dir(nir_builder *b, struct lower_state *state, unsigned i)
    return state->point_dir_imm[i];
 }
 
-static nir_ssa_def *
+static nir_def *
 get_point_coord(nir_builder *b, struct lower_state *state, unsigned i)
 {
    if (state->point_coord_imm[0] == NULL) {
@@ -106,11 +106,11 @@ get_point_coord(nir_builder *b, struct lower_state *state, unsigned i)
  */
 static void
 get_scaled_point_size(nir_builder *b, struct lower_state *state,
-                      nir_ssa_def **x, nir_ssa_def **y)
+                      nir_def **x, nir_def **y)
 {
    /* State uniform contains: (1/ViewportWidth, 1/ViewportHeight, PointSize, MaxPointSize) */
-   nir_ssa_def *uniform = nir_load_var(b, state->uniform);
-   nir_ssa_def *point_size = state->point_size;
+   nir_def *uniform = nir_load_var(b, state->uniform);
+   nir_def *point_size = state->point_size;
 
    /* clamp point-size to valid range */
    if (point_size && state->point_size_per_vertex) {
@@ -158,7 +158,7 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
 {
    unsigned stream_id = nir_intrinsic_stream_id(instr);
 
-   nir_ssa_def *point_width, *point_height;
+   nir_def *point_width, *point_height;
    get_scaled_point_size(b, state, &point_width, &point_height);
 
    nir_instr_remove(&instr->instr);
@@ -173,8 +173,8 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
          }
 
          /* pos = scaled_point_size * point_dir + point_pos */
-         nir_ssa_def *point_dir = get_point_dir(b, state, i);
-         nir_ssa_def *pos = nir_vec4(b,
+         nir_def *point_dir = get_point_dir(b, state, i);
+         nir_def *pos = nir_vec4(b,
                                      nir_ffma(b,
                                               point_width,
                                               nir_channel(b, point_dir, 0),
@@ -188,7 +188,7 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
          nir_store_var(b, state->pos_out, pos, 0xf);
 
          /* point coord */
-         nir_ssa_def *point_coord = get_point_coord(b, state, i);
+         nir_def *point_coord = get_point_coord(b, state, i);
          for (unsigned j = 0; j < state->num_point_coords; ++j) {
             unsigned num_channels = glsl_get_components(state->point_coord_out[j]->type);
             unsigned mask = (1 << num_channels) - 1;

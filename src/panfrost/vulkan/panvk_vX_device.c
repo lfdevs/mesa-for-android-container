@@ -77,10 +77,11 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
       }
 
       if (debug & PANVK_DEBUG_TRACE)
-         pandecode_jc(batch->scoreboard.first_job, pdev->gpu_id);
+         pandecode_jc(pdev->decode_ctx, batch->scoreboard.first_job,
+                      pdev->gpu_id);
 
       if (debug & PANVK_DEBUG_DUMP)
-         pandecode_dump_mappings();
+         pandecode_dump_mappings(pdev->decode_ctx);
    }
 
    if (batch->fragment_job) {
@@ -109,14 +110,14 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
       }
 
       if (debug & PANVK_DEBUG_TRACE)
-         pandecode_jc(batch->fragment_job, pdev->gpu_id);
+         pandecode_jc(pdev->decode_ctx, batch->fragment_job, pdev->gpu_id);
 
       if (debug & PANVK_DEBUG_DUMP)
-         pandecode_dump_mappings();
+         pandecode_dump_mappings(pdev->decode_ctx);
    }
 
    if (debug & PANVK_DEBUG_TRACE)
-      pandecode_next_frame();
+      pandecode_next_frame(0);
 
    batch->issued = true;
 }
@@ -243,8 +244,9 @@ panvk_per_arch(queue_submit)(struct vk_queue *vk_queue,
 
          if (batch->fb.info) {
             for (unsigned i = 0; i < batch->fb.info->attachment_count; i++) {
-               bos[bo_idx++] = batch->fb.info->attachments[i]
-                                  .iview->pview.image->data.bo->gem_handle;
+               const struct pan_image *image = pan_image_view_get_plane(
+                  &batch->fb.info->attachments[i].iview->pview, 0);
+               bos[bo_idx++] = image->data.bo->gem_handle;
             }
          }
 

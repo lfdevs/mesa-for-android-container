@@ -321,7 +321,13 @@ driGetConfigAttribIndex(const __DRIconfig *config,
     case __DRI_ATTRIB_VISUAL_SELECT_GROUP:
         *value = 0;
         break;
-    SIMPLE_CASE(__DRI_ATTRIB_SWAP_METHOD, swapMethod);
+    case __DRI_ATTRIB_SWAP_METHOD:
+        /* Not supported any more, but we have the __DRI_ATTRIB still defined
+         * for the X server's sake, and EGL will expect us to handle it because
+         * it iterates all __DRI_ATTRIBs.
+         */
+        *value = __DRI_ATTRIB_SWAP_EXCHANGE;
+        break;
     case __DRI_ATTRIB_MAX_SWAP_INTERVAL:
         *value = INT_MAX;
         break;
@@ -944,6 +950,11 @@ static const struct {
       .internal_format =        GL_RGB5_A1,
    },
    {
+      .image_format    = __DRI_IMAGE_FORMAT_ABGR1555,
+      .mesa_format     =        MESA_FORMAT_R5G5B5A1_UNORM,
+      .internal_format =        GL_RGB5_A1,
+   },
+   {
       .image_format    = __DRI_IMAGE_FORMAT_XRGB8888,
       .mesa_format     =        MESA_FORMAT_B8G8R8X8_UNORM,
       .internal_format =        GL_RGB8,
@@ -1062,6 +1073,16 @@ static const struct {
       .internal_format =        GL_RG16,
    },
 #endif
+   {
+      .image_format    = __DRI_IMAGE_FORMAT_ARGB4444,
+      .mesa_format     =        MESA_FORMAT_B4G4R4A4_UNORM,
+      .internal_format =        GL_RGBA4,
+   },
+   {
+      .image_format    = __DRI_IMAGE_FORMAT_ABGR4444,
+      .mesa_format     =        MESA_FORMAT_R4G4B4A4_UNORM,
+      .internal_format =        GL_RGBA4,
+   },
 };
 
 uint32_t

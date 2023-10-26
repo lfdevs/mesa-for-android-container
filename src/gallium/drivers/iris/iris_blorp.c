@@ -301,6 +301,16 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
                                 PIPE_CONTROL_STALL_AT_SCOREBOARD);
 #endif
 
+   /* Check if blorp ds state matches ours. */
+   if (intel_needs_workaround(batch->screen->devinfo, 18019816803)) {
+      const bool blorp_ds_state =
+         params->depth.enabled || params->stencil.enabled;
+      if (ice->state.ds_write_state != blorp_ds_state) {
+         blorp_batch->flags |= BLORP_BATCH_NEED_PSS_STALL_SYNC;
+         ice->state.ds_write_state = blorp_ds_state;
+      }
+   }
+
    if (params->depth.enabled &&
        !(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
       genX(emit_depth_state_workarounds)(ice, batch, &params->depth.surf);
@@ -488,4 +498,18 @@ genX(init_blorp)(struct iris_context *ice)
    ice->blorp.lookup_shader = iris_blorp_lookup_shader;
    ice->blorp.upload_shader = iris_blorp_upload_shader;
    ice->blorp.exec = iris_blorp_exec;
+}
+
+static void
+blorp_emit_breakpoint_pre_draw(struct blorp_batch *blorp_batch)
+{
+   struct iris_batch *batch = blorp_batch->driver_batch;
+   genX(maybe_emit_breakpoint)(batch, true);
+}
+
+static void
+blorp_emit_breakpoint_post_draw(struct blorp_batch *blorp_batch)
+{
+   struct iris_batch *batch = blorp_batch->driver_batch;
+   genX(maybe_emit_breakpoint)(batch, false);
 }

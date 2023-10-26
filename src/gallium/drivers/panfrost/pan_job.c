@@ -68,6 +68,7 @@ panfrost_batch_add_surface(struct panfrost_batch *batch,
 {
    if (surf) {
       struct panfrost_resource *rsrc = pan_resource(surf->texture);
+      pan_legalize_afbc_format(batch->ctx, rsrc, surf->format, true);
       panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_FRAGMENT);
    }
 }
@@ -351,6 +352,14 @@ panfrost_batch_add_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
 }
 
 void
+panfrost_batch_write_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
+                        enum pipe_shader_type stage)
+{
+   panfrost_batch_add_bo_old(
+      batch, bo, PAN_BO_ACCESS_WRITE | panfrost_access_for_stage(stage));
+}
+
+void
 panfrost_batch_read_rsrc(struct panfrost_batch *batch,
                          struct panfrost_resource *rsrc,
                          enum pipe_shader_type stage)
@@ -489,7 +498,7 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
       rts[i].last_level = rts[i].first_level = surf->u.tex.level;
       rts[i].first_layer = surf->u.tex.first_layer;
       rts[i].last_layer = surf->u.tex.last_layer;
-      rts[i].image = &prsrc->image;
+      panfrost_set_image_view_planes(&rts[i], surf->texture);
       rts[i].nr_samples =
          surf->nr_samples ?: MAX2(surf->texture->nr_samples, 1);
       memcpy(rts[i].swizzle, id_swz, sizeof(rts[i].swizzle));
@@ -518,7 +527,7 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
       zs->last_level = zs->first_level = surf->u.tex.level;
       zs->first_layer = surf->u.tex.first_layer;
       zs->last_layer = surf->u.tex.last_layer;
-      zs->image = &z_rsrc->image;
+      zs->planes[0] = &z_rsrc->image;
       zs->nr_samples = surf->nr_samples ?: MAX2(surf->texture->nr_samples, 1);
       memcpy(zs->swizzle, id_swz, sizeof(zs->swizzle));
       fb->zs.view.zs = zs;
@@ -535,7 +544,7 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
          s->last_level = s->first_level = surf->u.tex.level;
          s->first_layer = surf->u.tex.first_layer;
          s->last_layer = surf->u.tex.last_layer;
-         s->image = &s_rsrc->image;
+         s->planes[0] = &s_rsrc->image;
          s->nr_samples = surf->nr_samples ?: MAX2(surf->texture->nr_samples, 1);
          memcpy(s->swizzle, id_swz, sizeof(s->swizzle));
          fb->zs.view.s = s;
@@ -685,14 +694,14 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
       drmSyncobjWait(dev->fd, &out_sync, 1, INT64_MAX, 0, NULL);
 
       if (dev->debug & PAN_DBG_TRACE)
-         pandecode_jc(submit.jc, dev->gpu_id);
+         pandecode_jc(dev->decode_ctx, submit.jc, dev->gpu_id);
 
       if (dev->debug & PAN_DBG_DUMP)
-         pandecode_dump_mappings();
+         pandecode_dump_mappings(dev->decode_ctx);
 
       /* Jobs won't be complete if blackhole rendering, that's ok */
       if (!ctx->is_noop && dev->debug & PAN_DBG_SYNC)
-         pandecode_abort_on_fault(submit.jc, dev->gpu_id);
+         pandecode_abort_on_fault(dev->decode_ctx, submit.jc, dev->gpu_id);
    }
 
    return 0;

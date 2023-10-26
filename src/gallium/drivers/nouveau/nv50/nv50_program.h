@@ -24,6 +24,7 @@
 #define __NV50_PROG_H__
 
 struct nv50_context;
+struct nir_shader;
 
 #include "pipe/p_state.h"
 
@@ -55,7 +56,8 @@ struct nv50_gmem_state {
 };
 
 struct nv50_program {
-   struct pipe_shader_state pipe;
+   struct nir_shader *nir;
+   struct pipe_stream_output_info stream_output;
 
    uint8_t type;
    bool translated;

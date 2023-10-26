@@ -733,32 +733,47 @@ si_emit_spm_counters(struct si_context *sctx, struct radeon_cmdbuf *cs)
 
    radeon_begin(cs);
 
-   for (uint32_t b = 0; b < spm->num_used_sq_block_sel; b++) {
-      struct ac_spm_block_select *sq_block_sel = &spm->sq_block_sel[b];
-      const struct ac_spm_counter_select *cntr_sel = &sq_block_sel->counters[0];
-      uint32_t reg_base = R_036700_SQ_PERFCOUNTER0_SELECT;
+   for (uint32_t instance = 0; instance < ARRAY_SIZE(spm->sqg); instance++) {
+      uint32_t num_counters = spm->sqg[instance].num_counters;
 
-      radeon_set_uconfig_reg_seq(reg_base + b * 4, 1, false);
-      radeon_emit(cntr_sel->sel0 | S_036700_SQC_BANK_MASK(0xf)); /* SQC_BANK_MASK only gfx10 */
+      if (!num_counters)
+         continue;
+
+      radeon_set_uconfig_reg(R_030800_GRBM_GFX_INDEX,
+                             S_030800_SH_BROADCAST_WRITES(1) |
+                             S_030800_INSTANCE_BROADCAST_WRITES(1) |
+                             S_030800_SE_INDEX(instance));
+
+      for (uint32_t b = 0; b < num_counters; b++) {
+         const struct ac_spm_counter_select *cntr_sel = &spm->sqg[instance].counters[b];
+         uint32_t reg_base = R_036700_SQ_PERFCOUNTER0_SELECT;
+
+         radeon_set_uconfig_reg_seq(reg_base + b * 4, 1, false);
+         radeon_emit(cntr_sel->sel0 | S_036700_SQC_BANK_MASK(0xf)); /* SQC_BANK_MASK only gfx10 */
+      }
    }
 
    for (uint32_t b = 0; b < spm->num_block_sel; b++) {
       struct ac_spm_block_select *block_sel = &spm->block_sel[b];
       struct ac_pc_block_base *regs = block_sel->b->b->b;
 
-      radeon_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, block_sel->grbm_gfx_index);
+      for (unsigned i = 0; i < block_sel->num_instances; i++) {
+         struct ac_spm_block_instance *block_instance = &block_sel->instances[i];
 
-      for (unsigned c = 0; c < block_sel->num_counters; c++) {
-         const struct ac_spm_counter_select *cntr_sel = &block_sel->counters[c];
+         radeon_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, block_instance->grbm_gfx_index);
 
-         if (!cntr_sel->active)
-            continue;
+         for (unsigned c = 0; c < block_instance->num_counters; c++) {
+            const struct ac_spm_counter_select *cntr_sel = &block_instance->counters[c];
 
-         radeon_set_uconfig_reg_seq(regs->select0[c], 1, false);
-         radeon_emit(cntr_sel->sel0);
+            if (!cntr_sel->active)
+               continue;
 
-         radeon_set_uconfig_reg_seq(regs->select1[c], 1, false);
-         radeon_emit(cntr_sel->sel1);
+            radeon_set_uconfig_reg_seq(regs->select0[c], 1, false);
+            radeon_emit(cntr_sel->sel0);
+
+            radeon_set_uconfig_reg_seq(regs->select1[c], 1, false);
+            radeon_emit(cntr_sel->sel1);
+         }
       }
    }
 
@@ -804,13 +819,13 @@ si_emit_spm_setup(struct si_context *sctx, struct radeon_cmdbuf *cs)
    radeon_set_uconfig_reg(R_03726C_RLC_SPM_ACCUM_MODE, 0);
    radeon_set_uconfig_reg(R_037210_RLC_SPM_PERFMON_SEGMENT_SIZE, 0);
    radeon_set_uconfig_reg(R_03727C_RLC_SPM_PERFMON_SE3TO0_SEGMENT_SIZE,
-                          S_03727C_SE0_NUM_LINE(spm->num_muxsel_lines[0]) |
-                          S_03727C_SE1_NUM_LINE(spm->num_muxsel_lines[1]) |
-                          S_03727C_SE2_NUM_LINE(spm->num_muxsel_lines[2]) |
-                          S_03727C_SE3_NUM_LINE(spm->num_muxsel_lines[3]));
+                          S_03727C_SE0_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE0]) |
+                          S_03727C_SE1_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE1]) |
+                          S_03727C_SE2_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE2]) |
+                          S_03727C_SE3_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE3]));
    radeon_set_uconfig_reg(R_037280_RLC_SPM_PERFMON_GLB_SEGMENT_SIZE,
                           S_037280_PERFMON_SEGMENT_SIZE(total_muxsel_lines) |
-                          S_037280_GLOBAL_NUM_LINE(spm->num_muxsel_lines[4]));
+                          S_037280_GLOBAL_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_GLOBAL]));
 
    /* Upload each muxsel ram to the RLC. */
    for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
@@ -868,35 +883,11 @@ si_spm_init(struct si_context *sctx)
    sctx->screen->perfcounters->num_instance_cs_dwords = 3;
 
    struct ac_perfcounters *pc = &sctx->screen->perfcounters->base;
-   struct ac_spm_counter_create_info spm_counters[] = {
-
-      /* XXX: doesn't work */
-      {TCP, 0, 0x9},    /* Number of L2 requests. */
-      {TCP, 0, 0x12},   /* Number of L2 misses. */
-
-      /* Scalar cache hit */
-      {SQ, 0, 0x14f},   /* Number of SCACHE hits. */
-      {SQ, 0, 0x150},   /* Number of SCACHE misses. */
-      {SQ, 0, 0x151},   /* Number of SCACHE misses duplicate. */
-
-      /* Instruction cache hit */
-      {SQ, 0, 0x12c},   /* Number of ICACHE hits. */
-      {SQ, 0, 0x12d},   /* Number of ICACHE misses. */
-      {SQ, 0, 0x12e},   /* Number of ICACHE misses duplicate. */
-
-      /* XXX: doesn't work */
-      {GL1C, 0, 0xe},   /* Number of GL1C requests. */
-      {GL1C, 0, 0x12},  /* Number of GL1C misses. */
-
-      /* L2 cache hit */
-      {GL2C, 0, 0x3},   /* Number of GL2C requests. */
-      {GL2C, 0, info->gfx_level >= GFX10_3 ? 0x2b : 0x23},  /* Number of GL2C misses. */
-   };
 
    if (!ac_init_perfcounters(info, false, false, pc))
       return false;
 
-   if (!ac_init_spm(info, pc, ARRAY_SIZE(spm_counters), spm_counters, &sctx->spm))
+   if (!ac_init_spm(info, pc, &sctx->spm))
       return false;
 
    if (!si_spm_init_bo(sctx))

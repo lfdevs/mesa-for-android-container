@@ -316,28 +316,47 @@ void si_pm4_free_state(struct si_context *sctx, struct si_pm4_state *state, unsi
 
       if (sctx->queued.array[idx] == state) {
          sctx->queued.array[idx] = NULL;
-         sctx->dirty_states &= ~BITFIELD_BIT(idx);
+         sctx->dirty_atoms &= ~BITFIELD64_BIT(idx);
       }
    }
 
    FREE(state);
 }
 
-void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
+void si_pm4_emit_commands(struct si_context *sctx, struct si_pm4_state *state)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
 
-   if (state->is_shader) {
-      radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, ((struct si_shader*)state)->bo,
-                                RADEON_USAGE_READ | RADEON_PRIO_SHADER_BINARY);
-   }
+   radeon_begin(cs);
+   radeon_emit_array(state->pm4, state->ndw);
+   radeon_end();
+}
+
+void si_pm4_emit_state(struct si_context *sctx, unsigned index)
+{
+   struct si_pm4_state *state = sctx->queued.array[index];
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
+
+   /* All places should unset dirty_states if this doesn't pass. */
+   assert(state && state != sctx->emitted.array[index]);
 
    radeon_begin(cs);
    radeon_emit_array(state->pm4, state->ndw);
    radeon_end();
 
+   sctx->emitted.array[index] = state;
+}
+
+void si_pm4_emit_shader(struct si_context *sctx, unsigned index)
+{
+   struct si_pm4_state *state = sctx->queued.array[index];
+
+   si_pm4_emit_state(sctx, index);
+
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, ((struct si_shader*)state)->bo,
+                             RADEON_USAGE_READ | RADEON_PRIO_SHADER_BINARY);
    if (state->atom.emit)
-      state->atom.emit(sctx);
+      state->atom.emit(sctx, -1);
 }
 
 void si_pm4_reset_emitted(struct si_context *sctx)
@@ -346,7 +365,7 @@ void si_pm4_reset_emitted(struct si_context *sctx)
 
    for (unsigned i = 0; i < SI_NUM_STATES; i++) {
       if (sctx->queued.array[i])
-         sctx->dirty_states |= BITFIELD_BIT(i);
+         sctx->dirty_atoms |= BITFIELD64_BIT(i);
    }
 }
 

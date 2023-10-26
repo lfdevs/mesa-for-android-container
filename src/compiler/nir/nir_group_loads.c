@@ -127,7 +127,7 @@ can_move(nir_instr *instr, uint8_t current_indirection_level)
        instr->type == nir_instr_type_deref ||
        instr->type == nir_instr_type_tex ||
        instr->type == nir_instr_type_load_const ||
-       instr->type == nir_instr_type_ssa_undef)
+       instr->type == nir_instr_type_undef)
       return true;
 
    if (instr->type == nir_instr_type_intrinsic &&
@@ -164,8 +164,7 @@ get_uniform_inst_resource(nir_instr *instr)
    return NULL;
 }
 
-struct check_sources_state
-{
+struct check_sources_state {
    nir_block *block;
    uint32_t first_index;
 };
@@ -194,13 +193,13 @@ group_loads(nir_instr *first, nir_instr *last)
       if (!can_move(instr, first->pass_flags))
          continue;
 
-      nir_ssa_def *def = nir_instr_ssa_def(instr);
+      nir_def *def = nir_instr_def(instr);
       if (def) {
          bool all_uses_after_last = true;
 
          nir_foreach_use(use, def) {
-            if (use->parent_instr->block == instr->block &&
-                use->parent_instr->index <= last->index) {
+            if (nir_src_parent_instr(use)->block == instr->block &&
+                nir_src_parent_instr(use)->index <= last->index) {
                all_uses_after_last = false;
                break;
             }
@@ -273,7 +272,7 @@ set_instr_indices(nir_block *block)
        * instructions.
        */
       if (last && is_pseudo_inst(last) && is_grouped_load(instr))
-          counter++;
+         counter++;
 
       /* Set each instruction's index within the block. */
       instr->index = counter;
@@ -307,7 +306,6 @@ is_barrier(nir_instr *instr)
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
       const char *name = nir_intrinsic_infos[intr->intrinsic].name;
 
-
       if (intr->intrinsic == nir_intrinsic_discard ||
           intr->intrinsic == nir_intrinsic_discard_if ||
           intr->intrinsic == nir_intrinsic_terminate ||
@@ -320,8 +318,7 @@ is_barrier(nir_instr *instr)
    return false;
 }
 
-struct indirection_state
-{
+struct indirection_state {
    nir_block *block;
    unsigned indirections;
 };
@@ -376,7 +373,7 @@ process_block(nir_block *block, nir_load_grouping grouping,
               unsigned max_distance)
 {
    int max_indirection = -1;
-   unsigned num_inst_per_level[256] = {0};
+   unsigned num_inst_per_level[256] = { 0 };
 
    /* UINT32_MAX means the instruction has not been visited. Once
     * an instruction has been visited and its indirection level has been
@@ -481,7 +478,7 @@ nir_group_loads(nir_shader *shader, nir_load_grouping grouping,
       }
 
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance |
-                                  nir_metadata_loop_analysis);
+                                     nir_metadata_dominance |
+                                     nir_metadata_loop_analysis);
    }
 }

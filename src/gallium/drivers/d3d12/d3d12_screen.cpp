@@ -324,7 +324,6 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
@@ -472,9 +471,6 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
        * TC can support to avoid overflowing an array.
        */
       return PIPE_MAX_SAMPLERS;
-
-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-      return 0; /* not implemented */
 
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 0; /* no idea */

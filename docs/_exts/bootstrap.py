@@ -96,6 +96,9 @@ class BootstrapHTML5TranslatorMixin:
         self.body.append(tag)
 
 def setup_translators(app):
+    if app.builder.default_translator_class is None:
+        return
+
     if not app.registry.translators.items():
         translator = types.new_class(
             "BootstrapHTML5Translator",

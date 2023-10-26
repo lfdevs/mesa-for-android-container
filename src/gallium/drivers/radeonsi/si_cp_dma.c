@@ -32,6 +32,15 @@ static inline unsigned cp_dma_max_byte_count(struct si_context *sctx)
    return max & ~(SI_CPDMA_ALIGNMENT - 1);
 }
 
+/* should cp dma skip the hole in sparse bo */
+static inline bool cp_dma_sparse_wa(struct si_context *sctx, struct si_resource *sdst)
+{
+   if ((sctx->gfx_level == GFX9) && sdst && (sdst->flags & RADEON_FLAG_SPARSE))
+      return true;
+
+   return false;
+}
+
 /* Emit a CP DMA packet to do a copy from one buffer to another, or to clear
  * a buffer. The size must fit in bits [20:0]. If CP_DMA_CLEAR is set, src_va is a 32-bit
  * clear value.
@@ -66,7 +75,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       command |= S_415_DAS(V_415_REGISTER) | S_415_DAIC(V_415_NO_INCREMENT);
    } else if (sctx->gfx_level >= GFX7 && cache_policy != L2_BYPASS) {
       header |=
-         S_411_DST_SEL(V_411_DST_ADDR_TC_L2) | S_500_DST_CACHE_POLICY(cache_policy == L2_STREAM);
+         S_501_DST_SEL(V_501_DST_ADDR_TC_L2) | S_501_DST_CACHE_POLICY(cache_policy == L2_STREAM);
    }
 
    if (flags & CP_DMA_CLEAR) {
@@ -77,7 +86,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       command |= S_415_SAS(V_415_REGISTER) | S_415_SAIC(V_415_NO_INCREMENT);
    } else if (sctx->gfx_level >= GFX7 && cache_policy != L2_BYPASS) {
       header |=
-         S_411_SRC_SEL(V_411_SRC_ADDR_TC_L2) | S_500_SRC_CACHE_POLICY(cache_policy == L2_STREAM);
+         S_501_SRC_SEL(V_501_SRC_ADDR_TC_L2) | S_501_SRC_CACHE_POLICY(cache_policy == L2_STREAM);
    }
 
    radeon_begin(cs);
@@ -129,12 +138,6 @@ static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst
                               uint64_t remaining_size, unsigned user_flags, enum si_coherency coher,
                               bool *is_first, unsigned *packet_flags)
 {
-   /* Count memory usage in so that need_cs_space can take it into account. */
-   if (dst)
-      si_context_add_resource_size(sctx, dst);
-   if (src)
-      si_context_add_resource_size(sctx, src);
-
    if (!(user_flags & SI_OP_CPDMA_SKIP_CHECK_CS_SPACE))
       si_need_gfx_cs_space(sctx, 0);
 
@@ -150,7 +153,7 @@ static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst
     * Also wait for the previous CP DMA operations.
     */
    if (*is_first && sctx->flags)
-      sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+      si_emit_cache_flush_direct(sctx);
 
    if (user_flags & SI_OP_SYNC_CPDMA_BEFORE && *is_first && !(*packet_flags & CP_DMA_CLEAR))
       *packet_flags |= CP_DMA_RAW_WAIT;
@@ -198,9 +201,23 @@ void si_cp_dma_clear_buffer(struct si_context *sctx, struct radeon_cmdbuf *cs,
          sctx->flags |= si_get_flush_flags(sctx, coher, cache_policy);
    }
 
+   if (sctx->flags)
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+
    while (size) {
       unsigned byte_count = MIN2(size, cp_dma_max_byte_count(sctx));
       unsigned dma_flags = CP_DMA_CLEAR | (sdst ? 0 : CP_DMA_DST_IS_GDS);
+
+      if (cp_dma_sparse_wa(sctx,sdst)) {
+         unsigned skip_count =
+            sctx->ws->buffer_find_next_committed_memory(sdst->buf,
+                  va - sdst->gpu_address, &byte_count);
+         va += skip_count;
+         size -= skip_count;
+      }
+
+      if (!byte_count)
+         continue;
 
       si_cp_dma_prepare(sctx, dst, NULL, byte_count, size, user_flags, coher, &is_first,
                         &dma_flags);
@@ -336,6 +353,9 @@ void si_cp_dma_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
    if ((dst || src) && !(user_flags & SI_OP_SKIP_CACHE_INV_BEFORE))
          sctx->flags |= si_get_flush_flags(sctx, coher, cache_policy);
 
+   if (sctx->flags)
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+
    /* This is the main part doing the copying. Src is always aligned. */
    main_dst_offset = dst_offset + skipped_size;
    main_src_offset = src_offset + skipped_size;
@@ -343,6 +363,27 @@ void si_cp_dma_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
    while (size) {
       unsigned byte_count = MIN2(size, cp_dma_max_byte_count(sctx));
       unsigned dma_flags = gds_flags;
+
+      if (cp_dma_sparse_wa(sctx, si_resource(dst))) {
+         unsigned skip_count =
+            sctx->ws->buffer_find_next_committed_memory(si_resource(dst)->buf,
+                  main_dst_offset - si_resource(dst)->gpu_address, &byte_count);
+         main_dst_offset += skip_count;
+         main_src_offset += skip_count;
+         size -= skip_count;
+      }
+
+      if (cp_dma_sparse_wa(sctx, si_resource(src))) {
+         unsigned skip_count =
+            sctx->ws->buffer_find_next_committed_memory(si_resource(src)->buf,
+                  main_src_offset - si_resource(src)->gpu_address, &byte_count);
+         main_dst_offset += skip_count;
+         main_src_offset += skip_count;
+         size -= skip_count;
+      }
+
+      if (!byte_count)
+         continue;
 
       si_cp_dma_prepare(sctx, dst, src, byte_count, size + skipped_size + realign_size, user_flags,
                         coher, &is_first, &dma_flags);

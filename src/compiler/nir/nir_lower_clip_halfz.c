@@ -24,12 +24,9 @@
 #include "nir_builder.h"
 
 static bool
-lower_pos_write(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+lower_pos_write(nir_builder *b, nir_intrinsic_instr *intr,
+                UNUSED void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_store_deref)
       return false;
 
@@ -40,17 +37,17 @@ lower_pos_write(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_ssa_def *pos = nir_ssa_for_src(b, intr->src[1], 4);
-   nir_ssa_def *def = nir_vec4(b,
-                               nir_channel(b, pos, 0),
-                               nir_channel(b, pos, 1),
-                               nir_fmul_imm(b,
-                                            nir_fadd(b,
-                                                     nir_channel(b, pos, 2),
-                                                     nir_channel(b, pos, 3)),
-                                            0.5),
-                               nir_channel(b, pos, 3));
-   nir_instr_rewrite_src(&intr->instr, intr->src + 1, nir_src_for_ssa(def));
+   nir_def *pos = intr->src[1].ssa;
+   nir_def *def = nir_vec4(b,
+                           nir_channel(b, pos, 0),
+                           nir_channel(b, pos, 1),
+                           nir_fmul_imm(b,
+                                        nir_fadd(b,
+                                                 nir_channel(b, pos, 2),
+                                                 nir_channel(b, pos, 3)),
+                                        0.5),
+                           nir_channel(b, pos, 3));
+   nir_src_rewrite(intr->src + 1, def);
    return true;
 }
 
@@ -62,8 +59,8 @@ nir_lower_clip_halfz(nir_shader *shader)
        shader->info.stage != MESA_SHADER_TESS_EVAL)
       return;
 
-   nir_shader_instructions_pass(shader, lower_pos_write,
+   nir_shader_intrinsics_pass(shader, lower_pos_write,
                                 nir_metadata_block_index |
-                                nir_metadata_dominance,
+                                   nir_metadata_dominance,
                                 NULL);
 }

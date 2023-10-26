@@ -160,10 +160,10 @@ main(int argc, char **argv)
                                 /* Swap the operands to be sure that we test
                                  * how the QPUs distinguish between these ops.
                                  */
-                                swap_mux(&instr.alu.add.a,
-                                         &instr.alu.add.b);
-                                swap_pack(&instr.alu.add.a_unpack,
-                                          &instr.alu.add.b_unpack);
+                                swap_mux(&instr.alu.add.a.mux,
+                                         &instr.alu.add.b.mux);
+                                swap_pack(&instr.alu.add.a.unpack,
+                                          &instr.alu.add.b.unpack);
                                 break;
                         default:
                                 break;

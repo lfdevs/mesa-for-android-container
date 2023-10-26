@@ -1,9 +1,9 @@
-# driver seems flaky
-KHR-GL46.sample_variables.mask.rgba8.*.samples.*.mask.*
-
+glx@glx-tfp
 # ???
 spec@arb_query_buffer_object@qbo
 spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB
+
+dEQP-GLES31.functional.image_load_store.buffer.atomic.comp_swap_r32i_return_value
 
 # "../src/gallium/drivers/zink/zink_fence.c:130: fence_wait: Assertion `fence->batch_id' failed."
 .*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.4
@@ -103,6 +103,17 @@ wayland-dEQP-EGL.functional.render.single_context.gles3.rgb565_pbuffer
 wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer
 wayland-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer
 
+# Everything in wayland EGL is flaking with crashes since at least early 2023-09
+# Possibly https://gitlab.freedesktop.org/mesa/mesa/-/issues/9577
+wayland-dEQP-EGL.functional.*
+
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-index-wr
 
 spec@arb_timer_query@timestamp-get
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49554086
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49564619
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49529964
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49530854
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49445862
+# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49588884
+glx@glx_ext_no_config_context@no fbconfig

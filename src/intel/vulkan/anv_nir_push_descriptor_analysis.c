@@ -211,7 +211,7 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
                /* Check if the load was promoted to a push constant. */
                const unsigned load_offset = const_load_offset[0].u32;
                const int load_bytes = nir_intrinsic_dest_components(intrin) *
-                  (nir_dest_bit_size(intrin->dest) / 8);
+                  (intrin->def.bit_size / 8);
 
                for (unsigned i = 0; i < ARRAY_SIZE(bind_map->push_ranges); i++) {
                   if (bind_map->push_ranges[i].set == binding->set &&

@@ -274,6 +274,7 @@ enum fdl_chroma_location {
 };
 
 struct fdl_view_args {
+   uint32_t chip;
    uint64_t iova;
    uint32_t base_miplevel;
    uint32_t level_count;

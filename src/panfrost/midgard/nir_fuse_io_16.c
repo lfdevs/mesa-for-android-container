@@ -35,7 +35,7 @@ bool nir_fuse_io_16(nir_shader *shader);
 static bool
 nir_src_is_f2fmp(nir_src *use)
 {
-   nir_instr *parent = use->parent_instr;
+   nir_instr *parent = nir_src_parent_instr(use);
 
    if (parent->type != nir_instr_type_alu)
       return false;
@@ -60,7 +60,7 @@ nir_fuse_io_16(nir_shader *shader)
             if (intr->intrinsic != nir_intrinsic_load_interpolated_input)
                continue;
 
-            if (nir_dest_bit_size(intr->dest) != 32)
+            if (intr->def.bit_size != 32)
                continue;
 
             /* We swizzle at a 32-bit level so need a multiple of 2. We could
@@ -68,25 +68,21 @@ nir_fuse_io_16(nir_shader *shader)
             if (nir_intrinsic_component(intr))
                continue;
 
-            if (!intr->dest.is_ssa)
-               continue;
-
             bool valid = true;
 
-            nir_foreach_use_including_if(src, &intr->dest.ssa)
-               valid &= !src->is_if && nir_src_is_f2fmp(src);
+            nir_foreach_use_including_if(src, &intr->def)
+               valid &= !nir_src_is_if(src) && nir_src_is_f2fmp(src);
 
             if (!valid)
                continue;
 
-            intr->dest.ssa.bit_size = 16;
+            intr->def.bit_size = 16;
 
             nir_builder b = nir_builder_at(nir_after_instr(instr));
 
             /* The f2f32(f2fmp(x)) will cancel by opt_algebraic */
-            nir_ssa_def *conv = nir_f2f32(&b, &intr->dest.ssa);
-            nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, conv,
-                                           conv->parent_instr);
+            nir_def *conv = nir_f2f32(&b, &intr->def);
+            nir_def_rewrite_uses_after(&intr->def, conv, conv->parent_instr);
 
             progress |= true;
          }

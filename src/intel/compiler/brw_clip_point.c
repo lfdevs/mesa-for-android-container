@@ -29,10 +29,6 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
-#include "main/macros.h"
-#include "main/enums.h"
-#include "program/program.h"
-
 #include "brw_clip.h"
 
 

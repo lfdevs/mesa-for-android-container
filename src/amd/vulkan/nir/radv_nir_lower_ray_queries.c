@@ -58,20 +58,20 @@ rq_variable_create(void *ctx, nir_shader *shader, unsigned array_length, const s
    return result;
 }
 
-static nir_ssa_def *
-nir_load_array(nir_builder *b, nir_variable *array, nir_ssa_def *index)
+static nir_def *
+nir_load_array(nir_builder *b, nir_variable *array, nir_def *index)
 {
    return nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, array), index));
 }
 
 static void
-nir_store_array(nir_builder *b, nir_variable *array, nir_ssa_def *index, nir_ssa_def *value, unsigned writemask)
+nir_store_array(nir_builder *b, nir_variable *array, nir_def *index, nir_def *value, unsigned writemask)
 {
    nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, array), index), value, writemask);
 }
 
 static nir_deref_instr *
-rq_deref_var(nir_builder *b, nir_ssa_def *index, rq_variable *var)
+rq_deref_var(nir_builder *b, nir_def *index, rq_variable *var)
 {
    if (var->array_length == 1)
       return nir_build_deref_var(b, var->variable);
@@ -79,8 +79,8 @@ rq_deref_var(nir_builder *b, nir_ssa_def *index, rq_variable *var)
    return nir_build_deref_array(b, nir_build_deref_var(b, var->variable), index);
 }
 
-static nir_ssa_def *
-rq_load_var(nir_builder *b, nir_ssa_def *index, rq_variable *var)
+static nir_def *
+rq_load_var(nir_builder *b, nir_def *index, rq_variable *var)
 {
    if (var->array_length == 1)
       return nir_load_var(b, var->variable);
@@ -89,7 +89,7 @@ rq_load_var(nir_builder *b, nir_ssa_def *index, rq_variable *var)
 }
 
 static void
-rq_store_var(nir_builder *b, nir_ssa_def *index, rq_variable *var, nir_ssa_def *value, unsigned writemask)
+rq_store_var(nir_builder *b, nir_def *index, rq_variable *var, nir_def *value, unsigned writemask)
 {
    if (var->array_length == 1) {
       nir_store_var(b, var->variable, value, writemask);
@@ -99,13 +99,13 @@ rq_store_var(nir_builder *b, nir_ssa_def *index, rq_variable *var, nir_ssa_def *
 }
 
 static void
-rq_copy_var(nir_builder *b, nir_ssa_def *index, rq_variable *dst, rq_variable *src, unsigned mask)
+rq_copy_var(nir_builder *b, nir_def *index, rq_variable *dst, rq_variable *src, unsigned mask)
 {
    rq_store_var(b, index, dst, rq_load_var(b, index, src), mask);
 }
 
-static nir_ssa_def *
-rq_load_array(nir_builder *b, nir_ssa_def *index, rq_variable *var, nir_ssa_def *array_index)
+static nir_def *
+rq_load_array(nir_builder *b, nir_def *index, rq_variable *var, nir_def *array_index)
 {
    if (var->array_length == 1)
       return nir_load_array(b, var->variable, array_index);
@@ -115,7 +115,7 @@ rq_load_array(nir_builder *b, nir_ssa_def *index, rq_variable *var, nir_ssa_def 
 }
 
 static void
-rq_store_array(nir_builder *b, nir_ssa_def *index, rq_variable *var, nir_ssa_def *array_index, nir_ssa_def *value,
+rq_store_array(nir_builder *b, nir_def *index, rq_variable *var, nir_def *array_index, nir_def *value,
                unsigned writemask)
 {
    if (var->array_length == 1) {
@@ -172,6 +172,8 @@ struct ray_query_vars {
    rq_variable *stack;
    uint32_t shared_base;
    uint32_t stack_entries;
+
+   nir_intrinsic_instr *initialize;
 };
 
 #define VAR_NAME(name) strcat(strcpy(ralloc_size(ctx, strlen(base_name) + strlen(name) + 1), base_name), name)
@@ -282,7 +284,7 @@ lower_ray_query(nir_shader *shader, nir_variable *ray_query, struct hash_table *
 }
 
 static void
-copy_candidate_to_closest(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars)
+copy_candidate_to_closest(nir_builder *b, nir_def *index, struct ray_query_vars *vars)
 {
    rq_copy_var(b, index, vars->closest.barycentrics, vars->candidate.barycentrics, 0x3);
    rq_copy_var(b, index, vars->closest.geometry_id_and_flags, vars->candidate.geometry_id_and_flags, 0x1);
@@ -296,10 +298,10 @@ copy_candidate_to_closest(nir_builder *b, nir_ssa_def *index, struct ray_query_v
 }
 
 static void
-insert_terminate_on_first_hit(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars,
+insert_terminate_on_first_hit(nir_builder *b, nir_def *index, struct ray_query_vars *vars,
                               const struct radv_ray_flags *ray_flags, bool break_on_terminate)
 {
-   nir_ssa_def *terminate_on_first_hit;
+   nir_def *terminate_on_first_hit;
    if (ray_flags)
       terminate_on_first_hit = ray_flags->terminate_on_first_hit;
    else
@@ -315,16 +317,14 @@ insert_terminate_on_first_hit(nir_builder *b, nir_ssa_def *index, struct ray_que
 }
 
 static void
-lower_rq_confirm_intersection(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr,
-                              struct ray_query_vars *vars)
+lower_rq_confirm_intersection(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
 {
    copy_candidate_to_closest(b, index, vars);
    insert_terminate_on_first_hit(b, index, vars, NULL, false);
 }
 
 static void
-lower_rq_generate_intersection(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr,
-                               struct ray_query_vars *vars)
+lower_rq_generate_intersection(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
 {
    nir_push_if(b, nir_iand(b, nir_fge(b, rq_load_var(b, index, vars->closest.t), instr->src[1].ssa),
                            nir_fge(b, instr->src[1].ssa, rq_load_var(b, index, vars->tmin))));
@@ -339,7 +339,7 @@ lower_rq_generate_intersection(nir_builder *b, nir_ssa_def *index, nir_intrinsic
 enum rq_intersection_type { intersection_type_none, intersection_type_triangle, intersection_type_aabb };
 
 static void
-lower_rq_initialize(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars,
+lower_rq_initialize(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars,
                     struct radv_instance *instance)
 {
    rq_store_var(b, index, vars->flags, instr->src[2].ssa, 0x1);
@@ -356,12 +356,16 @@ lower_rq_initialize(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *ins
    rq_store_var(b, index, vars->closest.t, instr->src[7].ssa, 0x1);
    rq_store_var(b, index, vars->closest.intersection_type, nir_imm_int(b, intersection_type_none), 0x1);
 
-   nir_ssa_def *accel_struct = instr->src[1].ssa;
+   nir_def *accel_struct = instr->src[1].ssa;
 
-   nir_ssa_def *bvh_offset = nir_build_load_global(
+   /* Make sure that instance data loads don't hang in case of a miss by setting a valid initial address. */
+   rq_store_var(b, index, vars->closest.instance_addr, accel_struct, 1);
+   rq_store_var(b, index, vars->candidate.instance_addr, accel_struct, 1);
+
+   nir_def *bvh_offset = nir_build_load_global(
       b, 1, 32, nir_iadd_imm(b, accel_struct, offsetof(struct radv_accel_struct_header, bvh_offset)),
       .access = ACCESS_NON_WRITEABLE);
-   nir_ssa_def *bvh_base = nir_iadd(b, accel_struct, nir_u2u64(b, bvh_offset));
+   nir_def *bvh_base = nir_iadd(b, accel_struct, nir_u2u64(b, bvh_offset));
    bvh_base = build_addr_to_node(b, bvh_base);
 
    rq_store_var(b, index, vars->root_bvh_base, bvh_base, 0x1);
@@ -371,7 +375,7 @@ lower_rq_initialize(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *ins
       rq_store_var(b, index, vars->trav.stack, nir_imm_int(b, 0), 0x1);
       rq_store_var(b, index, vars->trav.stack_low_watermark, nir_imm_int(b, 0), 0x1);
    } else {
-      nir_ssa_def *base_offset = nir_imul_imm(b, nir_load_local_invocation_index(b), sizeof(uint32_t));
+      nir_def *base_offset = nir_imul_imm(b, nir_load_local_invocation_index(b), sizeof(uint32_t));
       base_offset = nir_iadd_imm(b, base_offset, vars->shared_base);
       rq_store_var(b, index, vars->trav.stack, base_offset, 0x1);
       rq_store_var(b, index, vars->trav.stack_low_watermark, base_offset, 0x1);
@@ -385,10 +389,12 @@ lower_rq_initialize(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *ins
    rq_store_var(b, index, vars->trav.top_stack, nir_imm_int(b, -1), 1);
 
    rq_store_var(b, index, vars->incomplete, nir_imm_bool(b, !(instance->debug_flags & RADV_DEBUG_NO_RT)), 0x1);
+
+   vars->initialize = instr;
 }
 
-static nir_ssa_def *
-lower_rq_load(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
+static nir_def *
+lower_rq_load(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
 {
    bool committed = nir_intrinsic_committed(instr);
    struct ray_query_intersection_vars *intersection = committed ? &vars->closest : &vars->candidate;
@@ -409,7 +415,7 @@ lower_rq_load(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, st
    case nir_ray_query_value_intersection_geometry_index:
       return nir_iand_imm(b, rq_load_var(b, index, intersection->geometry_id_and_flags), 0xFFFFFF);
    case nir_ray_query_value_intersection_instance_custom_index: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
       return nir_iand_imm(
          b,
          nir_build_load_global(
@@ -418,27 +424,27 @@ lower_rq_load(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, st
          0xFFFFFF);
    }
    case nir_ray_query_value_intersection_instance_id: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
       return nir_build_load_global(
          b, 1, 32, nir_iadd_imm(b, instance_node_addr, offsetof(struct radv_bvh_instance_node, instance_id)));
    }
    case nir_ray_query_value_intersection_instance_sbt_index:
       return nir_iand_imm(b, rq_load_var(b, index, intersection->sbt_offset_and_flags), 0xFFFFFF);
    case nir_ray_query_value_intersection_object_ray_direction: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
-      nir_ssa_def *wto_matrix[3];
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *wto_matrix[3];
       nir_build_wto_matrix_load(b, instance_node_addr, wto_matrix);
       return nir_build_vec3_mat_mult(b, rq_load_var(b, index, vars->direction), wto_matrix, false);
    }
    case nir_ray_query_value_intersection_object_ray_origin: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
-      nir_ssa_def *wto_matrix[3];
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *wto_matrix[3];
       nir_build_wto_matrix_load(b, instance_node_addr, wto_matrix);
       return nir_build_vec3_mat_mult(b, rq_load_var(b, index, vars->origin), wto_matrix, true);
    }
    case nir_ray_query_value_intersection_object_to_world: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
-      nir_ssa_def *rows[3];
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *rows[3];
       for (unsigned r = 0; r < 3; ++r)
          rows[r] = nir_build_load_global(
             b, 4, 32,
@@ -452,19 +458,19 @@ lower_rq_load(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, st
    case nir_ray_query_value_intersection_t:
       return rq_load_var(b, index, intersection->t);
    case nir_ray_query_value_intersection_type: {
-      nir_ssa_def *intersection_type = rq_load_var(b, index, intersection->intersection_type);
+      nir_def *intersection_type = rq_load_var(b, index, intersection->intersection_type);
       if (!committed)
          intersection_type = nir_iadd_imm(b, intersection_type, -1);
 
       return intersection_type;
    }
    case nir_ray_query_value_intersection_world_to_object: {
-      nir_ssa_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
+      nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
 
-      nir_ssa_def *wto_matrix[3];
+      nir_def *wto_matrix[3];
       nir_build_wto_matrix_load(b, instance_node_addr, wto_matrix);
 
-      nir_ssa_def *vals[3];
+      nir_def *vals[3];
       for (unsigned i = 0; i < 3; ++i)
          vals[i] = nir_channel(b, wto_matrix[i], column);
 
@@ -485,7 +491,7 @@ lower_rq_load(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, st
 
 struct traversal_data {
    struct ray_query_vars *vars;
-   nir_ssa_def *index;
+   nir_def *index;
 };
 
 static void
@@ -494,7 +500,7 @@ handle_candidate_aabb(nir_builder *b, struct radv_leaf_intersection *intersectio
 {
    struct traversal_data *data = args->data;
    struct ray_query_vars *vars = data->vars;
-   nir_ssa_def *index = data->index;
+   nir_def *index = data->index;
 
    rq_store_var(b, index, vars->candidate.primitive_id, intersection->primitive_id, 1);
    rq_store_var(b, index, vars->candidate.geometry_id_and_flags, intersection->geometry_id_and_flags, 1);
@@ -510,7 +516,7 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
 {
    struct traversal_data *data = args->data;
    struct ray_query_vars *vars = data->vars;
-   nir_ssa_def *index = data->index;
+   nir_def *index = data->index;
 
    rq_store_var(b, index, vars->candidate.barycentrics, intersection->barycentrics, 3);
    rq_store_var(b, index, vars->candidate.primitive_id, intersection->base.primitive_id, 1);
@@ -533,7 +539,7 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
 }
 
 static void
-store_stack_entry(nir_builder *b, nir_ssa_def *index, nir_ssa_def *value, const struct radv_ray_traversal_args *args)
+store_stack_entry(nir_builder *b, nir_def *index, nir_def *value, const struct radv_ray_traversal_args *args)
 {
    struct traversal_data *data = args->data;
    if (data->vars->stack)
@@ -542,8 +548,8 @@ store_stack_entry(nir_builder *b, nir_ssa_def *index, nir_ssa_def *value, const 
       nir_store_shared(b, value, index, .base = 0, .align_mul = 4);
 }
 
-static nir_ssa_def *
-load_stack_entry(nir_builder *b, nir_ssa_def *index, const struct radv_ray_traversal_args *args)
+static nir_def *
+load_stack_entry(nir_builder *b, nir_def *index, const struct radv_ray_traversal_args *args)
 {
    struct traversal_data *data = args->data;
    if (data->vars->stack)
@@ -552,9 +558,19 @@ load_stack_entry(nir_builder *b, nir_ssa_def *index, const struct radv_ray_trave
       return nir_load_shared(b, 1, 32, index, .base = 0, .align_mul = 4);
 }
 
-static nir_ssa_def *
-lower_rq_proceed(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars, struct radv_device *device)
+static nir_def *
+lower_rq_proceed(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars,
+                 struct radv_device *device)
 {
+   nir_metadata_require(nir_cf_node_get_function(&instr->instr.block->cf_node), nir_metadata_dominance);
+
+   bool ignore_cull_mask = false;
+   if (nir_block_dominates(vars->initialize->instr.block, instr->instr.block)) {
+      nir_src cull_mask = vars->initialize->src[3];
+      if (nir_src_is_const(cull_mask) && nir_src_as_uint(cull_mask) == 0xFF)
+         ignore_cull_mask = true;
+   }
+
    nir_variable *inv_dir = nir_local_variable_create(b->impl, glsl_vector_type(GLSL_TYPE_FLOAT, 3), "inv_dir");
    nir_store_var(b, inv_dir, nir_frcp(b, rq_load_var(b, index, vars->trav.direction)), 0x7);
 
@@ -589,6 +605,7 @@ lower_rq_proceed(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars
       .dir = rq_load_var(b, index, vars->direction),
       .vars = trav_vars,
       .stack_entries = vars->stack_entries,
+      .ignore_cull_mask = ignore_cull_mask,
       .stack_store_cb = store_stack_entry,
       .stack_load_cb = load_stack_entry,
       .aabb_cb = handle_candidate_aabb,
@@ -608,7 +625,7 @@ lower_rq_proceed(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars
 
    nir_push_if(b, rq_load_var(b, index, vars->incomplete));
    {
-      nir_ssa_def *incomplete = radv_build_ray_traversal(device, b, &args);
+      nir_def *incomplete = radv_build_ray_traversal(device, b, &args);
       rq_store_var(b, index, vars->incomplete, nir_iand(b, rq_load_var(b, index, vars->incomplete), incomplete), 1);
    }
    nir_pop_if(b, NULL);
@@ -617,7 +634,7 @@ lower_rq_proceed(nir_builder *b, nir_ssa_def *index, struct ray_query_vars *vars
 }
 
 static void
-lower_rq_terminate(nir_builder *b, nir_ssa_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
+lower_rq_terminate(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr, struct ray_query_vars *vars)
 {
    rq_store_var(b, index, vars->incomplete, nir_imm_false(b), 0x1);
 }
@@ -663,7 +680,7 @@ radv_nir_lower_ray_queries(struct nir_shader *shader, struct radv_device *device
                continue;
 
             nir_deref_instr *ray_query_deref = nir_instr_as_deref(intrinsic->src[0].ssa->parent_instr);
-            nir_ssa_def *index = NULL;
+            nir_def *index = NULL;
 
             if (ray_query_deref->deref_type == nir_deref_type_array) {
                index = ray_query_deref->arr.index.ssa;
@@ -677,7 +694,7 @@ radv_nir_lower_ray_queries(struct nir_shader *shader, struct radv_device *device
 
             builder.cursor = nir_before_instr(instr);
 
-            nir_ssa_def *new_dest = NULL;
+            nir_def *new_dest = NULL;
 
             switch (intrinsic->intrinsic) {
             case nir_intrinsic_rq_confirm_intersection:
@@ -693,7 +710,7 @@ radv_nir_lower_ray_queries(struct nir_shader *shader, struct radv_device *device
                new_dest = lower_rq_load(&builder, index, intrinsic, vars);
                break;
             case nir_intrinsic_rq_proceed:
-               new_dest = lower_rq_proceed(&builder, index, vars, device);
+               new_dest = lower_rq_proceed(&builder, index, intrinsic, vars, device);
                break;
             case nir_intrinsic_rq_terminate:
                lower_rq_terminate(&builder, index, intrinsic, vars);
@@ -703,7 +720,7 @@ radv_nir_lower_ray_queries(struct nir_shader *shader, struct radv_device *device
             }
 
             if (new_dest)
-               nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, new_dest);
+               nir_def_rewrite_uses(&intrinsic->def, new_dest);
 
             nir_instr_remove(instr);
             nir_instr_free(instr);

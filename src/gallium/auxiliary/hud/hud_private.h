@@ -69,6 +69,7 @@ struct hud_context {
    struct pipe_rasterizer_state rasterizer, rasterizer_aa_lines;
    void *vs_color, *vs_text;
    struct cso_velems_state velems;
+   struct cso_velems_state text_velems;
 
    /* font */
    struct util_font font;

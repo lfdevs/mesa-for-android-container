@@ -83,8 +83,8 @@ FLOAT_TO_BOOLEAN(GLfloat X)
 static inline GLint
 FLOAT_TO_FIXED(GLfloat F)
 {
-   return ( ((F) * 65536.0f > INT_MAX) ? INT_MAX :
-            ((F) * 65536.0f < INT_MIN) ? INT_MIN :
+   return ( ((F) * 65536.0f > (float)INT32_MAX) ? INT32_MAX :
+            ((F) * 65536.0f < (float)INT32_MIN) ? INT32_MIN :
             (GLint) ((F) * 65536.0f) );
 }
 

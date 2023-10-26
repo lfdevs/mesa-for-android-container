@@ -553,7 +553,7 @@ formats = [("pseudo", [Format.PSEUDO], 'Pseudo_instruction', list(itertools.prod
            ("sopk", [Format.SOPK], 'SOPK_instruction', itertools.product([0, 1, 2], [0, 1])),
            ("sopp", [Format.SOPP], 'SOPP_instruction', itertools.product([0, 1], [0, 1])),
            ("sopc", [Format.SOPC], 'SOPC_instruction', [(1, 2)]),
-           ("smem", [Format.SMEM], 'SMEM_instruction', [(0, 4), (0, 3), (1, 0), (1, 3), (1, 2), (0, 0)]),
+           ("smem", [Format.SMEM], 'SMEM_instruction', [(0, 4), (0, 3), (1, 0), (1, 3), (1, 2), (1, 1), (0, 0)]),
            ("ds", [Format.DS], 'DS_instruction', [(1, 1), (1, 2), (1, 3), (0, 3), (0, 4)]),
            ("ldsdir", [Format.LDSDIR], 'LDSDIR_instruction', [(1, 1)]),
            ("mubuf", [Format.MUBUF], 'MUBUF_instruction', [(0, 4), (1, 3)]),

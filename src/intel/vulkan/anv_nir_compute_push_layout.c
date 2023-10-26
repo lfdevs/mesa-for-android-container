@@ -31,7 +31,7 @@
 void
 anv_nir_compute_push_layout(nir_shader *nir,
                             const struct anv_physical_device *pdevice,
-                            bool robust_buffer_access,
+                            enum brw_robustness_flags robust_flags,
                             bool fragment_dynamic,
                             struct brw_stage_prog_data *prog_data,
                             struct anv_pipeline_bind_map *map,
@@ -88,7 +88,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       has_const_ubo && nir->info.stage != MESA_SHADER_COMPUTE &&
       !brw_shader_stage_requires_bindless_resources(nir->info.stage);
 
-   if (push_ubo_ranges && robust_buffer_access) {
+   if (push_ubo_ranges && (robust_flags & BRW_ROBUSTNESS_UBO)) {
       /* We can't on-the-fly adjust our push ranges because doing so would
        * mess up the layout in the shader.  When robustBufferAccess is
        * enabled, we push a mask into the shader indicating which pushed
@@ -173,31 +173,31 @@ anv_nir_compute_push_layout(nir_shader *nir,
                case nir_intrinsic_load_desc_set_address_intel: {
                   assert(brw_shader_stage_requires_bindless_resources(nir->info.stage));
                   b->cursor = nir_before_instr(&intrin->instr);
-                  nir_ssa_def *pc_load = nir_load_uniform(b, 1, 32,
+                  nir_def *pc_load = nir_load_uniform(b, 1, 32,
                      nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
                      .base = offsetof(struct anv_push_constants, desc_offsets),
                      .range = sizeof_field(struct anv_push_constants, desc_offsets),
                      .dest_type = nir_type_uint32);
                   pc_load = nir_iand_imm(b, pc_load, ANV_DESCRIPTOR_SET_OFFSET_MASK);
-                  nir_ssa_def *desc_addr =
+                  nir_def *desc_addr =
                      nir_pack_64_2x32_split(
                         b, pc_load,
                         nir_load_reloc_const_intel(
                            b, BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH));
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc_addr);
+                  nir_def_rewrite_uses(&intrin->def, desc_addr);
                   break;
                }
 
                case nir_intrinsic_load_desc_set_dynamic_index_intel: {
                   b->cursor = nir_before_instr(&intrin->instr);
-                  nir_ssa_def *pc_load = nir_load_uniform(b, 1, 32,
+                  nir_def *pc_load = nir_load_uniform(b, 1, 32,
                      nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
                      .base = offsetof(struct anv_push_constants, desc_offsets),
                      .range = sizeof_field(struct anv_push_constants, desc_offsets),
                      .dest_type = nir_type_uint32);
                   pc_load = nir_iand_imm(
                      b, pc_load, ANV_DESCRIPTOR_SET_DYNAMIC_INDEX_MASK);
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa, pc_load);
+                  nir_def_rewrite_uses(&intrin->def, pc_load);
                   break;
                }
 
@@ -233,7 +233,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       if (push_constant_range.length > 0)
          map->push_ranges[n++] = push_constant_range;
 
-      if (robust_buffer_access) {
+      if (robust_flags & BRW_ROBUSTNESS_UBO) {
          const uint32_t push_reg_mask_offset =
             offsetof(struct anv_push_constants, push_reg_mask[nir->info.stage]);
          assert(push_reg_mask_offset >= push_start);
@@ -266,7 +266,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
          };
 
          /* We only bother to shader-zero pushed client UBOs */
-         if (binding->set < MAX_SETS && robust_buffer_access) {
+         if (binding->set < MAX_SETS &&
+             (robust_flags & BRW_ROBUSTNESS_UBO)) {
             prog_data->zero_push_reg |= BITFIELD64_RANGE(range_start_reg,
                                                          ubo_range->length);
          }

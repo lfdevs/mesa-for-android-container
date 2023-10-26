@@ -1,12 +1,37 @@
+.etnaviv-rules:
+  stage: etnaviv
+  rules:
+    - !reference [.austriancoder-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - changes: &etnaviv_file_list
+      - src/etnaviv/**/*
+      - src/gallium/drivers/etnaviv/**/*
+      - src/gallium/winsys/etnaviv/**/*
+      - src/gallium/auxiliary/renderonly/**/*
+      - src/gallium/winsys/kmsro/**/*
+      when: on_success
+
+.etnaviv-manual-rules:
+  stage: etnaviv
+  retry: !reference [.scheduled_pipeline-rules, retry]
+  rules:
+    - !reference [.austriancoder-farm-manual-rules, rules]
+    - !reference [.gl-manual-rules, rules]
+    - changes:
+        *etnaviv_file_list
+      when: manual
+
+
 .etnaviv-test:arm32:
   extends:
     - .baremetal-test-arm32
     - .etnaviv-rules
   script:
     - ./install/bare-metal/fastboot.sh
+  timeout: 20m
   variables:
     BM_CMDLINE: "ip=dhcp console=ttymxc0,115200n8 root=/dev/nfs rw nfsrootdebug init=/init $BM_KERNELARGS"
-    BM_KERNEL: /baremetal-files/zImage
+    BM_KERNEL: zImage
     FLAKES_CHANNEL: "#etnaviv-ci"
 
 .etnaviv-test:arm64:
@@ -15,16 +40,17 @@
     - .etnaviv-rules
   script:
     - ./install/bare-metal/fastboot.sh
+  timeout: 20m
   variables:
     BM_CMDLINE: "ip=dhcp console=ttymxc0,115200n8 root=/dev/nfs rw nfsrootdebug init=/init $BM_KERNELARGS"
-    BM_KERNEL: /baremetal-files/Image
+    BM_KERNEL: Image
     FLAKES_CHANNEL: "#etnaviv-ci"
 
 .etnaviv-gc2000:arm32:
   extends:
     - .etnaviv-test:arm32
   variables:
-    BM_DTB: /baremetal-files/imx6q-cubox-i.dtb
+    BM_DTB: imx6q-cubox-i
     DEQP_EXPECTED_RENDERER: GC2000
     GPU_VERSION: "etnaviv-gc2000"
   tags:
@@ -34,7 +60,7 @@
   extends:
     - .etnaviv-test:arm64
   variables:
-    BM_DTB: /baremetal-files/imx8mq-nitrogen.dtb
+    BM_DTB: imx8mq-nitrogen
     DEQP_EXPECTED_RENDERER: GC7000
     GPU_VERSION: "etnaviv-gc7000"
   tags:
@@ -65,6 +91,7 @@ gc2000_piglit:
     PIGLIT_PLATFORM: gbm
     PIGLIT_PROFILES: gpu
     TEST_PHASE_TIMEOUT: 40
+  timeout: 40m
 
 gc7000_gles2:
   extends:

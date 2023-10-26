@@ -76,68 +76,23 @@ is_texture_inst(enum tgsi_opcode opcode)
 }
 
 
-/**
- * Is the opcode an instruction which computes a derivative explicitly or
- * implicitly?
- */
-static bool
-computes_derivative(enum tgsi_opcode opcode)
-{
-   if (tgsi_get_opcode_info(opcode)->is_tex) {
-      return opcode != TGSI_OPCODE_TG4 &&
-             opcode != TGSI_OPCODE_TXD &&
-             opcode != TGSI_OPCODE_TXF &&
-             opcode != TGSI_OPCODE_TXF_LZ &&
-             opcode != TGSI_OPCODE_TEX_LZ &&
-             opcode != TGSI_OPCODE_TXL &&
-             opcode != TGSI_OPCODE_TXL2 &&
-             opcode != TGSI_OPCODE_TXQ &&
-             opcode != TGSI_OPCODE_TXQS;
-   }
-
-   return opcode == TGSI_OPCODE_DDX || opcode == TGSI_OPCODE_DDX_FINE ||
-          opcode == TGSI_OPCODE_DDY || opcode == TGSI_OPCODE_DDY_FINE ||
-          opcode == TGSI_OPCODE_SAMPLE ||
-          opcode == TGSI_OPCODE_SAMPLE_B ||
-          opcode == TGSI_OPCODE_SAMPLE_C;
-}
-
-
 static void
 scan_src_operand(struct tgsi_shader_info *info,
                  const struct tgsi_full_instruction *fullinst,
                  const struct tgsi_full_src_register *src,
                  unsigned src_index,
                  unsigned usage_mask_after_swizzle,
-                 bool is_interp_instruction,
                  bool *is_mem_inst)
 {
    int ind = src->Register.Index;
 
    if (info->processor == PIPE_SHADER_COMPUTE &&
        src->Register.File == TGSI_FILE_SYSTEM_VALUE) {
-      unsigned name, mask;
+      unsigned name;
 
       name = info->system_value_semantic_name[src->Register.Index];
 
       switch (name) {
-      case TGSI_SEMANTIC_THREAD_ID:
-      case TGSI_SEMANTIC_BLOCK_ID:
-         mask = usage_mask_after_swizzle & TGSI_WRITEMASK_XYZ;
-         while (mask) {
-            unsigned i = u_bit_scan(&mask);
-
-            if (name == TGSI_SEMANTIC_THREAD_ID)
-               info->uses_thread_id[i] = true;
-            else
-               info->uses_block_id[i] = true;
-         }
-         break;
-      case TGSI_SEMANTIC_BLOCK_SIZE:
-         /* The block size is translated to IMM with a fixed block size. */
-         if (info->properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] == 0)
-            info->uses_block_size = true;
-         break;
       case TGSI_SEMANTIC_GRID_SIZE:
          info->uses_grid_size = true;
          break;
@@ -157,7 +112,7 @@ scan_src_operand(struct tgsi_shader_info *info,
       }
 
       if (info->processor == PIPE_SHADER_FRAGMENT) {
-         unsigned name, index, input;
+         unsigned name, input;
 
          if (src->Register.Indirect && src->Indirect.ArrayID)
             input = info->input_array_first[src->Indirect.ArrayID];
@@ -165,58 +120,10 @@ scan_src_operand(struct tgsi_shader_info *info,
             input = src->Register.Index;
 
          name = info->input_semantic_name[input];
-         index = info->input_semantic_index[input];
 
          if (name == TGSI_SEMANTIC_POSITION &&
              usage_mask_after_swizzle & TGSI_WRITEMASK_Z)
             info->reads_z = true;
-
-         if (name == TGSI_SEMANTIC_COLOR)
-            info->colors_read |= usage_mask_after_swizzle << (index * 4);
-
-         /* Process only interpolated varyings. Don't include POSITION.
-          * Don't include integer varyings, because they are not
-          * interpolated. Don't process inputs interpolated by INTERP
-          * opcodes. Those are tracked separately.
-          */
-         if ((!is_interp_instruction || src_index != 0) &&
-             (name == TGSI_SEMANTIC_GENERIC ||
-              name == TGSI_SEMANTIC_TEXCOORD ||
-              name == TGSI_SEMANTIC_COLOR ||
-              name == TGSI_SEMANTIC_BCOLOR ||
-              name == TGSI_SEMANTIC_FOG ||
-              name == TGSI_SEMANTIC_CLIPDIST)) {
-            switch (info->input_interpolate[input]) {
-            case TGSI_INTERPOLATE_COLOR:
-            case TGSI_INTERPOLATE_PERSPECTIVE:
-               switch (info->input_interpolate_loc[input]) {
-               case TGSI_INTERPOLATE_LOC_CENTER:
-                  info->uses_persp_center = true;
-                  break;
-               case TGSI_INTERPOLATE_LOC_CENTROID:
-                  info->uses_persp_centroid = true;
-                  break;
-               case TGSI_INTERPOLATE_LOC_SAMPLE:
-                  info->uses_persp_sample = true;
-                  break;
-               }
-               break;
-            case TGSI_INTERPOLATE_LINEAR:
-               switch (info->input_interpolate_loc[input]) {
-               case TGSI_INTERPOLATE_LOC_CENTER:
-                  info->uses_linear_center = true;
-                  break;
-               case TGSI_INTERPOLATE_LOC_CENTROID:
-                  info->uses_linear_centroid = true;
-                  break;
-               case TGSI_INTERPOLATE_LOC_SAMPLE:
-                  info->uses_linear_sample = true;
-                  break;
-               }
-               break;
-               /* TGSI_INTERPOLATE_CONSTANT doesn't do any interpolation. */
-            }
-         }
       }
    }
 
@@ -243,22 +150,8 @@ scan_src_operand(struct tgsi_shader_info *info,
    }
 
    /* check for indirect register reads */
-   if (src->Register.Indirect) {
+   if (src->Register.Indirect)
       info->indirect_files |= (1 << src->Register.File);
-      info->indirect_files_read |= (1 << src->Register.File);
-
-      /* record indirect constant buffer indexing */
-      if (src->Register.File == TGSI_FILE_CONSTANT) {
-         if (src->Register.Dimension) {
-            if (src->Dimension.Indirect)
-               info->const_buffers_indirect = info->const_buffers_declared;
-            else
-               info->const_buffers_indirect |= 1u << src->Dimension.Index;
-         } else {
-            info->const_buffers_indirect |= 1;
-         }
-      }
-   }
 
    if (src->Register.Dimension && src->Dimension.Indirect)
       info->dim_indirect_files |= 1u << src->Register.File;
@@ -305,24 +198,14 @@ scan_src_operand(struct tgsi_shader_info *info,
       if (tgsi_get_opcode_info(fullinst->Instruction.Opcode)->is_store) {
          info->writes_memory = true;
 
-         if (src->Register.File == TGSI_FILE_IMAGE) {
-            if (src->Register.Indirect)
-               info->images_atomic = info->images_declared;
-            else
-               info->images_atomic |= 1 << src->Register.Index;
-         } else if (src->Register.File == TGSI_FILE_BUFFER) {
+         if (src->Register.File == TGSI_FILE_BUFFER) {
             if (src->Register.Indirect)
                info->shader_buffers_atomic = info->shader_buffers_declared;
             else
                info->shader_buffers_atomic |= 1 << src->Register.Index;
          }
       } else {
-         if (src->Register.File == TGSI_FILE_IMAGE) {
-            if (src->Register.Indirect)
-               info->images_load = info->images_declared;
-            else
-               info->images_load |= 1 << src->Register.Index;
-         } else if (src->Register.File == TGSI_FILE_BUFFER) {
+         if (src->Register.File == TGSI_FILE_BUFFER) {
             if (src->Register.Indirect)
                info->shader_buffers_load = info->shader_buffers_declared;
             else
@@ -340,8 +223,6 @@ scan_instruction(struct tgsi_shader_info *info,
 {
    unsigned i;
    bool is_mem_inst = false;
-   bool is_interp_instruction = false;
-   unsigned sampler_src;
 
    assert(fullinst->Instruction.Opcode < TGSI_OPCODE_LAST);
    info->opcode_count[fullinst->Instruction.Opcode]++;
@@ -351,76 +232,10 @@ scan_instruction(struct tgsi_shader_info *info,
    case TGSI_OPCODE_UIF:
    case TGSI_OPCODE_BGNLOOP:
       (*current_depth)++;
-      info->max_depth = MAX2(info->max_depth, *current_depth);
       break;
    case TGSI_OPCODE_ENDIF:
    case TGSI_OPCODE_ENDLOOP:
       (*current_depth)--;
-      break;
-   case TGSI_OPCODE_TEX:
-   case TGSI_OPCODE_TEX_LZ:
-   case TGSI_OPCODE_TXB:
-   case TGSI_OPCODE_TXD:
-   case TGSI_OPCODE_TXL:
-   case TGSI_OPCODE_TXP:
-   case TGSI_OPCODE_TXQ:
-   case TGSI_OPCODE_TXQS:
-   case TGSI_OPCODE_TXF:
-   case TGSI_OPCODE_TXF_LZ:
-   case TGSI_OPCODE_TEX2:
-   case TGSI_OPCODE_TXB2:
-   case TGSI_OPCODE_TXL2:
-   case TGSI_OPCODE_TG4:
-   case TGSI_OPCODE_LODQ:
-      sampler_src = fullinst->Instruction.NumSrcRegs - 1;
-      if (fullinst->Src[sampler_src].Register.File != TGSI_FILE_SAMPLER)
-         info->uses_bindless_samplers = true;
-      break;
-   case TGSI_OPCODE_RESQ:
-      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File))
-         info->uses_bindless_images = true;
-      break;
-   case TGSI_OPCODE_LOAD:
-      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File)) {
-         info->uses_bindless_images = true;
-
-         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
-            info->uses_bindless_buffer_load = true;
-         else
-            info->uses_bindless_image_load = true;
-      }
-      break;
-   case TGSI_OPCODE_ATOMUADD:
-   case TGSI_OPCODE_ATOMXCHG:
-   case TGSI_OPCODE_ATOMCAS:
-   case TGSI_OPCODE_ATOMAND:
-   case TGSI_OPCODE_ATOMOR:
-   case TGSI_OPCODE_ATOMXOR:
-   case TGSI_OPCODE_ATOMUMIN:
-   case TGSI_OPCODE_ATOMUMAX:
-   case TGSI_OPCODE_ATOMIMIN:
-   case TGSI_OPCODE_ATOMIMAX:
-   case TGSI_OPCODE_ATOMFADD:
-   case TGSI_OPCODE_ATOMINC_WRAP:
-   case TGSI_OPCODE_ATOMDEC_WRAP:
-      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File)) {
-         info->uses_bindless_images = true;
-
-         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
-            info->uses_bindless_buffer_atomic = true;
-         else
-            info->uses_bindless_image_atomic = true;
-      }
-      break;
-   case TGSI_OPCODE_STORE:
-      if (tgsi_is_bindless_image_file(fullinst->Dst[0].Register.File)) {
-         info->uses_bindless_images = true;
-
-         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
-            info->uses_bindless_buffer_store = true;
-         else
-            info->uses_bindless_image_store = true;
-      }
       break;
    case TGSI_OPCODE_FBFETCH:
       info->uses_fbfetch = true;
@@ -429,69 +244,10 @@ scan_instruction(struct tgsi_shader_info *info,
       break;
    }
 
-   if (fullinst->Instruction.Opcode == TGSI_OPCODE_INTERP_CENTROID ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_INTERP_OFFSET ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_INTERP_SAMPLE) {
-      const struct tgsi_full_src_register *src0 = &fullinst->Src[0];
-      unsigned input;
-
-      is_interp_instruction = true;
-
-      if (src0->Register.Indirect && src0->Indirect.ArrayID)
-         input = info->input_array_first[src0->Indirect.ArrayID];
-      else
-         input = src0->Register.Index;
-
-      /* For the INTERP opcodes, the interpolation is always
-       * PERSPECTIVE unless LINEAR is specified.
-       */
-      switch (info->input_interpolate[input]) {
-      case TGSI_INTERPOLATE_COLOR:
-      case TGSI_INTERPOLATE_CONSTANT:
-      case TGSI_INTERPOLATE_PERSPECTIVE:
-         switch (fullinst->Instruction.Opcode) {
-         case TGSI_OPCODE_INTERP_CENTROID:
-            info->uses_persp_opcode_interp_centroid = true;
-            break;
-         case TGSI_OPCODE_INTERP_OFFSET:
-            info->uses_persp_opcode_interp_offset = true;
-            break;
-         case TGSI_OPCODE_INTERP_SAMPLE:
-            info->uses_persp_opcode_interp_sample = true;
-            break;
-         }
-         break;
-
-      case TGSI_INTERPOLATE_LINEAR:
-         switch (fullinst->Instruction.Opcode) {
-         case TGSI_OPCODE_INTERP_CENTROID:
-            info->uses_linear_opcode_interp_centroid = true;
-            break;
-         case TGSI_OPCODE_INTERP_OFFSET:
-            info->uses_linear_opcode_interp_offset = true;
-            break;
-         case TGSI_OPCODE_INTERP_SAMPLE:
-            info->uses_linear_opcode_interp_sample = true;
-            break;
-         }
-         break;
-      }
-   }
-
-   if ((fullinst->Instruction.Opcode >= TGSI_OPCODE_F2D &&
-        fullinst->Instruction.Opcode <= TGSI_OPCODE_DSSG) ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_DFMA ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_DDIV ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_D2U64 ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_D2I64 ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_U642D ||
-       fullinst->Instruction.Opcode == TGSI_OPCODE_I642D)
-      info->uses_doubles = true;
-
    for (i = 0; i < fullinst->Instruction.NumSrcRegs; i++) {
       scan_src_operand(info, fullinst, &fullinst->Src[i], i,
                        tgsi_util_get_inst_usage_mask(fullinst, i),
-                       is_interp_instruction, &is_mem_inst);
+                       &is_mem_inst);
 
       if (fullinst->Src[i].Register.Indirect) {
          struct tgsi_full_src_register src = {{0}};
@@ -501,7 +257,7 @@ scan_instruction(struct tgsi_shader_info *info,
 
          scan_src_operand(info, fullinst, &src, -1,
                           1 << fullinst->Src[i].Indirect.Swizzle,
-                          false, NULL);
+                          NULL);
       }
 
       if (fullinst->Src[i].Register.Dimension &&
@@ -513,7 +269,7 @@ scan_instruction(struct tgsi_shader_info *info,
 
          scan_src_operand(info, fullinst, &src, -1,
                           1 << fullinst->Src[i].DimIndirect.Swizzle,
-                          false, NULL);
+                          NULL);
       }
    }
 
@@ -529,7 +285,7 @@ scan_instruction(struct tgsi_shader_info *info,
                           (1 << fullinst->TexOffsets[i].SwizzleX) |
                           (1 << fullinst->TexOffsets[i].SwizzleY) |
                           (1 << fullinst->TexOffsets[i].SwizzleZ),
-                          false, &is_mem_inst);
+                          &is_mem_inst);
       }
    }
 
@@ -544,10 +300,9 @@ scan_instruction(struct tgsi_shader_info *info,
          src.Register.Index = dst->Indirect.Index;
 
          scan_src_operand(info, fullinst, &src, -1,
-                          1 << dst->Indirect.Swizzle, false, NULL);
+                          1 << dst->Indirect.Swizzle, NULL);
 
          info->indirect_files |= (1 << dst->Register.File);
-         info->indirect_files_written |= (1 << dst->Register.File);
       }
 
       if (dst->Register.Dimension && dst->Dimension.Indirect) {
@@ -557,7 +312,7 @@ scan_instruction(struct tgsi_shader_info *info,
          src.Register.Index = dst->DimIndirect.Index;
 
          scan_src_operand(info, fullinst, &src, -1,
-                          1 << dst->DimIndirect.Swizzle, false, NULL);
+                          1 << dst->DimIndirect.Swizzle, NULL);
 
          info->dim_indirect_files |= 1u << dst->Register.File;
       }
@@ -576,11 +331,6 @@ scan_instruction(struct tgsi_shader_info *info,
                else
                   info->msaa_images_declared |= 1 << dst->Register.Index;
             }
-
-            if (dst->Register.Indirect)
-               info->images_store = info->images_declared;
-            else
-               info->images_store |= 1 << dst->Register.Index;
          } else if (dst->Register.File == TGSI_FILE_BUFFER) {
             if (dst->Register.Indirect)
                info->shader_buffers_store = info->shader_buffers_declared;
@@ -589,12 +339,6 @@ scan_instruction(struct tgsi_shader_info *info,
          }
       }
    }
-
-   if (is_mem_inst)
-      info->num_memory_instructions++;
-
-   if (computes_derivative(fullinst->Instruction.Opcode))
-      info->uses_derivatives = true;
 
    info->num_instructions++;
 }
@@ -627,7 +371,6 @@ scan_declaration(struct tgsi_shader_info *info,
       default:
          break;
       }
-      info->array_max[file] = MAX2(info->array_max[file], array_id);
    }
 
    for (reg = fulldecl->Range.First; reg <= fulldecl->Range.Last; reg++) {
@@ -684,9 +427,6 @@ scan_declaration(struct tgsi_shader_info *info,
          case TGSI_SEMANTIC_PRIMID:
             info->uses_primid = true;
             break;
-         case TGSI_SEMANTIC_POSITION:
-            info->reads_position = true;
-            break;
          case TGSI_SEMANTIC_FACE:
             info->uses_frontface = true;
             break;
@@ -712,27 +452,14 @@ scan_declaration(struct tgsi_shader_info *info,
          case TGSI_SEMANTIC_BASEVERTEX:
             info->uses_basevertex = true;
             break;
-         case TGSI_SEMANTIC_DRAWID:
-            info->uses_drawid = true;
-            break;
          case TGSI_SEMANTIC_PRIMID:
             info->uses_primid = true;
             break;
          case TGSI_SEMANTIC_INVOCATIONID:
             info->uses_invocationid = true;
             break;
-         case TGSI_SEMANTIC_POSITION:
-            info->reads_position = true;
-            break;
          case TGSI_SEMANTIC_FACE:
             info->uses_frontface = true;
-            break;
-         case TGSI_SEMANTIC_SAMPLEMASK:
-            info->reads_samplemask = true;
-            break;
-         case TGSI_SEMANTIC_TESSINNER:
-         case TGSI_SEMANTIC_TESSOUTER:
-            info->reads_tess_factors = true;
             break;
          }
          break;
@@ -761,9 +488,6 @@ scan_declaration(struct tgsi_shader_info *info,
          }
 
          switch (semName) {
-         case TGSI_SEMANTIC_PRIMID:
-            info->writes_primid = true;
-            break;
          case TGSI_SEMANTIC_VIEWPORT_INDEX:
             info->writes_viewport_index = true;
             break;
@@ -775,9 +499,6 @@ scan_declaration(struct tgsi_shader_info *info,
             break;
          case TGSI_SEMANTIC_CLIPVERTEX:
             info->writes_clipvertex = true;
-            break;
-         case TGSI_SEMANTIC_COLOR:
-            info->colors_written |= 1 << semIndex;
             break;
          case TGSI_SEMANTIC_STENCIL:
             info->writes_stencil = true;
@@ -853,11 +574,9 @@ scan_property(struct tgsi_shader_info *info,
    switch (name) {
    case TGSI_PROPERTY_NUM_CLIPDIST_ENABLED:
       info->num_written_clipdistance = value;
-      info->clipdist_writemask |= (1 << value) - 1;
       break;
    case TGSI_PROPERTY_NUM_CULLDIST_ENABLED:
       info->num_written_culldistance = value;
-      info->culldist_writemask |= (1 << value) - 1;
       break;
    }
 }
@@ -899,7 +618,6 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
           procType == PIPE_SHADER_TESS_EVAL ||
           procType == PIPE_SHADER_COMPUTE);
    info->processor = procType;
-   info->num_tokens = tgsi_num_tokens(parse.Tokens);
 
    if (procType == PIPE_SHADER_GEOMETRY)
       info->properties[TGSI_PROPERTY_GS_INVOCATIONS] = 1;

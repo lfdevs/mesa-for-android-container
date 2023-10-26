@@ -53,37 +53,42 @@ ValueFactory::set_virtual_register_base(int base)
 }
 
 bool
-ValueFactory::allocate_registers(const exec_list *registers)
+ValueFactory::allocate_registers(const std::list<nir_intrinsic_instr *>& regs)
 {
-   bool has_arrays = false;
    struct array_entry {
       unsigned index;
       unsigned length;
-      unsigned ncomponents;
+      int ncomponents;
 
       bool operator()(const array_entry& a, const array_entry& b) const
       {
-         return a.length < b.length ||
-                (a.length == b.length && a.ncomponents > b.ncomponents);
+         return a.ncomponents < b.ncomponents ||
+               (a.ncomponents == b.ncomponents && a.length < b.length);
       }
    };
 
    using array_list =
       std::priority_queue<array_entry, std::vector<array_entry>, array_entry>;
 
+   std::list<unsigned> non_array;
    array_list arrays;
+   for(auto intr : regs) {
+      unsigned num_elms = nir_intrinsic_num_array_elems(intr);
+      int num_comp = nir_intrinsic_num_components(intr);
+      int bit_size = nir_intrinsic_bit_size(intr);
 
-   foreach_list_typed(nir_register, reg, node, registers)
-   {
-      if (reg->num_array_elems) {
+      if (num_elms > 0 || num_comp > 1 || bit_size > 32) {
          array_entry ae = {
-            reg->index, reg->num_array_elems, reg->bit_size / 32 * reg->num_components};
+            intr->def.index,
+            num_elms ? num_elms : 1,
+            bit_size / 32 * num_comp};
          arrays.push(ae);
-         has_arrays = true;
+      } else {
+         non_array.push_back(intr->def.index);
       }
    }
 
-   int ncomponents = 0;
+   int free_components = 4;
    int sel = m_next_register_index;
    unsigned length = 0;
 
@@ -94,48 +99,39 @@ ValueFactory::allocate_registers(const exec_list *registers)
       /* This is a bit hackish, return an id that encodes the array merge. To
        * make sure that the mapping doesn't go wrong we have to make sure the
        * arrays is longer than the number of instances in this arrays slot */
-      if (a.ncomponents + ncomponents > 4 || a.length > length) {
+      if (a.ncomponents > free_components || a.length > length) {
          sel = m_next_register_index;
-         ncomponents = 0;
-         length = 0;
+         free_components = 4;
+         m_next_register_index += a.length;
       }
 
-      if (ncomponents == 0)
-         m_next_register_index += a.length;
+      uint32_t frac = free_components - a.ncomponents;
 
-      uint32_t frac = ncomponents;
       auto array = new LocalArray(sel, a.ncomponents, a.length, frac);
 
-      for (unsigned i = 0; i < a.ncomponents; ++i) {
+      for (int i = 0; i < a.ncomponents; ++i) {
          RegisterKey key(a.index, i, vp_array);
-         m_channel_counts.inc_count(i);
+         m_channel_counts.inc_count(frac + i, a.length);
          m_registers[key] = array;
          sfn_log << SfnLog::reg << __func__ << ": Allocate array " << key << ":" << *array
                  << "\n";
       }
 
-      ncomponents += a.ncomponents;
+      free_components -= a.ncomponents;
       length = a.length;
    }
 
    m_required_array_registers = m_next_register_index ? m_next_register_index : 0;
 
-   foreach_list_typed(nir_register, reg, node, registers)
-   {
-      if (!reg->num_array_elems) {
-         uint32_t sel = m_next_register_index++;
-         unsigned num_components = reg->num_components * reg->bit_size / 32;
-         for (auto chan = 0u; chan < num_components; ++chan) {
-            RegisterKey key(reg->index, chan, vp_register);
-            m_channel_counts.inc_count(chan);
-            m_registers[key] =
-               new Register(sel, chan, num_components > 1 ? pin_none : pin_free);
-            sfn_log << SfnLog::reg << "allocate register " << key << ":"
-                    << *m_registers[key] << "\n";
-         }
-      }
+   for (auto index : non_array) {
+      RegisterKey key(index, 0, vp_register);
+      auto chan = m_channel_counts.least_used(0xf);
+      m_registers[key] = new Register(m_next_register_index++,
+                                      chan, pin_free);
+      m_channel_counts.inc_count(chan);
    }
-   return has_arrays;
+
+   return true;
 }
 
 int ValueFactory::new_register_index()
@@ -172,20 +168,12 @@ ValueFactory::allocate_pinned_vec4(int sel, bool is_ssa)
 }
 
 void
-ValueFactory::inject_value(const nir_dest& dest, int chan, PVirtualValue value)
+ValueFactory::inject_value(const nir_def& def, int chan, PVirtualValue value)
 {
-   assert(dest.is_ssa);
-   RegisterKey key(dest.ssa.index, chan, vp_ssa);
+   RegisterKey key(def.index, chan, vp_ssa);
    sfn_log << SfnLog::reg << "Inject value with key " << key << "\n";
    assert(m_values.find(key) == m_values.end());
    m_values[key] = value;
-}
-
-PRegister
-ValueFactory::dest(const nir_alu_dest& dst, int chan, Pin pin_channel, uint8_t chan_mask)
-{
-   sfn_log << SfnLog::reg << "Search (ref) " << &dst << "\n";
-   return dest(dst.dest, chan, pin_channel, chan_mask);
 }
 
 class TranslateRegister : public RegisterVisitor {
@@ -211,46 +199,6 @@ public:
    int m_offset;
    int m_chan;
 };
-
-PRegister
-ValueFactory::resolve_array(nir_register *reg,
-                            nir_src *indirect,
-                            int base_offset,
-                            int chan)
-{
-   PVirtualValue addr = nullptr;
-   auto type = reg->num_array_elems ? vp_array : vp_register;
-   RegisterKey key(reg->index, chan, type);
-   auto ireg = m_registers.find(key);
-   if (ireg == m_registers.end()) {
-      std::cerr << "Key " << key << " not found\n";
-      assert(0);
-   }
-
-   if (reg->num_array_elems) {
-
-      if (indirect)
-         addr = src(*indirect, 0);
-
-      TranslateRegister array_resolution(base_offset, addr, chan);
-
-      ireg->second->accept(array_resolution);
-      assert(array_resolution.m_value);
-      return array_resolution.m_value;
-   } else {
-      return ireg->second;
-   }
-}
-
-PRegister
-ValueFactory::dest(const nir_dest& dst, int chan, Pin pin_channel, uint8_t chan_mask)
-{
-   if (dst.is_ssa) {
-      return dest(dst.ssa, chan, pin_channel, chan_mask);
-   } else {
-      return resolve_array(dst.reg.reg, dst.reg.indirect, dst.reg.base_offset, chan);
-   }
-}
 
 void
 ValueFactory::allocate_const(nir_load_const_instr *load_const)
@@ -316,34 +264,15 @@ ValueFactory::temp_vec4(Pin pin, const RegisterVec4::Swizzle& swizzle)
 }
 
 RegisterVec4
-ValueFactory::dest_vec4(const nir_dest& dst, Pin pin)
+ValueFactory::dest_vec4(const nir_def& def, Pin pin)
 {
    if (pin != pin_group && pin != pin_chgr)
       pin = pin_chan;
-   if (dst.is_ssa) {
-      PRegister x = dest(dst, 0, pin);
-      PRegister y = dest(dst, 1, pin);
-      PRegister z = dest(dst, 2, pin);
-      PRegister w = dest(dst, 3, pin);
-      return RegisterVec4(x, y, z, w, pin);
-   } else {
-      assert(!dst.reg.indirect);
-      PRegister v[4];
-      int sel = -1;
-      for (int i = 0; i < 4; ++i) {
-         RegisterKey key(dst.reg.reg->index, i, vp_register);
-         v[i] = m_registers[key];
-         assert(sel >= 0 || v[i]);
-         if (sel < 0)
-            sel = v[i]->sel();
-
-         if (!v[i]) {
-            v[i] = m_registers[key] = new Register(sel, i, pin_group);
-         }
-      }
-      return RegisterVec4(v[0], v[1], v[2], v[3], pin);
-   }
-   unreachable("unsupported");
+   PRegister x = dest(def, 0, pin);
+   PRegister y = dest(def, 1, pin);
+   PRegister z = dest(def, 2, pin);
+   PRegister w = dest(def, 3, pin);
+   return RegisterVec4(x, y, z, w, pin);
 }
 
 PRegister ValueFactory::addr()
@@ -386,16 +315,11 @@ ValueFactory::src(const nir_src& src, int chan)
 {
    sfn_log << SfnLog::reg << "search (ref) " << (void *)&src << "\n";
 
-   if (src.is_ssa) {
-      sfn_log << SfnLog::reg << "search ssa " << src.ssa->index << " c:" << chan
-              << " got ";
-      auto val = ssa_src(*src.ssa, chan);
-      sfn_log << *val << "\n";
-      return val;
-   } else {
-      sfn_log << SfnLog::reg << "search reg " << src.reg.reg->index << "\n";
-      return local_register(src.reg, chan);
-   }
+   sfn_log << SfnLog::reg << "search ssa " << src.ssa->index << " c:" << chan
+           << " got ";
+   auto val = ssa_src(*src.ssa, chan);
+   sfn_log << *val << "\n";
+   return val;
 }
 
 PVirtualValue
@@ -412,7 +336,7 @@ ValueFactory::dummy_dest(unsigned chan)
 }
 
 PRegister
-ValueFactory::dest(const nir_ssa_def& ssa, int chan, Pin pin_channel, uint8_t chan_mask)
+ValueFactory::dest(const nir_def& ssa, int chan, Pin pin_channel, uint8_t chan_mask)
 {
    RegisterKey key(ssa.index, chan, vp_ssa);
 
@@ -473,7 +397,7 @@ ValueFactory::undef(int index, int chan)
 }
 
 PVirtualValue
-ValueFactory::ssa_src(const nir_ssa_def& ssa, int chan)
+ValueFactory::ssa_src(const nir_def& ssa, int chan)
 {
    RegisterKey key(ssa.index, chan, vp_ssa);
    sfn_log << SfnLog::reg << "search src with key" << key << "\n";
@@ -486,20 +410,21 @@ ValueFactory::ssa_src(const nir_ssa_def& ssa, int chan)
    if (ival != m_values.end())
       return ival->second;
 
+   RegisterKey rkey(ssa.index, chan, vp_register);
+   sfn_log << SfnLog::reg << "search src with key" << rkey << "\n";
+
+   ireg = m_registers.find(rkey);
+   if (ireg != m_registers.end())
+      return ireg->second;
+
+   RegisterKey array_key(ssa.index, chan, vp_array);
+   sfn_log << SfnLog::reg << "search array with key" << array_key << "\n";
+   auto iarray = m_registers.find(array_key);
+   if (iarray != m_registers.end())
+      return iarray->second;
+
    std::cerr << "Didn't find source with key " << key << "\n";
    unreachable("Source values should always exist");
-}
-
-PRegister
-ValueFactory::local_register(const nir_register_dest& dst, int chan)
-{
-   return resolve_array(dst.reg, dst.indirect, dst.base_offset, chan);
-}
-
-PRegister
-ValueFactory::local_register(const nir_register_src& src, int chan)
-{
-   return resolve_array(src.reg, src.indirect, src.base_offset, chan);
 }
 
 PVirtualValue
@@ -537,12 +462,12 @@ ValueFactory::src_vec(const nir_src& source, int components)
 }
 
 std::vector<PRegister, Allocator<PRegister>>
-ValueFactory::dest_vec(const nir_dest& dst, int num_components)
+ValueFactory::dest_vec(const nir_def& def, int num_components)
 {
    std::vector<PRegister, Allocator<PRegister>> retval;
    retval.reserve(num_components);
    for (int i = 0; i < num_components; ++i)
-      retval.push_back(dest(dst, i, num_components > 1 ? pin_none : pin_free));
+      retval.push_back(dest(def, i, num_components > 1 ? pin_none : pin_free));
    return retval;
 }
 
@@ -1040,11 +965,9 @@ ValueFactory::prepare_live_range_map()
          continue;
 
       if (key.value.pool == vp_array) {
-         if (key.value.chan == 0) {
-            auto array = static_cast<LocalArray *>(reg);
-            for (auto& a : *array) {
-               result.append_register(a);
-            }
+         auto array = static_cast<LocalArray *>(reg);
+         for (auto& a : *array) {
+            result.append_register(a);
          }
       } else {
          if (reg->chan() < 4)

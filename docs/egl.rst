@@ -160,7 +160,7 @@ EGL Drivers
    This driver can share DRI drivers with ``libGL``.
 
 ``haiku``
-   This driver supports only the `Haiku <https://haiku-os.org>`__
+   This driver supports only the `Haiku <https://www.haiku-os.org/>`__
    platform. It is also much less feature-complete than ``egl_dri2``,
    supporting only part of EGL 1.4 and none of the extensions beyond it.
 

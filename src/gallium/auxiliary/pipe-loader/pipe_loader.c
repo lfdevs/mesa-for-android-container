@@ -56,12 +56,17 @@ const driOptionDescription gallium_driconf[] = {
 };
 
 int
-pipe_loader_probe(struct pipe_loader_device **devs, int ndev)
+pipe_loader_probe(struct pipe_loader_device **devs, int ndev, bool with_zink)
 {
    int i, n = 0;
 
    for (i = 0; i < ARRAY_SIZE(backends); i++)
       n += backends[i](&devs[n], MAX2(0, ndev - n));
+
+#if defined(HAVE_ZINK) && defined(HAVE_LIBDRM)
+   if (with_zink)
+      n += pipe_loader_drm_zink_probe(&devs[n], MAX2(0, ndev - n));
+#endif
 
    return n;
 }

@@ -19,14 +19,13 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- * 
+ *
  * Authors:
  *    Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
  */
 
 #include "nir.h"
 #include "nir_builder.h"
-
 
 /**
  * This pass uses the enabled clip planes from the rasterizer state to rewrite
@@ -38,7 +37,7 @@
  * then overwrite it if that plane isn't enabled
  */
 static void
-recursive_if_chain(nir_builder *b, nir_deref_instr *deref, nir_ssa_def *value, unsigned clip_plane_enable, nir_ssa_def *index, unsigned start, unsigned end)
+recursive_if_chain(nir_builder *b, nir_deref_instr *deref, nir_def *value, unsigned clip_plane_enable, nir_def *index, unsigned start, unsigned end)
 {
    if (start == end - 1) {
       /* store the original value again if the clip plane is enabled */
@@ -61,13 +60,9 @@ recursive_if_chain(nir_builder *b, nir_deref_instr *deref, nir_ssa_def *value, u
  * so we rewrite disabled clip planes to a zero value in order to disable them
  */
 static bool
-lower_clip_plane_store(nir_builder *b, nir_instr *instr_, void *cb_data)
+lower_clip_plane_store(nir_builder *b, nir_intrinsic_instr *instr,
+                       void *cb_data)
 {
-   if (instr_->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *instr = nir_instr_as_intrinsic(instr_);
-
    unsigned clip_plane_enable = *(unsigned *)cb_data;
    nir_variable *out;
    unsigned plane;
@@ -80,14 +75,14 @@ lower_clip_plane_store(nir_builder *b, nir_instr *instr_, void *cb_data)
    out = nir_deref_instr_get_variable(deref);
    if ((out->data.location != VARYING_SLOT_CLIP_DIST0 &&
         out->data.location != VARYING_SLOT_CLIP_DIST1) ||
-        out->data.mode != nir_var_shader_out)
+       out->data.mode != nir_var_shader_out)
       return false;
 
    b->cursor = nir_after_instr(&instr->instr);
    if (deref->deref_type == nir_deref_type_var) {
       int wrmask = nir_intrinsic_write_mask(instr);
 
-      nir_ssa_def *components[4];
+      nir_def *components[4];
       int start = out->data.location == VARYING_SLOT_CLIP_DIST1 ? 4 : 0;
       /* rewrite components as zeroes for planes that aren't enabled */
       for (int i = 0; i < 4; i++) {
@@ -95,12 +90,12 @@ lower_clip_plane_store(nir_builder *b, nir_instr *instr_, void *cb_data)
             if (!(clip_plane_enable & (1 << (start + i))))
                components[i] = nir_imm_int(b, 0);
             else
-               components[i] = nir_channel(b, nir_ssa_for_src(b, instr->src[1], nir_src_num_components(instr->src[1])), i);
+               components[i] = nir_channel(b, instr->src[1].ssa, i);
          } else
-            components[i] = nir_ssa_undef(b, 1, 32);
+            components[i] = nir_undef(b, 1, 32);
       }
       nir_store_deref(b, deref, nir_vec(b, components, instr->num_components), wrmask);
-   } else  if (nir_src_is_const(deref->arr.index)) {
+   } else if (nir_src_is_const(deref->arr.index)) {
       /* storing using a constant index */
       plane = nir_src_as_uint(deref->arr.index);
       /* no need to make changes if the clip plane is enabled */
@@ -111,7 +106,7 @@ lower_clip_plane_store(nir_builder *b, nir_instr *instr_, void *cb_data)
       nir_store_deref(b, deref, nir_imm_int(b, 0), 1);
    } else {
       /* storing using a variable index */
-      nir_ssa_def *index = nir_ssa_for_src(b, deref->arr.index, 1);
+      nir_def *index = deref->arr.index.ssa;
       unsigned length = glsl_get_length(nir_deref_instr_parent(deref)->type);
 
       recursive_if_chain(b, deref, instr->src[1].ssa, clip_plane_enable, index, 0, length);
@@ -129,8 +124,8 @@ nir_lower_clip_disable(nir_shader *shader, unsigned clip_plane_enable)
    if (clip_plane_enable == u_bit_consecutive(0, shader->info.clip_distance_array_size))
       return false;
 
-   return nir_shader_instructions_pass(shader, lower_clip_plane_store,
+   return nir_shader_intrinsics_pass(shader, lower_clip_plane_store,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        &clip_plane_enable);
 }

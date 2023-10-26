@@ -7,8 +7,6 @@
 #include "agx_tilebuffer.h"
 #include "nir_builder.h"
 
-#define ALL_SAMPLES (0xFF)
-
 /*
  * Lower alpha-to-coverage to sample_mask and some math. May run on either a
  * monolithic pixel shader or a fragment epilogue.
@@ -19,9 +17,6 @@ agx_nir_lower_alpha_to_coverage(nir_shader *shader, uint8_t nr_samples)
    /* nir_lower_io_to_temporaries ensures that stores are in the last block */
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_block *block = nir_impl_last_block(impl);
-
-   nir_builder _b = nir_builder_create(impl);
-   nir_builder *b = &_b;
 
    /* The store is probably at the end of the block, so search in reverse. */
    nir_intrinsic_instr *store = NULL;
@@ -51,11 +46,12 @@ agx_nir_lower_alpha_to_coverage(nir_shader *shader, uint8_t nr_samples)
       return;
 
    /* Similarly, if there are less than 4 components, alpha is undefined */
-   nir_ssa_def *rgba = store->src[0].ssa;
+   nir_def *rgba = store->src[0].ssa;
    if (rgba->num_components < 4)
       return;
 
-   b->cursor = nir_before_instr(&store->instr);
+   nir_builder _b = nir_builder_at(nir_before_instr(&store->instr));
+   nir_builder *b = &_b;
 
    /* Calculate a coverage mask (alpha * nr_samples) bits set. The way we do
     * this isn't particularly clever:
@@ -63,9 +59,9 @@ agx_nir_lower_alpha_to_coverage(nir_shader *shader, uint8_t nr_samples)
     *    # of bits = (unsigned int) (alpha * nr_samples)
     *    mask = (1 << (# of bits)) - 1
     */
-   nir_ssa_def *alpha = nir_channel(b, rgba, 3);
-   nir_ssa_def *bits = nir_f2u32(b, nir_fmul_imm(b, alpha, nr_samples));
-   nir_ssa_def *mask =
+   nir_def *alpha = nir_channel(b, rgba, 3);
+   nir_def *bits = nir_f2u32(b, nir_fmul_imm(b, alpha, nr_samples));
+   nir_def *mask =
       nir_iadd_imm(b, nir_ishl(b, nir_imm_intN_t(b, 1, 16), bits), -1);
 
    /* Discard samples that aren't covered */
@@ -84,9 +80,6 @@ agx_nir_lower_alpha_to_one(nir_shader *shader)
    /* nir_lower_io_to_temporaries ensures that stores are in the last block */
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_block *block = nir_impl_last_block(impl);
-
-   nir_builder _b = nir_builder_create(impl);
-   nir_builder *b = &_b;
 
    nir_foreach_instr(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -107,14 +100,14 @@ agx_nir_lower_alpha_to_one(nir_shader *shader)
       if (sem.location < FRAG_RESULT_DATA0)
          continue;
 
-      nir_ssa_def *rgba = intr->src[0].ssa;
+      nir_def *rgba = intr->src[0].ssa;
       if (rgba->num_components < 4)
          continue;
 
-      b->cursor = nir_before_instr(instr);
-      nir_ssa_def *rgb1 = nir_vector_insert_imm(
-         b, rgba, nir_imm_floatN_t(b, 1.0, rgba->bit_size), 3);
+      nir_builder b = nir_builder_at(nir_before_instr(instr));
+      nir_def *rgb1 = nir_vector_insert_imm(
+         &b, rgba, nir_imm_floatN_t(&b, 1.0, rgba->bit_size), 3);
 
-      nir_instr_rewrite_src_ssa(instr, &intr->src[0], rgb1);
+      nir_src_rewrite(&intr->src[0], rgb1);
    }
 }

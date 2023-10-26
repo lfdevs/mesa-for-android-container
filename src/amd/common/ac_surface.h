@@ -217,6 +217,7 @@ struct gfx9_meta_equation {
 struct gfx9_surf_layout {
    uint16_t epitch;           /* gfx9 only, not on gfx10 */
    uint8_t swizzle_mode;      /* color or depth */
+   bool uses_custom_pitch;    /* only used by gfx10.3+ */
 
    enum gfx9_resource_type resource_type:8; /* 1D, 2D or 3D */
    uint16_t surf_pitch;                   /* in blocks */
@@ -457,7 +458,7 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
                                 uint64_t *mods);
 bool ac_modifier_has_dcc(uint64_t modifier);
 bool ac_modifier_has_dcc_retile(uint64_t modifier);
-bool ac_modifier_supports_dcc_image_stores(uint64_t modifier);
+bool ac_modifier_supports_dcc_image_stores(enum amd_gfx_level gfx_level, uint64_t modifier);
 void ac_modifier_max_extent(const struct radeon_info *info,
                             uint64_t modifier, uint32_t *width, uint32_t *height);
 
@@ -490,27 +491,27 @@ unsigned ac_get_cb_number_type(enum pipe_format format);
 unsigned ac_get_cb_format(enum amd_gfx_level gfx_level, enum pipe_format format);
 
 #ifdef AC_SURFACE_INCLUDE_NIR
-nir_ssa_def *ac_nir_dcc_addr_from_coord(nir_builder *b, const struct radeon_info *info,
+nir_def *ac_nir_dcc_addr_from_coord(nir_builder *b, const struct radeon_info *info,
                                         unsigned bpe, struct gfx9_meta_equation *equation,
-                                        nir_ssa_def *dcc_pitch, nir_ssa_def *dcc_height,
-                                        nir_ssa_def *dcc_slice_size,
-                                        nir_ssa_def *x, nir_ssa_def *y, nir_ssa_def *z,
-                                        nir_ssa_def *sample, nir_ssa_def *pipe_xor);
+                                        nir_def *dcc_pitch, nir_def *dcc_height,
+                                        nir_def *dcc_slice_size,
+                                        nir_def *x, nir_def *y, nir_def *z,
+                                        nir_def *sample, nir_def *pipe_xor);
 
-nir_ssa_def *ac_nir_cmask_addr_from_coord(nir_builder *b, const struct radeon_info *info,
+nir_def *ac_nir_cmask_addr_from_coord(nir_builder *b, const struct radeon_info *info,
                                         struct gfx9_meta_equation *equation,
-                                        nir_ssa_def *cmask_pitch, nir_ssa_def *cmask_height,
-                                        nir_ssa_def *cmask_slice_size,
-                                        nir_ssa_def *x, nir_ssa_def *y, nir_ssa_def *z,
-                                        nir_ssa_def *pipe_xor,
-                                        nir_ssa_def **bit_position);
+                                        nir_def *cmask_pitch, nir_def *cmask_height,
+                                        nir_def *cmask_slice_size,
+                                        nir_def *x, nir_def *y, nir_def *z,
+                                        nir_def *pipe_xor,
+                                        nir_def **bit_position);
 
-nir_ssa_def *ac_nir_htile_addr_from_coord(nir_builder *b, const struct radeon_info *info,
+nir_def *ac_nir_htile_addr_from_coord(nir_builder *b, const struct radeon_info *info,
                                           struct gfx9_meta_equation *equation,
-                                          nir_ssa_def *htile_pitch,
-                                          nir_ssa_def *htile_slice_size,
-                                          nir_ssa_def *x, nir_ssa_def *y, nir_ssa_def *z,
-                                          nir_ssa_def *pipe_xor);
+                                          nir_def *htile_pitch,
+                                          nir_def *htile_slice_size,
+                                          nir_def *x, nir_def *y, nir_def *z,
+                                          nir_def *pipe_xor);
 #endif
 
 #ifdef __cplusplus

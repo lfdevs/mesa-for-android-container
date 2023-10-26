@@ -84,8 +84,8 @@ Add this to your ``.emacs`` to automatically format any C & C++ file
 If ``/usr/share/clang/clang-format.el`` doesn't exist, look through the
 files in the package providing ``clang-format`` in your distro. If you
 can't find anything (eg. on Debian/Ubuntu), refer to `this StackOverflow
-answer <https://stackoverflow.com/a/59850773>`__ to install clang-format
-through Emacs instead.
+answer <https://stackoverflow.com/questions/59690583/how-do-you-use-clang-format-on-emacs-ubuntu/59850773#59850773>`__
+to install clang-format through Emacs instead.
 
 git ``pre-commit`` hook
 ***********************

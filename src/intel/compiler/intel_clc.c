@@ -402,6 +402,8 @@ int main(int argc, char **argv)
       .warning = msg_callback,
    };
 
+   size_t total_size = 0;
+   char *all_inputs = NULL;
    util_dynarray_foreach(&input_files, char *, infile) {
       int fd = open(*infile, O_RDONLY);
       if (fd < 0) {
@@ -411,46 +413,50 @@ int main(int argc, char **argv)
       }
 
       off_t len = lseek(fd, 0, SEEK_END);
-      const void *map = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
+      size_t new_size = total_size + len;
+      all_inputs = reralloc_size(mem_ctx, all_inputs, new_size + 1);
+      if (!all_inputs) {
+         fprintf(stderr, "Failed to allocate memory\n");
+         ralloc_free(mem_ctx);
+         return 1;
+      }
+      lseek(fd, 0, SEEK_SET);
+      read(fd, all_inputs + total_size, len);
       close(fd);
-      if (map == MAP_FAILED) {
-         fprintf(stderr, "Failed to mmap the file: errno=%d, %s\n",
-                 errno, strerror(errno));
-         ralloc_free(mem_ctx);
-         return 1;
-      }
+      total_size = new_size;
+      all_inputs[total_size] = '\0';
+   }
 
-      const char *allowed_spirv_extensions[] = {
-         "SPV_EXT_shader_atomic_float_add",
-         "SPV_EXT_shader_atomic_float_min_max",
-         "SPV_KHR_float_controls",
-         "SPV_INTEL_subgroups",
-         NULL,
-      };
+   const char *allowed_spirv_extensions[] = {
+      "SPV_EXT_shader_atomic_float_add",
+      "SPV_EXT_shader_atomic_float_min_max",
+      "SPV_KHR_float_controls",
+      "SPV_INTEL_subgroups",
+      NULL,
+   };
 
-      struct clc_compile_args clc_args = {
-         .source = {
-            .name = *infile,
-            .value = map,
-         },
-         .features = {
-            .fp16 = true,
-            .intel_subgroups = true,
-            .subgroups = true,
-            .subgroups_ifp = true,
-         },
-         .args = util_dynarray_begin(&clang_args),
-         .num_args = util_dynarray_num_elements(&clang_args, char *),
-         .allowed_spirv_extensions = allowed_spirv_extensions,
-      };
+   struct clc_compile_args clc_args = {
+      .source = {
+         .name = "intel_clc_files",
+         .value = all_inputs,
+      },
+      .features = {
+         .fp16 = true,
+         .intel_subgroups = true,
+         .subgroups = true,
+         .subgroups_ifp = true,
+      },
+      .args = util_dynarray_begin(&clang_args),
+      .num_args = util_dynarray_num_elements(&clang_args, char *),
+      .allowed_spirv_extensions = allowed_spirv_extensions,
+   };
 
-      struct clc_binary *spirv_out =
-         util_dynarray_grow(&spirv_objs, struct clc_binary, 1);
+   struct clc_binary *spirv_out =
+      util_dynarray_grow(&spirv_objs, struct clc_binary, 1);
 
-      if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out)) {
-         ralloc_free(mem_ctx);
-         return 1;
-      }
+   if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out)) {
+      ralloc_free(mem_ctx);
+      return 1;
    }
 
    util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {

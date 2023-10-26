@@ -187,7 +187,7 @@ typedef void (*glcpp_extension_iterator)(
 		bool es);
 
 struct glcpp_parser {
-	void *linalloc;
+	linear_ctx *linalloc;
 	yyscan_t scanner;
 	struct hash_table *defines;
 	active_list_t *active;

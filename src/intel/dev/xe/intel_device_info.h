@@ -24,6 +24,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct intel_device_info;
 
@@ -33,3 +34,6 @@ intel_device_info_xe_get_info_from_fd(int fd,
 bool
 intel_device_info_xe_query_regions(int fd, struct intel_device_info *devinfo,
                                    bool update);
+
+void *
+intel_device_info_xe_query_hwconfig(int fd, int32_t *len);

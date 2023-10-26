@@ -110,71 +110,6 @@ public:
    static Instruction *split64BitOpPostRA(Function *, Instruction *,
                                           Value *zero, Value *carry);
 
-   struct Location
-   {
-      Location(unsigned array, unsigned arrayIdx, unsigned i, unsigned c)
-         : array(array), arrayIdx(arrayIdx), i(i), c(c) { }
-      Location(const Location &l)
-         : array(l.array), arrayIdx(l.arrayIdx), i(l.i), c(l.c) { }
-
-      bool operator==(const Location &l) const
-      {
-         return
-            array == l.array && arrayIdx == l.arrayIdx && i == l.i && c == l.c;
-      }
-
-      bool operator<(const Location &l) const
-      {
-         return array != l.array ? array < l.array :
-            arrayIdx != l.arrayIdx ? arrayIdx < l.arrayIdx :
-            i != l.i ? i < l.i :
-            c != l.c ? c < l.c :
-            false;
-      }
-
-      unsigned array, arrayIdx, i, c;
-   };
-
-   typedef bimap<Location, Value *> ValueMap;
-
-   class DataArray
-   {
-   public:
-      DataArray(BuildUtil *bld) : up(bld), array(0), arrayIdx(0), baseAddr(0),
-         arrayLen(0), baseSym(NULL), vecDim(0), eltSize(0), file(FILE_NULL),
-         regOnly(false) { }
-
-      void setup(unsigned array, unsigned arrayIdx,
-                 uint32_t base, int len, int vecDim, int eltSize,
-                 DataFile file, int8_t fileIdx);
-
-      inline bool exists(ValueMap&, unsigned int i, unsigned int c);
-
-      Value *load(ValueMap&, int i, int c, Value *ptr);
-      void store(ValueMap&, int i, int c, Value *ptr, Value *value);
-      Value *acquire(ValueMap&, int i, int c);
-
-   private:
-      inline Value *lookup(ValueMap&, unsigned i, unsigned c);
-      inline Value *insert(ValueMap&, unsigned i, unsigned c, Value *v);
-
-      Symbol *mkSymbol(int i, int c);
-
-   private:
-      BuildUtil *up;
-      unsigned array, arrayIdx;
-
-      uint32_t baseAddr;
-      uint32_t arrayLen;
-      Symbol *baseSym;
-
-      uint8_t vecDim;
-      uint8_t eltSize; // in bytes
-
-      DataFile file;
-      bool regOnly;
-   };
-
    Symbol *mkSymbol(DataFile file, int8_t fileIndex,
                     DataType ty, uint32_t baseAddress);
 
@@ -310,27 +245,6 @@ inline Instruction *
 BuildUtil::mkBMov(Value *dst, Value *src)
 {
    return mkCvt(OP_CVT, TYPE_U32, dst, TYPE_U32, src);
-}
-
-bool
-BuildUtil::DataArray::exists(ValueMap &m, unsigned int i, unsigned int c)
-{
-   assert(i < arrayLen && c < vecDim);
-   return !regOnly || m.r.count(Location(array, arrayIdx, i, c));
-}
-
-Value *
-BuildUtil::DataArray::lookup(ValueMap &m, unsigned i, unsigned c)
-{
-   ValueMap::r_iterator it = m.r.find(Location(array, arrayIdx, i, c));
-   return it != m.r.end() ? it->second : NULL;
-}
-
-Value *
-BuildUtil::DataArray::insert(ValueMap &m, unsigned i, unsigned c, Value *v)
-{
-   m.insert(Location(array, arrayIdx, i, c), v);
-   return v;
 }
 
 } // namespace nv50_ir

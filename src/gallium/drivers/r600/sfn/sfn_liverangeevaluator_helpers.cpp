@@ -289,9 +289,16 @@ RegisterCompAccess::RegisterCompAccess():
 }
 
 void
-RegisterCompAccess::record_read(int line, ProgramScope *scope, LiveRangeEntry::EUse use)
+RegisterCompAccess::record_read(int block, int line, ProgramScope *scope, LiveRangeEntry::EUse use)
 {
    last_read_scope = scope;
+
+   if (alu_block_id == block_id_uninitalized) {
+      alu_block_id = block;
+   } else if (alu_block_id != block) {
+      alu_block_id = block_id_not_unique;
+   }
+
    if (use != LiveRangeEntry::use_unspecified)
       m_use_type.set(use);
    if (last_read < line)
@@ -349,9 +356,14 @@ RegisterCompAccess::record_read(int line, ProgramScope *scope, LiveRangeEntry::E
 }
 
 void
-RegisterCompAccess::record_write(int line, ProgramScope *scope)
+RegisterCompAccess::record_write(int block, int line, ProgramScope *scope)
 {
    last_write = line;
+   if (alu_block_id == block_id_uninitalized) {
+      alu_block_id = block;
+   } else if (alu_block_id != block) {
+      alu_block_id = block_id_not_unique;
+   }
 
    if (first_write < 0) {
       first_write = line;

@@ -123,13 +123,7 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
  * \param stencil_bits  Array of stencil buffer sizes to be exposed.
  * \param num_depth_stencil_bits  Number of entries in both \c depth_bits and
  *                      \c stencil_bits.
- * \param db_modes      Array of buffer swap modes.  If an element has a
- *                      value of \c __DRI_ATTRIB_SWAP_NONE, then it
- *                      represents a single-buffered mode.  Other valid
- *                      values are \c __DRI_ATTRIB_SWAP_EXCHANGE,
- *                      \c __DRI_ATTRIB_SWAP_COPY, and \c __DRI_ATTRIB_SWAP_UNDEFINED.
- *                      They represent the respective GLX values as in
- *                      the GLX_OML_swap_method extension spec.
+ * \param db_modes      Array of double buffer modes.
  * \param num_db_modes  Number of entries in \c db_modes.
  * \param msaa_samples  Array of msaa sample count. 0 represents a visual
  *                      without a multisample buffer.
@@ -149,7 +143,7 @@ static __DRIconfig **
 driCreateConfigs(mesa_format format,
                  const uint8_t * depth_bits, const uint8_t * stencil_bits,
                  unsigned num_depth_stencil_bits,
-                 const GLenum * db_modes, unsigned num_db_modes,
+                 const bool *db_modes, unsigned num_db_modes,
                  const uint8_t * msaa_samples, unsigned num_msaa_modes,
                  GLboolean enable_accum, GLboolean color_depth_match)
 {
@@ -190,6 +184,18 @@ driCreateConfigs(mesa_format format,
       /* MESA_FORMAT_RGBA_FLOAT16 */
       {{ 0, 0, 0, 0},
        { 0, 16, 32, 48 }},
+      /* MESA_FORMAT_B5G5R5A1_UNORM */
+      {{ 0x00007C00, 0x000003E0, 0x0000001F, 0x00008000 },
+       { 10, 5, 0, 15 }},
+      /* MESA_FORMAT_R5G5B5A1_UNORM */
+      {{ 0x0000001F, 0x000003E0, 0x00007C00, 0x00008000 },
+       { 0, 5, 10, 15 }},
+      /* MESA_FORMAT_B4G4R4A4_UNORM */
+      {{ 0x00000F00, 0x000000F0, 0x0000000F, 0x0000F000 },
+       { 8, 4, 0, 12 }},
+      /* MESA_FORMAT_R4G4B4A4_UNORM */
+      {{ 0x0000000F, 0x000000F0, 0x00000F00, 0x0000F000 },
+       { 0, 4, 8, 12 }},
    };
 
    const uint32_t * masks;
@@ -254,6 +260,22 @@ driCreateConfigs(mesa_format format,
    case MESA_FORMAT_R10G10B10A2_UNORM:
       masks = format_table[8].masks;
       shifts = format_table[8].shifts;
+      break;
+   case MESA_FORMAT_B5G5R5A1_UNORM:
+      masks = format_table[11].masks;
+      shifts = format_table[11].shifts;
+      break;
+   case MESA_FORMAT_R5G5B5A1_UNORM:
+      masks = format_table[12].masks;
+      shifts = format_table[12].shifts;
+      break;
+   case MESA_FORMAT_B4G4R4A4_UNORM:
+      masks = format_table[13].masks;
+      shifts = format_table[13].shifts;
+      break;
+   case MESA_FORMAT_R4G4B4A4_UNORM:
+      masks = format_table[14].masks;
+      shifts = format_table[14].shifts;
       break;
    default:
       fprintf(stderr, "[%s:%u] Unknown framebuffer type %s (%d).\n",
@@ -321,14 +343,7 @@ driCreateConfigs(mesa_format format,
                     modes->stencilBits = stencil_bits[k];
                     modes->depthBits = depth_bits[k];
 
-                    if (db_modes[i] == __DRI_ATTRIB_SWAP_NONE) {
-                            modes->doubleBufferMode = GL_FALSE;
-                        modes->swapMethod = __DRI_ATTRIB_SWAP_UNDEFINED;
-                    }
-                    else {
-                            modes->doubleBufferMode = GL_TRUE;
-                            modes->swapMethod = db_modes[i];
-                    }
+                    modes->doubleBufferMode = db_modes[i];
 
                     modes->samples = msaa_samples[h];
 
@@ -417,23 +432,11 @@ dri_fill_in_modes(struct dri_screen *screen)
 
       /* Required by Android, for HAL_PIXEL_FORMAT_RGBX_8888. */
       MESA_FORMAT_R8G8B8X8_SRGB,
-   };
-   static const enum pipe_format pipe_formats[] = {
-      PIPE_FORMAT_B10G10R10A2_UNORM,
-      PIPE_FORMAT_B10G10R10X2_UNORM,
-      PIPE_FORMAT_R10G10B10A2_UNORM,
-      PIPE_FORMAT_R10G10B10X2_UNORM,
-      PIPE_FORMAT_BGRA8888_UNORM,
-      PIPE_FORMAT_BGRX8888_UNORM,
-      PIPE_FORMAT_BGRA8888_SRGB,
-      PIPE_FORMAT_BGRX8888_SRGB,
-      PIPE_FORMAT_B5G6R5_UNORM,
-      PIPE_FORMAT_R16G16B16A16_FLOAT,
-      PIPE_FORMAT_R16G16B16X16_FLOAT,
-      PIPE_FORMAT_RGBA8888_UNORM,
-      PIPE_FORMAT_RGBX8888_UNORM,
-      PIPE_FORMAT_RGBA8888_SRGB,
-      PIPE_FORMAT_RGBX8888_SRGB,
+
+      MESA_FORMAT_B5G5R5A1_UNORM,
+      MESA_FORMAT_R5G5B5A1_UNORM,
+      MESA_FORMAT_B4G4R4A4_UNORM,
+      MESA_FORMAT_R4G4B4A4_UNORM,
    };
    __DRIconfig **configs = NULL;
    uint8_t depth_bits_array[5];
@@ -447,10 +450,7 @@ dri_fill_in_modes(struct dri_screen *screen)
    bool allow_rgb10;
    bool allow_fp16;
 
-   static const GLenum back_buffer_modes[] = {
-      __DRI_ATTRIB_SWAP_NONE, __DRI_ATTRIB_SWAP_UNDEFINED,
-      __DRI_ATTRIB_SWAP_COPY
-   };
+   static const bool db_modes[] = { false, true };
 
    if (driQueryOptionb(&screen->dev->option_cache, "always_have_depth_buffer")) {
       /* all visuals will have a depth buffer */
@@ -507,35 +507,36 @@ dri_fill_in_modes(struct dri_screen *screen)
    mixed_color_depth =
       p_screen->get_param(p_screen, PIPE_CAP_MIXED_COLOR_DEPTH_BITS);
 
-   assert(ARRAY_SIZE(mesa_formats) == ARRAY_SIZE(pipe_formats));
-
    /* Add configs. */
-   for (unsigned format = 0; format < ARRAY_SIZE(mesa_formats); format++) {
+   for (unsigned f = 0; f < ARRAY_SIZE(mesa_formats); f++) {
+      mesa_format format = mesa_formats[f];
       __DRIconfig **new_configs = NULL;
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
 
       /* Expose only BGRA ordering if the loader doesn't support RGBA ordering. */
       if (!allow_rgba_ordering &&
-          (mesa_formats[format] == MESA_FORMAT_R8G8B8A8_UNORM ||
-           mesa_formats[format] == MESA_FORMAT_R8G8B8X8_UNORM ||
-           mesa_formats[format] == MESA_FORMAT_R8G8B8A8_SRGB  ||
-           mesa_formats[format] == MESA_FORMAT_R8G8B8X8_SRGB))
+          (format == MESA_FORMAT_R8G8B8A8_UNORM ||
+           format == MESA_FORMAT_R8G8B8X8_UNORM ||
+           format == MESA_FORMAT_R8G8B8A8_SRGB  ||
+           format == MESA_FORMAT_R8G8B8X8_SRGB  ||
+           format == MESA_FORMAT_R5G5B5A1_UNORM ||
+           format == MESA_FORMAT_R4G4B4A4_UNORM))
          continue;
 
       if (!allow_rgb10 &&
-          (mesa_formats[format] == MESA_FORMAT_B10G10R10A2_UNORM ||
-           mesa_formats[format] == MESA_FORMAT_B10G10R10X2_UNORM ||
-           mesa_formats[format] == MESA_FORMAT_R10G10B10A2_UNORM ||
-           mesa_formats[format] == MESA_FORMAT_R10G10B10X2_UNORM))
+          (format == MESA_FORMAT_B10G10R10A2_UNORM ||
+           format == MESA_FORMAT_B10G10R10X2_UNORM ||
+           format == MESA_FORMAT_R10G10B10A2_UNORM ||
+           format == MESA_FORMAT_R10G10B10X2_UNORM))
          continue;
 
       if (!allow_fp16 &&
-          (mesa_formats[format] == MESA_FORMAT_RGBA_FLOAT16 ||
-           mesa_formats[format] == MESA_FORMAT_RGBX_FLOAT16))
+          (format == MESA_FORMAT_RGBA_FLOAT16 ||
+           format == MESA_FORMAT_RGBX_FLOAT16))
          continue;
 
-      if (!p_screen->is_format_supported(p_screen, pipe_formats[format],
+      if (!p_screen->is_format_supported(p_screen, format,
                                          PIPE_TEXTURE_2D, 0, 0,
                                          PIPE_BIND_RENDER_TARGET |
                                          PIPE_BIND_DISPLAY_TARGET))
@@ -544,7 +545,7 @@ dri_fill_in_modes(struct dri_screen *screen)
       for (i = 1; i <= MSAA_VISUAL_MAX_SAMPLES; i++) {
          int samples = i > 1 ? i : 0;
 
-         if (p_screen->is_format_supported(p_screen, pipe_formats[format],
+         if (p_screen->is_format_supported(p_screen, format,
                                            PIPE_TEXTURE_2D, samples, samples,
                                            PIPE_BIND_RENDER_TARGET)) {
             msaa_modes[num_msaa_modes++] = samples;
@@ -553,20 +554,20 @@ dri_fill_in_modes(struct dri_screen *screen)
 
       if (num_msaa_modes) {
          /* Single-sample configs with an accumulation buffer. */
-         new_configs = driCreateConfigs(mesa_formats[format],
+         new_configs = driCreateConfigs(format,
                                         depth_bits_array, stencil_bits_array,
-                                        depth_buffer_factor, back_buffer_modes,
-                                        ARRAY_SIZE(back_buffer_modes),
+                                        depth_buffer_factor,
+                                        db_modes, ARRAY_SIZE(db_modes),
                                         msaa_modes, 1,
                                         GL_TRUE, !mixed_color_depth);
          configs = driConcatConfigs(configs, new_configs);
 
          /* Multi-sample configs without an accumulation buffer. */
          if (num_msaa_modes > 1) {
-            new_configs = driCreateConfigs(mesa_formats[format],
+            new_configs = driCreateConfigs(format,
                                            depth_bits_array, stencil_bits_array,
-                                           depth_buffer_factor, back_buffer_modes,
-                                           ARRAY_SIZE(back_buffer_modes),
+                                           depth_buffer_factor,
+                                           db_modes, ARRAY_SIZE(db_modes),
                                            msaa_modes+1, num_msaa_modes-1,
                                            GL_FALSE, !mixed_color_depth);
             configs = driConcatConfigs(configs, new_configs);
@@ -654,6 +655,38 @@ dri_fill_st_visual(struct st_visual *stvis,
 
    case 0x0000F800:
       stvis->color_format = PIPE_FORMAT_B5G6R5_UNORM;
+      break;
+
+   case 0x00007C00:
+      assert(!mode->sRGBCapable);
+      if (mode->alphaMask)
+         stvis->color_format = PIPE_FORMAT_B5G5R5A1_UNORM;
+      else
+         stvis->color_format = PIPE_FORMAT_B5G5R5X1_UNORM;
+      break;
+
+   case 0x0000001F:
+      assert(!mode->sRGBCapable);
+      if (mode->alphaMask)
+         stvis->color_format = PIPE_FORMAT_R5G5B5A1_UNORM;
+      else
+         stvis->color_format = PIPE_FORMAT_R5G5B5X1_UNORM;
+      break;
+
+   case 0x00000F00:
+      assert(!mode->sRGBCapable);
+      if (mode->alphaMask)
+         stvis->color_format = PIPE_FORMAT_B4G4R4A4_UNORM;
+      else
+         stvis->color_format = PIPE_FORMAT_B4G4R4X4_UNORM;
+      break;
+
+   case 0x0000000F:
+      assert(!mode->sRGBCapable);
+      if (mode->alphaMask)
+         stvis->color_format = PIPE_FORMAT_R4G4B4A4_UNORM;
+      else
+         stvis->color_format = PIPE_FORMAT_R4G4B4X4_UNORM;
       break;
 
    default:

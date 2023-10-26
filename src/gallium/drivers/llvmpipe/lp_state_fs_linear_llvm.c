@@ -37,7 +37,6 @@
 #include "util/os_time.h"
 #include "pipe/p_shader_tokens.h"
 #include "draw/draw_context.h"
-#include "tgsi/tgsi_dump.h"
 #include "gallivm/lp_bld_type.h"
 #include "gallivm/lp_bld_const.h"
 #include "gallivm/lp_bld_conv.h"
@@ -145,14 +144,14 @@ llvm_fragment_body(struct lp_build_context *bld,
    LLVMValueRef result = NULL;
    bool rgba_order = (variant->key.cbuf_format[0] == PIPE_FORMAT_R8G8B8A8_UNORM ||
                       variant->key.cbuf_format[0] == PIPE_FORMAT_R8G8B8X8_UNORM);
-
+   struct nir_shader *nir = shader->base.ir.nir;
    sampler->instance = 0;
 
    /*
     * Advance inputs
     */
    unsigned i;
-   for (i = 0; i < shader->info.base.num_inputs; ++i) {
+   for (i = 0; i < util_bitcount64(nir->info.inputs_read); ++i) {
       inputs[i] =
          lp_build_pointer_get2(builder, bld->vec_type, inputs_ptrs[i], sampler->counter);
       assert(LLVMTypeOf(inputs[i]) == bld->vec_type);
@@ -165,72 +164,66 @@ llvm_fragment_body(struct lp_build_context *bld,
       outputs[i] = bld->undef;
    }
 
-   if (shader->base.type == PIPE_SHADER_IR_TGSI) {
-      lp_build_tgsi_aos(gallivm, shader->base.tokens, fs_type,
-                        rgba_order ? rgba_swizzles : bgra_swizzles,
-                        consts_ptr, inputs, outputs,
-                        &sampler->base,
-                        &shader->info.base);
-   } else {
-      nir_shader *clone = nir_shader_clone(NULL, shader->base.ir.nir);
-      lp_build_nir_aos(gallivm, clone, fs_type,
-                       rgba_order ? rgba_swizzles : bgra_swizzles,
-                       consts_ptr, inputs, outputs,
-                       &sampler->base,
-                       &shader->info.base);
-      ralloc_free(clone);
-   }
+   nir_shader *clone = nir_shader_clone(NULL, nir);
+   lp_build_nir_aos(gallivm, clone, fs_type,
+                    rgba_order ? rgba_swizzles : bgra_swizzles,
+                    consts_ptr, inputs, outputs,
+                    &sampler->base);
+   ralloc_free(clone);
 
    /*
     * Blend output color
     */
-   for (i = 0; i < shader->info.base.num_outputs; ++i) {
-      if (!outputs[i])
-         continue;
+   nir_foreach_shader_out_variable(var, nir) {
+      unsigned slots = nir_variable_count_slots(var, var->type);
 
-      LLVMValueRef output = LLVMBuildLoad2(builder, bld->vec_type, outputs[i], "");
-      lp_build_name(output, "output%u", i);
+      for (unsigned s = 0; s < slots; s++) {
+         unsigned idx = var->data.driver_location + s;
+         if (!outputs[idx])
+            continue;
 
-      unsigned cbuf = shader->info.base.output_semantic_index[i];
-      lp_build_name(output, "cbuf%u", cbuf);
+         LLVMValueRef output = LLVMBuildLoad2(builder, bld->vec_type, outputs[idx], "");
+         lp_build_name(output, "output%u", i);
 
-      if (shader->info.base.output_semantic_name[i]
-          != TGSI_SEMANTIC_COLOR || cbuf != 0) {
-         continue;
+         unsigned cbuf = var->data.location - FRAG_RESULT_DATA0 + s;
+         lp_build_name(output, "cbuf%u", cbuf);
+
+         if (var->data.location < FRAG_RESULT_DATA0 || s > 0)
+            continue;
+
+         /* Perform alpha test if necessary */
+         LLVMValueRef mask = NULL;
+         if (variant->key.alpha.enabled) {
+            LLVMTypeRef vec_type = lp_build_vec_type(gallivm, fs_type);
+            LLVMValueRef broadcast_alpha = lp_build_broadcast(gallivm, vec_type,
+                                                              alpha_ref);
+
+            mask = lp_build_cmp(bld, variant->key.alpha.func, output,
+                                broadcast_alpha);
+            /* XXX is 4 correct? */
+            mask = lp_build_swizzle_scalar_aos(bld, mask, bgra_swizzles[3], 4);
+
+            lp_build_name(mask, "alpha_test_mask");
+         }
+
+         LLVMValueRef src1 = lp_build_zero(gallivm, fs_type);
+
+         result = lp_build_blend_aos(gallivm,
+                                     &variant->key.blend,
+                                     variant->key.cbuf_format[idx],
+                                     fs_type,
+                                     cbuf,   /* rt */
+                                     output, /* src */
+                                     NULL,   /* src_alpha */
+                                     src1,   /* src1 */
+                                     NULL,   /* src1_alpha */
+                                     dst,
+                                     mask,
+                                     blend_color,  /* const_ */
+                                     NULL,         /* const_alpha */
+                                     rgba_order ? rgba_swizzles : bgra_swizzles,
+                                     4);
       }
-
-      /* Perform alpha test if necessary */
-      LLVMValueRef mask = NULL;
-      if (variant->key.alpha.enabled) {
-         LLVMTypeRef vec_type = lp_build_vec_type(gallivm, fs_type);
-         LLVMValueRef broadcast_alpha = lp_build_broadcast(gallivm, vec_type,
-                                                           alpha_ref);
-
-         mask = lp_build_cmp(bld, variant->key.alpha.func, output,
-                             broadcast_alpha);
-         /* XXX is 4 correct? */
-         mask = lp_build_swizzle_scalar_aos(bld, mask, bgra_swizzles[3], 4);
-
-         lp_build_name(mask, "alpha_test_mask");
-      }
-
-      LLVMValueRef src1 = lp_build_zero(gallivm, fs_type);
-
-      result = lp_build_blend_aos(gallivm,
-                                  &variant->key.blend,
-                                  variant->key.cbuf_format[i],
-                                  fs_type,
-                                  cbuf,   /* rt */
-                                  output, /* src */
-                                  NULL,   /* src_alpha */
-                                  src1,   /* src1 */
-                                  NULL,   /* src1_alpha */
-                                  dst,
-                                  mask,
-                                  blend_color,  /* const_ */
-                                  NULL,         /* const_alpha */
-                                  rgba_order ? rgba_swizzles : bgra_swizzles,
-                                  4);
    }
 
    return result;
@@ -251,6 +244,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
           shader->kind == LP_FS_KIND_BLIT_RGB1 ||
           shader->kind == LP_FS_KIND_LLVM_LINEAR);
 
+   struct nir_shader *nir = shader->base.ir.nir;
    struct gallivm_state *gallivm = variant->gallivm;
    LLVMTypeRef int8t = LLVMInt8TypeInContext(gallivm->context);
    LLVMTypeRef int32t = LLVMInt32TypeInContext(gallivm->context);
@@ -267,9 +261,6 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
    fs_type.length = 16;
 
    if (LP_DEBUG & DEBUG_TGSI) {
-      if (shader->base.tokens) {
-         tgsi_dump(shader->base.tokens, 0);
-      }
       if (shader->base.ir.nir) {
          nir_print_shader(shader->base.ir.nir, stderr);
       }
@@ -382,35 +373,40 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
     */
    LLVMValueRef inputs_ptrs[LP_MAX_LINEAR_INPUTS];
 
-   for (unsigned attrib = 0; attrib < shader->info.base.num_inputs; ++attrib) {
-      assert(attrib < LP_MAX_LINEAR_INPUTS);
-      if (attrib >= LP_MAX_LINEAR_INPUTS) {
-         break;
+   nir_foreach_shader_in_variable(var, nir) {
+      unsigned slots = nir_variable_count_slots(var, var->type);
+
+      for (unsigned s = 0; s < slots; s++) {
+         unsigned attrib = var->data.driver_location + s;
+         assert(attrib < LP_MAX_LINEAR_INPUTS);
+         if (attrib >= LP_MAX_LINEAR_INPUTS) {
+            break;
+         }
+
+         LLVMValueRef index = LLVMConstInt(int32t, attrib, 0);
+
+         LLVMTypeRef input_type = variant->jit_linear_inputs_type;
+         LLVMValueRef elem =
+            lp_build_array_get2(bld.gallivm, input_type, interpolators_ptr, index);
+         assert(LLVMGetTypeKind(LLVMTypeOf(elem)) == LLVMPointerTypeKind);
+
+         LLVMTypeRef fetch_type = LLVMPointerType(variant->jit_linear_func_type, 0);
+         LLVMValueRef fetch_ptr = lp_build_pointer_get2(builder, fetch_type, elem,
+                                                        LLVMConstInt(int32t, 0, 0));
+         assert(LLVMGetTypeKind(LLVMTypeOf(fetch_ptr)) == LLVMPointerTypeKind);
+
+         /* Pointer to a row of interpolated inputs */
+         LLVMTypeRef call_type = variant->jit_linear_func_type;
+         elem = LLVMBuildBitCast(builder, elem, pint8t, "");
+         LLVMValueRef inputs_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
+         assert(LLVMGetTypeKind(LLVMTypeOf(inputs_ptr)) == LLVMPointerTypeKind);
+
+         lp_add_function_attr(inputs_ptr, -1, LP_FUNC_ATTR_NOUNWIND);
+
+         lp_build_name(inputs_ptr, "input%u_ptr", attrib);
+
+         inputs_ptrs[attrib] = inputs_ptr;
       }
-
-      LLVMValueRef index = LLVMConstInt(int32t, attrib, 0);
-
-      LLVMTypeRef input_type = variant->jit_linear_inputs_type;
-      LLVMValueRef elem =
-         lp_build_array_get2(bld.gallivm, input_type, interpolators_ptr, index);
-      assert(LLVMGetTypeKind(LLVMTypeOf(elem)) == LLVMPointerTypeKind);
-
-      LLVMTypeRef fetch_type = LLVMPointerType(variant->jit_linear_func_type, 0);
-      LLVMValueRef fetch_ptr = lp_build_pointer_get2(builder, fetch_type, elem,
-                                       LLVMConstInt(int32t, 0, 0));
-      assert(LLVMGetTypeKind(LLVMTypeOf(fetch_ptr)) == LLVMPointerTypeKind);
-
-      /* Pointer to a row of interpolated inputs */
-      LLVMTypeRef call_type = variant->jit_linear_func_type;
-      elem = LLVMBuildBitCast(builder, elem, pint8t, "");
-      LLVMValueRef inputs_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
-      assert(LLVMGetTypeKind(LLVMTypeOf(inputs_ptr)) == LLVMPointerTypeKind);
-
-      lp_add_function_attr(inputs_ptr, -1, LP_FUNC_ATTR_NOUNWIND);
-
-      lp_build_name(inputs_ptr, "input%u_ptr", attrib);
-
-      inputs_ptrs[attrib] = inputs_ptr;
    }
 
    /*

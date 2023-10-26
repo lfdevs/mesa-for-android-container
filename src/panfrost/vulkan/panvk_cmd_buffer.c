@@ -444,7 +444,7 @@ panvk_cmd_fb_info_set_subpass(struct panvk_cmd_buffer *cmdbuf)
       memcpy(fbinfo->rts[cb].clear_value, clears[idx].color,
              sizeof(fbinfo->rts[cb].clear_value));
       fbinfo->nr_samples =
-         MAX2(fbinfo->nr_samples, view->pview.image->layout.nr_samples);
+         MAX2(fbinfo->nr_samples, pan_image_view_get_nr_samples(&view->pview));
    }
 
    if (subpass->zs_attachment.idx != VK_ATTACHMENT_UNUSED) {
@@ -453,7 +453,7 @@ panvk_cmd_fb_info_set_subpass(struct panvk_cmd_buffer *cmdbuf)
          util_format_description(view->pview.format);
 
       fbinfo->nr_samples =
-         MAX2(fbinfo->nr_samples, view->pview.image->layout.nr_samples);
+         MAX2(fbinfo->nr_samples, pan_image_view_get_nr_samples(&view->pview));
 
       if (util_format_has_depth(fdesc)) {
          fbinfo->zs.clear.z = subpass->zs_attachment.clear;

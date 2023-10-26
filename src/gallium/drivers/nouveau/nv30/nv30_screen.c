@@ -220,7 +220,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_LEGACY_MATH_RULES:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_TGSI_TEX_TXF_LZ:
    case PIPE_CAP_SHADER_CLOCK:
    case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
@@ -360,7 +359,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       case PIPE_SHADER_CAP_INT16:
       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
@@ -409,7 +407,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       case PIPE_SHADER_CAP_INT16:
       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:

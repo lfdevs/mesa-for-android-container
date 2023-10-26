@@ -34,6 +34,7 @@
 
 #include "util/glheader.h"
 #include "samplerobj.h"
+#include "teximage.h"
 
 
 #ifdef __cplusplus
@@ -118,7 +119,7 @@ _mesa_is_texture_complete(const struct gl_texture_object *texObj,
                           const struct gl_sampler_object *sampler,
                           bool linear_as_nearest_for_int_tex)
 {
-   struct gl_texture_image *img = texObj->Image[0][texObj->Attrib.BaseLevel];
+   struct gl_texture_image *img = _mesa_base_tex_image(texObj);
    bool isMultisample = img && img->NumSamples >= 2;
 
    /*

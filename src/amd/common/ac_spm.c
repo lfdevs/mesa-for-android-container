@@ -10,6 +10,78 @@
 #include "util/u_memory.h"
 #include "ac_perfcounter.h"
 
+/* SPM counters definition. */
+/* GFX10+ */
+static struct ac_spm_counter_descr gfx10_num_l2_hits = {TCP, 0x9};
+static struct ac_spm_counter_descr gfx10_num_l2_misses = {TCP, 0x12};
+static struct ac_spm_counter_descr gfx10_num_scache_hits = {SQ, 0x14f};
+static struct ac_spm_counter_descr gfx10_num_scache_misses = {SQ, 0x150};
+static struct ac_spm_counter_descr gfx10_num_scache_misses_dup = {SQ, 0x151};
+static struct ac_spm_counter_descr gfx10_num_icache_hits = {SQ, 0x12c};
+static struct ac_spm_counter_descr gfx10_num_icache_misses = {SQ, 0x12d};
+static struct ac_spm_counter_descr gfx10_num_icache_misses_dup = {SQ, 0x12e};
+static struct ac_spm_counter_descr gfx10_num_gl1c_hits = {GL1C, 0xe};
+static struct ac_spm_counter_descr gfx10_num_gl1c_misses = {GL1C, 0x12};
+static struct ac_spm_counter_descr gfx10_num_gl2c_hits = {GL2C, 0x3};
+static struct ac_spm_counter_descr gfx10_num_gl2c_misses = {GL2C, 0x23};
+
+static struct ac_spm_counter_create_info gfx10_spm_counters[] = {
+   {&gfx10_num_l2_hits},
+   {&gfx10_num_l2_misses},
+   {&gfx10_num_scache_hits},
+   {&gfx10_num_scache_misses},
+   {&gfx10_num_scache_misses_dup},
+   {&gfx10_num_icache_hits},
+   {&gfx10_num_icache_misses},
+   {&gfx10_num_icache_misses_dup},
+   {&gfx10_num_gl1c_hits},
+   {&gfx10_num_gl1c_misses},
+   {&gfx10_num_gl2c_hits},
+   {&gfx10_num_gl2c_misses},
+};
+
+/* GFX10.3+ */
+static struct ac_spm_counter_descr gfx103_num_gl2c_misses = {GL2C, 0x2b};
+
+static struct ac_spm_counter_create_info gfx103_spm_counters[] = {
+   {&gfx10_num_l2_hits},
+   {&gfx10_num_l2_misses},
+   {&gfx10_num_scache_hits},
+   {&gfx10_num_scache_misses},
+   {&gfx10_num_scache_misses_dup},
+   {&gfx10_num_icache_hits},
+   {&gfx10_num_icache_misses},
+   {&gfx10_num_icache_misses_dup},
+   {&gfx10_num_gl1c_hits},
+   {&gfx10_num_gl1c_misses},
+   {&gfx10_num_gl2c_hits},
+   {&gfx103_num_gl2c_misses},
+};
+
+/* GFX11+ */
+static struct ac_spm_counter_descr gfx11_num_l2_misses = {TCP, 0x11};
+static struct ac_spm_counter_descr gfx11_num_scache_hits = {SQ_WGP, 0x126};
+static struct ac_spm_counter_descr gfx11_num_scache_misses = {SQ_WGP, 0x127};
+static struct ac_spm_counter_descr gfx11_num_scache_misses_dup = {SQ_WGP, 0x128};
+static struct ac_spm_counter_descr gfx11_num_icache_hits = {SQ_WGP, 0x10e};
+static struct ac_spm_counter_descr gfx11_num_icache_misses = {SQ_WGP, 0x10f};
+static struct ac_spm_counter_descr gfx11_num_icache_misses_dup = {SQ_WGP, 0x110};
+
+static struct ac_spm_counter_create_info gfx11_spm_counters[] = {
+   {&gfx10_num_l2_hits},
+   {&gfx11_num_l2_misses},
+   {&gfx11_num_scache_hits},
+   {&gfx11_num_scache_misses},
+   {&gfx11_num_scache_misses_dup},
+   {&gfx11_num_icache_hits},
+   {&gfx11_num_icache_misses},
+   {&gfx11_num_icache_misses_dup},
+   {&gfx10_num_gl1c_hits},
+   {&gfx10_num_gl1c_misses},
+   {&gfx10_num_gl2c_hits},
+   {&gfx103_num_gl2c_misses},
+};
+
 static struct ac_spm_block_select *
 ac_spm_get_block_select(struct ac_spm *spm, const struct ac_pc_block *block)
 {
@@ -35,42 +107,179 @@ ac_spm_get_block_select(struct ac_spm *spm, const struct ac_pc_block *block)
    memset(new_block_sel, 0, sizeof(*new_block_sel));
 
    new_block_sel->b = block;
-   new_block_sel->num_counters = block->b->b->num_spm_counters;
+   new_block_sel->instances =
+      calloc(block->num_global_instances, sizeof(*new_block_sel->instances));
+   if (!new_block_sel->instances)
+      return NULL;
+   new_block_sel->num_instances = block->num_global_instances;
 
-   /* Broadcast global block writes to SEs and SAs */
-   if (!(block->b->b->flags & (AC_PC_BLOCK_SE | AC_PC_BLOCK_SHADER)))
-      new_block_sel->grbm_gfx_index = S_030800_SE_BROADCAST_WRITES(1) |
-                                      S_030800_SH_BROADCAST_WRITES(1);
-   /* Broadcast per SE block writes to SAs */
-   else if (block->b->b->flags & AC_PC_BLOCK_SE)
-      new_block_sel->grbm_gfx_index = S_030800_SH_BROADCAST_WRITES(1);
+   for (unsigned i = 0; i < new_block_sel->num_instances; i++)
+      new_block_sel->instances[i].num_counters = block->b->b->num_spm_counters;
 
    return new_block_sel;
 }
 
+struct ac_spm_instance_mapping {
+   uint32_t se_index;         /* SE index or 0 if global */
+   uint32_t sa_index;         /* SA index or 0 if global or per-SE */
+   uint32_t instance_index;
+};
+
+static bool
+ac_spm_init_instance_mapping(const struct radeon_info *info,
+                             const struct ac_pc_block *block,
+                             const struct ac_spm_counter_info *counter,
+                             struct ac_spm_instance_mapping *mapping)
+{
+   uint32_t instance_index = 0, se_index = 0, sa_index = 0;
+
+   if (block->b->b->flags & AC_PC_BLOCK_SE) {
+      if (block->b->b->gpu_block == SQ) {
+         /* Per-SE blocks. */
+         se_index = counter->instance / block->num_instances;
+         instance_index = counter->instance % block->num_instances;
+      } else {
+         /* Per-SA blocks. */
+         assert(block->b->b->gpu_block == GL1C ||
+                block->b->b->gpu_block == TCP ||
+                block->b->b->gpu_block == SQ_WGP);
+         se_index = (counter->instance / block->num_instances) / info->max_sa_per_se;
+         sa_index = (counter->instance / block->num_instances) % info->max_sa_per_se;
+         instance_index = counter->instance % block->num_instances;
+      }
+   } else {
+      /* Global blocks. */
+      assert(block->b->b->gpu_block == GL2C);
+      instance_index = counter->instance;
+   }
+
+   if (se_index >= info->num_se ||
+       sa_index >= info->max_sa_per_se ||
+       instance_index >= block->num_instances)
+      return false;
+
+   mapping->se_index = se_index;
+   mapping->sa_index = sa_index;
+   mapping->instance_index = instance_index;
+
+   return true;
+}
+
 static void
-ac_spm_init_muxsel(const struct ac_pc_block *block,
+ac_spm_init_muxsel(const struct radeon_info *info,
+                   const struct ac_pc_block *block,
+                   const struct ac_spm_instance_mapping *mapping,
                    struct ac_spm_counter_info *counter,
                    uint32_t spm_wire)
 {
-   struct ac_spm_muxsel *muxsel = &counter->muxsel;
+   const uint16_t counter_idx = 2 * spm_wire + (counter->is_even ? 0 : 1);
+   union ac_spm_muxsel *muxsel = &counter->muxsel;
 
-   muxsel->counter = 2 * spm_wire + (counter->is_even ? 0 : 1);
-   muxsel->block = block->b->b->spm_block_select;
-   muxsel->shader_array = 0;
-   muxsel->instance = 0;
+   if (info->gfx_level >= GFX11) {
+      muxsel->gfx11.counter = counter_idx;
+      muxsel->gfx11.block = block->b->b->spm_block_select;
+      muxsel->gfx11.shader_array = mapping->sa_index;
+      muxsel->gfx11.instance = mapping->instance_index;
+   } else {
+      muxsel->gfx10.counter = counter_idx;
+      muxsel->gfx10.block = block->b->b->spm_block_select;
+      muxsel->gfx10.shader_array = mapping->sa_index;
+      muxsel->gfx10.instance = mapping->instance_index;
+   }
+}
+
+static uint32_t
+ac_spm_init_grbm_gfx_index(const struct ac_pc_block *block,
+                           const struct ac_spm_instance_mapping *mapping)
+{
+   uint32_t instance = mapping->instance_index;
+   uint32_t grbm_gfx_index = 0;
+
+   grbm_gfx_index |= S_030800_SE_INDEX(mapping->se_index) |
+                     S_030800_SH_INDEX(mapping->sa_index);
+
+   switch (block->b->b->gpu_block) {
+   case GL2C:
+      /* Global blocks. */
+      grbm_gfx_index |= S_030800_SE_BROADCAST_WRITES(1);
+      break;
+   case SQ:
+      /* Per-SE blocks. */
+      grbm_gfx_index |= S_030800_SH_BROADCAST_WRITES(1);
+      break;
+   default:
+      /* Other blocks shouldn't broadcast. */
+      break;
+   }
+
+   if (block->b->b->gpu_block == SQ_WGP) {
+      union {
+         struct {
+            uint32_t block_index : 2; /* Block index withing WGP */
+            uint32_t wgp_index : 3;
+            uint32_t is_below_spi : 1; /* 0: lower WGP numbers, 1: higher WGP numbers */
+            uint32_t reserved : 26;
+         };
+
+         uint32_t value;
+      } instance_index = {0};
+
+      const uint32_t num_wgp_above_spi = 4;
+      const bool is_below_spi = mapping->instance_index >= num_wgp_above_spi;
+
+      instance_index.wgp_index =
+         is_below_spi ? (mapping->instance_index - num_wgp_above_spi) : mapping->instance_index;
+      instance_index.is_below_spi = is_below_spi;
+
+      instance = instance_index.value;
+   }
+
+   grbm_gfx_index |= S_030800_INSTANCE_INDEX(instance);
+
+   return grbm_gfx_index;
 }
 
 static bool
 ac_spm_map_counter(struct ac_spm *spm, struct ac_spm_block_select *block_sel,
                    struct ac_spm_counter_info *counter,
+                   const struct ac_spm_instance_mapping *mapping,
                    uint32_t *spm_wire)
 {
-   if (block_sel->b->b->b->gpu_block == SQ) {
-      for (unsigned i = 0; i < ARRAY_SIZE(spm->sq_block_sel); i++) {
-         struct ac_spm_block_select *sq_block_sel = &spm->sq_block_sel[i];
-         struct ac_spm_counter_select *cntr_sel = &sq_block_sel->counters[0];
-         if (i < spm->num_used_sq_block_sel)
+   uint32_t instance = counter->instance;
+
+   if (block_sel->b->b->b->gpu_block == SQ_WGP) {
+      if (!spm->sq_wgp[instance].grbm_gfx_index) {
+         spm->sq_wgp[instance].grbm_gfx_index =
+            ac_spm_init_grbm_gfx_index(block_sel->b, mapping);
+      }
+
+      for (unsigned i = 0; i < ARRAY_SIZE(spm->sq_wgp[instance].counters); i++) {
+         struct ac_spm_counter_select *cntr_sel = &spm->sq_wgp[instance].counters[i];
+
+         if (i < spm->sq_wgp[instance].num_counters)
+            continue;
+
+         cntr_sel->sel0 |= S_036700_PERF_SEL(counter->event_id) |
+                           S_036700_SPM_MODE(1) | /* 16-bit clamp */
+                           S_036700_PERF_MODE(0);
+
+         /* Each SQ_WQP modules (GFX11+) share one 32-bit accumulator/wire
+          * per pair of selects.
+          */
+         cntr_sel->active |= 1 << (i % 2);
+         *spm_wire = i / 2;
+
+         if (cntr_sel->active & 0x1)
+            counter->is_even = true;
+
+         spm->sq_wgp[instance].num_counters++;
+         return true;
+      }
+   } else if (block_sel->b->b->b->gpu_block == SQ) {
+      for (unsigned i = 0; i < ARRAY_SIZE(spm->sqg[instance].counters); i++) {
+         struct ac_spm_counter_select *cntr_sel = &spm->sqg[instance].counters[i];
+
+         if (i < spm->sqg[instance].num_counters)
             continue;
 
          /* SQ doesn't support 16-bit counters. */
@@ -85,13 +294,21 @@ ac_spm_map_counter(struct ac_spm *spm, struct ac_spm_block_select *block_sel,
          /* One wire per SQ module. */
          *spm_wire = i;
 
-         spm->num_used_sq_block_sel++;
+         spm->sqg[instance].num_counters++;
          return true;
       }
    } else {
       /* Generic blocks. */
-      for (unsigned i = 0; i < block_sel->num_counters; i++) {
-         struct ac_spm_counter_select *cntr_sel = &block_sel->counters[i];
+      struct ac_spm_block_instance *block_instance =
+         &block_sel->instances[instance];
+
+      if (!block_instance->grbm_gfx_index) {
+         block_instance->grbm_gfx_index =
+            ac_spm_init_grbm_gfx_index(block_sel->b, mapping);
+      }
+
+      for (unsigned i = 0; i < block_instance->num_counters; i++) {
+         struct ac_spm_counter_select *cntr_sel = &block_instance->counters[i];
          int index = ffs(~cntr_sel->active) - 1;
 
          switch (index) {
@@ -133,30 +350,32 @@ ac_spm_map_counter(struct ac_spm *spm, struct ac_spm_block_select *block_sel,
 }
 
 static bool
-ac_spm_add_counter(const struct ac_perfcounters *pc,
+ac_spm_add_counter(const struct radeon_info *info,
+                   const struct ac_perfcounters *pc,
                    struct ac_spm *spm,
-                   const struct ac_spm_counter_create_info *info)
+                   const struct ac_spm_counter_create_info *counter_info)
 {
+   struct ac_spm_instance_mapping instance_mapping = {0};
    struct ac_spm_counter_info *counter;
    struct ac_spm_block_select *block_sel;
    struct ac_pc_block *block;
    uint32_t spm_wire;
 
    /* Check if the GPU block is valid. */
-   block = ac_pc_get_block(pc, info->gpu_block);
+   block = ac_pc_get_block(pc, counter_info->b->gpu_block);
    if (!block) {
       fprintf(stderr, "ac/spm: Invalid GPU block.\n");
       return false;
    }
 
    /* Check if the number of instances is valid. */
-   if (info->instance > block->num_instances) {
+   if (counter_info->instance > block->num_global_instances - 1) {
       fprintf(stderr, "ac/spm: Invalid instance ID.\n");
       return false;
    }
 
    /* Check if the event ID is valid. */
-   if (info->event_id > block->b->selectors) {
+   if (counter_info->b->event_id > block->b->selectors) {
       fprintf(stderr, "ac/spm: Invalid event ID.\n");
       return false;
    }
@@ -164,48 +383,143 @@ ac_spm_add_counter(const struct ac_perfcounters *pc,
    counter = &spm->counters[spm->num_counters];
    spm->num_counters++;
 
-   counter->gpu_block = info->gpu_block;
-   counter->instance = info->instance;
-   counter->event_id = info->event_id;
+   counter->gpu_block = counter_info->b->gpu_block;
+   counter->event_id = counter_info->b->event_id;
+   counter->instance = counter_info->instance;
 
    /* Get the select block used to configure the counter. */
    block_sel = ac_spm_get_block_select(spm, block);
    if (!block_sel)
       return false;
 
+   /* Initialize instance mapping for the counter. */
+   if (!ac_spm_init_instance_mapping(info, block, counter, &instance_mapping)) {
+      fprintf(stderr, "ac/spm: Failed to initialize instance mapping.\n");
+      return false;
+   }
+
    /* Map the counter to the select block. */
-   if (!ac_spm_map_counter(spm, block_sel, counter, &spm_wire)) {
+   if (!ac_spm_map_counter(spm, block_sel, counter, &instance_mapping, &spm_wire)) {
       fprintf(stderr, "ac/spm: No free slots available!\n");
       return false;
    }
 
    /* Determine the counter segment type. */
    if (block->b->b->flags & AC_PC_BLOCK_SE) {
-      counter->segment_type = AC_SPM_SEGMENT_TYPE_SE0; // XXX
+      counter->segment_type = instance_mapping.se_index;
    } else {
       counter->segment_type = AC_SPM_SEGMENT_TYPE_GLOBAL;
    }
 
    /* Configure the muxsel for SPM. */
-   ac_spm_init_muxsel(block, counter, spm_wire);
+   ac_spm_init_muxsel(info, block, &instance_mapping, counter, spm_wire);
 
    return true;
 }
 
+static void
+ac_spm_fill_muxsel_ram(const struct radeon_info *info,
+                       struct ac_spm *spm,
+                       enum ac_spm_segment_type segment_type,
+                       uint32_t offset)
+{
+   struct ac_spm_muxsel_line *mappings = spm->muxsel_lines[segment_type];
+   uint32_t even_counter_idx = 0, even_line_idx = 0;
+   uint32_t odd_counter_idx = 0, odd_line_idx = 1;
+
+   /* Add the global timestamps first. */
+   if (segment_type == AC_SPM_SEGMENT_TYPE_GLOBAL) {
+      if (info->gfx_level >= GFX11) {
+         mappings[even_line_idx].muxsel[even_counter_idx++].value = 0xf840;
+         mappings[even_line_idx].muxsel[even_counter_idx++].value = 0xf841;
+         mappings[even_line_idx].muxsel[even_counter_idx++].value = 0xf842;
+         mappings[even_line_idx].muxsel[even_counter_idx++].value = 0xf843;
+      } else {
+         for (unsigned i = 0; i < 4; i++) {
+            mappings[even_line_idx].muxsel[even_counter_idx++].value = 0xf0f0;
+         }
+      }
+   }
+
+   for (unsigned i = 0; i < spm->num_counters; i++) {
+      struct ac_spm_counter_info *counter = &spm->counters[i];
+
+      if (counter->segment_type != segment_type)
+         continue;
+
+      if (counter->is_even) {
+         counter->offset =
+            (offset + even_line_idx) * AC_SPM_NUM_COUNTER_PER_MUXSEL + even_counter_idx;
+
+         mappings[even_line_idx].muxsel[even_counter_idx] = spm->counters[i].muxsel;
+         if (++even_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
+            even_counter_idx = 0;
+            even_line_idx += 2;
+         }
+      } else {
+         counter->offset =
+            (offset + odd_line_idx) * AC_SPM_NUM_COUNTER_PER_MUXSEL + odd_counter_idx;
+
+         mappings[odd_line_idx].muxsel[odd_counter_idx] = spm->counters[i].muxsel;
+         if (++odd_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
+            odd_counter_idx = 0;
+            odd_line_idx += 2;
+         }
+      }
+   }
+}
+
 bool ac_init_spm(const struct radeon_info *info,
                  const struct ac_perfcounters *pc,
-                 unsigned num_counters,
-                 const struct ac_spm_counter_create_info *counters,
                  struct ac_spm *spm)
 {
+   const struct ac_spm_counter_create_info *create_info;
+   unsigned create_info_count;
+   unsigned num_counters = 0;
+
+   switch (info->gfx_level) {
+   case GFX10:
+      create_info_count = ARRAY_SIZE(gfx10_spm_counters);
+      create_info = gfx10_spm_counters;
+      break;
+   case GFX10_3:
+      create_info_count = ARRAY_SIZE(gfx103_spm_counters);
+      create_info = gfx103_spm_counters;
+      break;
+   case GFX11:
+   case GFX11_5:
+      create_info_count = ARRAY_SIZE(gfx11_spm_counters);
+      create_info = gfx11_spm_counters;
+      break;
+   default:
+      return false; /* not implemented */
+   }
+
+   /* Count the total number of counters. */
+   for (unsigned i = 0; i < create_info_count; i++) {
+      const struct ac_pc_block *block = ac_pc_get_block(pc, create_info[i].b->gpu_block);
+
+      if (!block)
+         return false;
+
+      num_counters += block->num_global_instances;
+   }
+
    spm->counters = CALLOC(num_counters, sizeof(*spm->counters));
    if (!spm->counters)
       return false;
 
-   for (unsigned i = 0; i < num_counters; i++) {
-      if (!ac_spm_add_counter(pc, spm, &counters[i])) {
-         fprintf(stderr, "ac/spm: Failed to add SPM counter (%d).\n", i);
-         return false;
+   for (unsigned i = 0; i < create_info_count; i++) {
+      const struct ac_pc_block *block = ac_pc_get_block(pc, create_info[i].b->gpu_block);
+      struct ac_spm_counter_create_info counter = create_info[i];
+
+      for (unsigned j = 0; j < block->num_global_instances; j++) {
+         counter.instance = j;
+
+         if (!ac_spm_add_counter(info, pc, spm, &counter)) {
+            fprintf(stderr, "ac/spm: Failed to add SPM counter (%d).\n", i);
+            return false;
+         }
       }
    }
 
@@ -245,70 +559,41 @@ bool ac_init_spm(const struct radeon_info *info,
       spm->num_muxsel_lines[s] = num_lines;
    }
 
-   /* RLC uses the following order: Global, SE0, SE1, SE2, SE3. */
-   const enum ac_spm_segment_type ordered_segment[AC_SPM_SEGMENT_TYPE_COUNT] =
-   {
-      AC_SPM_SEGMENT_TYPE_GLOBAL,
-      AC_SPM_SEGMENT_TYPE_SE0,
-      AC_SPM_SEGMENT_TYPE_SE1,
-      AC_SPM_SEGMENT_TYPE_SE2,
-      AC_SPM_SEGMENT_TYPE_SE3,
-   };
+   /* Compute the maximum number of muxsel lines among all SEs. On GFX11,
+    * there is only one SE segment size value and the highest value is used.
+    */
+   for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_GLOBAL; s++) {
+      spm->max_se_muxsel_lines =
+         MAX2(spm->num_muxsel_lines[s], spm->max_se_muxsel_lines);
+   }
 
-   for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
-      if (!spm->muxsel_lines[s])
-         continue;
+   /* RLC uses the following order: Global, SE0, SE1, SE2, SE3, SE4, SE5. */
+   ac_spm_fill_muxsel_ram(info, spm, AC_SPM_SEGMENT_TYPE_GLOBAL, 0);
 
-      uint32_t segment_offset = 0;
-      for (unsigned i = 0; s != ordered_segment[i]; i++) {
-         segment_offset += spm->num_muxsel_lines[ordered_segment[i]] *
-                           AC_SPM_NUM_COUNTER_PER_MUXSEL;
+   const uint32_t num_global_lines = spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_GLOBAL];
+
+   if (info->gfx_level >= GFX11) {
+      /* On GFX11, RLC uses one segment size for every single SE. */
+      for (unsigned i = 0; i < info->num_se; i++) {
+         assert(i < AC_SPM_SEGMENT_TYPE_GLOBAL);
+         uint32_t offset = num_global_lines + i * spm->max_se_muxsel_lines;
+
+         ac_spm_fill_muxsel_ram(info, spm, i, offset);
       }
+   } else {
+      uint32_t offset = num_global_lines;
 
-      uint32_t even_counter_idx = 0, even_line_idx = 0;
-      uint32_t odd_counter_idx = 0, odd_line_idx = 1;
+      for (unsigned i = 0; i < info->num_se; i++) {
+         assert(i < AC_SPM_SEGMENT_TYPE_GLOBAL);
 
-      /* Add the global timestamps first. */
-      if (s == AC_SPM_SEGMENT_TYPE_GLOBAL) {
-         struct ac_spm_muxsel global_timestamp_muxsel = {
-            .counter = 0x30,
-            .block = 0x3,
-            .shader_array = 0,
-            .instance = 0x1e,
-         };
+         ac_spm_fill_muxsel_ram(info, spm, i, offset);
 
-         for (unsigned i = 0; i < 4; i++) {
-            spm->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx++] = global_timestamp_muxsel;
-         }
-      }
-
-      for (unsigned i = 0; i < spm->num_counters; i++) {
-         struct ac_spm_counter_info *counter = &spm->counters[i];
-
-         if (counter->segment_type != s)
-            continue;
-
-         if (counter->is_even) {
-            counter->offset = segment_offset + even_line_idx *
-                              AC_SPM_NUM_COUNTER_PER_MUXSEL + even_counter_idx;
-
-            spm->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx] = spm->counters[i].muxsel;
-            if (++even_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
-               even_counter_idx = 0;
-               even_line_idx += 2;
-            }
-         } else {
-            counter->offset = segment_offset + odd_line_idx *
-                              AC_SPM_NUM_COUNTER_PER_MUXSEL + odd_counter_idx;
-
-            spm->muxsel_lines[s][odd_line_idx].muxsel[odd_counter_idx] = spm->counters[i].muxsel;
-            if (++odd_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
-               odd_counter_idx = 0;
-               odd_line_idx += 2;
-            }
-         }
+         offset += spm->num_muxsel_lines[i];
       }
    }
+
+   /* On GFX11, the data size written by the hw is in units of segment. */
+   spm->ptr_granularity = info->gfx_level >= GFX11 ? 32 : 1;
 
    return true;
 }
@@ -318,6 +603,11 @@ void ac_destroy_spm(struct ac_spm *spm)
    for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
       FREE(spm->muxsel_lines[s]);
    }
+
+   for (unsigned i = 0; i < spm->num_block_sel; i++) {
+      FREE(spm->block_sel[i].instances);
+   }
+
    FREE(spm->block_sel);
    FREE(spm->counters);
 }
@@ -341,7 +631,7 @@ static uint32_t ac_spm_get_num_samples(const struct ac_spm *spm)
    uint32_t num_samples = 0;
 
    /* Get the data size (in bytes) written by the hw to the ring buffer. */
-   data_size = ptr[0];
+   data_size = ptr[0] * spm->ptr_granularity;
 
    /* Compute the number of 256 bits (16 * 16-bits counters) lines written. */
    num_lines_written = data_size / (2 * AC_SPM_NUM_COUNTER_PER_MUXSEL);

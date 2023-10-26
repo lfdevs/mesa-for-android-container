@@ -8,7 +8,6 @@ use crate::core::context::Context;
 use crate::core::device::*;
 use crate::core::format::*;
 use crate::core::memory::*;
-use crate::*;
 
 use mesa_rust_util::properties::Properties;
 use mesa_rust_util::ptr::*;
@@ -350,20 +349,16 @@ fn create_sub_buffer(
 #[cl_entrypoint]
 fn set_mem_object_destructor_callback(
     memobj: cl_mem,
-    pfn_notify: Option<MemCB>,
+    pfn_notify: Option<FuncMemCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<()> {
     let m = memobj.get_ref()?;
 
-    // CL_INVALID_VALUE if pfn_notify is NULL.
-    if pfn_notify.is_none() {
-        return Err(CL_INVALID_VALUE);
-    }
+    // SAFETY: The requirements on `MemCB::new` match the requirements
+    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
+    let cb = unsafe { MemCB::new(pfn_notify, user_data)? };
 
-    m.cbs
-        .lock()
-        .unwrap()
-        .push(cl_closure!(|m| pfn_notify(m, user_data)));
+    m.cbs.lock().unwrap().push(cb);
     Ok(())
 }
 
@@ -2348,7 +2343,7 @@ fn enqueue_svm_free_impl(
     command_queue: cl_command_queue,
     num_svm_pointers: cl_uint,
     svm_pointers: *mut *mut c_void,
-    pfn_free_func: Option<SVMFreeCb>,
+    pfn_free_func: Option<FuncSVMFreeCb>,
     user_data: *mut c_void,
     num_events_in_wait_list: cl_uint,
     event_wait_list: *const cl_event,
@@ -2371,6 +2366,15 @@ fn enqueue_svm_free_impl(
         return Err(CL_INVALID_OPERATION);
     }
 
+    // The application is allowed to reuse or free the memory referenced by `svm_pointers` after this
+    // function returns so we have to make a copy.
+    // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
+    let mut svm_pointers =
+        unsafe { slice::from_raw_parts(svm_pointers, num_svm_pointers as usize) }.to_vec();
+    // SAFETY: The requirements on `SVMFreeCb::new` match the requirements
+    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
+    let cb_opt = unsafe { SVMFreeCb::new(pfn_free_func, user_data) }.ok();
+
     create_and_queue(
         q,
         cmd_type,
@@ -2378,16 +2382,10 @@ fn enqueue_svm_free_impl(
         event,
         false,
         Box::new(move |q, _| {
-            if let Some(cb) = pfn_free_func {
-                // SAFETY: it's undefined behavior if the application screws up
-                unsafe {
-                    cb(command_queue, num_svm_pointers, svm_pointers, user_data);
-                }
+            if let Some(cb) = cb_opt {
+                cb.call(q, &mut svm_pointers);
             } else {
-                // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
-                let svm_pointers =
-                    unsafe { slice::from_raw_parts(svm_pointers, num_svm_pointers as usize) };
-                for &ptr in svm_pointers {
+                for ptr in svm_pointers {
                     svm_free_impl(&q.context, ptr);
                 }
             }
@@ -2402,7 +2400,7 @@ fn enqueue_svm_free(
     command_queue: cl_command_queue,
     num_svm_pointers: cl_uint,
     svm_pointers: *mut *mut c_void,
-    pfn_free_func: Option<SVMFreeCb>,
+    pfn_free_func: Option<FuncSVMFreeCb>,
     user_data: *mut c_void,
     num_events_in_wait_list: cl_uint,
     event_wait_list: *const cl_event,
@@ -2426,7 +2424,7 @@ fn enqueue_svm_free_arm(
     command_queue: cl_command_queue,
     num_svm_pointers: cl_uint,
     svm_pointers: *mut *mut c_void,
-    pfn_free_func: Option<SVMFreeCb>,
+    pfn_free_func: Option<FuncSVMFreeCb>,
     user_data: *mut c_void,
     num_events_in_wait_list: cl_uint,
     event_wait_list: *const cl_event,
@@ -2591,6 +2589,9 @@ fn enqueue_svm_mem_fill_impl(
         return Err(CL_INVALID_VALUE);
     }
 
+    // The application is allowed to reuse or free the memory referenced by `pattern` after this
+    // function returns so we have to make a copy.
+    let pattern: Vec<u8> = unsafe { slice::from_raw_parts(pattern.cast(), pattern_size).to_vec() };
     create_and_queue(
         q,
         cmd_type,
@@ -2602,7 +2603,7 @@ fn enqueue_svm_mem_fill_impl(
             while offset < size {
                 // SAFETY: pointer are either valid or undefined behavior
                 unsafe {
-                    ptr::copy(pattern, svm_ptr.add(offset), pattern_size);
+                    ptr::copy(pattern.as_ptr().cast(), svm_ptr.add(offset), pattern_size);
                 }
                 offset += pattern_size;
             }

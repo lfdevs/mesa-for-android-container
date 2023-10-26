@@ -30,6 +30,8 @@
 #ifndef RADEON_PROGRAM_UTIL_H
 #define RADEON_PROGRAM_UTIL_H
 
+#include <stdbool.h>
+
 #include "radeon_opcodes.h"
 
 struct radeon_compiler;
@@ -126,4 +128,5 @@ float rc_get_constant_value(
 
 unsigned int rc_get_scalar_src_swz(unsigned int swizzle);
 
+bool rc_inst_has_three_diff_temp_srcs(struct rc_instruction *inst);
 #endif /* RADEON_PROGRAM_UTIL_H */

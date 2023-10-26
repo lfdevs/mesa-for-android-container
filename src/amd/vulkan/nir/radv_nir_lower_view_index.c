@@ -71,8 +71,8 @@ radv_nir_lower_view_index(nir_shader *nir, bool per_primitive)
 
          layer->data.per_primitive = per_primitive;
          b.cursor = nir_before_instr(instr);
-         nir_ssa_def *def = nir_load_var(&b, layer);
-         nir_ssa_def_rewrite_uses(&load->dest.ssa, def);
+         nir_def *def = nir_load_var(&b, layer);
+         nir_def_rewrite_uses(&load->def, def);
 
          /* Update inputs_read to reflect that the pass added a new input. */
          nir->info.inputs_read |= VARYING_BIT_LAYER;

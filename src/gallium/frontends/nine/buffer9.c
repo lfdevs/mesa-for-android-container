@@ -232,7 +232,7 @@ NineBuffer9_RebindIfRequired( struct NineBuffer9 *This,
             nine_context_set_stream_source_apply(device, i,
                                                  resource,
                                                  device->state.vtxbuf[i].buffer_offset + offset,
-                                                 device->state.vtxbuf[i].stride);
+                                                 device->state.vtxstride[i]);
     }
     if (device->state.idxbuf == (struct NineIndexBuffer9 *)This)
         nine_context_set_indices_apply(device, resource,

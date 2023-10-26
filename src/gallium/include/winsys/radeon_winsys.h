@@ -448,6 +448,13 @@ struct radeon_winsys {
                          uint64_t offset, uint64_t size, bool commit);
 
    /**
+    * Calc size of the first committed part of the given sparse buffer.
+    * \note Only implemented by the amdgpu winsys.
+    * \return the skipped count if the range_offset fall into a hole.
+    */
+   unsigned (*buffer_find_next_committed_memory)(struct pb_buffer *buf,
+                        uint64_t range_offset, unsigned *range_size);
+   /**
     * Return the virtual address of a buffer.
     *
     * When virtual memory is not in use, this is the offset relative to the
@@ -493,14 +500,26 @@ struct radeon_winsys {
    /**
     * Create a command submission context.
     * Various command streams can be submitted to the same context.
+    *
+    * \param allow_context_lost  If true, lost contexts skip command submission and report
+    *                            the reset status.
+    *                            If false, losing the context results in undefined behavior.
     */
    struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws,
-                                           enum radeon_ctx_priority priority);
+                                           enum radeon_ctx_priority priority,
+                                           bool allow_context_lost);
 
    /**
     * Destroy a context.
     */
    void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
+
+   /**
+    * Set a reset status for the context due to a software failure, such as an allocation failure
+    * or a skipped draw.
+    */
+   void (*ctx_set_sw_reset_status)(struct radeon_winsys_ctx *ctx, enum pipe_reset_status status,
+                                   const char *format, ...);
 
    /**
     * Query a GPU reset status.
@@ -524,7 +543,7 @@ struct radeon_winsys {
                      struct radeon_winsys_ctx *ctx, enum amd_ip_type amd_ip_type,
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
-                     void *flush_ctx, bool allow_context_lost);
+                     void *flush_ctx);
 
    /**
     * Set up and enable mid command buffer preemption for the command stream.

@@ -803,6 +803,8 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    };
 
    // llvm handles these extensions differently so we have to pass this flag instead to expose the clc functions
+
+   clang_opts.push_back("-Dcl_khr_expect_assume=1");
    if (args->features.integer_dot_product) {
       clang_opts.push_back("-Dcl_khr_integer_dot_product=1");
       clang_opts.push_back("-D__opencl_c_integer_dot_product_input_4x8bit_packed=1");

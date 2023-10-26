@@ -61,7 +61,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
    }
 
    unsigned set = ir3_shader_descriptor_set(b->shader->info.stage);
-   nir_ssa_def *src = nir_ssa_for_src(b, intr->src[buffer_src], 1);
+   nir_def *src = intr->src[buffer_src].ssa;
    src = nir_iadd_imm(b, src, desc_offset);
    /* An out-of-bounds index into an SSBO/image array can cause a GPU fault
     * on access to the descriptor (I don't see any hw mechanism to bound the
@@ -71,8 +71,8 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
     * can avoid the dmesg spam and users thinking this is a driver bug:
     */
    src = nir_umod_imm(b, src, IR3_BINDLESS_DESC_COUNT);
-   nir_ssa_def *bindless = nir_bindless_resource_ir3(b, 32, src, set);
-   nir_instr_rewrite_src_ssa(&intr->instr, &intr->src[buffer_src], bindless);
+   nir_def *bindless = nir_bindless_resource_ir3(b, 32, src, set);
+   nir_src_rewrite(&intr->src[buffer_src], bindless);
 
    return true;
 }

@@ -51,12 +51,13 @@ nvc0_vertex_state_create(struct pipe_context *pipe,
                          unsigned num_elements,
                          const struct pipe_vertex_element *elements)
 {
+    struct nvc0_context *nvc0 = nvc0_context(pipe);
     struct nvc0_vertex_stateobj *so;
     struct translate_key transkey;
     unsigned i;
     unsigned src_offset_max = 0;
 
-    so = MALLOC(sizeof(*so) +
+    so = CALLOC(1, sizeof(*so) +
                 num_elements * sizeof(struct nvc0_vertex_element));
     if (!so)
         return NULL;
@@ -113,6 +114,10 @@ nvc0_vertex_state_create(struct pipe_context *pipe,
            if (ve->instance_divisor < so->min_instance_div[vbi])
               so->min_instance_div[vbi] = ve->instance_divisor;
         }
+
+        so->strides[vbi] = ve->src_stride;
+        if (!ve->src_stride && nvc0->screen->eng3d->oclass < GM107_3D_CLASS)
+           so->constant_vbos |= 1 << vbi;
 
         if (1) {
             unsigned ca;
@@ -205,14 +210,14 @@ nvc0_user_vbuf_range(struct nvc0_context *nvc0, int vbi,
 {
    if (unlikely(nvc0->vertex->instance_bufs & (1 << vbi))) {
       const uint32_t div = nvc0->vertex->min_instance_div[vbi];
-      *base = nvc0->instance_off * nvc0->vtxbuf[vbi].stride;
-      *size = (nvc0->instance_max / div) * nvc0->vtxbuf[vbi].stride +
+      *base = nvc0->instance_off * nvc0->vertex->strides[vbi];
+      *size = (nvc0->instance_max / div) * nvc0->vertex->strides[vbi] +
          nvc0->vertex->vb_access_size[vbi];
    } else {
       /* NOTE: if there are user buffers, we *must* have index bounds */
       assert(nvc0->vb_elt_limit != ~0);
-      *base = nvc0->vb_elt_first * nvc0->vtxbuf[vbi].stride;
-      *size = nvc0->vb_elt_limit * nvc0->vtxbuf[vbi].stride +
+      *base = nvc0->vb_elt_first * nvc0->vertex->strides[vbi];
+      *size = nvc0->vb_elt_limit * nvc0->vertex->strides[vbi] +
          nvc0->vertex->vb_access_size[vbi];
    }
 }
@@ -340,7 +345,7 @@ nvc0_validate_vertex_buffers(struct nvc0_context *nvc0)
                PUSH_DATA (push, ve->pipe.instance_divisor);
             }
             BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(i)), 1);
-            PUSH_DATA (push, (1 << 12) | vb->stride);
+            PUSH_DATA (push, (1 << 12) | vertex->strides[b]);
          }
          /* address/value set in nvc0_update_user_vbufs */
          continue;
@@ -351,13 +356,13 @@ nvc0_validate_vertex_buffers(struct nvc0_context *nvc0)
 
       if (unlikely(ve->pipe.instance_divisor)) {
          BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(i)), 4);
-         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vertex->strides[b]);
          PUSH_DATAh(push, res->address + offset);
          PUSH_DATA (push, res->address + offset);
          PUSH_DATA (push, ve->pipe.instance_divisor);
       } else {
          BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(i)), 3);
-         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vertex->strides[b]);
          PUSH_DATAh(push, res->address + offset);
          PUSH_DATA (push, res->address + offset);
       }
@@ -394,7 +399,7 @@ nvc0_validate_vertex_buffers_shared(struct nvc0_context *nvc0)
       if (mask & (1 << b)) {
          if (!(nvc0->constant_vbos & (1 << b))) {
             BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(b)), 1);
-            PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+            PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | nvc0->vertex->strides[b]);
          }
          /* address/value set in nvc0_update_user_vbufs_shared */
          continue;
@@ -408,7 +413,7 @@ nvc0_validate_vertex_buffers_shared(struct nvc0_context *nvc0)
       limit = buf->base.width0 - 1;
 
       BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(b)), 3);
-      PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+      PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | nvc0->vertex->strides[b]);
       PUSH_DATAh(push, buf->address + offset);
       PUSH_DATA (push, buf->address + offset);
 
@@ -959,6 +964,8 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
       (!indirect || indirect->count_from_stream_output) && info->index_size &&
       (nvc0->vb_elt_limit >= (draws[0].count * 2));
 
+   if (nvc0->dirty_3d & (NVC0_NEW_3D_ARRAYS | NVC0_NEW_3D_VERTEX))
+      nvc0->constant_vbos = nvc0->vertex->constant_vbos & nvc0->vbo_user;
    /* Check whether we want to switch vertex-submission mode. */
    if (nvc0->vbo_user && !(nvc0->dirty_3d & (NVC0_NEW_3D_ARRAYS | NVC0_NEW_3D_VERTEX))) {
       if (nvc0->vbo_push_hint != !!nvc0->state.vbo_mode)

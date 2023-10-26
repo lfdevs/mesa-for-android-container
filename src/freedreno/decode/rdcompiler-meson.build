@@ -4,22 +4,30 @@
 # Before compiling, create "subprojects" directory and create a link
 # to mesa there.
 
-project('generate_rd', ['c'], default_options : ['c_std=c11'])
+project('generate_rd', ['c', 'cpp'], default_options : ['c_std=c11', 'cpp_std=c++17'])
 
-mesa_proj = subproject('mesa',
-                       default_options : ['gallium-drivers=',
-                                          'dri-drivers=',
-                                          'glx=disabled',
-                                          'vulkan-drivers=',
-                                          'tools=freedreno'])
+mesa_options = ['gallium-drivers=',
+                'vulkan-drivers=',
+                'glx=disabled',
+                'tools=freedreno']
 
-add_project_arguments(mesa_proj.get_variable('pre_args'), language : ['c'])
+if host_machine.system() == 'android'
+  mesa_options += ['platforms=android',
+                   'platform-sdk-version=28',
+                   'android-stub=true']
+endif
+
+mesa_proj = subproject('mesa', default_options : mesa_options)
+
+add_project_arguments(mesa_proj.get_variable('pre_args'), language : ['c', 'cpp'])
 add_project_arguments(mesa_proj.get_variable('c_args'),   language : ['c'])
+add_project_arguments(mesa_proj.get_variable('c_cpp_args'), language : ['c', 'cpp'])
+add_project_arguments(mesa_proj.get_variable('cpp_args'), language : ['cpp'])
 
 generate_rd = executable(
   'generate_rd',
   [
-    'generate_rd.c'
+    'generate_rd.cc'
   ],
   include_directories: [
     mesa_proj.get_variable('inc_freedreno'),

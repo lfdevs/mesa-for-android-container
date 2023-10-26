@@ -235,7 +235,7 @@ drm_create_adapter( int fd,
     ctx->fd = fd;
     ctx->base.linear_framebuffer = different_device;
 
-    if (!pipe_loader_drm_probe_fd(&ctx->dev, fd)) {
+    if (!pipe_loader_drm_probe_fd(&ctx->dev, fd, false)) {
         ERR("Failed to probe drm fd %d.\n", fd);
         FREE(ctx);
         close(fd);

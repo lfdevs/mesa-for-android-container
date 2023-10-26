@@ -291,6 +291,7 @@ radv_pick_resolve_method_images(struct radv_device *device, struct radv_image *s
       else if (src_image->vk.array_layers > 1 || dst_image->vk.array_layers > 1)
          *method = RESOLVE_COMPUTE;
    } else {
+      assert(dst_image_layout == VK_IMAGE_LAYOUT_UNDEFINED);
       if (src_image->vk.array_layers > 1 || dst_image->vk.array_layers > 1 ||
           (dst_image->planes[0].surface.flags & RADEON_SURF_NO_RENDER_TARGET))
          *method = RESOLVE_COMPUTE;
@@ -349,7 +350,8 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
     */
    assert(region->srcSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
    assert(region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
-   assert(region->srcSubresource.layerCount == region->dstSubresource.layerCount);
+   assert(vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource) ==
+          vk_image_subresource_layer_count(&dst_image->vk, &region->dstSubresource));
 
    const uint32_t src_base_layer = radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
 
@@ -380,7 +382,7 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
          .baseMipLevel = region->dstSubresource.mipLevel,
          .levelCount = 1,
          .baseArrayLayer = dst_base_layer,
-         .layerCount = region->dstSubresource.layerCount,
+         .layerCount = vk_image_subresource_layer_count(&dst_image->vk, &region->dstSubresource),
       };
 
       cmd_buffer->state.flush_bits |= radv_init_dcc(cmd_buffer, dst_image, &range, 0xffffffff);
@@ -401,7 +403,9 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &resolve_area);
 
-   for (uint32_t layer = 0; layer < region->srcSubresource.layerCount; ++layer) {
+   const unsigned src_layer_count = vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource);
+
+   for (uint32_t layer = 0; layer < src_layer_count; ++layer) {
 
       VkResult ret = build_resolve_pipeline(device, fs_key);
       if (ret != VK_SUCCESS) {
@@ -659,10 +663,10 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
    if (render->ds_att.resolve_iview != NULL) {
       struct radv_image_view *src_iview = render->ds_att.iview;
       struct radv_image_view *dst_iview = render->ds_att.resolve_iview;
-      VkImageLayout dst_layout = render->ds_att.resolve_layout;
 
       radv_pick_resolve_method_images(cmd_buffer->device, src_iview->image, src_iview->vk.format, dst_iview->image,
-                                      dst_iview->vk.base_mip_level, dst_layout, cmd_buffer, &resolve_method);
+                                      dst_iview->vk.base_mip_level, VK_IMAGE_LAYOUT_UNDEFINED, cmd_buffer,
+                                      &resolve_method);
 
       if ((src_iview->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && render->ds_att.resolve_mode != VK_RESOLVE_MODE_NONE) {
          if (resolve_method == RESOLVE_FRAGMENT) {
@@ -835,15 +839,13 @@ radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
       .oldLayout = src_image_layout,
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
       .image = radv_image_to_handle(src_image),
-      .subresourceRange =
-         (VkImageSubresourceRange){
-            .aspectMask = region->srcSubresource.aspectMask,
-            .baseMipLevel = region->srcSubresource.mipLevel,
-            .levelCount = 1,
-            .baseArrayLayer = src_base_layer,
-            .layerCount = region->srcSubresource.layerCount,
-         },
-   };
+      .subresourceRange = (VkImageSubresourceRange){
+         .aspectMask = region->srcSubresource.aspectMask,
+         .baseMipLevel = region->srcSubresource.mipLevel,
+         .levelCount = 1,
+         .baseArrayLayer = src_base_layer,
+         .layerCount = vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource),
+      }};
 
    VkSampleLocationsInfoEXT sample_loc_info;
    if (src_image->vk.create_flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) {

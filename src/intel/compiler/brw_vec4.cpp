@@ -23,6 +23,7 @@
 
 #include "brw_vec4.h"
 #include "brw_fs.h"
+#include "brw_eu.h"
 #include "brw_cfg.h"
 #include "brw_nir.h"
 #include "brw_vec4_builder.h"
@@ -30,7 +31,6 @@
 #include "brw_dead_control_flow.h"
 #include "brw_private.h"
 #include "dev/intel_debug.h"
-#include "program/prog_parameter.h"
 #include "util/u_math.h"
 
 #define MAX_INSTRUCTION (1 << 30)
@@ -2398,7 +2398,8 @@ vec4_visitor::run()
       if (INTEL_DEBUG(DEBUG_OPTIMIZER) && this_progress) {             \
          char filename[64];                                            \
          snprintf(filename, 64, "%s-%s-%02d-%02d-" #pass,              \
-                  stage_abbrev, nir->info.name, iteration, pass_num); \
+                  _mesa_shader_stage_to_abbrev(stage),                 \
+                  nir->info.name, iteration, pass_num);                \
                                                                        \
          backend_shader::dump_instructions(filename);                  \
       }                                                                \
@@ -2411,7 +2412,7 @@ vec4_visitor::run()
    if (INTEL_DEBUG(DEBUG_OPTIMIZER)) {
       char filename[64];
       snprintf(filename, 64, "%s-%s-00-00-start",
-               stage_abbrev, nir->info.name);
+               _mesa_shader_stage_to_abbrev(stage), nir->info.name);
 
       backend_shader::dump_instructions(filename);
    }
@@ -2499,7 +2500,7 @@ vec4_visitor::run()
                           "%s shader triggered register spilling.  "
                           "Try reducing the number of live vec4 values "
                           "to improve performance.\n",
-                          stage_name);
+                          _mesa_shader_stage_to_string(stage));
 
       while (!reg_allocate()) {
          if (failed)
@@ -2533,14 +2534,14 @@ extern "C" {
 
 const unsigned *
 brw_compile_vs(const struct brw_compiler *compiler,
-               void *mem_ctx,
                struct brw_compile_vs_params *params)
 {
-   struct nir_shader *nir = params->nir;
+   struct nir_shader *nir = params->base.nir;
    const struct brw_vs_prog_key *key = params->key;
    struct brw_vs_prog_data *prog_data = params->prog_data;
    const bool debug_enabled =
-      brw_should_print_shader(nir, params->debug_flag ? params->debug_flag : DEBUG_VS);
+      brw_should_print_shader(nir, params->base.debug_flag ?
+                                   params->base.debug_flag : DEBUG_VS);
 
    prog_data->base.base.stage = MESA_SHADER_VERTEX;
    prog_data->base.base.ray_queries = nir->info.ray_queries;
@@ -2557,7 +2558,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
    brw_nir_lower_vs_inputs(nir, params->edgeflag_is_last, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(nir);
    brw_postprocess_nir(nir, compiler, debug_enabled,
-                       key->base.robust_buffer_access);
+                       key->base.robust_flags);
 
    prog_data->base.clip_distance_mask =
       ((1 << nir->info.clip_distance_array_size) - 1);
@@ -2635,22 +2636,25 @@ brw_compile_vs(const struct brw_compiler *compiler,
    if (is_scalar) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
-      fs_visitor v(compiler, params->log_data, mem_ctx, &key->base,
+      fs_visitor v(compiler, &params->base, &key->base,
                    &prog_data->base.base, nir, 8,
-                   params->stats != NULL, debug_enabled);
+                   params->base.stats != NULL, debug_enabled);
       if (!v.run_vs()) {
-         params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+         params->base.error_str =
+            ralloc_strdup(params->base.mem_ctx, v.fail_msg);
          return NULL;
       }
 
-      prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs;
+      assert(v.payload().num_regs % reg_unit(compiler->devinfo) == 0);
+      prog_data->base.base.dispatch_grf_start_reg =
+         v.payload().num_regs / reg_unit(compiler->devinfo);
 
-      fs_generator g(compiler, params->log_data, mem_ctx,
+      fs_generator g(compiler, &params->base,
                      &prog_data->base.base, v.runtime_check_aads_emit,
                      MESA_SHADER_VERTEX);
       if (unlikely(debug_enabled)) {
          const char *debug_name =
-            ralloc_asprintf(mem_ctx, "%s vertex shader %s",
+            ralloc_asprintf(params->base.mem_ctx, "%s vertex shader %s",
                             nir->info.label ? nir->info.label :
                                "unnamed",
                             nir->info.name);
@@ -2658,7 +2662,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
          g.enable_debug(debug_name);
       }
       g.generate_code(v.cfg, 8, v.shader_stats,
-                      v.performance_analysis.require(), params->stats);
+                      v.performance_analysis.require(), params->base.stats);
       g.add_const_data(nir->constant_data, nir->constant_data_size);
       assembly = g.get_assembly();
    }
@@ -2666,19 +2670,19 @@ brw_compile_vs(const struct brw_compiler *compiler,
    if (!assembly) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
 
-      vec4_vs_visitor v(compiler, params->log_data, key, prog_data,
-                        nir, mem_ctx,
-                        debug_enabled);
+      vec4_vs_visitor v(compiler, &params->base, key, prog_data,
+                        nir, debug_enabled);
       if (!v.run()) {
-         params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+         params->base.error_str =
+            ralloc_strdup(params->base.mem_ctx, v.fail_msg);
          return NULL;
       }
 
-      assembly = brw_vec4_generate_assembly(compiler, params->log_data, mem_ctx,
+      assembly = brw_vec4_generate_assembly(compiler, &params->base,
                                             nir, &prog_data->base,
                                             v.cfg,
                                             v.performance_analysis.require(),
-                                            params->stats, debug_enabled);
+                                            debug_enabled);
    }
 
    return assembly;

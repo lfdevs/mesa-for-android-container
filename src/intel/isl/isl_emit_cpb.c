@@ -100,10 +100,7 @@ isl_genX(emit_cpb_control_s)(const struct isl_device *dev, void *batch,
       cpb.TiledMode              = isl_encode_tiling[info->surf->tiling];
       cpb.SurfaceBaseAddress     = info->address;
 
-      /* We don't use miptails yet. The PRM recommends that you set "Mip Tail
-       * Start LOD" to 15 to prevent the hardware from trying to use them.
-       */
-      cpb.MipTailStartLOD        = 15;
+      cpb.MipTailStartLOD        = info->surf->miptail_start_level;
       /* TODO:
        *
        * cpb.CPCBCompressionEnable is this CCS compression? Currently disabled

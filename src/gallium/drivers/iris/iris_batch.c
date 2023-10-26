@@ -229,11 +229,8 @@ iris_init_batch(struct iris_context *ice,
    }
 
    if (INTEL_DEBUG(DEBUG_ANY)) {
-      const unsigned decode_flags =
-         INTEL_BATCH_DECODE_FULL |
-         (INTEL_DEBUG(DEBUG_COLOR) ? INTEL_BATCH_DECODE_IN_COLOR : 0) |
-         INTEL_BATCH_DECODE_OFFSETS |
-         INTEL_BATCH_DECODE_FLOATS;
+      const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS |
+         (INTEL_DEBUG(DEBUG_COLOR) ? INTEL_BATCH_DECODE_IN_COLOR : 0);
 
       intel_batch_decode_ctx_init(&batch->decoder, &screen->compiler->isa,
                                   screen->devinfo,
@@ -621,7 +618,7 @@ add_aux_map_bos_to_batch(struct iris_batch *batch)
 static void
 finish_seqno(struct iris_batch *batch)
 {
-   struct iris_fine_fence *sq = iris_fine_fence_new(batch, IRIS_FENCE_END);
+   struct iris_fine_fence *sq = iris_fine_fence_new(batch);
    if (!sq)
       return;
 
@@ -681,6 +678,8 @@ replace_kernel_ctx(struct iris_batch *batch)
    struct iris_bufmgr *bufmgr = screen->bufmgr;
    const struct intel_device_info *devinfo = iris_bufmgr_get_device_info(bufmgr);
 
+   threaded_context_unwrap_sync(&batch->ice->ctx);
+
    switch (devinfo->kmd_type) {
    case INTEL_KMD_TYPE_I915:
       return iris_i915_replace_batch(batch);
@@ -697,18 +696,19 @@ iris_batch_check_for_reset(struct iris_batch *batch)
 {
    struct iris_screen *screen = batch->screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
+   struct iris_context *ice = batch->ice;
    const struct iris_kmd_backend *backend;
-   enum pipe_reset_status status;
+   enum pipe_reset_status status = PIPE_NO_RESET;
+
+   /* Banned context was already signalled to application */
+   if (ice->context_reset_signaled)
+      return status;
 
    backend = iris_bufmgr_get_kernel_driver_backend(bufmgr);
    status = backend->batch_check_for_reset(batch);
-   if (status != PIPE_NO_RESET) {
-      /* Our context is likely banned, or at least in an unknown state.
-       * Throw it away and start with a fresh context.  Ideally this may
-       * catch the problem before our next execbuf fails with -EIO.
-       */
-      replace_kernel_ctx(batch);
-   }
+
+   if (status != PIPE_NO_RESET)
+      ice->context_reset_signaled = true;
 
    return status;
 }
@@ -860,12 +860,12 @@ iris_batch_name_to_string(enum iris_batch_name name)
 }
 
 static inline bool
-context_or_engine_was_banned(struct iris_bufmgr *bufmgr, int ret)
+context_or_exec_queue_was_banned(struct iris_bufmgr *bufmgr, int ret)
 {
    enum intel_kmd_type kmd_type = iris_bufmgr_get_device_info(bufmgr)->kmd_type;
 
    /* In i915 EIO means our context is banned, while on Xe ECANCELED means
-    * our engine was banned
+    * our exec queue was banned
     */
    if ((kmd_type == INTEL_KMD_TYPE_I915 && ret == -EIO) ||
        (kmd_type == INTEL_KMD_TYPE_XE && ret == -ECANCELED))
@@ -900,7 +900,7 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
       enum intel_kmd_type kmd_type = iris_bufmgr_get_device_info(bufmgr)->kmd_type;
       uint32_t batch_ctx_id = kmd_type == INTEL_KMD_TYPE_I915 ?
-                              batch->i915.ctx_id : batch->xe.engine_id;
+                              batch->i915.ctx_id : batch->xe.exec_queue_id;
       fprintf(stderr, "%19s:%-3d: %s batch [%u] flush with %5db (%0.1f%%) "
               "(cmds), %4d BOs (%0.1fMb aperture)\n",
               file, line, iris_batch_name_to_string(batch->name),
@@ -957,8 +957,12 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
     * has been lost and needs to be re-initialized.  If this succeeds,
     * dubiously claim success...
     */
-   if (ret && context_or_engine_was_banned(bufmgr, ret)) {
+   if (ret && context_or_exec_queue_was_banned(bufmgr, ret)) {
       enum pipe_reset_status status = iris_batch_check_for_reset(batch);
+
+      if (status != PIPE_NO_RESET || ice->context_reset_signaled)
+         replace_kernel_ctx(batch);
+
       if (batch->reset->reset) {
          /* Tell gallium frontends the device is lost and it was our fault. */
          batch->reset->reset(batch->reset->data, status);

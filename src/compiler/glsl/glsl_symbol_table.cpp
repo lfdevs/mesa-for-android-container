@@ -106,7 +106,7 @@ glsl_symbol_table::glsl_symbol_table()
    this->separate_function_namespace = false;
    this->table = _mesa_symbol_table_ctor();
    this->mem_ctx = ralloc_context(NULL);
-   this->linalloc = linear_alloc_parent(this->mem_ctx, 0);
+   this->linalloc = linear_context(this->mem_ctx);
 }
 
 glsl_symbol_table::~glsl_symbol_table()

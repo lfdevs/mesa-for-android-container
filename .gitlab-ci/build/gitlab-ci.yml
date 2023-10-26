@@ -1,8 +1,16 @@
 # Shared between windows and Linux
 .build-common:
-  extends: .build-rules
+  extends: .container+build-rules
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
+  # Build jobs don't take more than 1-3 minutes. 5-8 min max on a fresh runner
+  # without a populated ccache.
+  # These jobs are never slow, either they finish within reasonable time or
+  # something has gone wrong and the job will never terminate, so we should
+  # instead timeout so that the retry mechanism can kick in.
+  # A few exception are made, see `timeout:` overrides in the rest of this
+  # file.
+  timeout: 30m
   artifacts:
     name: "mesa_${CI_JOB_NAME}"
     when: always
@@ -35,12 +43,9 @@
     - !reference [default, after_script]
 
 .build-windows:
-  extends: .build-common
-  tags:
-    - windows
-    - docker
-    - "2022"
-    - mesa
+  extends:
+    - .build-common
+    - .windows-docker-tags
   cache:
     key: ${CI_JOB_NAME}
     paths:
@@ -80,7 +85,7 @@ debian-testing:
       -D dri3=enabled
       -D gallium-va=enabled
     GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915"
-    VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio"
+    VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio,nouveau-experimental"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
@@ -147,15 +152,6 @@ debian-testing-msan:
     - .gitlab-ci/meson/build.sh
     - .gitlab-ci/prepare-artifacts.sh
 
-# TODO: remove together with Clover
-.debian-clover-testing:
-  extends:
-    - .debian-cl-testing
-  variables:
-    GALLIUM_ST: >
-      -D gallium-opencl=icd
-      -D opencl-spirv=true
-
 debian-rusticl-testing:
   extends:
     - .debian-cl-testing
@@ -203,6 +199,7 @@ debian-build-testing:
     .gitlab-ci/meson/build.sh
     section_switch shader-db "shader-db"
     .gitlab-ci/run-shader-db.sh
+  timeout: 30m
 
 # Test a release build with -Werror so new warnings don't sneak in.
 debian-release:
@@ -345,7 +342,6 @@ debian-android:
       -Wno-error=enum-conversion
       -Wno-error=initializer-overrides
       -Wno-error=sometimes-uninitialized
-      -Wno-error=implicit-const-int-float-conversion
     CPP_ARGS: >
       -Wno-error=c99-designator
       -Wno-error=unused-variable
@@ -462,6 +458,7 @@ debian-arm64:
       -D valgrind=disabled
       -D imagination-srv=true
       -D perfetto=true
+      -D freedreno-kmds=msm,virtio
     S3_ARTIFACT_NAME: mesa-arm64-default-${BUILDTYPE}
   script:
     - .gitlab-ci/meson/build.sh
@@ -515,12 +512,10 @@ debian-clang:
     C_ARGS: >
       -Wno-error=constant-conversion
       -Wno-error=enum-conversion
-      -Wno-error=implicit-const-int-float-conversion
       -Wno-error=initializer-overrides
       -Wno-error=sometimes-uninitialized
     CPP_ARGS: >
       -Wno-error=c99-designator
-      -Wno-error=implicit-const-int-float-conversion
       -Wno-error=overloaded-virtual
       -Wno-error=tautological-constant-out-of-range-compare
       -Wno-error=unused-private-field
@@ -609,21 +604,6 @@ windows-vs2019:
     EXTRA_OPTION: >
       -D valgrind=disabled
 
-# TODO: remove with Clover
-.debian-clover:
-  extends: .debian-cl
-  variables:
-    GALLIUM_DRIVERS: "r600,radeonsi,swrast"
-    GALLIUM_ST: >
-      -D dri3=disabled
-      -D gallium-vdpau=disabled
-      -D gallium-omx=disabled
-      -D gallium-va=disabled
-      -D gallium-xa=disabled
-      -D gallium-nine=false
-      -D gallium-opencl=icd
-      -D gallium-rusticl=false
-
 debian-rusticl:
   extends: .debian-cl
   variables:
@@ -665,7 +645,7 @@ debian-vulkan:
       -D c_args=-fno-sanitize-recover=all
       -D cpp_args=-fno-sanitize-recover=all
     UBSAN_OPTIONS: "print_stacktrace=1"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: amd,broadcom,freedreno,intel,intel_hasvk,virtio,imagination-experimental,microsoft-experimental
     EXTRA_OPTION: >
       -D vulkan-layers=device-select,overlay
       -D build-aco-tests=true

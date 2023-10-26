@@ -24,6 +24,7 @@
 #include "vk_semaphore.h"
 
 #include "util/os_time.h"
+#include "util/perf/cpu_trace.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -327,6 +328,8 @@ vk_common_WaitSemaphores(VkDevice _device,
                          const VkSemaphoreWaitInfo *pWaitInfo,
                          uint64_t timeout)
 {
+   MESA_TRACE_FUNC();
+
    VK_FROM_HANDLE(vk_device, device, _device);
 
    if (vk_device_is_lost(device))

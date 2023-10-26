@@ -87,7 +87,6 @@ disk_cache_init_queue(struct disk_cache *cache)
     * doesn't stall.
     */
    return util_queue_init(&cache->cache_queue, "disk$", 32, 4,
-                          UTIL_QUEUE_INIT_SCALE_THREADS |
                           UTIL_QUEUE_INIT_RESIZE_IF_FULL |
                           UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY |
                           UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY, NULL);
@@ -107,9 +106,6 @@ disk_cache_type_create(const char *gpu_name,
    uint8_t cache_version = CACHE_VERSION;
    size_t cv_size = sizeof(cache_version);
 
-   if (!disk_cache_enabled())
-      return NULL;
-
    /* A ralloc context for transient data during this invocation. */
    local = ralloc_context(NULL);
    if (local == NULL)
@@ -123,13 +119,8 @@ disk_cache_type_create(const char *gpu_name,
    cache->path_init_failed = true;
    cache->type = DISK_CACHE_NONE;
 
-#ifdef ANDROID
-   /* Android needs the "disk cache" to be enabled for
-    * EGL_ANDROID_blob_cache's callbacks to be called, but it doesn't actually
-    * want any storing to disk to happen inside of the driver.
-    */
-   goto path_fail;
-#endif
+   if (!disk_cache_enabled())
+      goto path_fail;
 
    char *path = disk_cache_generate_cache_dir(local, gpu_name, driver_id,
                                               cache_type);
@@ -445,7 +436,7 @@ cache_put(void *job, void *gdata, int thread_index)
       disk_cache_write_item_to_disk_foz(dc_job);
    } else if (dc_job->cache->type == DISK_CACHE_DATABASE) {
       disk_cache_db_write_item_to_disk(dc_job);
-   } else {
+   } else if (dc_job->cache->type == DISK_CACHE_MULTI_FILE) {
       filename = disk_cache_get_cache_filename(dc_job->cache, dc_job->key);
       if (filename == NULL)
          goto done;
@@ -482,17 +473,17 @@ blob_put_compressed(struct disk_cache *cache, const cache_key key,
 
    entry->uncompressed_size = size;
 
-   MESA_TRACE_BEGIN("deflate");
    size_t compressed_size =
          util_compress_deflate(data, size, entry->compressed_data, max_buf);
-   MESA_TRACE_END();
    if (!compressed_size)
       goto out;
 
    unsigned entry_size = compressed_size + sizeof(*entry);
-   MESA_TRACE_BEGIN("blob_put");
-   cache->blob_put_cb(key, CACHE_KEY_SIZE, entry, entry_size);
-   MESA_TRACE_END();
+   // The curly brackets are here to only trace the blob_put_cb call
+   {
+      MESA_TRACE_SCOPE("blob_put");
+      cache->blob_put_cb(key, CACHE_KEY_SIZE, entry, entry_size);
+   }
 
 out:
    free(entry);
@@ -512,10 +503,12 @@ blob_get_compressed(struct disk_cache *cache, const cache_key key,
    if (!entry)
       return NULL;
 
-   MESA_TRACE_BEGIN("blob_get");
-   signed long entry_size =
-      cache->blob_get_cb(key, CACHE_KEY_SIZE, entry, max_blob_size);
-   MESA_TRACE_END();
+   signed long entry_size;
+   // The curly brackets are here to only trace the blob_get_cb call
+   {
+      MESA_TRACE_SCOPE("blob_get");
+      entry_size = cache->blob_get_cb(key, CACHE_KEY_SIZE, entry, max_blob_size);
+   }
 
    if (!entry_size) {
       free(entry);
@@ -529,10 +522,8 @@ blob_get_compressed(struct disk_cache *cache, const cache_key key,
    }
 
    unsigned compressed_size = entry_size - sizeof(*entry);
-   MESA_TRACE_BEGIN("inflate");
    bool ret = util_compress_inflate(entry->compressed_data, compressed_size,
                                     data, entry->uncompressed_size);
-   MESA_TRACE_END();
    if (!ret) {
       free(data);
       free(entry);
@@ -603,7 +594,7 @@ disk_cache_get(struct disk_cache *cache, const cache_key key, size_t *size)
          buf = disk_cache_load_item_foz(cache, key, size);
       } else if (cache->type == DISK_CACHE_DATABASE) {
          buf = disk_cache_db_load_item(cache, key, size);
-      } else {
+      } else if (cache->type == DISK_CACHE_MULTI_FILE) {
          char *filename = disk_cache_get_cache_filename(cache, key);
          if (filename)
             buf = disk_cache_load_item(cache, filename, size);

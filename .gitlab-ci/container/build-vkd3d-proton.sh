@@ -6,7 +6,7 @@
 # KERNEL_ROOTFS_TAG
 set -ex
 
-VKD3D_PROTON_COMMIT="6365efeba253807beecaed0eaa963295522c6b70"
+VKD3D_PROTON_COMMIT="2ad6cfdeaacdf47e2689e30a8fb5ac8193725f0d"
 
 VKD3D_PROTON_DST_DIR="/vkd3d-proton-tests"
 VKD3D_PROTON_SRC_DIR="/vkd3d-proton-src"

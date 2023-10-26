@@ -36,8 +36,11 @@
 #include "xf86drm.h"
 
 #include "pipe/p_screen.h"
+#include "pipe-loader/pipe_loader.h"
 #include "renderonly/renderonly.h"
 #include "util/u_memory.h"
+
+#include "loader.h"
 
 static void kmsro_ro_destroy(struct renderonly *ro)
 {
@@ -49,107 +52,77 @@ static void kmsro_ro_destroy(struct renderonly *ro)
    FREE(ro);
 }
 
-struct pipe_screen *kmsro_drm_screen_create(int fd,
+struct pipe_screen *kmsro_drm_screen_create(int kms_fd,
                                             const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen = NULL;
    struct renderonly *ro = CALLOC_STRUCT(renderonly);
+   char *render_dev_name = NULL;
 
    if (!ro)
       return NULL;
 
-   ro->kms_fd = fd;
-   ro->gpu_fd = -1;
+   ro->kms_fd = kms_fd;
+   ro->gpu_fd = pipe_loader_get_compatible_render_capable_device_fd(kms_fd);
+   if (ro->gpu_fd < 0) {
+      FREE(ro);
+      return NULL;
+   }
+
+   render_dev_name = loader_get_kernel_driver_name(ro->gpu_fd);
+   if (!render_dev_name) {
+      close(ro->gpu_fd);
+      FREE(ro);
+      return NULL;
+   }
+
    ro->destroy = kmsro_ro_destroy;
    util_sparse_array_init(&ro->bo_map, sizeof(struct renderonly_scanout), 64);
    simple_mtx_init(&ro->bo_map_lock, mtx_plain);
 
-   const struct {
-      const char *name;
-      struct pipe_screen *(*create_screen)(int, struct renderonly *,
-                                           const struct pipe_screen_config *);
-      struct renderonly_scanout *(*create_for_resource)(struct pipe_resource *,
-                                                        struct renderonly *,
-                                                        struct winsys_handle *);
-   } renderonly_drivers[] = {
+   if (strcmp(render_dev_name, "asahi") == 0) {
 #if defined(GALLIUM_ASAHI)
-      {
-         .name = "asahi",
-         .create_screen = asahi_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_gpu_import_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_gpu_import_for_resource;
+      screen = asahi_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   }
+   else if (strcmp(render_dev_name, "etnaviv") == 0) {
 #if defined(GALLIUM_ETNAVIV)
-      {
-         .name = "etnaviv",
-         .create_screen = etna_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
+      screen = etna_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   } else if (strcmp(render_dev_name, "msm") == 0) {
 #if defined(GALLIUM_FREEDRENO)
-      {
-         .name = "msm",
-         .create_screen = fd_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
+      screen = fd_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   } else if (strcmp(render_dev_name, "lima") == 0) {
 #if defined(GALLIUM_LIMA)
-      {
-         .name = "lima",
-         .create_screen = lima_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
+      screen = lima_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   } else if (strcmp(render_dev_name, "panfrost") == 0) {
 #if defined(GALLIUM_PANFROST)
-      {
-         .name = "panfrost",
-         .create_screen = panfrost_drm_screen_create_renderonly,
-         .create_for_resource = panfrost_create_kms_dumb_buffer_for_resource,
-      },
+      ro->create_for_resource = panfrost_create_kms_dumb_buffer_for_resource;
+      screen = panfrost_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   } else if (strcmp(render_dev_name, "v3d") == 0) {
 #if defined(GALLIUM_V3D)
-      {
-         .name = "v3d",
-         .create_screen = v3d_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
+      screen = v3d_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-
+   } else if (strcmp(render_dev_name, "vc4") == 0) {
 #if defined(GALLIUM_VC4)
       /* Passes the vc4-allocated BO through to the KMS-only DRM device using
        * PRIME buffer sharing.  The VC4 BO must be linear, which the SCANOUT
        * flag on allocation will have ensured.
        */
-      {
-         .name = "vc4",
-         .create_screen = vc4_drm_screen_create_renderonly,
-         .create_for_resource = renderonly_create_gpu_import_for_resource,
-      },
+      ro->create_for_resource = renderonly_create_gpu_import_for_resource;
+      screen = vc4_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
 #endif
-   };
-
-   for (int i = 0; i < ARRAY_SIZE(renderonly_drivers); i++) {
-      ro->gpu_fd = drmOpenWithType(renderonly_drivers[i].name, NULL, DRM_NODE_RENDER);
-      if (ro->gpu_fd >= 0) {
-         ro->create_for_resource = renderonly_drivers[i].create_for_resource;
-         screen = renderonly_drivers[i].create_screen(ro->gpu_fd, ro, config);
-         if (!screen)
-            goto out_free;
-         return screen;
-      }
    }
 
+   free(render_dev_name);
+
    return screen;
-
-out_free:
-   if (ro->gpu_fd >= 0)
-      close(ro->gpu_fd);
-   FREE(ro);
-
-   return NULL;
 }

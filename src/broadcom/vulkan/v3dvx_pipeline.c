@@ -227,6 +227,45 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
          ds_info ? ds_info->stencilTestEnable && has_ds_attachment: false;
 
       pipeline->z_updates_enable = config.z_updates_enable;
+
+#if V3D_VERSION >= 71
+      /* From the Vulkan spec:
+       *
+       *    "depthClampEnable controls whether to clamp the fragment’s depth
+       *     values as described in Depth Test. If the pipeline is not created
+       *     with VkPipelineRasterizationDepthClipStateCreateInfoEXT present
+       *     then enabling depth clamp will also disable clipping primitives to
+       *     the z planes of the frustrum as described in Primitive Clipping.
+       *     Otherwise depth clipping is controlled by the state set in
+       *     VkPipelineRasterizationDepthClipStateCreateInfoEXT."
+       *
+       * Note: neither depth clamping nor VK_EXT_depth_clip_enable are actually
+       * supported in the driver yet, so in practice we are always enabling Z
+       * clipping for now.
+       */
+      bool z_clamp_enable = rs_info && rs_info->depthClampEnable;
+      bool z_clip_enable = false;
+      const VkPipelineRasterizationDepthClipStateCreateInfoEXT *clip_info =
+         ds_info ? vk_find_struct_const(ds_info->pNext,
+                                        PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT) :
+                   NULL;
+      if (clip_info)
+         z_clip_enable = clip_info->depthClipEnable;
+      else if (!z_clamp_enable)
+         z_clip_enable = true;
+
+      if (z_clip_enable) {
+         config.z_clipping_mode = pipeline->negative_one_to_one ?
+	    V3D_Z_CLIP_MODE_MIN_ONE_TO_ONE : V3D_Z_CLIP_MODE_ZERO_TO_ONE;
+      } else {
+         config.z_clipping_mode = V3D_Z_CLIP_MODE_NONE;
+      }
+
+      config.z_clamp_mode = z_clamp_enable;
+
+      config.depth_bounds_test_enable =
+              ds_info && ds_info->depthBoundsTestEnable && has_ds_attachment;
+#endif
    };
 }
 
@@ -360,7 +399,7 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
 static void
 pack_shader_state_record(struct v3dv_pipeline *pipeline)
 {
-   assert(sizeof(pipeline->shader_state_record) ==
+   assert(sizeof(pipeline->shader_state_record) >=
           cl_packet_length(GL_SHADER_STATE_RECORD));
 
    struct v3d_fs_prog_data *prog_data_fs =
@@ -435,14 +474,15 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
       shader.number_of_varyings_in_fragment_shader =
          prog_data_fs->num_inputs;
 
-      shader.coordinate_shader_propagate_nans = true;
-      shader.vertex_shader_propagate_nans = true;
-      shader.fragment_shader_propagate_nans = true;
-
       /* Note: see previous note about addresses */
       /* shader.coordinate_shader_code_address */
       /* shader.vertex_shader_code_address */
       /* shader.fragment_shader_code_address */
+
+#if V3D_VERSION == 42
+      shader.coordinate_shader_propagate_nans = true;
+      shader.vertex_shader_propagate_nans = true;
+      shader.fragment_shader_propagate_nans = true;
 
       /* FIXME: Use combined input/output size flag in the common case (also
        * on v3d, see v3dx_draw).
@@ -451,13 +491,25 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
          prog_data_vs_bin->separate_segments;
       shader.vertex_shader_has_separate_input_and_output_vpm_blocks =
          prog_data_vs->separate_segments;
-
       shader.coordinate_shader_input_vpm_segment_size =
          prog_data_vs_bin->separate_segments ?
          prog_data_vs_bin->vpm_input_size : 1;
       shader.vertex_shader_input_vpm_segment_size =
          prog_data_vs->separate_segments ?
          prog_data_vs->vpm_input_size : 1;
+#endif
+
+      /* On V3D 7.1 there isn't a specific flag to set if we are using
+       * shared/separate segments or not. We just set the value of
+       * vpm_input_size to 0, and set output to the max needed. That should be
+       * already properly set on prog_data_vs_bin
+       */
+#if V3D_VERSION == 71
+      shader.coordinate_shader_input_vpm_segment_size =
+         prog_data_vs_bin->vpm_input_size;
+      shader.vertex_shader_input_vpm_segment_size =
+         prog_data_vs->vpm_input_size;
+#endif
 
       shader.coordinate_shader_output_vpm_segment_size =
          prog_data_vs_bin->vpm_output_size;
@@ -658,4 +710,77 @@ v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
          pipeline->va_count++;
       }
    }
+}
+
+#if V3D_VERSION == 42
+static bool
+pipeline_has_integer_vertex_attrib(struct v3dv_pipeline *pipeline)
+{
+   for (uint8_t i = 0; i < pipeline->va_count; i++) {
+      if (vk_format_is_int(pipeline->va[i].vk_format))
+         return true;
+   }
+   return false;
+}
+#endif
+
+bool
+v3dX(pipeline_needs_default_attribute_values)(struct v3dv_pipeline *pipeline)
+{
+#if V3D_VERSION == 42
+   return pipeline_has_integer_vertex_attrib(pipeline);
+#endif
+
+   return false;
+}
+
+/* @pipeline can be NULL. In that case we assume the most common case. For
+ * example, for v42 we assume in that case that all the attributes have a
+ * float format (we only create an all-float BO once and we reuse it with all
+ * float pipelines), otherwise we look at the actual type of each attribute
+ * used with the specific pipeline passed in.
+ */
+struct v3dv_bo *
+v3dX(create_default_attribute_values)(struct v3dv_device *device,
+                                      struct v3dv_pipeline *pipeline)
+{
+#if V3D_VERSION >= 71
+   return NULL;
+#endif
+
+   uint32_t size = MAX_VERTEX_ATTRIBS * sizeof(float) * 4;
+   struct v3dv_bo *bo;
+
+   bo = v3dv_bo_alloc(device, size, "default_vi_attributes", true);
+
+   if (!bo) {
+      fprintf(stderr, "failed to allocate memory for the default "
+              "attribute values\n");
+      return NULL;
+   }
+
+   bool ok = v3dv_bo_map(device, bo, size);
+   if (!ok) {
+      fprintf(stderr, "failed to map default attribute values buffer\n");
+      return NULL;
+   }
+
+   uint32_t *attrs = bo->map;
+   uint8_t va_count = pipeline != NULL ? pipeline->va_count : 0;
+   for (int i = 0; i < MAX_VERTEX_ATTRIBS; i++) {
+      attrs[i * 4 + 0] = 0;
+      attrs[i * 4 + 1] = 0;
+      attrs[i * 4 + 2] = 0;
+      VkFormat attr_format =
+         pipeline != NULL ? pipeline->va[i].vk_format : VK_FORMAT_UNDEFINED;
+      if (i < va_count && vk_format_is_int(attr_format)) {
+         attrs[i * 4 + 3] = 1;
+      } else {
+         attrs[i * 4 + 3] = fui(1.0);
+      }
+   }
+
+   v3dv_bo_unmap(device, bo);
+
+   return bo;
 }

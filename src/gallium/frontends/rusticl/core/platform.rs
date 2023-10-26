@@ -20,6 +20,7 @@ pub struct PlatformDebug {
     pub allow_invalid_spirv: bool,
     pub clc: bool,
     pub program: bool,
+    pub sync_every_event: bool,
 }
 
 pub struct PlatformFeatures {
@@ -47,6 +48,7 @@ macro_rules! gen_cl_exts {
 gen_cl_exts!([
     (1, 0, 0, "cl_khr_byte_addressable_store"),
     (1, 0, 0, "cl_khr_create_command_queue"),
+    (1, 0, 0, "cl_khr_expect_assume"),
     (1, 0, 0, "cl_khr_extended_versioning"),
     (1, 0, 0, "cl_khr_icd"),
     (1, 0, 0, "cl_khr_il_program"),
@@ -61,6 +63,7 @@ static mut PLATFORM_DBG: PlatformDebug = PlatformDebug {
     allow_invalid_spirv: false,
     clc: false,
     program: false,
+    sync_every_event: false,
 };
 static mut PLATFORM_FEATURES: PlatformFeatures = PlatformFeatures {
     fp16: false,
@@ -75,6 +78,7 @@ fn load_env() {
                 "allow_invalid_spirv" => debug.allow_invalid_spirv = true,
                 "clc" => debug.clc = true,
                 "program" => debug.program = true,
+                "sync" => debug.sync_every_event = true,
                 _ => eprintln!("Unknown RUSTICL_DEBUG flag found: {}", flag),
             }
         }

@@ -36,7 +36,7 @@ struct regs_to_ssa_state {
 static void
 setup_reg(nir_intrinsic_instr *decl, struct regs_to_ssa_state *state)
 {
-   assert(state->values[decl->dest.ssa.index] == NULL);
+   assert(state->values[decl->def.index] == NULL);
    if (!should_lower_reg(decl))
       return;
 
@@ -46,9 +46,9 @@ setup_reg(nir_intrinsic_instr *decl, struct regs_to_ssa_state *state)
    memset(state->defs, 0, state->defs_words * sizeof(*state->defs));
 
    nir_foreach_reg_store(store, decl)
-      BITSET_SET(state->defs, store->parent_instr->block->index);
+      BITSET_SET(state->defs, nir_src_parent_instr(store)->block->index);
 
-   state->values[decl->dest.ssa.index] =
+   state->values[decl->def.index] =
       nir_phi_builder_add_value(state->phi_builder, num_components,
                                 bit_size, state->defs);
 }
@@ -57,19 +57,19 @@ static void
 rewrite_load(nir_intrinsic_instr *load, struct regs_to_ssa_state *state)
 {
    nir_block *block = load->instr.block;
-   nir_ssa_def *reg = load->src[0].ssa;
+   nir_def *reg = load->src[0].ssa;
 
    struct nir_phi_builder_value *value = state->values[reg->index];
    if (!value)
       return;
 
    nir_intrinsic_instr *decl = nir_instr_as_intrinsic(reg->parent_instr);
-   nir_ssa_def *def = nir_phi_builder_value_get_block_def(value, block);
+   nir_def *def = nir_phi_builder_value_get_block_def(value, block);
 
-   nir_ssa_def_rewrite_uses(&load->dest.ssa, def);
+   nir_def_rewrite_uses(&load->def, def);
    nir_instr_remove(&load->instr);
 
-   if (nir_ssa_def_is_unused(&decl->dest.ssa))
+   if (nir_def_is_unused(&decl->def))
       nir_instr_remove(&decl->instr);
 }
 
@@ -77,8 +77,8 @@ static void
 rewrite_store(nir_intrinsic_instr *store, struct regs_to_ssa_state *state)
 {
    nir_block *block = store->instr.block;
-   nir_ssa_def *new_value = store->src[0].ssa;
-   nir_ssa_def *reg = store->src[1].ssa;
+   nir_def *new_value = store->src[0].ssa;
+   nir_def *reg = store->src[1].ssa;
 
    struct nir_phi_builder_value *value = state->values[reg->index];
    if (!value)
@@ -90,10 +90,10 @@ rewrite_store(nir_intrinsic_instr *store, struct regs_to_ssa_state *state)
 
    /* Implement write masks by combining together the old/new values */
    if (write_mask != BITFIELD_MASK(num_components)) {
-      nir_ssa_def *old_value =
+      nir_def *old_value =
          nir_phi_builder_value_get_block_def(value, block);
 
-      nir_ssa_def *channels[NIR_MAX_VEC_COMPONENTS] = { NULL };
+      nir_def *channels[NIR_MAX_VEC_COMPONENTS] = { NULL };
       state->b.cursor = nir_before_instr(&store->instr);
 
       for (unsigned i = 0; i < num_components; ++i) {
@@ -109,7 +109,7 @@ rewrite_store(nir_intrinsic_instr *store, struct regs_to_ssa_state *state)
    nir_phi_builder_value_set_block_def(value, block, new_value);
    nir_instr_remove(&store->instr);
 
-   if (nir_ssa_def_is_unused(&decl->dest.ssa))
+   if (nir_def_is_unused(&decl->def))
       nir_instr_remove(&decl->instr);
 }
 
@@ -129,7 +129,7 @@ nir_lower_reg_intrinsics_to_ssa_impl(nir_function_impl *impl)
    }
 
    nir_metadata_require(impl, nir_metadata_block_index |
-                              nir_metadata_dominance);
+                                 nir_metadata_dominance);
    nir_index_ssa_defs(impl);
 
    void *dead_ctx = ralloc_context(NULL);
@@ -168,7 +168,7 @@ nir_lower_reg_intrinsics_to_ssa_impl(nir_function_impl *impl)
    ralloc_free(dead_ctx);
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+                                  nir_metadata_dominance);
    return true;
 }
 

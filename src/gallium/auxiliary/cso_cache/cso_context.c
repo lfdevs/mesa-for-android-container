@@ -1259,7 +1259,7 @@ cso_restore_vertex_elements(struct cso_context *ctx)
 
 void
 cso_set_vertex_buffers(struct cso_context *ctx,
-                       unsigned start_slot, unsigned count,
+                       unsigned count,
                        unsigned unbind_trailing_count,
                        bool take_ownership,
                        const struct pipe_vertex_buffer *buffers)
@@ -1270,13 +1270,13 @@ cso_set_vertex_buffers(struct cso_context *ctx,
       return;
 
    if (vbuf) {
-      u_vbuf_set_vertex_buffers(vbuf, start_slot, count, unbind_trailing_count,
+      u_vbuf_set_vertex_buffers(vbuf, count, unbind_trailing_count,
                                 take_ownership, buffers);
       return;
    }
 
    struct pipe_context *pipe = ctx->base.pipe;
-   pipe->set_vertex_buffers(pipe, start_slot, count, unbind_trailing_count,
+   pipe->set_vertex_buffers(pipe, count, unbind_trailing_count,
                             take_ownership, buffers);
 }
 
@@ -1310,7 +1310,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
          /* Unbind all buffers in cso_context, because we'll use u_vbuf. */
          unsigned unbind_vb_count = vb_count + unbind_trailing_vb_count;
          if (unbind_vb_count)
-            pipe->set_vertex_buffers(pipe, 0, 0, unbind_vb_count, false, NULL);
+            pipe->set_vertex_buffers(pipe, 0, unbind_vb_count, false, NULL);
 
          /* Unset this to make sure the CSO is re-bound on the next use. */
          ctx->velements = NULL;
@@ -1321,7 +1321,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
       }
 
       if (vb_count || unbind_trailing_vb_count) {
-         u_vbuf_set_vertex_buffers(vbuf, 0, vb_count,
+         u_vbuf_set_vertex_buffers(vbuf, vb_count,
                                    unbind_trailing_vb_count,
                                    take_ownership, vbuffers);
       }
@@ -1333,7 +1333,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
       /* Unbind all buffers in u_vbuf, because we'll use cso_context. */
       unsigned unbind_vb_count = vb_count + unbind_trailing_vb_count;
       if (unbind_vb_count)
-         u_vbuf_set_vertex_buffers(vbuf, 0, 0, unbind_vb_count, false, NULL);
+         u_vbuf_set_vertex_buffers(vbuf, 0, unbind_vb_count, false, NULL);
 
       /* Unset this to make sure the CSO is re-bound on the next use. */
       u_vbuf_unset_vertex_elements(vbuf);
@@ -1344,7 +1344,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
    }
 
    if (vb_count || unbind_trailing_vb_count) {
-      pipe->set_vertex_buffers(pipe, 0, vb_count, unbind_trailing_vb_count,
+      pipe->set_vertex_buffers(pipe, vb_count, unbind_trailing_vb_count,
                                take_ownership, vbuffers);
    }
    cso_set_vertex_elements_direct(ctx, velems);
@@ -1730,7 +1730,7 @@ cso_restore_state(struct cso_context *cso, unsigned unbind)
    if (state_mask & CSO_BIT_VERTEX_ELEMENTS)
       cso_restore_vertex_elements(cso);
    if (unbind & CSO_UNBIND_VERTEX_BUFFER0)
-      cso->base.pipe->set_vertex_buffers(cso->base.pipe, 0, 0, 1, false, NULL);
+      cso->base.pipe->set_vertex_buffers(cso->base.pipe, 0, 1, false, NULL);
    if (state_mask & CSO_BIT_STREAM_OUTPUTS)
       cso_restore_stream_outputs(cso);
    if (state_mask & CSO_BIT_PAUSE_QUERIES)

@@ -105,8 +105,6 @@ fi
 # moving that container to the runner.  So, if BM_KERNEL+BM_DTB are URLs,
 # fetch them instead of looking in the container.
 if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
-  apt-get install -y curl
-
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       "$BM_KERNEL" -o kernel
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
@@ -115,8 +113,8 @@ if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
   cat kernel dtb > Image.gz-dtb
   rm kernel
 else
-  cat $BM_KERNEL $BM_DTB > Image.gz-dtb
-  cp $BM_DTB dtb
+  cat /baremetal-files/"$BM_KERNEL" /baremetal-files/"$BM_DTB".dtb > Image.gz-dtb
+  cp /baremetal-files/"$BM_DTB".dtb dtb
 fi
 
 export PATH=$BM:$PATH

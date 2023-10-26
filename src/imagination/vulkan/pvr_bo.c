@@ -281,9 +281,6 @@ static uint32_t pvr_bo_alloc_to_winsys_flags(uint64_t flags)
    if (flags & PVR_BO_ALLOC_FLAG_PM_FW_PROTECT)
       ws_flags |= PVR_WINSYS_BO_FLAG_PM_FW_PROTECT;
 
-   if (flags & PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC)
-      ws_flags |= PVR_WINSYS_BO_FLAG_ZERO_ON_ALLOC;
-
    return ws_flags;
 }
 
@@ -349,9 +346,6 @@ VkResult pvr_bo_alloc(struct pvr_device *device,
    struct pvr_bo *pvr_bo;
    VkResult result;
 
-   if (PVR_IS_DEBUG_SET(ZERO_BOS))
-      flags |= PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC;
-
    pvr_bo = pvr_bo_alloc_bo(device);
    if (!pvr_bo) {
       result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -374,8 +368,7 @@ VkResult pvr_bo_alloc(struct pvr_device *device,
       if (result != VK_SUCCESS)
          goto err_buffer_destroy;
 
-      if (flags & PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC)
-         VG(VALGRIND_MAKE_MEM_DEFINED(pvr_bo->bo->map, pvr_bo->bo->size));
+      VG(VALGRIND_MAKE_MEM_DEFINED(pvr_bo->bo->map, pvr_bo->bo->size));
    }
 
    result = device->ws->ops->heap_alloc(heap, size, alignment, &pvr_bo->vma);

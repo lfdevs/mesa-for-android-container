@@ -764,10 +764,14 @@ _mesa_query_internal_format_default(struct gl_context *ctx, GLenum target,
       break;
    case GL_NUM_TILING_TYPES_EXT:
       params[0] = 2;
+      if (_mesa_has_MESA_texture_const_bandwidth(ctx))
+         params[0]++;
       break;
    case GL_TILING_TYPES_EXT:
       params[0] = GL_OPTIMAL_TILING_EXT;
       params[1] = GL_LINEAR_TILING_EXT;
+      if (_mesa_has_MESA_texture_const_bandwidth(ctx))
+         params[2] = GL_CONST_BW_TILING_MESA;
       break;
 
    default:

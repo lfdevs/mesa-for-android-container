@@ -281,7 +281,7 @@ agx_primitives_update_direct(struct agx_context *ctx,
  *
  * XXX: How do quads get tessellated?
  */
-static nir_ssa_def *
+static nir_def *
 primitive_fits(nir_builder *b, struct agx_xfb_key *key)
 {
    /* Get the number of vertices per primitive in the current mode, usually just
@@ -293,7 +293,7 @@ primitive_fits(nir_builder *b, struct agx_xfb_key *key)
       verts_per_prim = 6;
 
    /* Get the ID for this invocation */
-   nir_ssa_def *id = nir_load_vertex_id_zero_base(b);
+   nir_def *id = nir_load_vertex_id_zero_base(b);
 
    /* Figure out the ID for the first vertex of the next primitive. Since
     * transform feedback buffers are tightly packed, that's one byte after the
@@ -302,16 +302,16 @@ primitive_fits(nir_builder *b, struct agx_xfb_key *key)
     *
     *    (id - (id % prim size)) + prim size
     */
-   nir_ssa_def *rem = nir_umod_imm(b, id, verts_per_prim);
-   nir_ssa_def *next_id = nir_iadd_imm(b, nir_isub(b, id, rem), verts_per_prim);
+   nir_def *rem = nir_umod_imm(b, id, verts_per_prim);
+   nir_def *next_id = nir_iadd_imm(b, nir_isub(b, id, rem), verts_per_prim);
 
    /* Figure out where that vertex will land */
-   nir_ssa_def *index = nir_iadd(
+   nir_def *index = nir_iadd(
       b, nir_imul(b, nir_load_instance_id(b), nir_load_num_vertices(b)),
       next_id);
 
    /* Now check for overflow in each written buffer */
-   nir_ssa_def *all_fits = nir_imm_true(b);
+   nir_def *all_fits = nir_imm_true(b);
 
    u_foreach_bit(buffer, b->shader->xfb_info->buffers_written) {
       uint16_t stride = b->shader->info.xfb_stride[buffer] * 4;
@@ -320,10 +320,10 @@ primitive_fits(nir_builder *b, struct agx_xfb_key *key)
       /* For this primitive to fit, the next primitive cannot start after the
        * end of the transform feedback buffer.
        */
-      nir_ssa_def *end_offset = nir_imul_imm(b, index, stride);
+      nir_def *end_offset = nir_imul_imm(b, index, stride);
 
       /* Check whether that will remain in bounds */
-      nir_ssa_def *fits =
+      nir_def *fits =
          nir_uge(b, nir_load_xfb_size(b, .base = buffer), end_offset);
 
       /* Accumulate */
@@ -340,8 +340,7 @@ insert_overflow_check(nir_shader *nir, struct agx_xfb_key *key)
 
    /* Extract the current transform feedback shader */
    nir_cf_list list;
-   nir_cf_extract(&list, nir_before_block(nir_start_block(impl)),
-                  nir_after_block(nir_impl_last_block(impl)));
+   nir_cf_extract(&list, nir_before_impl(impl), nir_after_impl(impl));
 
    /* Get a builder for the (now empty) shader */
    nir_builder b = nir_builder_at(nir_after_block(nir_start_block(impl)));
@@ -373,28 +372,24 @@ lower_xfb_output(nir_builder *b, nir_intrinsic_instr *intr,
 
    uint16_t offset = offset_words * 4;
 
-   nir_ssa_def *index = nir_iadd(
+   nir_def *index = nir_iadd(
       b, nir_imul(b, nir_load_instance_id(b), nir_load_num_vertices(b)),
       nir_load_vertex_id_zero_base(b));
 
-   nir_ssa_def *xfb_offset =
+   nir_def *xfb_offset =
       nir_iadd_imm(b, nir_imul_imm(b, index, stride), offset);
 
-   nir_ssa_def *buf = nir_load_xfb_address(b, 64, .base = buffer);
-   nir_ssa_def *addr = nir_iadd(b, buf, nir_u2u64(b, xfb_offset));
+   nir_def *buf = nir_load_xfb_address(b, 64, .base = buffer);
+   nir_def *addr = nir_iadd(b, buf, nir_u2u64(b, xfb_offset));
 
-   nir_ssa_def *value = nir_channels(
+   nir_def *value = nir_channels(
       b, intr->src[0].ssa, BITFIELD_MASK(num_components) << start_component);
-   nir_store_global(b, addr, 4, value, BITFIELD_MASK(num_components));
+   nir_store_global(b, addr, 4, value, nir_component_mask(num_components));
 }
 
 static bool
-lower_xfb(nir_builder *b, nir_instr *instr, UNUSED void *data)
+lower_xfb(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 
@@ -419,32 +414,29 @@ lower_xfb(nir_builder *b, nir_instr *instr, UNUSED void *data)
       }
    }
 
-   nir_instr_remove(instr);
+   nir_instr_remove(&intr->instr);
    return progress;
 }
 
 static bool
-lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
+lower_xfb_intrinsics(struct nir_builder *b, nir_intrinsic_instr *intr,
+                     void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
    struct agx_xfb_key *key = data;
 
    switch (intr->intrinsic) {
    /* XXX: Rename to "xfb index" to avoid the clash */
    case nir_intrinsic_load_vertex_id_zero_base: {
-      nir_ssa_def *id = nir_load_vertex_id(b);
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, id);
+      nir_def *id = nir_load_vertex_id(b);
+      nir_def_rewrite_uses(&intr->def, id);
       return true;
    }
 
    case nir_intrinsic_load_vertex_id: {
       /* Get the raw invocation ID */
-      nir_ssa_def *id = nir_load_vertex_id(b);
+      nir_def *id = nir_load_vertex_id(b);
 
       /* Tessellate by primitive mode */
       if (key->mode == MESA_PRIM_LINE_STRIP ||
@@ -452,9 +444,9 @@ lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
          /* The last vertex is special for a loop. Check if that's we're dealing
           * with.
           */
-         nir_ssa_def *num_invocations =
+         nir_def *num_invocations =
             nir_imul_imm(b, nir_load_num_vertices(b), 2);
-         nir_ssa_def *last_vertex =
+         nir_def *last_vertex =
             nir_ieq(b, id, nir_iadd_imm(b, num_invocations, -1));
 
          /* (0, 1), (1, 2) */
@@ -470,24 +462,24 @@ lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
           * First: (0, 1, 2), (1, 3, 2), (2, 3, 4).
           * Last:  (0, 1, 2), (2, 1, 3), (2, 3, 4).
           */
-         nir_ssa_def *prim = nir_udiv_imm(b, id, 3);
-         nir_ssa_def *rem = nir_umod_imm(b, id, 3);
+         nir_def *prim = nir_udiv_imm(b, id, 3);
+         nir_def *rem = nir_umod_imm(b, id, 3);
 
          unsigned pv = key->flatshade_first ? 0 : 2;
 
          /* Swap the two non-provoking vertices third vertex in odd triangles */
-         nir_ssa_def *even = nir_ieq_imm(b, nir_iand_imm(b, prim, 1), 0);
-         nir_ssa_def *is_provoking = nir_ieq_imm(b, rem, pv);
-         nir_ssa_def *no_swap = nir_ior(b, is_provoking, even);
-         nir_ssa_def *swapped = nir_isub_imm(b, 3 - pv, rem);
-         nir_ssa_def *off = nir_bcsel(b, no_swap, rem, swapped);
+         nir_def *even = nir_ieq_imm(b, nir_iand_imm(b, prim, 1), 0);
+         nir_def *is_provoking = nir_ieq_imm(b, rem, pv);
+         nir_def *no_swap = nir_ior(b, is_provoking, even);
+         nir_def *swapped = nir_isub_imm(b, 3 - pv, rem);
+         nir_def *off = nir_bcsel(b, no_swap, rem, swapped);
 
          /* Pull the (maybe swapped) vertex from the corresponding primitive */
          id = nir_iadd(b, prim, off);
       } else if (key->mode == MESA_PRIM_TRIANGLE_FAN) {
          /* (0, 1, 2), (0, 2, 3) */
-         nir_ssa_def *prim = nir_udiv_imm(b, id, 3);
-         nir_ssa_def *rem = nir_umod_imm(b, id, 3);
+         nir_def *prim = nir_udiv_imm(b, id, 3);
+         nir_def *rem = nir_umod_imm(b, id, 3);
 
          id = nir_bcsel(b, nir_ieq_imm(b, rem, 0), nir_imm_int(b, 0),
                         nir_iadd(b, prim, rem));
@@ -498,9 +490,9 @@ lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
           */
          bool strips = key->mode == MESA_PRIM_QUAD_STRIP;
 
-         nir_ssa_def *prim = nir_udiv_imm(b, id, 6);
-         nir_ssa_def *rem = nir_umod_imm(b, id, 6);
-         nir_ssa_def *base = nir_imul_imm(b, prim, strips ? 2 : 4);
+         nir_def *prim = nir_udiv_imm(b, id, 6);
+         nir_def *rem = nir_umod_imm(b, id, 6);
+         nir_def *base = nir_imul_imm(b, prim, strips ? 2 : 4);
 
          /* Quads:       [0, 1, 3, 3, 1, 2]
           * Quad strips: [0, 1, 3, 0, 2, 3]
@@ -510,7 +502,7 @@ lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
          uint32_t order = strips ? order_strips : order_quads;
 
          /* Index out of the bitpacked array */
-         nir_ssa_def *offset = nir_iand_imm(
+         nir_def *offset = nir_iand_imm(
             b, nir_ushr(b, nir_imm_int(b, order), nir_imul_imm(b, rem, 4)),
             0xF);
 
@@ -524,16 +516,16 @@ lower_xfb_intrinsics(struct nir_builder *b, nir_instr *instr, void *data)
        * vertex ID is just the index as-is.
        */
       if (key->index_size) {
-         nir_ssa_def *index_buffer = nir_load_xfb_index_buffer(b, 64);
-         nir_ssa_def *offset = nir_imul_imm(b, id, key->index_size);
-         nir_ssa_def *address = nir_iadd(b, index_buffer, nir_u2u64(b, offset));
-         nir_ssa_def *index = nir_load_global_constant(
-            b, address, key->index_size, 1, key->index_size * 8);
+         nir_def *index_buffer = nir_load_xfb_index_buffer(b, 64);
+         nir_def *offset = nir_imul_imm(b, id, key->index_size);
+         nir_def *address = nir_iadd(b, index_buffer, nir_u2u64(b, offset));
+         nir_def *index = nir_load_global_constant(b, address, key->index_size,
+                                                   1, key->index_size * 8);
 
          id = nir_u2uN(b, index, id->bit_size);
       }
 
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, id);
+      nir_def_rewrite_uses(&intr->def, id);
       return true;
    }
 
@@ -552,9 +544,9 @@ agx_nir_lower_xfb(nir_shader *nir, struct agx_xfb_key *key)
    NIR_PASS_V(nir, nir_io_add_intrinsic_xfb_info);
 
    NIR_PASS_V(nir, insert_overflow_check, key);
-   NIR_PASS_V(nir, nir_shader_instructions_pass, lower_xfb,
+   NIR_PASS_V(nir, nir_shader_intrinsics_pass, lower_xfb,
               nir_metadata_block_index | nir_metadata_dominance, key);
-   NIR_PASS_V(nir, nir_shader_instructions_pass, lower_xfb_intrinsics,
+   NIR_PASS_V(nir, nir_shader_intrinsics_pass, lower_xfb_intrinsics,
               nir_metadata_block_index | nir_metadata_dominance, key);
 
    /* Lowering XFB creates piles of dead code. Eliminate now so we don't

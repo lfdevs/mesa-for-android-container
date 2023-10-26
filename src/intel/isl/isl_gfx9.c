@@ -25,77 +25,6 @@
 #include "isl_gfx9.h"
 #include "isl_priv.h"
 
-/**
- * Calculate the surface's subimage alignment, in units of surface samples,
- * for the standard tiling formats Yf and Ys.
- */
-static void
-gfx9_calc_std_image_alignment_sa(const struct isl_device *dev,
-                                 const struct isl_surf_init_info *restrict info,
-                                 enum isl_tiling tiling,
-                                 enum isl_msaa_layout msaa_layout,
-                                 struct isl_extent3d *align_sa)
-{
-   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
-
-   assert(isl_tiling_is_std_y(tiling));
-
-   const uint32_t bpb = fmtl->bpb;
-   const uint32_t is_Ys = tiling == ISL_TILING_Ys;
-
-   switch (info->dim) {
-   case ISL_SURF_DIM_1D:
-      /* See the Skylake BSpec > Memory Views > Common Surface Formats > Surface
-       * Layout and Tiling > 1D Surfaces > 1D Alignment Requirements.
-       */
-      *align_sa = (struct isl_extent3d) {
-         .w = 1 << (12 - (ffs(bpb) - 4) + (4 * is_Ys)),
-         .h = 1,
-         .d = 1,
-      };
-      return;
-   case ISL_SURF_DIM_2D:
-      /* See the Skylake BSpec > Memory Views > Common Surface Formats >
-       * Surface Layout and Tiling > 2D Surfaces > 2D/CUBE Alignment
-       * Requirements.
-       */
-      *align_sa = (struct isl_extent3d) {
-         .w = 1 << (6 - ((ffs(bpb) - 4) / 2) + (4 * is_Ys)),
-         .h = 1 << (6 - ((ffs(bpb) - 3) / 2) + (4 * is_Ys)),
-         .d = 1,
-      };
-
-      if (is_Ys) {
-         /* FINISHME(chadv): I don't trust this code. Untested. */
-         isl_finishme("%s:%s: [SKL+] multisample TileYs", __FILE__, __func__);
-
-         switch (msaa_layout) {
-         case ISL_MSAA_LAYOUT_NONE:
-         case ISL_MSAA_LAYOUT_INTERLEAVED:
-            break;
-         case ISL_MSAA_LAYOUT_ARRAY:
-            align_sa->w >>= (ffs(info->samples) - 0) / 2;
-            align_sa->h >>= (ffs(info->samples) - 1) / 2;
-            break;
-         }
-      }
-      return;
-
-   case ISL_SURF_DIM_3D:
-      /* See the Skylake BSpec > Memory Views > Common Surface Formats > Surface
-       * Layout and Tiling > 1D Surfaces > 1D Alignment Requirements.
-       */
-      *align_sa = (struct isl_extent3d) {
-         .w = 1 << (4 - ((ffs(bpb) - 2) / 3) + (4 * is_Ys)),
-         .h = 1 << (4 - ((ffs(bpb) - 4) / 3) + (2 * is_Ys)),
-         .d = 1 << (4 - ((ffs(bpb) - 3) / 3) + (2 * is_Ys)),
-      };
-      return;
-   }
-
-   unreachable("bad isl_surface_type");
-}
-
 void
 isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
                                    const struct isl_surf_init_info *restrict info,
@@ -166,11 +95,15 @@ isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
     */
 
    if (isl_tiling_is_std_y(tiling)) {
-      struct isl_extent3d image_align_sa;
-      gfx9_calc_std_image_alignment_sa(dev, info, tiling, msaa_layout,
-                                     &image_align_sa);
-
-      *image_align_el = isl_extent3d_sa_to_el(info->format, image_align_sa);
+      /* Ys and Yf tiled images are aligned to the tile size */
+      struct isl_tile_info tile_info;
+      isl_tiling_get_info(tiling, info->dim, msaa_layout,
+                          fmtl->bpb, info->samples, &tile_info);
+      *image_align_el = (struct isl_extent3d) {
+         .w = tile_info.logical_extent_el.w,
+         .h = tile_info.logical_extent_el.h,
+         .d = tile_info.logical_extent_el.d,
+      };
       return;
    }
 

@@ -248,10 +248,6 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
          "hevcencode"
    };
 
-   const char *derive_progressive_disallowlist[] = {
-         "ffmpeg"
-   };
-
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
@@ -280,13 +276,11 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
                                    PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
                                    PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE))
          return VA_STATUS_ERROR_OPERATION_FAILED;
-   } else {
-         if(!screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
-                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-                                   PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP))
-            for (i = 0; i < ARRAY_SIZE(derive_progressive_disallowlist); i++)
-               if ((strcmp(derive_progressive_disallowlist[i], proc) == 0))
-                  return VA_STATUS_ERROR_OPERATION_FAILED;
+   } else if (util_format_get_num_planes(surf->buffer->buffer_format) >= 2 &&
+              !screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
+                                       PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                       PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP)) {
+      return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
    surfaces = surf->buffer->get_surfaces(surf->buffer);

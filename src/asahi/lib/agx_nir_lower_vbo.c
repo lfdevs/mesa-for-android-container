@@ -78,8 +78,8 @@ agx_vbo_supports_format(enum pipe_format format)
    return agx_vbo_internal_format(format) != PIPE_FORMAT_NONE;
 }
 
-static nir_ssa_def *
-apply_swizzle_channel(nir_builder *b, nir_ssa_def *vec, unsigned swizzle,
+static nir_def *
+apply_swizzle_channel(nir_builder *b, nir_def *vec, unsigned swizzle,
                       bool is_int)
 {
    switch (swizzle) {
@@ -119,7 +119,7 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    unsigned index = nir_intrinsic_base(intr) + nir_src_as_uint(*offset_src);
 
    struct agx_attribute attrib = vbufs->attributes[index];
-   uint32_t stride = vbufs->strides[attrib.buf];
+   uint32_t stride = attrib.stride;
    uint16_t offset = attrib.src_offset;
 
    const struct util_format_description *desc =
@@ -149,7 +149,7 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
       util_format_is_pure_uint(interchange_format) &&
             !util_format_is_pure_uint(attrib.format)
          ? (interchange_align * 8)
-         : nir_dest_bit_size(intr->dest);
+         : intr->def.bit_size;
 
    /* Non-UNORM R10G10B10A2 loaded as a scalar and unpacked */
    if (interchange_format == PIPE_FORMAT_R32_UINT && !desc->is_array)
@@ -158,12 +158,11 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    /* Calculate the element to fetch the vertex for. Divide the instance ID by
     * the divisor for per-instance data. Divisor=0 specifies per-vertex data.
     */
-   nir_ssa_def *el =
-      (attrib.divisor == 0)
-         ? nir_load_vertex_id(b)
-         : nir_udiv_imm(b, nir_load_instance_id(b), attrib.divisor);
+   nir_def *el = (attrib.divisor == 0)
+                    ? nir_load_vertex_id(b)
+                    : nir_udiv_imm(b, nir_load_instance_id(b), attrib.divisor);
 
-   nir_ssa_def *base = nir_load_vbo_base_agx(b, nir_imm_int(b, attrib.buf));
+   nir_def *base = nir_load_vbo_base_agx(b, nir_imm_int(b, attrib.buf));
 
    assert((stride % interchange_align) == 0 && "must be aligned");
    assert((offset % interchange_align) == 0 && "must be aligned");
@@ -177,21 +176,22 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
     * i.e. the set of formats that support masking.
     */
    if (offset_el == 0 && (stride_el == 2 || stride_el == 4) &&
-       agx_internal_format_supports_mask(interchange_format)) {
+       agx_internal_format_supports_mask(
+          (enum agx_internal_formats)interchange_format)) {
 
       shift = util_logbase2(stride_el);
       stride_el = 1;
    }
 
-   nir_ssa_def *stride_offset_el =
+   nir_def *stride_offset_el =
       nir_iadd_imm(b, nir_imul_imm(b, el, stride_el), offset_el);
 
    /* Load the raw vector */
-   nir_ssa_def *memory = nir_load_constant_agx(
+   nir_def *memory = nir_load_constant_agx(
       b, interchange_comps, interchange_register_size, base, stride_offset_el,
       .format = interchange_format, .base = shift);
 
-   unsigned dest_size = nir_dest_bit_size(intr->dest);
+   unsigned dest_size = intr->def.bit_size;
 
    /* Unpack but do not convert non-native non-array formats */
    if (is_rgb10_a2(desc) && interchange_format == PIPE_FORMAT_R32_UINT) {
@@ -240,14 +240,15 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    /* We now have a properly formatted vector of the components in memory. Apply
     * the format swizzle forwards to trim/pad/reorder as needed.
     */
-   nir_ssa_def *channels[4] = {NULL};
-   assert(nir_intrinsic_component(intr) == 0 && "unimplemented");
+   nir_def *channels[4] = {NULL};
 
-   for (unsigned i = 0; i < intr->num_components; ++i)
-      channels[i] = apply_swizzle_channel(b, memory, desc->swizzle[i], is_int);
+   for (unsigned i = 0; i < intr->num_components; ++i) {
+      unsigned c = nir_intrinsic_component(intr) + i;
+      channels[i] = apply_swizzle_channel(b, memory, desc->swizzle[c], is_int);
+   }
 
-   nir_ssa_def *logical = nir_vec(b, channels, intr->num_components);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, logical);
+   nir_def *logical = nir_vec(b, channels, intr->num_components);
+   nir_def_rewrite_uses(&intr->def, logical);
    return true;
 }
 

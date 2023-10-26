@@ -32,34 +32,34 @@ typedef struct {
    unsigned rast_prim;
 } lower_fs_barycentric_state;
 
-static nir_ssa_def *
-lower_interp_center_smooth(nir_builder *b, nir_ssa_def *offset)
+static nir_def *
+lower_interp_center_smooth(nir_builder *b, nir_def *offset)
 {
-   nir_ssa_def *pull_model = nir_load_barycentric_model(b, 32);
+   nir_def *pull_model = nir_load_barycentric_model(b, 32);
 
-   nir_ssa_def *deriv_x =
+   nir_def *deriv_x =
       nir_vec3(b, nir_fddx_fine(b, nir_channel(b, pull_model, 0)), nir_fddx_fine(b, nir_channel(b, pull_model, 1)),
                nir_fddx_fine(b, nir_channel(b, pull_model, 2)));
-   nir_ssa_def *deriv_y =
+   nir_def *deriv_y =
       nir_vec3(b, nir_fddy_fine(b, nir_channel(b, pull_model, 0)), nir_fddy_fine(b, nir_channel(b, pull_model, 1)),
                nir_fddy_fine(b, nir_channel(b, pull_model, 2)));
 
-   nir_ssa_def *offset_x = nir_channel(b, offset, 0);
-   nir_ssa_def *offset_y = nir_channel(b, offset, 1);
+   nir_def *offset_x = nir_channel(b, offset, 0);
+   nir_def *offset_y = nir_channel(b, offset, 1);
 
-   nir_ssa_def *adjusted_x = nir_fadd(b, pull_model, nir_fmul(b, deriv_x, offset_x));
-   nir_ssa_def *adjusted = nir_fadd(b, adjusted_x, nir_fmul(b, deriv_y, offset_y));
+   nir_def *adjusted_x = nir_fadd(b, pull_model, nir_fmul(b, deriv_x, offset_x));
+   nir_def *adjusted = nir_fadd(b, adjusted_x, nir_fmul(b, deriv_y, offset_y));
 
-   nir_ssa_def *ij = nir_vec2(b, nir_channel(b, adjusted, 0), nir_channel(b, adjusted, 1));
+   nir_def *ij = nir_vec2(b, nir_channel(b, adjusted, 0), nir_channel(b, adjusted, 1));
 
    /* Get W by using the reciprocal of 1/W. */
-   nir_ssa_def *w = nir_frcp(b, nir_channel(b, adjusted, 2));
+   nir_def *w = nir_frcp(b, nir_channel(b, adjusted, 2));
 
    return nir_fmul(b, ij, w);
 }
 
-static nir_ssa_def *
-lower_barycentric_coord_at_offset(nir_builder *b, nir_ssa_def *src, enum glsl_interp_mode mode)
+static nir_def *
+lower_barycentric_coord_at_offset(nir_builder *b, nir_def *src, enum glsl_interp_mode mode)
 {
    if (mode == INTERP_MODE_SMOOTH)
       return lower_interp_center_smooth(b, src);
@@ -67,15 +67,15 @@ lower_barycentric_coord_at_offset(nir_builder *b, nir_ssa_def *src, enum glsl_in
    return nir_load_barycentric_at_offset(b, 32, src, .interp_mode = mode);
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_barycentric_coord_at_sample(nir_builder *b, lower_fs_barycentric_state *state, nir_intrinsic_instr *intrin)
 {
    const enum glsl_interp_mode mode = (enum glsl_interp_mode)nir_intrinsic_interp_mode(intrin);
-   nir_ssa_def *num_samples = nir_load_rasterization_samples_amd(b);
-   nir_ssa_def *new_dest;
+   nir_def *num_samples = nir_load_rasterization_samples_amd(b);
+   nir_def *new_dest;
 
    if (state->dynamic_rasterization_samples) {
-      nir_ssa_def *res1, *res2;
+      nir_def *res1, *res2;
 
       nir_push_if(b, nir_ieq_imm(b, num_samples, 1));
       {
@@ -83,7 +83,7 @@ lower_barycentric_coord_at_sample(nir_builder *b, lower_fs_barycentric_state *st
       }
       nir_push_else(b, NULL);
       {
-         nir_ssa_def *sample_pos = nir_load_sample_positions_amd(b, 32, intrin->src[0].ssa, num_samples);
+         nir_def *sample_pos = nir_load_sample_positions_amd(b, 32, intrin->src[0].ssa, num_samples);
 
          /* sample_pos -= 0.5 */
          sample_pos = nir_fadd_imm(b, sample_pos, -0.5f);
@@ -97,7 +97,7 @@ lower_barycentric_coord_at_sample(nir_builder *b, lower_fs_barycentric_state *st
       if (!state->num_rasterization_samples) {
          new_dest = nir_load_barycentric_pixel(b, 32, .interp_mode = nir_intrinsic_interp_mode(intrin));
       } else {
-         nir_ssa_def *sample_pos = nir_load_sample_positions_amd(b, 32, intrin->src[0].ssa, num_samples);
+         nir_def *sample_pos = nir_load_sample_positions_amd(b, 32, intrin->src[0].ssa, num_samples);
 
          /* sample_pos -= 0.5 */
          sample_pos = nir_fadd_imm(b, sample_pos, -0.5f);
@@ -109,7 +109,7 @@ lower_barycentric_coord_at_sample(nir_builder *b, lower_fs_barycentric_state *st
    return new_dest;
 }
 
-static nir_ssa_def *
+static nir_def *
 get_interp_param(nir_builder *b, lower_fs_barycentric_state *state, nir_intrinsic_instr *intrin)
 {
    const enum glsl_interp_mode mode = (enum glsl_interp_mode)nir_intrinsic_interp_mode(intrin);
@@ -130,10 +130,10 @@ get_interp_param(nir_builder *b, lower_fs_barycentric_state *state, nir_intrinsi
    return NULL;
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_point(nir_builder *b)
 {
-   nir_ssa_def *coords[3];
+   nir_def *coords[3];
 
    coords[0] = nir_imm_float(b, 1.0f);
    coords[1] = nir_imm_float(b, 0.0f);
@@ -142,10 +142,10 @@ lower_point(nir_builder *b)
    return nir_vec(b, coords, 3);
 }
 
-static nir_ssa_def *
-lower_line(nir_builder *b, nir_ssa_def *p1, nir_ssa_def *p2)
+static nir_def *
+lower_line(nir_builder *b, nir_def *p1, nir_def *p2)
 {
-   nir_ssa_def *coords[3];
+   nir_def *coords[3];
 
    coords[1] = nir_fadd(b, p1, p2);
    coords[0] = nir_fsub_imm(b, 1.0f, coords[1]);
@@ -154,20 +154,20 @@ lower_line(nir_builder *b, nir_ssa_def *p1, nir_ssa_def *p2)
    return nir_vec(b, coords, 3);
 }
 
-static nir_ssa_def *
-lower_triangle(nir_builder *b, nir_ssa_def *p1, nir_ssa_def *p2)
+static nir_def *
+lower_triangle(nir_builder *b, nir_def *p1, nir_def *p2)
 {
-   nir_ssa_def *v0_bary[3], *v1_bary[3], *v2_bary[3];
-   nir_ssa_def *coords[3];
+   nir_def *v0_bary[3], *v1_bary[3], *v2_bary[3];
+   nir_def *coords[3];
 
    /* Compute the provoking vertex ID:
     *
     * quad_id = thread_id >> 2
     * provoking_vtx_id = (provoking_vtx >> (quad_id << 1)) & 3
     */
-   nir_ssa_def *quad_id = nir_ushr_imm(b, nir_load_subgroup_invocation(b), 2);
-   nir_ssa_def *provoking_vtx = nir_load_provoking_vtx_amd(b);
-   nir_ssa_def *provoking_vtx_id = nir_ubfe(b, provoking_vtx, nir_ishl_imm(b, quad_id, 1), nir_imm_int(b, 2));
+   nir_def *quad_id = nir_ushr_imm(b, nir_load_subgroup_invocation(b), 2);
+   nir_def *provoking_vtx = nir_load_provoking_vtx_amd(b);
+   nir_def *provoking_vtx_id = nir_ubfe(b, provoking_vtx, nir_ishl_imm(b, quad_id, 1), nir_imm_int(b, 2));
 
    /* Compute barycentrics. */
    v0_bary[0] = nir_fsub(b, nir_fsub_imm(b, 1.0f, p2), p1);
@@ -194,30 +194,30 @@ lower_triangle(nir_builder *b, nir_ssa_def *p1, nir_ssa_def *p2)
 static bool
 lower_load_barycentric_coord(nir_builder *b, lower_fs_barycentric_state *state, nir_intrinsic_instr *intrin)
 {
-   nir_ssa_def *interp, *p1, *p2;
-   nir_ssa_def *new_dest;
+   nir_def *interp, *p1, *p2;
+   nir_def *new_dest;
 
    b->cursor = nir_after_instr(&intrin->instr);
 
    /* When the rasterization primitive isn't known at compile time (GPL), load it. */
    if (state->rast_prim == -1) {
-      nir_ssa_def *rast_prim = nir_load_rasterization_primitive_amd(b);
-      nir_ssa_def *res1, *res2;
+      nir_def *rast_prim = nir_load_rasterization_primitive_amd(b);
+      nir_def *res1, *res2;
 
-      nir_ssa_def *is_point = nir_ieq_imm(b, rast_prim, V_028A6C_POINTLIST);
+      nir_def *is_point = nir_ieq_imm(b, rast_prim, V_028A6C_POINTLIST);
       nir_if *if_point = nir_push_if(b, is_point);
       {
          res1 = lower_point(b);
       }
       nir_push_else(b, if_point);
       {
-         nir_ssa_def *res_line, *res_triangle;
+         nir_def *res_line, *res_triangle;
 
          interp = get_interp_param(b, state, intrin);
          p1 = nir_channel(b, interp, 0);
          p2 = nir_channel(b, interp, 1);
 
-         nir_ssa_def *is_line = nir_ieq_imm(b, rast_prim, V_028A6C_LINESTRIP);
+         nir_def *is_line = nir_ieq_imm(b, rast_prim, V_028A6C_LINESTRIP);
          nir_if *if_line = nir_push_if(b, is_line);
          {
             res_line = lower_line(b, p1, p2);
@@ -250,7 +250,7 @@ lower_load_barycentric_coord(nir_builder *b, lower_fs_barycentric_state *state, 
       }
    }
 
-   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, new_dest);
+   nir_def_rewrite_uses(&intrin->def, new_dest);
    nir_instr_remove(&intrin->instr);
 
    return true;

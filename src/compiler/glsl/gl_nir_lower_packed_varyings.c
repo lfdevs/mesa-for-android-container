@@ -359,7 +359,7 @@ get_packed_varying_deref(struct lower_packed_varyings_state *state,
 struct packing_store_values {
    bool is_64bit;
    unsigned writemasks[2];
-   nir_ssa_def *values[2];
+   nir_def *values[2];
    nir_deref_instr *deref;
 };
 
@@ -374,7 +374,7 @@ bitwise_assign_pack(struct lower_packed_varyings_state *state,
                     nir_deref_instr *packed_deref,
                     nir_deref_instr *unpacked_deref,
                     const struct glsl_type *unpacked_type,
-                    nir_ssa_def *value,
+                    nir_def *value,
                     unsigned writemask)
 
 {
@@ -406,7 +406,7 @@ bitwise_assign_pack(struct lower_packed_varyings_state *state,
 
             unsigned swiz_x = 0;
             unsigned writemask = 0x3;
-            nir_ssa_def *swizzle = nir_swizzle(&state->b, value, &swiz_x, 1);
+            nir_def *swizzle = nir_swizzle(&state->b, value, &swiz_x, 1);
 
             store_state->is_64bit = true;
             store_state->deref = packed_deref;
@@ -450,7 +450,7 @@ bitwise_assign_unpack(struct lower_packed_varyings_state *state,
                       nir_deref_instr *unpacked_deref,
                       nir_deref_instr *packed_deref,
                       const struct glsl_type *unpacked_type,
-                      nir_ssa_def *value, unsigned writemask)
+                      nir_def *value, unsigned writemask)
 {
    nir_variable *packed_var = nir_deref_instr_get_variable(packed_deref);
 
@@ -523,7 +523,7 @@ bitwise_assign_unpack(struct lower_packed_varyings_state *state,
 
 static void
 create_store_deref(struct lower_packed_varyings_state *state,
-                   nir_deref_instr *deref, nir_ssa_def *value,
+                   nir_deref_instr *deref, nir_def *value,
                    unsigned writemask, bool is_64bit)
 {
    /* If dest and value have different number of components pack the srcs
@@ -532,7 +532,7 @@ create_store_deref(struct lower_packed_varyings_state *state,
    const struct glsl_type *type = glsl_without_array(deref->type);
    unsigned comps = glsl_get_vector_elements(type);
    if (value->num_components != comps) {
-      nir_ssa_def *srcs[4];
+      nir_def *srcs[4];
 
       unsigned comp = 0;
       for (unsigned i = 0; i < comps; i++) {
@@ -543,7 +543,7 @@ create_store_deref(struct lower_packed_varyings_state *state,
                srcs[i] = nir_swizzle(&state->b, value, &comp, 1);
             comp++;
          } else {
-            srcs[i] = nir_ssa_undef(&state->b, 1,
+            srcs[i] = nir_undef(&state->b, 1,
                                     glsl_type_is_64bit(type) ? 64 : 32);
          }
       }
@@ -555,7 +555,7 @@ create_store_deref(struct lower_packed_varyings_state *state,
 
 static unsigned
 lower_varying(struct lower_packed_varyings_state *state,
-              nir_ssa_def *rhs_swizzle, unsigned writemask,
+              nir_def *rhs_swizzle, unsigned writemask,
               const struct glsl_type *type, unsigned fine_location,
               nir_variable *unpacked_var, nir_deref_instr *unpacked_var_deref,
               const char *name, bool gs_input_toplevel, unsigned vertex_index);
@@ -576,7 +576,7 @@ lower_varying(struct lower_packed_varyings_state *state,
  */
 static unsigned
 lower_arraylike(struct lower_packed_varyings_state *state,
-                nir_ssa_def *rhs_swizzle, unsigned writemask,
+                nir_def *rhs_swizzle, unsigned writemask,
                 const struct glsl_type *type, unsigned fine_location,
                 nir_variable *unpacked_var, nir_deref_instr *unpacked_var_deref,
                 const char *name, bool gs_input_toplevel, unsigned vertex_index)
@@ -640,7 +640,7 @@ lower_arraylike(struct lower_packed_varyings_state *state,
  */
 static unsigned
 lower_varying(struct lower_packed_varyings_state *state,
-              nir_ssa_def *rhs_swizzle, unsigned writemask,
+              nir_def *rhs_swizzle, unsigned writemask,
               const struct glsl_type *type, unsigned fine_location,
               nir_variable *unpacked_var, nir_deref_instr *unpacked_var_deref,
               const char *name, bool gs_input_toplevel, unsigned vertex_index)
@@ -741,10 +741,10 @@ lower_varying(struct lower_packed_varyings_state *state,
             ralloc_asprintf(state->mem_ctx, "%s.%s", name, left_swizzle_name) :
             NULL;
 
-         nir_ssa_def *left_swizzle = NULL;
+         nir_def *left_swizzle = NULL;
          unsigned left_writemask = ~0u;
          if (state->mode == nir_var_shader_out) {
-            nir_ssa_def *ssa_def = rhs_swizzle ?
+            nir_def *ssa_def = rhs_swizzle ?
                rhs_swizzle : nir_load_deref(&state->b, unpacked_var_deref);
             left_swizzle =
                nir_swizzle(&state->b, ssa_def,
@@ -767,10 +767,10 @@ lower_varying(struct lower_packed_varyings_state *state,
          ralloc_asprintf(state->mem_ctx, "%s.%s", name, right_swizzle_name) :
          NULL;
 
-      nir_ssa_def *right_swizzle = NULL;
+      nir_def *right_swizzle = NULL;
       unsigned right_writemask = ~0u;
       if (state->mode == nir_var_shader_out) {
-        nir_ssa_def *ssa_def = rhs_swizzle ?
+        nir_def *ssa_def = rhs_swizzle ?
            rhs_swizzle : nir_load_deref(&state->b, unpacked_var_deref);
         right_swizzle =
            nir_swizzle(&state->b, ssa_def,
@@ -810,7 +810,7 @@ lower_varying(struct lower_packed_varyings_state *state,
       struct packing_store_values *store_value;
       if (state->mode == nir_var_shader_out) {
          unsigned writemask = ((1 << components) - 1) << location_frac;
-         nir_ssa_def *value = rhs_swizzle ? rhs_swizzle :
+         nir_def *value = rhs_swizzle ? rhs_swizzle :
             nir_load_deref(&state->b, unpacked_var_deref);
 
          store_value =
@@ -822,9 +822,9 @@ lower_varying(struct lower_packed_varyings_state *state,
             swizzle_values[i] = i + location_frac;
          }
 
-         nir_ssa_def *ssa_def = &packed_deref->dest.ssa;
+         nir_def *ssa_def = &packed_deref->def;
          ssa_def = nir_load_deref(&state->b, packed_deref);
-         nir_ssa_def *swizzle =
+         nir_def *swizzle =
             nir_swizzle(&state->b, ssa_def, swizzle_values, components);
 
          store_value = bitwise_assign_unpack(state, unpacked_var_deref,
@@ -937,7 +937,7 @@ lower_packed_inputs(struct lower_packed_varyings_state *state)
    /* Shader inputs need to be lowered at the beginning of main() so set bulder
     * cursor to insert packing code at the start of the main function.
     */
-   state->b.cursor = nir_before_block(nir_start_block(state->impl));
+   state->b.cursor = nir_before_impl(state->impl);
 
    /* insert new varyings, lower old ones to locals and add unpacking code a
     * the start of the shader.

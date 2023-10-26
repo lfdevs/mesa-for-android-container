@@ -185,9 +185,9 @@ GeometryShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
    case nir_intrinsic_end_primitive:
       return emit_vertex(intr, true);
    case nir_intrinsic_load_primitive_id:
-      return emit_simple_mov(intr->dest, 0, m_primitive_id);
+      return emit_simple_mov(intr->def, 0, m_primitive_id);
    case nir_intrinsic_load_invocation_id:
-      return emit_simple_mov(intr->dest, 0, m_invocation_id);
+      return emit_simple_mov(intr->def, 0, m_invocation_id);
    case nir_intrinsic_load_per_vertex_input:
       return emit_load_per_vertex_input(intr);
    default:;
@@ -320,10 +320,10 @@ GeometryShader::store_output(nir_intrinsic_instr *instr)
 bool
 GeometryShader::emit_load_per_vertex_input(nir_intrinsic_instr *instr)
 {
-   auto dest = value_factory().dest_vec4(instr->dest, pin_group);
+   auto dest = value_factory().dest_vec4(instr->def, pin_group);
 
    RegisterVec4::Swizzle dest_swz{7, 7, 7, 7};
-   for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+   for (unsigned i = 0; i < instr->def.num_components; ++i) {
       dest_swz[i] = i + nir_intrinsic_component(instr);
    }
 

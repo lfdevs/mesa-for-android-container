@@ -152,7 +152,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
 
          bool has_ycbcr_sampler = false;
          for (unsigned i = 0; i < pCreateInfo->pBindings[j].descriptorCount; ++i) {
-            if (radv_sampler_from_handle(pCreateInfo->pBindings[j].pImmutableSamplers[i])->ycbcr_sampler)
+            if (radv_sampler_from_handle(pCreateInfo->pBindings[j].pImmutableSamplers[i])->vk.ycbcr_conversion)
                has_ycbcr_sampler = true;
          }
 
@@ -240,7 +240,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
          if (binding->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && binding->pImmutableSamplers) {
             for (unsigned i = 0; i < binding->descriptorCount; ++i) {
                struct vk_ycbcr_conversion *conversion =
-                  radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler;
+                  radv_sampler_from_handle(binding->pImmutableSamplers[i])->vk.ycbcr_conversion;
 
                if (conversion) {
                   has_ycbcr_sampler = true;
@@ -351,8 +351,9 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
             if (has_ycbcr_sampler) {
                ycbcr_sampler_offsets[b] = (const char *)ycbcr_samplers - (const char *)set_layout;
                for (uint32_t i = 0; i < binding->descriptorCount; i++) {
-                  if (radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler)
-                     ycbcr_samplers[i] = radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler->state;
+                  if (radv_sampler_from_handle(binding->pImmutableSamplers[i])->vk.ycbcr_conversion)
+                     ycbcr_samplers[i] =
+                        radv_sampler_from_handle(binding->pImmutableSamplers[i])->vk.ycbcr_conversion->state;
                   else
                      ycbcr_samplers[i].format = VK_FORMAT_UNDEFINED;
                }

@@ -82,7 +82,7 @@ namespace
       {
          nir_alu_instr *alu = find_op(op);
          EXPECT_TRUE(alu != NULL);
-         return alu->dest.dest.ssa.bit_size;
+         return alu->def.bit_size;
       }
 
       char *get_fs_ir(void) {

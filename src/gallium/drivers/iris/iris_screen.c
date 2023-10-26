@@ -62,6 +62,9 @@
 
 #define genX_call(devinfo, func, ...)             \
    switch ((devinfo)->verx10) {                   \
+   case 200:                                      \
+      gfx20_##func(__VA_ARGS__);                  \
+      break;                                      \
    case 125:                                      \
       gfx125_##func(__VA_ARGS__);                 \
       break;                                      \
@@ -120,14 +123,14 @@ iris_enable_clover()
 }
 
 static void
-iris_warn_clover()
+iris_warn_cl()
 {
    static bool warned = false;
    if (warned)
       return;
 
    warned = true;
-   fprintf(stderr, "WARNING: OpenCL support via iris+clover is incomplete.\n"
+   fprintf(stderr, "WARNING: OpenCL support via iris driver is incomplete.\n"
                    "For a complete and conformant OpenCL implementation, use\n"
                    "https://github.com/intel/compute-runtime instead\n");
 }
@@ -252,7 +255,6 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -298,6 +300,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_LEGACY_MATH_RULES:
    case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
    case PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE:
+   case PIPE_CAP_HAS_CONST_BW:
       return true;
    case PIPE_CAP_UMA:
       return iris_bufmgr_vram_size(screen->bufmgr) == 0;
@@ -551,8 +554,6 @@ iris_get_shader_param(struct pipe_screen *pscreen,
          irs |= 1 << PIPE_SHADER_IR_NIR_SERIALIZED;
       return irs;
    }
-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-      return 1;
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return 0;
@@ -581,10 +582,10 @@ iris_get_compute_param(struct pipe_screen *pscreen,
 
    switch (param) {
    case PIPE_COMPUTE_CAP_ADDRESS_BITS:
-      /* This gets queried on clover device init and is never queried by the
+      /* This gets queried on OpenCL device init and is never queried by the
        * OpenGL state tracker.
        */
-      iris_warn_clover();
+      iris_warn_cl();
       RET((uint32_t []){ 64 });
 
    case PIPE_COMPUTE_CAP_IR_TARGET:
@@ -668,6 +669,7 @@ iris_screen_destroy(struct iris_screen *screen)
    util_queue_destroy(&screen->shader_compiler_queue);
    glsl_type_singleton_decref();
    iris_bo_unreference(screen->workaround_bo);
+   iris_bo_unreference(screen->breakpoint_bo);
    u_transfer_helper_destroy(screen->base.transfer_helper);
    iris_bufmgr_unref(screen->bufmgr);
    disk_cache_destroy(screen->disk_cache);
@@ -850,6 +852,11 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    if (!screen->workaround_bo)
       return NULL;
 
+   screen->breakpoint_bo = iris_bo_alloc(screen->bufmgr, "breakpoint", 4, 4,
+                                         IRIS_MEMZONE_OTHER, BO_ALLOC_ZEROED);
+   if (!screen->breakpoint_bo)
+      return NULL;
+
    if (!iris_init_identifier_bo(screen))
       return NULL;
 
@@ -857,7 +864,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       driQueryOptionb(config->options, "dual_color_blend_by_location");
    screen->driconf.disable_throttling =
       driQueryOptionb(config->options, "disable_throttling");
-   screen->driconf.always_flush_cache =
+   screen->driconf.always_flush_cache = INTEL_DEBUG(DEBUG_STALL) ||
       driQueryOptionb(config->options, "always_flush_cache");
    screen->driconf.sync_compile =
       driQueryOptionb(config->options, "sync_compile");
@@ -865,6 +872,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       driQueryOptionb(config->options, "limit_trig_input_range");
    screen->driconf.lower_depth_range_rate =
       driQueryOptionf(config->options, "lower_depth_range_rate");
+   screen->driconf.intel_enable_wa_14018912822 =
+      driQueryOptionb(config->options, "intel_enable_wa_14018912822");
 
    screen->precompile = debug_get_bool_option("shader_precompile", true);
 

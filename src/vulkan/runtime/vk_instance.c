@@ -24,6 +24,7 @@
 #include "vk_instance.h"
 
 #include "util/libdrm.h"
+#include "util/perf/cpu_trace.h"
 
 #include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
@@ -53,6 +54,8 @@ vk_instance_init(struct vk_instance *instance,
    memset(instance, 0, sizeof(*instance));
    vk_object_base_init(NULL, &instance->base, VK_OBJECT_TYPE_INSTANCE);
    instance->alloc = *alloc;
+
+   util_cpu_trace_init();
 
    /* VK_EXT_debug_utils */
    /* These messengers will only be used during vkCreateInstance or

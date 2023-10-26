@@ -66,7 +66,6 @@ glx_message(int level, const char *f, ...)
 
    /* Note that the _LOADER_* levels are lower numbers for more severe. */
    if (level <= threshold) {
-      fprintf(stderr, "libGL%s: ", level <= _LOADER_WARNING ? " error" : "");
       va_start(args, f);
       vfprintf(stderr, f, args);
       va_end(args);
@@ -557,19 +556,6 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
       case GLX_VISUAL_SELECT_GROUP_SGIX:
          config->visualSelectGroup = *bp++;
          break;
-      case GLX_SWAP_METHOD_OML:
-         if (*bp == GLX_SWAP_UNDEFINED_OML ||
-             *bp == GLX_SWAP_COPY_OML ||
-             *bp == GLX_SWAP_EXCHANGE_OML) {
-            config->swapMethod = *bp++;
-         } else {
-            /* X servers with old HW drivers may return any value here, so
-             * assume GLX_SWAP_METHOD_UNDEFINED.
-             */
-            config->swapMethod = GLX_SWAP_UNDEFINED_OML;
-            bp++;
-         }
-         break;
 #endif
       case GLX_SAMPLE_BUFFERS_SGIS:
          config->sampleBuffers = *bp++;
@@ -778,10 +764,11 @@ glx_screen_cleanup(struct glx_screen *psc)
 ** If that works then fetch the per screen configs data.
 */
 static Bool
-AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
+AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, Bool zink)
 {
    struct glx_screen *psc;
    GLint i, screens;
+   unsigned screen_count = 0;
 
    /*
     ** First allocate memory for the array of per screen configs.
@@ -791,7 +778,7 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
    if (!priv->screens)
       return GL_FALSE;
 
-   for (i = 0; i < screens; i++, psc++) {
+   for (i = 0; i < screens; i++) {
       psc = NULL;
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 #if defined(GLX_USE_DRM)
@@ -818,17 +805,21 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
       if (psc == NULL)
          psc = applegl_create_screen(i, priv);
 #else
-      if (psc == NULL)
+      if (psc == NULL && !zink)
       {
          psc = indirect_create_screen(i, priv);
          indirect = true;
       }
 #endif
       priv->screens[i] = psc;
+      if (psc)
+         screen_count++;
 
       if(indirect) /* Load extensions required only for indirect glx */
          glxSendClientInfo(priv, i);
    }
+   if (zink && !screen_count)
+      return GL_FALSE;
    SyncHandle();
    return GL_TRUE;
 }
@@ -890,9 +881,9 @@ __glXInitialize(Display * dpy)
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
    Bool glx_accel = !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
-   Bool zink;
    const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
-   zink = env && !strcmp(env, "zink");
+   Bool zink = env && !strcmp(env, "zink");
+   Bool try_zink = False;
 
    dpyPriv->drawHash = __glxHashCreate();
 
@@ -914,10 +905,13 @@ __glXInitialize(Display * dpy)
 #endif /* HAVE_DRI3 */
       if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false))
          dpyPriv->dri2Display = dri2CreateDisplay(dpy);
+      if (!dpyPriv->dri3Display && !dpyPriv->dri2Display)
+         try_zink = !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false) &&
+                    !getenv("GALLIUM_DRIVER");
    }
 #endif /* GLX_USE_DRM */
    if (glx_direct)
-      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink);
+      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink | try_zink);
 
 #ifdef GLX_USE_WINDOWSGL
    if (glx_direct && glx_accel)
@@ -932,9 +926,18 @@ __glXInitialize(Display * dpy)
    }
 #endif
 
-   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv)) {
-      free(dpyPriv);
-      return NULL;
+   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, zink | try_zink)) {
+      Bool fail = True;
+      if (try_zink) {
+         free(dpyPriv->screens);
+         dpyPriv->driswDisplay->destroyDisplay(dpyPriv->driswDisplay);
+         dpyPriv->driswDisplay = driswCreateDisplay(dpy, false);
+         fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False);
+      }
+      if (fail) {
+         free(dpyPriv);
+         return NULL;
+      }
    }
 
    glxSendClientInfo(dpyPriv, -1);

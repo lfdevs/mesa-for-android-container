@@ -1,6 +1,7 @@
 use crate::api::event::create_and_queue;
 use crate::api::icd::*;
 use crate::api::util::*;
+use crate::core::device::*;
 use crate::core::event::*;
 use crate::core::queue::*;
 
@@ -40,14 +41,30 @@ impl CLInfo<cl_command_queue_info> for cl_command_queue {
 }
 
 fn valid_command_queue_properties(properties: cl_command_queue_properties) -> bool {
-    let valid_flags =
-        cl_bitfield::from(CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE);
+    let valid_flags = cl_bitfield::from(
+        CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
+            | CL_QUEUE_PROFILING_ENABLE
+            | CL_QUEUE_ON_DEVICE
+            | CL_QUEUE_ON_DEVICE_DEFAULT,
+    );
     properties & !valid_flags == 0
 }
 
-fn supported_command_queue_properties(properties: cl_command_queue_properties) -> bool {
-    let valid_flags = cl_bitfield::from(CL_QUEUE_PROFILING_ENABLE);
-    properties & !valid_flags == 0
+fn supported_command_queue_properties(
+    dev: &Device,
+    properties: cl_command_queue_properties,
+) -> bool {
+    let profiling = cl_bitfield::from(CL_QUEUE_PROFILING_ENABLE);
+    let valid_flags = profiling;
+    if properties & !valid_flags != 0 {
+        return false;
+    }
+
+    if properties & profiling != 0 && !dev.has_timestamp {
+        return false;
+    }
+
+    true
 }
 
 pub fn create_command_queue_impl(
@@ -70,7 +87,7 @@ pub fn create_command_queue_impl(
     }
 
     // CL_INVALID_QUEUE_PROPERTIES if values specified in properties are valid but are not supported by the device.
-    if !supported_command_queue_properties(properties) {
+    if !supported_command_queue_properties(d, properties) {
         return Err(CL_INVALID_QUEUE_PROPERTIES);
     }
 
@@ -97,9 +114,6 @@ fn create_command_queue_with_properties(
     device: cl_device_id,
     properties: *const cl_queue_properties,
 ) -> CLResult<cl_command_queue> {
-    let c = context.get_arc()?;
-    let d = device.get_ref()?.to_static().ok_or(CL_INVALID_DEVICE)?;
-
     let mut queue_properties = cl_command_queue_properties::default();
     let properties = if properties.is_null() {
         None
@@ -119,12 +133,7 @@ fn create_command_queue_with_properties(
         Some(properties)
     };
 
-    Ok(cl_command_queue::from_arc(Queue::new(
-        c,
-        d,
-        queue_properties,
-        properties,
-    )?))
+    create_command_queue_impl(context, device, queue_properties, properties)
 }
 
 #[cl_entrypoint]

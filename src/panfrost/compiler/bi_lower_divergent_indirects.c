@@ -38,12 +38,9 @@
  */
 
 static bool
-bi_lower_divergent_indirects_impl(nir_builder *b, nir_instr *instr, void *data)
+bi_lower_divergent_indirects_impl(nir_builder *b, nir_intrinsic_instr *intr,
+                                  void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    gl_shader_stage stage = b->shader->info.stage;
    nir_src *offset;
 
@@ -78,43 +75,42 @@ bi_lower_divergent_indirects_impl(nir_builder *b, nir_instr *instr, void *data)
 
    /* This indirect does need it */
 
-   b->cursor = nir_before_instr(instr);
-   nir_ssa_def *lane = nir_load_subgroup_invocation(b);
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *lane = nir_load_subgroup_invocation(b);
    unsigned *lanes = data;
 
    /* Write zero in a funny way to bypass lower_load_const_to_scalar */
    bool has_dest = nir_intrinsic_infos[intr->intrinsic].has_dest;
-   unsigned size = has_dest ? nir_dest_bit_size(intr->dest) : 32;
-   nir_ssa_def *zero = has_dest ? nir_imm_zero(b, 1, size) : NULL;
-   nir_ssa_def *zeroes[4] = {zero, zero, zero, zero};
-   nir_ssa_def *res =
-      has_dest ? nir_vec(b, zeroes, nir_dest_num_components(intr->dest)) : NULL;
+   unsigned size = has_dest ? intr->def.bit_size : 32;
+   nir_def *zero = has_dest ? nir_imm_zero(b, 1, size) : NULL;
+   nir_def *zeroes[4] = {zero, zero, zero, zero};
+   nir_def *res =
+      has_dest ? nir_vec(b, zeroes, intr->def.num_components) : NULL;
 
    for (unsigned i = 0; i < (*lanes); ++i) {
       nir_push_if(b, nir_ieq_imm(b, lane, i));
 
-      nir_instr *c = nir_instr_clone(b->shader, instr);
+      nir_instr *c = nir_instr_clone(b->shader, &intr->instr);
       nir_intrinsic_instr *c_intr = nir_instr_as_intrinsic(c);
       nir_builder_instr_insert(b, c);
       nir_pop_if(b, NULL);
 
       if (has_dest) {
-         assert(c_intr->dest.is_ssa);
-         nir_ssa_def *c_ssa = &c_intr->dest.ssa;
+         nir_def *c_ssa = &c_intr->def;
          res = nir_if_phi(b, c_ssa, res);
       }
    }
 
    if (has_dest)
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, res);
+      nir_def_rewrite_uses(&intr->def, res);
 
-   nir_instr_remove(instr);
+   nir_instr_remove(&intr->instr);
    return true;
 }
 
 bool
 bi_lower_divergent_indirects(nir_shader *shader, unsigned lanes)
 {
-   return nir_shader_instructions_pass(
-      shader, bi_lower_divergent_indirects_impl, nir_metadata_none, &lanes);
+   return nir_shader_intrinsics_pass(shader, bi_lower_divergent_indirects_impl,
+                                     nir_metadata_none, &lanes);
 }

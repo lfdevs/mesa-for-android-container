@@ -36,12 +36,12 @@
 
 typedef struct {
    const nir_lower_wpos_ytransform_options *options;
-   nir_shader   *shader;
-   nir_builder   b;
+   nir_shader *shader;
+   nir_builder b;
    nir_variable *transform;
 } lower_wpos_ytransform_state;
 
-static nir_ssa_def *
+static nir_def *
 get_transform(lower_wpos_ytransform_state *state)
 {
    if (state->transform == NULL) {
@@ -60,8 +60,8 @@ get_transform(lower_wpos_ytransform_state *state)
 }
 
 /* NIR equiv of TGSI CMP instruction: */
-static nir_ssa_def *
-nir_cmp(nir_builder *b, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *src2)
+static nir_def *
+nir_cmp(nir_builder *b, nir_def *src0, nir_def *src1, nir_def *src2)
 {
    return nir_bcsel(b, nir_flt_imm(b, src0, 0.0), src1, src2);
 }
@@ -73,10 +73,9 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
                      float adjX, float adjY[2])
 {
    nir_builder *b = &state->b;
-   nir_ssa_def *wpostrans, *wpos_temp, *wpos_temp_y, *wpos_input;
+   nir_def *wpostrans, *wpos_temp, *wpos_temp_y, *wpos_input;
 
-   assert(intr->dest.is_ssa);
-   wpos_input = &intr->dest.ssa;
+   wpos_input = &intr->def;
 
    b->cursor = nir_after_instr(&intr->instr);
 
@@ -90,7 +89,7 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
           * or not, which is determined by testing against the inversion
           * state variable used below, which will be either +1 or -1.
           */
-         nir_ssa_def *adj_temp;
+         nir_def *adj_temp;
 
          adj_temp = nir_cmp(b,
                             nir_channel(b, wpostrans, invert ? 2 : 0),
@@ -115,14 +114,12 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
     */
    if (invert) {
       /* wpos_temp.y = wpos_input * wpostrans.xxxx + wpostrans.yyyy */
-      wpos_temp_y = nir_fadd(b, nir_fmul(b, nir_channel(b, wpos_temp, 1),
-                                            nir_channel(b, wpostrans, 0)),
-                                nir_channel(b, wpostrans, 1));
+      wpos_temp_y = nir_fadd(b, nir_fmul(b, nir_channel(b, wpos_temp, 1), nir_channel(b, wpostrans, 0)),
+                             nir_channel(b, wpostrans, 1));
    } else {
       /* wpos_temp.y = wpos_input * wpostrans.zzzz + wpostrans.wwww */
-      wpos_temp_y = nir_fadd(b, nir_fmul(b, nir_channel(b, wpos_temp, 1),
-                                            nir_channel(b, wpostrans, 2)),
-                                nir_channel(b, wpostrans, 3));
+      wpos_temp_y = nir_fadd(b, nir_fmul(b, nir_channel(b, wpos_temp, 1), nir_channel(b, wpostrans, 2)),
+                             nir_channel(b, wpostrans, 3));
    }
 
    wpos_temp = nir_vec4(b,
@@ -131,9 +128,9 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
                         nir_channel(b, wpos_temp, 2),
                         nir_channel(b, wpos_temp, 3));
 
-   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa,
-                                  wpos_temp,
-                                  wpos_temp->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def,
+                              wpos_temp,
+                              wpos_temp->parent_instr);
 }
 
 static void
@@ -229,7 +226,7 @@ static void
 lower_fddy(lower_wpos_ytransform_state *state, nir_alu_instr *fddy)
 {
    nir_builder *b = &state->b;
-   nir_ssa_def *p, *pt, *trans;
+   nir_def *p, *pt, *trans;
 
    b->cursor = nir_before_instr(&fddy->instr);
 
@@ -240,9 +237,7 @@ lower_fddy(lower_wpos_ytransform_state *state, nir_alu_instr *fddy)
 
    pt = nir_fmul(b, p, trans);
 
-   nir_instr_rewrite_src(&fddy->instr,
-                         &fddy->src[0].src,
-                         nir_src_for_ssa(pt));
+   nir_src_rewrite(&fddy->src[0].src, pt);
 
    for (unsigned i = 0; i < 4; i++)
       fddy->src[0].swizzle[i] = MIN2(i, pt->num_components - 1);
@@ -257,19 +252,17 @@ lower_interp_deref_or_load_baryc_at_offset(lower_wpos_ytransform_state *state,
                                            unsigned offset_src)
 {
    nir_builder *b = &state->b;
-   nir_ssa_def *offset;
-   nir_ssa_def *flip_y;
+   nir_def *offset;
+   nir_def *flip_y;
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   offset = nir_ssa_for_src(b, intr->src[offset_src], 2);
+   offset = intr->src[offset_src].ssa;
    flip_y = nir_fmul(b, nir_channel(b, offset, 1),
-                        nir_channel(b, get_transform(state), 0));
-   nir_instr_rewrite_src(&intr->instr, &intr->src[offset_src],
-                         nir_src_for_ssa(nir_vec2(b, nir_channel(b, offset, 0),
-                                                     flip_y)));
+                     nir_channel(b, get_transform(state), 0));
+   nir_src_rewrite(&intr->src[offset_src],
+                   nir_vec2(b, nir_channel(b, offset, 0), flip_y));
 }
-
 
 static void
 lower_load_sample_pos(lower_wpos_ytransform_state *state,
@@ -278,17 +271,17 @@ lower_load_sample_pos(lower_wpos_ytransform_state *state,
    nir_builder *b = &state->b;
    b->cursor = nir_after_instr(&intr->instr);
 
-   nir_ssa_def *pos = &intr->dest.ssa;
-   nir_ssa_def *scale = nir_channel(b, get_transform(state), 0);
-   nir_ssa_def *neg_scale = nir_channel(b, get_transform(state), 2);
+   nir_def *pos = &intr->def;
+   nir_def *scale = nir_channel(b, get_transform(state), 0);
+   nir_def *neg_scale = nir_channel(b, get_transform(state), 2);
    /* Either y or 1-y for scale equal to 1 or -1 respectively. */
-   nir_ssa_def *flipped_y =
-               nir_fadd(b, nir_fmax(b, neg_scale, nir_imm_float(b, 0.0)),
-                        nir_fmul(b, nir_channel(b, pos, 1), scale));
-   nir_ssa_def *flipped_pos = nir_vec2(b, nir_channel(b, pos, 0), flipped_y);
+   nir_def *flipped_y =
+      nir_fadd(b, nir_fmax(b, neg_scale, nir_imm_float(b, 0.0)),
+               nir_fmul(b, nir_channel(b, pos, 1), scale));
+   nir_def *flipped_pos = nir_vec2(b, nir_channel(b, pos, 0), flipped_y);
 
-   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, flipped_pos,
-                                  flipped_pos->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, flipped_pos,
+                              flipped_pos->parent_instr);
 }
 
 static bool
@@ -347,6 +340,6 @@ nir_lower_wpos_ytransform(nir_shader *shader,
    return nir_shader_instructions_pass(shader,
                                        lower_wpos_ytransform_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        &state);
 }

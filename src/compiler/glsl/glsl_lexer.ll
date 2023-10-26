@@ -308,7 +308,7 @@ PATH		["][./ _A-Za-z0-9]*["]
 
                                    char *end = strrchr(ptr, '"');
                                    int path_len = (end - ptr) + 1;
-                                   void *mem_ctx = yyextra->linalloc;
+                                   linear_ctx *mem_ctx = yyextra->linalloc;
                                    yylloc->path = (char *) linear_alloc_child(mem_ctx, path_len);
                                    memcpy(yylloc->path, ptr, path_len);
                                    yylloc->path[path_len - 1] = '\0';
@@ -376,7 +376,7 @@ PATH		["][./ _A-Za-z0-9]*["]
 				    * on strlen() for the length of the string, as this is already
 				    * found by flex and stored in yyleng
 				    */
-                                    void *mem_ctx = yyextra->linalloc;
+                                    linear_ctx *mem_ctx = yyextra->linalloc;
                                     char *id = (char *) linear_alloc_child(mem_ctx, yyleng + 1);
                                     memcpy(id, yytext, yyleng + 1);
                                     yylval->identifier = id;

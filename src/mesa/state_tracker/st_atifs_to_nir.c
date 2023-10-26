@@ -39,13 +39,13 @@ struct st_translate {
    nir_builder *b;
    struct ati_fragment_shader *atifs;
 
-   nir_ssa_def *temps[MAX_PROGRAM_TEMPS];
+   nir_def *temps[MAX_PROGRAM_TEMPS];
 
    nir_variable *fragcolor;
    nir_variable *constants;
    nir_variable *samplers[MAX_TEXTURE_UNITS];
 
-   nir_ssa_def *inputs[VARYING_SLOT_MAX];
+   nir_def *inputs[VARYING_SLOT_MAX];
 
    unsigned current_pass;
 
@@ -54,30 +54,30 @@ struct st_translate {
    bool error;
 };
 
-static nir_ssa_def *
-nir_channel_vec4(nir_builder *b, nir_ssa_def *src, unsigned channel)
+static nir_def *
+nir_channel_vec4(nir_builder *b, nir_def *src, unsigned channel)
 {
    unsigned swizzle[4] = { channel, channel, channel, channel };
    return nir_swizzle(b, src, swizzle, 4);
 }
 
-static nir_ssa_def *
+static nir_def *
 nir_imm_vec4_float(nir_builder *b, float f)
 {
    return nir_imm_vec4(b, f, f, f, f);
 }
 
-static nir_ssa_def *
+static nir_def *
 get_temp(struct st_translate *t, unsigned index)
 {
    if (!t->temps[index])
-      t->temps[index] = nir_ssa_undef(t->b, 4, 32);
+      t->temps[index] = nir_undef(t->b, 4, 32);
    return t->temps[index];
 }
 
-static nir_ssa_def *
+static nir_def *
 apply_swizzle(struct st_translate *t,
-              struct nir_ssa_def *src, GLuint swizzle)
+              struct nir_def *src, GLuint swizzle)
 {
    /* From the ATI_fs spec:
     *
@@ -97,10 +97,10 @@ apply_swizzle(struct st_translate *t,
       static unsigned xywz[4] = { 0, 1, 3, 2 };
       return nir_swizzle(t->b, src, xywz, 4);
    } else {
-      nir_ssa_def *rcp = nir_frcp(t->b, nir_channel(t->b, src,
+      nir_def *rcp = nir_frcp(t->b, nir_channel(t->b, src,
                                                     swizzle == GL_SWIZZLE_STR_DR_ATI ? 2 : 3));
 
-      nir_ssa_def *st_mul = nir_fmul(t->b, nir_trim_vector(t->b, src, 2), rcp);
+      nir_def *st_mul = nir_fmul(t->b, nir_trim_vector(t->b, src, 2), rcp);
 
       return nir_vec4(t->b,
                       nir_channel(t->b, st_mul, 0),
@@ -110,7 +110,7 @@ apply_swizzle(struct st_translate *t,
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 load_input(struct st_translate *t, gl_varying_slot slot)
 {
    if (!t->inputs[slot]) {
@@ -124,7 +124,7 @@ load_input(struct st_translate *t, gl_varying_slot slot)
    return t->inputs[slot];
 }
 
-static nir_ssa_def *
+static nir_def *
 atifs_load_uniform(struct st_translate *t, int index)
 {
    nir_deref_instr *deref = nir_build_deref_array(t->b,
@@ -133,7 +133,7 @@ atifs_load_uniform(struct st_translate *t, int index)
    return nir_load_deref(t->b, deref);
 }
 
-static struct nir_ssa_def *
+static struct nir_def *
 get_source(struct st_translate *t, GLenum src_type)
 {
    if (src_type >= GL_REG_0_ATI && src_type <= GL_REG_5_ATI) {
@@ -167,7 +167,7 @@ get_source(struct st_translate *t, GLenum src_type)
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 prepare_argument(struct st_translate *t, const struct atifs_instruction *inst,
                  const unsigned argId, bool alpha)
 {
@@ -178,7 +178,7 @@ prepare_argument(struct st_translate *t, const struct atifs_instruction *inst,
 
    const struct atifragshader_src_register *srcReg = &inst->SrcReg[alpha][argId];
 
-   nir_ssa_def *src = get_source(t, srcReg->Index);
+   nir_def *src = get_source(t, srcReg->Index);
 
    switch (srcReg->argRep) {
    case GL_NONE:
@@ -211,12 +211,12 @@ prepare_argument(struct st_translate *t, const struct atifs_instruction *inst,
    return src;
 }
 
-static nir_ssa_def *
+static nir_def *
 emit_arith_inst(struct st_translate *t,
                 const struct atifs_instruction *inst,
                 bool alpha)
 {
-   nir_ssa_def *src[3] = {0};
+   nir_def *src[3] = {0};
    for (int i = 0; i < inst->ArgCount[alpha]; i++)
       src[i] = prepare_argument(t, inst, i, alpha);
 
@@ -269,9 +269,9 @@ emit_arith_inst(struct st_translate *t,
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 emit_dstmod(struct st_translate *t,
-            struct nir_ssa_def *dst, GLuint dstMod)
+            struct nir_def *dst, GLuint dstMod)
 {
    switch (dstMod & ~GL_SATURATE_BIT_ATI) {
    case GL_2X_BIT_ATI:
@@ -315,7 +315,7 @@ compile_setupinst(struct st_translate *t,
 
    GLuint pass_tex = texinst->src;
 
-   nir_ssa_def *coord;
+   nir_def *coord;
 
    if (pass_tex >= GL_TEXTURE0_ARB && pass_tex <= GL_TEXTURE7_ARB) {
       unsigned attr = pass_tex - GL_TEXTURE0_ARB;
@@ -331,7 +331,7 @@ compile_setupinst(struct st_translate *t,
          coord = nir_imm_vec4_float(t->b, 0.0f);
       }
    } else {
-      coord = nir_ssa_undef(t->b, 4, 32);
+      coord = nir_undef(t->b, 4, 32);
    }
    coord = apply_swizzle(t, coord, texinst->swizzle);
 
@@ -360,16 +360,16 @@ compile_setupinst(struct st_translate *t,
          glsl_get_sampler_dim_coordinate_components(tex->sampler_dim);
 
       tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                        &tex_deref->dest.ssa);
+                                        &tex_deref->def);
       tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
-                                        &tex_deref->dest.ssa);
+                                        &tex_deref->def);
       tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_coord,
                                         nir_trim_vector(t->b, coord, tex->coord_components));
 
-      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+      nir_def_init(&tex->instr, &tex->def, 4, 32);
       nir_builder_instr_insert(t->b, &tex->instr);
 
-      t->temps[r] = &tex->dest.ssa;
+      t->temps[r] = &tex->def;
    } else if (texinst->Opcode == ATI_FRAGMENT_SHADER_PASS_OP) {
       t->temps[r] = coord;
    }
@@ -393,7 +393,7 @@ compile_instruction(struct st_translate *t,
          continue;
 
       /* Execute the op */
-      nir_ssa_def *result = emit_arith_inst(t, inst, optype);
+      nir_def *result = emit_arith_inst(t, inst, optype);
       result = emit_dstmod(t, result, inst->DstReg[optype].dstMod);
 
       /* Do the writemask */
@@ -516,9 +516,9 @@ st_nir_lower_atifs_samplers_instr(nir_builder *b, nir_instr *instr, void *data)
     * accidentally enables a cube array).
     */
    if (coord_components != tex->coord_components) {
-      nir_ssa_def *coords = nir_ssa_for_src(b, tex->src[coords_idx].src, tex->coord_components);
-      nir_instr_rewrite_src_ssa(instr, &tex->src[coords_idx].src,
-                                nir_resize_vector(b, coords, coord_components));
+      nir_def *coords = tex->src[coords_idx].src.ssa;
+      nir_src_rewrite(&tex->src[coords_idx].src,
+                      nir_resize_vector(b, coords, coord_components));
       tex->coord_components = coord_components;
    }
 

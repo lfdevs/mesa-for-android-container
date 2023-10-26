@@ -145,7 +145,7 @@ Bug fixes
 - radv: Resident Evil Revelations 2 artifacts on 7900XTX with DCC
 - radv: Prototype 2 black textures on RDNA 3 when DCC is enabled
 - Mesa 23.0.0 crashes immediately with indirect rendering
-- virpipe-on-gl: arb_enhanced_layouts@matching_fp64_types crashes
+- virpipe-on-gl: arb_enhanced_layouts\@matching_fp64_types crashes
 - [RADV] Returnal - pistol muzzle flash fills whole screen (graphical artifact)
 - ACO: dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_geom_buffers1_sets3_imm_samplers hangs on NAVI10
 - Build failures with recent lld
@@ -3512,7 +3512,7 @@ Martin Roukala (né Peres) (22):
 - zink/ci/radv: remove a test from the fails list
 - zink/ci: add a fail to the VG flake list
 - zink/ci: relocate radv testing from radv's gitlab-ci.yml
-- zink/ci: add spec@!opengl 1.1@line-smooth-stipple to the fails list
+- zink/ci: add spec\@!opengl 1.1\@line-smooth-stipple to the fails list
 - ci/b2c: uprev to b2c v0.9.9
 - ci/debian/x86_test-vk: drop an outdated dependency
 - ci/core-manual-rules: enclose the whole condition in quotes

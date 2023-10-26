@@ -50,7 +50,6 @@ extern "C" {
 #define UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY      (1 << 0)
 #define UTIL_QUEUE_INIT_RESIZE_IF_FULL            (1 << 1)
 #define UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY  (1 << 2)
-#define UTIL_QUEUE_INIT_SCALE_THREADS             (1 << 3)
 
 #if UTIL_FUTEX_SUPPORTED
 #define UTIL_QUEUE_FENCE_FUTEX
@@ -206,6 +205,7 @@ struct util_queue_job {
 struct util_queue {
    char name[14]; /* 13 characters = the thread name without the index */
    mtx_t lock;
+   bool create_threads_on_demand;
    cnd_t has_queued_cond;
    cnd_t has_space_cond;
    thrd_t *threads;

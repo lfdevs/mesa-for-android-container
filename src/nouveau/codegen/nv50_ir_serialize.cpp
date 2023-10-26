@@ -3,7 +3,6 @@
 #include "nv50_ir.h"
 #include "nv50_ir_target.h"
 #include "nv50_ir_driver.h"
-#include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir_serialize.h"
 
 enum FixupApplyFunc {
@@ -27,27 +26,8 @@ nv50_ir_prog_info_serialize(struct blob *blob, struct nv50_ir_prog_info *info)
    blob_write_uint8(blob, info->optLevel);
    blob_write_uint8(blob, info->dbgFlags);
    blob_write_uint8(blob, info->omitLineNum);
-   blob_write_uint8(blob, info->bin.sourceRep);
 
-   switch(info->bin.sourceRep) {
-      case PIPE_SHADER_IR_TGSI: {
-         struct tgsi_token *tokens = (struct tgsi_token *)info->bin.source;
-         unsigned int num_tokens = tgsi_num_tokens(tokens);
-
-         blob_write_uint32(blob, num_tokens);
-         blob_write_bytes(blob, tokens, num_tokens * sizeof(struct tgsi_token));
-         break;
-      }
-      case PIPE_SHADER_IR_NIR: {
-         struct nir_shader *nir = (struct nir_shader *)info->bin.source;
-         nir_serialize(blob, nir, true);
-         break;
-      }
-      default:
-         ERROR("unhandled info->bin.sourceRep switch case\n");
-         assert(false);
-         return false;
-   }
+   nir_serialize(blob, info->bin.nir, true);
 
    if (info->type == PIPE_SHADER_COMPUTE)
       blob_write_bytes(blob, &info->prop.cp, sizeof(info->prop.cp));

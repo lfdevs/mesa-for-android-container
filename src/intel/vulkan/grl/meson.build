@@ -162,7 +162,7 @@ foreach t : [['125', 'gfx125', 'dg2']]
     [grl_cl_kernel_h, grl_compiled_cl_kernels, grl_cl_kernel_c,
      grl_genX_files, grl_metakernel_c, grl_metakernel_h],
     include_directories : [
-      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler,
+      inc_include, inc_src,
       inc_intel,
     ],
     c_args : [
@@ -192,8 +192,7 @@ libgrl = static_library(
   'grl',
   [grl_cl_kernel_h],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel,
-    inc_compiler,
+    inc_include, inc_src, inc_intel,
   ],
   link_whole : [grl_genX_libs],
   dependencies : [libgrl_deps, idep_anv_headers],

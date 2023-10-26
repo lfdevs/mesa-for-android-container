@@ -2,6 +2,13 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
+# This test checks the driver's reported conformance version against the
+# version of the CTS we're running. This check fails every few months
+# and everyone has to go and bump the number in every driver.
+# Running this check only makes sense while preparing a conformance
+# submission, so skip it in the regular CI.
+dEQP-VK.api.driver_properties.conformance_version
+
 # These are tremendously slow (pushing toward a minute), and aren't
 # reliable to be run in parallel with other tests due to CPU-side timing.
 dEQP-GLES[0-9]*.functional.flush_finish.*
@@ -29,6 +36,3 @@ spec@!opengl 1.1@windowoverlap
 # Note that "glx-" tests don't appear in x11-skips.txt because they can be
 # run even if PIGLIT_PLATFORM=gbm (for example)
 glx@glx-copy-sub-buffer.*
-# Reads the front buffer but it doesn't have to.
-# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/755
-glx-swap-copy

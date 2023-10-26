@@ -47,8 +47,7 @@ struct backend_shader {
 protected:
 
    backend_shader(const struct brw_compiler *compiler,
-                  void *log_data,
-                  void *mem_ctx,
+                  const struct brw_compile_params *params,
                   const nir_shader *shader,
                   struct brw_stage_prog_data *stage_prog_data,
                   bool debug_enabled);
@@ -77,8 +76,6 @@ public:
 
    gl_shader_stage stage;
    bool debug_enabled;
-   const char *stage_name;
-   const char *stage_abbrev;
 
    brw::simple_allocator alloc;
 

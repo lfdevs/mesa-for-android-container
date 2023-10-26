@@ -124,10 +124,10 @@ bool trace_dump_is_triggered(void);
       trace_dump_arg_end(); \
    } while(0)
 
-#define trace_dump_arg_enum(_arg, _value) \
+#define trace_dump_arg_enum(_type, _arg) \
    do { \
       trace_dump_arg_begin(#_arg); \
-      trace_dump_enum(_value); \
+      trace_dump_enum(tr_util_##_type##_name(_arg)); \
       trace_dump_arg_end(); \
    } while(0)
 
@@ -191,10 +191,17 @@ bool trace_dump_is_triggered(void);
    } while(0)
 
 
-#define trace_dump_member_enum(_obj, _member, _value) \
+#define trace_dump_member_enum(_type, _obj, _member) \
    do { \
       trace_dump_member_begin(#_member); \
-      trace_dump_enum(_value); \
+      trace_dump_enum(tr_util_##_type##_name((_obj)->_member)); \
+      trace_dump_member_end(); \
+   } while(0)
+
+#define trace_dump_member_struct(_type, _obj, _member) \
+   do { \
+      trace_dump_member_begin(#_member); \
+      trace_dump_##_type(&((_obj)->_member)); \
       trace_dump_member_end(); \
    } while(0)
 
@@ -210,6 +217,13 @@ bool trace_dump_is_triggered(void);
       trace_dump_arg_begin(#_arg); \
       trace_dump_array_val(_type, _arg, _size); \
       trace_dump_arg_end(); \
+   } while(0)
+
+#define trace_dump_ret_array(_type, _arg, _size) \
+   do { \
+      trace_dump_ret_begin(); \
+      trace_dump_array(_type, _arg, _size); \
+      trace_dump_ret_end(); \
    } while(0)
 
 #define trace_dump_ret_array_val(_type, _arg, _size) \

@@ -120,5 +120,15 @@ void
 trace_transfer_destroy(struct trace_context *tr_ctx,
                        struct trace_transfer *tr_trans);
 
+struct pipe_sampler_view *
+trace_sampler_view_create(struct trace_context *tr_ctx,
+                  struct pipe_resource *tr_res,
+                  struct pipe_sampler_view *sampler_view);
+
+void
+trace_sampler_view_destroy(struct trace_sampler_view *tr_view);
+
+struct pipe_sampler_view *
+trace_sampler_view_unwrap(struct trace_sampler_view *tr_view);
 
 #endif /* TR_TEXTURE_H_ */

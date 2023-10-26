@@ -650,7 +650,7 @@ tu_autotune_begin_renderpass(struct tu_cmd_buffer *cmd,
    tu_cs_emit_regs(cs, A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
    tu_cs_emit_regs(cs, A6XX_RB_SAMPLE_COUNT_ADDR(.qword = result_iova));
-
+   /* A7XX TODO: Fixup ZPASS_DONE */
    tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
    tu_cs_emit(cs, ZPASS_DONE);
 }
@@ -672,6 +672,7 @@ void tu_autotune_end_renderpass(struct tu_cmd_buffer *cmd,
 
    tu_cs_emit_regs(cs, A6XX_RB_SAMPLE_COUNT_ADDR(.qword = result_iova));
 
+   /* A7XX TODO: Fixup ZPASS_DONE */
    tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
    tu_cs_emit(cs, ZPASS_DONE);
 }

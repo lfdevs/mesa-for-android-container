@@ -211,7 +211,7 @@ option(
   value : ['auto'],
   choices : ['auto', 'amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk',
              'panfrost', 'swrast', 'virtio', 'imagination-experimental',
-             'microsoft-experimental'],
+             'microsoft-experimental', 'nouveau-experimental'],
   description : 'List of vulkan drivers to build. If this is set to auto ' +
                 'all drivers applicable to the target OS/architecture ' +
                 'will be built'
@@ -580,6 +580,13 @@ option(
   description : 'List of Perfetto datasources to build. If this is set to ' +
                 '`auto`, datasources that can not be build are skipped. ' +
                 'Default: [`auto`]'
+)
+
+option(
+  'gpuvis',
+  type : 'boolean',
+  value : false,
+  description : 'Enable tracing markers for gpuvis. Default: false'
 )
 
 option(

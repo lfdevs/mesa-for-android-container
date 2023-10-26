@@ -33,10 +33,6 @@
 struct gl_linked_shader;
 struct gl_shader_program;
 
-/* Operations for lower_64bit_integer_instructions() */
-#define DIV64                     (1U << 0)
-#define MOD64                     (1U << 1)
-
 bool do_common_optimization(exec_list *ir, bool linked,
                             const struct gl_shader_compiler_options *options,
                             bool native_integers);
@@ -57,10 +53,8 @@ bool do_mat_op_to_vec(exec_list *instructions);
 bool do_minmax_prune(exec_list *instructions);
 bool do_tree_grafting(exec_list *instructions);
 bool do_vec_index_to_cond_assign(exec_list *instructions);
-bool lower_discard(exec_list *instructions);
 void lower_discard_flow(exec_list *instructions);
 bool lower_instructions(exec_list *instructions,
-                        bool have_dround,
                         bool have_gpu_shader5);
 bool lower_clip_cull_distance(struct gl_shader_program *prog,
                               gl_linked_shader *shader);
@@ -78,9 +72,6 @@ bool lower_subroutine(exec_list *instructions, struct _mesa_glsl_parse_state *st
 bool propagate_invariance(exec_list *instructions);
 
 namespace ir_builder { class ir_factory; };
-
-bool lower_64bit_integer_instructions(exec_list *instructions,
-                                      unsigned what_to_lower);
 
 void lower_precision(const struct gl_shader_compiler_options *options,
                      exec_list *instructions);

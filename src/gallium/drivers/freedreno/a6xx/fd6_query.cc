@@ -703,6 +703,9 @@ so_overflow_predicate_result_resource(struct fd_acc_query *aq,
                                       int index, struct fd_resource *dst,
                                       unsigned offset)
 {
+   fd_ringbuffer_attach_bo(ring, dst->bo);
+   fd_ringbuffer_attach_bo(ring, fd_resource(aq->prsc)->bo);
+
    /* result = generated - emitted: */
    OUT_PKT7(ring, CP_MEM_TO_MEM, 7);
    OUT_RING(ring, CP_MEM_TO_MEM_0_NEG_B |

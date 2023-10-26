@@ -79,7 +79,7 @@ create_ivci(struct zink_screen *screen,
       unreachable("unsupported target");
    }
 
-   ivci.format = zink_get_format(screen, templ->format);
+   ivci.format = res->base.b.format == PIPE_FORMAT_A8_UNORM ? res->format : zink_get_format(screen, templ->format);
    assert(ivci.format != VK_FORMAT_UNDEFINED);
 
    /* TODO: it's currently illegal to use non-identity swizzles for framebuffer attachments,

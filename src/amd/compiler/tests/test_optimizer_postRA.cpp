@@ -365,21 +365,21 @@ BEGIN_TEST(optimizer_postRA.dpp)
    Operand d(inputs[3], PhysReg(0));
 
    /* basic optimization */
-   //! v1: %res0:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res0:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 0, %res0:v[2]
    Temp tmp0 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    Temp res0 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp0, reg_v2), b);
    writeout(0, Operand(res0, reg_v2));
 
    /* operand swapping */
-   //! v1: %res1:v[2] = v_subrev_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res1:v[2] = v_subrev_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 1, %res1:v[2]
    Temp tmp1 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    Temp res1 = bld.vop2(aco_opcode::v_sub_f32, bld.def(v1, reg_v2), b, Operand(tmp1, reg_v2));
    writeout(1, Operand(res1, reg_v2));
 
-   //! v1: %tmp2:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
-   //! v1: %res2:v[2] = v_sub_f32 %b:v[1], %tmp2:v[2] row_half_mirror bound_ctrl:1
+   //! v1: %tmp2:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
+   //! v1: %res2:v[2] = v_sub_f32 %b:v[1], %tmp2:v[2] row_half_mirror bound_ctrl:1 fi
    //! p_unit_test 2, %res2:v[2]
    Temp tmp2 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    Temp res2 = bld.vop2_dpp(aco_opcode::v_sub_f32, bld.def(v1, reg_v2), b, Operand(tmp2, reg_v2),
@@ -387,21 +387,21 @@ BEGIN_TEST(optimizer_postRA.dpp)
    writeout(2, Operand(res2, reg_v2));
 
    /* modifiers */
-   //! v1: %res3:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res3:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 3, %res3:v[2]
    auto tmp3 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    tmp3->dpp16().neg[0] = true;
    Temp res3 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp3, reg_v2), b);
    writeout(3, Operand(res3, reg_v2));
 
-   //! v1: %res4:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res4:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 4, %res4:v[2]
    Temp tmp4 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    auto res4 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp4, reg_v2), b);
    res4->valu().neg[0] = true;
    writeout(4, Operand(res4, reg_v2));
 
-   //! v1: %tmp5:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
+   //! v1: %tmp5:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
    //! v1: %res5:v[2] = v_add_f32 %tmp5:v[2], %b:v[1] clamp
    //! p_unit_test 5, %res5:v[2]
    Temp tmp5 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
@@ -409,7 +409,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    res5->valu().clamp = true;
    writeout(5, Operand(res5, reg_v2));
 
-   //! v1: %res6:v[2] = v_add_f32 |%a:v[0]|, %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res6:v[2] = v_add_f32 |%a:v[0]|, %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 6, %res6:v[2]
    auto tmp6 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    tmp6->dpp16().neg[0] = true;
@@ -417,14 +417,14 @@ BEGIN_TEST(optimizer_postRA.dpp)
    res6->valu().abs[0] = true;
    writeout(6, Operand(res6, reg_v2));
 
-   //! v1: %res7:v[2] = v_subrev_f32 %a:v[0], |%b:v[1]| row_mirror bound_ctrl:1
+   //! v1: %res7:v[2] = v_subrev_f32 %a:v[0], |%b:v[1]| row_mirror bound_ctrl:1 fi
    //! p_unit_test 7, %res7:v[2]
    Temp tmp7 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    auto res7 = bld.vop2_e64(aco_opcode::v_sub_f32, bld.def(v1, reg_v2), b, Operand(tmp7, reg_v2));
    res7->valu().abs[0] = true;
    writeout(7, Operand(res7, reg_v2));
 
-   //! v1: %tmp12:v[2] = v_mov_b32 -%a:v[0] row_mirror bound_ctrl:1
+   //! v1: %tmp12:v[2] = v_mov_b32 -%a:v[0] row_mirror bound_ctrl:1 fi
    //! v1: %res12:v[2] = v_add_u32 %tmp12:v[2], %b:v[1]
    //! p_unit_test 12, %res12:v[2]
    auto tmp12 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
@@ -432,7 +432,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    Temp res12 = bld.vop2(aco_opcode::v_add_u32, bld.def(v1, reg_v2), Operand(tmp12, reg_v2), b);
    writeout(12, Operand(res12, reg_v2));
 
-   //! v1: %tmp13:v[2] = v_mov_b32 -%a:v[0] row_mirror bound_ctrl:1
+   //! v1: %tmp13:v[2] = v_mov_b32 -%a:v[0] row_mirror bound_ctrl:1 fi
    //! v1: %res13:v[2] = v_add_f16 %tmp13:v[2], %b:v[1]
    //! p_unit_test 13, %res13:v[2]
    auto tmp13 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
@@ -441,14 +441,14 @@ BEGIN_TEST(optimizer_postRA.dpp)
    writeout(13, Operand(res13, reg_v2));
 
    /* vcc */
-   //! v1: %res8:v[2] = v_cndmask_b32 %a:v[0], %b:v[1], %c:vcc row_mirror bound_ctrl:1
+   //! v1: %res8:v[2] = v_cndmask_b32 %a:v[0], %b:v[1], %c:vcc row_mirror bound_ctrl:1 fi
    //! p_unit_test 8, %res8:v[2]
    Temp tmp8 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    Temp res8 =
       bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1, reg_v2), Operand(tmp8, reg_v2), b, c);
    writeout(8, Operand(res8, reg_v2));
 
-   //! v1: %tmp9:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
+   //! v1: %tmp9:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
    //! v1: %res9:v[2] = v_cndmask_b32 %tmp9:v[2], %b:v[1], %d:s[0-1]
    //! p_unit_test 9, %res9:v[2]
    Temp tmp9 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
@@ -459,7 +459,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    /* control flow */
    //! BB1
    //! /* logical preds: BB0, / linear preds: BB0, / kind: uniform, */
-   //! v1: %res10:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res10:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 10, %res10:v[2]
    Temp tmp10 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
 
@@ -473,7 +473,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    writeout(10, Operand(res10, reg_v2));
 
    /* can't combine if the v_mov_b32's operand is modified */
-   //! v1: %tmp11_1:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
+   //! v1: %tmp11_1:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
    //! v1: %tmp11_2:v[0] = v_mov_b32 0
    //! v1: %res11:v[2] = v_add_f32 %tmp11_1:v[2], %b:v[1]
    //! p_unit_test 11, %res11_1:v[2], %tmp11_2:v[0]
@@ -481,6 +481,56 @@ BEGIN_TEST(optimizer_postRA.dpp)
    Temp tmp11_2 = bld.vop1(aco_opcode::v_mov_b32, bld.def(v1, reg_v0), Operand::c32(0));
    Temp res11 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp11_1, reg_v2), b);
    writeout(11, Operand(res11, reg_v2), Operand(tmp11_2, reg_v0));
+
+   finish_optimizer_postRA_test();
+END_TEST
+
+BEGIN_TEST(optimizer_postRA.dpp_across_exec)
+   for (amd_gfx_level gfx : {GFX9, GFX10}) {
+      //>> v1: %a:v[0], v1: %b:v[1] = p_startpgm
+      if (!setup_cs("v1 v1", gfx))
+         continue;
+
+      bld.instructions->at(0)->definitions[0].setFixed(PhysReg(256));
+      bld.instructions->at(0)->definitions[1].setFixed(PhysReg(257));
+
+      PhysReg reg_v2(258);
+      Operand a(inputs[0], PhysReg(256));
+      Operand b(inputs[1], PhysReg(257));
+
+      //~gfx9! v1: %tmp0:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
+      //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+      //~gfx9! v1: %res0:v[2] = v_add_f32 %tmp0:v[2], %b:v[1]
+      //~gfx10! v1: %res0:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
+      //! p_unit_test 0, %res0:v[2]
+      Temp tmp0 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
+      bld.sop1(Builder::s_not, Definition(exec, bld.lm), Definition(scc, s1),
+               Operand(exec, bld.lm));
+      Temp res0 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp0, reg_v2), b);
+      writeout(0, Operand(res0, reg_v2));
+
+      finish_optimizer_postRA_test();
+   }
+END_TEST
+
+BEGIN_TEST(optimizer_postRA.dpp_vcmpx)
+   //>> v1: %a:v[0], v1: %b:v[1] = p_startpgm
+   if (!setup_cs("v1 v1", GFX11))
+      return;
+
+   bld.instructions->at(0)->definitions[0].setFixed(PhysReg(256));
+   bld.instructions->at(0)->definitions[1].setFixed(PhysReg(257));
+
+   PhysReg reg_v2(258);
+   Operand a(inputs[0], PhysReg(256));
+   Operand b(inputs[1], PhysReg(257));
+
+   //! v1: %tmp0:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
+   //! s2: %res0:exec = v_cmpx_lt_f32 %tmp0:v[2], %b:v[1]
+   //! p_unit_test 0, %res0:exec
+   Temp tmp0 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
+   Temp res0 = bld.vopc(aco_opcode::v_cmpx_lt_f32, bld.def(bld.lm, exec), Operand(tmp0, reg_v2), b);
+   writeout(0, Operand(res0, exec));
 
    finish_optimizer_postRA_test();
 END_TEST
@@ -555,7 +605,7 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
    //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
    //! s2: %0:exec = p_parallelcopy %saved_exec:s[84-85]
 
-   //! v1: %res10:v[12] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1
+   //! v1: %res10:v[12] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
    //! p_unit_test 10, %res10:v[12]
    Temp result =
       bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v12), Operand(dpp_tmp, reg_v12), b);
@@ -585,7 +635,7 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf_overwritten)
    Operand f(inputs[5], PhysReg(2));   /* buffer store address (scalar) */
    PhysReg reg_v12(268);               /* temporary register */
 
-   //! v1: %dpp_tmp:v[12] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
+   //! v1: %dpp_tmp:v[12] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
    Temp dpp_tmp = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v12), a, dpp_row_mirror);
 
    //! s2: %saved_exec:s[84-85],  s1: %0:scc,  s2: %0:exec = s_and_saveexec_b64 %e:s[0-1], %0:exec

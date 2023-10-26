@@ -125,6 +125,210 @@ EXPORT_DONE PIXEL 0 S2.xyzw
    check(sh, shader_expect);
 }
 
+TEST_F(TestShaderFromNir, CopyPropRegDest)
+{
+const char *shader_input =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MOV S2.x : R0.x {W}
+ALU MUL S3.x : S2.x S2.x {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+const char *shader_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MUL S3.x : R0.x R0.x {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+   auto sh = from_string(shader_input);
+
+   optimize(*sh);
+
+   check(sh, shader_expect);
+}
+
+TEST_F(TestShaderFromNir, CopyPropRegDestAndOverwrite)
+{
+const char *shader_input =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MOV S2.x : R0.x {W}
+ALU MOV R0.x : L[2.0] {W}
+ALU MUL S3.x : S2.x R0.x {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+const char *shader_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MOV S2.x : R0.x {W}
+ALU MOV R0.x : L[2.0] {W}
+ALU MUL S3.x : S2.x L[2.0] {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+   auto sh = from_string(shader_input);
+
+   optimize(*sh);
+
+   check(sh, shader_expect);
+}
+
+TEST_F(TestShaderFromNir, CopyPropRegDestAndIndirectOverwrite)
+{
+const char *shader_input =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+ARRAYS A0[2].x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MOV S2.x : A0[0].x {W}
+ALU MOV A0[R0.x].x : L[2.0] {W}
+ALU MUL S3.x : S2.x A0[1].x {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+const char *shader_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x
+ARRAYS A0[2].x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU MOV S2.x : A0[0].x {W}
+ALU MOV A0[R0.x].x : L[2.0] {W}
+ALU MUL S3.x : S2.x A0[1].x {W}
+EXPORT_DONE PIXEL 0 S3.xxxx
+)";
+
+   auto sh = from_string(shader_input);
+
+   optimize(*sh);
+
+   check(sh, shader_expect);
+}
+
+
+TEST_F(TestShaderFromNir, CopyPropAndIndirectReadOrder)
+{
+const char *shader_input =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+PROP WRITE_ALL_COLORS:1
+OUTPUT LOC:0 NAME:1 MASK:15
+ARRAYS A0[4].x
+REGISTERS R0.xy
+SHADER
+BLOCK_START
+  ALU MOV A0[0].x : I[0] {W}
+  ALU MOV A0[1].x : I[1] {W}
+  ALU MOV A0[2].x : I[0] {W}
+  ALU MOV A0[3].x : I[0] {W}
+  ALU MOV S2.x{s} : A0[R0.x].x {W}
+  ALU MOV A0[1].x : L[0x2] {W}
+  ALU MOV A0[2].x : L[0x2] {W}
+  ALU MOV A0[3].x : L[0x3] {W}
+  ALU MOV A0[R0.y].x : I[1] {W}
+  ALU MOV S3.x : A0[0].x {W}
+  ALU MOV S3.y : A0[1].x {W}
+  ALU MOV S3.z : A0[2].x {W}
+  ALU MOV S3.w : A0[3].x {W}
+  EXPORT_DONE PIXEL 0 S3.xyzw
+BLOCK_END
+)";
+
+const char *shader_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+PROP WRITE_ALL_COLORS:1
+OUTPUT LOC:0 NAME:1 MASK:15
+ARRAYS A0[4].x
+REGISTERS R0.xy
+SHADER
+BLOCK_START
+ALU_GROUP_BEGIN
+  ALU MOVA_INT AR : R0.x {}
+  ALU MOV A0[0].x : I[0] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV A0[1].x : I[1] {W}
+  ALU MOV A0[2].x : I[0] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV A0[3].x : I[0] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+    ALU MOV S2.x : A0[AR].x {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOVA_INT AR : R0.y {}
+  ALU MOV A0[1].x : L[0x2] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV A0[2].x : L[0x2] {W}
+  ALU MOV A0[3].x : L[0x3] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV A0[AR].x : I[1] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV S3.x@chgr : A0[0].x {W}
+  ALU MOV S3.y@chgr : A0[1].x {W}
+  ALU MOV S3.z@chgr : A0[2].x {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU MOV S3.w@chgr : A0[3].x {WL}
+ALU_GROUP_END
+BLOCK_START
+BLOCK_END
+  EXPORT_DONE PIXEL 0 S3.xyzw
+BLOCK_END
+)";
+
+   auto sh = from_string(shader_input);
+   split_address_loads(*sh);
+   check(schedule(sh), shader_expect);
+}
+
 TEST_F(TestShaderFromNir, OptimizeWithDestArrayValue)
 {
    auto sh = from_string(shader_with_dest_array);

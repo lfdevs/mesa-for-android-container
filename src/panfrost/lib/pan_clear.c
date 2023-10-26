@@ -26,9 +26,9 @@
 #include "genxml/gen_macros.h"
 
 #include <string.h>
-#include "gallium/auxiliary/util/u_pack_color.h"
 #include "util/format_srgb.h"
 #include "util/rounding.h"
+#include "util/u_pack_color.h"
 #include "pan_format.h"
 #include "pan_util.h"
 

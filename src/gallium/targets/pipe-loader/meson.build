@@ -64,7 +64,7 @@ pipe_loaders = [
   [with_gallium_r600, 'r600', driver_r600, []],
   [with_gallium_radeonsi, 'radeonsi', [driver_radeonsi, idep_xmlconfig], []],
   [with_gallium_freedreno, 'msm', driver_freedreno, []],
-  [with_gallium_kmsro, 'kmsro', _kmsro_targets, []],
+  [with_gallium_kmsro, 'kmsro', _kmsro_targets, [libpipe_loader_dynamic]],
   [with_gallium_svga, 'vmwgfx', driver_svga, []],
   [with_gallium_softpipe, 'swrast', driver_swrast, [libwsw, libws_null, libswdri, libswkmsdri]],
 ]

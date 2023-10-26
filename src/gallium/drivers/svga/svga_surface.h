@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -141,6 +141,10 @@ svga_surface_const(const struct pipe_surface *surface)
 
 struct pipe_surface *
 svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s);
+
+void
+svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf,
+                       bool reset);
 
 static inline SVGA3dResourceType
 svga_resource_type(enum pipe_texture_target target)

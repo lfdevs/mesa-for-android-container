@@ -25,15 +25,16 @@
  */
 
 #include "pipe/p_state.h"
-#include "util/u_debug.h"
 #include "util/format/u_format.h"
 #include "util/hash_table.h"
+#include "util/macros.h"
+#include "util/u_debug.h"
 #include "util/u_dump.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
-#include "u_tracepoints.h"
 #include "util/u_trace_gallium.h"
+#include "u_tracepoints.h"
 
 #include "freedreno_context.h"
 #include "freedreno_fence.h"
@@ -315,7 +316,6 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
     * performance.
     */
 
-#define div_round_up(v, a) (((v) + (a)-1) / (a))
    /* figure out number of tiles per pipe: */
    if (is_a20x(screen)) {
       /* for a20x we want to minimize the number of "pipes"
@@ -326,10 +326,10 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
       tpp_y = 6;
    } else {
       tpp_x = tpp_y = 1;
-      while (div_round_up(gmem->nbins_y, tpp_y) > npipes)
+      while (DIV_ROUND_UP(gmem->nbins_y, tpp_y) > npipes)
          tpp_y += 2;
-      while ((div_round_up(gmem->nbins_y, tpp_y) *
-              div_round_up(gmem->nbins_x, tpp_x)) > npipes)
+      while ((DIV_ROUND_UP(gmem->nbins_y, tpp_y) *
+              DIV_ROUND_UP(gmem->nbins_x, tpp_x)) > npipes)
          tpp_x += 1;
    }
 
@@ -399,7 +399,7 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
          uint32_t p;
 
          /* pipe number: */
-         p = ((i / tpp_y) * div_round_up(gmem->nbins_x, tpp_x)) + (j / tpp_x);
+         p = ((i / tpp_y) * DIV_ROUND_UP(gmem->nbins_x, tpp_x)) + (j / tpp_x);
          assert(p < gmem->num_vsc_pipes);
 
          /* clip bin width: */

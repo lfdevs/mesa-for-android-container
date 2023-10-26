@@ -186,12 +186,14 @@ PIPE_FORMAT_AYUV                    , other, 4, 4, 1, un8 ,     ,     ,     , xy
 PIPE_FORMAT_XYUV                    , other, 4, 4, 1, un8 ,     ,     ,     , xyz1, yuv
 
 # same subsampling but with rgb channels
-PIPE_FORMAT_R8G8_B8G8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , xyz1, rgb
-PIPE_FORMAT_G8R8_G8B8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , xyz1, rgb
-PIPE_FORMAT_G8R8_B8R8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , zyx1, rgb
-PIPE_FORMAT_R8G8_R8B8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , zyx1, rgb
-PIPE_FORMAT_B8R8_G8R8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , yxz1, rgb
-PIPE_FORMAT_R8B8_R8G8_UNORM         , subsampled, 2, 1, 1, x32 ,     ,     ,     , yxz1, rgb
+PIPE_FORMAT_R8G8_B8G8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , xyz1, rgb
+PIPE_FORMAT_G8R8_G8B8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , xyz1, rgb
+PIPE_FORMAT_G8R8_B8R8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , zyx1, rgb
+PIPE_FORMAT_R8G8_R8B8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , zyx1, rgb
+PIPE_FORMAT_B8R8_G8R8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , yxz1, rgb
+PIPE_FORMAT_R8B8_R8G8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , yxz1, rgb
+PIPE_FORMAT_G8B8_G8R8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , xyz1, rgb
+PIPE_FORMAT_B8G8_R8G8_UNORM         , subsampled, 2, 1, 1, un8 , un8 , un8 , un8 , xyz1, rgb
 
 # some special formats not fitting anywhere else
 PIPE_FORMAT_R11G11B10_FLOAT         , other,     1, 1, 1, f11 , f11 , f10 ,     , xyz1, rgb
@@ -406,7 +408,10 @@ PIPE_FORMAT_Y8_400_UNORM          , other  , 1, 1, 1,  un8,     ,     ,     , x0
 # RGB version of NV12 and YV12 for hardware that supports sampling from
 # multiplane textures but needs color-space conversion in the shader.
 PIPE_FORMAT_R8_G8B8_420_UNORM     , planar2, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
+PIPE_FORMAT_R8_B8G8_420_UNORM     , planar2, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
 PIPE_FORMAT_G8_B8R8_420_UNORM     , planar2, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
+PIPE_FORMAT_R8_G8_B8_420_UNORM    , planar3, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
+PIPE_FORMAT_R8_B8_G8_420_UNORM    , planar3, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
 PIPE_FORMAT_G8_B8_R8_420_UNORM    , planar3, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
 PIPE_FORMAT_R8_G8_B8_UNORM        , planar3, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
 

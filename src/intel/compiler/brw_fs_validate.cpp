@@ -33,7 +33,8 @@
 #define fsv_assert(assertion)                                           \
    {                                                                    \
       if (!(assertion)) {                                               \
-         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n", stage_abbrev); \
+         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
+                 _mesa_shader_stage_to_abbrev(stage));                  \
          dump_instruction(inst, stderr);                                \
          fprintf(stderr, "%s:%d: '%s' failed\n", __FILE__, __LINE__, #assertion);  \
          abort();                                                       \
@@ -45,7 +46,8 @@
       unsigned f = (first);                                             \
       unsigned s = (second);                                            \
       if (f != s) {                                                     \
-         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n", stage_abbrev); \
+         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
+                 _mesa_shader_stage_to_abbrev(stage));                  \
          dump_instruction(inst, stderr);                                \
          fprintf(stderr, "%s:%d: A == B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
@@ -59,7 +61,8 @@
       unsigned f = (first);                                             \
       unsigned s = (second);                                            \
       if (f == s) {                                                     \
-         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n", stage_abbrev); \
+         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
+                 _mesa_shader_stage_to_abbrev(stage));                  \
          dump_instruction(inst, stderr);                                \
          fprintf(stderr, "%s:%d: A != B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
@@ -73,7 +76,8 @@
       unsigned f = (first);                                             \
       unsigned s = (second);                                            \
       if (f > s) {                                                      \
-         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n", stage_abbrev); \
+         fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
+                 _mesa_shader_stage_to_abbrev(stage));                  \
          dump_instruction(inst, stderr);                                \
          fprintf(stderr, "%s:%d: A <= B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
@@ -82,27 +86,12 @@
       }                                                                 \
    }
 
+#ifndef NDEBUG
 void
 fs_visitor::validate()
 {
-#ifndef NDEBUG
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       switch (inst->opcode) {
-      case SHADER_OPCODE_URB_WRITE_LOGICAL: {
-         const unsigned header_size = 1 +
-            unsigned(inst->src[URB_LOGICAL_SRC_PER_SLOT_OFFSETS].file != BAD_FILE) +
-            unsigned(inst->src[URB_LOGICAL_SRC_CHANNEL_MASK].file != BAD_FILE);
-
-         unsigned data_size = 0;
-         for (unsigned i = header_size, j = 0; i < inst->mlen; i++, j++) {
-            fsv_assert_eq(type_sz(offset(inst->src[URB_LOGICAL_SRC_DATA], bld, j).type), 4);
-            data_size++;
-         }
-
-         fsv_assert_eq(header_size + data_size, inst->mlen);
-         break;
-      }
-
       case SHADER_OPCODE_SEND:
          fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
          break;
@@ -204,5 +193,5 @@ fs_visitor::validate()
          fsv_assert_eq(inst->dst.stride, 1);
       }
    }
-#endif
 }
+#endif

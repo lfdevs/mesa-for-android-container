@@ -1118,7 +1118,7 @@ Connor Abbott (6):
 Daniel Schürmann (2):
 
 -  nir: Define shifts according to SM5 specification.
--  nir: Use SM5 properties to optimize shift(a@32, iand(31, b))
+-  nir: Use SM5 properties to optimize shift(a\@32, iand(31, b))
 
 Daniel Stone (2):
 

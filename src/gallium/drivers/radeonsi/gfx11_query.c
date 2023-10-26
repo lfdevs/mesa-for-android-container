@@ -12,7 +12,7 @@
 
 #include <stddef.h>
 
-static void emit_shader_query(struct si_context *sctx)
+static void emit_shader_query(struct si_context *sctx, unsigned index)
 {
    assert(!list_is_empty(&sctx->shader_query_buffers));
 
@@ -422,13 +422,13 @@ struct pipe_query *gfx11_sh_query_create(struct si_screen *screen, enum pipe_que
    return (struct pipe_query *)query;
 }
 
-void gfx11_init_query(struct si_context *sctx)
+void si_gfx11_init_query(struct si_context *sctx)
 {
    list_inithead(&sctx->shader_query_buffers);
    sctx->atoms.s.shader_query.emit = emit_shader_query;
 }
 
-void gfx11_destroy_query(struct si_context *sctx)
+void si_gfx11_destroy_query(struct si_context *sctx)
 {
    if (!sctx->shader_query_buffers.next)
       return;

@@ -89,11 +89,9 @@ do_optimization(struct exec_list *ir, const char *optimization,
       return do_tree_grafting(ir);
    } else if (strcmp(optimization, "do_vec_index_to_cond_assign") == 0) {
       return do_vec_index_to_cond_assign(ir);
-   } else if (strcmp(optimization, "lower_discard") == 0) {
-      return lower_discard(ir);
    } else if (sscanf(optimization, "lower_instructions ( %d ) ",
                      &int_0) == 1) {
-      return lower_instructions(ir, false, false);
+      return lower_instructions(ir, false);
    } else {
       printf("Unrecognized optimization %s\n", optimization);
       exit(EXIT_FAILURE);
@@ -158,6 +156,8 @@ int test_optpass(int argc, char **argv)
          exit(EXIT_FAILURE);
       }
    }
+
+   glsl_type_singleton_init_or_ref();
 
    struct gl_context local_ctx;
    struct gl_context *ctx = &local_ctx;
@@ -234,6 +234,8 @@ int test_optpass(int argc, char **argv)
 
    ralloc_free(state);
    ralloc_free(shader);
+
+   glsl_type_singleton_decref();
 
    return error;
 }

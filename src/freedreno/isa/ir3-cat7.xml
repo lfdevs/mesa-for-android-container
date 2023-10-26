@@ -73,7 +73,7 @@ SOFTWARE.
 	</display>
 	<pattern low="45" high="50">xxxxxx</pattern>
 	<field   pos="51" 		   name="TYPE" type="#dccln-type"/>
-	<pattern low="52" high="54">xxx</pattern>
+	<pattern low="52" high="54">xx0</pattern>
 	<encode>
 		<!-- TODO: read handle type -->
 		<map name="TYPE">1</map>
@@ -143,6 +143,21 @@ SOFTWARE.
 		Data (Cache?) Flush
 	</doc>
 	<pattern low="55" high="58">0110</pattern>
+</bitset>
+
+<bitset name="ccinv" extends="#instruction-cat7">
+	<doc>
+		_Presumably_ invalidates workgroup-wide cache for image/buffer data access.
+		So while "fence" is enough to synchronize data access inside a workgroup,
+		for cross-workgroup synchronization we have to invalidate that cache.
+	</doc>
+	<gen min="700"/>
+	<display>
+		{SY}{SS}{JP}{NAME}
+	</display>
+	<pattern low="45" high="50">x1xxxx</pattern>
+	<pattern low="51" high="54">1010</pattern>
+	<pattern low="55" high="58">0101</pattern>
 </bitset>
 
 <bitset name="lock" extends="#instruction-cat7">

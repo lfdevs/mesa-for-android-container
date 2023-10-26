@@ -4,6 +4,7 @@ import xml.parsers.expat
 import sys
 import os
 import collections
+import argparse
 
 class Error(Exception):
 	def __init__(self, message):
@@ -21,7 +22,6 @@ class Enum(object):
 		return False
 
 	def dump(self):
-		prev = 0
 		use_hex = False
 		for (name, value) in self.values:
 			if value > 0x1000:
@@ -48,7 +48,7 @@ class Field(object):
 
 		builtin_types = [ None, "a3xx_regid", "boolean", "uint", "hex", "int", "fixed", "ufixed", "float", "address", "waddress" ]
 
-		maxpos = parser.current_bitsize - 1;
+		maxpos = parser.current_bitsize - 1
 
 		if low < 0 or low > maxpos:
 			raise parser.error("low attribute out of range: %d" % low)
@@ -57,11 +57,11 @@ class Field(object):
 		if high < low:
 			raise parser.error("low is greater than high: low=%d, high=%d" % (low, high))
 		if self.type == "boolean" and not low == high:
-			raise parser.error("booleans should be 1 bit fields");
+			raise parser.error("booleans should be 1 bit fields")
 		elif self.type == "float" and not (high - low == 31 or high - low == 15):
 			raise parser.error("floats should be 16 or 32 bit fields")
 		elif not self.type in builtin_types and not self.type in parser.enums:
-			raise parser.error("unknown type '%s'" % self.type);
+			raise parser.error("unknown type '%s'" % self.type)
 
 	def ctype(self, var_name):
 		if self.type == None:
@@ -207,10 +207,10 @@ class Bitset(object):
 
 		if reg.array:
 			print("static inline struct fd_reg_pair\npack_%s(uint32_t __i, struct %s fields)\n{" %
-				  (prefix, prefix));
+				  (prefix, prefix))
 		else:
 			print("static inline struct fd_reg_pair\npack_%s(struct %s fields)\n{" %
-				  (prefix, prefix));
+				  (prefix, prefix))
 
 		self.dump_regpair_builder(reg)
 
@@ -309,6 +309,10 @@ class Reg(object):
 		if self.bitset.inline:
 			self.bitset.dump_regpair_builder(self)
 
+	def dump_py(self):
+		print("\tREG_%s = 0x%08x" % (self.full_name, self.offset))
+
+
 class Parser(object):
 	def __init__(self):
 		self.current_array = None
@@ -374,7 +378,7 @@ class Parser(object):
 
 			self.current_bitset.fields.append(b)
 		except ValueError as e:
-			raise self.error(e);
+			raise self.error(e)
 
 	def parse_varset(self, attrs):
 		# Inherit the varset from the enclosing domain if not overriden:
@@ -411,7 +415,7 @@ class Parser(object):
 			v = next(iter(self.variant_regs[reg.name]))
 			assert self.variant_regs[reg.name][v].bit_size == reg.bit_size
 
-		self.variant_regs[reg.name][variant] = reg;
+		self.variant_regs[reg.name][variant] = reg
 
 	def add_all_usages(self, reg, usages):
 		if not usages:
@@ -534,7 +538,6 @@ class Parser(object):
 			else:
 				value = self.current_enum_value
 			self.current_enum.values.append((attrs["name"], value))
-			# self.current_enum_value = value + 1
 		elif name == "reg32":
 			self.parse_reg(attrs, 32)
 		elif name == "reg64":
@@ -562,7 +565,6 @@ class Parser(object):
 			self.current_domain = None
 			self.current_prefix = None
 			self.current_prefix_type = None
-			self.current_domain = None
 		elif name == "stripe":
 			self.current_stripe = None
 		elif name == "bitset":
@@ -570,7 +572,7 @@ class Parser(object):
 		elif name == "reg32":
 			self.current_reg = None
 		elif name == "array":
-			self.current_array = None;
+			self.current_array = None
 		elif name == "enum":
 			self.current_enum = None
 
@@ -632,11 +634,22 @@ class Parser(object):
 
 		self.dump_reg_usages()
 
+
+	def dump_regs_py(self):
+		regs = []
+		for e in self.file:
+			if isinstance(e, Reg):
+				regs.append(e)
+
+		for e in regs:
+			e.dump_py()
+
+
 	def dump_reg_variants(self, regname, variants):
 		# Don't bother for things that only have a single variant:
 		if len(variants) == 1:
 			return
-		print("#ifdef __cplusplus");
+		print("#ifdef __cplusplus")
 		print("struct __%s {" % regname)
 		# TODO be more clever.. we should probably figure out which
 		# fields have the same type in all variants (in which they
@@ -708,16 +721,14 @@ class Parser(object):
 			self.dump_reg_variants(regname, self.variant_regs[regname])
 
 
-def main():
+def dump_c(rnn_path, xml_path, guard, func):
 	p = Parser()
-	rnn_path = sys.argv[1]
-	xml_file = sys.argv[2]
-	if len(sys.argv) > 3 and sys.argv[3] == '--pack-structs':
-		do_structs = True
-		guard = str.replace(os.path.basename(xml_file), '.', '_').upper() + '_STRUCTS'
-	else:
-		do_structs = False
-		guard = str.replace(os.path.basename(xml_file), '.', '_').upper()
+
+	try:
+		p.parse(rnn_path, xml_path)
+	except Error as e:
+		print(e, file=sys.stderr)
+		exit(1)
 
 	print("#ifndef %s\n#define %s\n" % (guard, guard))
 
@@ -725,24 +736,65 @@ def main():
 	print("#include <assert.h>")
 	print()
 
-	print("#ifdef __cplusplus");
+	print("#ifdef __cplusplus")
 	print("#define __struct_cast(X)")
 	print("#else")
 	print("#define __struct_cast(X) (struct X)")
 	print("#endif")
 
+	func(p)
+
+	print("\n#endif /* %s */" % guard)
+
+
+def dump_c_defines(args):
+	guard = str.replace(os.path.basename(args.xml), '.', '_').upper()
+	dump_c(args.rnn, args.xml, guard, lambda p: p.dump())
+
+
+def dump_c_pack_structs(args):
+	guard = str.replace(os.path.basename(args.xml), '.', '_').upper() + '_STRUCTS'
+	dump_c(args.rnn, args.xml, guard, lambda p: p.dump_structs())
+
+
+def dump_py_defines(args):
+	p = Parser()
+
 	try:
-		p.parse(rnn_path, xml_file)
+		p.parse(args.rnn, args.xml)
 	except Error as e:
 		print(e, file=sys.stderr)
 		exit(1)
 
-	if do_structs:
-		p.dump_structs()
-	else:
-		p.dump()
+	file_name = os.path.splitext(os.path.basename(args.xml))[0]
 
-	print("\n#endif /* %s */" % guard)
+	print("from enum import IntEnum")
+	print("class %sRegs(IntEnum):" % file_name.upper())
+
+	os.path.basename(args.xml)
+
+	p.dump_regs_py()
+
+
+def main():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--rnn', type=str, required=True)
+	parser.add_argument('--xml', type=str, required=True)
+
+	subparsers = parser.add_subparsers(required=True)
+
+	parser_c_defines = subparsers.add_parser('c-defines')
+	parser_c_defines.set_defaults(func=dump_c_defines)
+
+	parser_c_pack_structs = subparsers.add_parser('c-pack-structs')
+	parser_c_pack_structs.set_defaults(func=dump_c_pack_structs)
+
+	parser_py_defines = subparsers.add_parser('py-defines')
+	parser_py_defines.set_defaults(func=dump_py_defines)
+
+	args = parser.parse_args()
+	args.func(args)
+
 
 if __name__ == '__main__':
 	main()

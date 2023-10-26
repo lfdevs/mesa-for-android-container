@@ -288,9 +288,10 @@ write_ubo_ssbo_uniforms(struct v3dv_cmd_buffer *cmd_buffer,
                                offset + dynamic_offset);
    } else {
       if (content == QUNIFORM_UBO_ADDR) {
-         /* We reserve index 0 for push constants and artificially increase our
-          * indices by one for that reason, fix that now before accessing the
-          * descriptor map.
+         /* We reserve UBO index 0 for push constants in Vulkan (and for the
+          * constant buffer in GL) so the compiler always adds one to all UBO
+          * indices, fix it up before we access the descriptor map, since
+          * indices start from 0 there.
           */
          assert(index > 0);
          index--;
@@ -497,7 +498,6 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
    struct v3dv_cl_reloc uniform_stream = v3dv_cl_get_address(&job->indirect);
 
    struct v3dv_cl_out *uniforms = cl_start(&job->indirect);
-
    for (int i = 0; i < uinfo->count; i++) {
       uint32_t data = uinfo->data[i];
 
@@ -519,13 +519,17 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
                               cmd_buffer, pipeline, variant->stage);
          break;
 
-      case QUNIFORM_VIEWPORT_X_SCALE:
-         cl_aligned_f(&uniforms, dynamic->viewport.scale[0][0] * 256.0f);
+      case QUNIFORM_VIEWPORT_X_SCALE: {
+         float clipper_xy_granularity = V3DV_X(cmd_buffer->device, CLIPPER_XY_GRANULARITY);
+         cl_aligned_f(&uniforms, dynamic->viewport.scale[0][0] * clipper_xy_granularity);
          break;
+      }
 
-      case QUNIFORM_VIEWPORT_Y_SCALE:
-         cl_aligned_f(&uniforms, dynamic->viewport.scale[0][1] * 256.0f);
+      case QUNIFORM_VIEWPORT_Y_SCALE: {
+         float clipper_xy_granularity = V3DV_X(cmd_buffer->device, CLIPPER_XY_GRANULARITY);
+         cl_aligned_f(&uniforms, dynamic->viewport.scale[0][1] * clipper_xy_granularity);
          break;
+      }
 
       case QUNIFORM_VIEWPORT_Z_OFFSET: {
          float translate_z;

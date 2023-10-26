@@ -514,6 +514,42 @@ rgrb_to_rgba_aos(struct gallivm_state *gallivm,
 }
 
 /**
+ * Convert from <n x i32> packed GB_GR to <4n x i8> RGBA AoS
+ */
+static LLVMValueRef
+gbgr_to_rgba_aos(struct gallivm_state *gallivm,
+                 unsigned n,
+                 LLVMValueRef packed,
+                 LLVMValueRef i)
+{
+   LLVMValueRef r, g, b;
+   LLVMValueRef rgba;
+
+   yuyv_to_yuv_soa(gallivm, n, packed, i, &g, &b, &r);
+   rgba = rgb_to_rgba_aos(gallivm, n, r, g, b);
+
+   return rgba;
+}
+
+/**
+ * Convert from <n x i32> packed BG_RG to <4n x i8> RGBA AoS
+ */
+static LLVMValueRef
+bgrg_to_rgba_aos(struct gallivm_state *gallivm,
+                 unsigned n,
+                 LLVMValueRef packed,
+                 LLVMValueRef i)
+{
+   LLVMValueRef r, g, b;
+   LLVMValueRef rgba;
+
+   uyvy_to_yuv_soa(gallivm, n, packed, i, &g, &b, &r);
+   rgba = rgb_to_rgba_aos(gallivm, n, r, g, b);
+
+   return rgba;
+}
+
+/**
  * @param n  is the number of pixels processed
  * @param packed  is a <n x i32> vector with the packed YUYV blocks
  * @param i  is a <n x i32> vector with the x pixel coordinate (0 or 1)
@@ -566,6 +602,12 @@ lp_build_fetch_subsampled_rgba_aos(struct gallivm_state *gallivm,
       break;
    case PIPE_FORMAT_R8G8_R8B8_UNORM:
       rgba = rgrb_to_rgba_aos(gallivm, n, packed, i);
+      break;
+   case PIPE_FORMAT_G8B8_G8R8_UNORM:
+      rgba = gbgr_to_rgba_aos(gallivm, n, packed, i);
+      break;
+   case PIPE_FORMAT_B8G8_R8G8_UNORM:
+      rgba = bgrg_to_rgba_aos(gallivm, n, packed, i);
       break;
    default:
       assert(0);

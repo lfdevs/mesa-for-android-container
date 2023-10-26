@@ -26,6 +26,7 @@
 #include "vk_common_entrypoints.h"
 #include "vk_alloc.h"
 #include "vk_device.h"
+#include "vk_util.h"
 
 void
 vk_buffer_init(struct vk_device *device,
@@ -40,6 +41,12 @@ vk_buffer_init(struct vk_device *device,
    buffer->create_flags = pCreateInfo->flags;
    buffer->size = pCreateInfo->size;
    buffer->usage = pCreateInfo->usage;
+
+   const VkBufferUsageFlags2CreateInfoKHR *usage2_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage2_info != NULL)
+      buffer->usage = usage2_info->usage;
 }
 
 void *

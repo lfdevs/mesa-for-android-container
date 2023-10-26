@@ -182,7 +182,9 @@ traces:
     crocus-g41:
       label: [unsupported]
     crocus-hsw:
+      label: [skip, flakes]
       checksum: 99b3ec85e4b9335c3cffc49a63c0c62c
+      text: "Text glyphs render incorrectly sometimes."
   warzone2100/warzone2100-default.trace:
     crocus-g41:
       label: [unsupported]

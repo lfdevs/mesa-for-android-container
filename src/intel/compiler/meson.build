@@ -92,10 +92,12 @@ libintel_compiler_files = files(
   'brw_nir_lower_alpha_to_coverage.c',
   'brw_nir_lower_intersection_shader.c',
   'brw_nir_lower_non_uniform_resource_intel.c',
+  'brw_nir_lower_non_uniform_barycentric_at_sample.c',
   'brw_nir_lower_ray_queries.c',
   'brw_nir_lower_rt_intrinsics.c',
   'brw_nir_lower_shader_calls.c',
   'brw_nir_lower_shading_rate_output.c',
+  'brw_nir_lower_sparse.c',
   'brw_nir_lower_storage_image.c',
   'brw_nir_opt_peephole_ffma.c',
   'brw_nir_opt_peephole_imul32x16.c',
@@ -159,7 +161,7 @@ brw_nir_trig = custom_target(
 libintel_compiler = static_library(
   'intel_compiler',
   [libintel_compiler_files, brw_nir_trig, ir_expression_operation_h],
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
+  include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_nir_headers, idep_mesautil, idep_intel_dev],
@@ -177,7 +179,7 @@ elif with_intel_clc
     link_with : [
       libintel_compiler, libintel_common,libisl,
     ],
-    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
+    include_directories : [inc_include, inc_src, inc_intel],
     c_args : [pre_args, no_override_init_args],
     link_args : [ld_args_build_id],
     dependencies : [idep_nir, idep_vtn, idep_mesaclc, idep_mesautil, idep_intel_dev],
@@ -206,7 +208,7 @@ if with_tests
         'test_vf_float_conversions.cpp',
       ),
       ir_expression_operation_h,
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
+      include_directories : [inc_include, inc_src, inc_intel],
       link_with : [
         libintel_compiler, libintel_common, libisl
       ],

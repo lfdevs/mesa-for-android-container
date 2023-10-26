@@ -106,6 +106,16 @@ static uint32_t X(fd_ringbuffer_sp_emit_reloc_ring)(
          }
          fd_target->u.last_submit_seqno = fd_submit->seqno;
       }
+
+#ifndef NDEBUG
+      /* Dealing with assert'd BOs is deferred until the submit is known,
+       * since the batch resource tracking attaches BOs directly to
+       * the submit instead of the long lived stateobj
+       */
+      for (unsigned i = 0; i < fd_target->u.nr_assert_bos; i++) {
+         fd_ringbuffer_sp_assert_attached_nonobj(ring, fd_target->u.assert_bos[i]);
+      }
+#endif
    }
 
    return size;

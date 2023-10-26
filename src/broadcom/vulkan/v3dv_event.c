@@ -33,20 +33,16 @@ get_set_event_cs()
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options,
                                                   "set event cs");
 
-   b.shader->info.workgroup_size[0] = 1;
-   b.shader->info.workgroup_size[1] = 1;
-   b.shader->info.workgroup_size[2] = 1;
-
-   nir_ssa_def *buf =
+   nir_def *buf =
       nir_vulkan_resource_index(&b, 2, 32, nir_imm_int(&b, 0),
                                 .desc_set = 0,
                                 .binding = 0,
                                 .desc_type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
-   nir_ssa_def *offset =
+   nir_def *offset =
       nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 0, .range = 4);
 
-   nir_ssa_def *value =
+   nir_def *value =
       nir_load_push_constant(&b, 1, 8, nir_imm_int(&b, 0), .base = 4, .range = 4);
 
    nir_store_ssbo(&b, value, buf, offset,
@@ -62,23 +58,19 @@ get_wait_event_cs()
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options,
                                                   "wait event cs");
 
-   b.shader->info.workgroup_size[0] = 1;
-   b.shader->info.workgroup_size[1] = 1;
-   b.shader->info.workgroup_size[2] = 1;
-
-   nir_ssa_def *buf =
+   nir_def *buf =
       nir_vulkan_resource_index(&b, 2, 32, nir_imm_int(&b, 0),
                                 .desc_set = 0,
                                 .binding = 0,
                                 .desc_type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
-   nir_ssa_def *offset =
+   nir_def *offset =
       nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 0, .range = 4);
 
    nir_loop *loop = nir_push_loop(&b);
-      nir_ssa_def *load =
+      nir_def *load =
          nir_load_ssbo(&b, 1, 8, buf, offset, .access = 0, .align_mul = 4);
-      nir_ssa_def *value = nir_i2i32(&b, load);
+      nir_def *value = nir_i2i32(&b, load);
 
       nir_if *if_stmt = nir_push_if(&b, nir_ieq_imm(&b, value, 1));
       nir_jump(&b, nir_jump_break);

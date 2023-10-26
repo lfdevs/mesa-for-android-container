@@ -249,6 +249,7 @@ struct gl_extensions
    GLboolean KHR_texture_compression_astc_ldr;
    GLboolean KHR_texture_compression_astc_sliced_3d;
    GLboolean MESA_framebuffer_flip_y;
+   GLboolean MESA_texture_const_bandwidth;
    GLboolean MESA_pack_invert;
    GLboolean MESA_tile_raster_order;
    GLboolean EXT_shader_framebuffer_fetch;
@@ -797,6 +798,16 @@ struct gl_constants
     * Disable the glsl optimisation that resizes uniform arrays.
     */
    bool DisableUniformArrayResize;
+
+   /**
+    * Alias extension e.g. GL_ATI_shader_texture_lod to GL_ARB_shader_texture_lod.
+    */
+   char *AliasShaderExtension;
+
+   /**
+    * Allow fs-only bias argument in vertex shaders.
+    */
+   GLboolean AllowVertexTextureBias;
 
    /**
     * Align varyings to POT in a slot

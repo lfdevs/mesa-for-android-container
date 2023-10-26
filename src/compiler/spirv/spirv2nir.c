@@ -28,7 +28,10 @@
  */
 
 #include "nir.h"
-#include "spirv/nir_spirv.h"
+#include "nir_spirv.h"
+#include "spirv.h"
+#include "util/u_dynarray.h"
+#include "vtn_private.h"
 
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -41,29 +44,48 @@
 
 #define WORD_SIZE 4
 
+struct {
+   const char *name;
+   gl_shader_stage stage;
+} abbrev_stage_table[] = {
+   { "vs",    MESA_SHADER_VERTEX },
+   { "tcs",   MESA_SHADER_TESS_CTRL },
+   { "tes",   MESA_SHADER_TESS_EVAL },
+   { "gs",    MESA_SHADER_GEOMETRY },
+   { "fs",    MESA_SHADER_FRAGMENT },
+   { "cs",    MESA_SHADER_COMPUTE },
+   { "cl",    MESA_SHADER_KERNEL },
+   { "task",  MESA_SHADER_TASK },
+   { "mesh",  MESA_SHADER_MESH },
+
+   /* Keep previously used shader names working. */
+   { "vertex",    MESA_SHADER_VERTEX },
+   { "tess-ctrl", MESA_SHADER_TESS_CTRL },
+   { "tess-eval", MESA_SHADER_TESS_EVAL },
+   { "geometry",  MESA_SHADER_GEOMETRY },
+   { "fragment",  MESA_SHADER_FRAGMENT },
+   { "compute",   MESA_SHADER_COMPUTE },
+   { "kernel",    MESA_SHADER_KERNEL },
+};
+
 static gl_shader_stage
-stage_to_enum(char *stage)
+abbrev_to_stage(const char *name)
 {
-   if (!strcmp(stage, "vertex"))
-      return MESA_SHADER_VERTEX;
-   else if (!strcmp(stage, "tess-ctrl"))
-      return MESA_SHADER_TESS_CTRL;
-   else if (!strcmp(stage, "tess-eval"))
-      return MESA_SHADER_TESS_EVAL;
-   else if (!strcmp(stage, "geometry"))
-      return MESA_SHADER_GEOMETRY;
-   else if (!strcmp(stage, "fragment"))
-      return MESA_SHADER_FRAGMENT;
-   else if (!strcmp(stage, "compute"))
-      return MESA_SHADER_COMPUTE;
-   else if (!strcmp(stage, "kernel"))
-      return MESA_SHADER_KERNEL;
-   else if (!strcmp(stage, "task"))
-      return MESA_SHADER_TASK;
-   else if (!strcmp(stage, "mesh"))
-      return MESA_SHADER_MESH;
-   else
-      return MESA_SHADER_NONE;
+   for (unsigned i = 0; i < ARRAY_SIZE(abbrev_stage_table); i++) {
+      if (!strcasecmp(abbrev_stage_table[i].name, name))
+         return abbrev_stage_table[i].stage;
+   }
+   return MESA_SHADER_NONE;
+}
+
+static const char *
+stage_to_abbrev(gl_shader_stage stage)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(abbrev_stage_table); i++) {
+      if (abbrev_stage_table[i].stage == stage)
+         return abbrev_stage_table[i].name;
+   }
+   return "UNKNOWN";
 }
 
 static void
@@ -74,18 +96,104 @@ print_usage(char *exec_name, FILE *f)
            "Options:\n"
            "  -h  --help              Print this help.\n"
            "  -s, --stage <stage>     Specify the shader stage.  Valid stages are:\n"
-           "                          vertex, tess-ctrl, tess-eval, geometry, fragment,\n"
-           "                          task, mesh, compute, and kernel (OpenCL-style compute).\n"
+           "                          vs, tcs, tes, gs, fs, cs, cl (OpenCL-style compute),\n"
+           "                          task and mesh.  Case insensitive.\n"
            "  -e, --entry <name>      Specify the entry-point name.\n"
            "  -g, --opengl            Use OpenGL environment instead of Vulkan for\n"
            "                          graphics stages.\n"
-           "  --optimize              Run basic NIR optimizations in the result.\n", exec_name);
+           "  --optimize              Run basic NIR optimizations in the result.\n"
+           "\n"
+           "Passing the stage and the entry-point name is optional unless there's\n"
+           "ambiguity, in which case the program will print the entry-points\n"
+           "available.",
+           exec_name);
+}
+
+struct entry_point {
+   const char *name;
+   gl_shader_stage stage;
+};
+
+static struct entry_point
+select_entry_point(void *mem_ctx, const uint32_t *words, size_t word_count,
+                  struct entry_point args)
+{
+   /* Create a dummy vtn_builder to use with vtn_string_literal. */
+   struct vtn_builder *b = rzalloc(mem_ctx, struct vtn_builder);
+
+   struct util_dynarray candidates;
+   util_dynarray_init(&candidates, mem_ctx);
+
+   /* Skip header. */
+   const uint32_t *w = words + 5;
+   const uint32_t *end = words + word_count;
+
+   bool seen_entry_point = false;
+   while (w < end) {
+      SpvOp opcode = w[0] & SpvOpCodeMask;
+      unsigned count = w[0] >> SpvWordCountShift;
+      assert(count >= 1 && w + count <= end);
+
+      if (opcode == SpvOpEntryPoint) {
+         seen_entry_point = true;
+
+         unsigned name_words;
+         const char *name = vtn_string_literal(b, &w[3], count - 3, &name_words);
+         gl_shader_stage stage = vtn_stage_for_execution_model(w[1]);
+
+         struct entry_point e = { name, stage };
+         util_dynarray_append(&candidates, struct entry_point, e);
+      } else if (seen_entry_point) {
+         /* List of entry_points is over, we can break now. */
+         break;
+      }
+
+      w += count;
+   }
+
+   struct entry_point r = {0};
+   if (util_dynarray_num_elements(&candidates, struct entry_point) == 0) {
+      fprintf(stderr, "ERROR: No entry-points available.\n");
+      return r;
+   }
+
+   int matches = 0;
+   util_dynarray_foreach(&candidates, struct entry_point, e) {
+      if ((!args.name || !strcmp(args.name, e->name)) &&
+          (args.stage == MESA_SHADER_NONE || args.stage == e->stage)) {
+         if (matches == 0) {
+            /* Save the first match we found. */
+            r = *e;
+         }
+         matches++;
+      }
+   }
+
+   if (matches != 1) {
+      if (matches == 0) {
+         fprintf(stderr, "No matching entry-point for arguments passed.\n");
+      } else {
+         fprintf(stderr, "Multiple entry-points available, select with --stage and/or --entry.\n");
+
+         /* Discard whatever we found before. */
+         r.name = NULL;
+         r.stage = MESA_SHADER_NONE;
+      }
+
+      fprintf(stderr, "Entry-points available:\n");
+      util_dynarray_foreach(&candidates, struct entry_point, e)
+         fprintf(stderr, "  --entry e \"%s\" --stage %s\n", e->name, stage_to_abbrev(e->stage));
+   }
+
+   return r;
 }
 
 int main(int argc, char **argv)
 {
-   gl_shader_stage shader_stage = MESA_SHADER_FRAGMENT;
-   char *entry_point = "main";
+   struct entry_point entry_point = {
+      .name = NULL,
+      .stage = MESA_SHADER_NONE,
+   };
    int ch;
    bool optimize = false;
    enum nir_spirv_execution_environment env = NIR_SPIRV_VULKAN;
@@ -105,16 +213,18 @@ int main(int argc, char **argv)
       case 'h':
          print_usage(argv[0], stdout);
          return 0;
-      case 's':
-         shader_stage = stage_to_enum(optarg);
-         if (shader_stage == MESA_SHADER_NONE) {
+      case 's': {
+         gl_shader_stage s = abbrev_to_stage(optarg);
+         if (s == MESA_SHADER_NONE) {
             fprintf(stderr, "Unknown stage \"%s\"\n", optarg);
             print_usage(argv[0], stderr);
             return 1;
          }
+         entry_point.stage = s;
          break;
+      }
       case 'e':
-         entry_point = optarg;
+         entry_point.name = optarg;
          break;
       case 'g':
          env = NIR_SPIRV_OPENGL;
@@ -154,6 +264,19 @@ int main(int argc, char **argv)
       return 1;
    }
 
+   const uint32_t *words = map;
+   if (words[0] != SpvMagicNumber) {
+      fprintf(stderr, "ERROR: Not a SPIR-V file. First word was 0x%x, want 0x%x (SPIR-V magic).",
+              words[0], SpvMagicNumber);
+      return 1;
+   }
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   entry_point = select_entry_point(mem_ctx, map, word_count, entry_point);
+   if (!entry_point.name)
+      return 1;
+
    glsl_type_singleton_init_or_ref();
 
    struct nir_shader_compiler_options nir_opts = {0};
@@ -162,7 +285,7 @@ int main(int argc, char **argv)
       .environment = env,
    };
 
-   if (shader_stage == MESA_SHADER_KERNEL) {
+   if (entry_point.stage == MESA_SHADER_KERNEL) {
       spirv_opts.environment = NIR_SPIRV_OPENCL;
       spirv_opts.caps.address = true;
       spirv_opts.caps.float64 = true;
@@ -173,7 +296,7 @@ int main(int argc, char **argv)
    }
 
    nir_shader *nir = spirv_to_nir(map, word_count, NULL, 0,
-                                  shader_stage, entry_point,
+                                  entry_point.stage, entry_point.name,
                                   &spirv_opts, &nir_opts);
 
    if (nir) {
@@ -214,6 +337,8 @@ int main(int argc, char **argv)
    }
 
    glsl_type_singleton_decref();
+
+   ralloc_free(mem_ctx);
 
    return 0;
 }

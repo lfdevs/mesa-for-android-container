@@ -49,7 +49,8 @@ util_vma_heap_init(struct util_vma_heap *heap,
 {
    list_inithead(&heap->holes);
    heap->free_size = 0;
-   util_vma_heap_free(heap, start, size);
+   if (size > 0)
+      util_vma_heap_free(heap, start, size);
 
    /* Default to using high addresses */
    heap->alloc_high = true;

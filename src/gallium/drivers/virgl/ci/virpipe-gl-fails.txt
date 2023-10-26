@@ -6,13 +6,10 @@ dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_larger,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_larger,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.default_framebuffer,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.fbo,Fail
 dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_pixel.multisample_rbo_1,Fail
 dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_pixel.multisample_rbo_2,Fail
 dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_pixel.multisample_texture_1,Fail
@@ -207,7 +204,6 @@ spec@!opengl 1.5@depth-tex-compare,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 3.2@layered-rendering@clear-color-mismatched-layer-count,Fail
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
 spec@arb_blend_func_extended@arb_blend_func_extended-fbo-extended-blend-pattern_gles2,Fail
 spec@arb_clear_texture@arb_clear_texture-depth,Fail
 spec@arb_copy_image@arb_copy_image-formats,Fail
@@ -291,8 +287,6 @@ spec@arb_shader_image_load_store@layer@image2DMS/layered binding test,Fail
 spec@arb_shader_image_load_store@layer@image2DMS/non-layered binding test,Fail
 spec@arb_shader_image_load_store@layer@image2DMSArray/layered binding test,Fail
 spec@arb_shader_image_load_store@layer@image2DMSArray/non-layered binding test,Fail
-spec@arb_shader_image_load_store@max-images,Fail
-spec@arb_shader_image_load_store@max-images@Combined max image uniforms test,Fail
 spec@arb_shader_image_load_store@max-size,Fail
 spec@arb_shader_image_load_store@max-size@image2DMS max size test/4x16384x8x1,Fail
 spec@arb_shader_image_load_store@max-size@image2DMS max size test/4x8x16384x1,Fail
@@ -301,7 +295,6 @@ spec@arb_shader_image_load_store@semantics,Fail
 spec@arb_shader_image_load_store@semantics@imageLoad/Vertex shader/rgba32f/image2DMS test,Fail
 spec@arb_shader_image_load_store@semantics@imageLoad/Vertex shader/rgba32f/image2DMSArray test,Fail
 spec@arb_shader_storage_buffer_object@execution@ssbo-atomiccompswap-int,Fail
-spec@arb_shader_storage_buffer_object@maxblocks,Fail
 spec@arb_shader_texture_image_samples@builtin-image,Fail
 spec@arb_shader_texture_image_samples@builtin-image@r8/Compute/image2DMS samples test/2x8x96x1,Fail
 spec@arb_shader_texture_image_samples@builtin-image@r8/Compute/image2DMSArray samples test/2x8x16x6,Fail
@@ -681,3 +674,4 @@ spec@arb_viewport_array@display-list,Fail
 
 spec@arb_gl_spirv@execution@ssbo@unsized-array,Fail
 spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
+spec@!opengl 1.1@line-flat-clip-color,Fail

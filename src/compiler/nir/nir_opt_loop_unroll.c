@@ -26,7 +26,6 @@
 #include "nir_control_flow.h"
 #include "nir_loop_analyze.h"
 
-
 /* This limit is chosen fairly arbitrarily.  GLSL IR max iteration is 32
  * instructions. (Multiply counting nodes and magic number 5.)  But there is
  * no 1:1 mapping between GLSL IR and NIR so 25 was picked because it seemed
@@ -523,9 +522,7 @@ complex_unroll_single_terminator(nir_loop *loop)
    nir_cf_list_clone_and_reinsert(&lcssa_list, loop->cf_node.parent,
                                   cursor, remap_table);
 
-   start_cursor = terminator->continue_from_then ?
-      nir_before_block(nir_if_first_else_block(if_stmt)) :
-      nir_before_block(nir_if_first_then_block(if_stmt));
+   start_cursor = terminator->continue_from_then ? nir_before_block(nir_if_first_else_block(if_stmt)) : nir_before_block(nir_if_first_then_block(if_stmt));
 
    /* Reinsert the cloned vars back where they came from */
    nir_cf_reinsert(&lcssa_list, start_cursor);
@@ -590,9 +587,7 @@ wrapper_unroll(nir_loop *loop)
          nir_cf_reinsert(&loop_body,
                          nir_after_block(terminator->continue_from_block));
 
-         loop_end = terminator->continue_from_then ?
-           nir_after_block(nir_if_last_then_block(terminator->nif)) :
-           nir_after_block(nir_if_last_else_block(terminator->nif));
+         loop_end = terminator->continue_from_then ? nir_after_block(nir_if_last_then_block(terminator->nif)) : nir_after_block(nir_if_last_else_block(terminator->nif));
       }
    } else {
       loop_prepare_for_unroll(loop);
@@ -635,9 +630,7 @@ is_access_out_of_bounds(nir_loop_terminator *term, nir_deref_instr *deref,
        * the trip count any iteration over the loop will be an out of bounds
        * access of the array.
        */
-      unsigned length = glsl_type_is_vector(parent->type) ?
-                        glsl_get_vector_elements(parent->type) :
-                        glsl_get_length(parent->type);
+      unsigned length = glsl_type_is_vector(parent->type) ? glsl_get_vector_elements(parent->type) : glsl_get_length(parent->type);
       return length <= trip_count;
    }
 
@@ -684,11 +677,11 @@ remove_out_of_bounds_induction_use(nir_shader *shader, nir_loop *loop,
             if (is_access_out_of_bounds(term, nir_src_as_deref(intrin->src[0]),
                                         trip_count)) {
                if (intrin->intrinsic == nir_intrinsic_load_deref) {
-                  nir_ssa_def *undef =
-                     nir_ssa_undef(&b, intrin->dest.ssa.num_components,
-                                   intrin->dest.ssa.bit_size);
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                           undef);
+                  nir_def *undef =
+                     nir_undef(&b, intrin->def.num_components,
+                               intrin->def.bit_size);
+                  nir_def_rewrite_uses(&intrin->def,
+                                       undef);
                } else {
                   nir_instr_remove(instr);
                   continue;
@@ -720,7 +713,7 @@ partial_unroll(nir_shader *shader, nir_loop *loop, unsigned trip_count)
 
    nir_loop_terminator *terminator =
       list_first_entry(&loop->info->loop_terminator_list,
-                        nir_loop_terminator, loop_terminator_link);
+                       nir_loop_terminator, loop_terminator_link);
 
    assert(nir_is_trivial_loop_if(terminator->nif, terminator->break_block));
 
@@ -1002,9 +995,7 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out,
                 * We trust that nir_opt_if() does its job well enough to
                 * remove all instructions from the continue block when possible.
                 */
-               nir_block *first_continue_from_blk = t->continue_from_then ?
-                  nir_if_first_then_block(t->nif) :
-                  nir_if_first_else_block(t->nif);
+               nir_block *first_continue_from_blk = t->continue_from_then ? nir_if_first_then_block(t->nif) : nir_if_first_else_block(t->nif);
 
                if (!(nir_cf_node_is_last(&first_continue_from_blk->cf_node) &&
                      exec_list_is_empty(&first_continue_from_blk->instr_list)))
@@ -1090,7 +1081,6 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out,
                list_first_entry(&loop->info->loop_terminator_list,
                                 nir_loop_terminator, loop_terminator_link);
 
-
             if (terminator->nif == loop->info->limiting_terminator->nif) {
                limiting_term_second = false;
                terminator =
@@ -1133,7 +1123,7 @@ nir_opt_loop_unroll_impl(nir_function_impl *impl,
 {
    bool progress = false;
    nir_metadata_require(impl, nir_metadata_loop_analysis, indirect_mask,
-                        (int) force_unroll_sampler_indirect);
+                        (int)force_unroll_sampler_indirect);
    nir_metadata_require(impl, nir_metadata_block_index);
 
    bool has_nested_loop = false;

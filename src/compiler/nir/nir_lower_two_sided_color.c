@@ -27,19 +27,18 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-#define MAX_COLORS 2  /* VARYING_SLOT_COL0/COL1 */
+#define MAX_COLORS 2 /* VARYING_SLOT_COL0/COL1 */
 
 typedef struct {
-   nir_builder   b;
-   nir_shader   *shader;
+   nir_builder b;
+   nir_shader *shader;
    bool face_sysval;
    struct {
-      nir_variable *front;        /* COLn */
-      nir_variable *back;         /* BFCn */
+      nir_variable *front; /* COLn */
+      nir_variable *back;  /* BFCn */
    } colors[MAX_COLORS];
    int colors_count;
 } lower_2side_state;
-
 
 /* Lowering pass for fragment shaders to emulated two-sided-color.  For
  * each COLOR input, a corresponding BCOLOR input is created, and bcsel
@@ -59,7 +58,7 @@ create_input(nir_shader *shader, gl_varying_slot slot,
    return var;
 }
 
-static nir_ssa_def *
+static nir_def *
 load_input(nir_builder *b, nir_variable *in)
 {
    return nir_load_input(b, 4, 32, nir_imm_int(b, 0),
@@ -95,8 +94,8 @@ setup_inputs(lower_2side_state *state)
          slot = VARYING_SLOT_BFC1;
 
       state->colors[i].back = create_input(
-            state->shader, slot,
-            state->colors[i].front->data.interpolation);
+         state->shader, slot,
+         state->colors[i].front->data.interpolation);
    }
 
    return 0;
@@ -138,13 +137,13 @@ nir_lower_two_sided_color_instr(nir_builder *b, nir_instr *instr, void *data)
       return false;
 
    /* replace load_input(COLn) with
-      * bcsel(load_system_value(FACE), load_input(COLn), load_input(BFCn))
-      */
+    * bcsel(load_system_value(FACE), load_input(COLn), load_input(BFCn))
+    */
    b->cursor = nir_before_instr(&intr->instr);
    /* gl_FrontFace is a boolean but the intrinsic constructor creates
-      * 32-bit value by default.
-      */
-   nir_ssa_def *face;
+    * 32-bit value by default.
+    */
+   nir_def *face;
    if (state->face_sysval)
       face = nir_load_front_face(b, 1);
    else {
@@ -154,18 +153,17 @@ nir_lower_two_sided_color_instr(nir_builder *b, nir_instr *instr, void *data)
       face = nir_load_var(b, var);
    }
 
-   nir_ssa_def *front, *back;
+   nir_def *front, *back;
    if (intr->intrinsic == nir_intrinsic_load_deref) {
       front = nir_load_var(b, state->colors[idx].front);
-      back  = nir_load_var(b, state->colors[idx].back);
+      back = nir_load_var(b, state->colors[idx].back);
    } else {
       front = load_input(b, state->colors[idx].front);
-      back  = load_input(b, state->colors[idx].back);
+      back = load_input(b, state->colors[idx].back);
    }
-   nir_ssa_def *color = nir_bcsel(b, face, front, back);
+   nir_def *color = nir_bcsel(b, face, front, back);
 
-   assert(intr->dest.is_ssa);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, color);
+   nir_def_rewrite_uses(&intr->def, color);
 
    return true;
 }
@@ -187,6 +185,6 @@ nir_lower_two_sided_color(nir_shader *shader, bool face_sysval)
    return nir_shader_instructions_pass(shader,
                                        nir_lower_two_sided_color_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        &state);
 }

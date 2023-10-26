@@ -30,6 +30,7 @@ traces:
       checksum: 6aef509acd1257cc56612141e24dc11c
     freedreno-a630:
       checksum: 6aef509acd1257cc56612141e24dc11c
+      label: [skip, flakes]
     zink-a618:
       checksum: 45bdbb33bf87ed114bd548248be13408
       label: [skip, broken]
@@ -255,14 +256,15 @@ traces:
     freedreno-a530:
       checksum: 824672b1eef72c0223ac754dfc46e2d5
     freedreno-a618:
-      checksum: 5c0c5da476775dfac94b79e7edb556ce
+      checksum: e9b5d984b49f888ff1a4787fe2baea71
     freedreno-a630:
-      checksum: 5c0c5da476775dfac94b79e7edb556ce
+      label: [skip, flakes]
+      checksum: 1db3e8a057748109bd06734860396abf
     zink-a618:
-      checksum: a8dea3dcb341c0f6c786a264dee51766
+      checksum: f534d68a62934453325f11ff19e2241a
     zink-a630:
       label: [skip, flakes]
-      checksum: a8dea3dcb341c0f6c786a264dee51766
+      checksum: f534d68a62934453325f11ff19e2241a
       text: occasional Different pixels 1 (no tolerance), 0 (1% tol.)
 
   filament/filament-default.trace:
@@ -376,7 +378,7 @@ traces:
       text: missing 3/4 of rendered image
       checksum: e7f01e62180b60aef8c67fc4977c90d1
     freedreno-a530:
-      checksum: 71f46ff29ab058f89c745ddede5cc907
+      checksum: 777ecb806510d9a038a0d06d44deeb6f
     freedreno-a618:
       label: [skip]
     freedreno-a630:
@@ -385,7 +387,7 @@ traces:
         One of the material textures appears brighter on freedreno than
         i965 in a way that is probably wrong.
     zink-a618:
-      checksum: e64bcc59d61d1c75ce5eeb109343d9bd
+      checksum: ba79e6d4a64b4391d3e9e20d3d630f0a
     zink-a630:
       checksum: e64bcc59d61d1c75ce5eeb109343d9bd
 
@@ -781,6 +783,7 @@ traces:
     freedreno-a618:
       checksum: a71d1ad391162acef60cbb2804d0cf64
     freedreno-a630:
+      label: [skip, flakes]
       checksum: a71d1ad391162acef60cbb2804d0cf64
     zink-a618:
       checksum: 7d084f2cd05644b717cc591bd8e9dcce

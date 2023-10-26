@@ -26,6 +26,8 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
+#include "util/vl_zscan_data.h"
+
 void
 genX(CmdBeginVideoCodingKHR)(VkCommandBuffer commandBuffer,
                              const VkVideoBeginCodingInfoKHR *pBeginInfo)
@@ -1022,90 +1024,34 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
       avc_img.CurrentPictureFrameNumber = h264_pic_info->pStdPictureInfo->frame_num;
    }
 
-   if (pps->flags.pic_scaling_matrix_present_flag) {
+   StdVideoH264ScalingLists scaling_lists;
+   vk_video_derive_h264_scaling_list(sps, pps, &scaling_lists);
+   anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
+      qm.DWordLength = 16;
+      qm.AVC = AVC_4x4_Intra_MATRIX;
+      for (unsigned m = 0; m < 3; m++)
+         for (unsigned q = 0; q < 16; q++)
+            qm.ForwardQuantizerMatrix[m * 16 + vl_zscan_normal_16[q]] = scaling_lists.ScalingList4x4[m][q];
+   }
+   anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
+      qm.DWordLength = 16;
+      qm.AVC = AVC_4x4_Inter_MATRIX;
+      for (unsigned m = 0; m < 3; m++)
+         for (unsigned q = 0; q < 16; q++)
+            qm.ForwardQuantizerMatrix[m * 16 + vl_zscan_normal_16[q]] = scaling_lists.ScalingList4x4[m + 3][q];
+   }
+   if (pps->flags.transform_8x8_mode_flag) {
       anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
          qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Intra_MATRIX;
-         for (unsigned m = 0; m < 3; m++)
-            for (unsigned q = 0; q < 16; q++)
-               qm.ForwardQuantizerMatrix[m * 16 + q] = pps->pScalingLists->ScalingList4x4[m][q];
-      }
-      anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-         qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Inter_MATRIX;
-         for (unsigned m = 0; m < 3; m++)
-            for (unsigned q = 0; q < 16; q++)
-               qm.ForwardQuantizerMatrix[m * 16 + q] = pps->pScalingLists->ScalingList4x4[m + 3][q];
-      }
-      if (pps->flags.transform_8x8_mode_flag) {
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Intra_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = pps->pScalingLists->ScalingList8x8[0][q];
-         }
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Inter_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = pps->pScalingLists->ScalingList8x8[3][q];
-         }
-      }
-   } else if (sps->flags.seq_scaling_matrix_present_flag) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-         qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Intra_MATRIX;
-         for (unsigned m = 0; m < 3; m++)
-            for (unsigned q = 0; q < 16; q++)
-               qm.ForwardQuantizerMatrix[m * 16 + q] = sps->pScalingLists->ScalingList4x4[m][q];
+         qm.AVC = AVC_8x8_Intra_MATRIX;
+         for (unsigned q = 0; q < 64; q++)
+            qm.ForwardQuantizerMatrix[vl_zscan_normal[q]] = scaling_lists.ScalingList8x8[0][q];
       }
       anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
          qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Inter_MATRIX;
-         for (unsigned m = 0; m < 3; m++)
-            for (unsigned q = 0; q < 16; q++)
-               qm.ForwardQuantizerMatrix[m * 16 + q] = sps->pScalingLists->ScalingList4x4[m + 3][q];
-      }
-      if (pps->flags.transform_8x8_mode_flag) {
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Intra_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = sps->pScalingLists->ScalingList8x8[0][q];
-         }
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Inter_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = sps->pScalingLists->ScalingList8x8[3][q];
-         }
-      }
-   } else {
-      anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-         qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Intra_MATRIX;
-         for (unsigned q = 0; q < 3 * 16; q++)
-            qm.ForwardQuantizerMatrix[q] = 0x10;
-      }
-      anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-         qm.DWordLength = 16;
-         qm.AVC = AVC_4x4_Inter_MATRIX;
-         for (unsigned q = 0; q < 3 * 16; q++)
-            qm.ForwardQuantizerMatrix[q] = 0x10;
-      }
-      if (pps->flags.transform_8x8_mode_flag) {
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Intra_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = 0x10;
-         }
-         anv_batch_emit(&cmd_buffer->batch, GENX(MFX_QM_STATE), qm) {
-            qm.DWordLength = 16;
-            qm.AVC = AVC_8x8_Inter_MATRIX;
-            for (unsigned q = 0; q < 64; q++)
-               qm.ForwardQuantizerMatrix[q] = 0x10;
-         }
+         qm.AVC = AVC_8x8_Inter_MATRIX;
+         for (unsigned q = 0; q < 64; q++)
+            qm.ForwardQuantizerMatrix[vl_zscan_normal[q]] = scaling_lists.ScalingList8x8[1][q];
       }
    }
 

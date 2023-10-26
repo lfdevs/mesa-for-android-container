@@ -7,9 +7,22 @@
 #ifndef SI_SHADER_PRIVATE_H
 #define SI_SHADER_PRIVATE_H
 
+#include "ac_hw_stage.h"
 #include "ac_shader_abi.h"
 #include "ac_llvm_build.h"
 #include "si_shader.h"
+
+#define SI_SPI_PS_INPUT_ADDR_FOR_PROLOG (       \
+   S_0286D0_PERSP_SAMPLE_ENA(1) |               \
+   S_0286D0_PERSP_CENTER_ENA(1) |               \
+   S_0286D0_PERSP_CENTROID_ENA(1) |             \
+   S_0286D0_LINEAR_SAMPLE_ENA(1) |              \
+   S_0286D0_LINEAR_CENTER_ENA(1) |              \
+   S_0286D0_LINEAR_CENTROID_ENA(1) |            \
+   S_0286D0_FRONT_FACE_ENA(1) |                 \
+   S_0286D0_ANCILLARY_ENA(1) |                  \
+   S_0286D0_SAMPLE_COVERAGE_ENA(1) |            \
+   S_0286D0_POS_FIXED_PT_ENA(1))
 
 struct util_debug_callback;
 
@@ -56,7 +69,6 @@ struct si_shader_args {
    /* API TCS & TES */
    struct ac_arg tes_offchip_addr;
    /* PS */
-   struct ac_arg pos_fixed_pt;
    struct ac_arg alpha_reference;
    struct ac_arg color_start;
    /* CS */
@@ -128,6 +140,29 @@ void si_get_tcs_epilog_key(struct si_shader *shader, union si_shader_part_key *k
 bool si_need_ps_prolog(const union si_shader_part_key *key);
 void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_key *key);
 void si_get_ps_epilog_key(struct si_shader *shader, union si_shader_part_key *key);
+enum ac_hw_stage si_select_hw_stage(const gl_shader_stage stage, const union si_shader_key *const key,
+                                    const enum amd_gfx_level gfx_level);
+nir_shader *si_get_prev_stage_nir_shader(struct si_shader *shader,
+                                         struct si_shader *prev_shader,
+                                         struct si_shader_args *args,
+                                         bool *free_nir);
+unsigned si_get_tcs_out_patch_stride(const struct si_shader_info *info);
+void si_get_tcs_epilog_args(enum amd_gfx_level gfx_level,
+                            struct si_shader_args *args,
+                            struct ac_arg *rel_patch_id,
+                            struct ac_arg *invocation_id,
+                            struct ac_arg *tf_lds_offset,
+                            struct ac_arg tess_factors[6]);
+void si_get_vs_prolog_args(enum amd_gfx_level gfx_level,
+                           struct si_shader_args *args,
+                           const union si_shader_part_key *key);
+void si_get_ps_prolog_args(struct si_shader_args *args,
+                           const union si_shader_part_key *key);
+void si_get_ps_epilog_args(struct si_shader_args *args,
+                           const union si_shader_part_key *key,
+                           struct ac_arg colors[MAX_DRAW_BUFFERS],
+                           struct ac_arg *depth, struct ac_arg *stencil,
+                           struct ac_arg *sample_mask);
 
 /* gfx10_shader_ngg.c */
 unsigned gfx10_ngg_get_vertices_per_prim(struct si_shader *shader);
@@ -136,7 +171,7 @@ unsigned gfx10_ngg_get_scratch_dw_size(struct si_shader *shader);
 bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader);
 
 /* si_nir_lower_abi.c */
-nir_ssa_def *si_nir_load_internal_binding(nir_builder *b, struct si_shader_args *args,
+nir_def *si_nir_load_internal_binding(nir_builder *b, struct si_shader_args *args,
                                           unsigned slot, unsigned num_components);
 bool si_nir_lower_abi(nir_shader *nir, struct si_shader *shader, struct si_shader_args *args);
 
@@ -171,17 +206,16 @@ LLVMValueRef si_insert_input_ret_float(struct si_shader_context *ctx, LLVMValueR
                                        struct ac_arg param, unsigned return_index);
 LLVMValueRef si_insert_input_ptr(struct si_shader_context *ctx, LLVMValueRef ret,
                                  struct ac_arg param, unsigned return_index);
-LLVMValueRef si_prolog_get_internal_bindings(struct si_shader_context *ctx);
+LLVMValueRef si_prolog_get_internal_binding_slot(struct si_shader_context *ctx, unsigned slot);
 LLVMValueRef si_unpack_param(struct si_shader_context *ctx, struct ac_arg param, unsigned rshift,
                              unsigned bitwidth);
-void si_build_wrapper_function(struct si_shader_context *ctx, struct ac_llvm_pointer *parts,
-                               unsigned num_parts, unsigned main_part,
-                               unsigned next_shader_first_part,
-                               enum ac_arg_type *main_arg_types,
-                               bool same_thread_count);
 bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                             struct si_shader *shader, struct si_shader_args *args,
                             struct util_debug_callback *debug, struct nir_shader *nir);
+bool si_llvm_build_shader_part(struct si_screen *sscreen, gl_shader_stage stage,
+                               bool prolog, struct ac_llvm_compiler *compiler,
+                               struct util_debug_callback *debug, const char *name,
+                               struct si_shader_part *result);
 
 /* si_shader_llvm_gs.c */
 LLVMValueRef si_is_es_thread(struct si_shader_context *ctx);
@@ -192,27 +226,28 @@ void si_llvm_gs_build_end(struct si_shader_context *ctx);
 /* si_shader_llvm_tess.c */
 LLVMValueRef si_get_rel_patch_id(struct si_shader_context *ctx);
 void si_llvm_ls_build_end(struct si_shader_context *ctx);
-void si_llvm_build_tcs_epilog(struct si_shader_context *ctx, union si_shader_part_key *key,
-                              bool separate_epilog);
+void si_llvm_build_tcs_epilog(struct si_shader_context *ctx, union si_shader_part_key *key);
 void si_llvm_tcs_build_end(struct si_shader_context *ctx);
 void si_llvm_init_tcs_callbacks(struct si_shader_context *ctx);
 
 /* si_shader_llvm_ps.c */
-void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
-                             bool separate_prolog);
-void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part_key *key,
-                             bool separate_epilog);
+void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part_key *key);
+void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part_key *key);
 void si_llvm_ps_build_end(struct si_shader_context *ctx);
 
 /* si_shader_llvm_vs.c */
-void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
-                             bool separate_prolog);
+void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part_key *key);
 
 /* si_shader_aco.c */
 bool si_aco_compile_shader(struct si_shader *shader,
                            struct si_shader_args *args,
                            struct nir_shader *nir,
                            struct util_debug_callback *debug);
-void si_aco_resolve_symbols(struct si_shader *shader, uint32_t *code, uint64_t scratch_va);
+void si_aco_resolve_symbols(struct si_shader *shader, uint32_t *code_for_write,
+                            const uint32_t *code_for_read, uint64_t scratch_va,
+                            uint32_t const_offset);
+bool si_aco_build_shader_part(struct si_screen *screen, gl_shader_stage stage, bool prolog,
+                              struct util_debug_callback *debug, const char *name,
+                              struct si_shader_part *result);
 
 #endif

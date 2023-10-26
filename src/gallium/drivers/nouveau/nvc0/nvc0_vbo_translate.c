@@ -81,9 +81,9 @@ nvc0_vertex_configure_translate(struct nvc0_context *nvc0, int32_t index_bias)
       }
 
       if (index_bias && !unlikely(nvc0->vertex->instance_bufs & (1 << i)))
-         map += (intptr_t)index_bias * vb->stride;
+         map += (intptr_t)index_bias * nvc0->vertex->strides[i];
 
-      translate->set_buffer(translate, i, map, vb->stride, ~0);
+      translate->set_buffer(translate, i, map, nvc0->vertex->strides[i], ~0);
    }
 }
 
@@ -109,7 +109,7 @@ nvc0_push_map_edgeflag(struct push_context *ctx, struct nvc0_context *nvc0,
    struct pipe_vertex_buffer *vb = &nvc0->vtxbuf[ve->vertex_buffer_index];
    struct nv04_resource *buf = nv04_resource(vb->buffer.resource);
 
-   ctx->edgeflag.stride = vb->stride;
+   ctx->edgeflag.stride = ve->src_stride;
    ctx->edgeflag.width = util_format_get_blocksize(ve->src_format);
    if (!vb->is_user_buffer) {
       unsigned offset = vb->buffer_offset + ve->src_offset;
@@ -120,7 +120,7 @@ nvc0_push_map_edgeflag(struct push_context *ctx, struct nvc0_context *nvc0,
    }
 
    if (index_bias)
-      ctx->edgeflag.data += (intptr_t)index_bias * vb->stride;
+      ctx->edgeflag.data += (intptr_t)index_bias * ve->src_stride;
 }
 
 static inline unsigned

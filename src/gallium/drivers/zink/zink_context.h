@@ -99,7 +99,8 @@ zink_fence_wait(struct pipe_context *ctx);
 
 void
 zink_wait_on_batch(struct zink_context *ctx, uint64_t batch_id);
-
+void
+zink_reset_ds3_states(struct zink_context *ctx);
 bool
 zink_check_batch_completion(struct zink_context *ctx, uint64_t batch_id);
 VkCommandBuffer
@@ -119,8 +120,10 @@ void
 zink_resource_buffer_barrier2(struct zink_context *ctx, struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline);
 bool
 zink_resource_image_needs_barrier(struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
-bool
+void
 zink_resource_image_barrier_init(VkImageMemoryBarrier *imb, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
+void
+zink_resource_image_barrier2_init(VkImageMemoryBarrier2 *imb, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
 void
 zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
                       VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
@@ -278,10 +281,8 @@ zink_resource_rebind(struct zink_context *ctx, struct zink_resource *res);
 
 void
 zink_rebind_framebuffer(struct zink_context *ctx, struct zink_resource *res);
-bool
-zink_use_dummy_attachments(const struct zink_context *ctx);
 void
-zink_set_color_write_enables(struct zink_context *ctx);
+zink_set_null_fs(struct zink_context *ctx);
 
 void
 zink_copy_image_buffer(struct zink_context *ctx, struct zink_resource *dst, struct zink_resource *src,

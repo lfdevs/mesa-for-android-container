@@ -71,7 +71,7 @@ predicate_following(nir_cf_node *node, struct lower_returns_state *state)
        */
       nir_cf_list list;
       nir_cf_extract(&list, nir_after_cf_node(&if_stmt->cf_node),
-                            nir_after_cf_list(state->cf_list));
+                     nir_after_cf_list(state->cf_list));
       assert(!exec_list_is_empty(&list.list));
       nir_cf_reinsert(&list, nir_before_cf_list(&if_stmt->else_list));
    }
@@ -168,7 +168,7 @@ lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
       /* This block is unreachable.  Delete it and everything after it. */
       nir_cf_list list;
       nir_cf_extract(&list, nir_before_cf_node(&block->cf_node),
-                            nir_after_cf_list(state->cf_list));
+                     nir_after_cf_list(state->cf_list));
 
       if (exec_list_is_empty(&list.list)) {
          /* There's nothing here, which also means there's nothing in this
@@ -209,7 +209,7 @@ lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
          nir_local_variable_create(b->impl, glsl_bool_type(), "return");
 
       /* Initialize the variable to 0 */
-      b->cursor = nir_before_cf_list(&b->impl->body);
+      b->cursor = nir_before_impl(b->impl);
       nir_store_var(b, state->return_flag, nir_imm_false(b), 1);
    }
 

@@ -55,22 +55,22 @@
  *  0.9375 1111111111111110
  *  1.0000 1111111111111111
  */
-static nir_ssa_def *
-build_dither_mask(nir_builder *b, nir_ssa_def *color)
+static nir_def *
+build_dither_mask(nir_builder *b, nir_def *color)
 {
    assert(color->num_components == 4);
-   nir_ssa_def *alpha = nir_channel(b, color, 3);
+   nir_def *alpha = nir_channel(b, color, 3);
 
-   nir_ssa_def *m =
+   nir_def *m =
       nir_f2i32(b, nir_fmul_imm(b, nir_fsat(b, alpha), 16.0));
 
-   nir_ssa_def *part_a =
+   nir_def *part_a =
       nir_iand_imm(b, nir_ushr(b, nir_imm_int(b, 0xfea80),
                                   nir_iand_imm(b, m, ~3)),
                       0xf);
 
-   nir_ssa_def *part_b = nir_iand_imm(b, m, 2);
-   nir_ssa_def *part_c = nir_iand_imm(b, m, 1);
+   nir_def *part_b = nir_iand_imm(b, m, 2);
+   nir_def *part_c = nir_iand_imm(b, m, 1);
 
    return nir_ior(b, nir_imul_imm(b, part_a, 0x1111),
                      nir_ior(b, nir_imul_imm(b, part_b, 0x0808),
@@ -138,7 +138,7 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
 
    /* It's possible that shader_info may be out-of-date and the writes to
     * either gl_SampleMask or the first color value may have been removed.
-    * This can happen if, for instance a nir_ssa_undef is written to the
+    * This can happen if, for instance a nir_undef is written to the
     * color value.  In that case, just bail and don't do anything rather
     * than crashing.
     */
@@ -149,13 +149,11 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
     * assuming an alpha of 1.0 and letting the sample mask pass through
     * unaltered seems like the kindest thing to do to apps.
     */
-   assert(color0_write->src[0].is_ssa);
-   nir_ssa_def *color0 = color0_write->src[0].ssa;
+   nir_def *color0 = color0_write->src[0].ssa;
    if (color0->num_components < 4)
       goto skip;
 
-   assert(sample_mask_write->src[0].is_ssa);
-   nir_ssa_def *sample_mask = sample_mask_write->src[0].ssa;
+   nir_def *sample_mask = sample_mask_write->src[0].ssa;
 
    if (sample_mask_write_first) {
       /* If the sample mask write comes before the write to color0, we need
@@ -170,23 +168,19 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
    nir_builder b = nir_builder_at(nir_before_instr(&sample_mask_write->instr));
 
    /* Combine dither_mask and the gl_SampleMask value */
-   nir_ssa_def *dither_mask = build_dither_mask(&b, color0);
+   nir_def *dither_mask = build_dither_mask(&b, color0);
    dither_mask = nir_iand(&b, sample_mask, dither_mask);
 
    if (key->alpha_to_coverage == BRW_SOMETIMES) {
-      nir_ssa_def *push_flags =
+      nir_def *push_flags =
          nir_load_uniform(&b, 1, 32, nir_imm_int(&b, prog_data->msaa_flags_param * 4));
-      nir_ssa_def *alpha_to_coverage =
-         nir_i2b(&b,
-                 nir_iadd_imm(&b, push_flags,
-                              BRW_WM_MSAA_FLAG_ALPHA_TO_COVERAGE));
+      nir_def *alpha_to_coverage =
+         nir_test_mask(&b, push_flags, BRW_WM_MSAA_FLAG_ALPHA_TO_COVERAGE);
       dither_mask = nir_bcsel(&b, alpha_to_coverage,
                               dither_mask, sample_mask_write->src[0].ssa);
    }
 
-   nir_instr_rewrite_src(&sample_mask_write->instr,
-                         &sample_mask_write->src[0],
-                         nir_src_for_ssa(dither_mask));
+   nir_src_rewrite(&sample_mask_write->src[0], dither_mask);
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
                                nir_metadata_dominance);

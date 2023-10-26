@@ -111,7 +111,7 @@ emit_const_ptrs(struct fd_ringbuffer *ring, const struct ir3_shader_variant *v,
 }
 
 static void
-emit_stage_tess_consts(struct fd_ringbuffer *ring, struct ir3_shader_variant *v,
+emit_stage_tess_consts(struct fd_ringbuffer *ring, const struct ir3_shader_variant *v,
                        uint32_t *params, int num_params)
 {
    const struct ir3_const_state *const_state = ir3_const_state(v);
@@ -166,7 +166,7 @@ fd6_build_tess_consts(struct fd6_emit *emit)
    }
 
    if (emit->gs) {
-      struct ir3_shader_variant *prev;
+      const struct ir3_shader_variant *prev;
       if (emit->ds)
          prev = emit->ds;
       else
@@ -229,7 +229,7 @@ fd6_emit_ubos(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 }
 
 unsigned
-fd6_user_consts_cmdstream_size(struct ir3_shader_variant *v)
+fd6_user_consts_cmdstream_size(const struct ir3_shader_variant *v)
 {
    if (!v)
       return 0;
@@ -350,18 +350,16 @@ fd6_emit_cs_user_consts(struct fd_context *ctx,
 }
 
 void
-fd6_emit_immediates(struct fd_screen *screen,
-                    const struct ir3_shader_variant *v,
+fd6_emit_immediates(const struct ir3_shader_variant *v,
                     struct fd_ringbuffer *ring)
 {
-   ir3_emit_immediates(screen, v, ring);
+   ir3_emit_immediates(v, ring);
 }
 
 void
-fd6_emit_link_map(struct fd_screen *screen,
-                  const struct ir3_shader_variant *producer,
-                  const struct ir3_shader_variant *v,
+fd6_emit_link_map(const struct ir3_shader_variant *producer,
+                  const struct ir3_shader_variant *consumer,
                   struct fd_ringbuffer *ring)
 {
-   ir3_emit_link_map(screen, producer, v, ring);
+   ir3_emit_link_map(producer, consumer, ring);
 }

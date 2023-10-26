@@ -1,0 +1,1 @@
+dEQP-VK.ray_tracing_pipeline.capture_replay.acceleration_structures.compaction.gpu_built.bottom_acceleration_structure.triangles,Fail

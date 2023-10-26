@@ -119,17 +119,28 @@ cs_program_emit(struct fd_ringbuffer *ring, struct kernel *kernel)
    struct ir3_kernel *ir3_kernel = to_ir3_kernel(kernel);
    struct a6xx_backend *a6xx_backend = to_a6xx_backend(ir3_kernel->backend);
    struct ir3_shader_variant *v = ir3_kernel->v;
+   const unsigned *local_size = kernel->local_size;
    const struct ir3_info *i = &v->info;
    enum a6xx_threadsize thrsz = i->double_threadsize ? THREAD128 : THREAD64;
 
-   OUT_PKT4(ring, REG_A6XX_SP_MODE_CONTROL, 1);
-   OUT_RING(ring, A6XX_SP_MODE_CONTROL_CONSTANT_DEMOTION_ENABLE | 4);
+   OUT_REG(ring, A6XX_SP_MODE_CONTROL(.constant_demotion_enable = true,
+                                      .isammode = ISAMMODE_GL,
+                                      .shared_consts_enable = false));
 
    OUT_PKT4(ring, REG_A6XX_SP_PERFCTR_ENABLE, 1);
    OUT_RING(ring, A6XX_SP_PERFCTR_ENABLE_CS);
 
    OUT_PKT4(ring, REG_A6XX_SP_FLOAT_CNTL, 1);
    OUT_RING(ring, 0);
+
+   for (size_t i = 0; i < ARRAY_SIZE(a6xx_backend->info->a6xx.magic_raw); i++) {
+      auto magic_reg = a6xx_backend->info->a6xx.magic_raw[i];
+      if (!magic_reg.reg)
+         break;
+
+      OUT_PKT4(ring, magic_reg.reg, 1);
+      OUT_RING(ring, magic_reg.value);
+   }
 
    OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP,
       .vs_state = true,
@@ -159,6 +170,14 @@ cs_program_emit(struct fd_ringbuffer *ring, struct kernel *kernel)
                COND(v->mergedregs, A6XX_SP_CS_CTRL_REG0_MERGEDREGS) |
                COND(ir3_kernel->info.early_preamble, A6XX_SP_CS_CTRL_REG0_EARLYPREAMBLE) |
                A6XX_SP_CS_CTRL_REG0_BRANCHSTACK(ir3_shader_branchstack_hw(v)));
+   if (CHIP == A7XX) {
+      OUT_REG(ring, HLSQ_FS_CNTL_0(CHIP, .threadsize = THREAD64));
+
+      OUT_REG(ring, HLSQ_CONTROL_2_REG(CHIP, .dword = 0xfcfcfcfc),
+              HLSQ_CONTROL_3_REG(CHIP, .dword = 0xfcfcfcfc),
+              HLSQ_CONTROL_4_REG(CHIP, .dword = 0xfcfcfcfc),
+              HLSQ_CONTROL_5_REG(CHIP, .dword = 0x0000fc00), );
+   }
 
    OUT_PKT4(ring, REG_A6XX_SP_CS_UNKNOWN_A9B1, 1);
    OUT_RING(ring, A6XX_SP_CS_UNKNOWN_A9B1_SHARED_SIZE(1) |
@@ -183,16 +202,28 @@ cs_program_emit(struct fd_ringbuffer *ring, struct kernel *kernel)
                         A6XX_HLSQ_CS_CNTL_0_LOCALIDREGID(local_invocation_id));
       OUT_RING(ring, A6XX_HLSQ_CS_CNTL_1_LINEARLOCALIDREGID(regid(63, 0)) |
                         A6XX_HLSQ_CS_CNTL_1_THREADSIZE(thrsz));
+   } else {
+      enum a7xx_cs_yalign yalign = (local_size[1] % 8 == 0)   ? CS_YALIGN_8
+                                   : (local_size[1] % 4 == 0) ? CS_YALIGN_4
+                                   : (local_size[1] % 2 == 0) ? CS_YALIGN_2
+                                                              : CS_YALIGN_1;
+
+      OUT_REG(ring, A7XX_HLSQ_CS_CNTL_1(.linearlocalidregid = regid(63, 0),
+                                        .threadsize = thrsz,
+                                        .unk11 = true,
+                                        .unk22 = true,
+                                        .yalign = yalign, ));
    }
 
    if (CHIP == A7XX || a6xx_backend->info->a6xx.has_lpac) {
-      OUT_PKT4(ring, REG_A6XX_SP_CS_CNTL_0, 2);
+      OUT_PKT4(ring, REG_A6XX_SP_CS_CNTL_0, 1);
       OUT_RING(ring, A6XX_SP_CS_CNTL_0_WGIDCONSTID(work_group_id) |
                         A6XX_SP_CS_CNTL_0_WGSIZECONSTID(regid(63, 0)) |
                         A6XX_SP_CS_CNTL_0_WGOFFSETCONSTID(regid(63, 0)) |
                         A6XX_SP_CS_CNTL_0_LOCALIDREGID(local_invocation_id));
-      OUT_RING(ring, A6XX_SP_CS_CNTL_1_LINEARLOCALIDREGID(regid(63, 0)) |
-                        A6XX_SP_CS_CNTL_1_THREADSIZE(thrsz));
+      OUT_REG(ring,
+         SP_CS_CNTL_1(CHIP, .linearlocalidregid = regid(63, 0),
+                            .threadsize = thrsz, ));
    }
 
    OUT_PKT4(ring, REG_A6XX_SP_CS_OBJ_START, 2);
@@ -215,9 +246,9 @@ cs_program_emit(struct fd_ringbuffer *ring, struct kernel *kernel)
    OUT_RELOC(ring, v->bo, 0, 0, 0);
 
    if (v->pvtmem_size > 0) {
-      uint32_t per_fiber_size = ALIGN(v->pvtmem_size, 512);
+      uint32_t per_fiber_size = v->pvtmem_size;
       uint32_t per_sp_size =
-         ALIGN(per_fiber_size * a6xx_backend->info->a6xx.fibers_per_sp, 1 << 12);
+         ALIGN(per_fiber_size * a6xx_backend->info->fibers_per_sp, 1 << 12);
       uint32_t total_size = per_sp_size * a6xx_backend->info->num_sp_cores;
 
       struct fd_bo *pvtmem = fd_bo_new(a6xx_backend->dev, total_size, 0, "pvtmem");
@@ -454,6 +485,12 @@ a6xx_emit_grid(struct kernel *kernel, uint32_t grid[3],
                     .localsizey = local_size[1] - 1,
                     .localsizez = local_size[2] - 1,
                  ));
+   if (CHIP == A7XX) {
+      OUT_REG(ring, A7XX_HLSQ_CS_LOCAL_SIZE(.localsizex = local_size[0] - 1,
+                                            .localsizey = local_size[1] - 1,
+                                            .localsizez = local_size[2] - 1, ));
+   }
+
    OUT_REG(ring, HLSQ_CS_NDRANGE_1(CHIP,
                     .globalsize_x = local_size[0] * num_groups[0],
                  ));

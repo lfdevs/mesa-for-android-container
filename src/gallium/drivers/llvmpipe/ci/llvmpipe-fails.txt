@@ -189,13 +189,6 @@ spec@glsl-4.50@execution@ssbo-atomiccompswap-int,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-# [...]
-# Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
-# Image comparison failed: reference = 0, expected = 0:0:0:0, result = 0:0:0:3
-# Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
-# [...]
-wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail
-
 # Debian bookworm fails
 spec@arb_viewport_array@display-list,Fail
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmin-float-nan,Fail
@@ -203,3 +196,5 @@ spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmax-float-nan,Fail
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float,Crash
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float-nan,Crash
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float-negative-zero,Crash
+spec@!opengl 1.1@line-flat-clip-color,Fail
+spec@intel_shader_atomic_float_minmax@execution@shared-atomiccompswap-float,Crash

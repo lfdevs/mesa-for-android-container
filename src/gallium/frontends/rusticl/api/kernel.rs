@@ -22,13 +22,13 @@ impl CLInfo<cl_kernel_info> for cl_kernel {
     fn query(&self, q: cl_kernel_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let kernel = self.get_ref()?;
         Ok(match q {
-            CL_KERNEL_ATTRIBUTES => cl_prop::<&str>(&kernel.build.attributes_string),
+            CL_KERNEL_ATTRIBUTES => cl_prop::<&str>(&kernel.kernel_info.attributes_string),
             CL_KERNEL_CONTEXT => {
                 let ptr = Arc::as_ptr(&kernel.prog.context);
                 cl_prop::<cl_context>(cl_context::from_ptr(ptr))
             }
             CL_KERNEL_FUNCTION_NAME => cl_prop::<&str>(&kernel.name),
-            CL_KERNEL_NUM_ARGS => cl_prop::<cl_uint>(kernel.build.args.len() as cl_uint),
+            CL_KERNEL_NUM_ARGS => cl_prop::<cl_uint>(kernel.kernel_info.args.len() as cl_uint),
             CL_KERNEL_PROGRAM => {
                 let ptr = Arc::as_ptr(&kernel.prog);
                 cl_prop::<cl_program>(cl_program::from_ptr(ptr))
@@ -46,7 +46,7 @@ impl CLInfoObj<cl_kernel_arg_info, cl_uint> for cl_kernel {
         let kernel = self.get_ref()?;
 
         // CL_INVALID_ARG_INDEX if arg_index is not a valid argument index.
-        if idx as usize >= kernel.build.args.len() {
+        if idx as usize >= kernel.kernel_info.args.len() {
             return Err(CL_INVALID_ARG_INDEX);
         }
 
@@ -94,7 +94,7 @@ impl CLInfoObj<cl_kernel_work_group_info, cl_device_id> for cl_kernel {
         }
 
         Ok(match *q {
-            CL_KERNEL_COMPILE_WORK_GROUP_SIZE => cl_prop::<[usize; 3]>(kernel.work_group_size),
+            CL_KERNEL_COMPILE_WORK_GROUP_SIZE => cl_prop::<[usize; 3]>(kernel.work_group_size()),
             CL_KERNEL_LOCAL_MEM_SIZE => cl_prop::<cl_ulong>(kernel.local_mem_size(dev)),
             CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE => {
                 cl_prop::<usize>(kernel.preferred_simd_size(dev))
@@ -211,8 +211,8 @@ impl CLInfoObj<cl_kernel_sub_group_info, (cl_device_id, usize, *const c_void, us
                 }
                 cl_prop::<usize>(result)
             }
-            CL_KERNEL_COMPILE_NUM_SUB_GROUPS => cl_prop::<usize>(kernel.num_subgroups),
-            CL_KERNEL_COMPILE_SUB_GROUP_SIZE_INTEL => cl_prop::<usize>(kernel.subgroup_size),
+            CL_KERNEL_COMPILE_NUM_SUB_GROUPS => cl_prop::<usize>(kernel.num_subgroups()),
+            CL_KERNEL_COMPILE_SUB_GROUP_SIZE_INTEL => cl_prop::<usize>(kernel.subgroup_size()),
             // CL_INVALID_VALUE if param_name is not one of the supported values
             _ => return Err(CL_INVALID_VALUE),
         })
@@ -329,7 +329,7 @@ fn set_kernel_arg(
     let k = kernel.get_arc()?;
 
     // CL_INVALID_ARG_INDEX if arg_index is not a valid argument index.
-    if let Some(arg) = k.build.args.get(arg_index as usize) {
+    if let Some(arg) = k.kernel_info.args.get(arg_index as usize) {
         // CL_INVALID_ARG_SIZE if arg_size does not match the size of the data type for an argument
         // that is not a memory object or if the argument is a memory object and
         // arg_size != sizeof(cl_mem) or if arg_size is zero and the argument is declared with the
@@ -429,7 +429,7 @@ fn set_kernel_arg_svm_pointer(
         return Err(CL_INVALID_OPERATION);
     }
 
-    if let Some(arg) = kernel.build.args.get(arg_index) {
+    if let Some(arg) = kernel.kernel_info.args.get(arg_index) {
         if !matches!(
             arg.kind,
             KernelArgType::MemConstant | KernelArgType::MemGlobal
@@ -557,7 +557,7 @@ fn enqueue_ndrange_kernel(
 
         // CL_INVALID_WORK_GROUP_SIZE if local_work_size is specified and does not match the
         // required work-group size for kernel in the program source.
-        if lws != 0 && k.work_group_size[i] != 0 && lws != k.work_group_size[i] {
+        if lws != 0 && k.work_group_size()[i] != 0 && lws != k.work_group_size()[i] {
             return Err(CL_INVALID_WORK_GROUP_SIZE);
         }
 

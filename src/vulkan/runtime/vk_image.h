@@ -212,6 +212,14 @@ struct vk_image_buffer_layout
 vk_image_buffer_copy_layout(const struct vk_image *image,
                             const VkBufferImageCopy2* region);
 
+struct vk_image_buffer_layout
+vk_memory_to_image_copy_layout(const struct vk_image *image,
+                               const VkMemoryToImageCopyEXT* region);
+
+struct vk_image_buffer_layout
+vk_image_to_memory_copy_layout(const struct vk_image *image,
+                               const VkImageToMemoryCopyEXT* region);
+
 struct vk_image_view {
    struct vk_object_base base;
 

@@ -491,9 +491,6 @@ bool iris_resource_level_has_hiz(const struct intel_device_info *devinfo,
 bool iris_sample_with_depth_aux(const struct intel_device_info *devinfo,
                                 const struct iris_resource *res);
 
-bool iris_can_sample_mcs_with_clear(const struct intel_device_info *devinfo,
-                                    const struct iris_resource *res);
-
 bool iris_has_color_unresolved(const struct iris_resource *res,
                                unsigned start_level, unsigned num_levels,
                                unsigned start_layer, unsigned num_layers);
@@ -504,11 +501,12 @@ bool iris_render_formats_color_compatible(enum isl_format a,
                                           bool clear_color_unknown);
 enum isl_aux_usage iris_resource_render_aux_usage(struct iris_context *ice,
                                                   struct iris_resource *res,
-                                                  uint32_t level,
                                                   enum isl_format render_fmt,
+                                                  uint32_t level,
                                                   bool draw_aux_disabled);
 void iris_resource_prepare_render(struct iris_context *ice,
-                                  struct iris_resource *res, uint32_t level,
+                                  struct iris_resource *res,
+                                  enum isl_format render_fmt, uint32_t level,
                                   uint32_t start_layer, uint32_t layer_count,
                                   enum isl_aux_usage aux_usage);
 void iris_resource_finish_render(struct iris_context *ice,

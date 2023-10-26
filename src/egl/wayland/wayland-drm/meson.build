@@ -57,10 +57,11 @@ libwayland_drm = static_library(
 #
 # Moving these to a src/wsi/ was suggested but shot down, so put these
 # here for now as the maybe-least-bad solution.
-wp_dir = dep_wl_protocols.get_variable(pkgconfig : 'pkgdatadir')
+wp_dir = dep_wl_protocols.get_variable(pkgconfig : 'pkgdatadir', internal : 'pkgdatadir')
 wp_protos = {
   'linux-dmabuf-unstable-v1': 'unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml',
   'presentation-time': 'stable/presentation-time/presentation-time.xml',
+  'tearing-control-v1': 'staging/tearing-control/tearing-control-v1.xml',
 }
 wp_files = {}
 foreach name, xml : wp_protos

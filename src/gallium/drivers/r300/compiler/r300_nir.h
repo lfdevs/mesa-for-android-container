@@ -26,6 +26,27 @@
 #include "pipe/p_screen.h"
 #include "compiler/nir/nir.h"
 
+static inline bool
+is_ubo_or_input(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                unsigned src, unsigned num_components,
+                const uint8_t *swizzle)
+{
+   nir_instr *parent = instr->src[src].src.ssa->parent_instr;
+   if (parent->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(parent);
+
+   switch (intrinsic->intrinsic) {
+   case nir_intrinsic_load_ubo_vec4:
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_interpolated_input:
+      return true;
+   default:
+      return false;
+   }
+}
+
 char *r300_finalize_nir(struct pipe_screen *pscreen, void *nir);
 
 extern bool r300_transform_vs_trig_input(struct nir_shader *shader);
@@ -35,5 +56,9 @@ extern bool r300_transform_fs_trig_input(struct nir_shader *shader);
 extern bool r300_nir_fuse_fround_d3d9(struct nir_shader *shader);
 
 extern bool r300_nir_lower_bool_to_float(struct nir_shader *shader);
+
+extern bool r300_nir_prepare_presubtract(struct nir_shader *shader);
+
+extern bool r300_nir_clean_double_fneg(struct nir_shader *shader);
 
 #endif /* R300_NIR_H */

@@ -1110,6 +1110,18 @@ vk_cmd_set_vertex_binding_strides(struct vk_command_buffer *cmd,
                                   uint32_t binding_count,
                                   const VkDeviceSize *strides);
 
+/* Set color attachment count for blending on a command buffer.
+ *
+ * This is an implicit part of starting a subpass or a secondary command
+ * buffer in a subpass.
+ */
+void
+vk_cmd_set_cb_attachment_count(struct vk_command_buffer *cmd,
+                               uint32_t attachment_count);
+
+const char *
+vk_dynamic_graphic_state_to_str(enum mesa_vk_dynamic_graphics_state state);
+
 #ifdef __cplusplus
 }
 #endif

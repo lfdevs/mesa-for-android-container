@@ -47,17 +47,17 @@ build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samp
    nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
    color_out->data.location = FRAG_RESULT_DATA0;
 
-   nir_ssa_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
-   nir_ssa_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
+   nir_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
+   nir_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
 
-   nir_ssa_def *pos_int = nir_f2i32(&b, pos_in);
+   nir_def *pos_int = nir_f2i32(&b, pos_in);
 
-   nir_ssa_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
+   nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
    radv_meta_build_resolve_shader_core(dev, &b, is_integer, samples, input_img, color, img_coord);
 
-   nir_ssa_def *outval = nir_load_var(&b, color);
+   nir_def *outval = nir_load_var(&b, color);
    nir_store_var(&b, color_out, outval, 0xf);
    return b.shader;
 }
@@ -260,18 +260,18 @@ build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples
    nir_variable *fs_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_out");
    fs_out->data.location = index == DEPTH_RESOLVE ? FRAG_RESULT_DEPTH : FRAG_RESULT_STENCIL;
 
-   nir_ssa_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
+   nir_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
 
-   nir_ssa_def *pos_int = nir_f2i32(&b, pos_in);
+   nir_def *pos_int = nir_f2i32(&b, pos_in);
 
-   nir_ssa_def *img_coord = nir_trim_vector(&b, pos_int, 2);
+   nir_def *img_coord = nir_trim_vector(&b, pos_int, 2);
 
    nir_deref_instr *input_img_deref = nir_build_deref_var(&b, input_img);
-   nir_ssa_def *outval = nir_txf_ms_deref(&b, input_img_deref, img_coord, nir_imm_int(&b, 0));
+   nir_def *outval = nir_txf_ms_deref(&b, input_img_deref, img_coord, nir_imm_int(&b, 0));
 
    if (resolve_mode != VK_RESOLVE_MODE_SAMPLE_ZERO_BIT) {
       for (int i = 1; i < samples; i++) {
-         nir_ssa_def *si = nir_txf_ms_deref(&b, input_img_deref, img_coord, nir_imm_int(&b, i));
+         nir_def *si = nir_txf_ms_deref(&b, input_img_deref, img_coord, nir_imm_int(&b, i));
 
          switch (resolve_mode) {
          case VK_RESOLVE_MODE_AVERAGE_BIT:
@@ -726,7 +726,8 @@ radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    assert(region->srcSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
    assert(region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
-   assert(region->srcSubresource.layerCount == region->dstSubresource.layerCount);
+   assert(vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource) ==
+          vk_image_subresource_layer_count(&dst_image->vk, &region->dstSubresource));
 
    const uint32_t src_base_layer = radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
 
@@ -751,7 +752,9 @@ radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &resolve_area);
 
-   for (uint32_t layer = 0; layer < region->srcSubresource.layerCount; ++layer) {
+   const unsigned src_layer_count = vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource);
+
+   for (uint32_t layer = 0; layer < src_layer_count; ++layer) {
 
       struct radv_image_view src_iview;
       radv_image_view_init(&src_iview, cmd_buffer->device,
@@ -888,7 +891,8 @@ radv_depth_stencil_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer, VkIm
    radv_emit_resolve_barrier(cmd_buffer, &barrier);
 
    struct radv_image_view *src_iview = cmd_buffer->state.render.ds_att.iview;
-   VkImageLayout src_layout = cmd_buffer->state.render.ds_att.layout;
+   VkImageLayout src_layout =
+      aspects & VK_IMAGE_ASPECT_DEPTH_BIT ? render->ds_att.layout : render->ds_att.stencil_layout;
    struct radv_image *src_image = src_iview->image;
 
    VkImageResolve2 region = {0};

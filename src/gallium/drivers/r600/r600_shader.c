@@ -22,6 +22,8 @@
  */
 #include "nir_serialize.h"
 #include "pipe/p_defines.h"
+#include "r600_asm.h"
+#include "r600_isa.h"
 #include "r600_sq.h"
 #include "r600_formats.h"
 #include "r600_opcodes.h"
@@ -29,8 +31,6 @@
 #include "r600_dump.h"
 #include "r600d.h"
 #include "sfn/sfn_nir.h"
-
-#include "sb/sb_public.h"
 
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_parse.h"
@@ -41,6 +41,7 @@
 #include "nir/nir_to_tgsi_info.h"
 #include "compiler/nir/nir.h"
 #include "util/u_bitcast.h"
+#include "util/u_endian.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include <stdio.h>
@@ -127,7 +128,7 @@ static int store_shader(struct pipe_context *ctx,
 		ptr = r600_buffer_map_sync_with_rings(
 			&rctx->b, shader->bo,
 			PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
-		if (R600_BIG_ENDIAN) {
+		if (UTIL_ARCH_BIG_ENDIAN) {
 			for (i = 0; i < shader->shader.bc.ndw; ++i) {
 				ptr[i] = util_cpu_to_le32(shader->shader.bc.bytecode[i]);
 			}
@@ -149,8 +150,6 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_pipe_shader_selector *sel = shader->selector;
 	int r;
-	struct r600_screen *rscreen = (struct r600_screen *)ctx->screen;
-	
 	const nir_shader_compiler_options *nir_options =
 		(const nir_shader_compiler_options *)
 			ctx->screen->get_compiler_options(ctx->screen,
@@ -168,9 +167,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		pipe_shader_type_from_mesa(sel->nir->info.stage);
 	
 	bool dump = r600_can_dump_shader(&rctx->screen->b, processor);
-	bool use_sb = rctx->screen->b.debug_flags & DBG_NIR_SB;
 
-	unsigned sb_disasm;
 	unsigned export_shader;
 	
 	shader->shader.bc.isa = rctx->isa;
@@ -224,36 +221,6 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 			r600_dump_streamout(&sel->so);
 		}
 	}
-	
-	if (shader->shader.processor_type == PIPE_SHADER_VERTEX) {
-		/* only disable for vertex shaders in tess paths */
-		if (key.vs.as_ls)
-			use_sb = 0;
-	}
-	use_sb &= (shader->shader.processor_type != PIPE_SHADER_TESS_CTRL);
-	use_sb &= (shader->shader.processor_type != PIPE_SHADER_TESS_EVAL);
-	use_sb &= (shader->shader.processor_type != PIPE_SHADER_COMPUTE);
-
-	/* disable SB for shaders using doubles */
-	use_sb &= !shader->shader.uses_doubles;
-
-	use_sb &= !shader->shader.uses_atomics;
-	use_sb &= !shader->shader.uses_images;
-	use_sb &= !shader->shader.uses_helper_invocation;
-        use_sb &= !shader->shader.disable_sb;
-
-	/* SB can't handle READ_SCRATCH properly */
-	use_sb &= !(shader->shader.needs_scratch_space && rscreen->b.gfx_level < R700);
-
-	/* sb has bugs in array reg allocation
-	 * (dEQP-GLES2.functional.shaders.struct.local.struct_array_dynamic_index_fragment
-	 * with NTT)
-	 */
-	use_sb &= !(shader->shader.indirect_files & (1 << TGSI_FILE_TEMPORARY));
-	use_sb &= !(shader->shader.indirect_files & (1 << TGSI_FILE_CONSTANT));
-
-	/* sb has scheduling assertion fails with interpolate_at. */
-	use_sb &= !shader->shader.uses_interpolate_at_sample;
 
 	/* Check if the bytecode has already been built. */
 	if (!shader->shader.bc.bytecode) {
@@ -264,33 +231,20 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		}
 	}
 
-	sb_disasm = use_sb || (rctx->screen->b.debug_flags & DBG_SB_DISASM);
-	if (dump && !sb_disasm) {
+	if (dump) {
 		fprintf(stderr, "--------------------------------------------------------------\n");
 		r600_bytecode_disasm(&shader->shader.bc);
 		fprintf(stderr, "______________________________________________________________\n");
-	} else if ((dump && sb_disasm) || use_sb) {
-                r = r600_sb_bytecode_process(rctx, &shader->shader.bc, &shader->shader,
-		                             dump, use_sb);
-		if (r) {
-			R600_ERR("r600_sb_bytecode_process failed !\n");
-			goto error;
-		}
-	}
 
-	if (dump) {
-		print_shader_info(stderr, nshader++, &shader->shader);
+                print_shader_info(stderr, nshader++, &shader->shader);
 		print_pipe_info(stderr, &sel->info);
 	}
 
 	if (shader->gs_copy_shader) {
 		if (dump) {
 			// dump copy shader
-			r = r600_sb_bytecode_process(rctx, &shader->gs_copy_shader->shader.bc,
-						     &shader->gs_copy_shader->shader, dump, 0);
-			if (r)
-				goto error;
-		}
+			r600_bytecode_disasm(&shader->gs_copy_shader->shader.bc);
+                }
 
 		if ((r = store_shader(ctx, shader->gs_copy_shader)))
 			goto error;
@@ -510,6 +464,9 @@ static int emit_streamout(struct r600_shader_ctx *ctx, struct pipe_stream_output
 		}
 	}
 
+	if (so->num_outputs && ctx->bc->cf_last->op != CF_OP_ALU &&
+            ctx->bc->cf_last->op != CF_OP_ALU_PUSH_BEFORE)
+		ctx->bc->force_add_cf = 1;
 	/* Initialize locations where the outputs are stored. */
 	for (i = 0; i < so->num_outputs; i++) {
 
@@ -728,6 +685,7 @@ int generate_gs_copy_shader(struct r600_context *rctx,
 		alu.execute_mask = 1;
 		alu.update_pred = 1;
 		alu.last = 1;
+		ctx.bc->force_add_cf = 1;
 		r600_bytecode_add_alu_type(ctx.bc, &alu, CF_OP_ALU_PUSH_BEFORE);
 
 		r600_bytecode_add_cfinst(ctx.bc, CF_OP_JUMP);
@@ -740,6 +698,7 @@ int generate_gs_copy_shader(struct r600_context *rctx,
 
 	/* bc adds nops - copy it */
 	if (ctx.bc->gfx_level == R600) {
+		ctx.bc->force_add_cf = 1;
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP0_NOP;
 		alu.last = 1;

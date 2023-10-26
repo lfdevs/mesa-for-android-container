@@ -146,6 +146,11 @@ validate_ir(Program* program)
                   "Format cannot have DPP applied", instr.get());
             check((!instr->isVOP3() && !instr->isVOP3P()) || program->gfx_level >= GFX11,
                   "VOP3+DPP is GFX11+ only", instr.get());
+
+            bool fi =
+               instr->isDPP8() ? instr->dpp8().fetch_inactive : instr->dpp16().fetch_inactive;
+            check(!fi || program->gfx_level >= GFX10, "DPP Fetch-Inactive is GFX10+ only",
+                  instr.get());
          }
 
          /* check SDWA */
@@ -254,8 +259,9 @@ validate_ir(Program* program)
                   check(!vop3p.opsel_lo[i] && !vop3p.opsel_hi[i],
                         "Unexpected opsel for subdword operand", instr.get());
             }
-            check(instr->definitions[0].regClass() == v1, "VOP3P must have v1 definition",
-                  instr.get());
+            check(instr->definitions[0].regClass() == v1 ||
+                     instr_info.classes[(int)instr->opcode] == instr_class::wmma,
+                  "VOP3P must have v1 definition", instr.get());
          }
 
          /* check for undefs */
@@ -266,8 +272,9 @@ validate_ir(Program* program)
                                    instr->opcode == aco_opcode::p_create_vector ||
                                    instr->opcode == aco_opcode::p_jump_to_epilog ||
                                    instr->opcode == aco_opcode::p_dual_src_export_gfx11 ||
+                                   instr->opcode == aco_opcode::p_end_with_regs ||
                                    (instr->opcode == aco_opcode::p_interp_gfx11 && i == 0) ||
-                                   (instr->opcode == aco_opcode::p_bpermute_gfx11w64 && i == 0) ||
+                                   (instr->opcode == aco_opcode::p_bpermute_permlane && i == 0) ||
                                    (flat && i == 1) || (instr->isMIMG() && (i == 1 || i == 2)) ||
                                    ((instr->isMUBUF() || instr->isMTBUF()) && i == 1) ||
                                    (instr->isScratch() && i == 0) || (instr->isDS() && i == 0) ||
@@ -550,16 +557,18 @@ validate_ir(Program* program)
                         instr->operands[0].size() == 2,
                      "First operand of p_jump_to_epilog must be a SGPR", instr.get());
                for (unsigned i = 1; i < instr->operands.size(); i++) {
-                  check(
-                     instr->operands[i].isOfType(RegType::vgpr) || instr->operands[i].isUndefined(),
-                     "Other operands of p_jump_to_epilog must be VGPRs or undef", instr.get());
+                  check(instr->operands[i].isOfType(RegType::vgpr) ||
+                           instr->operands[i].isOfType(RegType::sgpr) ||
+                           instr->operands[i].isUndefined(),
+                        "Other operands of p_jump_to_epilog must be VGPRs, SGPRs or undef",
+                        instr.get());
                }
             } else if (instr->opcode == aco_opcode::p_dual_src_export_gfx11) {
                check(instr->definitions.size() == 6,
                      "p_dual_src_export_gfx11 must have 6 definitions", instr.get());
-               check(instr->definitions[2].regClass().type() == RegType::vgpr &&
-                        instr->definitions[2].regClass().size() == 1,
-                     "Third definition of p_dual_src_export_gfx11 must be a v1", instr.get());
+               check(instr->definitions[2].regClass() == program->lane_mask,
+                     "Third definition of p_dual_src_export_gfx11 must be a lane mask",
+                     instr.get());
                check(instr->definitions[3].regClass() == program->lane_mask,
                      "Fourth definition of p_dual_src_export_gfx11 must be a lane mask",
                      instr.get());

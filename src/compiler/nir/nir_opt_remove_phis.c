@@ -29,7 +29,7 @@
 #include "nir_builder.h"
 
 static nir_alu_instr *
-get_parent_mov(nir_ssa_def *ssa)
+get_parent_mov(nir_def *ssa)
 {
    if (ssa->parent_instr->type != nir_instr_type_alu)
       return NULL;
@@ -39,7 +39,7 @@ get_parent_mov(nir_ssa_def *ssa)
 }
 
 static bool
-matching_mov(nir_alu_instr *mov1, nir_ssa_def *ssa)
+matching_mov(nir_alu_instr *mov1, nir_def *ssa)
 {
    if (!mov1)
       return false;
@@ -69,13 +69,11 @@ remove_phis_block(nir_block *block, nir_builder *b)
    bool progress = false;
 
    nir_foreach_phi_safe(phi, block) {
-      nir_ssa_def *def = NULL;
+      nir_def *def = NULL;
       nir_alu_instr *mov = NULL;
       bool srcs_same = true;
 
       nir_foreach_phi_src(src, phi) {
-         assert(src->src.is_ssa);
-
          /* For phi nodes at the beginning of loops, we may encounter some
           * sources from backedges that point back to the destination of the
           * same phi, i.e. something like:
@@ -87,11 +85,11 @@ remove_phis_block(nir_block *block, nir_builder *b)
           * still dominate the phi node, and the phi will still always take
           * the value of that definition.
           */
-         if (src->src.ssa == &phi->dest.ssa)
+         if (src->src.ssa == &phi->def)
             continue;
-         
+
          if (def == NULL) {
-            def  = src->src.ssa;
+            def = src->src.ssa;
             mov = get_parent_mov(def);
          } else if (nir_src_is_undef(src->src) &&
                     nir_block_dominates(def->parent_instr->block, src->pred)) {
@@ -111,8 +109,8 @@ remove_phis_block(nir_block *block, nir_builder *b)
          /* In this case, the phi had no sources. So turn it into an undef. */
 
          b->cursor = nir_after_phis(block);
-         def = nir_ssa_undef(b, phi->dest.ssa.num_components,
-                             phi->dest.ssa.bit_size);
+         def = nir_undef(b, phi->def.num_components,
+                         phi->def.bit_size);
       } else if (mov) {
          /* If the sources were all movs from the same source with the same
           * swizzle, then we can't just pick a random move because it may not
@@ -126,8 +124,7 @@ remove_phis_block(nir_block *block, nir_builder *b)
          def = nir_mov_alu(b, mov->src[0], def->num_components);
       }
 
-      assert(phi->dest.is_ssa);
-      nir_ssa_def_rewrite_uses(&phi->dest.ssa, def);
+      nir_def_rewrite_uses(&phi->def, def);
       nir_instr_remove(&phi->instr);
 
       progress = true;
@@ -157,7 +154,7 @@ nir_opt_remove_phis_impl(nir_function_impl *impl)
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+                                     nir_metadata_dominance);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -175,4 +172,3 @@ nir_opt_remove_phis(nir_shader *shader)
 
    return progress;
 }
-

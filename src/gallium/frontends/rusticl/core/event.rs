@@ -5,11 +5,12 @@ use crate::core::queue::*;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::pipe::context::*;
+use mesa_rust::pipe::query::*;
+use mesa_rust_gen::*;
 use mesa_rust_util::static_assert;
 use rusticl_opencl_gen::*;
 
 use std::collections::HashSet;
-use std::os::raw::c_void;
 use std::slice;
 use std::sync::Arc;
 use std::sync::Condvar;
@@ -23,12 +24,24 @@ static_assert!(CL_RUNNING == 1);
 static_assert!(CL_SUBMITTED == 2);
 static_assert!(CL_QUEUED == 3);
 
-pub type EventSig = Box<dyn Fn(&Arc<Queue>, &PipeContext) -> CLResult<()>>;
+pub type EventSig = Box<dyn FnOnce(&Arc<Queue>, &PipeContext) -> CLResult<()>>;
 
+pub enum EventTimes {
+    Queued = CL_PROFILING_COMMAND_QUEUED as isize,
+    Submit = CL_PROFILING_COMMAND_SUBMIT as isize,
+    Start = CL_PROFILING_COMMAND_START as isize,
+    End = CL_PROFILING_COMMAND_END as isize,
+}
+
+#[derive(Default)]
 struct EventMutState {
     status: cl_int,
-    cbs: [Vec<(EventCB, *mut c_void)>; 3],
+    cbs: [Vec<EventCB>; 3],
     work: Option<EventSig>,
+    time_queued: cl_ulong,
+    time_submit: cl_ulong,
+    time_start: cl_ulong,
+    time_end: cl_ulong,
 }
 
 pub struct Event {
@@ -62,8 +75,8 @@ impl Event {
             deps: deps,
             state: Mutex::new(EventMutState {
                 status: CL_QUEUED as cl_int,
-                cbs: [Vec::new(), Vec::new(), Vec::new()],
                 work: Some(work),
+                ..Default::default()
             }),
             cv: Condvar::new(),
         })
@@ -78,8 +91,7 @@ impl Event {
             deps: Vec::new(),
             state: Mutex::new(EventMutState {
                 status: CL_SUBMITTED as cl_int,
-                cbs: [Vec::new(), Vec::new(), Vec::new()],
-                work: None,
+                ..Default::default()
             }),
             cv: Condvar::new(),
         })
@@ -107,9 +119,8 @@ impl Event {
         }
 
         if [CL_COMPLETE, CL_RUNNING, CL_SUBMITTED].contains(&(new as u32)) {
-            if let Some(cbs) = lock.cbs.get(new as usize) {
-                cbs.iter()
-                    .for_each(|(cb, data)| unsafe { cb(cl_event::from_ptr(self), new, *data) });
+            if let Some(cbs) = lock.cbs.get_mut(new as usize) {
+                cbs.drain(..).for_each(|cb| cb.call(self, new));
             }
         }
     }
@@ -127,16 +138,37 @@ impl Event {
         self.cmd_type == CL_COMMAND_USER
     }
 
-    pub fn add_cb(&self, state: cl_int, cb: EventCB, data: *mut c_void) {
+    pub fn set_time(&self, which: EventTimes, value: cl_ulong) {
+        let mut lock = self.state();
+        match which {
+            EventTimes::Queued => lock.time_queued = value,
+            EventTimes::Submit => lock.time_submit = value,
+            EventTimes::Start => lock.time_start = value,
+            EventTimes::End => lock.time_end = value,
+        }
+    }
+
+    pub fn get_time(&self, which: EventTimes) -> cl_ulong {
+        let lock = self.state();
+
+        match which {
+            EventTimes::Queued => lock.time_queued,
+            EventTimes::Submit => lock.time_submit,
+            EventTimes::Start => lock.time_start,
+            EventTimes::End => lock.time_end,
+        }
+    }
+
+    pub fn add_cb(&self, state: cl_int, cb: EventCB) {
         let mut lock = self.state();
         let status = lock.status;
 
         // call cb if the status was already reached
         if state >= status {
             drop(lock);
-            unsafe { cb(cl_event::from_ptr(self), status, data) };
+            cb.call(self, state);
         } else {
-            lock.cbs.get_mut(state as usize).unwrap().push((cb, data));
+            lock.cbs.get_mut(state as usize).unwrap().push(cb);
         }
     }
 
@@ -165,24 +197,41 @@ impl Event {
     pub fn call(&self, ctx: &PipeContext) {
         let mut lock = self.state();
         let status = lock.status;
+        let queue = self.queue.as_ref().unwrap();
+        let profiling_enabled = queue.is_profiling_enabled();
         if status == CL_QUEUED as cl_int {
-            let work = lock.work.take();
-            let new = work.as_ref().map_or(
+            if profiling_enabled {
+                // We already have the lock so can't call set_time on the event
+                lock.time_submit = queue.device.screen().get_timestamp();
+            }
+            let mut query_start = None;
+            let mut query_end = None;
+            let new = lock.work.take().map_or(
                 // if there is no work
                 CL_SUBMITTED as cl_int,
                 |w| {
-                    let res = w(self.queue.as_ref().unwrap(), ctx).err().map_or(
+                    if profiling_enabled {
+                        query_start =
+                            PipeQueryGen::<{ pipe_query_type::PIPE_QUERY_TIMESTAMP }>::new(ctx);
+                    }
+
+                    let res = w(queue, ctx).err().map_or(
                         // if there is an error, negate it
                         CL_SUBMITTED as cl_int,
                         |e| e,
                     );
+                    if profiling_enabled {
+                        query_end =
+                            PipeQueryGen::<{ pipe_query_type::PIPE_QUERY_TIMESTAMP }>::new(ctx);
+                    }
                     res
                 },
             );
-            // we have to make sure that the work object is dropped before we notify about the
-            // status change. It's probably fine to move the value above, but we have to be
-            // absolutely sure it happens before the status update.
-            drop(work);
+
+            if profiling_enabled {
+                lock.time_start = query_start.unwrap().read_blocked();
+                lock.time_end = query_end.unwrap().read_blocked();
+            }
             self.set_status(&mut lock, new);
         }
     }

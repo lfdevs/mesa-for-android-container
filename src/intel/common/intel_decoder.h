@@ -55,7 +55,7 @@ struct intel_spec *intel_spec_load(const struct intel_device_info *devinfo);
 struct intel_spec *
 intel_spec_load_from_path(const struct intel_device_info *devinfo,
                           const char *path);
-struct intel_spec *intel_spec_load_filename(const char *filename);
+struct intel_spec *intel_spec_load_filename(const char *dir, const char *name);
 void intel_spec_destroy(struct intel_spec *spec);
 uint32_t intel_spec_get_gen(struct intel_spec *spec);
 struct intel_group *intel_spec_find_instruction(struct intel_spec *spec,
@@ -65,9 +65,9 @@ struct intel_group *intel_spec_find_register(struct intel_spec *spec, uint32_t o
 struct intel_group *intel_spec_find_register_by_name(struct intel_spec *spec, const char *name);
 struct intel_enum *intel_spec_find_enum(struct intel_spec *spec, const char *name);
 
-int intel_group_get_length(struct intel_group *group, const uint32_t *p);
-const char *intel_group_get_name(struct intel_group *group);
-uint32_t intel_group_get_opcode(struct intel_group *group);
+int intel_group_get_length(const struct intel_group *group, const uint32_t *p);
+const char *intel_group_get_name(const struct intel_group *group);
+uint32_t intel_group_get_opcode(const struct intel_group *group);
 struct intel_field *intel_group_find_field(struct intel_group *group, const char *name);
 struct intel_enum *intel_spec_find_enum(struct intel_spec *spec, const char *name);
 
@@ -209,14 +209,36 @@ void intel_print_group(FILE *out,
 
 enum intel_batch_decode_flags {
    /** Print in color! */
-   INTEL_BATCH_DECODE_IN_COLOR  = (1 << 0),
+   INTEL_BATCH_DECODE_IN_COLOR    = (1 << 0),
    /** Print everything, not just headers */
-   INTEL_BATCH_DECODE_FULL      = (1 << 1),
+   INTEL_BATCH_DECODE_FULL        = (1 << 1),
    /** Print offsets along with the batch */
-   INTEL_BATCH_DECODE_OFFSETS   = (1 << 2),
+   INTEL_BATCH_DECODE_OFFSETS     = (1 << 2),
    /** Guess when a value is a float and print it as such */
-   INTEL_BATCH_DECODE_FLOATS    = (1 << 3),
+   INTEL_BATCH_DECODE_FLOATS      = (1 << 3),
+   /** Print surface states */
+   INTEL_BATCH_DECODE_SURFACES    = (1 << 4),
+   /** Print sampler states */
+   INTEL_BATCH_DECODE_SAMPLERS    = (1 << 5),
+   /** Print accumulated state
+    *
+    *  Instead of printing instructions as we parse them, retain a pointer to
+    *  each of the last instruction emitted and print it upon parsing one of
+    *  the following instructions :
+    *     - 3DPRIMITIVE
+    *     - GPGPU_WALKER
+    *     - 3DSTATE_WM_HZ_OP
+    *     - COMPUTE_WALKER
+    */
+   INTEL_BATCH_DECODE_ACCUMULATE  = (1 << 6),
 };
+
+#define INTEL_BATCH_DECODE_DEFAULT_FLAGS \
+   (INTEL_BATCH_DECODE_FULL |            \
+    INTEL_BATCH_DECODE_OFFSETS |         \
+    INTEL_BATCH_DECODE_FLOATS |          \
+    INTEL_BATCH_DECODE_SURFACES |        \
+    INTEL_BATCH_DECODE_SAMPLERS)
 
 struct intel_batch_decode_bo {
    uint64_t addr;
@@ -262,6 +284,9 @@ struct intel_batch_decode_ctx {
 
    int n_batch_buffer_start;
    uint64_t acthd;
+
+   struct hash_table *commands;
+   struct hash_table *stats;
 };
 
 void intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
@@ -281,6 +306,14 @@ void intel_batch_decode_ctx_finish(struct intel_batch_decode_ctx *ctx);
 void intel_print_batch(struct intel_batch_decode_ctx *ctx,
                        const uint32_t *batch, uint32_t batch_size,
                        uint64_t batch_addr, bool from_ring);
+
+void intel_batch_stats_reset(struct intel_batch_decode_ctx *ctx);
+
+void intel_batch_stats(struct intel_batch_decode_ctx *ctx,
+                       const uint32_t *batch, uint32_t batch_size,
+                       uint64_t batch_addr, bool from_ring);
+
+void intel_batch_print_stats(struct intel_batch_decode_ctx *ctx);
 
 #ifdef __cplusplus
 }

@@ -1,3 +1,15 @@
+.lima-rules:
+  stage: arm
+  rules:
+    - !reference [.lima-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - changes:
+      - src/gallium/drivers/lima/**/*
+      - src/gallium/winsys/lima/**/*
+      - src/lima/**/*
+      when: on_success
+
+
 .lava-meson-gxl-s805x-libretech-ac:
   extends:
     - .lava-test-deqp:arm64

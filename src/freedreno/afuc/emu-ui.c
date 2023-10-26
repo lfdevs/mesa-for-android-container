@@ -143,6 +143,21 @@ read_one_value(const char **val)
 }
 
 static void
+print_dst(unsigned reg)
+{
+   if (reg == REG_REM)
+      printf("$rem"); /* remainding dwords in packet */
+   else if (reg == REG_ADDR)
+      printf("$addr");
+   else if (reg == REG_USRADDR)
+      printf("$usraddr");
+   else if (reg == REG_DATA)
+      printf("$data");
+   else
+      printf("$%02x", reg);
+}
+
+static void
 dump_gpr_register(struct emu *emu, unsigned n)
 {
    printf("              GPR:  ");

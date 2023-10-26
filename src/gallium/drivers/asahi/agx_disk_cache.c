@@ -18,6 +18,9 @@
 #include "agx_disk_cache.h"
 #include "agx_state.h"
 
+/* Flags that are allowed and do not disable the disk cache */
+#define ALLOWED_FLAGS (AGX_DBG_NO16)
+
 /**
  * Compute a disk cache key for the given uncompiled shader and shader key.
  */
@@ -25,16 +28,16 @@ static void
 agx_disk_cache_compute_key(struct disk_cache *cache,
                            const struct agx_uncompiled_shader *uncompiled,
                            const union asahi_shader_key *shader_key,
-                           gl_shader_stage stage, cache_key cache_key)
+                           cache_key cache_key)
 {
    uint8_t data[sizeof(uncompiled->nir_sha1) + sizeof(*shader_key)];
    int hash_size = sizeof(uncompiled->nir_sha1);
    int key_size;
-   if (stage == MESA_SHADER_VERTEX)
+   if (uncompiled->type == PIPE_SHADER_VERTEX)
       key_size = sizeof(shader_key->vs);
-   else if (stage == MESA_SHADER_FRAGMENT)
+   else if (uncompiled->type == PIPE_SHADER_FRAGMENT)
       key_size = sizeof(shader_key->fs);
-   else if (gl_shader_stage_is_compute(stage))
+   else if (uncompiled->type == PIPE_SHADER_COMPUTE)
       key_size = 0;
    else
       unreachable("Unsupported shader stage");
@@ -65,9 +68,8 @@ agx_disk_cache_store(struct disk_cache *cache,
 
    assert(binary->bo->ptr.cpu != NULL && "shaders must be CPU mapped");
 
-   gl_shader_stage stage = uncompiled->nir->info.stage;
    cache_key cache_key;
-   agx_disk_cache_compute_key(cache, uncompiled, key, stage, cache_key);
+   agx_disk_cache_compute_key(cache, uncompiled, key, cache_key);
 
    struct blob blob;
    blob_init(&blob);
@@ -98,9 +100,8 @@ agx_disk_cache_retrieve(struct agx_screen *screen,
    if (!cache)
       return NULL;
 
-   gl_shader_stage stage = uncompiled->nir->info.stage;
    cache_key cache_key;
-   agx_disk_cache_compute_key(cache, uncompiled, key, stage, cache_key);
+   agx_disk_cache_compute_key(cache, uncompiled, key, cache_key);
 
    size_t size;
    void *buffer = disk_cache_get(cache, cache_key, &size);
@@ -136,7 +137,7 @@ void
 agx_disk_cache_init(struct agx_screen *screen)
 {
 #ifdef ENABLE_SHADER_CACHE
-   if (agx_get_compiler_debug() || screen->dev.debug)
+   if (agx_get_compiler_debug() || (screen->dev.debug & ~ALLOWED_FLAGS))
       return;
 
    const char *renderer = screen->pscreen.get_name(&screen->pscreen);

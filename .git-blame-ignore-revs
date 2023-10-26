@@ -1,4 +1,6 @@
 # List of commits to ignore when using `git blame`.
+# Enable with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
 # Per git-blame(1):
 #   Ignore revisions listed in the file, one unabbreviated object name
@@ -45,3 +47,21 @@ c7bf3b69ebc8f2252dbf724a4de638e6bb2ac402
 
 # egl: re-format using clang-format
 2f670d89db038d5a29f6b72732fd7ad63dfaf4c6
+
+# panfrost: clang-format the tree
+0afd691f29683f6e9dde60f79eca094373521806
+
+# aco: Format.
+1e2639026fec7069806449f9ba2a124ce4eb5569
+
+# radv: Format.
+59c501ca353f8ec9d2717c98af2bfa1a1dbf4d75
+
+# pvr: clang-format fixes
+953c04ebd39c52d457301bdd8ac803949001da2d
+
+# freedreno: Re-indent
+2d439343ea1aee146d4ce32800992cd389bd505d
+
+# ir3: Reformat source with clang-format
+177138d8cb0b4f6a42ef0a1f8593e14d79f17c54

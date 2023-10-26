@@ -160,9 +160,6 @@ glx_config_get(struct glx_config * mode, int attribute, int *value_return)
    case GLX_OPTIMAL_PBUFFER_HEIGHT_SGIX:
       *value_return = mode->optimalPbufferHeight;
       return 0;
-   case GLX_SWAP_METHOD_OML:
-      *value_return = mode->swapMethod;
-      return 0;
 #endif
    case GLX_SAMPLE_BUFFERS_SGIS:
       *value_return = mode->sampleBuffers;
@@ -245,7 +242,6 @@ glx_config_create_list(unsigned count)
       (*next)->transparentIndex = GLX_DONT_CARE;
       (*next)->xRenderable = GLX_DONT_CARE;
       (*next)->fbconfigID = GLX_DONT_CARE;
-      (*next)->swapMethod = GLX_SWAP_UNDEFINED_OML;
       (*next)->bindToTextureRgb = GLX_DONT_CARE;
       (*next)->bindToTextureRgba = GLX_DONT_CARE;
       (*next)->bindToMipmapTexture = GLX_DONT_CARE;

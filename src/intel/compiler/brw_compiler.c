@@ -26,21 +26,23 @@
 #include "brw_eu.h"
 #include "dev/intel_debug.h"
 #include "compiler/nir/nir.h"
-#include "main/errors.h"
 #include "util/u_debug.h"
 
 #define COMMON_OPTIONS                                                        \
+   .has_uclz = true,                                                          \
    .lower_fdiv = true,                                                        \
    .lower_scmp = true,                                                        \
    .lower_flrp16 = true,                                                      \
    .lower_fmod = true,                                                        \
-   .lower_ufind_msb_to_uclz = true,                                           \
+   .lower_ufind_msb = true,                                                   \
    .lower_uadd_carry = true,                                                  \
    .lower_usub_borrow = true,                                                 \
    .lower_flrp64 = true,                                                      \
    .lower_fisnormal = true,                                                   \
    .lower_isign = true,                                                       \
    .lower_ldexp = true,                                                       \
+   .lower_bitfield_extract = true,                                            \
+   .lower_bitfield_insert = true,                                             \
    .lower_device_index_to_zero = true,                                        \
    .vectorize_io = true,                                                      \
    .vectorize_tess_levels = true,                                             \
@@ -183,15 +185,14 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->lower_flrp32 = devinfo->ver < 6 || devinfo->ver >= 11;
       nir_options->lower_fpow = devinfo->ver >= 12;
 
-      nir_options->lower_bitfield_extract = devinfo->ver >= 7;
-      nir_options->lower_bitfield_extract_to_shifts = devinfo->ver < 7;
-      nir_options->lower_bitfield_insert = devinfo->ver >= 7;
-      nir_options->lower_bitfield_insert_to_shifts = devinfo->ver < 7;
+      nir_options->has_bfe = devinfo->ver >= 7;
+      nir_options->has_bfm = devinfo->ver >= 7;
+      nir_options->has_bfi = devinfo->ver >= 7;
 
       nir_options->lower_rotate = devinfo->ver < 11;
       nir_options->lower_bitfield_reverse = devinfo->ver < 7;
       nir_options->lower_find_lsb = devinfo->ver < 7;
-      nir_options->lower_ifind_msb_to_uclz = devinfo->ver < 7;
+      nir_options->lower_ifind_msb = devinfo->ver < 7;
       nir_options->has_iadd3 = devinfo->verx10 >= 125;
 
       nir_options->has_sdot_4x8 = devinfo->ver >= 12;

@@ -294,3 +294,78 @@ vk_cmd_enqueue_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
              sizeof(*cmd->u.bind_descriptor_sets.dynamic_offsets) * dynamicOffsetCount);
    }
 }
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+static void
+dispatch_graph_amdx_free(struct vk_cmd_queue *queue, struct vk_cmd_queue_entry *cmd)
+{
+   VkDispatchGraphCountInfoAMDX *count_info = cmd->u.dispatch_graph_amdx.count_info;
+   void *infos = (void *)count_info->infos.hostAddress;
+
+   for (uint32_t i = 0; i < count_info->count; i++) {
+      VkDispatchGraphInfoAMDX *info = (void *)((const uint8_t *)infos + i * count_info->stride);
+      vk_free(queue->alloc, (void *)info->payloads.hostAddress);
+   }
+
+   vk_free(queue->alloc, infos);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_cmd_enqueue_CmdDispatchGraphAMDX(VkCommandBuffer commandBuffer, VkDeviceAddress scratch,
+                                    const VkDispatchGraphCountInfoAMDX *pCountInfo)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+
+   if (vk_command_buffer_has_error(cmd_buffer))
+      return;
+
+   VkResult result = VK_SUCCESS;
+   const VkAllocationCallbacks *alloc = cmd_buffer->cmd_queue.alloc;
+
+   struct vk_cmd_queue_entry *cmd =
+      vk_zalloc(alloc, sizeof(struct vk_cmd_queue_entry), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!cmd) {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+      goto err;
+   }
+
+   cmd->type = VK_CMD_DISPATCH_GRAPH_AMDX;
+   cmd->driver_free_cb = dispatch_graph_amdx_free;
+
+   cmd->u.dispatch_graph_amdx.scratch = scratch;
+
+   cmd->u.dispatch_graph_amdx.count_info =
+      vk_zalloc(alloc, sizeof(VkDispatchGraphCountInfoAMDX), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (cmd->u.dispatch_graph_amdx.count_info == NULL)
+      goto err;
+
+   memcpy((void *)cmd->u.dispatch_graph_amdx.count_info, pCountInfo,
+          sizeof(VkDispatchGraphCountInfoAMDX));
+
+   uint32_t infos_size = pCountInfo->count * pCountInfo->stride;
+   void *infos = vk_zalloc(alloc, infos_size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   cmd->u.dispatch_graph_amdx.count_info->infos.hostAddress = infos;
+   memcpy(infos, pCountInfo->infos.hostAddress, infos_size);
+
+   for (uint32_t i = 0; i < pCountInfo->count; i++) {
+      VkDispatchGraphInfoAMDX *info = (void *)((const uint8_t *)infos + i * pCountInfo->stride);
+
+      uint32_t payloads_size = info->payloadCount * info->payloadStride;
+      void *dst_payload = vk_zalloc(alloc, payloads_size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      memcpy(dst_payload, info->payloads.hostAddress, payloads_size);
+      info->payloads.hostAddress = dst_payload;
+   }
+
+   list_addtail(&cmd->cmd_link, &cmd_buffer->cmd_queue.cmds);
+   goto finish;
+err:
+   if (cmd) {
+      vk_free(alloc, cmd);
+      dispatch_graph_amdx_free(&cmd_buffer->cmd_queue, cmd);
+   }
+
+finish:
+   if (unlikely(result != VK_SUCCESS))
+      vk_command_buffer_set_error(cmd_buffer, result);
+}
+#endif

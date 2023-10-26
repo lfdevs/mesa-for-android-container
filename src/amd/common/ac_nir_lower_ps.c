@@ -21,7 +21,7 @@ typedef struct {
    bool lower_load_barycentric;
 
    /* Add one for dual source blend second output. */
-   nir_ssa_def *outputs[FRAG_RESULT_MAX + 1][4];
+   nir_def *outputs[FRAG_RESULT_MAX + 1][4];
    nir_alu_type output_types[FRAG_RESULT_MAX + 1];
 
    /* MAX_DRAW_BUFFERS for MRT export, 1 for MRTZ export */
@@ -85,52 +85,52 @@ init_interp_param(nir_builder *b, lower_ps_state *s)
     * contains fully-covered quads.
     */
    if (s->options->bc_optimize_for_persp || s->options->bc_optimize_for_linear) {
-      nir_ssa_def *bc_optimize = nir_load_barycentric_optimize_amd(b);
+      nir_def *bc_optimize = nir_load_barycentric_optimize_amd(b);
 
       if (s->options->bc_optimize_for_persp) {
-         nir_ssa_def *center =
+         nir_def *center =
             nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
-         nir_ssa_def *centroid =
+         nir_def *centroid =
             nir_load_barycentric_centroid(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
 
-         nir_ssa_def *value = nir_bcsel(b, bc_optimize, center, centroid);
+         nir_def *value = nir_bcsel(b, bc_optimize, center, centroid);
          nir_store_var(b, s->persp_centroid, value, 0x3);
       }
 
       if (s->options->bc_optimize_for_linear) {
-         nir_ssa_def *center =
+         nir_def *center =
             nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
-         nir_ssa_def *centroid =
+         nir_def *centroid =
             nir_load_barycentric_centroid(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
 
-         nir_ssa_def *value = nir_bcsel(b, bc_optimize, center, centroid);
+         nir_def *value = nir_bcsel(b, bc_optimize, center, centroid);
          nir_store_var(b, s->linear_centroid, value, 0x3);
       }
    }
 
    if (s->options->force_persp_sample_interp) {
-      nir_ssa_def *sample =
+      nir_def *sample =
          nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
       nir_store_var(b, s->persp_center, sample, 0x3);
       nir_store_var(b, s->persp_centroid, sample, 0x3);
    }
 
    if (s->options->force_linear_sample_interp) {
-      nir_ssa_def *sample =
+      nir_def *sample =
          nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
       nir_store_var(b, s->linear_center, sample, 0x3);
       nir_store_var(b, s->linear_centroid, sample, 0x3);
    }
 
    if (s->options->force_persp_center_interp) {
-      nir_ssa_def *center =
+      nir_def *center =
          nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
       nir_store_var(b, s->persp_sample, center, 0x3);
       nir_store_var(b, s->persp_centroid, center, 0x3);
    }
 
    if (s->options->force_linear_center_interp) {
-      nir_ssa_def *center =
+      nir_def *center =
          nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
       nir_store_var(b, s->linear_sample, center, 0x3);
       nir_store_var(b, s->linear_centroid, center, 0x3);
@@ -186,8 +186,8 @@ lower_ps_load_barycentric(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_
 
    b->cursor = nir_before_instr(&intrin->instr);
 
-   nir_ssa_def *replacement = nir_load_var(b, var);
-   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, replacement);
+   nir_def *replacement = nir_load_var(b, var);
+   nir_def_rewrite_uses(&intrin->def, replacement);
 
    nir_instr_remove(&intrin->instr);
    return true;
@@ -200,7 +200,7 @@ gather_ps_store_output(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_sta
    unsigned write_mask = nir_intrinsic_write_mask(intrin);
    unsigned component = nir_intrinsic_component(intrin);
    nir_alu_type type = nir_intrinsic_src_type(intrin);
-   nir_ssa_def *store_val = intrin->src[0].ssa;
+   nir_def *store_val = intrin->src[0].ssa;
 
    b->cursor = nir_before_instr(&intrin->instr);
 
@@ -249,13 +249,13 @@ lower_ps_load_sample_mask_in(nir_builder *b, nir_intrinsic_instr *intrin, lower_
    b->cursor = nir_before_instr(&intrin->instr);
 
    uint32_t ps_iter_mask = ac_get_ps_iter_mask(s->options->ps_iter_samples);
-   nir_ssa_def *sampleid = nir_load_sample_id(b);
-   nir_ssa_def *submask = nir_ishl(b, nir_imm_int(b, ps_iter_mask), sampleid);
+   nir_def *sampleid = nir_load_sample_id(b);
+   nir_def *submask = nir_ishl(b, nir_imm_int(b, ps_iter_mask), sampleid);
 
-   nir_ssa_def *sample_mask = nir_load_sample_mask_in(b);
-   nir_ssa_def *replacement = nir_iand(b, sample_mask, submask);
+   nir_def *sample_mask = nir_load_sample_mask_in(b);
+   nir_def *replacement = nir_iand(b, sample_mask, submask);
 
-   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, replacement);
+   nir_def_rewrite_uses(&intrin->def, replacement);
 
    nir_instr_remove(&intrin->instr);
    return true;
@@ -327,8 +327,8 @@ emit_ps_color_clamp_and_alpha_test(nir_builder *b, lower_ps_state *s)
          } else if (s->options->alpha_func == COMPARE_FUNC_NEVER) {
             nir_discard(b);
          } else if (s->outputs[slot][3]) {
-            nir_ssa_def *ref = nir_load_alpha_reference_amd(b);
-            nir_ssa_def *cond =
+            nir_def *ref = nir_load_alpha_reference_amd(b);
+            nir_def *cond =
                nir_compare_func(b, s->options->alpha_func, s->outputs[slot][3], ref);
             nir_discard_if(b, nir_inot(b, cond));
          }
@@ -341,16 +341,16 @@ emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
 {
    uint64_t outputs_written = b->shader->info.outputs_written;
 
-   nir_ssa_def *mrtz_alpha = NULL;
+   nir_def *mrtz_alpha = NULL;
    if (s->options->alpha_to_coverage_via_mrtz) {
       mrtz_alpha = s->outputs[FRAG_RESULT_COLOR][3] ?
          s->outputs[FRAG_RESULT_COLOR][3] :
          s->outputs[FRAG_RESULT_DATA0][3];
    }
 
-   nir_ssa_def *depth = s->outputs[FRAG_RESULT_DEPTH][0];
-   nir_ssa_def *stencil = s->outputs[FRAG_RESULT_STENCIL][0];
-   nir_ssa_def *sample_mask = s->outputs[FRAG_RESULT_SAMPLE_MASK][0];
+   nir_def *depth = s->outputs[FRAG_RESULT_DEPTH][0];
+   nir_def *stencil = s->outputs[FRAG_RESULT_STENCIL][0];
+   nir_def *sample_mask = s->outputs[FRAG_RESULT_SAMPLE_MASK][0];
 
    if (s->options->kill_samplemask) {
       sample_mask = NULL;
@@ -371,8 +371,8 @@ emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
                                  outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK),
                                  s->options->alpha_to_coverage_via_mrtz);
 
-   nir_ssa_def *undef = nir_ssa_undef(b, 1, 32);
-   nir_ssa_def *outputs[4] = {undef, undef, undef, undef};
+   nir_def *undef = nir_undef(b, 1, 32);
+   nir_def *outputs[4] = {undef, undef, undef, undef};
    unsigned write_mask = 0;
    unsigned flags = 0;
 
@@ -465,22 +465,22 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
    bool enable_mrt_output_nan_fixup =
       s->options->enable_mrt_output_nan_fixup & BITFIELD_BIT(cbuf);
 
-   nir_ssa_def *undef = nir_ssa_undef(b, 1, 32);
-   nir_ssa_def *outputs[4] = {undef, undef, undef, undef};
+   nir_def *undef = nir_undef(b, 1, 32);
+   nir_def *outputs[4] = {undef, undef, undef, undef};
    unsigned write_mask = 0;
    unsigned flags = 0;
 
    nir_alu_type base_type = nir_alu_type_get_base_type(type);
    unsigned type_size = nir_alu_type_get_type_size(type);
 
-   nir_ssa_def *data[4];
+   nir_def *data[4];
    memcpy(data, s->outputs[slot], sizeof(data));
 
    /* Replace NaN by zero (for 32-bit float formats) to fix game bugs if requested. */
    if (enable_mrt_output_nan_fixup && type == nir_type_float32) {
       for (int i = 0; i < 4; i++) {
          if (data[i]) {
-            nir_ssa_def *isnan = nir_fisnan(b, data[i]);
+            nir_def *isnan = nir_fisnan(b, data[i]);
             data[i] = nir_bcsel(b, isnan, nir_imm_float(b, 0), data[i]);
          }
       }
@@ -593,14 +593,14 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
       }
 
       for (int i = 0; i < 2; i++) {
-         nir_ssa_def *lo = data[i * 2];
-         nir_ssa_def *hi = data[i * 2 + 1];
+         nir_def *lo = data[i * 2];
+         nir_def *hi = data[i * 2 + 1];
          if (!lo && !hi)
             continue;
 
-         lo = lo ? lo : nir_ssa_undef(b, 1, type_size);
-         hi = hi ? hi : nir_ssa_undef(b, 1, type_size);
-         nir_ssa_def *vec = nir_vec2(b, lo, hi);
+         lo = lo ? lo : nir_undef(b, 1, type_size);
+         hi = hi ? hi : nir_undef(b, 1, type_size);
+         nir_def *vec = nir_vec2(b, lo, hi);
 
          outputs[i] = nir_build_alu1(b, pack_op, vec);
 
@@ -657,8 +657,8 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
    uint32_t mrt1_write_mask = nir_intrinsic_write_mask(mrt1_exp);
    uint32_t write_mask = mrt0_write_mask | mrt1_write_mask;
 
-   nir_ssa_def *mrt0_arg = mrt0_exp->src[0].ssa;
-   nir_ssa_def *mrt1_arg = mrt1_exp->src[0].ssa;
+   nir_def *mrt0_arg = mrt0_exp->src[0].ssa;
+   nir_def *mrt1_arg = mrt1_exp->src[0].ssa;
 
    /* Swizzle code is right before mrt0_exp. */
    b->cursor = nir_before_instr(&mrt0_exp->instr);
@@ -671,9 +671,9 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
       return;
    }
 
-   nir_ssa_def *undef = nir_ssa_undef(b, 1, 32);
-   nir_ssa_def *arg0_vec[4] = {undef, undef, undef, undef};
-   nir_ssa_def *arg1_vec[4] = {undef, undef, undef, undef};
+   nir_def *undef = nir_undef(b, 1, 32);
+   nir_def *arg0_vec[4] = {undef, undef, undef, undef};
+   nir_def *arg1_vec[4] = {undef, undef, undef, undef};
 
    /* For illustration, originally
     *   lane0 export arg00 and arg01
@@ -684,29 +684,29 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
     *   lane1 export arg01 and arg11.
     */
    u_foreach_bit (i, write_mask) {
-      nir_ssa_def *arg0 = nir_channel(b, mrt0_arg, i);
-      nir_ssa_def *arg1 = nir_channel(b, mrt1_arg, i);
+      nir_def *arg0 = nir_channel(b, mrt0_arg, i);
+      nir_def *arg1 = nir_channel(b, mrt1_arg, i);
 
       /* swap odd,even lanes of arg0 */
-      arg0 = nir_quad_swizzle_amd(b, arg0, .swizzle_mask = 0b10110001);
+      arg0 = nir_quad_swizzle_amd(b, arg0, .swizzle_mask = 0b10110001, .fetch_inactive = true);
 
       /* swap even lanes between arg0 and arg1 */
-      nir_ssa_def *tid = nir_load_subgroup_invocation(b);
-      nir_ssa_def *is_even = nir_ieq_imm(b, nir_iand_imm(b, tid, 1), 0);
+      nir_def *tid = nir_load_subgroup_invocation(b);
+      nir_def *is_even = nir_ieq_imm(b, nir_iand_imm(b, tid, 1), 0);
 
-      nir_ssa_def *tmp = arg0;
+      nir_def *tmp = arg0;
       arg0 = nir_bcsel(b, is_even, arg1, arg0);
       arg1 = nir_bcsel(b, is_even, tmp, arg1);
 
       /* swap odd,even lanes again for arg0 */
-      arg0 = nir_quad_swizzle_amd(b, arg0, .swizzle_mask = 0b10110001);
+      arg0 = nir_quad_swizzle_amd(b, arg0, .swizzle_mask = 0b10110001, .fetch_inactive = true);
 
       arg0_vec[i] = arg0;
       arg1_vec[i] = arg1;
    }
 
-   nir_instr_rewrite_src_ssa(&mrt0_exp->instr, &mrt0_exp->src[0], nir_vec(b, arg0_vec, 4));
-   nir_instr_rewrite_src_ssa(&mrt1_exp->instr, &mrt1_exp->src[0], nir_vec(b, arg1_vec, 4));
+   nir_src_rewrite(&mrt0_exp->src[0], nir_vec(b, arg0_vec, 4));
+   nir_src_rewrite(&mrt1_exp->src[0], nir_vec(b, arg1_vec, 4));
 
    nir_intrinsic_set_write_mask(mrt0_exp, write_mask);
    nir_intrinsic_set_write_mask(mrt1_exp, write_mask);
@@ -741,7 +741,7 @@ emit_ps_null_export(nir_builder *b, lower_ps_state *s)
       V_008DFC_SQ_EXP_MRT : V_008DFC_SQ_EXP_NULL;
 
    nir_intrinsic_instr *intrin =
-      nir_export_amd(b, nir_ssa_undef(b, 4, 32),
+      nir_export_amd(b, nir_undef(b, 4, 32),
                      .base = target,
                      .flags = AC_EXP_FLAG_VALID_MASK | AC_EXP_FLAG_DONE);
    /* To avoid builder set write mask to 0xf. */
@@ -751,7 +751,7 @@ emit_ps_null_export(nir_builder *b, lower_ps_state *s)
 static void
 export_ps_outputs(nir_builder *b, lower_ps_state *s)
 {
-   b->cursor = nir_after_cf_list(&b->impl->body);
+   b->cursor = nir_after_impl(b->impl);
 
    emit_ps_color_clamp_and_alpha_test(b, s);
 
@@ -798,7 +798,7 @@ export_ps_outputs(nir_builder *b, lower_ps_state *s)
          unsigned target = get_ps_color_export_target(s);
 
          s->exp[s->exp_num++] =
-            nir_export_amd(b, nir_ssa_undef(b, 4, 32), .base = target);
+            nir_export_amd(b, nir_undef(b, 4, 32), .base = target);
       }
    } else {
       if (s->output_types[FRAG_RESULT_COLOR] != nir_type_invalid) {

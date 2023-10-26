@@ -18,7 +18,7 @@ Linux mainline, that is why Mesa has its own kernel version which should be used
 as the base for newer kernels.
 
 So, one should base the kernel uprev from the last tag used in the Mesa CI,
-please refer to ``.gitlab-ci/container/gitlab-ci.yml`` ``KERNEL_URL`` variable.
+please refer to ``.gitlab-ci/image-tags.yml`` ``KERNEL_TAG`` variable.
 Every tag has a standard naming: ``vX.YZ-for-mesa-ci-<commit_short_SHA>``, which
 can be created via the command:
 
@@ -27,8 +27,7 @@ can be created via the command:
 Building Kernel
 ---------------
 
-When Mesa CI generates a new rootfs image, the Linux Kernel is built based on
-the script located at ``.gitlab-ci/container/build-kernel.sh``.
+The kernel files are loaded from the artifacts uploaded to S3 from gfx-ci/linux.
 
 Updating Kconfigs
 ^^^^^^^^^^^^^^^^^
@@ -41,15 +40,15 @@ defconfig* made via ``merge_config.sh`` script located at Linux Kernel tree.
 Kconfigs location
 """""""""""""""""
 
-+------------+--------------------------------------------+-------------------------------------+
-| Platform   | Mesa CI Kconfig location                   | Linux tree defconfig                |
-+============+============================================+=====================================+
-| arm        | .gitlab-ci/container/arm.config            | arch/arm/configs/multi_v7_defconfig |
-+------------+--------------------------------------------+-------------------------------------+
-| arm64      | .gitlab-ci/container/arm64.config          | arch/arm64/configs/defconfig        |
-+------------+--------------------------------------------+-------------------------------------+
-| x86-64     | .gitlab-ci/container/x86_64.config         | arch/x86/configs/x86_64_defconfig   |
-+------------+--------------------------------------------+-------------------------------------+
++------------+------------------------------------------------------+-------------------------------------+
+| Platform   | Mesa CI Kconfig location                             | Linux tree defconfig                |
++============+======================================================+=====================================+
+| arm        | kernel/configs/mesa3d-ci_arm.config\@gfx-ci/linux    | arch/arm/configs/multi_v7_defconfig |
++------------+------------------------------------------------------+-------------------------------------+
+| arm64      | kernel/configs/mesa3d-ci_arm64.config\@gfx-ci/linux  | arch/arm64/configs/defconfig        |
++------------+------------------------------------------------------+-------------------------------------+
+| x86-64     | kernel/configs/mesa3d-ci_x86_64.config\@gfx-ci/linux | arch/x86/configs/x86_64_defconfig   |
++------------+------------------------------------------------------+-------------------------------------+
 
 Updating image tags
 -------------------

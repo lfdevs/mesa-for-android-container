@@ -24,9 +24,9 @@
 #ifndef _NIR_SEARCH_
 #define _NIR_SEARCH_
 
+#include "util/u_dynarray.h"
 #include "nir.h"
 #include "nir_worklist.h"
-#include "util/u_dynarray.h"
 
 #define NIR_SEARCH_MAX_VARIABLES 16
 
@@ -173,7 +173,7 @@ struct per_op_table {
 };
 
 struct transform {
-   uint16_t search; /* Index in table->values[] for the search expression. */
+   uint16_t search;  /* Index in table->values[] for the search expression. */
    uint16_t replace; /* Index in table->values[] for the replace value. */
    unsigned condition_offset;
 };

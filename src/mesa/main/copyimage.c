@@ -239,7 +239,11 @@ prepare_target_err(struct gl_context *ctx, GLuint name, GLenum target,
       if (target == GL_TEXTURE_CUBE_MAP) {
          int i;
 
-         assert(z < MAX_FACES);  /* should have been caught earlier */
+         if (z < 0 || z >= MAX_FACES) {
+            _mesa_error(ctx, GL_INVALID_VALUE,
+                        "glCopyImageSubData(cube face (%sZ = %d)", dbg_prefix, z);
+            return false;
+         }
 
          /* make sure all the cube faces are present */
          for (i = 0; i < depth; i++) {

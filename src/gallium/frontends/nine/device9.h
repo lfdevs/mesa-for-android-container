@@ -158,6 +158,7 @@ struct NineDevice9
     /* dummy vbo (containing 0 0 0 0) to bind if vertex shader input
      * is not bound to anything by the vertex declaration */
     struct pipe_resource *dummy_vbo;
+    struct pipe_resource *dummy_vbo_sw;
     BOOL device_needs_reset;
     int minor_version_num;
     long long available_texture_mem;

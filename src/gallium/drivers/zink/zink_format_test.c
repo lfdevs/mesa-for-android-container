@@ -7,7 +7,7 @@ main(int argc, char *argv[])
    int ret = 0;
    for (int i = 0; i < PIPE_FORMAT_COUNT; ++i) {
       enum pipe_format pipe_fmt = i;
-      VkFormat vk_fmt = zink_pipe_format_to_vk_format(i);
+      VkFormat vk_fmt = vk_format_from_pipe_format(i);
 
       /* skip unsupported formats */
       if (vk_fmt == VK_FORMAT_UNDEFINED)

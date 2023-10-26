@@ -1,4 +1,0 @@
-builtin-float-cos-1.0.generated
-builtin-float-sin-1.0.generated
-builtin-float-sincos-1.0.generated
-builtin-float-tan-1.0.generated

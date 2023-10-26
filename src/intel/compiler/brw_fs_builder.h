@@ -27,6 +27,7 @@
 
 #include "brw_ir_fs.h"
 #include "brw_shader.h"
+#include "brw_eu.h"
 
 namespace brw {
    /**
@@ -198,12 +199,13 @@ namespace brw {
       dst_reg
       vgrf(enum brw_reg_type type, unsigned n = 1) const
       {
+         const unsigned unit = reg_unit(shader->devinfo);
          assert(dispatch_width() <= 32);
 
          if (n > 0)
             return dst_reg(VGRF, shader->alloc.allocate(
                               DIV_ROUND_UP(n * type_sz(type) * dispatch_width(),
-                                           REG_SIZE)),
+                                           unit * REG_SIZE) * unit),
                            type);
          else
             return retype(null_reg_ud(), type);

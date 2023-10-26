@@ -333,6 +333,177 @@ vk_video_session_parameters_update(struct vk_video_session_parameters *params,
    return result;
 }
 
+const uint8_t h264_scaling_list_default_4x4_intra[] =
+{
+   /* Table 7-3 - Default_4x4_Intra */
+   6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32, 32, 37, 37, 42
+};
+
+const uint8_t h264_scaling_list_default_4x4_inter[] =
+{
+   /* Table 7-3 - Default_4x4_Inter */
+   10, 14, 14, 20, 20, 20, 24, 24, 24, 24, 27, 27, 27, 30, 30, 34
+};
+
+const uint8_t h264_scaling_list_default_8x8_intra[] =
+{
+   /* Table 7-4 - Default_8x8_Intra */
+   6,  10, 10, 13, 11, 13, 16, 16, 16, 16, 18, 18, 18, 18, 18, 23,
+   23, 23, 23, 23, 23, 25, 25, 25, 25, 25, 25, 25, 27, 27, 27, 27,
+   27, 27, 27, 27, 29, 29, 29, 29, 29, 29, 29, 31, 31, 31, 31, 31,
+   31, 33, 33, 33, 33, 33, 36, 36, 36, 36, 38, 38, 38, 40, 40, 42,
+};
+
+const uint8_t h264_scaling_list_default_8x8_inter[] =
+{
+   /* Table 7-4 - Default_8x8_Inter */
+   9 , 13, 13, 15, 13, 15, 17, 17, 17, 17, 19, 19, 19, 19, 19, 21,
+   21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 24, 24, 24, 24,
+   24, 24, 24, 24, 25, 25, 25, 25, 25, 25, 25, 27, 27, 27, 27, 27,
+   27, 28, 28, 28, 28, 28, 30, 30, 30, 30, 32, 32, 32, 33, 33, 35,
+};
+
+void
+vk_video_derive_h264_scaling_list(const StdVideoH264SequenceParameterSet *sps,
+                                  const StdVideoH264PictureParameterSet *pps,
+                                  StdVideoH264ScalingLists *list)
+{
+   StdVideoH264ScalingLists temp;
+
+   /* derive SPS scaling list first, because PPS may depend on it in fall-back
+    * rule B */
+   if (sps->flags.seq_scaling_matrix_present_flag)
+   {
+      for (int i = 0; i < STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS; i++)
+      {
+         if (sps->pScalingLists->scaling_list_present_mask & (1 << i))
+            memcpy(temp.ScalingList4x4[i],
+                   pps->pScalingLists->ScalingList4x4[i],
+                   STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+         else /* fall-back rule A */
+         {
+            if (i == 0)
+               memcpy(temp.ScalingList4x4[i],
+                      h264_scaling_list_default_4x4_intra,
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+            else if (i == 3)
+               memcpy(temp.ScalingList4x4[i],
+                      h264_scaling_list_default_4x4_inter,
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+            else
+               memcpy(temp.ScalingList4x4[i],
+                      temp.ScalingList4x4[i - 1],
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+         }
+      }
+
+      for (int j = 0; j < STD_VIDEO_H264_SCALING_LIST_8X8_NUM_LISTS; j++)
+      {
+         int i = j + STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS;
+         if (sps->pScalingLists->scaling_list_present_mask & (1 << i))
+            memcpy(temp.ScalingList8x8[j], pps->pScalingLists->ScalingList8x8[j],
+                   STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+         else /* fall-back rule A */
+         {
+            if (i == 6)
+               memcpy(temp.ScalingList8x8[j],
+                      h264_scaling_list_default_8x8_intra,
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+            else if (i == 7)
+               memcpy(temp.ScalingList8x8[j],
+                      h264_scaling_list_default_8x8_inter,
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+            else
+               memcpy(temp.ScalingList8x8[j], temp.ScalingList8x8[j - 2],
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+         }
+      }
+   }
+   else
+   {
+      memset(temp.ScalingList4x4, 0x10,
+             STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS *
+             STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+      memset(temp.ScalingList8x8, 0x10,
+             STD_VIDEO_H264_SCALING_LIST_8X8_NUM_LISTS *
+             STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+   }
+
+   if (pps->flags.pic_scaling_matrix_present_flag)
+   {
+      for (int i = 0; i < STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS; i++)
+      {
+         if (pps->pScalingLists->scaling_list_present_mask & (1 << i))
+            memcpy(list->ScalingList4x4[i], pps->pScalingLists->ScalingList4x4[i],
+                   STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+         else if (sps->flags.seq_scaling_matrix_present_flag) /* fall-back rule B */
+         {
+            if (i == 0 || i == 3)
+               memcpy(list->ScalingList4x4[i], temp.ScalingList4x4[i],
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+            else
+               memcpy(list->ScalingList4x4[i], list->ScalingList4x4[i - 1],
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+         }
+         else /* fall-back rule A */
+         {
+            if (i == 0)
+               memcpy(list->ScalingList4x4[i],
+                      h264_scaling_list_default_4x4_intra,
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+            else if (i == 3)
+               memcpy(list->ScalingList4x4[i],
+                      h264_scaling_list_default_4x4_inter,
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+            else
+               memcpy(list->ScalingList4x4[i],
+                      list->ScalingList4x4[i - 1],
+                      STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+         }
+      }
+
+      for (int j = 0; j < STD_VIDEO_H264_SCALING_LIST_8X8_NUM_LISTS; j++)
+      {
+         int i = j + STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS;
+         if (pps->pScalingLists->scaling_list_present_mask & (1 << i))
+            memcpy(list->ScalingList8x8[j], pps->pScalingLists->ScalingList8x8[j],
+                   STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+         else if (sps->flags.seq_scaling_matrix_present_flag) /* fall-back rule B */
+         {
+            if (i == 6 || i == 7)
+               memcpy(list->ScalingList8x8[j], temp.ScalingList8x8[j],
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+            else
+               memcpy(list->ScalingList8x8[j], list->ScalingList8x8[j - 2],
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+         }
+         else /* fall-back rule A */
+         {
+            if (i == 6)
+               memcpy(list->ScalingList8x8[j],
+                      h264_scaling_list_default_8x8_intra,
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+            else if (i == 7)
+               memcpy(list->ScalingList8x8[j],
+                      h264_scaling_list_default_8x8_inter,
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+            else
+               memcpy(list->ScalingList8x8[j], list->ScalingList8x8[j - 2],
+                      STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+         }
+      }
+   }
+   else
+   {
+      memcpy(list->ScalingList4x4, temp.ScalingList4x4,
+            STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS *
+            STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
+      memcpy(list->ScalingList8x8, temp.ScalingList8x8,
+            STD_VIDEO_H264_SCALING_LIST_8X8_NUM_LISTS *
+            STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
+   }
+}
+
 const StdVideoH264SequenceParameterSet *
 vk_video_find_h264_dec_std_sps(const struct vk_video_session_parameters *params,
                                uint32_t id)
@@ -552,7 +723,7 @@ vk_video_parse_h265_slice_header(const struct VkVideoDecodeInfoKHR *frame_info,
    vl_vlc_get_uimsbf(&vlc, 3); /* nuh_temporal_id_plus1 */
 
    struct vl_rbsp rbsp;
-   vl_rbsp_init(&rbsp, &vlc, 128);
+   vl_rbsp_init(&rbsp, &vlc, 128, /* emulation_bytes */ true);
 
    memset(params, 0, sizeof(*params));
 

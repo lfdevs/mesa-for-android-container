@@ -30,12 +30,25 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_shader_tokens.h"
+#include "pipe/p_video_codec.h"
 
 struct winsys_handle;
 
 void trace_dump_resource_template(const struct pipe_resource *templat);
 
+void trace_dump_video_codec_template(const struct pipe_video_codec *templat);
+
+void trace_dump_video_buffer_template(const struct pipe_video_buffer *templat);
+
+void trace_dump_pipe_picture_desc(const struct pipe_picture_desc *picture);
+
+void trace_dump_pipe_vpp_blend(const struct pipe_vpp_blend *blend);
+
+void trace_dump_pipe_vpp_desc(const struct pipe_vpp_desc *process_properties);
+
 void trace_dump_box(const struct pipe_box *box);
+
+void trace_dump_u_rect(const struct u_rect *rect);
 
 void trace_dump_rasterizer_state(const struct pipe_rasterizer_state *state);
 

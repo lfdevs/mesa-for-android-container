@@ -21,7 +21,6 @@
  * SOFTWARE.
  */
 
-
 #include "nir.h"
 #include "nir_builder.h"
 
@@ -54,7 +53,7 @@ static bool
 lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr, nir_shader *shader)
 {
    nir_variable *out = NULL;
-   nir_ssa_def *s;
+   nir_def *s;
 
    switch (intr->intrinsic) {
    case nir_intrinsic_store_deref:
@@ -81,9 +80,9 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr, nir_shader *shader)
    if (is_color_output(shader, out)) {
       b->cursor = nir_before_instr(&intr->instr);
       int src = intr->intrinsic == nir_intrinsic_store_deref ? 1 : 0;
-      s = nir_ssa_for_src(b, intr->src[src], intr->num_components);
+      s = intr->src[src].ssa;
       s = nir_fsat(b, s);
-      nir_instr_rewrite_src(&intr->instr, &intr->src[src], nir_src_for_ssa(s));
+      nir_src_rewrite(&intr->src[src], s);
    }
 
    return true;
@@ -102,6 +101,6 @@ nir_lower_clamp_color_outputs(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        shader);
 }

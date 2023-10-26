@@ -76,8 +76,6 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
          tex.swizzle_b = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[2]);
          tex.swizzle_a = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[3]);
 
-         tex.reverse_standard_border_color = image_view->planes[plane].channel_reverse;
-
          tex.texture_type = image_view->format->planes[plane].tex_type;
 
          if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
@@ -110,8 +108,6 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
 
          tex.array_stride_64_byte_aligned = image->planes[iplane].cube_map_stride / 64;
 
-         tex.srgb = vk_format_is_srgb(image_view->vk.view_format);
-
          /* At this point we don't have the job. That's the reason the first
           * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
           * add the bo to the job. This also means that we need to add manually
@@ -122,6 +118,51 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
             v3dv_layer_offset(image, 0, image_view->vk.base_array_layer,
                               iplane);
          tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
+
+         bool is_srgb = vk_format_is_srgb(image_view->vk.format);
+
+         /* V3D 4.x doesn't have the reverse and swap_r/b bits, so we compose
+          * the reverse and/or swap_r/b swizzle from the format table with the
+          * image view swizzle. This, however, doesn't work for border colors,
+          * for that there is the reverse_standard_border_color.
+          *
+          * In v3d 7.x, however, there is no reverse_standard_border_color bit,
+          * since the reverse and swap_r/b bits also affect border colors. It is
+          * because of this that we absolutely need to use these bits with
+          * reversed and swpaped formats, since that's the only way to ensure
+          * correct border colors. In that case we don't want to program the
+          * swizzle to the composition of the format swizzle and the view
+          * swizzle like we do in v3d 4.x, since the format swizzle is applied
+          * via the reverse and swap_r/b bits.
+          */
+#if V3D_VERSION == 42
+         tex.srgb = is_srgb;
+         tex.reverse_standard_border_color =
+            image_view->planes[plane].channel_reverse;
+#endif
+#if V3D_VERSION >= 71
+         tex.transfer_func = is_srgb ? TRANSFER_FUNC_SRGB : TRANSFER_FUNC_NONE;
+
+         tex.reverse = image_view->planes[plane].channel_reverse;
+         tex.r_b_swap = image_view->planes[plane].swap_rb;
+
+         if (tex.reverse || tex.r_b_swap) {
+            tex.swizzle_r =
+               v3d_translate_pipe_swizzle(image_view->view_swizzle[0]);
+            tex.swizzle_g =
+               v3d_translate_pipe_swizzle(image_view->view_swizzle[1]);
+            tex.swizzle_b =
+               v3d_translate_pipe_swizzle(image_view->view_swizzle[2]);
+            tex.swizzle_a =
+               v3d_translate_pipe_swizzle(image_view->view_swizzle[3]);
+         }
+
+         tex.chroma_offset_x = 1;
+         tex.chroma_offset_y = 1;
+         /* See comment in XML field definition for rationale of the shifts */
+         tex.texture_base_pointer_cb = base_offset >> 6;
+         tex.texture_base_pointer_cr = base_offset >> 6;
+#endif
       }
    }
 }
@@ -166,7 +207,14 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
 
       assert(buffer_view->format->plane_count == 1);
       tex.texture_type = buffer_view->format->planes[0].tex_type;
-      tex.srgb = vk_format_is_srgb(buffer_view->vk_format);
+
+      bool is_srgb = vk_format_is_srgb(buffer_view->vk_format);
+#if V3D_VERSION == 42
+      tex.srgb = is_srgb;
+#endif
+#if V3D_VERSION >= 71
+      tex.transfer_func = is_srgb ? TRANSFER_FUNC_SRGB : TRANSFER_FUNC_NONE;
+#endif
 
       /* At this point we don't have the job. That's the reason the first
        * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
@@ -179,5 +227,13 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
          buffer_view->offset;
 
       tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
+
+#if V3D_VERSION >= 71
+      tex.chroma_offset_x = 1;
+      tex.chroma_offset_y = 1;
+      /* See comment in XML field definition for rationale of the shifts */
+      tex.texture_base_pointer_cb = base_offset >> 6;
+      tex.texture_base_pointer_cr = base_offset >> 6;
+#endif
    }
 }

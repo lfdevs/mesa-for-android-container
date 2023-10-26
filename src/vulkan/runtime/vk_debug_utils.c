@@ -153,12 +153,62 @@ vk_common_DestroyDebugUtilsMessengerEXT(
    vk_free2(&instance->alloc, pAllocator, messenger);
 }
 
+static VkResult
+vk_common_set_object_name_locked(
+   struct vk_device *device,
+   const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
+{
+   if (unlikely(device->swapchain_name == NULL)) {
+      /* Even though VkSwapchain/Surface are non-dispatchable objects, we know
+       * a priori that these are actually pointers so we can use
+       * the pointer hash table for them.
+       */
+      device->swapchain_name = _mesa_pointer_hash_table_create(NULL);
+      if (device->swapchain_name == NULL)
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   char *object_name = vk_strdup(&device->alloc, pNameInfo->pObjectName,
+                                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (object_name == NULL)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   struct hash_entry *entry =
+      _mesa_hash_table_search(device->swapchain_name,
+                              (void *)(uintptr_t)pNameInfo->objectHandle);
+   if (unlikely(entry == NULL)) {
+      entry = _mesa_hash_table_insert(device->swapchain_name,
+                                      (void *)(uintptr_t)pNameInfo->objectHandle,
+                                      object_name);
+      if (entry == NULL) {
+         vk_free(&device->alloc, object_name);
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+   } else {
+      vk_free(&device->alloc, entry->data);
+      entry->data = object_name;
+   }
+   return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_SetDebugUtilsObjectNameEXT(
    VkDevice _device,
    const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
 {
    VK_FROM_HANDLE(vk_device, device, _device);
+
+#ifdef ANDROID
+   if (pNameInfo->objectType == VK_OBJECT_TYPE_SWAPCHAIN_KHR ||
+       pNameInfo->objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
+#else
+   if (pNameInfo->objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
+#endif
+      mtx_lock(&device->swapchain_name_mtx);
+      VkResult res = vk_common_set_object_name_locked(device, pNameInfo);
+      mtx_unlock(&device->swapchain_name_mtx);
+      return res;
+   }
+
    struct vk_object_base *object =
       vk_object_base_from_u64_handle(pNameInfo->objectHandle,
                                      pNameInfo->objectType);

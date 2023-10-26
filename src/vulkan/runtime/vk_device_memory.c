@@ -43,7 +43,6 @@ vk_device_memory_create(struct vk_device *device,
       return NULL;
 
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-   assert(pAllocateInfo->allocationSize > 0);
 
    mem->size = pAllocateInfo->allocationSize;
    mem->memory_type_index = pAllocateInfo->memoryTypeIndex;
@@ -137,6 +136,29 @@ vk_device_memory_create(struct vk_device *device,
          break;
       }
    }
+
+   /* From the Vulkan Specification 1.3.261:
+    *
+    *    VUID-VkMemoryAllocateInfo-allocationSize-07897
+    *
+    *   "If the parameters do not define an import or export operation,
+    *   allocationSize must be greater than 0."
+    */
+   if (!mem->import_handle_type && !mem->export_handle_types)
+      assert(pAllocateInfo->allocationSize > 0);
+
+   /* From the Vulkan Specification 1.3.261:
+    *
+    *    VUID-VkMemoryAllocateInfo-allocationSize-07899
+    *
+    *    "If the parameters define an export operation and the handle type is
+    *    not VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
+    *    allocationSize must be greater than 0."
+    */
+    if (mem->export_handle_types &&
+        mem->export_handle_types !=
+          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+      assert(pAllocateInfo->allocationSize > 0);
 
    if ((mem->export_handle_types &
         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) &&

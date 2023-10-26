@@ -41,6 +41,9 @@
 #elif (V3D_VERSION == 42)
 #  define V3DX(x) V3D42_##x
 #  define v3dX(x) v3d42_##x
+#elif (V3D_VERSION == 71)
+#  define V3DX(x) V3D71_##x
+#  define v3dX(x) v3d71_##x
 #else
 #  error "Need to add prefixing macros for this v3d version"
 #endif

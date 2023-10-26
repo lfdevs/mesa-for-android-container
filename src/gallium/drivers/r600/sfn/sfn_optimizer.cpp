@@ -373,14 +373,18 @@ CopyPropFwdVisitor::visit(AluInstr *instr)
    auto ii = dest->uses().begin();
    auto ie = dest->uses().end();
 
+   auto mov_block_id = instr->block_id();
+
    while(ii != ie) {
       auto i = *ii;
+      auto target_block_id = i->block_id();
+
       ++ii;
       /* SSA can always be propagated, registers only in the same block
        * and only if they are assigned in the same block */
-      bool can_propagate = dest->has_flag(Register::ssa);
+      bool dest_can_propagate = dest->has_flag(Register::ssa);
 
-      if (!can_propagate) {
+      if (!dest_can_propagate) {
 
          /* Register can propagate if the assignment was in the same
           * block, and we don't have a second assignment coming later
@@ -391,27 +395,64 @@ CopyPropFwdVisitor::visit(AluInstr *instr)
           * 3: MOV SN.x, R0.x
           *
           * Here we can't prpagate the move in 1 to SN.x in 3 */
-         if ((instr->block_id() == i->block_id() && instr->index() < i->index())) {
-            can_propagate = true;
+         if ((mov_block_id == target_block_id && instr->index() < i->index())) {
+            dest_can_propagate = true;
             if (dest->parents().size() > 1) {
                for (auto p : dest->parents()) {
                   if (p->block_id() == i->block_id() && p->index() > instr->index()) {
-                     can_propagate = false;
+                     dest_can_propagate = false;
                      break;
                   }
                }
             }
          }
       }
+      bool move_addr_use = false;
+      bool src_can_propagate = false;
+      if (auto rsrc = src->as_register()) {
+         if (rsrc->has_flag(Register::ssa)) {
+            src_can_propagate = true;
+         } else if (mov_block_id == target_block_id) {
+            if (auto a = rsrc->addr()) {
+               if (a->as_register() &&
+                   !a->as_register()->has_flag(Register::addr_or_idx) &&
+                   i->block_id() == mov_block_id &&
+                   i->index() == instr->index() + 1) {
+                  src_can_propagate = true;
+                  move_addr_use = true;
+               }
+            } else {
+               src_can_propagate = true;
+            }
+            for (auto p : rsrc->parents()) {
+               if (p->block_id() == mov_block_id &&
+                   p->index() > instr->index() &&
+                   p->index() < i->index()) {
+                  src_can_propagate = false;
+                  break;
+               }
+            }
+         }
+      } else {
+         src_can_propagate = true;
+      }
 
-      if (can_propagate) {
+      if (dest_can_propagate && src_can_propagate) {
          sfn_log << SfnLog::opt << "   Try replace in " << i->block_id() << ":"
                  << i->index() << *i << "\n";
 
          if (i->as_alu() && i->as_alu()->parent_group()) {
             progress |= i->as_alu()->parent_group()->replace_source(dest, src);
-         } else
-            progress |= i->replace_source(dest, src);
+         } else {
+            bool success = i->replace_source(dest, src);
+            if (success && move_addr_use) {
+               for (auto r : instr->required_instr()){
+                  std::cerr << "add " << *r << " to " << *i << "\n";
+                  i->add_required_instr(r);
+               }
+            }
+            progress |= success;
+         }
       }
    }
    if (instr->dest()) {
@@ -599,7 +640,8 @@ CopyPropFwdVisitor::propagate_to(RegisterVec4& value, Instr *instr)
 
          value.set_value(i, new_src[i]);
 
-         if (new_src[i]->pin() != pin_fully) {
+         if (new_src[i]->pin() != pin_fully &&
+             new_src[i]->pin() != pin_chgr) {
             if (new_src[i]->pin() == pin_chan)
                new_src[i]->set_pin(pin_chgr);
             else
@@ -778,7 +820,52 @@ public:
    bool has_group_dest;
 };
 
+class HasVecSrcVisitor : public ConstInstrVisitor {
+public:
+   HasVecSrcVisitor():
+       has_group_src(false)
+   {
+   }
 
+   void visit(UNUSED const AluInstr& instr) override { }
+   void visit(UNUSED const AluGroup& instr) override { }
+   void visit(UNUSED const FetchInstr& instr) override  { };
+   void visit(UNUSED const Block& instr) override { };
+   void visit(UNUSED const ControlFlowInstr& instr) override{ }
+   void visit(UNUSED const IfInstr& instr) override{ }
+   void visit(UNUSED const LDSAtomicInstr& instr) override { };
+   void visit(UNUSED const LDSReadInstr& instr) override { };
+
+   void visit(const TexInstr& instr) override { check(instr.src()); }
+   void visit(const ExportInstr& instr) override { check(instr.value()); }
+   void visit(const GDSInstr& instr) override { check(instr.src()); }
+
+   // No swizzling supported, so we want to keep the register group
+   void visit(UNUSED const ScratchIOInstr& instr) override  { has_group_src = true; };
+   void visit(UNUSED const StreamOutInstr& instr) override { has_group_src = true; }
+   void visit(UNUSED const MemRingOutInstr& instr) override { has_group_src = true; }
+   void visit(UNUSED const RatInstr& instr) override { has_group_src = true; };
+
+   void visit(UNUSED const EmitVertexInstr& instr) override { }
+
+   // We always emit at least two values
+   void visit(UNUSED const WriteTFInstr& instr) override { has_group_src = true; };
+
+
+   void check(const RegisterVec4& value);
+
+   bool has_group_src;
+};
+
+void HasVecSrcVisitor::check(const RegisterVec4& value)
+{
+   int nval = 0;
+   for (int i = 0; i < 4 && nval < 2; ++i) {
+      if (value[i]->chan() < 4)
+         ++nval;
+   }
+   has_group_src = nval > 1;
+}
 
 bool
 simplify_source_vectors(Shader& sh)
@@ -812,7 +899,14 @@ SimplifySourceVecVisitor::visit(TexInstr *instr)
                      break;
                }
 
-               if (check_dests.has_group_dest)
+               HasVecSrcVisitor check_src;
+               for (auto p : src[i]->uses()) {
+                  p->accept(check_src);
+                  if (check_src.has_group_src)
+                     break;
+               }
+
+               if (check_dests.has_group_dest || check_src.has_group_src)
                   break;
 
                if (src[i]->pin() == pin_group)

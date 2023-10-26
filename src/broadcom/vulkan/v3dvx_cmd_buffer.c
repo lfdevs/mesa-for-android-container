@@ -56,10 +56,15 @@ v3dX(job_emit_enable_double_buffer)(struct v3dv_job *job)
    };
    config.width_in_pixels = tiling->width;
    config.height_in_pixels = tiling->height;
+#if V3D_VERSION == 42
    config.number_of_render_targets = MAX2(tiling->render_target_count, 1);
    config.multisample_mode_4x = tiling->msaa;
    config.double_buffer_in_non_ms_mode = tiling->double_buffer;
    config.maximum_bpp_of_all_render_targets = tiling->internal_bpp;
+#endif
+#if V3D_VERSION >= 71
+      unreachable("HW generation 71 not supported yet.");
+#endif
 
    uint8_t *rewrite_addr = (uint8_t *)job->bcl_tile_binning_mode_ptr;
    cl_packet_pack(TILE_BINNING_MODE_CFG)(NULL, rewrite_addr, &config);
@@ -82,10 +87,22 @@ v3dX(job_emit_binning_prolog)(struct v3dv_job *job,
    cl_emit(&job->bcl, TILE_BINNING_MODE_CFG, config) {
       config.width_in_pixels = tiling->width;
       config.height_in_pixels = tiling->height;
+#if V3D_VERSION == 42
       config.number_of_render_targets = MAX2(tiling->render_target_count, 1);
       config.multisample_mode_4x = tiling->msaa;
       config.double_buffer_in_non_ms_mode = tiling->double_buffer;
       config.maximum_bpp_of_all_render_targets = tiling->internal_bpp;
+#endif
+#if V3D_VERSION >= 71
+      config.log2_tile_width = log2_tile_size(tiling->tile_width);
+      config.log2_tile_height = log2_tile_size(tiling->tile_height);
+      /* FIXME: ideally we would like next assert on the packet header (as is
+       * general, so also applies to GL). We would need to expand
+       * gen_pack_header for that.
+       */
+      assert(config.log2_tile_width == config.log2_tile_height ||
+             config.log2_tile_width == config.log2_tile_height + 1);
+#endif
    }
 
    /* There's definitely nothing in the VCD cache we want. */
@@ -345,6 +362,11 @@ cmd_buffer_render_pass_emit_store(struct v3dv_cmd_buffer *cmd_buffer,
                                              iview->vk.base_array_layer + layer,
                                              image_plane);
 
+   /* The Clear Buffer bit is not supported for Z/Stencil stores in 7.x and it
+    * is broken in earlier V3D versions.
+    */
+   assert((buffer != Z && buffer != STENCIL && buffer != ZSTENCIL) || !clear);
+
    cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
       store.buffer_to_store = buffer;
       store.address = v3dv_cl_address(image->planes[image_plane].mem->bo, layer_offset);
@@ -467,6 +489,30 @@ cmd_buffer_render_pass_emit_stores(struct v3dv_cmd_buffer *cmd_buffer,
       const VkImageAspectFlags aspects =
          vk_format_aspects(ds_attachment->desc.format);
 
+#if V3D_VERSION <= 42
+      /* GFXH-1689: The per-buffer store command's clear buffer bit is broken
+       * for depth/stencil.
+       *
+       * There used to be some confusion regarding the Clear Tile Buffers
+       * Z/S bit also being broken, but we confirmed with Broadcom that this
+       * is not the case, it was just that some other hardware bugs (that we
+       * need to work around, such as GFXH-1461) could cause this bit to behave
+       * incorrectly.
+       *
+       * There used to be another issue where the RTs bit in the Clear Tile
+       * Buffers packet also cleared Z/S, but Broadcom confirmed this is
+       * fixed since V3D 4.1.
+       *
+       * So if we have to emit a clear of depth or stencil we don't use
+       * the per-buffer store clear bit, even if we need to store the buffers,
+       * instead we always have to use the Clear Tile Buffers Z/S bit.
+       * If we have configured the job to do early Z/S clearing, then we
+       * don't want to emit any Clear Tile Buffers command at all here.
+       *
+       * Note that GFXH-1689 is not reproduced in the simulator, where
+       * using the clear buffer bit in depth/stencil stores works fine.
+       */
+
       /* Only clear once on the first subpass that uses the attachment */
       uint32_t ds_first_subpass = !state->pass->multiview_enabled ?
          ds_attachment->first_subpass :
@@ -485,6 +531,17 @@ cmd_buffer_render_pass_emit_stores(struct v3dv_cmd_buffer *cmd_buffer,
                            ds_first_subpass,
                            ds_attachment->desc.stencilLoadOp,
                            subpass->do_stencil_clear_with_draw);
+
+      use_global_zs_clear = !state->job->early_zs_clear &&
+         (needs_depth_clear || needs_stencil_clear);
+#endif
+#if V3D_VERSION >= 71
+      /* The store command's clear buffer bit cannot be used for Z/S stencil:
+       * since V3D 4.5.6 Z/S buffers are automatically cleared between tiles,
+       * so we don't want to emit redundant clears here.
+       */
+      use_global_zs_clear = false;
+#endif
 
       /* Skip the last store if it is not required */
       uint32_t ds_last_subpass = !pass->multiview_enabled ?
@@ -528,30 +585,6 @@ cmd_buffer_render_pass_emit_stores(struct v3dv_cmd_buffer *cmd_buffer,
          needs_stencil_store = subpass->resolve_stencil;
       }
 
-      /* GFXH-1689: The per-buffer store command's clear buffer bit is broken
-       * for depth/stencil.
-       *
-       * There used to be some confusion regarding the Clear Tile Buffers
-       * Z/S bit also being broken, but we confirmed with Broadcom that this
-       * is not the case, it was just that some other hardware bugs (that we
-       * need to work around, such as GFXH-1461) could cause this bit to behave
-       * incorrectly.
-       *
-       * There used to be another issue where the RTs bit in the Clear Tile
-       * Buffers packet also cleared Z/S, but Broadcom confirmed this is
-       * fixed since V3D 4.1.
-       *
-       * So if we have to emit a clear of depth or stencil we don't use
-       * the per-buffer store clear bit, even if we need to store the buffers,
-       * instead we always have to use the Clear Tile Buffers Z/S bit.
-       * If we have configured the job to do early Z/S clearing, then we
-       * don't want to emit any Clear Tile Buffers command at all here.
-       *
-       * Note that GFXH-1689 is not reproduced in the simulator, where
-       * using the clear buffer bit in depth/stencil stores works fine.
-       */
-      use_global_zs_clear = !state->job->early_zs_clear &&
-         (needs_depth_clear || needs_stencil_clear);
       if (needs_depth_store || needs_stencil_store) {
          const uint32_t zs_buffer =
             v3dv_zs_buffer(needs_depth_store, needs_stencil_store);
@@ -649,10 +682,15 @@ cmd_buffer_render_pass_emit_stores(struct v3dv_cmd_buffer *cmd_buffer,
     * bit and instead we have to emit a single clear of all tile buffers.
     */
    if (use_global_zs_clear || use_global_rt_clear) {
+#if V3D_VERSION == 42
       cl_emit(cl, CLEAR_TILE_BUFFERS, clear) {
          clear.clear_z_stencil_buffer = use_global_zs_clear;
          clear.clear_all_render_targets = use_global_rt_clear;
       }
+#endif
+#if V3D_VERSION >= 71
+      cl_emit(cl, CLEAR_RENDER_TARGETS, clear);
+#endif
    }
 }
 
@@ -778,6 +816,103 @@ set_rcl_early_z_config(struct v3dv_job *job,
    }
 }
 
+/* Note that for v71, render target cfg packets has just one field that
+ * combined the internal type and clamp mode. For simplicity we keep just one
+ * helper.
+ *
+ * Note: rt_type is in fact a "enum V3DX(Internal_Type)".
+ *
+ * FIXME: for v71 we are not returning all the possible combinations for
+ * render target internal type and clamp. For example for int types we are
+ * always using clamp int, and for 16f we are using clamp none or pos (that
+ * seems to be the equivalent for no-clamp on 4.2), but not pq or hlg. In
+ * summary right now we are just porting what we were doing on 4.2
+ */
+uint32_t
+v3dX(clamp_for_format_and_type)(uint32_t rt_type,
+                                VkFormat vk_format)
+{
+#if V3D_VERSION == 42
+   if (vk_format_is_int(vk_format))
+      return V3D_RENDER_TARGET_CLAMP_INT;
+   else if (vk_format_is_srgb(vk_format))
+      return V3D_RENDER_TARGET_CLAMP_NORM;
+   else
+      return V3D_RENDER_TARGET_CLAMP_NONE;
+#endif
+#if V3D_VERSION >= 71
+   switch (rt_type) {
+   case V3D_INTERNAL_TYPE_8I:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_8I_CLAMPED;
+   case V3D_INTERNAL_TYPE_8UI:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_8UI_CLAMPED;
+   case V3D_INTERNAL_TYPE_8:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_8;
+   case V3D_INTERNAL_TYPE_16I:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_16I_CLAMPED;
+   case V3D_INTERNAL_TYPE_16UI:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_16UI_CLAMPED;
+   case V3D_INTERNAL_TYPE_16F:
+      return vk_format_is_srgb(vk_format) ?
+         V3D_RENDER_TARGET_TYPE_CLAMP_16F_CLAMP_NORM :
+         V3D_RENDER_TARGET_TYPE_CLAMP_16F;
+   case V3D_INTERNAL_TYPE_32I:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_32I_CLAMPED;
+   case V3D_INTERNAL_TYPE_32UI:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_32UI_CLAMPED;
+   case V3D_INTERNAL_TYPE_32F:
+      return V3D_RENDER_TARGET_TYPE_CLAMP_32F;
+   default:
+      unreachable("Unknown internal render target type");
+   }
+
+   return V3D_RENDER_TARGET_TYPE_CLAMP_INVALID;
+#endif
+}
+
+static void
+cmd_buffer_render_pass_setup_render_target(struct v3dv_cmd_buffer *cmd_buffer,
+                                           int rt,
+                                           uint32_t *rt_bpp,
+#if V3D_VERSION == 42
+                                           uint32_t *rt_type,
+                                           uint32_t *rt_clamp)
+#else
+                                           uint32_t *rt_type_clamp)
+#endif
+{
+   const struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
+
+   assert(state->subpass_idx < state->pass->subpass_count);
+   const struct v3dv_subpass *subpass =
+      &state->pass->subpasses[state->subpass_idx];
+
+   if (rt >= subpass->color_count)
+      return;
+
+   struct v3dv_subpass_attachment *attachment = &subpass->color_attachments[rt];
+   const uint32_t attachment_idx = attachment->attachment;
+   if (attachment_idx == VK_ATTACHMENT_UNUSED)
+      return;
+
+   assert(attachment_idx < state->framebuffer->attachment_count &&
+          attachment_idx < state->attachment_alloc_count);
+   struct v3dv_image_view *iview = state->attachments[attachment_idx].image_view;
+   assert(vk_format_is_color(iview->vk.format));
+
+   assert(iview->plane_count == 1);
+   *rt_bpp = iview->planes[0].internal_bpp;
+#if V3D_VERSION == 42
+   *rt_type = iview->planes[0].internal_type;
+   *rt_clamp = v3dX(clamp_for_format_and_type)(iview->planes[0].internal_type,
+                                               iview->vk.format);
+#endif
+#if V3D_VERSION >= 71
+   *rt_type_clamp = v3dX(clamp_for_format_and_type)(iview->planes[0].internal_type,
+                                                    iview->vk.format);
+#endif
+}
+
 void
 v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
 {
@@ -824,7 +959,19 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
       config.number_of_render_targets = MAX2(subpass->color_count, 1);
       config.multisample_mode_4x = tiling->msaa;
       config.double_buffer_in_non_ms_mode = tiling->double_buffer;
+#if V3D_VERSION == 42
       config.maximum_bpp_of_all_render_targets = tiling->internal_bpp;
+#endif
+#if V3D_VERSION >= 71
+      config.log2_tile_width = log2_tile_size(tiling->tile_width);
+      config.log2_tile_height = log2_tile_size(tiling->tile_height);
+      /* FIXME: ideallly we would like next assert on the packet header (as is
+       * general, so also applies to GL). We would need to expand
+       * gen_pack_header for that.
+       */
+      assert(config.log2_tile_width == config.log2_tile_height ||
+             config.log2_tile_width == config.log2_tile_height + 1);
+#endif
 
       if (ds_attachment_idx != VK_ATTACHMENT_UNUSED) {
          const struct v3dv_image_view *iview =
@@ -851,6 +998,10 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
           * Early-Z/S clearing is independent of Early Z/S testing, so it is
           * possible to enable one but not the other so long as their
           * respective requirements are met.
+          *
+          * From V3D 4.5.6, Z/S buffers are always cleared automatically
+          * between tiles, but we still want to enable early ZS clears
+          * when Z/S are not loaded or stored.
           */
          struct v3dv_render_pass_attachment *ds_attachment =
             &pass->attachments[ds_attachment_idx];
@@ -858,6 +1009,13 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
          const VkImageAspectFlags ds_aspects =
             vk_format_aspects(ds_attachment->desc.format);
 
+         bool needs_depth_store =
+            v3dv_cmd_buffer_check_needs_store(state,
+                                              ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
+                                              ds_attachment->last_subpass,
+                                              ds_attachment->desc.storeOp) ||
+                                              subpass->resolve_depth;
+#if V3D_VERSION <= 42
          bool needs_depth_clear =
             check_needs_clear(state,
                               ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -865,14 +1023,19 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
                               ds_attachment->desc.loadOp,
                               subpass->do_depth_clear_with_draw);
 
-         bool needs_depth_store =
-            v3dv_cmd_buffer_check_needs_store(state,
-                                              ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
-                                              ds_attachment->last_subpass,
-                                              ds_attachment->desc.storeOp) ||
-                                              subpass->resolve_depth;
-
          do_early_zs_clear = needs_depth_clear && !needs_depth_store;
+#endif
+#if V3D_VERSION >= 71
+         bool needs_depth_load =
+            v3dv_cmd_buffer_check_needs_load(state,
+                                             ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
+                                             ds_attachment->first_subpass,
+                                             ds_attachment->desc.loadOp,
+                                             ds_attachment->last_subpass,
+                                             ds_attachment->desc.storeOp);
+         do_early_zs_clear = !needs_depth_load && !needs_depth_store;
+#endif
+
          if (do_early_zs_clear &&
              vk_format_has_stencil(ds_attachment->desc.format)) {
             bool needs_stencil_load =
@@ -905,10 +1068,20 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
     */
    job->early_zs_clear = do_early_zs_clear;
 
+#if V3D_VERSION >= 71
+   uint32_t base_addr = 0;
+#endif
    for (uint32_t i = 0; i < subpass->color_count; i++) {
       uint32_t attachment_idx = subpass->color_attachments[i].attachment;
-      if (attachment_idx == VK_ATTACHMENT_UNUSED)
+      if (attachment_idx == VK_ATTACHMENT_UNUSED) {
+#if V3D_VERSION >= 71
+         cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1, rt) {
+            rt.render_target_number = i;
+            rt.stride = 1; /* Unused */
+         }
+#endif
          continue;
+      }
 
       struct v3dv_image_view *iview =
          state->attachments[attachment_idx].image_view;
@@ -920,10 +1093,10 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
       const struct v3d_resource_slice *slice =
          &image->planes[plane].slices[iview->vk.base_mip_level];
 
-      const uint32_t *clear_color =
+      UNUSED const uint32_t *clear_color =
          &state->attachments[attachment_idx].clear_value.color[0];
 
-      uint32_t clear_pad = 0;
+      UNUSED uint32_t clear_pad = 0;
       if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
           slice->tiling == V3D_TILING_UIF_XOR) {
          int uif_block_height = v3d_utile_height(image->planes[plane].cpp) * 2;
@@ -937,6 +1110,7 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
          }
       }
 
+#if V3D_VERSION == 42
       cl_emit(rcl, TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1, clear) {
          clear.clear_color_low_32_bits = clear_color[0];
          clear.clear_color_next_24_bits = clear_color[1] & 0xffffff;
@@ -960,22 +1134,74 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
             clear.render_target_number = i;
          };
       }
+#endif
+
+#if V3D_VERSION >= 71
+      cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1, rt) {
+         rt.clear_color_low_bits = clear_color[0];
+         cmd_buffer_render_pass_setup_render_target(cmd_buffer, i, &rt.internal_bpp,
+                                                    &rt.internal_type_and_clamping);
+         rt.stride =
+            v3d_compute_rt_row_row_stride_128_bits(tiling->tile_width,
+                                                   v3d_internal_bpp_words(rt.internal_bpp));
+         rt.base_address = base_addr;
+         rt.render_target_number = i;
+
+         /* base_addr in multiples of 512 bits. We divide by 8 because stride
+          * is in 128-bit units, but it is packing 2 rows worth of data, so we
+          * need to divide it by 2 so it is only 1 row, and then again by 4 so
+          * it is in 512-bit units.
+          */
+         base_addr += (tiling->tile_height * rt.stride) / 8;
+      }
+
+      if (iview->planes[0].internal_bpp >= V3D_INTERNAL_BPP_64) {
+         cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART2, rt) {
+            rt.clear_color_mid_bits = /* 40 bits (32 + 8)  */
+               ((uint64_t) clear_color[1]) |
+               (((uint64_t) (clear_color[2] & 0xff)) << 32);
+            rt.render_target_number = i;
+         }
+      }
+
+      if (iview->planes[0].internal_bpp >= V3D_INTERNAL_BPP_128) {
+         cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART3, rt) {
+            rt.clear_color_top_bits = /* 56 bits (24 + 32) */
+               (((uint64_t) (clear_color[2] & 0xffffff00)) >> 8) |
+               (((uint64_t) (clear_color[3])) << 24);
+            rt.render_target_number = i;
+         }
+      }
+#endif
    }
 
+#if V3D_VERSION >= 71
+   /* If we don't have any color RTs, we still need to emit one and flag
+    * it as not used using stride = 1.
+    */
+   if (subpass->color_count == 0) {
+      cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1, rt) {
+         rt.stride = 1;
+      }
+   }
+#endif
+
+#if V3D_VERSION == 42
    cl_emit(rcl, TILE_RENDERING_MODE_CFG_COLOR, rt) {
-      v3dX(cmd_buffer_render_pass_setup_render_target)
+      cmd_buffer_render_pass_setup_render_target
          (cmd_buffer, 0, &rt.render_target_0_internal_bpp,
           &rt.render_target_0_internal_type, &rt.render_target_0_clamp);
-      v3dX(cmd_buffer_render_pass_setup_render_target)
+      cmd_buffer_render_pass_setup_render_target
          (cmd_buffer, 1, &rt.render_target_1_internal_bpp,
           &rt.render_target_1_internal_type, &rt.render_target_1_clamp);
-      v3dX(cmd_buffer_render_pass_setup_render_target)
+      cmd_buffer_render_pass_setup_render_target
          (cmd_buffer, 2, &rt.render_target_2_internal_bpp,
           &rt.render_target_2_internal_type, &rt.render_target_2_clamp);
-      v3dX(cmd_buffer_render_pass_setup_render_target)
+      cmd_buffer_render_pass_setup_render_target
          (cmd_buffer, 3, &rt.render_target_3_internal_bpp,
           &rt.render_target_3_internal_type, &rt.render_target_3_clamp);
    }
+#endif
 
    /* Ends rendering mode config. */
    if (ds_attachment_idx != VK_ATTACHMENT_UNUSED) {
@@ -1036,10 +1262,15 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
       }
       if (cmd_buffer->state.tile_aligned_render_area &&
           (i == 0 || v3dv_do_double_initial_tile_clear(tiling))) {
+#if V3D_VERSION == 42
          cl_emit(rcl, CLEAR_TILE_BUFFERS, clear) {
             clear.clear_z_stencil_buffer = !job->early_zs_clear;
             clear.clear_all_render_targets = true;
          }
+#endif
+#if V3D_VERSION >= 71
+         cl_emit(rcl, CLEAR_RENDER_TARGETS, clear_rt);
+#endif
       }
       cl_emit(rcl, END_OF_TILE_MARKER, end);
    }
@@ -1052,6 +1283,43 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
    }
 
    cl_emit(rcl, END_OF_RENDERING, end);
+}
+
+void
+v3dX(viewport_compute_xform)(const VkViewport *viewport,
+                            float scale[3],
+                            float translate[3])
+{
+   float x = viewport->x;
+   float y = viewport->y;
+   float half_width = 0.5f * viewport->width;
+   float half_height = 0.5f * viewport->height;
+   double n = viewport->minDepth;
+   double f = viewport->maxDepth;
+
+   scale[0] = half_width;
+   translate[0] = half_width + x;
+   scale[1] = half_height;
+   translate[1] = half_height + y;
+
+   scale[2] = (f - n);
+   translate[2] = n;
+
+   /* It seems that if the scale is small enough the hardware won't clip
+    * correctly so we work around this my choosing the smallest scale that
+    * seems to work.
+    *
+    * This case is exercised by CTS:
+    * dEQP-VK.draw.renderpass.inverted_depth_ranges.nodepthclamp_deltazero
+    *
+    * V3D 7.x fixes this by using the new
+    * CLIPPER_Z_SCALE_AND_OFFSET_NO_GUARDBAND.
+    */
+#if V3D_VERSION <= 42
+   const float min_abs_scale = 0.0005f;
+   if (fabs(scale[2]) < min_abs_scale)
+      scale[2] = scale[2] < 0 ? -min_abs_scale : min_abs_scale;
+#endif
 }
 
 void
@@ -1078,19 +1346,45 @@ v3dX(cmd_buffer_emit_viewport)(struct v3dv_cmd_buffer *cmd_buffer)
    v3dv_cl_ensure_space_with_branch(&job->bcl, required_cl_size);
    v3dv_return_if_oom(cmd_buffer, NULL);
 
+#if V3D_VERSION == 42
    cl_emit(&job->bcl, CLIPPER_XY_SCALING, clip) {
       clip.viewport_half_width_in_1_256th_of_pixel = vpscale[0] * 256.0f;
       clip.viewport_half_height_in_1_256th_of_pixel = vpscale[1] * 256.0f;
    }
+#endif
+#if V3D_VERSION >= 71
+   cl_emit(&job->bcl, CLIPPER_XY_SCALING, clip) {
+      clip.viewport_half_width_in_1_64th_of_pixel = vpscale[0] * 64.0f;
+      clip.viewport_half_height_in_1_64th_of_pixel = vpscale[1] * 64.0f;
+   }
+#endif
 
    float translate_z, scale_z;
    v3dv_cmd_buffer_state_get_viewport_z_xform(&cmd_buffer->state, 0,
                                               &translate_z, &scale_z);
 
+#if V3D_VERSION == 42
    cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET, clip) {
       clip.viewport_z_offset_zc_to_zs = translate_z;
       clip.viewport_z_scale_zc_to_zs = scale_z;
    }
+#endif
+
+#if V3D_VERSION >= 71
+   /* If the Z scale is too small guardband clipping may not clip correctly */
+   if (fabsf(scale_z) < 0.01f) {
+      cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET_NO_GUARDBAND, clip) {
+         clip.viewport_z_offset_zc_to_zs = translate_z;
+         clip.viewport_z_scale_zc_to_zs = scale_z;
+      }
+   } else {
+      cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET, clip) {
+         clip.viewport_z_offset_zc_to_zs = translate_z;
+         clip.viewport_z_scale_zc_to_zs = scale_z;
+      }
+   }
+#endif
+
    cl_emit(&job->bcl, CLIPPER_Z_MIN_MAX_CLIPPING_PLANES, clip) {
       /* Vulkan's default Z NDC is [0..1]. If 'negative_one_to_one' is enabled,
        * we are using OpenGL's [-1, 1] instead.
@@ -1205,12 +1499,46 @@ v3dX(cmd_buffer_emit_depth_bias)(struct v3dv_cmd_buffer *cmd_buffer)
    cl_emit(&job->bcl, DEPTH_OFFSET, bias) {
       bias.depth_offset_factor = dynamic->depth_bias.slope_factor;
       bias.depth_offset_units = dynamic->depth_bias.constant_factor;
+#if V3D_VERSION <= 42
       if (pipeline->depth_bias.is_z16)
          bias.depth_offset_units *= 256.0f;
+#endif
       bias.limit = dynamic->depth_bias.depth_bias_clamp;
    }
 
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_DEPTH_BIAS;
+}
+
+void
+v3dX(cmd_buffer_emit_depth_bounds)(struct v3dv_cmd_buffer *cmd_buffer)
+{
+   /* No depthBounds support for v42, so this method is empty in that case.
+    *
+    * Note that this method is being called as v3dv_job_init flags all state
+    * as dirty. See FIXME note in v3dv_job_init.
+    */
+
+#if V3D_VERSION >= 71
+   struct v3dv_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   assert(pipeline);
+
+   if (!pipeline->depth_bounds_test_enabled)
+      return;
+
+   struct v3dv_job *job = cmd_buffer->state.job;
+   assert(job);
+
+   v3dv_cl_ensure_space_with_branch(&job->bcl, cl_packet_length(DEPTH_BOUNDS_TEST_LIMITS));
+   v3dv_return_if_oom(cmd_buffer, NULL);
+
+   struct v3dv_dynamic_state *dynamic = &cmd_buffer->state.dynamic;
+   cl_emit(&job->bcl, DEPTH_BOUNDS_TEST_LIMITS, bounds) {
+      bounds.lower_test_limit = dynamic->depth_bounds.min;
+      bounds.upper_test_limit = dynamic->depth_bounds.max;
+   }
+
+   cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_DEPTH_BOUNDS;
+#endif
 }
 
 void
@@ -1256,10 +1584,13 @@ v3dX(cmd_buffer_emit_blend)(struct v3dv_cmd_buffer *cmd_buffer)
    struct v3dv_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    assert(pipeline);
 
+   const struct v3d_device_info *devinfo = &cmd_buffer->device->devinfo;
+   const uint32_t max_color_rts = V3D_MAX_RENDER_TARGETS(devinfo->ver);
+
    const uint32_t blend_packets_size =
       cl_packet_length(BLEND_ENABLES) +
       cl_packet_length(BLEND_CONSTANT_COLOR) +
-      cl_packet_length(BLEND_CFG) * V3D_MAX_DRAW_BUFFERS;
+      cl_packet_length(BLEND_CFG) * max_color_rts;
 
    v3dv_cl_ensure_space_with_branch(&job->bcl, blend_packets_size);
    v3dv_return_if_oom(cmd_buffer, NULL);
@@ -1271,7 +1602,7 @@ v3dX(cmd_buffer_emit_blend)(struct v3dv_cmd_buffer *cmd_buffer)
          }
       }
 
-      for (uint32_t i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
+      for (uint32_t i = 0; i < max_color_rts; i++) {
          if (pipeline->blend.enables & (1 << i))
             cl_emit_prepacked(&job->bcl, &pipeline->blend.cfg[i]);
       }
@@ -1298,9 +1629,15 @@ v3dX(cmd_buffer_emit_color_write_mask)(struct v3dv_cmd_buffer *cmd_buffer)
 
    struct v3dv_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    struct v3dv_dynamic_state *dynamic = &cmd_buffer->state.dynamic;
+   uint32_t color_write_mask = ~dynamic->color_write_enable |
+                               pipeline->blend.color_write_masks;
+#if V3D_VERSION <= 42
+   /* Only 4 RTs */
+   color_write_mask &= 0xffff;
+#endif
+
    cl_emit(&job->bcl, COLOR_WRITE_MASKS, mask) {
-      mask.mask = (~dynamic->color_write_enable |
-                   pipeline->blend.color_write_masks) & 0xffff;
+      mask.mask = color_write_mask;
    }
 
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_COLOR_WRITE_ENABLE;
@@ -1591,15 +1928,16 @@ v3dX(cmd_buffer_emit_configuration_bits)(struct v3dv_cmd_buffer *cmd_buffer)
    struct v3dv_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    assert(pipeline);
 
-   bool enable_ez = job_update_ez_state(job, pipeline, cmd_buffer);
-
    v3dv_cl_ensure_space_with_branch(&job->bcl, cl_packet_length(CFG_BITS));
    v3dv_return_if_oom(cmd_buffer, NULL);
 
    cl_emit_with_prepacked(&job->bcl, CFG_BITS, pipeline->cfg_bits, config) {
+#if V3D_VERSION == 42
+      bool enable_ez = job_update_ez_state(job, pipeline, cmd_buffer);
       config.early_z_enable = enable_ez;
       config.early_z_updates_enable = config.early_z_enable &&
          pipeline->z_updates_enable;
+#endif
    }
 }
 
@@ -1845,7 +2183,9 @@ emit_gs_shader_state_record(struct v3dv_job *job,
          gs_bin->prog_data.gs->base.threads == 4;
       shader.geometry_bin_mode_shader_start_in_final_thread_section =
          gs_bin->prog_data.gs->base.single_seg;
+#if V3D_VERSION <= 42
       shader.geometry_bin_mode_shader_propagate_nans = true;
+#endif
       shader.geometry_bin_mode_shader_uniforms_address =
          gs_bin_uniforms;
 
@@ -1855,7 +2195,9 @@ emit_gs_shader_state_record(struct v3dv_job *job,
          gs->prog_data.gs->base.threads == 4;
       shader.geometry_render_mode_shader_start_in_final_thread_section =
          gs->prog_data.gs->base.single_seg;
+#if V3D_VERSION <= 42
       shader.geometry_render_mode_shader_propagate_nans = true;
+#endif
       shader.geometry_render_mode_shader_uniforms_address =
          gs_render_uniforms;
    }
@@ -2031,10 +2373,12 @@ v3dX(cmd_buffer_emit_gl_shader_state)(struct v3dv_cmd_buffer *cmd_buffer)
                                 pipeline->vpm_cfg.Gv);
    }
 
+#if V3D_VERSION == 42
    struct v3dv_bo *default_attribute_values =
       pipeline->default_attribute_values != NULL ?
       pipeline->default_attribute_values :
       pipeline->device->default_attribute_float;
+#endif
 
    cl_emit_with_prepacked(&job->indirect, GL_SHADER_STATE_RECORD,
                           pipeline->shader_state_record, shader) {
@@ -2060,8 +2404,10 @@ v3dX(cmd_buffer_emit_gl_shader_state)(struct v3dv_cmd_buffer *cmd_buffer)
       shader.vertex_shader_uniforms_address = cmd_buffer->state.uniforms.vs;
       shader.fragment_shader_uniforms_address = cmd_buffer->state.uniforms.fs;
 
+#if V3D_VERSION == 42
       shader.address_of_default_attribute_values =
          v3dv_cl_address(default_attribute_values, 0);
+#endif
 
       shader.any_shader_reads_hardware_written_primitive_id =
          (pipeline->has_gs && prog_data_gs->uses_pid) || prog_data_fs->uses_pid;
@@ -2369,41 +2715,4 @@ v3dX(cmd_buffer_emit_indexed_indirect)(struct v3dv_cmd_buffer *cmd_buffer,
       prim.address = v3dv_cl_address(buffer->mem->bo,
                                      buffer->mem_offset + offset);
    }
-}
-
-void
-v3dX(cmd_buffer_render_pass_setup_render_target)(struct v3dv_cmd_buffer *cmd_buffer,
-                                                 int rt,
-                                                 uint32_t *rt_bpp,
-                                                 uint32_t *rt_type,
-                                                 uint32_t *rt_clamp)
-{
-   const struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
-
-   assert(state->subpass_idx < state->pass->subpass_count);
-   const struct v3dv_subpass *subpass =
-      &state->pass->subpasses[state->subpass_idx];
-
-   if (rt >= subpass->color_count)
-      return;
-
-   struct v3dv_subpass_attachment *attachment = &subpass->color_attachments[rt];
-   const uint32_t attachment_idx = attachment->attachment;
-   if (attachment_idx == VK_ATTACHMENT_UNUSED)
-      return;
-
-   assert(attachment_idx < state->framebuffer->attachment_count &&
-          attachment_idx < state->attachment_alloc_count);
-   struct v3dv_image_view *iview = state->attachments[attachment_idx].image_view;
-   assert(vk_format_is_color(iview->vk.format));
-
-   assert(iview->plane_count == 1);
-   *rt_bpp = iview->planes[0].internal_bpp;
-   *rt_type = iview->planes[0].internal_type;
-   if (vk_format_is_int(iview->vk.view_format))
-      *rt_clamp = V3D_RENDER_TARGET_CLAMP_INT;
-   else if (vk_format_is_srgb(iview->vk.view_format))
-      *rt_clamp = V3D_RENDER_TARGET_CLAMP_NORM;
-   else
-      *rt_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
 }

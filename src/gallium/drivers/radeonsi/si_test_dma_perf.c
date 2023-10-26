@@ -153,7 +153,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
             sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH |
                            SI_CONTEXT_FLUSH_AND_INV_CB |
                            SI_CONTEXT_FLUSH_AND_INV_DB;
-            sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+            si_emit_cache_flush_direct(sctx);
 
             struct pipe_query *q = ctx->create_query(ctx, query_type, 0);
             ctx->begin_query(ctx, q);
@@ -217,7 +217,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
                sctx->flags |= SI_CONTEXT_INV_VCACHE |
                               (cache_policy == L2_LRU ? 0 : SI_CONTEXT_INV_L2) |
                               SI_CONTEXT_CS_PARTIAL_FLUSH;
-               sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+               si_emit_cache_flush_direct(sctx);
             }
 
             ctx->end_query(ctx, q);

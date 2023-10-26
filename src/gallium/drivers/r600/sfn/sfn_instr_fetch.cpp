@@ -48,7 +48,7 @@ FetchInstr::FetchInstr(EVFetchInstr opcode,
                        EVFetchEndianSwap endian_swap,
                        uint32_t resource_id,
                        PRegister resource_offset):
-    InstrWithVectorResult(dst, dest_swizzle, resource_id, resource_offset),
+    InstrWithVectorResult(dst, dest_swizzle, resource_id, resource_offset),   
     m_opcode(opcode),
     m_src(src),
     m_src_offset(src_offset),
@@ -126,7 +126,7 @@ FetchInstr::is_equal_to(const FetchInstr& rhs) const
           m_num_format == rhs.m_num_format && m_endian_swap == rhs.m_endian_swap &&
           m_mega_fetch_count == rhs.m_mega_fetch_count &&
           m_array_base == rhs.m_array_base && m_array_size == rhs.m_array_size &&
-          m_elm_size == rhs.m_elm_size && resource_base() == rhs.resource_base();
+          m_elm_size == rhs.m_elm_size && resource_id() == rhs.resource_id();
 }
 
 bool
@@ -188,7 +188,7 @@ FetchInstr::do_print(std::ostream& os) const
    }
 
    if (m_opcode != vc_read_scratch)
-      os << " RID:" << resource_base();
+      os << " RID:" << resource_id();
 
    print_resource_offset(os);
 

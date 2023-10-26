@@ -35,6 +35,7 @@
 #include "util/u_sampler.h"
 #include "util/u_surface.h"
 #include "util/u_video.h"
+#include "util/set.h"
 
 #include "vl/vl_compositor.h"
 #include "vl/vl_video_buffer.h"
@@ -83,6 +84,14 @@ vlVaDestroySurfaces(VADriverContextP ctx, VASurfaceID *surface_list, int num_sur
       }
       if (surf->buffer)
          surf->buffer->destroy(surf->buffer);
+      if (surf->deint_buffer)
+         surf->deint_buffer->destroy(surf->deint_buffer);
+      if (surf->ctx) {
+         assert(_mesa_set_search(surf->ctx->surfaces, surf));
+         _mesa_set_remove_key(surf->ctx->surfaces, surf);
+         if (surf->fence && surf->ctx->decoder && surf->ctx->decoder->destroy_fence)
+            surf->ctx->decoder->destroy_fence(surf->ctx->decoder, surf->fence);
+      }
       util_dynarray_fini(&surf->subpics);
       FREE(surf);
       handle_table_remove(drv->htab, surface_list[i]);
@@ -126,7 +135,7 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
       return VA_STATUS_SUCCESS;
    }
 
-   context = handle_table_get(drv->htab, surf->ctx);
+   context = surf->ctx;
    if (!context) {
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -225,7 +234,7 @@ vlVaQuerySurfaceStatus(VADriverContextP ctx, VASurfaceID render_target, VASurfac
       return VA_STATUS_SUCCESS;
    }
 
-   context = handle_table_get(drv->htab, surf->ctx);
+   context = surf->ctx;
    if (!context) {
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -1365,11 +1374,13 @@ vlVaQueryVideoProcFilterCaps(VADriverContextP ctx, VAContextID context,
 }
 
 static VAProcColorStandardType vpp_input_color_standards[] = {
-   VAProcColorStandardBT601
+   VAProcColorStandardBT601,
+   VAProcColorStandardBT709
 };
 
 static VAProcColorStandardType vpp_output_color_standards[] = {
-   VAProcColorStandardBT601
+   VAProcColorStandardBT601,
+   VAProcColorStandardBT709
 };
 
 VAStatus
@@ -1529,6 +1540,7 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    struct pipe_screen *screen;
    VAStatus ret;
    unsigned int usage;
+   struct pipe_video_buffer *buffer;
 
 #ifdef _WIN32
    if ((mem_type != VA_SURFACE_ATTRIB_MEM_TYPE_NTHANDLE)
@@ -1553,16 +1565,24 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
       return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
-   if (surf->buffer->interlaced) {
-      struct pipe_video_buffer *interlaced = surf->buffer;
+   buffer = surf->buffer;
+
+   if (buffer->interlaced) {
+      struct pipe_video_buffer *interlaced = buffer;
       struct u_rect src_rect, dst_rect;
 
-      surf->templat.interlaced = false;
+      if (!surf->deint_buffer) {
+         surf->templat.interlaced = false;
 
-      ret = vlVaHandleSurfaceAllocate(drv, surf, &surf->templat, NULL, 0);
-      if (ret != VA_STATUS_SUCCESS) {
-         mtx_unlock(&drv->mutex);
-         return VA_STATUS_ERROR_ALLOCATION_FAILED;
+         ret = vlVaHandleSurfaceAllocate(drv, surf, &surf->templat, NULL, 0);
+         if (ret != VA_STATUS_SUCCESS) {
+            mtx_unlock(&drv->mutex);
+            return VA_STATUS_ERROR_ALLOCATION_FAILED;
+         }
+
+         surf->deint_buffer = surf->buffer;
+         surf->buffer = interlaced;
+         surf->templat.interlaced = true;
       }
 
       src_rect.x0 = dst_rect.x0 = 0;
@@ -1571,16 +1591,14 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
       src_rect.y1 = dst_rect.y1 = surf->templat.height;
 
       vl_compositor_yuv_deint_full(&drv->cstate, &drv->compositor,
-                                   interlaced, surf->buffer,
+                                   interlaced, surf->deint_buffer,
                                    &src_rect, &dst_rect,
                                    VL_COMPOSITOR_WEAVE);
-      if (interlaced->codec && interlaced->codec->update_decoder_target)
-         interlaced->codec->update_decoder_target(interlaced->codec, interlaced, surf->buffer);
 
-      interlaced->destroy(interlaced);
+      buffer = surf->deint_buffer;
    }
 
-   surfaces = surf->buffer->get_surfaces(surf->buffer);
+   surfaces = buffer->get_surfaces(buffer);
 
    usage = 0;
    if (flags & VA_EXPORT_SURFACE_WRITE_ONLY)
@@ -1609,7 +1627,7 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
 
 #else
    VADRMPRIMESurfaceDescriptor *desc = descriptor;
-   desc->fourcc = PipeFormatToVaFourcc(surf->buffer->buffer_format);
+   desc->fourcc = PipeFormatToVaFourcc(buffer->buffer_format);
    desc->width  = surf->templat.width;
    desc->height = surf->templat.height;
 
@@ -1661,7 +1679,7 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    desc->num_objects = p;
 
    if (flags & VA_EXPORT_SURFACE_COMPOSED_LAYERS) {
-      uint32_t drm_format = pipe_format_to_drm_format(surf->buffer->buffer_format);
+      uint32_t drm_format = pipe_format_to_drm_format(buffer->buffer_format);
       if (drm_format == DRM_FORMAT_INVALID) {
          ret = VA_STATUS_ERROR_UNSUPPORTED_MEMORY_TYPE;
          goto fail;

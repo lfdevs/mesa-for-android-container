@@ -57,12 +57,10 @@ tu_lrz_clear_depth_image(struct tu_cmd_buffer *cmd,
                          const VkImageSubresourceRange *pRanges);
 
 void
-tu_lrz_begin_renderpass(struct tu_cmd_buffer *cmd,
-                        const VkClearValue *clear_values);
+tu_lrz_begin_renderpass(struct tu_cmd_buffer *cmd);
 
 void
-tu_lrz_begin_resumed_renderpass(struct tu_cmd_buffer *cmd,
-                                const VkClearValue *clear_values);
+tu_lrz_begin_resumed_renderpass(struct tu_cmd_buffer *cmd);
 
 void
 tu_lrz_begin_secondary_cmdbuf(struct tu_cmd_buffer *cmd);

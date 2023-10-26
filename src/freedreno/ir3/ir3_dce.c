@@ -72,7 +72,8 @@ remove_unused_by_block(struct ir3_block *block)
    bool progress = false;
    foreach_instr_safe (instr, &block->instr_list) {
       if (instr->opc == OPC_END || instr->opc == OPC_CHSH ||
-          instr->opc == OPC_CHMASK)
+          instr->opc == OPC_CHMASK || instr->opc == OPC_LOCK ||
+          instr->opc == OPC_UNLOCK)
          continue;
       if (instr->flags & IR3_INSTR_UNUSED) {
          if (instr->opc == OPC_META_SPLIT) {

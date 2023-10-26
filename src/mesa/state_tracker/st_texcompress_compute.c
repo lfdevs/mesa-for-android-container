@@ -33,7 +33,7 @@
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
 #include "main/texcompress_astc.h"
-#include "main/texcompress_astc_luts_wrap.h"
+#include "util/texcompress_astc_luts_wrap.h"
 #include "main/uniforms.h"
 
 #include "state_tracker/st_atom_constbuf.h"
@@ -554,9 +554,12 @@ get_astc_partition_table_view(struct st_context *st,
                               unsigned block_w,
                               unsigned block_h)
 {
+   unsigned lut_width;
+   unsigned lut_height;
    struct pipe_box ptable_box;
    void *ptable_data =
-      _mesa_get_astc_decoder_partition_table(block_w, block_h, &ptable_box);
+      _mesa_get_astc_decoder_partition_table(block_w, block_h, &lut_width, &lut_height);
+   u_box_origin_2d(lut_width, lut_height, &ptable_box);
 
    struct pipe_sampler_view *view =
       util_hash_table_get(st->texcompress_compute.astc_partition_tables,

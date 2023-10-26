@@ -38,6 +38,8 @@ struct ir3_kernel_info {
    uint32_t buf_sizes[MAX_BUFS]; /* size in dwords */
    uint32_t buf_addr_regs[MAX_BUFS];
 
+   uint64_t shader_print_buffer_iova;
+
    /* driver-param / replaced uniforms: */
    unsigned numwg;
    unsigned wgid;

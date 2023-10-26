@@ -1513,10 +1513,11 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
    /* TODO: This doesn't need to be aligned to slc size. Alignment to 4 is fine.
     * Change pvr_cmd_buffer_alloc_mem() to take in an alignment?
     */
-   result = pvr_cmd_buffer_alloc_mem(cmd_buffer,
-                                     device->heaps.general_heap,
-                                     shader_info->const_shared_regs,
-                                     &const_shareds_buffer);
+   result =
+      pvr_cmd_buffer_alloc_mem(cmd_buffer,
+                               device->heaps.general_heap,
+                               PVR_DW_TO_BYTES(shader_info->const_shared_regs),
+                               &const_shareds_buffer);
    if (result != VK_SUCCESS)
       return result;
 

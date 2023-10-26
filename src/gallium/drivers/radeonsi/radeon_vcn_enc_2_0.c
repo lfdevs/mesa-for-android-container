@@ -336,8 +336,24 @@ static void radeon_enc_nalu_sps_hevc(struct radeon_encoder *enc)
          }
       }
       radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* overscan info present flag */
-      radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* video signal type present flag */
-      radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* chroma loc info present flag */
+      /* video signal type present flag  */
+      radeon_enc_code_fixed_bits(enc, pic->vui_info.flags.video_signal_type_present_flag, 1);
+      if (pic->vui_info.flags.video_signal_type_present_flag) {
+         radeon_enc_code_fixed_bits(enc, pic->vui_info.video_format, 3);
+         radeon_enc_code_fixed_bits(enc, pic->vui_info.video_full_range_flag, 1);
+         radeon_enc_code_fixed_bits(enc, pic->vui_info.flags.colour_description_present_flag, 1);
+         if (pic->vui_info.flags.colour_description_present_flag) {
+            radeon_enc_code_fixed_bits(enc, pic->vui_info.colour_primaries, 8);
+            radeon_enc_code_fixed_bits(enc, pic->vui_info.transfer_characteristics, 8);
+            radeon_enc_code_fixed_bits(enc, pic->vui_info.matrix_coefficients, 8);
+         }
+      }
+      /* chroma loc info present flag */
+      radeon_enc_code_fixed_bits(enc, pic->vui_info.flags.chroma_loc_info_present_flag, 1);
+      if (pic->vui_info.flags.chroma_loc_info_present_flag) {
+         radeon_enc_code_ue(enc, pic->vui_info.chroma_sample_loc_type_top_field);
+         radeon_enc_code_ue(enc, pic->vui_info.chroma_sample_loc_type_bottom_field);
+      }
       radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* neutral chroma indication flag */
       radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* field seq flag */
       radeon_enc_code_fixed_bits(enc, 0x0, 1);  /* frame field info present flag */

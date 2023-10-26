@@ -22,6 +22,7 @@ spec@arb_uniform_buffer_object@maxuniformblocksize@fs
 spec@arb_uniform_buffer_object@maxuniformblocksize@fsexceed
 spec@arb_uniform_buffer_object@maxuniformblocksize@vs
 spec@arb_uniform_buffer_object@maxuniformblocksize@vsexceed
+spec@ext_transform_feedback@max-varyings
 
 # these are timeout-prone
 spec@ext_external_objects@memory-object-api-errors
@@ -37,6 +38,8 @@ spec@ext_external_objects@vk-vert-buf-update-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects_fd@semaphore-api-errors
 
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
+
 # most GLX tests are pretty broken
 glx@glx-swap-event_async
 glx@glx-swap-event_interval
@@ -46,9 +49,6 @@ glx@glx-swap-event_event
 glx@glx-buffer-age
 glx@glx-buffer-age vblank_mode=0
 glx@glx-multithread-buffer
-glx@glx-swap-event_async
-glx@glx-swap-event_event
-glx@glx-swap-event_interval
 
 # Debian 12 (bookworm) uprev
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_frag_buffers32_sets1

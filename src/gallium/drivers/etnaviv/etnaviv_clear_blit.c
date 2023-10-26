@@ -188,13 +188,10 @@ etna_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
    struct etna_resource *rsc = etna_resource(prsc);
 
    if (rsc->render) {
-      if (etna_resource_older(rsc, etna_resource(rsc->render))) {
+      if (etna_resource_older(rsc, etna_resource(rsc->render)))
          etna_copy_resource(pctx, prsc, rsc->render, 0, 0);
-         rsc->seqno = etna_resource(rsc->render)->seqno;
-      }
    } else if (!etna_resource_ext_ts(rsc) && etna_resource_needs_flush(rsc)) {
       etna_copy_resource(pctx, prsc, prsc, 0, 0);
-      rsc->flush_seqno = rsc->seqno;
    }
 }
 
@@ -220,6 +217,15 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
 
    /* Copy each level and each layer */
    for (int level = first_level; level <= last_level; level++) {
+      /* skip levels that don't need to be flushed or are of the same age */
+      if (src == dst) {
+         if (!etna_resource_level_needs_flush(&src_priv->levels[level]))
+            continue;
+      } else {
+         if (!etna_resource_level_older(&dst_priv->levels[level], &src_priv->levels[level]))
+            continue;
+      }
+
       blit.src.level = blit.dst.level = level;
       blit.src.box.width = blit.dst.box.width =
          MIN2(src_priv->levels[level].padded_width, dst_priv->levels[level].padded_width);
@@ -235,17 +241,25 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
          blit.src.box.z = blit.dst.box.z = z;
          pctx->blit(pctx, &blit);
       }
+
+      if (src == dst)
+         etna_resource_level_mark_flushed(&dst_priv->levels[level]);
+      else
+         etna_resource_level_copy_seqno(&dst_priv->levels[level], &src_priv->levels[level]);
    }
 }
 
 void
 etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
-                       struct pipe_resource *src, int level,
+                       struct pipe_resource *src, int dst_level, int src_level,
                        struct pipe_box *box)
 {
+   struct etna_resource *src_priv = etna_resource(src);
+   struct etna_resource *dst_priv = etna_resource(dst);
+
    assert(src->format == dst->format);
    assert(src->array_size == dst->array_size);
-   assert(!etna_resource_needs_flush(etna_resource(dst)));
+   assert(!etna_resource_level_needs_flush(&dst_priv->levels[dst_level]));
 
    struct pipe_blit_info blit = {};
    blit.mask = util_format_get_mask(dst->format);
@@ -258,12 +272,19 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
    blit.dst.box = *box;
 
    blit.dst.box.depth = blit.src.box.depth = 1;
-   blit.src.level = blit.dst.level = level;
+   blit.src.level = src_level;
+   blit.dst.level = dst_level;
 
    for (int z = 0; z < box->depth; z++) {
       blit.src.box.z = blit.dst.box.z = box->z + z;
       pctx->blit(pctx, &blit);
    }
+
+   if (src == dst)
+      etna_resource_level_mark_flushed(&dst_priv->levels[dst_level]);
+   else
+      etna_resource_level_copy_seqno(&dst_priv->levels[dst_level],
+                                     &src_priv->levels[src_level]);
 }
 
 void

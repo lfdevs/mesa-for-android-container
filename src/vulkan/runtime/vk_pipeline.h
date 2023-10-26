@@ -37,6 +37,18 @@ struct vk_device;
 extern "C" {
 #endif
 
+#define VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NIR_CREATE_INFO_MESA \
+   (VkStructureType)1000290001
+
+#define VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NIR_CREATE_INFO_MESA_cast \
+   VkPipelineShaderStageNirCreateInfoMESA
+
+typedef struct VkPipelineShaderStageNirCreateInfoMESA {
+   VkStructureType sType;
+   const void *pNext;
+   struct nir_shader *nir;
+} VkPipelineShaderStageNirCreateInfoMESA;
+
 bool
 vk_pipeline_shader_stage_is_null(const VkPipelineShaderStageCreateInfo *info);
 

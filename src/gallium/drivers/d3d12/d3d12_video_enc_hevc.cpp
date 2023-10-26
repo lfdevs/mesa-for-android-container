@@ -97,33 +97,44 @@ d3d12_video_encoder_update_current_rate_control_hevc(struct d3d12_video_encoder 
                picture->rc.max_qp;
          }
 
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+         if (picture->quality_modes.level > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
+
+            // Convert between D3D12 definition and PIPE definition
+            // D3D12: QualityVsSpeed must be in the range [0, D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1.MaxQualityVsSpeed]
+            // The lower the value, the fastest the encode operation
+            // PIPE: The quality level range can be queried through the VAConfigAttribEncQualityRange attribute. 
+            // A lower value means higher quality, and a value of 1 represents the highest quality. 
+            // The quality level setting is used as a trade-off between quality and speed/power 
+            // consumption, with higher quality corresponds to lower speed and higher power consumption.
+
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR1.QualityVsSpeed =
+               pD3D12Enc->max_quality_levels - picture->quality_modes.level;
+         }
+#endif
+
       } break;
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_QUALITY_VARIABLE:
       {
          pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Mode = D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate =
-            picture->rc.target_bitrate;
-         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.PeakBitRate =
-            picture->rc.peak_bitrate;
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.ConstantQualityTarget =
-            picture->rc.vbr_quality_factor;
-#else
          pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.TargetAvgBitRate =
             picture->rc.target_bitrate;
          pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.PeakBitRate =
             picture->rc.peak_bitrate;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.ConstantQualityTarget =
             picture->rc.vbr_quality_factor;
-#endif
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
          if (D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE) {
             debug_printf("[d3d12_video_encoder_hevc] d3d12_video_encoder_update_current_rate_control_hevc D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE environment variable is set, "
                        ", forcing VBV Size = VBV Initial Capacity = Target Bitrate = %" PRIu64 " (bits)\n", pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate);
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
                D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
-               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT;
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.VBVCapacity =
                pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.InitialVBVFullness =
@@ -134,39 +145,13 @@ d3d12_video_encoder_update_current_rate_control_hevc(struct d3d12_video_encoder 
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
                D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
-               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT;
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.VBVCapacity =
                picture->rc.vbv_buffer_size;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.InitialVBVFullness =
                picture->rc.vbv_buf_initial_size;
          }
 #endif
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-         if (picture->rc.max_au_size > 0) {
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
-               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxFrameBitSize =
-               picture->rc.max_au_size;
-
-            debug_printf(
-               "[d3d12_video_encoder_hevc] d3d12_video_encoder_update_current_rate_control_hevc "
-               "Upper layer requested explicit MaxFrameBitSize: %" PRIu64 "\n",
-               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxFrameBitSize);
-         }
-
-         if (picture->rc.app_requested_qp_range) {
-            debug_printf(
-               "[d3d12_video_encoder_hevc] d3d12_video_encoder_update_current_rate_control_hevc "
-               "Upper layer requested explicit MinQP: %d MaxQP: %d\n",
-               picture->rc.min_qp, picture->rc.max_qp);
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
-               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QP_RANGE;
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MinQP =
-               picture->rc.min_qp;
-            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxQP =
-               picture->rc.max_qp;
-         }
-#else
          if (picture->rc.max_au_size > 0) {
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
                D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
@@ -191,7 +176,27 @@ d3d12_video_encoder_update_current_rate_control_hevc(struct d3d12_video_encoder 
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.MaxQP =
                picture->rc.max_qp;
          }
+
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+         if (picture->quality_modes.level > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
+
+            // Convert between D3D12 definition and PIPE definition
+            // D3D12: QualityVsSpeed must be in the range [0, D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1.MaxQualityVsSpeed]
+            // The lower the value, the fastest the encode operation
+            // PIPE: The quality level range can be queried through the VAConfigAttribEncQualityRange attribute. 
+            // A lower value means higher quality, and a value of 1 represents the highest quality. 
+            // The quality level setting is used as a trade-off between quality and speed/power 
+            // consumption, with higher quality corresponds to lower speed and higher power consumption.
+
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.QualityVsSpeed =
+               pD3D12Enc->max_quality_levels - picture->quality_modes.level;
+         }
 #endif
+
       } break;
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP:
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT:
@@ -249,6 +254,26 @@ d3d12_video_encoder_update_current_rate_control_hevc(struct d3d12_video_encoder 
                picture->rc.max_qp;
          }
 
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+         if (picture->quality_modes.level > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
+
+            // Convert between D3D12 definition and PIPE definition
+            // D3D12: QualityVsSpeed must be in the range [0, D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1.MaxQualityVsSpeed]
+            // The lower the value, the fastest the encode operation
+            // PIPE: The quality level range can be queried through the VAConfigAttribEncQualityRange attribute. 
+            // A lower value means higher quality, and a value of 1 represents the highest quality. 
+            // The quality level setting is used as a trade-off between quality and speed/power 
+            // consumption, with higher quality corresponds to lower speed and higher power consumption.
+
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR1.QualityVsSpeed =
+               pD3D12Enc->max_quality_levels - picture->quality_modes.level;
+         }
+#endif
+
       } break;
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE:
       {
@@ -259,6 +284,26 @@ d3d12_video_encoder_update_current_rate_control_hevc(struct d3d12_video_encoder 
             .ConstantQP_InterPredictedFrame_PrevRefOnly = picture->rc.quant_p_frames;
          pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP
             .ConstantQP_InterPredictedFrame_BiDirectionalRef = picture->rc.quant_b_frames;
+
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+         if (picture->quality_modes.level > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
+
+            // Convert between D3D12 definition and PIPE definition
+            // D3D12: QualityVsSpeed must be in the range [0, D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1.MaxQualityVsSpeed]
+            // The lower the value, the fastest the encode operation
+            // PIPE: The quality level range can be queried through the VAConfigAttribEncQualityRange attribute. 
+            // A lower value means higher quality, and a value of 1 represents the highest quality. 
+            // The quality level setting is used as a trade-off between quality and speed/power 
+            // consumption, with higher quality corresponds to lower speed and higher power consumption.
+
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP1.QualityVsSpeed =
+               pD3D12Enc->max_quality_levels - picture->quality_modes.level;
+         }
+#endif
       } break;
       default:
       {

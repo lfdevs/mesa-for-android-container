@@ -36,9 +36,9 @@ nir_lower_layer_id(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
     .num_slots = 1,
   };
   nir_intrinsic_set_io_semantics(load_input, semantics);
-  nir_ssa_dest_init(&load_input->instr, &load_input->dest, 1, 32);
+  nir_def_init(&load_input->instr, &load_input->def, 1, 32);
   nir_builder_instr_insert(b, &load_input->instr);
-  nir_ssa_def_rewrite_uses(&intr->dest.ssa, &load_input->dest.ssa);
+  nir_def_rewrite_uses(&intr->def, &load_input->def);
   return true;
 }
 

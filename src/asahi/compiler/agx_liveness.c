@@ -66,8 +66,10 @@ agx_compute_liveness(agx_context *ctx)
       /* Update its liveness information */
       memcpy(blk->live_in, blk->live_out, words * sizeof(BITSET_WORD));
 
-      agx_foreach_non_phi_in_block_rev(blk, I)
-         agx_liveness_ins_update(blk->live_in, I);
+      agx_foreach_instr_in_block_rev(blk, I) {
+         if (I->op != AGX_OPCODE_PHI)
+            agx_liveness_ins_update(blk->live_in, I);
+      }
 
       /* Propagate the live in of the successor (blk) to the live out of
        * predecessors.

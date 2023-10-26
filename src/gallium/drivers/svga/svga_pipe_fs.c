@@ -83,6 +83,10 @@ svga_bind_fs_state(struct pipe_context *pipe, void *shader)
 
    svga->curr.fs = fs;
    svga->dirty |= SVGA_NEW_FS;
+
+   /* Check if shader uses samplers */
+   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_FRAGMENT,
+                                          svga_shader_use_samplers(&fs->base));
 }
 
 

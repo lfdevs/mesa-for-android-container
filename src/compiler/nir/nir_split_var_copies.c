@@ -71,24 +71,21 @@ split_deref_copy_instr(nir_builder *b,
    } else if (glsl_type_is_struct_or_ifc(src->type)) {
       for (unsigned i = 0; i < glsl_get_length(src->type); i++) {
          split_deref_copy_instr(b, nir_build_deref_struct(b, dst, i),
-                                   nir_build_deref_struct(b, src, i),
-                                   dst_access, src_access);
+                                nir_build_deref_struct(b, src, i),
+                                dst_access, src_access);
       }
    } else {
       assert(glsl_type_is_matrix(src->type) || glsl_type_is_array(src->type));
       split_deref_copy_instr(b, nir_build_deref_array_wildcard(b, dst),
-                                nir_build_deref_array_wildcard(b, src),
-                                dst_access, src_access);
+                             nir_build_deref_array_wildcard(b, src),
+                             dst_access, src_access);
    }
 }
 
 static bool
-split_var_copies_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+split_var_copies_instr(nir_builder *b, nir_intrinsic_instr *copy,
+                       UNUSED void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
    if (copy->intrinsic != nir_intrinsic_copy_deref)
       return false;
 
@@ -106,8 +103,8 @@ split_var_copies_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 bool
 nir_split_var_copies(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader, split_var_copies_instr,
+   return nir_shader_intrinsics_pass(shader, split_var_copies_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        NULL);
 }

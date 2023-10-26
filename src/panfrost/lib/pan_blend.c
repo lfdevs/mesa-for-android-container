@@ -23,6 +23,7 @@
  */
 
 #include "pan_blend.h"
+#include "util/blend.h"
 
 #ifdef PAN_ARCH
 #include "pan_shader.h"
@@ -41,11 +42,13 @@
 /* Fixed function blending */
 
 static bool
-factor_is_supported(enum blend_factor factor)
+factor_is_supported(enum pipe_blendfactor factor)
 {
-   return factor != BLEND_FACTOR_SRC_ALPHA_SATURATE &&
-          factor != BLEND_FACTOR_SRC1_COLOR &&
-          factor != BLEND_FACTOR_SRC1_ALPHA;
+   factor = util_blendfactor_without_invert(factor);
+
+   return factor != PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE &&
+          factor != PIPE_BLENDFACTOR_SRC1_COLOR &&
+          factor != PIPE_BLENDFACTOR_SRC1_ALPHA;
 }
 
 /* OpenGL allows encoding (src*dest + dest*src) which is incompatiblle with
@@ -54,50 +57,50 @@ factor_is_supported(enum blend_factor factor)
  * + dest * (2*src) wih the new source_2 value of C. Detect this case. */
 
 static bool
-is_2srcdest(enum blend_func blend_func, enum blend_factor src_factor,
-            bool invert_src, enum blend_factor dest_factor, bool invert_dest,
-            bool is_alpha)
+is_2srcdest(enum pipe_blend_func blend_func, enum pipe_blendfactor src_factor,
+            enum pipe_blendfactor dest_factor, bool is_alpha)
 {
-   return (blend_func == BLEND_FUNC_ADD) &&
-          ((src_factor == BLEND_FACTOR_DST_COLOR) ||
-           ((src_factor == BLEND_FACTOR_DST_ALPHA) && is_alpha)) &&
-          ((dest_factor == BLEND_FACTOR_SRC_COLOR) ||
-           ((dest_factor == BLEND_FACTOR_SRC_ALPHA) && is_alpha)) &&
-          !invert_src && !invert_dest;
+   return (blend_func == PIPE_BLEND_ADD) &&
+          ((src_factor == PIPE_BLENDFACTOR_DST_COLOR) ||
+           ((src_factor == PIPE_BLENDFACTOR_DST_ALPHA) && is_alpha)) &&
+          ((dest_factor == PIPE_BLENDFACTOR_SRC_COLOR) ||
+           ((dest_factor == PIPE_BLENDFACTOR_SRC_ALPHA) && is_alpha));
 }
 
 static bool
-can_fixed_function_equation(enum blend_func blend_func,
-                            enum blend_factor src_factor, bool invert_src,
-                            enum blend_factor dest_factor, bool invert_dest,
-                            bool is_alpha, bool supports_2src)
+can_fixed_function_equation(enum pipe_blend_func blend_func,
+                            enum pipe_blendfactor src_factor,
+                            enum pipe_blendfactor dest_factor, bool is_alpha,
+                            bool supports_2src)
 {
-   if (is_2srcdest(blend_func, src_factor, invert_src, dest_factor, invert_dest,
-                   is_alpha)) {
-
+   if (is_2srcdest(blend_func, src_factor, dest_factor, is_alpha))
       return supports_2src;
-   }
 
-   if (blend_func != BLEND_FUNC_ADD && blend_func != BLEND_FUNC_SUBTRACT &&
-       blend_func != BLEND_FUNC_REVERSE_SUBTRACT)
+   if (blend_func != PIPE_BLEND_ADD && blend_func != PIPE_BLEND_SUBTRACT &&
+       blend_func != PIPE_BLEND_REVERSE_SUBTRACT)
       return false;
 
    if (!factor_is_supported(src_factor) || !factor_is_supported(dest_factor))
       return false;
 
-   if (src_factor != dest_factor && src_factor != BLEND_FACTOR_ZERO &&
-       dest_factor != BLEND_FACTOR_ZERO)
-      return false;
+   /* Fixed function requires src/dest factors to match (up to invert) or be
+    * zero/one.
+    */
+   enum pipe_blendfactor src = util_blendfactor_without_invert(src_factor);
+   enum pipe_blendfactor dest = util_blendfactor_without_invert(dest_factor);
 
-   return true;
+   return (src == dest) || (src == PIPE_BLENDFACTOR_ONE) ||
+          (dest == PIPE_BLENDFACTOR_ONE);
 }
 
 static unsigned
-blend_factor_constant_mask(enum blend_factor factor)
+blend_factor_constant_mask(enum pipe_blendfactor factor)
 {
-   if (factor == BLEND_FACTOR_CONSTANT_COLOR)
+   factor = util_blendfactor_without_invert(factor);
+
+   if (factor == PIPE_BLENDFACTOR_CONST_COLOR)
       return 0b0111; /* RGB */
-   else if (factor == BLEND_FACTOR_CONSTANT_ALPHA)
+   else if (factor == PIPE_BLENDFACTOR_CONST_ALPHA)
       return 0b1000; /* A */
    else
       return 0b0000; /* - */
@@ -137,35 +140,34 @@ pan_blend_can_fixed_function(const struct pan_blend_equation equation,
    return !equation.blend_enable ||
           (can_fixed_function_equation(
               equation.rgb_func, equation.rgb_src_factor,
-              equation.rgb_invert_src_factor, equation.rgb_dst_factor,
-              equation.rgb_invert_dst_factor, false, supports_2src) &&
+              equation.rgb_dst_factor, false, supports_2src) &&
            can_fixed_function_equation(
               equation.alpha_func, equation.alpha_src_factor,
-              equation.alpha_invert_src_factor, equation.alpha_dst_factor,
-              equation.alpha_invert_dst_factor, true, supports_2src));
+              equation.alpha_dst_factor, true, supports_2src));
 }
 
 static enum mali_blend_operand_c
-to_c_factor(enum blend_factor factor)
+to_c_factor(enum pipe_blendfactor factor)
 {
-   switch (factor) {
-   case BLEND_FACTOR_ZERO:
+   switch (util_blendfactor_without_invert(factor)) {
+   case PIPE_BLENDFACTOR_ONE:
+      /* Extra invert to flip back in caller */
       return MALI_BLEND_OPERAND_C_ZERO;
 
-   case BLEND_FACTOR_SRC_ALPHA:
+   case PIPE_BLENDFACTOR_SRC_ALPHA:
       return MALI_BLEND_OPERAND_C_SRC_ALPHA;
 
-   case BLEND_FACTOR_DST_ALPHA:
+   case PIPE_BLENDFACTOR_DST_ALPHA:
       return MALI_BLEND_OPERAND_C_DEST_ALPHA;
 
-   case BLEND_FACTOR_SRC_COLOR:
+   case PIPE_BLENDFACTOR_SRC_COLOR:
       return MALI_BLEND_OPERAND_C_SRC;
 
-   case BLEND_FACTOR_DST_COLOR:
+   case PIPE_BLENDFACTOR_DST_COLOR:
       return MALI_BLEND_OPERAND_C_DEST;
 
-   case BLEND_FACTOR_CONSTANT_COLOR:
-   case BLEND_FACTOR_CONSTANT_ALPHA:
+   case PIPE_BLENDFACTOR_CONST_COLOR:
+   case PIPE_BLENDFACTOR_CONST_ALPHA:
       return MALI_BLEND_OPERAND_C_CONSTANT;
 
    default:
@@ -174,87 +176,98 @@ to_c_factor(enum blend_factor factor)
 }
 
 static void
-to_panfrost_function(enum blend_func blend_func, enum blend_factor src_factor,
-                     bool invert_src, enum blend_factor dest_factor,
-                     bool invert_dest, bool is_alpha,
+to_panfrost_function(enum pipe_blend_func blend_func,
+                     enum pipe_blendfactor src_factor,
+                     enum pipe_blendfactor dest_factor, bool is_alpha,
                      struct MALI_BLEND_FUNCTION *function)
 {
-   assert(can_fixed_function_equation(blend_func, src_factor, invert_src,
-                                      dest_factor, invert_dest, is_alpha,
-                                      true));
+   assert(can_fixed_function_equation(blend_func, src_factor, dest_factor,
+                                      is_alpha, true));
 
-   if (src_factor == BLEND_FACTOR_ZERO && !invert_src) {
+   /* We handle ZERO/ONE specially since it's the hardware has 0 and can invert
+    * to 1 but Gallium has 0 as the uninverted version.
+    */
+   bool src_inverted =
+      util_blendfactor_is_inverted(src_factor) ^
+      (util_blendfactor_without_invert(src_factor) == PIPE_BLENDFACTOR_ONE);
+
+   bool dest_inverted =
+      util_blendfactor_is_inverted(dest_factor) ^
+      (util_blendfactor_without_invert(dest_factor) == PIPE_BLENDFACTOR_ONE);
+
+   if (src_factor == PIPE_BLENDFACTOR_ZERO) {
       function->a = MALI_BLEND_OPERAND_A_ZERO;
       function->b = MALI_BLEND_OPERAND_B_DEST;
-      if (blend_func == BLEND_FUNC_SUBTRACT)
+      if (blend_func == PIPE_BLEND_SUBTRACT)
          function->negate_b = true;
-      function->invert_c = invert_dest;
+      function->invert_c = dest_inverted;
       function->c = to_c_factor(dest_factor);
-   } else if (src_factor == BLEND_FACTOR_ZERO && invert_src) {
+   } else if (src_factor == PIPE_BLENDFACTOR_ONE) {
       function->a = MALI_BLEND_OPERAND_A_SRC;
       function->b = MALI_BLEND_OPERAND_B_DEST;
-      if (blend_func == BLEND_FUNC_SUBTRACT)
+      if (blend_func == PIPE_BLEND_SUBTRACT)
          function->negate_b = true;
-      else if (blend_func == BLEND_FUNC_REVERSE_SUBTRACT)
+      else if (blend_func == PIPE_BLEND_REVERSE_SUBTRACT)
          function->negate_a = true;
-      function->invert_c = invert_dest;
+      function->invert_c = dest_inverted;
       function->c = to_c_factor(dest_factor);
-   } else if (dest_factor == BLEND_FACTOR_ZERO && !invert_dest) {
+   } else if (dest_factor == PIPE_BLENDFACTOR_ZERO) {
       function->a = MALI_BLEND_OPERAND_A_ZERO;
       function->b = MALI_BLEND_OPERAND_B_SRC;
-      if (blend_func == BLEND_FUNC_REVERSE_SUBTRACT)
+      if (blend_func == PIPE_BLEND_REVERSE_SUBTRACT)
          function->negate_b = true;
-      function->invert_c = invert_src;
+      function->invert_c = src_inverted;
       function->c = to_c_factor(src_factor);
-   } else if (dest_factor == BLEND_FACTOR_ZERO && invert_dest) {
+   } else if (dest_factor == PIPE_BLENDFACTOR_ONE) {
       function->a = MALI_BLEND_OPERAND_A_DEST;
       function->b = MALI_BLEND_OPERAND_B_SRC;
-      if (blend_func == BLEND_FUNC_SUBTRACT)
+      if (blend_func == PIPE_BLEND_SUBTRACT)
          function->negate_a = true;
-      else if (blend_func == BLEND_FUNC_REVERSE_SUBTRACT)
+      else if (blend_func == PIPE_BLEND_REVERSE_SUBTRACT)
          function->negate_b = true;
-      function->invert_c = invert_src;
+      function->invert_c = src_inverted;
       function->c = to_c_factor(src_factor);
-   } else if (src_factor == dest_factor && invert_src == invert_dest) {
+   } else if (src_factor == dest_factor) {
       function->a = MALI_BLEND_OPERAND_A_ZERO;
-      function->invert_c = invert_src;
+      function->invert_c = src_inverted;
       function->c = to_c_factor(src_factor);
 
       switch (blend_func) {
-      case BLEND_FUNC_ADD:
+      case PIPE_BLEND_ADD:
          function->b = MALI_BLEND_OPERAND_B_SRC_PLUS_DEST;
          break;
-      case BLEND_FUNC_REVERSE_SUBTRACT:
+      case PIPE_BLEND_REVERSE_SUBTRACT:
          function->negate_b = true;
          FALLTHROUGH;
-      case BLEND_FUNC_SUBTRACT:
+      case PIPE_BLEND_SUBTRACT:
          function->b = MALI_BLEND_OPERAND_B_SRC_MINUS_DEST;
          break;
       default:
          unreachable("Invalid blend function");
       }
-   } else if (is_2srcdest(blend_func, src_factor, invert_src, dest_factor,
-                          invert_dest, is_alpha)) {
+   } else if (is_2srcdest(blend_func, src_factor, dest_factor, is_alpha)) {
       /* src*dest + dest*src = 2*src*dest = 0 + dest*(2*src) */
       function->a = MALI_BLEND_OPERAND_A_ZERO;
       function->b = MALI_BLEND_OPERAND_B_DEST;
       function->c = MALI_BLEND_OPERAND_C_SRC_X_2;
    } else {
-      assert(src_factor == dest_factor && invert_src != invert_dest);
+      assert(util_blendfactor_without_invert(src_factor) ==
+                util_blendfactor_without_invert(dest_factor) &&
+             src_inverted != dest_inverted);
 
       function->a = MALI_BLEND_OPERAND_A_DEST;
-      function->invert_c = invert_src;
+      function->invert_c = src_inverted;
       function->c = to_c_factor(src_factor);
 
       switch (blend_func) {
-      case BLEND_FUNC_ADD:
+      case PIPE_BLEND_ADD:
          function->b = MALI_BLEND_OPERAND_B_SRC_MINUS_DEST;
          break;
-      case BLEND_FUNC_REVERSE_SUBTRACT:
+      case PIPE_BLEND_REVERSE_SUBTRACT:
          function->b = MALI_BLEND_OPERAND_B_SRC_PLUS_DEST;
          function->negate_b = true;
          break;
-      case BLEND_FUNC_SUBTRACT:
+      case PIPE_BLEND_SUBTRACT:
          function->b = MALI_BLEND_OPERAND_B_SRC_PLUS_DEST;
          function->negate_a = true;
          break;
@@ -277,32 +290,42 @@ pan_blend_is_opaque(const struct pan_blend_equation equation)
       return true;
 
    /* Also detect open-coded opaque blending */
-   return equation.rgb_src_factor == BLEND_FACTOR_ZERO &&
-          equation.rgb_invert_src_factor &&
-          equation.rgb_dst_factor == BLEND_FACTOR_ZERO &&
-          !equation.rgb_invert_dst_factor &&
-          (equation.rgb_func == BLEND_FUNC_ADD ||
-           equation.rgb_func == BLEND_FUNC_SUBTRACT) &&
-          equation.alpha_src_factor == BLEND_FACTOR_ZERO &&
-          equation.alpha_invert_src_factor &&
-          equation.alpha_dst_factor == BLEND_FACTOR_ZERO &&
-          !equation.alpha_invert_dst_factor &&
-          (equation.alpha_func == BLEND_FUNC_ADD ||
-           equation.alpha_func == BLEND_FUNC_SUBTRACT);
+   return equation.rgb_src_factor == PIPE_BLENDFACTOR_ONE &&
+          equation.rgb_dst_factor == PIPE_BLENDFACTOR_ZERO &&
+          (equation.rgb_func == PIPE_BLEND_ADD ||
+           equation.rgb_func == PIPE_BLEND_SUBTRACT) &&
+          equation.alpha_src_factor == PIPE_BLENDFACTOR_ONE &&
+          equation.alpha_dst_factor == PIPE_BLENDFACTOR_ZERO &&
+          (equation.alpha_func == PIPE_BLEND_ADD ||
+           equation.alpha_func == PIPE_BLEND_SUBTRACT);
 }
 
-/* Check if (factor, invert) represents a constant value of val, assuming
- * src_alpha is the given constant.
+/* Check if a factor represents a constant value of val, assuming src_alpha is
+ * the given constant.
  */
 
 static inline bool
-is_factor_01(unsigned factor, bool invert, unsigned val, unsigned srca)
+is_factor_01(enum pipe_blendfactor factor, unsigned val, unsigned srca)
 {
    assert(val == 0 || val == 1);
    assert(srca == 0 || srca == 1);
 
-   return ((invert ^ !val) && factor == BLEND_FACTOR_ZERO) ||
-          ((invert ^ srca ^ !val) && factor == BLEND_FACTOR_SRC_ALPHA);
+   switch (factor) {
+   case PIPE_BLENDFACTOR_ZERO:
+      return (val == 0);
+
+   case PIPE_BLENDFACTOR_ONE:
+      return (val == 1);
+
+   case PIPE_BLENDFACTOR_SRC_ALPHA:
+      return (val == srca);
+
+   case PIPE_BLENDFACTOR_INV_SRC_ALPHA:
+      return (val == (1 - srca));
+
+   default:
+      return false;
+   }
 }
 
 /* Returns if src alpha = 0 implies the blended colour equals the destination
@@ -325,20 +348,20 @@ is_factor_01(unsigned factor, bool invert, unsigned val, unsigned srca)
 bool
 pan_blend_alpha_zero_nop(const struct pan_blend_equation eq)
 {
-   if (eq.rgb_func != BLEND_FUNC_ADD &&
-       eq.rgb_func != BLEND_FUNC_REVERSE_SUBTRACT)
+   if (eq.rgb_func != PIPE_BLEND_ADD &&
+       eq.rgb_func != PIPE_BLEND_REVERSE_SUBTRACT)
       return false;
 
    if (eq.color_mask & 0x8) {
-      if (!is_factor_01(eq.alpha_dst_factor, eq.alpha_invert_dst_factor, 1, 0))
+      if (!is_factor_01(eq.alpha_dst_factor, 1, 0))
          return false;
    }
 
    if (eq.color_mask & 0x7) {
-      if (!is_factor_01(eq.rgb_dst_factor, eq.rgb_invert_dst_factor, 1, 0))
+      if (!is_factor_01(eq.rgb_dst_factor, 1, 0))
          return false;
 
-      if (!is_factor_01(eq.rgb_src_factor, eq.rgb_invert_src_factor, 0, 0))
+      if (!is_factor_01(eq.rgb_src_factor, 0, 0))
          return false;
    }
 
@@ -363,24 +386,26 @@ pan_blend_alpha_zero_nop(const struct pan_blend_equation eq)
 bool
 pan_blend_alpha_one_store(const struct pan_blend_equation eq)
 {
-   if (eq.rgb_func != BLEND_FUNC_ADD && eq.rgb_func != BLEND_FUNC_SUBTRACT)
+   if (eq.rgb_func != PIPE_BLEND_ADD && eq.rgb_func != PIPE_BLEND_SUBTRACT)
       return false;
 
    if (eq.color_mask != 0xf)
       return false;
 
-   return is_factor_01(eq.rgb_src_factor, eq.rgb_invert_src_factor, 1, 1) &&
-          is_factor_01(eq.alpha_src_factor, eq.alpha_invert_src_factor, 1, 1) &&
-          is_factor_01(eq.rgb_dst_factor, eq.rgb_invert_dst_factor, 0, 1) &&
-          is_factor_01(eq.alpha_dst_factor, eq.alpha_invert_dst_factor, 0, 1);
+   return is_factor_01(eq.rgb_src_factor, 1, 1) &&
+          is_factor_01(eq.alpha_src_factor, 1, 1) &&
+          is_factor_01(eq.rgb_dst_factor, 0, 1) &&
+          is_factor_01(eq.alpha_dst_factor, 0, 1);
 }
 
 static bool
-is_dest_factor(enum blend_factor factor, bool alpha)
+is_dest_factor(enum pipe_blendfactor factor, bool alpha)
 {
-   return factor == BLEND_FACTOR_DST_ALPHA ||
-          factor == BLEND_FACTOR_DST_COLOR ||
-          (factor == BLEND_FACTOR_SRC_ALPHA_SATURATE && !alpha);
+   factor = util_blendfactor_without_invert(factor);
+
+   return factor == PIPE_BLENDFACTOR_DST_ALPHA ||
+          factor == PIPE_BLENDFACTOR_DST_COLOR ||
+          (factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE && !alpha);
 }
 
 /* Determines if a blend equation reads back the destination. This can occur by
@@ -390,13 +415,16 @@ is_dest_factor(enum blend_factor factor, bool alpha)
 bool
 pan_blend_reads_dest(const struct pan_blend_equation equation)
 {
-   return (equation.color_mask && equation.color_mask != 0xF) ||
-          is_dest_factor(equation.rgb_src_factor, false) ||
+   if (equation.color_mask && equation.color_mask != 0xF)
+      return true;
+
+   if (!equation.blend_enable)
+      return false;
+
+   return is_dest_factor(equation.rgb_src_factor, false) ||
           is_dest_factor(equation.alpha_src_factor, true) ||
-          equation.rgb_dst_factor != BLEND_FACTOR_ZERO ||
-          equation.rgb_invert_dst_factor ||
-          equation.alpha_dst_factor != BLEND_FACTOR_ZERO ||
-          equation.alpha_invert_dst_factor;
+          equation.rgb_dst_factor != PIPE_BLENDFACTOR_ZERO ||
+          equation.alpha_dst_factor != PIPE_BLENDFACTOR_ZERO;
 }
 
 /* Create the descriptor for a fixed blend mode given the corresponding API
@@ -420,13 +448,10 @@ pan_blend_to_fixed_function_equation(const struct pan_blend_equation equation,
 
    /* Compile the fixed-function blend */
    to_panfrost_function(equation.rgb_func, equation.rgb_src_factor,
-                        equation.rgb_invert_src_factor, equation.rgb_dst_factor,
-                        equation.rgb_invert_dst_factor, false, &out->rgb);
-
+                        equation.rgb_dst_factor, false, &out->rgb);
    to_panfrost_function(equation.alpha_func, equation.alpha_src_factor,
-                        equation.alpha_invert_src_factor,
-                        equation.alpha_dst_factor,
-                        equation.alpha_invert_dst_factor, true, &out->alpha);
+                        equation.alpha_dst_factor, true, &out->alpha);
+
    out->color_mask = equation.color_mask;
 }
 
@@ -521,8 +546,9 @@ get_equation_str(const struct pan_blend_rt_state *rt_state, char *str,
       "add", "sub", "reverse_sub", "min", "max",
    };
    const char *factors[] = {
-      "zero",       "src_color", "src1_color",  "dst_color",   "src_alpha",
-      "src1_alpha", "dst_alpha", "const_color", "const_alpha", "src_alpha_sat",
+      "",           "one",           "src_color",   "src_alpha",   "dst_alpha",
+      "dst_color",  "src_alpha_sat", "const_color", "const_alpha", "src1_color",
+      "src1_alpha",
    };
    int ret;
 
@@ -538,19 +564,21 @@ get_equation_str(const struct pan_blend_rt_state *rt_state, char *str,
 
    if (rt_state->equation.color_mask & 7) {
       assert(rt_state->equation.rgb_func < ARRAY_SIZE(funcs));
-      assert(rt_state->equation.rgb_src_factor < ARRAY_SIZE(factors));
-      assert(rt_state->equation.rgb_dst_factor < ARRAY_SIZE(factors));
-      ret =
-         snprintf(str, len, "%s%s%s(func=%s,src_factor=%s%s,dst_factor=%s%s)%s",
-                  (rt_state->equation.color_mask & 1) ? "R" : "",
-                  (rt_state->equation.color_mask & 2) ? "G" : "",
-                  (rt_state->equation.color_mask & 4) ? "B" : "",
-                  funcs[rt_state->equation.rgb_func],
-                  rt_state->equation.rgb_invert_src_factor ? "-" : "",
-                  factors[rt_state->equation.rgb_src_factor],
-                  rt_state->equation.rgb_invert_dst_factor ? "-" : "",
-                  factors[rt_state->equation.rgb_dst_factor],
-                  rt_state->equation.color_mask & 8 ? ";" : "");
+      ret = snprintf(
+         str, len, "%s%s%s(func=%s,src_factor=%s%s,dst_factor=%s%s)%s",
+         (rt_state->equation.color_mask & 1) ? "R" : "",
+         (rt_state->equation.color_mask & 2) ? "G" : "",
+         (rt_state->equation.color_mask & 4) ? "B" : "",
+         funcs[rt_state->equation.rgb_func],
+         util_blendfactor_is_inverted(rt_state->equation.rgb_src_factor) ? "-"
+                                                                         : "",
+         factors[util_blendfactor_without_invert(
+            rt_state->equation.rgb_src_factor)],
+         util_blendfactor_is_inverted(rt_state->equation.rgb_dst_factor) ? "-"
+                                                                         : "",
+         factors[util_blendfactor_without_invert(
+            rt_state->equation.rgb_dst_factor)],
+         rt_state->equation.color_mask & 8 ? ";" : "");
       assert(ret > 0);
       str += ret;
       len -= ret;
@@ -558,14 +586,17 @@ get_equation_str(const struct pan_blend_rt_state *rt_state, char *str,
 
    if (rt_state->equation.color_mask & 8) {
       assert(rt_state->equation.alpha_func < ARRAY_SIZE(funcs));
-      assert(rt_state->equation.alpha_src_factor < ARRAY_SIZE(factors));
-      assert(rt_state->equation.alpha_dst_factor < ARRAY_SIZE(factors));
-      ret = snprintf(str, len, "A(func=%s,src_factor=%s%s,dst_factor=%s%s)",
-                     funcs[rt_state->equation.alpha_func],
-                     rt_state->equation.alpha_invert_src_factor ? "-" : "",
-                     factors[rt_state->equation.alpha_src_factor],
-                     rt_state->equation.alpha_invert_dst_factor ? "-" : "",
-                     factors[rt_state->equation.alpha_dst_factor]);
+      ret = snprintf(
+         str, len, "A(func=%s,src_factor=%s%s,dst_factor=%s%s)",
+         funcs[rt_state->equation.alpha_func],
+         util_blendfactor_is_inverted(rt_state->equation.alpha_src_factor) ? "-"
+                                                                           : "",
+         factors[util_blendfactor_without_invert(
+            rt_state->equation.alpha_src_factor)],
+         util_blendfactor_is_inverted(rt_state->equation.alpha_dst_factor) ? "-"
+                                                                           : "",
+         factors[util_blendfactor_without_invert(
+            rt_state->equation.alpha_dst_factor)]);
       assert(ret > 0);
       str += ret;
       len -= ret;
@@ -573,12 +604,9 @@ get_equation_str(const struct pan_blend_rt_state *rt_state, char *str,
 }
 
 static bool
-pan_inline_blend_constants(nir_builder *b, nir_instr *instr, void *data)
+pan_inline_blend_constants(nir_builder *b, nir_intrinsic_instr *intr,
+                           void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_blend_const_color_rgba)
       return false;
 
@@ -589,10 +617,10 @@ pan_inline_blend_constants(nir_builder *b, nir_instr *instr, void *data)
       nir_const_value_for_float(floats[2], 32),
       nir_const_value_for_float(floats[3], 32)};
 
-   b->cursor = nir_after_instr(instr);
-   nir_ssa_def *constant = nir_build_imm(b, 4, 32, constants);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, constant);
-   nir_instr_remove(instr);
+   b->cursor = nir_after_instr(&intr->instr);
+   nir_def *constant = nir_build_imm(b, 4, 32, constants);
+   nir_def_rewrite_uses(&intr->def, constant);
+   nir_instr_remove(&intr->instr);
    return true;
 }
 
@@ -637,11 +665,9 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
 
    if (!rt_state->equation.blend_enable) {
       static const nir_lower_blend_channel replace = {
-         .func = BLEND_FUNC_ADD,
-         .src_factor = BLEND_FACTOR_ZERO,
-         .invert_src_factor = true,
-         .dst_factor = BLEND_FACTOR_ZERO,
-         .invert_dst_factor = false,
+         .func = PIPE_BLEND_ADD,
+         .src_factor = PIPE_BLENDFACTOR_ONE,
+         .dst_factor = PIPE_BLENDFACTOR_ZERO,
       };
 
       options.rt[rt].rgb = replace;
@@ -649,22 +675,14 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
    } else {
       options.rt[rt].rgb.func = rt_state->equation.rgb_func;
       options.rt[rt].rgb.src_factor = rt_state->equation.rgb_src_factor;
-      options.rt[rt].rgb.invert_src_factor =
-         rt_state->equation.rgb_invert_src_factor;
       options.rt[rt].rgb.dst_factor = rt_state->equation.rgb_dst_factor;
-      options.rt[rt].rgb.invert_dst_factor =
-         rt_state->equation.rgb_invert_dst_factor;
       options.rt[rt].alpha.func = rt_state->equation.alpha_func;
       options.rt[rt].alpha.src_factor = rt_state->equation.alpha_src_factor;
-      options.rt[rt].alpha.invert_src_factor =
-         rt_state->equation.alpha_invert_src_factor;
       options.rt[rt].alpha.dst_factor = rt_state->equation.alpha_dst_factor;
-      options.rt[rt].alpha.invert_dst_factor =
-         rt_state->equation.alpha_invert_dst_factor;
    }
 
-   nir_ssa_def *pixel = nir_load_barycentric_pixel(&b, 32, .interp_mode = 1);
-   nir_ssa_def *zero = nir_imm_int(&b, 0);
+   nir_def *pixel = nir_load_barycentric_pixel(&b, 32, .interp_mode = 1);
+   nir_def *zero = nir_imm_int(&b, 0);
 
    for (unsigned i = 0; i < 2; ++i) {
       nir_alu_type src_type =
@@ -674,7 +692,7 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
       src_type = nir_alu_type_get_base_type(nir_type) |
                  nir_alu_type_get_type_size(src_type);
 
-      nir_ssa_def *src = nir_load_interpolated_input(
+      nir_def *src = nir_load_interpolated_input(
          &b, 4, nir_alu_type_get_type_size(src_type), pixel, zero,
          .io_semantics.location = i ? VARYING_SLOT_VAR0 : VARYING_SLOT_COL0,
          .io_semantics.num_slots = 1, .base = i, .dest_type = src_type);
@@ -699,10 +717,9 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
    b.shader->info.io_lowered = true;
 
    NIR_PASS_V(b.shader, nir_lower_blend, &options);
-   nir_shader_instructions_pass(
-      b.shader, pan_inline_blend_constants,
-      nir_metadata_block_index | nir_metadata_dominance,
-      (void *)state->constants);
+   nir_shader_intrinsics_pass(b.shader, pan_inline_blend_constants,
+                              nir_metadata_block_index | nir_metadata_dominance,
+                              (void *)state->constants);
 
    return b.shader;
 }
@@ -770,12 +787,8 @@ struct rt_conversion_inputs {
 };
 
 static bool
-inline_rt_conversion(nir_builder *b, nir_instr *instr, void *data)
+inline_rt_conversion(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_rt_conversion_pan)
       return false;
 
@@ -785,8 +798,8 @@ inline_rt_conversion(nir_builder *b, nir_instr *instr, void *data)
    uint64_t conversion = GENX(pan_blend_get_internal_desc)(
       inputs->dev, inputs->formats[rt], rt, size, false);
 
-   b->cursor = nir_after_instr(instr);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_imm_int(b, conversion >> 32));
+   b->cursor = nir_after_instr(&intr->instr);
+   nir_def_rewrite_uses(&intr->def, nir_imm_int(b, conversion >> 32));
    return true;
 }
 
@@ -794,7 +807,7 @@ bool
 GENX(pan_inline_rt_conversion)(nir_shader *s, const struct panfrost_device *dev,
                                enum pipe_format *formats)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       s, inline_rt_conversion,
       nir_metadata_block_index | nir_metadata_dominance,
       &(struct rt_conversion_inputs){.dev = dev, .formats = formats});

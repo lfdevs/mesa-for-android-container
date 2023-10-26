@@ -28,6 +28,7 @@
 #ifndef vl_zscan_h
 #define vl_zscan_h
 
+#include "util/vl_zscan_data.h"
 #include "util/compiler.h"
 #include "pipe/p_state.h"
 
@@ -67,13 +68,6 @@ struct vl_zscan_buffer
    struct pipe_sampler_view *src, *layout, *quant;
    struct pipe_surface *dst;
 };
-
-extern const int vl_zscan_normal_16[];
-extern const int vl_zscan_linear[];
-extern const int vl_zscan_normal[];
-extern const int vl_zscan_alternate[];
-extern const int vl_zscan_h265_up_right_diagonal_16[];
-extern const int vl_zscan_h265_up_right_diagonal[];
 
 struct pipe_sampler_view *
 vl_zscan_layout(struct pipe_context *pipe, const int layout[64], unsigned blocks_per_line);

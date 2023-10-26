@@ -7,22 +7,18 @@
 #include "agx_tilebuffer.h"
 #include "nir_builder.h"
 
-static nir_ssa_def *
-mask_by_sample_id(nir_builder *b, nir_ssa_def *mask)
+static nir_def *
+mask_by_sample_id(nir_builder *b, nir_def *mask)
 {
-   nir_ssa_def *id_mask =
+   nir_def *id_mask =
       nir_ishl(b, nir_imm_intN_t(b, 1, mask->bit_size), nir_load_sample_id(b));
    return nir_iand(b, mask, id_mask);
 }
 
 static bool
-lower_to_sample(nir_builder *b, nir_instr *instr, void *_)
+lower_to_sample(nir_builder *b, nir_intrinsic_instr *intr, void *_)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
    switch (intr->intrinsic) {
    case nir_intrinsic_load_sample_pos: {
@@ -36,28 +32,28 @@ lower_to_sample(nir_builder *b, nir_instr *instr, void *_)
        *       xy[component] = ((float)nibble) / 16.0;
        *    }
        */
-      nir_ssa_def *packed = nir_load_sample_positions_agx(b);
+      nir_def *packed = nir_load_sample_positions_agx(b);
 
       /* The n'th sample is the in the n'th byte of the register */
-      nir_ssa_def *shifted = nir_ushr(
+      nir_def *shifted = nir_ushr(
          b, packed, nir_u2u32(b, nir_imul_imm(b, nir_load_sample_id(b), 8)));
 
-      nir_ssa_def *xy[2];
+      nir_def *xy[2];
       for (unsigned i = 0; i < 2; ++i) {
          /* Get the appropriate nibble */
-         nir_ssa_def *nibble =
+         nir_def *nibble =
             nir_iand_imm(b, nir_ushr_imm(b, shifted, i * 4), 0xF);
 
          /* Convert it from fixed point to float */
          xy[i] = nir_fmul_imm(b, nir_u2f16(b, nibble), 1.0 / 16.0);
 
          /* Upconvert if necessary */
-         xy[i] = nir_f2fN(b, xy[i], nir_dest_bit_size(intr->dest));
+         xy[i] = nir_f2fN(b, xy[i], intr->def.bit_size);
       }
 
       /* Collect and rewrite */
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_vec2(b, xy[0], xy[1]));
-      nir_instr_remove(instr);
+      nir_def_rewrite_uses(&intr->def, nir_vec2(b, xy[0], xy[1]));
+      nir_instr_remove(&intr->instr);
       return true;
    }
 
@@ -66,10 +62,10 @@ lower_to_sample(nir_builder *b, nir_instr *instr, void *_)
        * of the sample currently being shaded when sample shading is used. Mask
        * by the sample ID to make that happen.
        */
-      b->cursor = nir_after_instr(instr);
-      nir_ssa_def *old = &intr->dest.ssa;
-      nir_ssa_def *lowered = mask_by_sample_id(b, old);
-      nir_ssa_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
+      b->cursor = nir_after_instr(&intr->instr);
+      nir_def *old = &intr->def;
+      nir_def *lowered = mask_by_sample_id(b, old);
+      nir_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
       return true;
    }
 
@@ -77,14 +73,14 @@ lower_to_sample(nir_builder *b, nir_instr *instr, void *_)
       /* Lower fragment varyings with "sample" interpolation to
        * interpolateAtSample() with the sample ID
        */
-      b->cursor = nir_after_instr(instr);
-      nir_ssa_def *old = &intr->dest.ssa;
+      b->cursor = nir_after_instr(&intr->instr);
+      nir_def *old = &intr->def;
 
-      nir_ssa_def *lowered = nir_load_barycentric_at_sample(
-         b, nir_dest_bit_size(intr->dest), nir_load_sample_id(b),
+      nir_def *lowered = nir_load_barycentric_at_sample(
+         b, intr->def.bit_size, nir_load_sample_id(b),
          .interp_mode = nir_intrinsic_interp_mode(intr));
 
-      nir_ssa_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
+      nir_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
       return true;
    }
 
@@ -116,7 +112,7 @@ agx_nir_lower_sample_intrinsics(nir_shader *shader)
    if (!shader->info.fs.uses_sample_shading)
       return false;
 
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       shader, lower_to_sample,
       nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

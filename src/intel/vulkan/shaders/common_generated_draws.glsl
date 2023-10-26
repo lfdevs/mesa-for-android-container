@@ -21,14 +21,9 @@
  * IN THE SOFTWARE.
  */
 
-#define BITFIELD_BIT(i) (1u << i)
+#include "interface.h"
 
-#define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
-#define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
-#define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
-#define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
-
-/* These 3 bindings will be accessed through A64 messages */
+/* All storage bindings will be accessed through A64 messages */
 layout(set = 0, binding = 0, std430) buffer Storage0 {
    uint indirect_data[];
 };
@@ -41,17 +36,22 @@ layout(set = 0, binding = 2, std430) buffer Storage2 {
    uint draw_ids[];
 };
 
+/* We're not using a uniform block for this because our compiler
+ * infrastructure relies on UBOs to be 32-bytes aligned so that we can push
+ * them into registers. This value can come directly from the indirect buffer
+ * given to indirect draw commands and the requirement there is 4-bytes
+ * alignment.
+ *
+ * Also use a prefix to the variable to remember to make a copy of it, avoid
+ * unnecessary accesses.
+ */
+layout(set = 0, binding = 3) buffer Storage3 {
+   uint _draw_count;
+};
+
 /* This data will be provided through push constants. */
-layout(set = 0, binding = 3) uniform block {
-   uint64_t draw_id_addr;
-   uint64_t indirect_data_addr;
-   uint indirect_data_stride;
-   uint flags;
-   uint draw_base;
-   uint draw_count;
-   uint max_draw_count;
-   uint instance_multiplier;
-   uint64_t end_addr;
+layout(set = 0, binding = 4) uniform block {
+   anv_generated_indirect_draw_params params;
 };
 
 void write_VERTEX_BUFFER_STATE(uint write_offset,
@@ -130,4 +130,29 @@ void write_MI_BATCH_BUFFER_START(uint write_offset,
                                  1  << 0);  /* DWord Length */
    commands[write_offset + 1] = uint(addr & 0xffffffff);
    commands[write_offset + 2] = uint(addr >> 32);
+}
+
+void end_generated_draws(uint item_idx, uint cmd_idx, uint draw_id, uint draw_count)
+{
+   uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
+   bool indirect_count = (params.flags & ANV_GENERATED_FLAG_COUNT) != 0;
+   bool ring_mode = (params.flags & ANV_GENERATED_FLAG_RING_MODE) != 0;
+   /* We can have an indirect draw count = 0. */
+   uint last_draw_id = draw_count == 0 ? 0 : (min(draw_count, params.max_draw_count) - 1);
+   uint jump_offset = draw_count == 0 ? 0 : _3dprim_dw_size;
+
+   if (ring_mode) {
+      if (draw_id == last_draw_id) {
+         /* Exit the ring buffer to the next user commands */
+         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
+      } else if (item_idx == (params.ring_count - 1)) {
+         /* Jump back to the generation shader to generate mode draws */
+         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.gen_addr);
+      }
+   } else {
+      if (draw_id == last_draw_id && draw_count < params.max_draw_count) {
+         /* Skip forward to the end of the generated draws */
+         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
+      }
+   }
 }

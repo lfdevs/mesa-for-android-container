@@ -440,6 +440,34 @@ alloc_batch_locked(struct fd_batch_cache *cache, struct fd_context *ctx,
    return batch;
 }
 
+static void
+alloc_query_buf(struct fd_context *ctx, struct fd_batch *batch)
+{
+   if (batch->query_buf)
+      return;
+
+   if ((ctx->screen->gen < 3) || (ctx->screen->gen > 4))
+      return;
+
+   /* For gens that use fd_hw_query, pre-allocate an initially zero-sized
+    * (unbacked) query buffer.  This simplifies draw/grid/etc-time resource
+    * tracking.
+    */
+   struct pipe_screen *pscreen = &ctx->screen->base;
+   struct pipe_resource templ = {
+      .target = PIPE_BUFFER,
+      .format = PIPE_FORMAT_R8_UNORM,
+      .bind = PIPE_BIND_QUERY_BUFFER,
+      .width0 = 0, /* create initially zero size buffer */
+      .height0 = 1,
+      .depth0 = 1,
+      .array_size = 1,
+      .last_level = 0,
+      .nr_samples = 1,
+   };
+   batch->query_buf = pscreen->resource_create(pscreen, &templ);
+}
+
 struct fd_batch *
 fd_bc_alloc_batch(struct fd_context *ctx, bool nondraw)
 {
@@ -456,6 +484,8 @@ fd_bc_alloc_batch(struct fd_context *ctx, bool nondraw)
    fd_screen_lock(ctx->screen);
    batch = alloc_batch_locked(cache, ctx, nondraw);
    fd_screen_unlock(ctx->screen);
+
+   alloc_query_buf(ctx, batch);
 
    if (batch && nondraw)
       fd_context_switch_to(ctx, batch);
@@ -551,6 +581,8 @@ fd_batch_from_fb(struct fd_context *ctx,
    fd_screen_lock(ctx->screen);
    struct fd_batch *batch = batch_from_key(ctx, key);
    fd_screen_unlock(ctx->screen);
+
+   alloc_query_buf(ctx, batch);
 
    fd_batch_set_fb(batch, pfb);
 

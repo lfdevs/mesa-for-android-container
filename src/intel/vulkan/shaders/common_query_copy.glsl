@@ -21,12 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#define BITFIELD_BIT(i) (1u << i)
-
-#define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
-#define ANV_COPY_QUERY_FLAG_AVAILABLE BITFIELD_BIT(1)
-#define ANV_COPY_QUERY_FLAG_DELTA     BITFIELD_BIT(2)
-#define ANV_COPY_QUERY_FLAG_PARTIAL   BITFIELD_BIT(3)
+#include "interface.h"
 
 /* These 3 bindings will be accessed through A64 messages */
 layout(set = 0, binding = 0, std430) buffer Storage0 {
@@ -39,34 +34,28 @@ layout(set = 0, binding = 1, std430) buffer Storage1 {
 
 /* This data will be provided through push constants. */
 layout(set = 0, binding = 2) uniform block {
-   uint flags;
-   uint num_queries;
-   uint num_items;
-   uint query_base;
-   uint query_stride;
-   uint query_data_offset;
-   uint destination_stride;
+   anv_query_copy_shader_params params;
 };
 
 void query_copy(uint item_idx)
 {
-   if (item_idx >= num_queries)
+   if (item_idx >= params.num_queries)
       return;
 
-   bool is_result64 = (flags & ANV_COPY_QUERY_FLAG_RESULT64) != 0;
-   bool write_available = (flags & ANV_COPY_QUERY_FLAG_AVAILABLE) != 0;
-   bool compute_delta = (flags & ANV_COPY_QUERY_FLAG_DELTA) != 0;
-   bool partial_result = (flags & ANV_COPY_QUERY_FLAG_PARTIAL) != 0;
+   bool is_result64 = (params.flags & ANV_COPY_QUERY_FLAG_RESULT64) != 0;
+   bool write_available = (params.flags & ANV_COPY_QUERY_FLAG_AVAILABLE) != 0;
+   bool compute_delta = (params.flags & ANV_COPY_QUERY_FLAG_DELTA) != 0;
+   bool partial_result = (params.flags & ANV_COPY_QUERY_FLAG_PARTIAL) != 0;
 
-   uint query_byte = (query_base + item_idx) * query_stride;
-   uint query_data_byte = query_byte + query_data_offset;
-   uint destination_byte = item_idx * destination_stride;
+   uint query_byte = (params.query_base + item_idx) * params.query_stride;
+   uint query_data_byte = query_byte + params.query_data_offset;
+   uint destination_byte = item_idx * params.destination_stride;
 
    uint64_t availability = query_data[query_byte / 4];
 
    uint query_data_dword = query_data_byte / 4;
    uint dest_dword = destination_byte / 4;
-   for (uint i = 0; i < num_items; i++) {
+   for (uint i = 0; i < params.num_items; i++) {
       uint item_data_dword = query_data_dword + i * 2 * (compute_delta ? 2 : 1);
 
       uint64_t v;

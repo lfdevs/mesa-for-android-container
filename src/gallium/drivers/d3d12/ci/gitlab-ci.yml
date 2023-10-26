@@ -1,6 +1,5 @@
 .d3d12-test:
   extends:
-    - .build-windows
     - .use-windows_test_vs2019
     - .glon12-test-rules
   stage: layered-backends

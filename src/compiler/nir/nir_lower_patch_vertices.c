@@ -73,7 +73,7 @@ nir_lower_patch_vertices(nir_shader *nir,
 
                b.cursor = nir_before_instr(&intr->instr);
 
-               nir_ssa_def *val = NULL;
+               nir_def *val = NULL;
                if (static_count) {
                   val = nir_imm_int(&b, static_count);
                } else {
@@ -84,8 +84,8 @@ nir_lower_patch_vertices(nir_shader *nir,
                }
 
                progress = true;
-               nir_ssa_def_rewrite_uses(&intr->dest.ssa,
-                                        val);
+               nir_def_rewrite_uses(&intr->def,
+                                    val);
                nir_instr_remove(instr);
             }
          }
@@ -93,7 +93,7 @@ nir_lower_patch_vertices(nir_shader *nir,
 
       if (progress) {
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+                                        nir_metadata_dominance);
       }
    }
 

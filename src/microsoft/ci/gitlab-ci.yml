@@ -1,6 +1,8 @@
+include:
+  - local: 'src/microsoft/ci/gitlab-ci-inc.yml'
+
 test-spirv2dxil-windows:
   extends:
-    - .build-windows
     - .use-windows_test_vs2019
     - .spirv2dxil-test-rules
   stage: layered-backends
@@ -22,7 +24,6 @@ test-spirv2dxil-windows:
 
 test-dozen-deqp:
   extends:
-    - .build-windows
     - .use-windows_test_vs2019
     - .dozen-test-rules
   stage: layered-backends

@@ -608,6 +608,8 @@ def get_types(doc, beta, api, types_to_defines):
         if _type.attrib.get('structextends') is None:
             continue
         for extended in _type.attrib.get('structextends').split(','):
+            if extended not in required:
+                continue
             types[extended].extended_by.append(types[_type.attrib['name']])
 
     return types

@@ -275,6 +275,15 @@ vk_get_dynamic_graphics_states(BITSET_WORD *dynamic,
          unreachable("Unsupported dynamic graphics state");
       }
    }
+
+   /* attachmentCount is ignored if all of the states using it are dyanmic.
+    *
+    * TODO: Handle advanced blending here when supported.
+    */
+   if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_WRITE_MASKS))
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_ATTACHMENT_COUNT);
 }
 
 #define IS_DYNAMIC(STATE) \
@@ -2806,6 +2815,15 @@ vk_common_CmdSetColorBlendAdvancedEXT(VkCommandBuffer commandBuffer,
    unreachable("VK_EXT_blend_operation_advanced unsupported");
 }
 
+void
+vk_cmd_set_cb_attachment_count(struct vk_command_buffer *cmd,
+                               uint32_t attachment_count)
+{
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, CB_ATTACHMENT_COUNT, cb.attachment_count, attachment_count);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetDiscardRectangleEnableEXT(VkCommandBuffer commandBuffer,
                                           VkBool32 discardRectangleEnable)
@@ -2863,4 +2881,75 @@ vk_common_CmdSetDepthBias2EXT(
       SET_DYN_VALUE(dyn, RS_DEPTH_BIAS_FACTORS,
                     rs.depth_bias.exact, false);
    }
+}
+
+const char *
+vk_dynamic_graphic_state_to_str(enum mesa_vk_dynamic_graphics_state state)
+{
+#define NAME(name) \
+      case MESA_VK_DYNAMIC_##name: return #name
+
+   switch (state) {
+      NAME(VI);
+      NAME(VI_BINDINGS_VALID);
+      NAME(VI_BINDING_STRIDES);
+      NAME(IA_PRIMITIVE_TOPOLOGY);
+      NAME(IA_PRIMITIVE_RESTART_ENABLE);
+      NAME(TS_PATCH_CONTROL_POINTS);
+      NAME(TS_DOMAIN_ORIGIN);
+      NAME(VP_VIEWPORT_COUNT);
+      NAME(VP_VIEWPORTS);
+      NAME(VP_SCISSOR_COUNT);
+      NAME(VP_SCISSORS);
+      NAME(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE);
+      NAME(DR_RECTANGLES);
+      NAME(DR_MODE);
+      NAME(DR_ENABLE);
+      NAME(RS_RASTERIZER_DISCARD_ENABLE);
+      NAME(RS_DEPTH_CLAMP_ENABLE);
+      NAME(RS_DEPTH_CLIP_ENABLE);
+      NAME(RS_POLYGON_MODE);
+      NAME(RS_CULL_MODE);
+      NAME(RS_FRONT_FACE);
+      NAME(RS_CONSERVATIVE_MODE);
+      NAME(RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE);
+      NAME(RS_RASTERIZATION_ORDER_AMD);
+      NAME(RS_PROVOKING_VERTEX);
+      NAME(RS_RASTERIZATION_STREAM);
+      NAME(RS_DEPTH_BIAS_ENABLE);
+      NAME(RS_DEPTH_BIAS_FACTORS);
+      NAME(RS_LINE_WIDTH);
+      NAME(RS_LINE_MODE);
+      NAME(RS_LINE_STIPPLE_ENABLE);
+      NAME(RS_LINE_STIPPLE);
+      NAME(FSR);
+      NAME(MS_RASTERIZATION_SAMPLES);
+      NAME(MS_SAMPLE_MASK);
+      NAME(MS_ALPHA_TO_COVERAGE_ENABLE);
+      NAME(MS_ALPHA_TO_ONE_ENABLE);
+      NAME(MS_SAMPLE_LOCATIONS_ENABLE);
+      NAME(MS_SAMPLE_LOCATIONS);
+      NAME(DS_DEPTH_TEST_ENABLE);
+      NAME(DS_DEPTH_WRITE_ENABLE);
+      NAME(DS_DEPTH_COMPARE_OP);
+      NAME(DS_DEPTH_BOUNDS_TEST_ENABLE);
+      NAME(DS_DEPTH_BOUNDS_TEST_BOUNDS);
+      NAME(DS_STENCIL_TEST_ENABLE);
+      NAME(DS_STENCIL_OP);
+      NAME(DS_STENCIL_COMPARE_MASK);
+      NAME(DS_STENCIL_WRITE_MASK);
+      NAME(DS_STENCIL_REFERENCE);
+      NAME(CB_LOGIC_OP_ENABLE);
+      NAME(CB_LOGIC_OP);
+      NAME(CB_ATTACHMENT_COUNT);
+      NAME(CB_COLOR_WRITE_ENABLES);
+      NAME(CB_BLEND_ENABLES);
+      NAME(CB_BLEND_EQUATIONS);
+      NAME(CB_WRITE_MASKS);
+      NAME(CB_BLEND_CONSTANTS);
+      NAME(ATTACHMENT_FEEDBACK_LOOP_ENABLE);
+   default: unreachable("Invalid state");
+   }
+
+#undef NAME
 }

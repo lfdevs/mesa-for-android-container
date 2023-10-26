@@ -79,7 +79,7 @@ libamdgpu_addrlib = static_library(
       'inc', 'src', 'src/core', 'src/chip/gfx9', 'src/chip/r800',
       'src/chip/gfx10', 'src/chip/gfx11',
     ),
-    inc_amd_common, inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux,
+    inc_amd_common, inc_include, inc_src
   ],
   cpp_args : cpp_args_addrlib,
   gnu_symbol_visibility : 'hidden',

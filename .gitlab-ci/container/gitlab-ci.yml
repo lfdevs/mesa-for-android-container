@@ -47,7 +47,7 @@
 .container:
   stage: container
   extends:
-    - .container-rules
+    - .container+build-rules
     - .incorporate-templates-commit
     - .use-wine
   variables:
@@ -61,8 +61,6 @@
   extends:
     - .container
     - .incorporate-base-tag+templates-commit
-    # Don't want the .container rules
-    - .build-rules
 
 # Debian based x86_64 build image base
 debian/x86_64_build-base:
@@ -192,8 +190,7 @@ debian/android_build:
 debian/x86_64_test-base:
   extends: debian/x86_64_build-base
   variables:
-    KERNEL_URL: &kernel-rootfs-url "https://gitlab.freedesktop.org/gfx-ci/linux/-/archive/v6.3-for-mesa-ci-43c973a8ff91/linux-v6.3-for-mesa-ci-6fc749a2a59a.tar.bz2"
-    MESA_IMAGE_TAG: &debian-x86_64_test-base ${DEBIAN_BASE_TAG}
+    MESA_IMAGE_TAG: &debian-x86_64_test-base "${DEBIAN_BASE_TAG}--${KERNEL_TAG}"
 
 .use-debian/x86_64_test-base:
   extends:
@@ -327,13 +324,12 @@ fedora/x86_64_build:
 
 .kernel+rootfs:
   extends:
-    - .build-rules
+    - .container+build-rules
   stage: container
   variables:
     GIT_STRATEGY: fetch
-    KERNEL_URL: *kernel-rootfs-url
     MESA_ROOTFS_TAG: &kernel-rootfs ${KERNEL_ROOTFS_TAG}
-    DISTRIBUTION_TAG: &distribution-tag-arm "${MESA_ROOTFS_TAG}--${MESA_ARTIFACTS_TAG}--${MESA_TEMPLATES_COMMIT}"
+    DISTRIBUTION_TAG: &distribution-tag-arm "${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_ARTIFACTS_TAG}--${MESA_TEMPLATES_COMMIT}"
   script:
     - .gitlab-ci/container/lava_build.sh
 
@@ -344,7 +340,7 @@ kernel+rootfs_x86_64:
   image: "$FDO_BASE_IMAGE"
   variables:
     DEBIAN_ARCH: "amd64"
-    DISTRIBUTION_TAG: &distribution-tag-x86_64 "${MESA_ROOTFS_TAG}--${MESA_ARTIFACTS_BASE_TAG}--${MESA_TEMPLATES_COMMIT}"
+    DISTRIBUTION_TAG: &distribution-tag-x86_64 "${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_ARTIFACTS_BASE_TAG}--${MESA_TEMPLATES_COMMIT}"
 
 kernel+rootfs_arm64:
   extends:
@@ -378,11 +374,11 @@ kernel+rootfs_arm32:
     - .fdo.container-build@debian
     - .container
     # Don't want the .container rules
-    - .build-rules
+    - .container+build-rules
   variables:
-    FDO_DISTRIBUTION_TAG: "${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${MESA_TEMPLATES_COMMIT}"
+    FDO_DISTRIBUTION_TAG: "${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_TEMPLATES_COMMIT}"
     ARTIFACTS_PREFIX: "https://${S3_HOST}/mesa-lava"
-    ARTIFACTS_SUFFIX: "${MESA_ROOTFS_TAG}--${MESA_ARTIFACTS_TAG}--${MESA_TEMPLATES_COMMIT}"
+    ARTIFACTS_SUFFIX: "${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_ARTIFACTS_TAG}--${MESA_TEMPLATES_COMMIT}"
     MESA_ARTIFACTS_TAG: *debian-arm64_build
     MESA_ROOTFS_TAG: *kernel-rootfs
 
@@ -407,7 +403,7 @@ debian/arm64_test:
     MESA_ROOTFS_TAG: *kernel-rootfs
 
 .use-debian/arm32_test:
-  image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${MESA_TEMPLATES_COMMIT}"
+  image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_TEMPLATES_COMMIT}"
   extends:
     - .use-debian/arm_test
   variables:
@@ -417,7 +413,7 @@ debian/arm64_test:
     - debian/arm_test
 
 .use-debian/arm64_test:
-  image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${MESA_TEMPLATES_COMMIT}"
+  image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_TEMPLATES_COMMIT}"
   extends:
     - .use-debian/arm_test
   variables:
@@ -442,6 +438,8 @@ debian/arm64_test:
   variables:
     MESA_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}"
     MESA_UPSTREAM_IMAGE: "$CI_REGISTRY/$FDO_UPSTREAM_REPO/$MESA_IMAGE_PATH:${MESA_IMAGE_TAG}"
+  extends:
+    - .windows-docker-tags
 
 .windows_container_build:
   inherit:
@@ -449,17 +447,13 @@ debian/arm64_test:
   extends:
     - .container
     - .windows-docker-vs2019
+    - .windows-shell-tags
   rules:
     - !reference [.microsoft-farm-container-rules, rules]
-    - !reference [.container-rules, rules]
+    - !reference [.container+build-rules, rules]
   variables:
     GIT_STRATEGY: fetch # we do actually need the full repository though
     MESA_BASE_IMAGE: None
-  tags:
-    - windows
-    - shell
-    - "2022"
-    - mesa
   script:
     - .\.gitlab-ci\windows\mesa_container.ps1 $CI_REGISTRY $CI_REGISTRY_USER $CI_REGISTRY_PASSWORD $MESA_IMAGE $MESA_UPSTREAM_IMAGE ${DOCKERFILE} ${MESA_BASE_IMAGE}
 
@@ -481,7 +475,7 @@ windows_build_vs2019:
     - .windows_container_build
   rules:
     - !reference [.microsoft-farm-rules, rules]
-    - !reference [.build-rules, rules]
+    - !reference [.container+build-rules, rules]
   variables:
     MESA_IMAGE_PATH: &windows_build_image_path ${WINDOWS_X64_BUILD_PATH}
     MESA_IMAGE_TAG: &windows_build_image_tag ${MESA_BASE_IMAGE_TAG}--${WINDOWS_X64_BUILD_TAG}
@@ -500,7 +494,7 @@ windows_test_vs2019:
     - .windows_container_build
   rules:
     - !reference [.microsoft-farm-rules, rules]
-    - !reference [.build-rules, rules]
+    - !reference [.container+build-rules, rules]
   variables:
     MESA_IMAGE_PATH: &windows_test_image_path ${WINDOWS_X64_TEST_PATH}
     MESA_IMAGE_TAG: &windows_test_image_tag ${MESA_BASE_IMAGE_TAG}--${WINDOWS_X64_TEST_TAG}

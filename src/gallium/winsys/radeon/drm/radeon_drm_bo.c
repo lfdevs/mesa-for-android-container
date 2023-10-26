@@ -338,6 +338,11 @@ void radeon_bo_destroy(void *winsys, struct pb_buffer *_buf)
    memset(&args, 0, sizeof(args));
 
    mtx_lock(&rws->bo_handles_mutex);
+   /* radeon_winsys_bo_from_handle might have revived the bo */
+   if (pipe_is_referenced(&bo->base.reference)) {
+      mtx_unlock(&rws->bo_handles_mutex);
+      return;
+   }
    _mesa_hash_table_remove_key(rws->bo_handles, (void*)(uintptr_t)bo->handle);
    if (bo->flink_name) {
       _mesa_hash_table_remove_key(rws->bo_names,
@@ -1191,8 +1196,7 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
 
    if (bo) {
       /* Increase the refcount. */
-      struct pb_buffer *b = NULL;
-      pb_reference(&b, &bo->base);
+      p_atomic_inc(&bo->base.reference.count);
       goto done;
    }
 

@@ -54,3 +54,6 @@ spec@arb_buffer_storage@bufferstorage-persistent_gles3 read coherent client-stor
 # These are redundant with arb_copy_image, so skip them to cut down
 # on CI runtime:
 spec@nv_copy_image@nv_copy_image.*
+
+# Exclude this test which might fail when a new extension is implemented.
+dEQP-VK.info.device_extensions

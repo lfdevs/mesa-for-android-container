@@ -366,7 +366,11 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    builder.setEngineKind(EngineKind::JIT)
           .setErrorStr(&Error)
           .setTargetOptions(options)
+#if LLVM_VERSION_MAJOR >= 18
+          .setOptLevel((CodeGenOptLevel)OptLevel);
+#else
           .setOptLevel((CodeGenOpt::Level)OptLevel);
+#endif
 
 #if DETECT_OS_WINDOWS
     /*

@@ -39,6 +39,7 @@
 
 #include "gallivm/lp_bld.h"
 #include "pipe/p_defines.h"
+#include "util/format/u_formats.h"
 
 
 struct lp_type;

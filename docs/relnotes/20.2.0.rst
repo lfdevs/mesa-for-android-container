@@ -130,7 +130,7 @@ Bug fixes
 - Possible array out of bounds in brw_vec4_nir.cpp
 - freedreno/a6xx: incorrect rendering in asphalt 9
 - [tgl][bisected][regression][iris] failure on dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_default
-- Multiply defined symbols compiling with gcc@10.1.0
+- Multiply defined symbols compiling with gcc\@10.1.0
 - shrinking descriptor pool on intel+vulkan
 - dEQP-VK.renderpass2.dedicated_allocation.attachment.1.12 fails on NAVI14
 - turnip: binning and indirect dependency
@@ -184,7 +184,7 @@ Bug fixes
 - Missing render Information on Stellaris
 - freedreno/ir3: allow copy-propagate from array
 - Zink + GALLIUM_HUD SIGSEGV
-- piglit spec@egl_ext_device_base@conformance fails LLVM 11 Git assertion since "llvmpipe/fs: add caching support"
+- piglit spec\@egl_ext_device_base\@conformance fails LLVM 11 Git assertion since "llvmpipe/fs: add caching support"
 - llvmpipe: 1x1 framebuffer with a 2x2 viewport
 - [regression] nir build failure
 - ci: need to end baremetal tests after kernel panic/instaboot

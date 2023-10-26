@@ -14,8 +14,8 @@ As one might expect, :cpp:struct:`vk_instance` is the required base struct
 for implementing ``VkInstance``, :cpp:struct:`vk_physical_device` is
 required for ``VkPhysicalDevice``, and :cpp:struct:`vk_device` for
 ``VkDevice``.  Everything else must derive from
-:cpp:struct:`vk_vk_objet_base` or from some struct that derives from
-:cpp:struct:`vk_vk_objet_base`.
+:cpp:struct:`vk_object_base` or from some struct that derives from
+:cpp:struct:`vk_object_base`.
 
 
 vk_object_base

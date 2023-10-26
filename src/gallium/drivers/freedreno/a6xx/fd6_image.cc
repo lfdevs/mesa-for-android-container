@@ -73,6 +73,8 @@ fd6_image_descriptor(struct fd_context *ctx, const struct pipe_image_view *buf,
                             size);
    } else {
       struct fdl_view_args args = {
+         .chip = A6XX,
+
          .iova = rsc_iova(buf->resource, 0),
 
          .base_miplevel = buf->u.tex.level,

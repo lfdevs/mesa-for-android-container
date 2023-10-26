@@ -92,14 +92,13 @@ vec4_vs_visitor::emit_thread_end()
 
 
 vec4_vs_visitor::vec4_vs_visitor(const struct brw_compiler *compiler,
-                                 void *log_data,
+                                 const struct brw_compile_params *params,
                                  const struct brw_vs_prog_key *key,
                                  struct brw_vs_prog_data *vs_prog_data,
                                  const nir_shader *shader,
-                                 void *mem_ctx,
                                  bool debug_enabled)
-   : vec4_visitor(compiler, log_data, &key->base.tex, &vs_prog_data->base,
-                  shader, mem_ctx, false /* no_spills */, debug_enabled),
+   : vec4_visitor(compiler, params, &key->base.tex, &vs_prog_data->base,
+                  shader, false /* no_spills */, debug_enabled),
      key(key),
      vs_prog_data(vs_prog_data)
 {

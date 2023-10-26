@@ -471,8 +471,13 @@ tu_cond_exec_end(struct tu_cs *cs)
 
    cs->cond_flags[cs->cond_stack_depth] = 0;
    /* Subtract one here to account for the DWORD field itself. */
-   *cs->cond_dwords[cs->cond_stack_depth] =
-      cs->cur - cs->cond_dwords[cs->cond_stack_depth] - 1;
+   uint32_t cond_len = cs->cur - cs->cond_dwords[cs->cond_stack_depth] - 1;
+   if (cond_len) {
+      *cs->cond_dwords[cs->cond_stack_depth] = cond_len;
+   } else {
+      /* rewind the CS to drop the empty cond reg packet. */
+      cs->cur = cs->cur - 3;
+   }
 }
 
 /* Temporary struct for tracking a register state to be written, used by
@@ -493,6 +498,7 @@ struct tu_reg_value {
 #define __bo_type struct tu_bo *
 
 #include "a6xx-pack.xml.h"
+#include "adreno-pm4-pack.xml.h"
 
 #define __assert_eq(a, b)                                               \
    do {                                                                 \

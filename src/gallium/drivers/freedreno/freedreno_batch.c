@@ -119,6 +119,10 @@ fd_batch_create(struct fd_context *ctx, bool nondraw)
       }
    }
 
+   /* Pre-attach private BOs: */
+   for (unsigned i = 0; i < ctx->num_private_bos; i++)
+      fd_ringbuffer_attach_bo(batch->gmem, ctx->private_bos[i]);
+
    batch->subpass = subpass_create(batch);
 
    batch->in_fence_fd = -1;
@@ -525,8 +529,6 @@ fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc)
    if (track->write_batch == batch)
       return;
 
-   fd_batch_write_prep(batch, rsc);
-
    if (rsc->stencil)
       fd_batch_resource_write(batch, rsc->stencil);
 
@@ -570,6 +572,8 @@ fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc)
    fd_batch_reference_locked(&track->write_batch, batch);
 
    fd_batch_add_resource(batch, rsc);
+
+   fd_batch_write_prep(batch, rsc);
 }
 
 void

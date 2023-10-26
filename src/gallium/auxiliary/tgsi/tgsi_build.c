@@ -1393,18 +1393,3 @@ tgsi_build_full_property(
 
    return size;
 }
-
-struct tgsi_full_src_register
-tgsi_full_src_register_from_dst(const struct tgsi_full_dst_register *dst)
-{
-   struct tgsi_full_src_register src;
-   src.Register = tgsi_default_src_register();
-   src.Register.File = dst->Register.File;
-   src.Register.Indirect = dst->Register.Indirect;
-   src.Register.Dimension = dst->Register.Dimension;
-   src.Register.Index = dst->Register.Index;
-   src.Indirect = dst->Indirect;
-   src.Dimension = dst->Dimension;
-   src.DimIndirect = dst->DimIndirect;
-   return src;
-}

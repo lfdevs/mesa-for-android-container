@@ -124,8 +124,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(nir_serialize_all_test, alu_single_value_src_swizzle)
 {
-   nir_ssa_def *zero = nir_imm_zero(b, GetParam(), 32);
-   nir_ssa_def *fmax = nir_fmax(b, zero, zero);
+   nir_def *zero = nir_imm_zero(b, GetParam(), 32);
+   nir_def *fmax = nir_fmax(b, zero, zero);
 
    nir_alu_instr *fmax_alu = nir_instr_as_alu(fmax->parent_instr);
 
@@ -142,15 +142,15 @@ TEST_P(nir_serialize_all_test, alu_single_value_src_swizzle)
 
 TEST_P(nir_serialize_all_test, alu_vec)
 {
-   nir_ssa_def *undef = nir_ssa_undef(b, GetParam(), 32);
-   nir_ssa_def *undefs[] = {
+   nir_def *undef = nir_undef(b, GetParam(), 32);
+   nir_def *undefs[] = {
       undef, undef, undef, undef,
       undef, undef, undef, undef,
       undef, undef, undef, undef,
       undef, undef, undef, undef,
    };
 
-   nir_ssa_def *vec = nir_vec(b, undefs, GetParam());
+   nir_def *vec = nir_vec(b, undefs, GetParam());
    nir_alu_instr *vec_alu = nir_instr_as_alu(vec->parent_instr);
    for (int i = 0; i < GetParam(); i++)
       vec_alu->src[i].swizzle[0] = (GetParam() - 1) - i;
@@ -164,12 +164,11 @@ TEST_P(nir_serialize_all_test, alu_vec)
 
 TEST_P(nir_serialize_all_test, alu_two_components_full_swizzle)
 {
-   nir_ssa_def *undef = nir_ssa_undef(b, 2, 32);
-   nir_ssa_def *fma = nir_ffma(b, undef, undef, undef);
+   nir_def *undef = nir_undef(b, 2, 32);
+   nir_def *fma = nir_ffma(b, undef, undef, undef);
    nir_alu_instr *fma_alu = nir_instr_as_alu(fma->parent_instr);
 
    fma->num_components = GetParam();
-   fma_alu->dest.write_mask = (1 << GetParam()) - 1;
 
    memset(fma_alu->src[0].swizzle, 1, GetParam());
    memset(fma_alu->src[1].swizzle, 1, GetParam());
@@ -186,8 +185,8 @@ TEST_P(nir_serialize_all_test, alu_two_components_full_swizzle)
 
 TEST_P(nir_serialize_all_but_one_test, single_channel)
 {
-   nir_ssa_def *zero = nir_ssa_undef(b, GetParam(), 32);
-   nir_ssa_def *vec = nir_channel(b, zero, GetParam() - 1);
+   nir_def *zero = nir_undef(b, GetParam(), 32);
+   nir_def *vec = nir_channel(b, zero, GetParam() - 1);
    nir_alu_instr *vec_alu = nir_instr_as_alu(vec->parent_instr);
 
    serialize();

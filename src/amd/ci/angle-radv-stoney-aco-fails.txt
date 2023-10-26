@@ -1,19 +1,5 @@
-# Fails on both radv and anv:
-# "Valid format used but glReadPixels failed for input = [GL_RED, GL_BYTE] output = [GL_RGBA, GL_UNSIGNED_BYTE]"
-# Conclusion is it's an ext spec+test bug
-# https://gitlab.khronos.org/opengl/API/-/issues/180
-KHR-GLES3.packed_pixels.pbo_rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.pbo_rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.pbo_rectangle.rgba8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.rectangle.rgba8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.r8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.rg8_snorm,Fail
-KHR-GLES3.packed_pixels.varied_rectangle.rgba8_snorm,Fail
-
-# Regression between ANGLE db67df60f8c8020017c36b2dd446bc3d86614ffe and
-# 82f1cee01a9ea24960e8f23b24d348fccbe0aae0.
+# Failing since ANGLE exposed geometry shaders in their commit a4c7abcbc1eb
+# ("Advertise GL_OES_geometry_shader and GL_EXT_tessellation_shader"):
 #
 # "Rendered data at (28, 21) equal (0.0980392, 0.2, 0.298039, 0.4) exceeds allowed epsilon when compared to reference data equal (0.5, 0.6, 0.7, 0.8).
 #  Data comparison failed at esextcGeometryShaderRendering.cpp:5751"
@@ -56,46 +42,9 @@ dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth32f_stenci
 dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth24_stencil8_cube_array,Fail
 dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth32f_stencil8_cube_array,Fail
 
-# "Iteration 3/3: Samples per pixel: 2
-#  Verifying image has (at least) 3 different shades
-#  Found 2 different shades. Rare (less than 100 pixels): 0 Common: 2
-# Also fails, reports no validation failures on my RX Vega.
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_2_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_2_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_4_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_4_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_8_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_8_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_2_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_2_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_4_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_4_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_8_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_8_discard,Fail
-
-# "Result buffer failed, got unexpected values.
-#  Error at index 16: expected 1, got 0."
-# Also fails, reports no validation failures on my RX Vega.
-dEQP-GLES31.functional.synchronization.in_invocation.ssbo_alias_write,Fail
-dEQP-GLES31.functional.synchronization.inter_invocation.image_alias_write,Fail
-dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_alias_write,Fail
-
-# No useful debug info in the qpa.  Also fails, reports no validation failures on my an RX Vega.
-KHR-GLES31.core.sample_shading.render.rgba32f.full,Fail
-KHR-GLES31.core.sample_shading.render.rgba32f.half,Fail
-KHR-GLES31.core.sample_shading.render.rgba8.full,Fail
-KHR-GLES31.core.sample_shading.render.rgba8.half,Fail
-KHR-GLES31.core.sample_shading.render.rgba8i.full,Fail
-KHR-GLES31.core.sample_shading.render.rgba8i.half,Fail
-KHR-GLES31.core.sample_shading.render.rgba8ui.full,Fail
-KHR-GLES31.core.sample_shading.render.rgba8ui.half,Fail
-
 # Note that the set of test failures in this group changes based on the tests
 # run before them in the caselist!  We set them to what CI currently produces
 # for the default fractional test run, and mark the rest as flakes.
 multisample-dEQP-GLES31.functional.blend_equation_advanced.basic.multiply,Fail
 multisample-dEQP-GLES31.functional.blend_equation_advanced.basic.overlay,Fail
 multisample-dEQP-GLES31.functional.blend_equation_advanced.basic.screen,Fail
-
-multisample-dEQP-GLES31.functional.sample_shading.min_sample_shading.default_framebuffer_color,Fail
-multisample-dEQP-GLES31.functional.sample_shading.min_sample_shading.default_framebuffer_discard,Fail

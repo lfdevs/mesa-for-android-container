@@ -48,6 +48,7 @@
 #include "lp_state_fs.h"
 #include "lp_state_setup.h"
 
+#include "nir.h"
 
 /** Setup shader number (for debugging) */
 static unsigned setup_no = 0;
@@ -765,10 +766,11 @@ lp_make_setup_variant_key(const struct llvmpipe_context *lp,
                           struct lp_setup_variant_key *key)
 {
    const struct lp_fragment_shader *fs = lp->fs;
+   struct nir_shader *nir = fs->base.ir.nir;
 
    assert(sizeof key->inputs[0] == sizeof(uint));
 
-   key->num_inputs = fs->info.base.num_inputs;
+   key->num_inputs = nir->num_inputs;
    key->flatshade_first = lp->rasterizer->flatshade_first;
    key->pixel_center_half = lp->rasterizer->half_pixel_center;
    key->multisample = lp->rasterizer->multisample;

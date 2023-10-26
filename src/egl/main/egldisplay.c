@@ -474,18 +474,45 @@ _eglUnlinkResource(_EGLResource *res, _EGLResourceType type)
 _EGLDisplay *
 _eglGetX11Display(Display *native_display, const EGLAttrib *attrib_list)
 {
-   /* EGL_EXT_platform_x11 recognizes exactly one attribute,
-    * EGL_PLATFORM_X11_SCREEN_EXT, which is optional.
+   _EGLDisplay *dpy;
+   _EGLDevice *dev = NULL;
+
+   /* EGL_EXT_platform_x11 adds EGL_PLATFORM_X11_SCREEN_EXT,
+    * which is optional.
     */
    if (attrib_list != NULL) {
       for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
-         if (attrib_list[i] != EGL_PLATFORM_X11_SCREEN_EXT) {
+         EGLAttrib attrib = attrib_list[i];
+         EGLAttrib value = attrib_list[i + 1];
+
+         switch (attrib) {
+         case EGL_DEVICE_EXT:
+            dev = _eglLookupDevice((void *)value);
+            if (!dev) {
+               _eglError(EGL_BAD_DEVICE_EXT, "eglGetPlatformDisplay");
+               return NULL;
+            }
+            break;
+
+         /* EGL_EXT_platform_x11 adds EGL_PLATFORM_X11_SCREEN_EXT,
+          * which is optional.
+          */
+         case EGL_PLATFORM_X11_SCREEN_EXT:
+            break;
+
+         default:
             _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
             return NULL;
          }
       }
    }
-   return _eglFindDisplay(_EGL_PLATFORM_X11, native_display, attrib_list);
+
+   dpy = _eglFindDisplay(_EGL_PLATFORM_X11, native_display, attrib_list);
+   if (dpy) {
+      dpy->Device = dev;
+   }
+
+   return dpy;
 }
 #endif /* HAVE_X11_PLATFORM */
 
@@ -494,19 +521,42 @@ _EGLDisplay *
 _eglGetXcbDisplay(xcb_connection_t *native_display,
                   const EGLAttrib *attrib_list)
 {
+   _EGLDisplay *dpy;
+   _EGLDevice *dev = NULL;
+
    /* EGL_EXT_platform_xcb recognizes exactly one attribute,
     * EGL_PLATFORM_XCB_SCREEN_EXT, which is optional.
     */
    if (attrib_list != NULL) {
       for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
-         if (attrib_list[i] != EGL_PLATFORM_XCB_SCREEN_EXT) {
+         EGLAttrib attrib = attrib_list[i];
+         EGLAttrib value = attrib_list[i + 1];
+
+         switch (attrib) {
+         case EGL_DEVICE_EXT:
+            dev = _eglLookupDevice((void *)value);
+            if (!dev) {
+               _eglError(EGL_BAD_DEVICE_EXT, "eglGetPlatformDisplay");
+               return NULL;
+            }
+            break;
+
+         case EGL_PLATFORM_XCB_SCREEN_EXT:
+            break;
+
+         default:
             _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
             return NULL;
          }
       }
    }
 
-   return _eglFindDisplay(_EGL_PLATFORM_XCB, native_display, attrib_list);
+   dpy = _eglFindDisplay(_EGL_PLATFORM_XCB, native_display, attrib_list);
+   if (dpy) {
+      dpy->Device = dev;
+   }
+
+   return dpy;
 }
 #endif /* HAVE_XCB_PLATFORM */
 
@@ -515,13 +565,37 @@ _EGLDisplay *
 _eglGetGbmDisplay(struct gbm_device *native_display,
                   const EGLAttrib *attrib_list)
 {
-   /* EGL_MESA_platform_gbm recognizes no attributes. */
-   if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
-      _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
-      return NULL;
+   _EGLDisplay *dpy;
+   _EGLDevice *dev = NULL;
+
+   /* This platform recognizes only EXT_explicit_device */
+   if (attrib_list) {
+      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+         EGLAttrib attrib = attrib_list[i];
+         EGLAttrib value = attrib_list[i + 1];
+
+         switch (attrib) {
+         case EGL_DEVICE_EXT:
+            dev = _eglLookupDevice((void *)value);
+            if (!dev) {
+               _eglError(EGL_BAD_DEVICE_EXT, "eglGetPlatformDisplay");
+               return NULL;
+            }
+            break;
+
+         default:
+            _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
+            return NULL;
+         }
+      }
    }
 
-   return _eglFindDisplay(_EGL_PLATFORM_DRM, native_display, attrib_list);
+   dpy = _eglFindDisplay(_EGL_PLATFORM_DRM, native_display, attrib_list);
+   if (dpy) {
+      dpy->Device = dev;
+   }
+
+   return dpy;
 }
 #endif /* HAVE_DRM_PLATFORM */
 
@@ -530,33 +604,80 @@ _EGLDisplay *
 _eglGetWaylandDisplay(struct wl_display *native_display,
                       const EGLAttrib *attrib_list)
 {
-   /* EGL_EXT_platform_wayland recognizes no attributes. */
-   if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
-      _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
-      return NULL;
+   _EGLDisplay *dpy;
+   _EGLDevice *dev = NULL;
+
+   /* This platform recognizes only EXT_explicit_device */
+   if (attrib_list) {
+      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+         EGLAttrib attrib = attrib_list[i];
+         EGLAttrib value = attrib_list[i + 1];
+
+         switch (attrib) {
+         case EGL_DEVICE_EXT:
+            dev = _eglLookupDevice((void *)value);
+            if (!dev) {
+               _eglError(EGL_BAD_DEVICE_EXT, "eglGetPlatformDisplay");
+               return NULL;
+            }
+            break;
+
+         default:
+            _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
+            return NULL;
+         }
+      }
    }
 
-   return _eglFindDisplay(_EGL_PLATFORM_WAYLAND, native_display, attrib_list);
+   dpy = _eglFindDisplay(_EGL_PLATFORM_WAYLAND, native_display, attrib_list);
+   if (dpy) {
+      dpy->Device = dev;
+   }
+
+   return dpy;
 }
 #endif /* HAVE_WAYLAND_PLATFORM */
 
 _EGLDisplay *
 _eglGetSurfacelessDisplay(void *native_display, const EGLAttrib *attrib_list)
 {
-   /* This platform has no native display. */
+   _EGLDisplay *dpy;
+
+   /* Any native display must be an EGLDeviceEXT we know about */
    if (native_display != NULL) {
       _eglError(EGL_BAD_PARAMETER, "eglGetPlatformDisplay");
       return NULL;
    }
 
-   /* This platform recognizes no display attributes. */
-   if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
-      _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
-      return NULL;
+   /* This platform recognizes only EXT_explicit_device */
+   if (attrib_list) {
+      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+         EGLAttrib attrib = attrib_list[i];
+         EGLAttrib value = attrib_list[i + 1];
+
+         switch (attrib) {
+         case EGL_DEVICE_EXT:
+            if ((native_display && native_display != (void *)value) ||
+                (native_display != _eglLookupDevice(native_display))) {
+               _eglError(EGL_BAD_DEVICE_EXT, "eglGetPlatformDisplay");
+               return NULL;
+            }
+            break;
+
+         default:
+            _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
+            return NULL;
+         }
+      }
    }
 
-   return _eglFindDisplay(_EGL_PLATFORM_SURFACELESS, native_display,
-                          attrib_list);
+   dpy =
+      _eglFindDisplay(_EGL_PLATFORM_SURFACELESS, native_display, attrib_list);
+   if (dpy) {
+      dpy->Device = native_display;
+   }
+
+   return dpy;
 }
 
 #ifdef HAVE_ANDROID_PLATFORM

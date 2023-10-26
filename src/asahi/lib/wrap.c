@@ -228,6 +228,18 @@ wrap_Method(mach_port_t connection, uint32_t selector, const uint64_t *input,
       break;
    }
 
+   case AGX_SELECTOR_FREE_SHMEM: {
+      assert(inputCnt == 1);
+      assert(inputStruct == NULL);
+      assert(output == NULL);
+      assert(outputStruct == NULL);
+
+      agxdecode_track_free(
+         &(struct agx_bo){.type = AGX_ALLOC_CMDBUF, .handle = input[0]});
+
+      break;
+   }
+
    default:
       /* Dump the outputs */
       if (outputCnt) {

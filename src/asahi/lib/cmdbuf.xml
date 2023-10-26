@@ -196,6 +196,36 @@
     <value name="4" value="1"/>
   </enum>
 
+  <!-- Beginning of software-defined metadata used to implement image atomics
+     and multisampled image writes. For atomics, information could be
+     recovered from the PBE descriptor, but it is convenient to compute on the
+     CPU where we have ail.
+
+     This descriptor (or a pointer to it, if the extended form is used) is stashed
+     in the last 8 bytes of a PBE descriptor. Ordinarily used for
+     acceleration buffers or linear layer stride. We forbid atomics and
+     multisampled writes to compressed images and linear 2D arrays, leaving this
+     area free.
+   -->
+
+  <struct name="Atomic (software)" size="16">
+    <field name="Base" size="33" start="0" type="address" modifier="shr(7)"/>
+    <field name="Tile width" size="3" start="33" type="uint" modifier="log2" default="1"/>
+    <field name="Tile height" size="3" start="36" type="uint" modifier="log2" default="1"/>
+    <field name="Tiles per row" size="15" start="39" type="uint"/>
+    <field name="Sample count" size="2" start="54" type="uint" modifier="log2" default="1"/>
+
+    <!-- Extended fields begin here -->
+    <field name="Layer stride (pixels)" size="32" start="64" type="uint"/>
+  </struct>
+
+  <struct name="PBE Buffer (software)" size="8">
+     <!-- Not necessarily aligned -->
+     <field name="Base" size="40" start="0" type="address"/>
+  </struct>
+
+  <!-- End of software defined data structures -->
+
   <struct name="PBE" size="24">
     <field name="Dimension" size="4" start="0" type="Texture dimension" default="2D"/>
     <field name="Layout" size="2" start="4" type="Layout"/>
@@ -240,6 +270,9 @@
     <!-- If layout is linear, stride has the minus 1 encoded -->
     <field name="Depth (linear)" size="11" start="128" type="uint" modifier="minus(1)" default="1"/>
     <field name="Layer stride (linear)" size="27" start="139" type="uint" modifier="shr(7)"/>
+
+    <!-- If neither, for software use -->
+    <field name="Software-defined" size="64" start="128" type="hex"/>
   </struct>
 
   <struct name="Texture" size="24">
@@ -344,6 +377,27 @@
     <field name="Depth bias" size="32" start="0:0" type="float"/>
     <field name="Slope scale" size="32" start="1:0" type="float"/>
     <field name="Clamp" size="32" start="2:0" type="float"/>
+  </struct>
+
+  <enum name="Sampler states">
+    <value name="0" value="0"/>
+    <value name="4 compact" value="1"/>
+    <value name="8 compact" value="2"/>
+    <value name="12 compact" value="3"/>
+    <value name="16 compact" value="4"/>
+    <value name="8 extended" value="6"/>
+    <value name="16 extended" value="7"/>
+  </enum>
+
+  <struct name="Counts" size="4">
+    <field name="Unknown 0" size="1" start="0" type="hex" default="0"/>
+    <field name="Uniforms" size="3" start="1" type="uint" modifier="groups(64)"/>
+    <field name="Texture states" size="5" start="4" type="uint" modifier="groups(8)"/>
+    <field name="Sampler states" size="3" start="9" type="Sampler states"/>
+    <field name="Preshader GPRs" size="4" start="12" type="uint" modifier="groups(16)"/>
+
+    <!-- Only for fragment shaders -->
+    <field name="Unknown" size="16" start="16" type="hex"/>
   </struct>
 
   <!-- PPP state starts -->
@@ -538,16 +592,6 @@
     <field name="Depth bias" size="16" start="16" type="uint"/>
   </struct>
 
-  <enum name="Sampler states">
-    <value name="0" value="0"/>
-    <value name="4 compact" value="1"/>
-    <value name="8 compact" value="2"/>
-    <value name="12 compact" value="3"/>
-    <value name="16 compact" value="4"/>
-    <value name="8 extended" value="6"/>
-    <value name="16 extended" value="7"/>
-  </enum>
-
   <struct name="Fragment shader" size="16">
     <field name="Unknown 0" size="1" start="0" type="hex" default="0"/>
     <field name="Uniform register count" size="3" start="1" type="uint" modifier="groups(64)"/>
@@ -686,11 +730,15 @@
 
   <struct name="VDM Barrier">
     <field name="USC cache inval" size="1" start="3" type="bool" default="false"/>
+    <field name="Unk 4" size="1" start="4" type="bool" default="false"/>
     <field name="Unk 5" size="1" start="5" type="bool" default="false"/>
     <field name="Unk 6" size="1" start="6" type="bool" default="false"/>
     <field name="Unk 8" size="1" start="8" type="bool" default="false"/>
     <field name="Unk 11" size="1" start="11" type="bool" default="false"/>
     <field name="Unk 20" size="1" start="20" type="bool" default="false"/>
+    <field name="Unk 24" size="1" start="24" type="bool" default="false"/>
+    <field name="Unk 26" size="1" start="26" type="bool" default="false"/>
+    <field name="Returns" size="1" start="27" type="bool" default="false"/>
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Barrier"/>
   </struct>
 
@@ -722,7 +770,8 @@
   </struct>
 
   <struct name="VDM State Vertex Shader Word 1" size="4">
-    <field name="Pipeline" size="32" start="0" type="address"/>
+    <field name="Unknown 1:0" size="2" start="0" type="hex"/>
+    <field name="Pipeline" size="26" start="6" type="address" modifier="shr(6)"/>
   </struct>
 
   <struct name="VDM State Vertex Outputs" size="4">
@@ -798,6 +847,7 @@
        probable definition -->
   <struct name="VDM Stream Link" size="8">
     <field name="Target hi" size="8" start="0" type="hex"/>
+    <field name="With return" size="1" start="28" type="bool"/>
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Stream Link"/>
     <field name="Target lo" size="32" start="32" type="hex"/>
   </struct>
@@ -839,6 +889,10 @@
     <field name="Mode" size="2" start="27" type="CDM Mode"/>
     <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Header"/>
     <field name="Pipeline" size="26" start="1:6" type="address" modifier="shr(6)"/>
+  </struct>
+
+  <struct name="CDM Unk G14X" size="8">
+    <field name="Unknown 30" size="1" start="1:30" type="bool" default="true"/>
   </struct>
 
   <struct name="CDM Indirect" size="8">

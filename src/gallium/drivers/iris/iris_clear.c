@@ -395,9 +395,9 @@ clear_color(struct iris_context *ice,
    }
 
    enum isl_aux_usage aux_usage =
-      iris_resource_render_aux_usage(ice, res, level, format, false);
+      iris_resource_render_aux_usage(ice, res, format, level, false);
 
-   iris_resource_prepare_render(ice, res, level, box->z, box->depth,
+   iris_resource_prepare_render(ice, res, format, level, box->z, box->depth,
                                 aux_usage);
    iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_RENDER_WRITE);
 
@@ -616,10 +616,10 @@ clear_depth_stencil(struct iris_context *ice,
 
    if (clear_depth && z_res) {
       const enum isl_aux_usage aux_usage =
-         iris_resource_render_aux_usage(ice, z_res, level, z_res->surf.format,
+         iris_resource_render_aux_usage(ice, z_res, z_res->surf.format, level,
                                         false);
-      iris_resource_prepare_render(ice, z_res, level, box->z, box->depth,
-                                   aux_usage);
+      iris_resource_prepare_render(ice, z_res, z_res->surf.format, level,
+                                   box->z, box->depth, aux_usage);
       iris_emit_buffer_barrier_for(batch, z_res->bo, IRIS_DOMAIN_DEPTH_WRITE);
       iris_blorp_surf_for_resource(&batch->screen->isl_dev, &z_surf,
                                    &z_res->base.b, aux_usage, level, true);

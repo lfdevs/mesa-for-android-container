@@ -94,7 +94,7 @@ program_resource_visitor::process(ir_variable *var, const glsl_type *var_type,
                 false, record_array_count, NULL);
       ralloc_free(name);
    } else if (t_without_array->is_interface()) {
-      char *name = ralloc_strdup(NULL, t_without_array->name);
+      char *name = ralloc_strdup(NULL, glsl_get_type_name(t_without_array));
       const glsl_struct_field *ifc_member = var->data.from_named_ifc_block ?
          &t_without_array->
             fields.structure[t_without_array->field_index(var->name)] : NULL;

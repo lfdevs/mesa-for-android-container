@@ -84,13 +84,13 @@ fd_acc_query_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 {
    const struct fd_acc_sample_provider *p = aq->provider;
 
-   aq->batch = batch;
-   fd_batch_needs_flush(aq->batch);
-   p->resume(aq, aq->batch);
-
    fd_screen_lock(batch->ctx->screen);
    fd_batch_resource_write(batch, fd_resource(aq->prsc));
    fd_screen_unlock(batch->ctx->screen);
+
+   aq->batch = batch;
+   fd_batch_needs_flush(aq->batch);
+   p->resume(aq, aq->batch);
 }
 
 static void

@@ -149,6 +149,12 @@ struct pipe_video_codec
                               uint64_t timeout);
 
    /**
+    * Destroy fence.
+    */
+   void (*destroy_fence)(struct pipe_video_codec *codec,
+                         struct pipe_fence_handle *fence);
+
+   /**
     * Update target buffer address.
     *
     * Due to reallocation, target buffer address has changed, and the

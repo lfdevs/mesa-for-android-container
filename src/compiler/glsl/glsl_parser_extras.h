@@ -32,6 +32,8 @@
 
 #include <stdlib.h>
 #include "glsl_symbol_table.h"
+#include "mesa/main/config.h"
+#include "mesa/main/menums.h" /* for gl_api */
 
 /* THIS is a macro defined somewhere deep in the Windows MSVC header files.
  * Undefine it here to avoid collision with the lexer's THIS token.
@@ -75,7 +77,7 @@ typedef struct YYLTYPE {
 # define YYLTYPE_IS_TRIVIAL 1
 
 extern void _mesa_glsl_error(YYLTYPE *locp, _mesa_glsl_parse_state *state,
-                             const char *fmt, ...);
+                             const char *fmt, ...) PRINTFLIKE(3, 4);
 
 
 struct _mesa_glsl_parse_state {
@@ -386,7 +388,7 @@ struct _mesa_glsl_parse_state {
    exec_list translation_unit;
    glsl_symbol_table *symbols;
 
-   void *linalloc;
+   linear_ctx *linalloc;
 
    unsigned num_supported_versions;
    struct {
@@ -959,6 +961,8 @@ struct _mesa_glsl_parse_state {
    bool layer_viewport_relative;
 
    bool allow_extension_directive_midshader;
+   char *alias_shader_extension;
+   bool allow_vertex_texture_bias;
    bool allow_glsl_120_subset_in_110;
    bool allow_builtin_variable_redeclaration;
    bool ignore_write_to_readonly_var;

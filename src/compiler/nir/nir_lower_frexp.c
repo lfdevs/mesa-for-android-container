@@ -25,12 +25,12 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-static nir_ssa_def *
-lower_frexp_sig(nir_builder *b, nir_ssa_def *x)
+static nir_def *
+lower_frexp_sig(nir_builder *b, nir_def *x)
 {
-   nir_ssa_def *abs_x = nir_fabs(b, x);
-   nir_ssa_def *zero = nir_imm_floatN_t(b, 0, x->bit_size);
-   nir_ssa_def *sign_mantissa_mask, *exponent_value;
+   nir_def *abs_x = nir_fabs(b, x);
+   nir_def *zero = nir_imm_floatN_t(b, 0, x->bit_size);
+   nir_def *sign_mantissa_mask, *exponent_value;
 
    switch (x->bit_size) {
    case 16:
@@ -83,10 +83,10 @@ lower_frexp_sig(nir_builder *b, nir_ssa_def *x)
       /* We only need to deal with the exponent so first we extract the upper
        * 32 bits using nir_unpack_64_2x32_split_y.
        */
-      nir_ssa_def *upper_x = nir_unpack_64_2x32_split_y(b, x);
+      nir_def *upper_x = nir_unpack_64_2x32_split_y(b, x);
 
       /* If x is ±0, ±Inf, or NaN, return x unmodified. */
-      nir_ssa_def *new_upper =
+      nir_def *new_upper =
          nir_bcsel(b,
                    nir_iand(b,
                             nir_flt(b, zero, abs_x),
@@ -96,7 +96,7 @@ lower_frexp_sig(nir_builder *b, nir_ssa_def *x)
                            exponent_value),
                    upper_x);
 
-      nir_ssa_def *lower_x = nir_unpack_64_2x32_split_x(b, x);
+      nir_def *lower_x = nir_unpack_64_2x32_split_x(b, x);
 
       return nir_pack_64_2x32_split(b, lower_x, new_upper);
    } else {
@@ -112,43 +112,43 @@ lower_frexp_sig(nir_builder *b, nir_ssa_def *x)
    }
 }
 
-static nir_ssa_def *
-lower_frexp_exp(nir_builder *b, nir_ssa_def *x)
+static nir_def *
+lower_frexp_exp(nir_builder *b, nir_def *x)
 {
-   nir_ssa_def *abs_x = nir_fabs(b, x);
-   nir_ssa_def *zero = nir_imm_floatN_t(b, 0, x->bit_size);
-   nir_ssa_def *is_not_zero = nir_fneu(b, abs_x, zero);
-   nir_ssa_def *exponent;
+   nir_def *abs_x = nir_fabs(b, x);
+   nir_def *zero = nir_imm_floatN_t(b, 0, x->bit_size);
+   nir_def *is_not_zero = nir_fneu(b, abs_x, zero);
+   nir_def *exponent;
 
    switch (x->bit_size) {
    case 16: {
-      nir_ssa_def *exponent_shift = nir_imm_int(b, 10);
-      nir_ssa_def *exponent_bias = nir_imm_intN_t(b, -14, 16);
+      nir_def *exponent_shift = nir_imm_int(b, 10);
+      nir_def *exponent_bias = nir_imm_intN_t(b, -14, 16);
 
       /* Significand return must be of the same type as the input, but the
        * exponent must be a 32-bit integer.
        */
       exponent = nir_i2i32(b, nir_iadd(b, nir_ushr(b, abs_x, exponent_shift),
-                              nir_bcsel(b, is_not_zero, exponent_bias, zero)));
+                                       nir_bcsel(b, is_not_zero, exponent_bias, zero)));
       break;
    }
    case 32: {
-      nir_ssa_def *exponent_shift = nir_imm_int(b, 23);
-      nir_ssa_def *exponent_bias = nir_imm_int(b, -126);
+      nir_def *exponent_shift = nir_imm_int(b, 23);
+      nir_def *exponent_bias = nir_imm_int(b, -126);
 
       exponent = nir_iadd(b, nir_ushr(b, abs_x, exponent_shift),
-                             nir_bcsel(b, is_not_zero, exponent_bias, zero));
+                          nir_bcsel(b, is_not_zero, exponent_bias, zero));
       break;
    }
    case 64: {
-      nir_ssa_def *exponent_shift = nir_imm_int(b, 20);
-      nir_ssa_def *exponent_bias = nir_imm_int(b, -1022);
+      nir_def *exponent_shift = nir_imm_int(b, 20);
+      nir_def *exponent_bias = nir_imm_int(b, -1022);
 
-      nir_ssa_def *zero32 = nir_imm_int(b, 0);
-      nir_ssa_def *abs_upper_x = nir_unpack_64_2x32_split_y(b, abs_x);
+      nir_def *zero32 = nir_imm_int(b, 0);
+      nir_def *abs_upper_x = nir_unpack_64_2x32_split_y(b, abs_x);
 
       exponent = nir_iadd(b, nir_ushr(b, abs_upper_x, exponent_shift),
-                             nir_bcsel(b, is_not_zero, exponent_bias, zero32));
+                          nir_bcsel(b, is_not_zero, exponent_bias, zero32));
       break;
    }
    default:
@@ -165,7 +165,7 @@ lower_frexp_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
       return false;
 
    nir_alu_instr *alu_instr = nir_instr_as_alu(instr);
-   nir_ssa_def *lower;
+   nir_def *lower;
 
    b->cursor = nir_before_instr(instr);
 
@@ -180,7 +180,7 @@ lower_frexp_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
       return false;
    }
 
-   nir_ssa_def_rewrite_uses(&alu_instr->dest.dest.ssa, lower);
+   nir_def_rewrite_uses(&alu_instr->def, lower);
    nir_instr_remove(instr);
    return true;
 }
@@ -190,6 +190,6 @@ nir_lower_frexp(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_frexp_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        NULL);
 }

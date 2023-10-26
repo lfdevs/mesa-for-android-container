@@ -609,7 +609,9 @@ clSVMAlloc(cl_context d_ctx,
       void *ptr = nullptr;
       if (alignment < sizeof(void*))
          alignment = sizeof(void*);
-      posix_memalign(&ptr, alignment, size);
+      int ret = posix_memalign(&ptr, alignment, size);
+      if (ret)
+         return nullptr;
 
       if (ptr)
          ctx.add_svm_allocation(ptr, size);

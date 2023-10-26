@@ -36,6 +36,9 @@ CP_WAIT_MEM_WRITES:
 </domain>
 
 <domain name="A6XX_PIPE_REG" width="32">
+	<!-- This replaces RBBM_WAIT_FOR_GPU_IDLE_CMD starting with a650_sqe.fw -->
+	<reg32 name="WAIT_FOR_IDLE" offset="0x80" type="void"/>
+
 	<!-- This replaces CP_WFI_PEND_CTR on a3xx-a5xx -->
 	<reg32 name="WFI_PEND_DECR" offset="0x81" type="void"/>
 	<!-- This is only used for WRITE_PRIMITIVE_COUNTS/ZPASS_DONE events -->
@@ -78,6 +81,35 @@ CP_WAIT_MEM_WRITES:
 </domain>
 
 <domain name="A7XX_PIPE_REG" width="32">
+	<reg32 name="WFI_PEND_DECR" offset="0x81" type="void"/>
+	<reg32 name="WAIT_MEM_WRITES" offset="0x84" type="void"/>
+
+	<reg32 name="WAIT_FOR_IDLE" offset="0x87" type="void"/>
+
+	<reg64 name="NRT_ADDR" offset="0xa0"/>
+	<reg32 name="NRT_DATA" offset="0xa2"/>
+
+	<reg64 name="EVENT_TS_ADDR" offset="0xe8"/>
+	<reg32 name="EVENT_TS_CTRL" offset="0xea">
+		<enum name="a7xx_ts_memspace">
+			<value value="0" name="NO_MEMORY"/>
+			<value value="1" name="EXTERNAL_MEMORY"/>
+			<value value="2" name="ON_CHIP_MEMORY"/>
+		</enum>
+		<bitfield name="MEMSPACE" low="0" high="1" type="a7xx_ts_memspace"/>
+		<enum name="a7xx_ts_value">
+			<value value="0" name="NO_VALUE"/>
+			<value value="1" name="VALUE_DATA_32B"/> <!-- write low 32b of EVENT_TS_DATA -->
+			<value value="2" name="VALUE_DATA_64B"/> <!-- write all 64b of EVENT_TS_DATA -->
+			<value value="3" name="ALWAYS_ON"/> <!-- write CP_ALWAYS_ON_COUNTER -->
+			<value value="4" name="REGISTER"/> <!-- interpret EVENT_TS_DATA as a register offset/count -->
+		</enum>
+		<bitfield name="VALUE" low="3" high="5" type="a7xx_ts_value"/>
+		<bitfield name="INTERRUPT" pos="6" type="boolean"/>
+		<!-- which interrupt bit to trigger -->
+		<bitfield name="IRQNO" low="7" high="11"/>
+	</reg32>
+	<reg64 name="EVENT_TS_DATA" offset="0xeb"/>
 </domain>
 
 </database>

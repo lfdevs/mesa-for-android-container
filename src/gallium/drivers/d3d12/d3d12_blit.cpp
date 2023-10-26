@@ -661,14 +661,14 @@ get_stencil_resolve_fs(struct d3d12_context *ctx, bool no_flip)
    sampler->data.binding = 0;
    sampler->data.explicit_binding = true;
 
-   nir_ssa_def *tex_deref = &nir_build_deref_var(&b, sampler)->dest.ssa;
+   nir_def *tex_deref = &nir_build_deref_var(&b, sampler)->def;
 
    nir_variable *pos_in = nir_variable_create(b.shader, nir_var_shader_in,
                                               glsl_vec4_type(), "pos");
    pos_in->data.location = VARYING_SLOT_POS; // VARYING_SLOT_VAR0?
-   nir_ssa_def *pos = nir_load_var(&b, pos_in);
+   nir_def *pos = nir_load_var(&b, pos_in);
 
-   nir_ssa_def *pos_src;
+   nir_def *pos_src;
 
    if (no_flip)
       pos_src = pos;
@@ -680,7 +680,7 @@ get_stencil_resolve_fs(struct d3d12_context *ctx, bool no_flip)
       txs->is_array = false;
       txs->dest_type = nir_type_int;
 
-      nir_ssa_dest_init(&txs->instr, &txs->dest, 2, 32);
+      nir_def_init(&txs->instr, &txs->def, 2, 32);
       nir_builder_instr_insert(&b, &txs->instr);
 
       pos_src = nir_vec4(&b,
@@ -688,7 +688,7 @@ get_stencil_resolve_fs(struct d3d12_context *ctx, bool no_flip)
                          /*Height - pos_dest.y - 1*/
                          nir_fsub(&b,
                                   nir_fsub(&b,
-                                           nir_channel(&b, nir_i2f32(&b, &txs->dest.ssa), 1),
+                                           nir_channel(&b, nir_i2f32(&b, &txs->def), 1),
                                            nir_channel(&b, pos, 1)),
                                   nir_imm_float(&b, 1.0)),
                          nir_channel(&b, pos, 2),
@@ -706,10 +706,10 @@ get_stencil_resolve_fs(struct d3d12_context *ctx, bool no_flip)
    tex->is_array = false;
    tex->coord_components = 2;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
    nir_builder_instr_insert(&b, &tex->instr);
 
-   nir_store_var(&b, stencil_out, nir_channel(&b, &tex->dest.ssa, 1), 0x1);
+   nir_store_var(&b, stencil_out, nir_channel(&b, &tex->def, 1), 0x1);
 
    struct pipe_shader_state state = {};
    state.type = PIPE_SHADER_IR_NIR;

@@ -33,6 +33,7 @@
 #include "util/u_debug.h"
 #include "util/hash_table.h"
 #include "pipe/p_context.h"
+#include "pipe/p_video_codec.h"
 #include "util/u_threaded_context.h"
 
 #include "tr_screen.h"

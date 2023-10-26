@@ -13,6 +13,9 @@ pub struct PipeTransfer {
     is_buffer: bool,
 }
 
+// SAFETY: Transfers are safe to send between threads
+unsafe impl Send for PipeTransfer {}
+
 pub struct GuardedPipeTransfer<'a> {
     inner: PipeTransfer,
     ctx: &'a PipeContext,

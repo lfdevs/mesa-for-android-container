@@ -94,9 +94,7 @@ fd6_emit_flushes(struct fd_context *ctx, struct fd_ringbuffer *ring,
    if (flushes & FD6_WAIT_MEM_WRITES)
       OUT_PKT7(ring, CP_WAIT_MEM_WRITES, 0);
 
-   if ((flushes & FD6_WAIT_FOR_IDLE) ||
-       (ctx->screen->info->a6xx.has_ccu_flush_bug &&
-        (flushes & (FD6_FLUSH_CCU_COLOR | FD6_FLUSH_CCU_DEPTH))))
+   if (flushes & FD6_WAIT_FOR_IDLE)
       OUT_PKT7(ring, CP_WAIT_FOR_IDLE, 0);
 
    if (flushes & FD6_WAIT_FOR_ME)

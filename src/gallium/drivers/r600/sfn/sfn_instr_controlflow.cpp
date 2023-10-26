@@ -152,6 +152,16 @@ IfInstr::is_equal_to(const IfInstr& rhs) const
    return m_predicate->equal_to(*rhs.m_predicate);
 }
 
+uint32_t IfInstr::slots() const
+{
+   /* If we hava a literal value in the predicate evaluation, then
+    * we need at most two alu slots, otherwise it's just one. */
+   for (auto s : m_predicate->sources())
+      if (s->as_literal())
+         return 2;
+   return 1;
+};
+
 void
 IfInstr::accept(ConstInstrVisitor& visitor) const
 {

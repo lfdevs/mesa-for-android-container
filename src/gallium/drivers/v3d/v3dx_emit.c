@@ -512,13 +512,17 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         /* Note: EZ state may update based on the compiled FS,
                          * along with ZSA
                          */
+#if V3D_VERSION <= 42
                         config.early_z_updates_enable =
                                 (job->ez_state != V3D_EZ_DISABLED);
+#endif
                         if (v3d->zsa->base.depth_enabled) {
                                 config.z_updates_enable =
                                         v3d->zsa->base.depth_writemask;
+#if V3D_VERSION <= 42
                                 config.early_z_enable =
                                         config.early_z_updates_enable;
+#endif
                                 config.depth_test_function =
                                         v3d->zsa->base.depth_func;
                         } else {
@@ -535,13 +539,28 @@ v3dX(emit_state)(struct pipe_context *pctx)
                                 v3d_line_smoothing_enabled(v3d) ?
                                 V3D_LINE_RASTERIZATION_PERP_END_CAPS :
                                 V3D_LINE_RASTERIZATION_DIAMOND_EXIT;
-                }
 
+#if V3D_VERSION >= 71
+                        /* The following follows the logic implemented in v3dv
+                         * plus the definition of depth_clip_near/far and
+                         * depth_clamp.
+                         *
+                         * Note: some extensions are not supported by v3d
+                         * (like ARB_depth_clamp) that would affect this, but
+                         * the values on rasterizer are taking that into
+                         * account.
+                         */
+                        config.z_clipping_mode = v3d->rasterizer->base.depth_clip_near ||
+                           v3d->rasterizer->base.depth_clip_far ?
+                           V3D_Z_CLIP_MODE_MIN_ONE_TO_ONE : V3D_Z_CLIP_MODE_NONE;
+#endif
+                }
         }
 
         if (v3d->dirty & V3D_DIRTY_RASTERIZER &&
             v3d->rasterizer->base.offset_tri) {
-                if (job->zsbuf &&
+                if (v3d->screen->devinfo.ver <= 42 &&
+                    job->zsbuf &&
                     job->zsbuf->format == PIPE_FORMAT_Z16_UNORM) {
                         cl_emit_prepacked_sized(&job->bcl,
                                                 v3d->rasterizer->depth_offset_z16,
@@ -564,12 +583,23 @@ v3dX(emit_state)(struct pipe_context *pctx)
         }
 
         if (v3d->dirty & V3D_DIRTY_VIEWPORT) {
+#if V3D_VERSION <= 42
                 cl_emit(&job->bcl, CLIPPER_XY_SCALING, clip) {
                         clip.viewport_half_width_in_1_256th_of_pixel =
                                 v3d->viewport.scale[0] * 256.0f;
                         clip.viewport_half_height_in_1_256th_of_pixel =
                                 v3d->viewport.scale[1] * 256.0f;
                 }
+#endif
+#if V3D_VERSION >= 71
+                cl_emit(&job->bcl, CLIPPER_XY_SCALING, clip) {
+                        clip.viewport_half_width_in_1_64th_of_pixel =
+                                v3d->viewport.scale[0] * 64.0f;
+                        clip.viewport_half_height_in_1_64th_of_pixel =
+                                v3d->viewport.scale[1] * 64.0f;
+                }
+#endif
+
 
                 cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET, clip) {
                         clip.viewport_z_offset_zc_to_zs =
@@ -633,8 +663,10 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         }
 #endif
 
+                        const uint32_t max_rts =
+                                V3D_MAX_RENDER_TARGETS(v3d->screen->devinfo.ver);
                         if (blend->base.independent_blend_enable) {
-                                for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++)
+                                for (int i = 0; i < max_rts; i++)
                                         emit_rt_blend(v3d, job, &blend->base, i,
                                                       (1 << i),
                                                       v3d->blend_dst_alpha_one & (1 << i));
@@ -650,16 +682,16 @@ v3dX(emit_state)(struct pipe_context *pctx)
                                  * RTs without.
                                  */
                                 emit_rt_blend(v3d, job, &blend->base, 0,
-                                              ((1 << V3D_MAX_DRAW_BUFFERS) - 1) &
+                                              ((1 << max_rts) - 1) &
                                                    v3d->blend_dst_alpha_one,
                                               true);
                                 emit_rt_blend(v3d, job, &blend->base, 0,
-                                              ((1 << V3D_MAX_DRAW_BUFFERS) - 1) &
+                                              ((1 << max_rts) - 1) &
                                                    ~v3d->blend_dst_alpha_one,
                                               false);
                         } else {
                                 emit_rt_blend(v3d, job, &blend->base, 0,
-                                              (1 << V3D_MAX_DRAW_BUFFERS) - 1,
+                                              (1 << max_rts) - 1,
                                               v3d->blend_dst_alpha_one);
                         }
                 }
@@ -668,8 +700,10 @@ v3dX(emit_state)(struct pipe_context *pctx)
         if (v3d->dirty & V3D_DIRTY_BLEND) {
                 struct pipe_blend_state *blend = &v3d->blend->base;
 
+                const uint32_t max_rts =
+                        V3D_MAX_RENDER_TARGETS(v3d->screen->devinfo.ver);
                 cl_emit(&job->bcl, COLOR_WRITE_MASKS, mask) {
-                        for (int i = 0; i < 4; i++) {
+                        for (int i = 0; i < max_rts; i++) {
                                 int rt = blend->independent_blend_enable ? i : 0;
                                 int rt_mask = blend->rt[rt].colormask;
 

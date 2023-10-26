@@ -113,14 +113,14 @@ struct intel_measure_snapshot {
    unsigned count, event_count;
    const char* event_name;
    uint32_t renderpass;
-   uintptr_t vs, tcs, tes, gs, fs, cs, ms, ts;
+   uint32_t vs, tcs, tes, gs, fs, cs, ms, ts;
    /* for vulkan secondary command buffers */
    struct intel_measure_batch *secondary;
 };
 
 struct intel_measure_buffered_result {
    struct intel_measure_snapshot snapshot;
-   uint64_t start_ts, end_ts, idle_duration;
+   uint64_t start_ts, end_ts, idle_duration, batch_size;
    unsigned frame, batch_count, event_index, primary_renderpass;
 ;
 };
@@ -155,6 +155,7 @@ struct intel_measure_batch {
    struct list_head link;
    unsigned index;
    unsigned frame, batch_count, event_count;
+   uint64_t batch_size;
    uint32_t renderpass, primary_renderpass;
    uint64_t *timestamps;
    struct intel_measure_snapshot snapshots[0];
@@ -163,9 +164,9 @@ struct intel_measure_batch {
 void intel_measure_init(struct intel_measure_device *device);
 const char * intel_measure_snapshot_string(enum intel_measure_snapshot_type type);
 bool intel_measure_state_changed(const struct intel_measure_batch *batch,
-                                 uintptr_t vs, uintptr_t tcs, uintptr_t tes,
-                                 uintptr_t gs, uintptr_t fs, uintptr_t cs,
-                                 uintptr_t ms, uintptr_t ts);
+                                 uint32_t vs, uint32_t tcs, uint32_t tes,
+                                 uint32_t gs, uint32_t fs, uint32_t cs,
+                                 uint32_t ms, uint32_t ts);
 void intel_measure_frame_transition(unsigned frame);
 
 bool intel_measure_ready(struct intel_measure_batch *batch);
@@ -173,6 +174,7 @@ bool intel_measure_ready(struct intel_measure_batch *batch);
 struct intel_device_info;
 void intel_measure_print_cpu_result(unsigned int frame,
                                     unsigned int batch_count,
+                                    uint64_t batch_size,
                                     unsigned int event_index,
                                     unsigned int event_count,
                                     unsigned int count,

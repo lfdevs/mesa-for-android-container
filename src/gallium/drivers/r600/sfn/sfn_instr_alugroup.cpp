@@ -486,7 +486,7 @@ AluGroup::slots() const
    }
    if (m_addr_used) {
       ++result;
-      if (m_addr_is_index)
+      if (m_addr_is_index && s_max_slots == 5)
          ++result;
    }
 

@@ -31,6 +31,11 @@
         This file contains any EGL extension functions that are missing from
         the normal egl.xml list.
     </comment>
+    <types>
+        <type>struct <name>mesa_glinterop_device_info</name>;</type>
+        <type>struct <name>mesa_glinterop_export_in</name>;</type>
+        <type>struct <name>mesa_glinterop_export_out</name>;</type>
+    </types>
     <commands namespace="EGL">
         <!-- EGL_WL_bind_wayland_display -->
         <command>
@@ -76,6 +81,29 @@
             <param><ptype>EGLSurface</ptype> <name>surface</name></param>
             <param><ptype>EGLint *</ptype> <name>numerator</name></param>
             <param><ptype>EGLint *</ptype> <name>denominator</name></param>
+        </command>
+
+        <!-- EGL_MESA_gl_interop -->
+        <command>
+            <proto><ptype>EGLint</ptype> <name>eglGLInteropQueryDeviceInfoMESA</name></proto>
+            <param><ptype>EGLDisplay</ptype> <name>dpy</name></param>
+            <param><ptype>EGLContext</ptype> <name>ctx</name></param>
+            <param>struct <ptype>mesa_glinterop_device_info</ptype> *<name>out</name></param>
+        </command>
+        <command>
+            <proto><ptype>EGLint</ptype> <name>eglGLInteropExportObjectMESA</name></proto>
+            <param><ptype>EGLDisplay</ptype> <name>dpy</name></param>
+            <param><ptype>EGLContext</ptype> <name>ctx</name></param>
+            <param>struct <ptype>mesa_glinterop_export_in</ptype> *<name>in</name></param>
+            <param>struct <ptype>mesa_glinterop_export_out</ptype> *<name>out</name></param>
+        </command>
+        <command>
+            <proto><ptype>EGLint</ptype> <name>eglGLInteropFlushObjectsMESA</name></proto>
+            <param><ptype>EGLDisplay</ptype> <name>dpy</name></param>
+            <param><ptype>EGLContext</ptype> <name>ctx</name></param>
+            <param>unsigned <name>count</name></param>
+            <param>struct <ptype>mesa_glinterop_export_in</ptype> *<name>objects</name></param>
+            <param>GLsync *<name>sync</name></param>
         </command>
     </commands>
 </registry>

@@ -155,23 +155,25 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name,
    int err;
 
    /* Before doing anything else, ensure that with
-    * MESA_SHADER_CACHE_DISABLE set to true, that disk_cache_create returns NULL.
+    * MESA_SHADER_CACHE_DISABLE set to true, that disk_cache_create returns NO-OP cache.
     */
    setenv("MESA_SHADER_CACHE_DISABLE", "true", 1);
    cache = disk_cache_create("test", driver_id, 0);
-   EXPECT_EQ(cache, nullptr) << "disk_cache_create with MESA_SHADER_CACHE_DISABLE set";
+   EXPECT_EQ(cache->type, DISK_CACHE_NONE) << "disk_cache_create with MESA_SHADER_CACHE_DISABLE set";
+   disk_cache_destroy(cache);
 
    unsetenv("MESA_SHADER_CACHE_DISABLE");
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
    /* With SHADER_CACHE_DISABLE_BY_DEFAULT, ensure that with
-    * MESA_SHADER_CACHE_DISABLE set to nothing, disk_cache_create returns NULL.
+    * MESA_SHADER_CACHE_DISABLE set to nothing, disk_cache_create returns NO-OP cache.
     */
    unsetenv("MESA_SHADER_CACHE_DISABLE");
    cache = disk_cache_create("test", driver_id, 0);
-   EXPECT_EQ(cache, nullptr)
+   EXPECT_EQ(cache->type, DISK_CACHE_NONE)
       << "disk_cache_create with MESA_SHADER_CACHE_DISABLE unset "
          "and SHADER_CACHE_DISABLE_BY_DEFAULT build option";
+   disk_cache_destroy(cache);
 
    /* For remaining tests, ensure that the cache is enabled. */
    setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
@@ -1271,6 +1273,66 @@ TEST_F(Cache, DatabaseMultipartEviction)
 
    unsetenv("MESA_DISK_CACHE_DATABASE_NUM_PARTS");
    unsetenv("MESA_DISK_CACHE_DATABASE");
+
+   int err = rmrf_local(CACHE_TEST_TMP);
+   EXPECT_EQ(err, 0) << "Removing " CACHE_TEST_TMP " again";
+#endif
+}
+
+static void
+test_put_and_get_disabled(const char *driver_id)
+{
+   struct disk_cache *cache;
+   char blob[] = "This is a blob of thirty-seven bytes";
+   uint8_t blob_key[20];
+   char *result;
+   size_t size;
+
+   cache = disk_cache_create("test", driver_id, 0);
+
+   disk_cache_compute_key(cache, blob, sizeof(blob), blob_key);
+
+   /* Ensure that disk_cache_get returns nothing before anything is added. */
+   result = (char *) disk_cache_get(cache, blob_key, &size);
+   EXPECT_EQ(result, nullptr) << "disk_cache_get with non-existent item (pointer)";
+   EXPECT_EQ(size, 0) << "disk_cache_get with non-existent item (size)";
+
+   /* Simple test of put and get. */
+   disk_cache_put(cache, blob_key, blob, sizeof(blob), NULL);
+
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
+
+   result = (char *) disk_cache_get(cache, blob_key, &size);
+   EXPECT_STREQ(result, nullptr) << "disk_cache_get of existing item (pointer)";
+   EXPECT_EQ(size, 0) << "disk_cache_get of existing item (size)";
+
+   disk_cache_destroy(cache);
+}
+
+TEST_F(Cache, Disabled)
+{
+   const char *driver_id = "make_check";
+
+#ifndef ENABLE_SHADER_CACHE
+   GTEST_SKIP() << "ENABLE_SHADER_CACHE not defined.";
+#else
+   setenv("MESA_DISK_CACHE_SINGLE_FILE", "true", 1);
+
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
+
+   test_disk_cache_create(mem_ctx, CACHE_DIR_NAME_SF, driver_id);
+
+   test_put_and_get(false, driver_id);
+
+   setenv("MESA_SHADER_CACHE_DISABLE", "true", 1);
+
+   test_put_and_get_disabled(driver_id);
+
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
+   setenv("MESA_DISK_CACHE_SINGLE_FILE", "false", 1);
 
    int err = rmrf_local(CACHE_TEST_TMP);
    EXPECT_EQ(err, 0) << "Removing " CACHE_TEST_TMP " again";

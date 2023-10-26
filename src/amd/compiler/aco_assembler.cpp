@@ -795,8 +795,7 @@ emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction* inst
          encoding |= dpp.neg[1] << 22;
          encoding |= dpp.abs[0] << 21;
          encoding |= dpp.neg[0] << 20;
-         if (ctx.gfx_level >= GFX10)
-            encoding |= 1 << 18; /* set Fetch Inactive to match GFX9 behaviour */
+         encoding |= dpp.fetch_inactive << 18;
          encoding |= dpp.bound_ctrl << 19;
          encoding |= dpp.dpp_ctrl << 8;
          encoding |= reg(ctx, dpp_op, 8);
@@ -809,13 +808,12 @@ emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction* inst
 
          /* first emit the instruction without the DPP operand */
          Operand dpp_op = instr->operands[0];
-         instr->operands[0] = Operand(PhysReg{234}, v1);
+         instr->operands[0] = Operand(PhysReg{233u + dpp.fetch_inactive}, v1);
          instr->format = (Format)((uint16_t)instr->format & ~(uint16_t)Format::DPP8);
          emit_instruction(ctx, out, instr);
          uint32_t encoding = reg(ctx, dpp_op, 8);
          encoding |= dpp.opsel[0] && !instr->isVOP3() ? 128 : 0;
-         for (unsigned i = 0; i < 8; ++i)
-            encoding |= dpp.lane_sel[i] << (8 + i * 3);
+         encoding |= dpp.lane_sel << 8;
          out.push_back(encoding);
          return;
       } else if (instr->isVOP3()) {
@@ -1003,20 +1001,20 @@ fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
                   break;
                }
             } else {
-               if (!program->info.ps.has_epilog) {
-                  exp.done = true;
-                  exp.valid_mask = true;
-               }
+               exp.done = true;
+               exp.valid_mask = true;
                exported = true;
                break;
             }
          } else if ((*it)->definitions.size() && (*it)->definitions[0].physReg() == exec) {
             break;
          } else if ((*it)->opcode == aco_opcode::s_setpc_b64) {
-            /* Do not abort if the main FS has an epilog because it only
-             * exports MRTZ (if present) and the epilog exports colors.
+            /* Do not abort for VS/TES as NGG if they are non-monolithic shaders
+             * because a jump would be emitted.
              */
-            exported |= program->stage.hw == AC_HW_PIXEL_SHADER && program->info.ps.has_epilog;
+            exported |= (program->stage.sw == SWStage::VS || program->stage.sw == SWStage::TES) &&
+                        program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER &&
+                        program->info.merged_shader_compiled_separately;
          }
          ++it;
       }
@@ -1209,6 +1207,13 @@ fix_constaddrs(asm_context& ctx, std::vector<uint32_t>& out)
    for (auto& constaddr : ctx.constaddrs) {
       constaddr_info& info = constaddr.second;
       out[info.add_literal] += (out.size() - info.getpc_end) * 4u;
+
+      if (ctx.symbols) {
+         struct aco_symbol sym;
+         sym.id = aco_symbol_const_data_addr;
+         sym.offset = info.add_literal;
+         ctx.symbols->push_back(sym);
+      }
    }
    for (auto& addr : ctx.resumeaddrs) {
       constaddr_info& info = addr.second;
@@ -1283,12 +1288,15 @@ align_block(asm_context& ctx, std::vector<uint32_t>& code, Block& block)
 }
 
 unsigned
-emit_program(Program* program, std::vector<uint32_t>& code, std::vector<struct aco_symbol>* symbols)
+emit_program(Program* program, std::vector<uint32_t>& code, std::vector<struct aco_symbol>* symbols,
+             bool append_endpgm)
 {
    asm_context ctx(program, symbols);
 
-   if (program->stage.hw == AC_HW_VERTEX_SHADER || program->stage.hw == AC_HW_PIXEL_SHADER ||
-       program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER)
+   /* Prolog has no exports. */
+   if (!program->is_prolog && !program->info.has_epilog &&
+       (program->stage.hw == AC_HW_VERTEX_SHADER || program->stage.hw == AC_HW_PIXEL_SHADER ||
+        program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER))
       fix_exports(ctx, code, program);
 
    for (Block& block : program->blocks) {
@@ -1302,7 +1310,8 @@ emit_program(Program* program, std::vector<uint32_t>& code, std::vector<struct a
    unsigned exec_size = code.size() * sizeof(uint32_t);
 
    /* Add end-of-code markers for the UMR disassembler. */
-   code.resize(code.size() + 5, 0xbf9f0000u);
+   if (append_endpgm)
+      code.resize(code.size() + 5, 0xbf9f0000u);
 
    fix_constaddrs(ctx, code);
 

@@ -51,7 +51,7 @@ radv_nir_lower_viewport_to_zero(nir_shader *nir)
 
          b.cursor = nir_before_instr(instr);
 
-         nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_imm_zero(&b, 1, 32));
+         nir_def_rewrite_uses(&intr->def, nir_imm_zero(&b, 1, 32));
          progress = true;
          break;
       }

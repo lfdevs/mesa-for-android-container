@@ -109,6 +109,9 @@ void radv_device_finish_accel_struct_build_state(struct radv_device *device);
 VkResult radv_device_init_meta_etc_decode_state(struct radv_device *device, bool on_demand);
 void radv_device_finish_meta_etc_decode_state(struct radv_device *device);
 
+VkResult radv_device_init_meta_astc_decode_state(struct radv_device *device, bool on_demand);
+void radv_device_finish_meta_astc_decode_state(struct radv_device *device);
+
 VkResult radv_device_init_dgc_prepare_state(struct radv_device *device);
 void radv_device_finish_dgc_prepare_state(struct radv_device *device);
 
@@ -220,6 +223,8 @@ void radv_update_buffer_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, cons
 
 void radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
                           const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
+void radv_meta_decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
+                           const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
 
 /**
  * Return whether the bound pipeline is the FMASK decompress pass.
@@ -261,13 +266,13 @@ nir_shader *radv_meta_build_nir_vs_generate_vertices(struct radv_device *dev);
 nir_shader *radv_meta_build_nir_fs_noop(struct radv_device *dev);
 
 void radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer, int samples,
-                                         nir_variable *input_img, nir_variable *color, nir_ssa_def *img_coord);
+                                         nir_variable *input_img, nir_variable *color, nir_def *img_coord);
 
-nir_ssa_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding);
+nir_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding);
 
-nir_ssa_def *get_global_ids(nir_builder *b, unsigned num_components);
+nir_def *get_global_ids(nir_builder *b, unsigned num_components);
 
-void radv_break_on_count(nir_builder *b, nir_variable *var, nir_ssa_def *count);
+void radv_break_on_count(nir_builder *b, nir_variable *var, nir_def *count);
 
 #ifdef __cplusplus
 }

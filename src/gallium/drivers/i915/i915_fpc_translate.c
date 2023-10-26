@@ -33,11 +33,13 @@
 #include "i915_fpc.h"
 #include "i915_reg.h"
 
+#include "nir/nir.h"
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "util/log.h"
+#include "util/ralloc.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -95,15 +97,10 @@ i915_use_passthrough_shader(struct i915_fragment_shader *fs)
 void
 i915_program_error(struct i915_fp_compile *p, const char *msg, ...)
 {
-   if (p->log_program_errors) {
-      va_list args;
-
-      va_start(args, msg);
-      mesa_loge_v(msg, args);
-      va_end(args);
-   }
-
-   p->error = 1;
+   va_list args;
+   va_start(args, msg);
+   ralloc_vasprintf_append(&p->error, msg, args);
+   va_end(args);
 }
 
 static uint32_t
@@ -202,19 +199,11 @@ src_vector(struct i915_fp_compile *p,
    case TGSI_FILE_IMMEDIATE: {
       assert(index < p->num_immediates);
 
-      uint8_t swiz[4] = {
-         source->Register.SwizzleX,
-         source->Register.SwizzleY,
-         source->Register.SwizzleZ,
-         source->Register.SwizzleW
-      };
+      uint8_t swiz[4] = {source->Register.SwizzleX, source->Register.SwizzleY,
+                         source->Register.SwizzleZ, source->Register.SwizzleW};
 
-      uint8_t neg[4] = {
-         source->Register.Negate,
-         source->Register.Negate,
-         source->Register.Negate,
-         source->Register.Negate
-      };
+      uint8_t neg[4] = {source->Register.Negate, source->Register.Negate,
+                        source->Register.Negate, source->Register.Negate};
 
       unsigned i;
 
@@ -234,9 +223,9 @@ src_vector(struct i915_fp_compile *p,
       }
 
       if (i == 4) {
-         return negate(swizzle(UREG(REG_TYPE_R, 0),
-                               swiz[0], swiz[1], swiz[2], swiz[3]),
-                       neg[0], neg[1], neg[2], neg[3]);
+         return negate(
+            swizzle(UREG(REG_TYPE_R, 0), swiz[0], swiz[1], swiz[2], swiz[3]),
+            neg[0], neg[1], neg[2], neg[3]);
       }
 
       index = p->immediates_map[index];
@@ -564,12 +553,12 @@ i915_translate_instruction(struct i915_fp_compile *p,
       src0 = src_vector(p, &inst->Src[0], fs);
       tmp = i915_get_utemp(p);
 
-      i915_emit_texld(p, tmp,              /* dest reg: a dummy reg */
-                      A0_DEST_CHANNEL_ALL, /* dest writemask */
-                      0,                   /* sampler */
-                      src0,                /* coord*/
-                      T0_TEXKILL,          /* opcode */
-                      TGSI_WRITEMASK_XYZW);/* coord_mask */
+      i915_emit_texld(p, tmp,               /* dest reg: a dummy reg */
+                      A0_DEST_CHANNEL_ALL,  /* dest writemask */
+                      0,                    /* sampler */
+                      src0,                 /* coord*/
+                      T0_TEXKILL,           /* opcode */
+                      TGSI_WRITEMASK_XYZW); /* coord_mask */
       break;
 
    case TGSI_OPCODE_KILL:
@@ -706,8 +695,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
       break;
 
    case TGSI_OPCODE_SEQ: {
-      const uint32_t zero = swizzle(UREG(REG_TYPE_R, 0),
-                                    SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
+      const uint32_t zero =
+         swizzle(UREG(REG_TYPE_R, 0), SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
 
       /* if we're both >= and <= then we're == */
       src0 = src_vector(p, &inst->Src[0], fs);
@@ -724,8 +713,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
          i915_emit_arith(p, A0_MAX, tmp, A0_DEST_CHANNEL_ALL, 0, src0,
                          negate(src0, 1, 1, 1, 1), 0);
          i915_emit_arith(p, A0_SGE, get_result_vector(p, &inst->Dst[0]),
-                         get_result_flags(inst), 0,
-                         negate(tmp, 1, 1, 1, 1), zero, 0);
+                         get_result_flags(inst), 0, negate(tmp, 1, 1, 1, 1),
+                         zero, 0);
       } else {
          i915_emit_arith(p, A0_SGE, tmp, A0_DEST_CHANNEL_ALL, 0, src0, src1, 0);
 
@@ -759,8 +748,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
       break;
 
    case TGSI_OPCODE_SNE: {
-      const uint32_t zero = swizzle(UREG(REG_TYPE_R, 0),
-                                    SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
+      const uint32_t zero =
+         swizzle(UREG(REG_TYPE_R, 0), SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
 
       /* if we're < or > then we're != */
       src0 = src_vector(p, &inst->Src[0], fs);
@@ -777,8 +766,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
          i915_emit_arith(p, A0_MAX, tmp, A0_DEST_CHANNEL_ALL, 0, src0,
                          negate(src0, 1, 1, 1, 1), 0);
          i915_emit_arith(p, A0_SLT, get_result_vector(p, &inst->Dst[0]),
-                         get_result_flags(inst), 0,
-                         negate(tmp, 1, 1, 1, 1), zero, 0);
+                         get_result_flags(inst), 0, negate(tmp, 1, 1, 1, 1),
+                         zero, 0);
       } else {
          i915_emit_arith(p, A0_SLT, tmp, A0_DEST_CHANNEL_ALL, 0, src0, src1, 0);
 
@@ -938,18 +927,19 @@ i915_translate_instructions(struct i915_fp_compile *p,
                             struct i915_fragment_shader *fs)
 {
    int i;
-   for (i = 0; i < tokens->NumTokens && !p->error; i++) {
+   for (i = 0; i < tokens->NumTokens && !p->error[0]; i++) {
       i915_translate_token(p, &tokens->Tokens[i], fs);
    }
 }
 
 static struct i915_fp_compile *
-i915_init_compile(struct i915_context *i915, struct i915_fragment_shader *ifs)
+i915_init_compile(struct i915_fragment_shader *ifs)
 {
    struct i915_fp_compile *p = CALLOC_STRUCT(i915_fp_compile);
    int i;
 
    p->shader = ifs;
+   p->error = ralloc_strdup(NULL, "");
 
    /* Put new constants at end of const buffer, growing downward.
     * The problem is we don't know how many user-defined constants might
@@ -964,8 +954,6 @@ i915_init_compile(struct i915_context *i915, struct i915_fragment_shader *ifs)
 
    for (i = 0; i < I915_TEX_UNITS; i++)
       ifs->texcoords[i].semantic = -1;
-
-   p->log_program_errors = !i915->no_log_program_errors;
 
    p->first_instruction = true;
 
@@ -997,17 +985,26 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
    unsigned long program_size = (unsigned long)(p->csr - p->program);
    unsigned long decl_size = (unsigned long)(p->decl - p->declarations);
 
-   if (p->nr_tex_indirect > I915_MAX_TEX_INDIRECT)
-      debug_printf("Exceeded max nr indirect texture lookups\n");
+   if (p->nr_tex_indirect > I915_MAX_TEX_INDIRECT) {
+      i915_program_error(p,
+                         "Exceeded max nr indirect texture lookups (%d/%d)\n",
+                         p->nr_tex_indirect, I915_MAX_TEX_INDIRECT);
+   }
 
-   if (p->nr_tex_insn > I915_MAX_TEX_INSN)
-      i915_program_error(p, "Exceeded max TEX instructions");
+   if (p->nr_tex_insn > I915_MAX_TEX_INSN) {
+      i915_program_error(p, "Exceeded max TEX instructions (%d/%d)",
+                         p->nr_tex_insn, I915_MAX_TEX_INSN);
+   }
 
-   if (p->nr_alu_insn > I915_MAX_ALU_INSN)
-      i915_program_error(p, "Exceeded max ALU instructions");
+   if (p->nr_alu_insn > I915_MAX_ALU_INSN) {
+      i915_program_error(p, "Exceeded max ALU instructions (%d/%d)",
+                         p->nr_alu_insn, I915_MAX_ALU_INSN);
+   }
 
-   if (p->nr_decl_insn > I915_MAX_DECL_INSN)
-      i915_program_error(p, "Exceeded max DECL instructions");
+   if (p->nr_decl_insn > I915_MAX_DECL_INSN) {
+      i915_program_error(p, "Exceeded max DECL instructions (%d/%d)",
+                         p->nr_decl_insn, I915_MAX_DECL_INSN);
+   }
 
    /* hw doesn't seem to like empty frag programs (num_instructions == 1 is just
     * TGSI_END), even when the depth write fixup gets emitted below - maybe that
@@ -1016,7 +1013,7 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
    if (ifs->info.num_instructions == 1)
       i915_program_error(p, "Empty fragment shader");
 
-   if (p->error) {
+   if (strlen(p->error) != 0) {
       p->NumNativeInstructions = 0;
       p->NumNativeAluInstructions = 0;
       p->NumNativeTexInstructions = 0;
@@ -1043,14 +1040,21 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
       memcpy(&ifs->program[decl_size], p->program,
              program_size * sizeof(uint32_t));
 
-      util_debug_message(
-         &i915->debug, SHADER_INFO,
-         "%s shader: %d inst, %d tex, %d tex_indirect, %d temps, %d const",
-         _mesa_shader_stage_to_abbrev(MESA_SHADER_FRAGMENT), (int)program_size,
-         p->nr_tex_insn, p->nr_tex_indirect,
-         p->shader->info.file_max[TGSI_FILE_TEMPORARY] + 1,
-         ifs->num_constants);
+      if (i915) {
+         util_debug_message(
+            &i915->debug, SHADER_INFO,
+            "%s shader: %d inst, %d tex, %d tex_indirect, %d temps, %d const",
+            _mesa_shader_stage_to_abbrev(MESA_SHADER_FRAGMENT),
+            (int)program_size, p->nr_tex_insn, p->nr_tex_indirect,
+            p->shader->info.file_max[TGSI_FILE_TEMPORARY] + 1,
+            ifs->num_constants);
+      }
    }
+
+   if (strlen(p->error) != 0)
+      ifs->error = p->error;
+   else
+      ralloc_free(p->error);
 
    /* Release the compilation struct:
     */
@@ -1087,13 +1091,15 @@ i915_translate_fragment_program(struct i915_context *i915,
    struct i915_fp_compile *p;
    const struct tgsi_token *tokens = fs->state.tokens;
    struct i915_token_list *i_tokens;
+   bool debug =
+      I915_DBG_ON(DBG_FS) && (!fs->internal || NIR_DEBUG(PRINT_INTERNAL));
 
-   if (I915_DBG_ON(DBG_FS)) {
+   if (debug) {
       mesa_logi("TGSI fragment shader:");
       tgsi_dump(tokens, 0);
    }
 
-   p = i915_init_compile(i915, fs);
+   p = i915_init_compile(fs);
 
    i_tokens = i915_optimize(tokens);
    i915_translate_instructions(p, i_tokens, fs);
@@ -1102,7 +1108,10 @@ i915_translate_fragment_program(struct i915_context *i915,
    i915_fini_compile(i915, p);
    i915_optimize_free(i_tokens);
 
-   if (I915_DBG_ON(DBG_FS)) {
+   if (debug) {
+      if (fs->error)
+         mesa_loge("%s", fs->error);
+
       mesa_logi("i915 fragment shader with %d constants%s", fs->num_constants,
                 fs->num_constants ? ":" : "");
 

@@ -88,15 +88,12 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
 
    if (!workgroup_size_variable) {
       if (state.spilled[simd]) {
-         state.error[simd] = ralloc_asprintf(
-            state.mem_ctx, "SIMD%u skipped because would spill", width);
+         state.error[simd] = "Would spill";
          return false;
       }
 
       if (state.required_width && state.required_width != width) {
-         state.error[simd] = ralloc_asprintf(
-            state.mem_ctx, "SIMD%u skipped because required dispatch width is %u",
-            width, state.required_width);
+         state.error[simd] = "Different than required dispatch width";
          return false;
       }
 
@@ -109,16 +106,12 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
 
          if (simd > 0 && state.compiled[simd - 1] &&
             workgroup_size <= (width / 2)) {
-            state.error[simd] = ralloc_asprintf(
-               state.mem_ctx, "SIMD%u skipped because workgroup size %u already fits in SIMD%u",
-               width, workgroup_size, width / 2);
+            state.error[simd] = "Workgroup size already fits in smaller SIMD";
             return false;
          }
 
          if (DIV_ROUND_UP(workgroup_size, width) > max_threads) {
-            state.error[simd] = ralloc_asprintf(
-               state.mem_ctx, "SIMD%u can't fit all %u invocations in %u threads",
-               width, workgroup_size, max_threads);
+            state.error[simd] = "Would need more than max_threads to fit all invocations";
             return false;
          }
       }
@@ -129,24 +122,19 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
        */
       if (width == 32) {
          if (!INTEL_DEBUG(DEBUG_DO32) && (state.compiled[0] || state.compiled[1])) {
-            state.error[simd] = ralloc_strdup(
-               state.mem_ctx, "SIMD32 skipped because not required");
+            state.error[simd] = "SIMD32 not required (use INTEL_DEBUG=do32 to force)";
             return false;
          }
       }
    }
 
    if (width == 32 && cs_prog_data && cs_prog_data->base.ray_queries > 0) {
-      state.error[simd] = ralloc_asprintf(
-         state.mem_ctx, "SIMD%u skipped because of ray queries",
-         width);
+      state.error[simd] = "Ray queries not supported";
       return false;
    }
 
    if (width == 32 && cs_prog_data && cs_prog_data->uses_btd_stack_ids) {
-      state.error[simd] = ralloc_asprintf(
-         state.mem_ctx, "SIMD%u skipped because of bindless shader calls",
-         width);
+      state.error[simd] = "Bindless shader calls not supported";
       return false;
    }
 
@@ -182,9 +170,7 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
    static_assert(ARRAY_SIZE(env_skip) == SIMD_COUNT);
 
    if (unlikely(env_skip[simd])) {
-      state.error[simd] = ralloc_asprintf(
-         state.mem_ctx, "SIMD%u skipped because INTEL_DEBUG=no%u",
-         width, width);
+      state.error[simd] = "Disabled by INTEL_DEBUG environment variable";
       return false;
    }
 
@@ -257,10 +243,7 @@ brw_simd_select_for_workgroup_size(const struct intel_device_info *devinfo,
    cloned.prog_mask = 0;
    cloned.prog_spilled = 0;
 
-   void *mem_ctx = ralloc_context(NULL);
-
    brw_simd_selection_state simd_state{
-      .mem_ctx = mem_ctx,
       .devinfo = devinfo,
       .prog_data = &cloned,
    };
@@ -274,8 +257,6 @@ brw_simd_select_for_workgroup_size(const struct intel_device_info *devinfo,
          brw_simd_mark_compiled(simd_state, simd, test_bit(prog_data->prog_spilled, simd));
       }
    }
-
-   ralloc_free(mem_ctx);
 
    return brw_simd_select(simd_state);
 }

@@ -51,17 +51,17 @@ radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_le
 
          b.cursor = nir_before_instr(instr);
 
-         nir_ssa_def *val = nir_ssa_for_src(&b, intr->src[1], 1);
+         nir_def *val = intr->src[1].ssa;
 
          /* x_rate = (shadingRate & (Horizontal2Pixels | Horizontal4Pixels)) ? 0x1 : 0x0; */
-         nir_ssa_def *x_rate = nir_iand_imm(&b, val, 12);
+         nir_def *x_rate = nir_iand_imm(&b, val, 12);
          x_rate = nir_b2i32(&b, nir_ine_imm(&b, x_rate, 0));
 
          /* y_rate = (shadingRate & (Vertical2Pixels | Vertical4Pixels)) ? 0x1 : 0x0; */
-         nir_ssa_def *y_rate = nir_iand_imm(&b, val, 3);
+         nir_def *y_rate = nir_iand_imm(&b, val, 3);
          y_rate = nir_b2i32(&b, nir_ine_imm(&b, y_rate, 0));
 
-         nir_ssa_def *out = NULL;
+         nir_def *out = NULL;
 
          /* MS:
           * Primitive shading rate is a per-primitive output, it is
@@ -91,7 +91,7 @@ radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_le
 
          out = nir_ior(&b, nir_ishl_imm(&b, x_rate, x_rate_shift), nir_ishl_imm(&b, y_rate, y_rate_shift));
 
-         nir_instr_rewrite_src(&intr->instr, &intr->src[1], nir_src_for_ssa(out));
+         nir_src_rewrite(&intr->src[1], out);
 
          progress = true;
          if (nir->info.stage == MESA_SHADER_VERTEX)

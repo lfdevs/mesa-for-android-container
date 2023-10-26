@@ -1,76 +1,206 @@
+use crate::api::icd::CLResult;
+use crate::api::icd::ReferenceCountedAPIPointer;
+use crate::core::context::Context;
+use crate::core::event::Event;
+use crate::core::memory::Mem;
+use crate::core::program::Program;
+use crate::core::queue::Queue;
+
 use rusticl_opencl_gen::*;
 
 use std::borrow::Borrow;
+use std::ffi::c_void;
+use std::ffi::CStr;
 use std::iter::Product;
 
-#[macro_export]
-macro_rules! cl_closure {
-    (|$obj:ident| $cb:ident($($arg:ident$(,)?)*)) => {
-        Box::new(
-            unsafe {
-                move|$obj| $cb.unwrap()($($arg,)*)
-            }
-        )
-    }
-}
-
 macro_rules! cl_callback {
-    ($cb:ident {
+    ($cb:ident($fn_alias:ident) {
         $($p:ident : $ty:ty,)*
     }) => {
-        #[allow(dead_code)]
-        pub type $cb = unsafe extern "C" fn(
+        pub type $fn_alias = unsafe extern "C" fn(
             $($p: $ty,)*
         );
+
+        // INVARIANT:
+        // All safety requirements on `func` and `data` documented on `$cb::new` are invariants.
+        #[allow(dead_code)]
+        pub struct $cb {
+            func: $fn_alias,
+            data: *mut c_void,
+        }
+
+        #[allow(dead_code)]
+        impl $cb {
+            /// Creates a new `$cb`. Returns `Err(CL_INVALID_VALUE)` if `func` is `None`.
+            ///
+            /// # SAFETY:
+            ///
+            /// If `func` is `None`, there are no safety requirements. Otherwise:
+            ///
+            /// - `func` must be a thread-safe fn.
+            /// - Passing `data` as the last parameter to `func` must not cause unsoundness.
+            /// - CreateContextCB: `func` must be soundly callable as documented on
+            ///   [`clCreateContext`] in the OpenCL specification.
+            /// - DeleteContextCB: `func` must be soundly callable as documented on
+            ///   [`clSetContextDestructorCallback`] in the OpenCL specification.
+            /// - EventCB: `func` must be soundly callable as documented on
+            ///   [`clSetEventCallback`] in the OpenCL specification.
+            /// - MemCB: `func` must be soundly callable as documented on
+            ///   [`clSetMemObjectDestructorCallback`] in the OpenCL specification.
+            /// - ProgramCB: `func` must be soundly callable as documented on
+            ///   [`clBuildProgram`] in the OpenCL specification.
+            /// - SVMFreeCb: `func` must be soundly callable as documented on
+            ///   [`clEnqueueSVMFree`] in the OpenCL specification.
+            ///
+            /// [`clCreateContext`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clCreateContext
+            /// [`clSetContextDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetContextDestructorCallback
+            /// [`clSetEventCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetEventCallback
+            /// [`clSetMemObjectDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetMemObjectDestructorCallback
+            /// [`clBuildProgram`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clBuildProgram
+            /// [`clEnqueueSVMFree`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clEnqueueSVMFree
+            pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
+                let Some(func) = func else {
+                    return Err(CL_INVALID_VALUE);
+                };
+                Ok(Self { func, data })
+            }
+
+            /// Creates a new Option(`$cb`). Returns:
+            /// - `Ok(Some($cb)) if `func` is `Some(_)`.
+            /// - `Ok(None)` if `func` is `None` and `data` is `null`.
+            /// - `Err(CL_INVALID_VALUE)` if `func` is `None` and `data` is not `null`.
+            ///
+            /// # SAFETY:
+            ///
+            /// The safety requirements are identical to those of [`new`].
+            pub unsafe fn try_new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Option<Self>> {
+                let Some(func) = func else {
+                    return if data.is_null() {
+                        Ok(None)
+                    } else {
+                        Err(CL_INVALID_VALUE)
+                    };
+                };
+                Ok(Some(Self { func, data }))
+            }
+        }
+
+        unsafe impl Send for $cb {}
+        unsafe impl Sync for $cb {}
     }
 }
 
 cl_callback!(
-    CreateContextCB {
+    CreateContextCB(FuncCreateContextCB) {
         errinfo: *const ::std::os::raw::c_char,
-        private_info: *const ::std::ffi::c_void,
+        private_info: *const c_void,
         cb: usize,
-        user_data: *mut ::std::ffi::c_void,
+        user_data: *mut c_void,
     }
 );
 
+impl CreateContextCB {
+    pub fn _call(self, err_msg: &CStr, private_info: &[u8]) {
+        let err_msg_ptr = err_msg.as_ptr();
+        let private_info_ptr = private_info.as_ptr().cast::<c_void>();
+        // SAFETY: The first parameter must be a valid pointer to a NUL-terminated C string. We
+        // know this is satisfied since that is `CStr`'s type invariant.
+        // The second parameter must be a valid pointer to binary data with the length given in the
+        // thrid parameter. We know both of these are correct since we just got them from a byte slice.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe { (self.func)(err_msg_ptr, private_info_ptr, private_info.len(), self.data) };
+    }
+}
+
 cl_callback!(
-    DeleteContextCB {
+    DeleteContextCB(FuncDeleteContextCB) {
         context: cl_context,
-        user_data: *mut ::std::os::raw::c_void,
+        user_data: *mut c_void,
     }
 );
 
+impl DeleteContextCB {
+    pub fn call(self, ctx: &Context) {
+        let cl = cl_context::from_ptr(ctx);
+        // SAFETY: `cl` must have pointed to an OpenCL context, which is where we just got it from.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe { (self.func)(cl, self.data) };
+    }
+}
+
 cl_callback!(
-    EventCB {
+    EventCB(FuncEventCB) {
         event: cl_event,
         event_command_status: cl_int,
-        user_data: *mut ::std::os::raw::c_void,
+        user_data: *mut c_void,
     }
 );
 
+impl EventCB {
+    pub fn call(self, event: &Event, status: cl_int) {
+        let cl = cl_event::from_ptr(event);
+        // SAFETY: `cl` must be a valid pointer to an OpenCL event, which is where we just got it from.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe { (self.func)(cl, status, self.data) };
+    }
+}
+
 cl_callback!(
-    MemCB {
+    MemCB(FuncMemCB) {
         memobj: cl_mem,
-        user_data: *mut ::std::os::raw::c_void,
+        user_data: *mut c_void,
     }
 );
 
+impl MemCB {
+    pub fn call(self, mem: &Mem) {
+        let cl = cl_mem::from_ptr(mem);
+        // SAFETY: `cl` must have pointed to an OpenCL context, which is where we just got it from.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe { (self.func)(cl, self.data) };
+    }
+}
+
 cl_callback!(
-    ProgramCB {
+    ProgramCB(FuncProgramCB) {
         program: cl_program,
-        user_data: *mut ::std::os::raw::c_void,
+        user_data: *mut c_void,
     }
 );
 
+impl ProgramCB {
+    pub fn call(self, program: &Program) {
+        let cl = cl_program::from_ptr(program);
+        // SAFETY: `cl` must have pointed to an OpenCL program, which is where we just got it from.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe { (self.func)(cl, self.data) };
+    }
+}
+
 cl_callback!(
-    SVMFreeCb {
+    SVMFreeCb(FuncSVMFreeCb) {
         queue: cl_command_queue,
         num_svm_pointers: cl_uint,
-        svm_pointers: *mut *mut ::std::os::raw::c_void,
-        user_data: *mut ::std::os::raw::c_void,
+        svm_pointers: *mut *mut c_void,
+        user_data: *mut c_void,
     }
 );
+
+impl SVMFreeCb {
+    pub fn call(self, queue: &Queue, svm_pointers: &mut [*mut c_void]) {
+        let cl = cl_command_queue::from_ptr(queue);
+        // SAFETY: `cl` must be a valid pointer to an OpenCL queue, which is where we just got it from.
+        // All other requirements are covered by this callback's type invariants.
+        unsafe {
+            (self.func)(
+                cl,
+                svm_pointers.len() as u32,
+                svm_pointers.as_mut_ptr(),
+                self.data,
+            )
+        };
+    }
+}
 
 // a lot of APIs use 3 component vectors passed as C arrays
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

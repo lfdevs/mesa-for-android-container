@@ -24,6 +24,7 @@
 #include "anv_private.h"
 
 #include "common/intel_defines.h"
+#include "common/i915/intel_gem.h"
 
 #include "drm-uapi/i915_drm.h"
 
@@ -44,7 +45,7 @@ vk_priority_to_i915(VkQueueGlobalPriorityKHR priority)
    }
 }
 
-static int
+int
 anv_gem_set_context_param(int fd, uint32_t context, uint32_t param, uint64_t value)
 {
    if (param == I915_CONTEXT_PARAM_PRIORITY)
@@ -68,6 +69,7 @@ anv_i915_physical_device_get_parameters(struct anv_physical_device *device)
 {
    VkResult result = VK_SUCCESS;
    int val, fd = device->local_fd;
+   uint64_t value;
 
    if (!intel_gem_get_param(fd, I915_PARAM_HAS_WAIT_TIMEOUT, &val) || !val) {
        result = vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
@@ -121,6 +123,9 @@ anv_i915_physical_device_get_parameters(struct anv_physical_device *device)
 
    if (intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_TIMELINE_FENCES, &val))
       device->has_exec_timeline = val;
+
+   if (intel_gem_get_context_param(fd, 0, I915_CONTEXT_PARAM_VM, &value))
+      device->has_vm_control = value;
 
    return result;
 }
@@ -205,10 +210,51 @@ anv_i915_physical_device_init_memory_types(struct anv_physical_device *device)
 }
 
 VkResult
+anv_i915_set_queue_parameters(
+      struct anv_device *device,
+      uint32_t context_id,
+      const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority)
+{
+   struct anv_physical_device *physical_device = device->physical;
+
+   /* Here we tell the kernel not to attempt to recover our context but
+    * immediately (on the next batchbuffer submission) report that the
+    * context is lost, and we will do the recovery ourselves.  In the case
+    * of Vulkan, recovery means throwing VK_ERROR_DEVICE_LOST and letting
+    * the client clean up the pieces.
+    */
+   anv_gem_set_context_param(device->fd, context_id,
+                             I915_CONTEXT_PARAM_RECOVERABLE, false);
+
+   VkQueueGlobalPriorityKHR priority =
+      queue_priority ? queue_priority->globalPriority :
+         VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+
+   /* As per spec, the driver implementation may deny requests to acquire
+    * a priority above the default priority (MEDIUM) if the caller does not
+    * have sufficient privileges. In this scenario VK_ERROR_NOT_PERMITTED_KHR
+    * is returned.
+    */
+   if (physical_device->max_context_priority >= VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
+      int err = anv_gem_set_context_param(device->fd, context_id,
+                                          I915_CONTEXT_PARAM_PRIORITY,
+                                          priority);
+      if (err != 0 && priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
+         return vk_error(device, VK_ERROR_NOT_PERMITTED_KHR);
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult
 anv_i915_device_setup_context(struct anv_device *device,
                               const VkDeviceCreateInfo *pCreateInfo,
                               const uint32_t num_queues)
 {
+   if (device->physical->has_vm_control)
+      return anv_i915_device_setup_vm(device);
+
    struct anv_physical_device *physical_device = device->physical;
    VkResult result = VK_SUCCESS;
 
@@ -232,6 +278,7 @@ anv_i915_device_setup_context(struct anv_device *device,
       if (!intel_gem_create_context_engines(device->fd, 0 /* flags */,
                                             physical_device->engine_info,
                                             engine_count, engine_classes,
+                                            device->vm_id,
                                             (uint32_t *)&device->context_id))
          result = vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
                             "kernel context creation failed");
@@ -244,38 +291,15 @@ anv_i915_device_setup_context(struct anv_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   /* Here we tell the kernel not to attempt to recover our context but
-    * immediately (on the next batchbuffer submission) report that the
-    * context is lost, and we will do the recovery ourselves.  In the case
-    * of Vulkan, recovery means throwing VK_ERROR_DEVICE_LOST and letting
-    * the client clean up the pieces.
-    */
-   anv_gem_set_context_param(device->fd, device->context_id,
-                             I915_CONTEXT_PARAM_RECOVERABLE, false);
-
    /* Check if client specified queue priority. */
    const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority =
       vk_find_struct_const(pCreateInfo->pQueueCreateInfos[0].pNext,
                            DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
 
-   VkQueueGlobalPriorityKHR priority =
-      queue_priority ? queue_priority->globalPriority :
-         VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
-
-   /* As per spec, the driver implementation may deny requests to acquire
-    * a priority above the default priority (MEDIUM) if the caller does not
-    * have sufficient privileges. In this scenario VK_ERROR_NOT_PERMITTED_KHR
-    * is returned.
-    */
-   if (physical_device->max_context_priority >= VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
-      int err = anv_gem_set_context_param(device->fd, device->context_id,
-                                          I915_CONTEXT_PARAM_PRIORITY,
-                                          priority);
-      if (err != 0 && priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
-         result = vk_error(device, VK_ERROR_NOT_PERMITTED_KHR);
-         goto fail_context;
-      }
-   }
+   result = anv_i915_set_queue_parameters(device, device->context_id,
+                                          queue_priority);
+   if (result != VK_SUCCESS)
+      goto fail_context;
 
    return result;
 
@@ -284,40 +308,74 @@ fail_context:
    return result;
 }
 
-static int
-anv_gem_context_get_reset_stats(int fd, int context,
-                                uint32_t *active, uint32_t *pending)
+static VkResult
+anv_gem_context_get_reset_stats(struct anv_device *device, int context)
 {
    struct drm_i915_reset_stats stats = {
       .ctx_id = context,
    };
 
-   int ret = intel_ioctl(fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
-   if (ret == 0) {
-      *active = stats.batch_active;
-      *pending = stats.batch_pending;
+   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
+   if (ret == -1) {
+      /* We don't know the real error. */
+      return vk_device_set_lost(&device->vk, "get_reset_stats failed: %m");
    }
 
-   return ret;
+   if (stats.batch_active) {
+      return vk_device_set_lost(&device->vk, "GPU hung on one of our command buffers");
+   } else if (stats.batch_pending) {
+      return vk_device_set_lost(&device->vk, "GPU hung with commands in-flight");
+   }
+
+   return VK_SUCCESS;
 }
 
 VkResult
 anv_i915_device_check_status(struct vk_device *vk_device)
 {
    struct anv_device *device = container_of(vk_device, struct anv_device, vk);
-   uint32_t active = 0, pending = 0;
-   int ret = anv_gem_context_get_reset_stats(device->fd, device->context_id,
-                                             &active, &pending);
-   if (ret == -1) {
-      /* We don't know the real error. */
-      return vk_device_set_lost(&device->vk, "get_reset_stats failed: %m");
+   VkResult result;
+
+   if (device->physical->has_vm_control) {
+      for (uint32_t i = 0; i < device->queue_count; i++) {
+         result = anv_gem_context_get_reset_stats(device,
+                                                  device->queues[i].context_id);
+         if (result != VK_SUCCESS)
+            return result;
+
+         if (device->queues[i].companion_rcs_id != 0) {
+            uint32_t context_id = device->queues[i].companion_rcs_id;
+            result = anv_gem_context_get_reset_stats(device, context_id);
+            if (result != VK_SUCCESS) {
+               return result;
+            }
+         }
+      }
+   } else {
+      result = anv_gem_context_get_reset_stats(device, device->context_id);
    }
 
-   if (active) {
-      return vk_device_set_lost(&device->vk, "GPU hung on one of our command buffers");
-   } else if (pending) {
-      return vk_device_set_lost(&device->vk, "GPU hung with commands in-flight");
-   }
+   return result;
+}
 
+bool
+anv_i915_device_destroy_vm(struct anv_device *device)
+{
+   struct drm_i915_gem_vm_control destroy = {
+      .vm_id = device->vm_id,
+   };
+
+   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_VM_DESTROY, &destroy) == 0;
+}
+
+VkResult
+anv_i915_device_setup_vm(struct anv_device *device)
+{
+   struct drm_i915_gem_vm_control create = {};
+   if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_VM_CREATE, &create))
+      return vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                       "vm creation failed");
+
+   device->vm_id = create.vm_id;
    return VK_SUCCESS;
 }

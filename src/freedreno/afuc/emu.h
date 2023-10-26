@@ -31,14 +31,14 @@
 
 #include "afuc.h"
 
+extern int gpuver;
+
 #define EMU_NUM_GPR_REGS 32
 
 struct emu_gpr_regs {
    BITSET_DECLARE(written, EMU_NUM_GPR_REGS);
-   union {
-      uint32_t pc;
-      uint32_t val[EMU_NUM_GPR_REGS];
-   };
+   uint32_t pc;
+   uint32_t val[EMU_NUM_GPR_REGS];
 };
 
 #define EMU_NUM_CONTROL_REGS 0x1000
@@ -155,7 +155,11 @@ struct emu {
     */
    bool quiet;
 
-   bool lpac;
+   enum {
+      EMU_PROC_SQE,
+      EMU_PROC_BV,
+      EMU_PROC_LPAC,
+   } processor;
 
    uint32_t *instrs;
    unsigned sizedwords;

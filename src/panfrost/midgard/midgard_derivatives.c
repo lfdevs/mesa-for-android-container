@@ -122,7 +122,7 @@ midgard_emit_derivatives(compiler_context *ctx, nir_alu_instr *instr)
          },
    };
 
-   ins.dest = nir_dest_index_with_mask(&instr->dest.dest, &ins.mask);
+   ins.dest = nir_def_index_with_mask(&instr->def, &ins.mask);
    emit_mir_instruction(ctx, ins);
 }
 

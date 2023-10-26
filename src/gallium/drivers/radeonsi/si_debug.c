@@ -7,7 +7,6 @@
 #include "ac_debug.h"
 #include "ac_rtld.h"
 #include "driver_ddebug/dd_util.h"
-#include "si_compute.h"
 #include "si_pipe.h"
 #include "sid.h"
 #include "sid_tables.h"
@@ -349,7 +348,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
 
       if (begin < chunk->cdw) {
          ac_parse_ib_chunk(f, chunk->buf + begin, MIN2(end, chunk->cdw) - begin, last_trace_id,
-                           trace_id_count, gfx_level, family, NULL, NULL);
+                           trace_id_count, gfx_level, family, AMD_IP_GFX, NULL, NULL);
       }
 
       if (end <= chunk->cdw)
@@ -365,7 +364,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
    assert(end <= cs->current.cdw);
 
    ac_parse_ib_chunk(f, cs->current.buf + begin, end - begin, last_trace_id, trace_id_count,
-                     gfx_level, family, NULL, NULL);
+                     gfx_level, family, AMD_IP_GFX, NULL, NULL);
 
    fprintf(f, "------------------- %s end (dw = %u) -------------------\n\n", name, orig_end);
 }
@@ -396,12 +395,12 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
       if (chunk->gfx_begin == 0) {
          if (ctx->cs_preamble_state)
             ac_parse_ib(f, ctx->cs_preamble_state->pm4, ctx->cs_preamble_state->ndw, NULL, 0,
-                        "IB2: Init config", ctx->gfx_level, ctx->family, NULL, NULL);
+                        "IB2: Init config", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
       }
 
       if (scs->flushed) {
          ac_parse_ib(f, scs->gfx.ib + chunk->gfx_begin, chunk->gfx_end - chunk->gfx_begin,
-                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, NULL, NULL);
+                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
       } else {
          si_parse_current_ib(f, &ctx->gfx_cs, chunk->gfx_begin, chunk->gfx_end, &last_trace_id,
                              map ? 1 : 0, "IB", ctx->gfx_level, ctx->family);
@@ -457,7 +456,7 @@ void si_log_hw_flush(struct si_context *sctx)
 
    si_log_cs(sctx, sctx->log, true);
 
-   if (&sctx->b == sctx->screen->aux_context) {
+   if (sctx->context_flags & SI_CONTEXT_FLAG_AUX) {
       /* The aux context isn't captured by the ddebug wrapper,
        * so we dump it on a flush-by-flush basis here.
        */

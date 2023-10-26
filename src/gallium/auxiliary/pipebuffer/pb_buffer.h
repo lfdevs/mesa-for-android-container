@@ -255,7 +255,11 @@ pb_destroy(void *winsys, struct pb_buffer *buf)
    assert(buf);
    if (!buf)
       return;
-   assert(!pipe_is_referenced(&buf->reference));
+
+   /* we can't assert(!pipe_is_referenced(&buf->reference)) because the winsys
+    * might have means to revive a buf whose refcount reaches 0, such as when
+    * destroy and import race against each other
+    */
    buf->vtbl->destroy(winsys, buf);
 }
 

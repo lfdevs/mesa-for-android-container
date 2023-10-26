@@ -792,7 +792,7 @@ dzn_physical_device_create(struct vk_instance *instance,
 
    VkResult result =
       vk_physical_device_init(&pdev->vk, instance,
-                              NULL, NULL, /* We set up extensions later */
+                              NULL, NULL, NULL, /* We set up extensions later */
                               &dispatch_table);
    if (result != VK_SUCCESS) {
       vk_free(&instance->alloc, pdev);

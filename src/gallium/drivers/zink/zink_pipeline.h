@@ -63,9 +63,9 @@ zink_create_gfx_pipeline_library(struct zink_screen *screen, struct zink_gfx_pro
 VkPipeline
 zink_create_gfx_pipeline_output(struct zink_screen *screen, struct zink_gfx_pipeline_state *state);
 VkPipeline
-zink_create_gfx_pipeline_combined(struct zink_screen *screen, struct zink_gfx_program *prog, VkPipeline input, VkPipeline *library, unsigned libcount, VkPipeline output, bool optimized);
+zink_create_gfx_pipeline_combined(struct zink_screen *screen, struct zink_gfx_program *prog, VkPipeline input, VkPipeline *library, unsigned libcount, VkPipeline output, bool optimized, bool testonly);
 VkPipeline
-zink_create_gfx_pipeline_separate(struct zink_screen *screen, struct zink_shader_object *objs, VkPipelineLayout layout);
+zink_create_gfx_pipeline_separate(struct zink_screen *screen, struct zink_shader_object *objs, VkPipelineLayout layout, gl_shader_stage stage);
 #ifdef __cplusplus
 }
 #endif

@@ -1,3 +1,33 @@
+# The logic for each $FARM is as follows:
+#
+# If the disable file exists, we are disabling the farm, or it's already
+# disabled:
+#   - exists: [ .ci-farms-disabled/$FARM ]
+#     when: never
+#
+# Otherwise, changing the disable file means removing it, so we are
+# re-enabling the farm:
+#   - changes: [ .ci-farms-disabled/$FARM ]
+#     if: '$CI_PIPELINE_SOURCE != "schedule"'
+#     when: on_success
+# Note: the "manual" variant of each farm rules changes the above to `never`,
+# so that jobs meant to be manual don't run in re-enablement MRs. This is the
+# only difference between `.$FARM-farm-rules` and `.$FARM-farm-manual-rules`.
+#
+# If any other disable file is modified, we are disabling/re-enabling another
+# farm:
+#   - changes: [ .ci-farms-disabled/* ]
+#     if: '$CI_PIPELINE_SOURCE != "schedule"'
+#     when: never
+#
+# The `not schedule` condition is there to make sure scheduled pipelines
+# contains all the jobs, as `changes` conditions in scheduled pipelines are
+# always evaluated to `true`.
+#
+# The "fallback", if none of these rules match, is usually the list of files
+# that are used by a driver. See the various `.$DRIVER-rules` in the
+# corresponding `src/**/ci/gitlab-ci.yml`.
+
 .microsoft-farm-rules:
   rules:
     - exists: [ .ci-farms-disabled/microsoft ]  # 1. Is disabled, never run
@@ -28,29 +58,41 @@
     - exists: [ .ci-farms-disabled/microsoft ]
       when: never
     - changes: [ .ci-farms-disabled/microsoft ]
-      if: '$CI_PIPELINE_SOURCE != "schedule"'
+      if: '$CI_PROJECT_NAMESPACE == "mesa" && $CI_COMMIT_BRANCH'
       when: on_success
-    - !reference [.microsoft-farm-rules, rules]
+    - changes: [ .ci-farms-disabled/microsoft ]
+      if: '$GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    - changes: [ .ci-farms-disabled/microsoft ]
+      if: '$CI_PROJECT_NAMESPACE == "mesa" && $GITLAB_USER_LOGIN != "marge-bot" && $CI_COMMIT_BRANCH'
+      when: on_success
+    - changes: [ .ci-farms-disabled/* ]
+      if: '$CI_PROJECT_NAMESPACE == "mesa" && $CI_COMMIT_BRANCH'
+      when: never
+    - changes: [ .ci-farms-disabled/* ]
+      if: '$GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - changes: [ .ci-farms-disabled/* ]
+      if: '$CI_PROJECT_NAMESPACE == "mesa" && $GITLAB_USER_LOGIN != "marge-bot" && $CI_COMMIT_BRANCH'
+      when: never
 
 
 .collabora-farm-rules:
   rules:
-    - if: '$RUNNER_TAG =~ /^mesa-ci-x86-64-lava-/'
-      exists: [ .ci-farms-disabled/collabora ]
+    - exists: [ .ci-farms-disabled/collabora ]
       when: never
-    - if: '$RUNNER_TAG =~ /^mesa-ci-x86-64-lava-/ && $CI_PIPELINE_SOURCE != "schedule"'
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
       changes: [ .ci-farms-disabled/collabora ]
       when: on_success
-    - if: '$RUNNER_TAG =~ /^mesa-ci-x86-64-lava-/ && $CI_PIPELINE_SOURCE != "schedule"'
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
       changes: [ .ci-farms-disabled/* ]
       when: never
 
 .collabora-farm-manual-rules:
   rules:
-    - if: '$RUNNER_TAG =~ /^mesa-ci-x86-64-lava-/'
-      exists: [ .ci-farms-disabled/collabora ]
+    - exists: [ .ci-farms-disabled/collabora ]
       when: never
-    - if: '$RUNNER_TAG =~ /^mesa-ci-x86-64-lava-/ && $CI_PIPELINE_SOURCE != "schedule"'
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
       changes: [ .ci-farms-disabled/collabora ]
       when: never
     - !reference [.collabora-farm-rules, rules]
@@ -195,3 +237,57 @@
       when: never
     - !reference [.freedreno-farm-rules, rules]
 
+
+# Skip container & build jobs when disabling any farm, and run them if any
+# farm gets re-enabled.
+# Only apply these rules in MR context, because otherwise we get a false
+# positive on files being 'created' when pushing to a new branch, and break
+# our pipeline
+.disable-farm-mr-rules:
+  rules:
+    # changes(disabled) + exists(disabled) = disabling the farm
+    # Note: this cannot be simplified into a single `.ci-farms-disabled/*` rule
+    # because if there are more than one disabled farm and we only re-enable
+    # one, the exits(.ci-farms-disabled/*) would match and what should be
+    # a farm re-enable pipeline will be detected as a farm disable pipeline.
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/microsoft ]
+      exists: [ .ci-farms-disabled/microsoft ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/collabora ]
+      exists: [ .ci-farms-disabled/collabora ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/igalia ]
+      exists: [ .ci-farms-disabled/igalia ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/lima ]
+      exists: [ .ci-farms-disabled/lima ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/anholt ]
+      exists: [ .ci-farms-disabled/anholt ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/valve-mupuf ]
+      exists: [ .ci-farms-disabled/valve-mupuf ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/valve-kws ]
+      exists: [ .ci-farms-disabled/valve-kws ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/austriancoder ]
+      exists: [ .ci-farms-disabled/austriancoder ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [ .ci-farms-disabled/freedreno ]
+      exists: [ .ci-farms-disabled/freedreno ]
+      when: never
+    # Any other change to ci-farms/* means some farm is getting re-enabled.
+    # Run jobs in Marge pipelines (and let it fallback to manual otherwise)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $GITLAB_USER_LOGIN == "marge-bot"'
+      changes: [ .ci-farms/* ]
+      when: on_success

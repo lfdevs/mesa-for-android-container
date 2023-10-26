@@ -59,7 +59,7 @@ class PoERun:
         if not boot_detected:
             self.print_error(
                 "Something wrong; couldn't detect the boot start up sequence")
-            return 2
+            return 1
 
         for line in self.ser.lines(timeout=self.test_timeout, phase="test"):
             if re.search("---. end Kernel panic", line):
@@ -71,13 +71,13 @@ class PoERun:
                 return 1
 
             if re.search("nouveau 57000000.gpu: bus: MMIO read of 00000000 FAULT at 137000", line):
-                self.print_error("nouveau jetson boot bug, retrying.")
-                return 2
+                self.print_error("nouveau jetson boot bug, abandoning run.")
+                return 1
 
             # network fail on tk1
             if re.search("NETDEV WATCHDOG:.* transmit queue 0 timed out", line):
-                self.print_error("nouveau jetson tk1 network fail, retrying.")
-                return 2
+                self.print_error("nouveau jetson tk1 network fail, abandoning run.")
+                return 1
 
             result = re.search("hwci: mesa: (\S*)", line)
             if result:
@@ -88,7 +88,7 @@ class PoERun:
 
         self.print_error(
             "Reached the end of the CPU serial log without finding a result")
-        return 2
+        return 1
 
 
 def main():

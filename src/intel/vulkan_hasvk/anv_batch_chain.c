@@ -1899,14 +1899,14 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
       anv_cmd_buffer_process_relocs(cmd_buffers[0], &cmd_buffers[0]->surface_relocs);
    }
 
-   if (device->physical->memory.need_clflush) {
+   if (device->physical->memory.need_flush) {
       __builtin_ia32_mfence();
       for (uint32_t i = 0; i < num_cmd_buffers; i++) {
          u_vector_foreach(bbo, &cmd_buffers[i]->seen_bbos) {
-            for (uint32_t l = 0; l < (*bbo)->length; l += CACHELINE_SIZE)
-               __builtin_ia32_clflush((*bbo)->bo->map + l);
+            intel_flush_range_no_fence((*bbo)->bo->map, (*bbo)->length);
          }
       }
+      __builtin_ia32_mfence();
    }
 
    struct anv_batch *batch = &cmd_buffers[0]->batch;
@@ -1986,7 +1986,7 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
       flush->batch_bo->exec_obj_index = last_idx;
    }
 
-   if (device->physical->memory.need_clflush)
+   if (device->physical->memory.need_flush)
       intel_flush_range(flush->batch_bo->map, flush->batch_bo->size);
 
    execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
@@ -2421,7 +2421,7 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
       return result;
 
    memcpy(batch_bo->map, batch->start, batch_size);
-   if (device->physical->memory.need_clflush)
+   if (device->physical->memory.need_flush)
       intel_flush_range(batch_bo->map, batch_size);
 
    struct anv_execbuf execbuf = {

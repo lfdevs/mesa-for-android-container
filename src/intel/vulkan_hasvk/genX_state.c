@@ -250,14 +250,7 @@ genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
       ms.NumberofMultisamples       = __builtin_ffs(samples) - 1;
 
       ms.PixelLocation              = CENTER;
-#if GFX_VER >= 8
-      /* The PRM says that this bit is valid only for DX9:
-       *
-       *    SW can choose to set this bit only for DX9 API. DX10/OGL API's
-       *    should not have any effect by setting or not setting this bit.
-       */
-      ms.PixelPositionOffsetEnable  = false;
-#else
+#if GFX_VER < 8
       switch (samples) {
       case 1:
          INTEL_SAMPLE_POS_1X_ARRAY(ms.Sample, sl->locations);

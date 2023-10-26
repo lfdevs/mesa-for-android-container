@@ -74,6 +74,7 @@ __reg_iova(const struct fd_reg_pair *reg)
             uint64_t *__p64 = (uint64_t *)__p;                                 \
             *__p64 = __reg_iova(&__regs[i]) | __regs[i].value;                 \
             __p += 2;                                                          \
+            fd_ringbuffer_assert_attached(ring, __regs[i].bo);                 \
          } else {                                                              \
             *__p++ = __regs[i].value;                                          \
             if (__regs[i].is_address)                                          \
@@ -175,6 +176,14 @@ __reg_iova(const struct fd_reg_pair *reg)
       __ONE_REG(ring, 13, __VA_ARGS__);                                        \
       __ONE_REG(ring, 14, __VA_ARGS__);                                        \
       __ONE_REG(ring, 15, __VA_ARGS__);                                        \
+      memcpy(__p, dwords, 4 * sizedwords);                                     \
+      __p += sizedwords;                                                       \
+      ring->cur = __p;                                                         \
+   } while (0)
+
+#define OUT_BUF(ring, dwords, sizedwords)                                      \
+   do {                                                                        \
+      uint32_t *__p = ring->cur;                                               \
       memcpy(__p, dwords, 4 * sizedwords);                                     \
       __p += sizedwords;                                                       \
       ring->cur = __p;                                                         \

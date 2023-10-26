@@ -392,6 +392,8 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
       else
          vlVaGetReferenceFrame(drv, av1->ref_frame_map[i], &context->desc.av1.ref[i]);
    }
+
+  context->desc.av1.slice_parameter.slice_count = 0;
 }
 
 void vlVaHandleSliceParameterBufferAV1(vlVaContext *context, vlVaBuffer *buf, unsigned num_slices)
@@ -409,5 +411,6 @@ void vlVaHandleSliceParameterBufferAV1(vlVaContext *context, vlVaBuffer *buf, un
       context->desc.av1.slice_parameter.slice_data_row[slice_index] = av1->tile_row;
       context->desc.av1.slice_parameter.slice_data_col[slice_index] = av1->tile_column;
       context->desc.av1.slice_parameter.slice_data_anchor_frame_idx[slice_index] = av1->anchor_frame_idx;
+      context->desc.av1.slice_parameter.slice_count = slice_index + 1;
    }
 }

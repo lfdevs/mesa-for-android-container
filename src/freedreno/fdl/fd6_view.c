@@ -109,11 +109,11 @@ fdl6_format_swiz(enum pipe_format format, bool has_z24uint_s8uint,
       break;
 
    default:
-      /* Our I, L, A, and LA formats use R or RG HW formats. These aren't
-       * supported in Vulkan, and freedreno uses a hack to get the border
-       * colors correct by undoing these swizzles.
+      /* Our I, L, A, and LA formats use R or RG HW formats except for
+       * A8_UNORM. These aren't supported in Vulkan, and freedreno uses a hack
+       * to get the border colors correct by undoing these swizzles.
        */
-      if (util_format_is_alpha(format)) {
+      if (util_format_is_alpha(format) && format != PIPE_FORMAT_A8_UNORM) {
          format_swiz[0] = PIPE_SWIZZLE_0;
          format_swiz[1] = PIPE_SWIZZLE_0;
          format_swiz[2] = PIPE_SWIZZLE_0;
@@ -419,6 +419,7 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
    view->RB_MRT_BUF_INFO =
       A6XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(tile_mode) |
       A6XX_RB_MRT_BUF_INFO_COLOR_FORMAT(color_format) |
+      COND(args->chip >= A7XX && ubwc_enabled, A7XX_RB_MRT_BUF_INFO_LOSSLESSCOMPEN) |
       A6XX_RB_MRT_BUF_INFO_COLOR_SWAP(color_swap);
 
    view->SP_FS_MRT_REG =

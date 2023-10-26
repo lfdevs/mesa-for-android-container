@@ -20,27 +20,30 @@ typedef struct {
    unsigned payload_entry_bytes;
    unsigned draw_entry_bytes;
    unsigned num_entries;
+
+   /* True if the lowering needs to insert shader query. */
+   bool has_query;
 } lower_tsms_io_state;
 
-static nir_ssa_def *
+static nir_def *
 task_workgroup_index(nir_builder *b,
                      lower_tsms_io_state *s)
 {
-   nir_ssa_def *id = nir_load_workgroup_id(b, 32);
+   nir_def *id = nir_load_workgroup_id(b);
 
-   nir_ssa_def *x = nir_channel(b, id, 0);
-   nir_ssa_def *y = nir_channel(b, id, 1);
-   nir_ssa_def *z = nir_channel(b, id, 2);
+   nir_def *x = nir_channel(b, id, 0);
+   nir_def *y = nir_channel(b, id, 1);
+   nir_def *z = nir_channel(b, id, 2);
 
-   nir_ssa_def *grid_size = nir_load_num_workgroups(b, 32);
-   nir_ssa_def *grid_size_x = nir_channel(b, grid_size, 0);
-   nir_ssa_def *grid_size_y = nir_channel(b, grid_size, 1);
+   nir_def *grid_size = nir_load_num_workgroups(b);
+   nir_def *grid_size_x = nir_channel(b, grid_size, 0);
+   nir_def *grid_size_y = nir_channel(b, grid_size, 1);
 
    return nir_iadd(b, nir_imul(b, nir_imul(b, grid_size_x, grid_size_y), z),
                       nir_iadd(b, nir_imul(b, grid_size_x, y), x));
 }
 
-static nir_ssa_def *
+static nir_def *
 task_ring_entry_index(nir_builder *b,
                       lower_tsms_io_state *s)
 {
@@ -54,12 +57,12 @@ task_ring_entry_index(nir_builder *b,
     *   AND with num_entries - 1 to get the correct meaning.
     *   Note that num_entries must be a power of two.
     */
-   nir_ssa_def *ring_entry = nir_load_task_ring_entry_amd(b);
-   nir_ssa_def *idx = nir_iadd_nuw(b, ring_entry, task_workgroup_index(b, s));
+   nir_def *ring_entry = nir_load_task_ring_entry_amd(b);
+   nir_def *idx = nir_iadd_nuw(b, ring_entry, task_workgroup_index(b, s));
    return nir_iand_imm(b, idx, s->num_entries - 1);
 }
 
-static nir_ssa_def *
+static nir_def *
 task_draw_ready_bit(nir_builder *b,
                     lower_tsms_io_state *s)
 {
@@ -86,14 +89,14 @@ task_draw_ready_bit(nir_builder *b,
     * If the task shader doesn't write this bit, the HW hangs.
     */
 
-   nir_ssa_def *ring_entry = nir_load_task_ring_entry_amd(b);
-   nir_ssa_def *workgroup_index = task_workgroup_index(b, s);
+   nir_def *ring_entry = nir_load_task_ring_entry_amd(b);
+   nir_def *workgroup_index = task_workgroup_index(b, s);
 
-   nir_ssa_def *idx = nir_iadd_nuw(b, ring_entry, workgroup_index);
+   nir_def *idx = nir_iadd_nuw(b, ring_entry, workgroup_index);
    return nir_u2u8(b, nir_ubfe_imm(b, idx, util_bitcount(s->num_entries - 1), 1));
 }
 
-static nir_ssa_def *
+static nir_def *
 mesh_ring_entry_index(nir_builder *b,
                       lower_tsms_io_state *s)
 {
@@ -111,15 +114,15 @@ mesh_ring_entry_index(nir_builder *b,
 
 static void
 task_write_draw_ring(nir_builder *b,
-                     nir_ssa_def *store_val,
+                     nir_def *store_val,
                      unsigned const_off,
                      lower_tsms_io_state *s)
 {
-   nir_ssa_def *ptr = task_ring_entry_index(b, s);
-   nir_ssa_def *ring = nir_load_ring_task_draw_amd(b);
-   nir_ssa_def *scalar_off = nir_imul_imm(b, ptr, s->draw_entry_bytes);
-   nir_ssa_def *vector_off = nir_imm_int(b, 0);
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *ptr = task_ring_entry_index(b, s);
+   nir_def *ring = nir_load_ring_task_draw_amd(b);
+   nir_def *scalar_off = nir_imul_imm(b, ptr, s->draw_entry_bytes);
+   nir_def *vector_off = nir_imm_int(b, 0);
+   nir_def *zero = nir_imm_int(b, 0);
 
    nir_store_buffer_amd(b, store_val, ring, vector_off, scalar_off, zero,
                         .base = const_off, .memory_modes = nir_var_shader_out,
@@ -139,7 +142,24 @@ filter_task_intrinsics(const nir_instr *instr,
           intrin->intrinsic == nir_intrinsic_load_task_payload;
 }
 
-static nir_ssa_def *
+static void
+task_invocation_query(nir_builder *b, lower_tsms_io_state *s)
+{
+   if (!s->has_query)
+      return;
+
+   const unsigned invocations = b->shader->info.workgroup_size[0] *
+                                b->shader->info.workgroup_size[1] *
+                                b->shader->info.workgroup_size[2];
+
+   nir_if *if_pipeline_query = nir_push_if(b, nir_load_pipeline_stat_query_enabled_amd(b));
+   {
+      nir_atomic_add_shader_invocation_count_amd(b, nir_imm_int(b, invocations));
+   }
+   nir_pop_if(b, if_pipeline_query);
+}
+
+static nir_def *
 lower_task_launch_mesh_workgroups(nir_builder *b,
                                   nir_intrinsic_instr *intrin,
                                   lower_tsms_io_state *s)
@@ -153,20 +173,20 @@ lower_task_launch_mesh_workgroups(nir_builder *b,
     * always a waitcnt_vscnt instruction in order to avoid a race condition
     * between payload stores and their loads after mesh shaders launch.
     */
-   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+   nir_barrier(b, .execution_scope = SCOPE_WORKGROUP,
                          .memory_scope = SCOPE_DEVICE,
                          .memory_semantics = NIR_MEMORY_ACQ_REL,
                          .memory_modes = nir_var_mem_task_payload | nir_var_shader_out |
                                          nir_var_mem_ssbo | nir_var_mem_global);
 
    /* On the first invocation, write the full draw ring entry. */
-   nir_ssa_def *invocation_index = nir_load_local_invocation_index(b);
+   nir_def *invocation_index = nir_load_local_invocation_index(b);
    nir_if *if_invocation_index_zero = nir_push_if(b, nir_ieq_imm(b, invocation_index, 0));
    {
-      nir_ssa_def *dimensions = intrin->src[0].ssa;
-      nir_ssa_def *x = nir_channel(b, dimensions, 0);
-      nir_ssa_def *y = nir_channel(b, dimensions, 1);
-      nir_ssa_def *z = nir_channel(b, dimensions, 2);
+      nir_def *dimensions = intrin->src[0].ssa;
+      nir_def *x = nir_channel(b, dimensions, 0);
+      nir_def *y = nir_channel(b, dimensions, 1);
+      nir_def *z = nir_channel(b, dimensions, 2);
 
       /* When either Y or Z are 0, also set X to 0.
        * Not necessary, but speeds up the job of the CP.
@@ -179,13 +199,15 @@ lower_task_launch_mesh_workgroups(nir_builder *b,
       nir_scoped_memory_barrier(b, SCOPE_INVOCATION, NIR_MEMORY_RELEASE, nir_var_shader_out);
       /* Ready bit, only write the low 8 bits. */
       task_write_draw_ring(b, task_draw_ready_bit(b, s), 12, s);
+
+      task_invocation_query(b, s);
    }
    nir_pop_if(b, if_invocation_index_zero);
 
    return NIR_LOWER_INSTR_PROGRESS_REPLACE;
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_task_payload_store(nir_builder *b,
                          nir_intrinsic_instr *intrin,
                          lower_tsms_io_state *s)
@@ -193,12 +215,12 @@ lower_task_payload_store(nir_builder *b,
    unsigned write_mask = nir_intrinsic_write_mask(intrin);
    unsigned base = nir_intrinsic_base(intrin);
 
-   nir_ssa_def *store_val = intrin->src[0].ssa;
-   nir_ssa_def *addr = intrin->src[1].ssa;
-   nir_ssa_def *ring = nir_load_ring_task_payload_amd(b);
-   nir_ssa_def *ptr = task_ring_entry_index(b, s);
-   nir_ssa_def *ring_off = nir_imul_imm(b, ptr, s->payload_entry_bytes);
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *store_val = intrin->src[0].ssa;
+   nir_def *addr = intrin->src[1].ssa;
+   nir_def *ring = nir_load_ring_task_payload_amd(b);
+   nir_def *ptr = task_ring_entry_index(b, s);
+   nir_def *ring_off = nir_imul_imm(b, ptr, s->payload_entry_bytes);
+   nir_def *zero = nir_imm_int(b, 0);
 
    nir_store_buffer_amd(b, store_val, ring, addr, ring_off, zero, .base = base,
                         .write_mask = write_mask,
@@ -208,31 +230,31 @@ lower_task_payload_store(nir_builder *b,
    return NIR_LOWER_INSTR_PROGRESS_REPLACE;
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_taskmesh_payload_load(nir_builder *b,
                             nir_intrinsic_instr *intrin,
                             lower_tsms_io_state *s)
 {
    unsigned base = nir_intrinsic_base(intrin);
-   unsigned num_components = intrin->dest.ssa.num_components;
-   unsigned bit_size = intrin->dest.ssa.bit_size;
+   unsigned num_components = intrin->def.num_components;
+   unsigned bit_size = intrin->def.bit_size;
 
-   nir_ssa_def *ptr =
+   nir_def *ptr =
       b->shader->info.stage == MESA_SHADER_TASK ?
       task_ring_entry_index(b, s) :
       mesh_ring_entry_index(b, s);
 
-   nir_ssa_def *addr = intrin->src[0].ssa;
-   nir_ssa_def *ring = nir_load_ring_task_payload_amd(b);
-   nir_ssa_def *ring_off = nir_imul_imm(b, ptr, s->payload_entry_bytes);
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *addr = intrin->src[0].ssa;
+   nir_def *ring = nir_load_ring_task_payload_amd(b);
+   nir_def *ring_off = nir_imul_imm(b, ptr, s->payload_entry_bytes);
+   nir_def *zero = nir_imm_int(b, 0);
 
    return nir_load_buffer_amd(b, num_components, bit_size, ring, addr, ring_off, zero, .base = base,
                               .memory_modes = nir_var_mem_task_payload,
                               .access = ACCESS_COHERENT);
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_task_intrinsics(nir_builder *b,
                       nir_instr *instr,
                       void *state)
@@ -256,7 +278,8 @@ lower_task_intrinsics(nir_builder *b,
 void
 ac_nir_lower_task_outputs_to_mem(nir_shader *shader,
                                  unsigned task_payload_entry_bytes,
-                                 unsigned task_num_entries)
+                                 unsigned task_num_entries,
+                                 bool has_query)
 {
    assert(util_is_power_of_two_nonzero(task_num_entries));
 
@@ -269,6 +292,7 @@ ac_nir_lower_task_outputs_to_mem(nir_shader *shader,
       .draw_entry_bytes = 16,
       .payload_entry_bytes = task_payload_entry_bytes,
       .num_entries = task_num_entries,
+      .has_query = has_query,
    };
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
@@ -293,7 +317,7 @@ filter_mesh_input_load(const nir_instr *instr,
    return intrin->intrinsic == nir_intrinsic_load_task_payload;
 }
 
-static nir_ssa_def *
+static nir_def *
 lower_mesh_intrinsics(nir_builder *b,
                       nir_instr *instr,
                       void *state)

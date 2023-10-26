@@ -30,6 +30,10 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#ifdef HAVE_LIBDRM
+#include <xf86drm.h>
+#endif
+
 #include "egltypedefs.h"
 
 #ifdef __cplusplus
@@ -54,7 +58,7 @@ _eglLookupDevice(EGLDeviceEXT device)
 }
 
 _EGLDevice *
-_eglAddDevice(int fd, bool software);
+_eglFindDevice(int fd, bool software);
 
 enum _egl_device_extension {
    _EGL_DEVICE_SOFTWARE,
@@ -64,8 +68,21 @@ enum _egl_device_extension {
 
 typedef enum _egl_device_extension _EGLDeviceExtension;
 
+#ifdef HAVE_LIBDRM
+drmDevicePtr
+_eglDeviceDrm(_EGLDevice *dev);
+#else
+#define _eglDeviceDrm(dev) NULL
+#endif
+
+_EGLDevice *
+_eglDeviceNext(_EGLDevice *dev);
+
 EGLBoolean
 _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext);
+
+int
+_eglDeviceRefreshList(void);
 
 EGLBoolean
 _eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute, EGLAttrib *value);

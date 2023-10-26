@@ -313,7 +313,7 @@ init_db_template_entry(struct zink_screen *screen, struct zink_shader *shader, e
                        unsigned idx, struct zink_descriptor_template *entry, unsigned *entry_idx)
 {
     int index = shader->bindings[type][idx].index;
-    gl_shader_stage stage = shader->info.stage;
+    gl_shader_stage stage = clamp_stage(&shader->info);
     entry->count = shader->bindings[type][idx].size;
 
     switch (shader->bindings[type][idx].type) {
@@ -692,7 +692,7 @@ zink_descriptor_shader_init(struct zink_screen *screen, struct zink_shader *shad
 {
    VkDescriptorSetLayoutBinding bindings[ZINK_DESCRIPTOR_BASE_TYPES * ZINK_MAX_DESCRIPTORS_PER_TYPE];
    unsigned num_bindings = 0;
-   VkShaderStageFlagBits stage_flags = mesa_to_vk_shader_stage(shader->info.stage);
+   VkShaderStageFlagBits stage_flags = mesa_to_vk_shader_stage(clamp_stage(&shader->info));
 
    unsigned desc_set_size = shader->has_uniforms;
    for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++)
@@ -709,7 +709,7 @@ zink_descriptor_shader_init(struct zink_screen *screen, struct zink_shader *shad
       binding->pImmutableSamplers = NULL;
       struct zink_descriptor_template *entry = &shader->precompile.db_template[num_bindings];
       entry->count = 1;
-      entry->offset = offsetof(struct zink_context, di.db.ubos[shader->info.stage][0]);
+      entry->offset = offsetof(struct zink_context, di.db.ubos[clamp_stage(&shader->info)][0]);
       entry->stride = sizeof(VkDescriptorAddressInfoEXT);
       entry->db_size = screen->info.db_props.robustUniformBufferDescriptorSize;
       num_bindings++;

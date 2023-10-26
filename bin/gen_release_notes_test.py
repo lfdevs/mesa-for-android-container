@@ -198,3 +198,8 @@ async def test_parse_issues(content: str, bugs: typing.List[str]) -> None:
             mock.patch('bin.gen_release_notes.gather_commits', mock.AsyncMock(return_value='sha\n')):
         ids = await parse_issues('1234 not used')
         assert set(ids) == set(bugs)
+
+@pytest.mark.asyncio
+async def test_rst_escape():
+    out = inliner.quoteInline('foo@bar')
+    assert out == 'foo\@bar'

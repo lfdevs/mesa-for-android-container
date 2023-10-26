@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -149,7 +149,7 @@ vmw_drm_gb_surface_from_handle(struct svga_winsys_screen *sws,
     SVGA3dSurfaceAllFlags flags;
     uint32_t mip_levels;
     struct vmw_buffer_desc desc;
-    struct pb_manager *provider = vws->pools.gmr;
+    struct pb_manager *provider = vws->pools.dma_base;
     struct pb_buffer *pb_buf;
     uint32_t handle;
     int ret;

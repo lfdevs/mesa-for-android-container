@@ -48,15 +48,15 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
 
    b->cursor = nir_after_instr(instr);
 
-   nir_ssa_def *val = &intrin->dest.ssa;
+   nir_def *val = &intrin->def;
 
    /* Do GL_FIXED rescaling for GLES2.0.  Our GL_FIXED attributes
     * come in as floating point conversions of the integer values.
     */
    if (wa_flags & BRW_ATTRIB_WA_COMPONENT_MASK) {
-      nir_ssa_def *scaled =
+      nir_def *scaled =
          nir_fmul_imm(b, val, 1.0f / 65536.0f);
-      nir_ssa_def *comps[4];
+      nir_def *comps[4];
       for (int i = 0; i < val->num_components; i++) {
          bool rescale = i < (wa_flags & BRW_ATTRIB_WA_COMPONENT_MASK);
          comps[i] = nir_channel(b, rescale ? scaled : val, i);
@@ -67,7 +67,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    /* Do sign recovery for 2101010 formats if required. */
    if (wa_flags & BRW_ATTRIB_WA_SIGN) {
       /* sign recovery shift: <22, 22, 22, 30> */
-      nir_ssa_def *shift = nir_imm_ivec4(b, 22, 22, 22, 30);
+      nir_def *shift = nir_imm_ivec4(b, 22, 22, 22, 30);
       val = nir_ishr(b, nir_ishl(b, val, shift), shift);
    }
 
@@ -90,7 +90,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
           * promote to the new higher version, and this is what Haswell+
           * hardware does anyway, we just always use this formula.
           */
-         nir_ssa_def *es3_normalize_factor =
+         nir_def *es3_normalize_factor =
             nir_imm_vec4(b, 1.0f / ((1 << 9) - 1), 1.0f / ((1 << 9) - 1),
                             1.0f / ((1 << 9) - 1), 1.0f / ((1 << 1) - 1));
          val = nir_fmax(b,
@@ -102,7 +102,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
           * 2.1 unsigned normalization
           * f = c/(2^n-1)
           */
-         nir_ssa_def *normalize_factor =
+         nir_def *normalize_factor =
             nir_imm_vec4(b, 1.0f / ((1 << 10) - 1), 1.0f / ((1 << 10) - 1),
                             1.0f / ((1 << 10) - 1), 1.0f / ((1 << 2)  - 1));
 
@@ -115,7 +115,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
                                             : nir_u2f32(b, val);
    }
 
-   nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa, val,
+   nir_def_rewrite_uses_after(&intrin->def, val,
                                   val->parent_instr);
 
    return true;

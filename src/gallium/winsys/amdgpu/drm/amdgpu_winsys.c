@@ -30,46 +30,6 @@ static simple_mtx_t dev_tab_mutex = SIMPLE_MTX_INITIALIZER;
 DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", false)
 #endif
 
-static void handle_env_var_force_family(struct amdgpu_winsys *ws)
-{
-      const char *family = debug_get_option("SI_FORCE_FAMILY", NULL);
-      unsigned i;
-
-      if (!family)
-               return;
-
-      for (i = CHIP_TAHITI; i < CHIP_LAST; i++) {
-         if (!strcmp(family, ac_get_llvm_processor_name(i))) {
-            /* Override family and gfx_level. */
-            ws->info.family = i;
-            ws->info.name = "NOOP";
-            strcpy(ws->info.lowercase_name , "noop");
-
-            if (i >= CHIP_GFX1100)
-               ws->info.gfx_level = GFX11;
-            else if (i >= CHIP_NAVI21)
-               ws->info.gfx_level = GFX10_3;
-            else if (i >= CHIP_NAVI10)
-               ws->info.gfx_level = GFX10;
-            else if (i >= CHIP_VEGA10)
-               ws->info.gfx_level = GFX9;
-            else if (i >= CHIP_TONGA)
-               ws->info.gfx_level = GFX8;
-            else if (i >= CHIP_BONAIRE)
-               ws->info.gfx_level = GFX7;
-            else
-               ws->info.gfx_level = GFX6;
-
-            /* Don't submit any IBs. */
-            setenv("RADEON_NOOP", "1", 1);
-            return;
-         }
-      }
-
-      fprintf(stderr, "radeonsi: Unknown family: %s\n", family);
-      exit(1);
-}
-
 /* Helper function to do the ioctls needed for setup and init. */
 static bool do_winsys_init(struct amdgpu_winsys *ws,
                            const struct pipe_screen_config *config,
@@ -82,8 +42,6 @@ static bool do_winsys_init(struct amdgpu_winsys *ws,
    if (ws->info.has_dedicated_vram)
       ws->info.has_local_buffers = false;
 
-   handle_env_var_force_family(ws);
-
    ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
@@ -92,7 +50,7 @@ static bool do_winsys_init(struct amdgpu_winsys *ws,
 
    ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL ||
                   strstr(debug_get_option("AMD_DEBUG", ""), "check_vm") != NULL;
-   ws->noop_cs = debug_get_bool_option("RADEON_NOOP", false);
+   ws->noop_cs = ws->info.family_overridden || debug_get_bool_option("RADEON_NOOP", false);
 #if DEBUG
    ws->debug_all_bos = debug_get_option_all_bos();
 #endif

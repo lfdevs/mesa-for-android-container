@@ -116,11 +116,6 @@ struct pvr_suballoc_bo {
  * firmware processor.
  */
 #define PVR_BO_ALLOC_FLAG_PM_FW_PROTECT BITFIELD_BIT(3U)
-/**
- * \brief Flag passed to #pvr_bo_alloc() to indicate that the buffer should be
- * zeroed at allocation time.
- */
-#define PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC BITFIELD_BIT(4U)
 
 VkResult pvr_bo_alloc(struct pvr_device *device,
                       struct pvr_winsys_heap *heap,

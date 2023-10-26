@@ -105,7 +105,7 @@
  */
 #define USE_DRAWPIXELS_CACHE 1
 
-static nir_ssa_def *
+static nir_def *
 sample_via_nir(nir_builder *b, nir_variable *texcoord,
                const char *name, int sampler, enum glsl_base_type base_type,
                nir_alu_type alu_type)
@@ -126,17 +126,17 @@ sample_via_nir(nir_builder *b, nir_variable *texcoord,
    tex->coord_components = 2;
    tex->dest_type = alu_type;
    tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
    tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
    tex->src[2] =
       nir_tex_src_for_ssa(nir_tex_src_coord,
                           nir_trim_vector(b, nir_load_var(b, texcoord),
                                              tex->coord_components));
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
-   return nir_channel(b, &tex->dest.ssa, 0);
+   return nir_channel(b, &tex->def, 0);
 }
 
 static void *
@@ -160,7 +160,7 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
       nir_variable *out =
          nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                            FRAG_RESULT_DEPTH, glsl_float_type());
-      nir_ssa_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
+      nir_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
                                           GLSL_TYPE_FLOAT, nir_type_float32);
       nir_store_var(&b, out, depth, 0x1);
 
@@ -176,7 +176,7 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
       nir_variable *out =
          nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                            FRAG_RESULT_STENCIL, glsl_uint_type());
-      nir_ssa_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
+      nir_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
                                             GLSL_TYPE_UINT, nir_type_uint32);
       nir_store_var(&b, out, stencil, 0x1);
    }
@@ -199,9 +199,9 @@ make_drawpix_zs_to_color_program_nir(struct st_context *st,
                                         VARYING_SLOT_TEX0, glsl_vec_type(2));
 
    /* Sample depth and stencil */
-   nir_ssa_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
+   nir_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
                                        GLSL_TYPE_FLOAT, nir_type_float32);
-   nir_ssa_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
+   nir_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
                                          GLSL_TYPE_UINT, nir_type_uint32);
 
    /* Create the variable to store the output color */
@@ -209,29 +209,29 @@ make_drawpix_zs_to_color_program_nir(struct st_context *st,
       nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                         FRAG_RESULT_COLOR, glsl_vec_type(4));
 
-   nir_ssa_def *shifted_depth = nir_fmul(&b,nir_f2f64(&b, depth), nir_imm_double(&b,0xffffff));
-   nir_ssa_def *int_depth = nir_f2u32(&b,shifted_depth);
+   nir_def *shifted_depth = nir_fmul(&b,nir_f2f64(&b, depth), nir_imm_double(&b,0xffffff));
+   nir_def *int_depth = nir_f2u32(&b,shifted_depth);
 
-   nir_ssa_def *ds[4];
+   nir_def *ds[4];
    ds[0] = nir_ubitfield_extract(&b, stencil, nir_imm_int(&b, 0), nir_imm_int(&b,8));
    ds[1] = nir_ubitfield_extract(&b, int_depth, nir_imm_int(&b, 0), nir_imm_int(&b,8));
    ds[2] = nir_ubitfield_extract(&b, int_depth, nir_imm_int(&b, 8), nir_imm_int(&b,8));
    ds[3] = nir_ubitfield_extract(&b, int_depth, nir_imm_int(&b, 16), nir_imm_int(&b,8));
 
-   nir_ssa_def *ds_comp[4];
+   nir_def *ds_comp[4];
    ds_comp[0] = nir_fsat(&b, nir_fmul_imm(&b, nir_u2f32(&b, ds[3]), 1.0/255.0));
    ds_comp[1] = nir_fsat(&b, nir_fmul_imm(&b, nir_u2f32(&b, ds[2]), 1.0/255.0));
    ds_comp[2] = nir_fsat(&b, nir_fmul_imm(&b, nir_u2f32(&b, ds[1]), 1.0/255.0));
    ds_comp[3] = nir_fsat(&b, nir_fmul_imm(&b, nir_u2f32(&b, ds[0]), 1.0/255.0));
 
-   nir_ssa_def *unpacked_ds = nir_vec4(&b, ds_comp[0], ds_comp[1], ds_comp[2], ds_comp[3]);
+   nir_def *unpacked_ds = nir_vec4(&b, ds_comp[0], ds_comp[1], ds_comp[2], ds_comp[3]);
 
    if (rgba) {
       nir_store_var(&b, color_out, unpacked_ds, 0xf);
    }
    else {
       unsigned zyxw[4] = { 2, 1, 0, 3 };
-      nir_ssa_def *swizzled_ds= nir_swizzle(&b, unpacked_ds, zyxw, 4);
+      nir_def *swizzled_ds= nir_swizzle(&b, unpacked_ds, zyxw, 4);
       nir_store_var(&b, color_out, swizzled_ds, 0xf);
    }
 

@@ -63,6 +63,12 @@ struct pan_image_slice_layout {
    unsigned surface_stride;
 
    struct {
+      /* Stride in number of superblocks */
+      unsigned stride;
+
+      /* Number of superblocks */
+      unsigned nr_blocks;
+
       /* Size of the AFBC header preceding each slice */
       unsigned header_size;
 
@@ -128,7 +134,9 @@ struct pan_image_view {
    unsigned first_level, last_level;
    unsigned first_layer, last_layer;
    unsigned char swizzle[4];
-   const struct pan_image *image;
+
+   /* planes 1 and 2 are NULL for single plane formats */
+   const struct pan_image *planes[MAX_IMAGE_PLANES];
 
    /* If EXT_multisampled_render_to_texture is used, this may be
     * greater than image->layout.nr_samples. */
@@ -140,6 +148,57 @@ struct pan_image_view {
       unsigned size;
    } buf;
 };
+
+static inline const struct pan_image *
+pan_image_view_get_plane(const struct pan_image_view *iview, uint32_t idx)
+{
+   if (idx >= ARRAY_SIZE(iview->planes))
+      return NULL;
+
+   return iview->planes[idx];
+}
+
+static inline uint32_t
+pan_image_view_get_nr_samples(const struct pan_image_view *iview)
+{
+   /* All planes should have the same nr_samples value, so we
+    * just pick the first plane. */
+   const struct pan_image *image = pan_image_view_get_plane(iview, 0);
+
+   if (!image)
+      return 0;
+
+   return image->layout.nr_samples;
+}
+
+static inline const struct pan_image *
+pan_image_view_get_rt_image(const struct pan_image_view *iview)
+{
+   /* We only support rendering to plane 0 */
+   assert(pan_image_view_get_plane(iview, 1) == NULL);
+   return pan_image_view_get_plane(iview, 0);
+}
+
+static inline bool
+pan_image_view_has_crc(const struct pan_image_view *iview)
+{
+   const struct pan_image *image = pan_image_view_get_rt_image(iview);
+
+   if (!image)
+      return false;
+
+   return image->layout.crc;
+}
+
+static inline const struct pan_image *
+pan_image_view_get_zs_image(const struct pan_image_view *iview)
+{
+   /* We split depth/stencil combined formats, and end up with only
+    * singleplanar depth and stencil formats. */
+   assert(util_format_is_depth_or_stencil(iview->format));
+   assert(pan_image_view_get_plane(iview, 1) == NULL);
+   return pan_image_view_get_plane(iview, 0);
+}
 
 unsigned panfrost_compute_checksum_size(struct pan_image_slice_layout *slice,
                                         unsigned width, unsigned height);
@@ -174,6 +233,8 @@ enum pan_afbc_mode panfrost_afbc_format(unsigned arch, enum pipe_format format);
 
 bool panfrost_afbc_can_ytr(enum pipe_format format);
 
+bool panfrost_afbc_can_pack(enum pipe_format format);
+
 bool panfrost_afbc_can_tile(const struct panfrost_device *dev);
 
 /*
@@ -196,9 +257,15 @@ unsigned panfrost_afbc_superblock_height(uint64_t modifier);
 
 bool panfrost_afbc_is_wide(uint64_t modifier);
 
+struct pan_block_size panfrost_afbc_subblock_size(uint64_t modifier);
+
 uint32_t pan_afbc_row_stride(uint64_t modifier, uint32_t width);
 
 uint32_t pan_afbc_stride_blocks(uint64_t modifier, uint32_t row_stride_bytes);
+
+uint32_t pan_slice_align(uint64_t modifier);
+
+uint32_t pan_afbc_body_align(uint64_t modifier);
 
 struct pan_block_size panfrost_block_size(uint64_t modifier,
                                           enum pipe_format format);
@@ -234,7 +301,8 @@ struct pan_image_explicit_layout {
 };
 
 bool
-pan_image_layout_init(struct pan_image_layout *layout,
+pan_image_layout_init(const struct panfrost_device *dev,
+                      struct pan_image_layout *layout,
                       const struct pan_image_explicit_layout *explicit_layout);
 
 unsigned panfrost_get_legacy_stride(const struct pan_image_layout *layout,

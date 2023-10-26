@@ -46,7 +46,7 @@ public:
 private:
    bool load_const(nir_load_const_instr *lc, Shader& shader);
    bool process_jump(nir_jump_instr *instr, Shader& shader);
-   bool process_undef(nir_ssa_undef_instr *undef, Shader& shader);
+   bool process_undef(nir_undef_instr *undef, Shader& shader);
 
    Instr::Pointer export_from_string(std::istream& is, bool is_last);
 

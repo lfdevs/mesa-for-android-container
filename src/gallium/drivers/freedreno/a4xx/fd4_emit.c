@@ -573,7 +573,7 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 
          OUT_PKT0(ring, REG_A4XX_VFD_FETCH(j), 4);
          OUT_RING(ring, A4XX_VFD_FETCH_INSTR_0_FETCHSIZE(fs - 1) |
-                           A4XX_VFD_FETCH_INSTR_0_BUFSTRIDE(vb->stride) |
+                           A4XX_VFD_FETCH_INSTR_0_BUFSTRIDE(elem->src_stride) |
                            COND(elem->instance_divisor,
                                 A4XX_VFD_FETCH_INSTR_0_INSTANCED) |
                            COND(switchnext, A4XX_VFD_FETCH_INSTR_0_SWITCHNEXT));

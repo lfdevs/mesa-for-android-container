@@ -36,7 +36,6 @@
 #include "i915_reg.h"
 #include "i915_state.h"
 
-
 /***********************************************************************
  * Determine the hardware vertex layout.
  * Depends on vertex/fragment shader state.

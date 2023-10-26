@@ -80,7 +80,8 @@ intel_measure_init(struct intel_measure_device *device)
        * warning on the output filehandle.
        */
 
-      /* default batch_size allows for 64k renders in a single batch */
+      /* default batch_size allows for 32k renders in a single batch */
+      const int MINIMUM_BATCH_SIZE = 1024;
       const int DEFAULT_BATCH_SIZE = 64 * 1024;
       config.batch_size = DEFAULT_BATCH_SIZE;
 
@@ -88,6 +89,7 @@ intel_measure_init(struct intel_measure_device *device)
        * csv.  Overflow may occur for offscreen workloads or large 'interval'
        * settings.
        */
+      const int MINIMUM_BUFFER_SIZE = 1024;
       const int DEFAULT_BUFFER_SIZE = 64 * 1024;
       config.buffer_size = DEFAULT_BUFFER_SIZE;
 
@@ -179,12 +181,12 @@ intel_measure_init(struct intel_measure_device *device)
       if (batch_size_s) {
          batch_size_s += 11;
          const int batch_size = atoi(batch_size_s);
-         if (batch_size < DEFAULT_BATCH_SIZE) {
-            fprintf(stderr, "INTEL_MEASURE minimum batch_size is 4k: "
+         if (batch_size < MINIMUM_BATCH_SIZE ) {
+            fprintf(stderr, "INTEL_MEASURE minimum batch_size is 1k: "
                     "%d\n", batch_size);
             abort();
          }
-         if (batch_size > DEFAULT_BATCH_SIZE * 1024) {
+         if (batch_size > MINIMUM_BATCH_SIZE * 4 * 1024) {
             fprintf(stderr, "INTEL_MEASURE batch_size limited to 4M: "
                     "%d\n", batch_size);
             abort();
@@ -196,11 +198,11 @@ intel_measure_init(struct intel_measure_device *device)
       if (buffer_size_s) {
          buffer_size_s += 12;
          const int buffer_size = atoi(buffer_size_s);
-         if (buffer_size < DEFAULT_BUFFER_SIZE) {
+         if (buffer_size < MINIMUM_BUFFER_SIZE) {
             fprintf(stderr, "INTEL_MEASURE minimum buffer_size is 1k: "
                     "%d\n", DEFAULT_BUFFER_SIZE);
          }
-         if (buffer_size > DEFAULT_BUFFER_SIZE * 1024) {
+         if (buffer_size > MINIMUM_BUFFER_SIZE * 1024) {
             fprintf(stderr, "INTEL_MEASURE buffer_size limited to 1M: "
                     "%d\n", buffer_size);
          }
@@ -213,12 +215,12 @@ intel_measure_init(struct intel_measure_device *device)
       }
 
       if (!config.cpu_measure)
-         fputs("draw_start,draw_end,frame,batch,renderpass,"
+         fputs("draw_start,draw_end,frame,batch,batch_size,renderpass,"
                "event_index,event_count,type,count,vs,tcs,tes,"
                "gs,fs,cs,ms,ts,idle_us,time_us\n",
                config.file);
       else
-         fputs("draw_start,frame,batch,event_index,event_count,"
+         fputs("draw_start,frame,batch,batch_size,event_index,event_count,"
                "type,count\n",
                config.file);
    }
@@ -279,9 +281,9 @@ intel_measure_snapshot_string(enum intel_measure_snapshot_type type)
  */
 bool
 intel_measure_state_changed(const struct intel_measure_batch *batch,
-                            uintptr_t vs, uintptr_t tcs, uintptr_t tes,
-                            uintptr_t gs, uintptr_t fs, uintptr_t cs,
-                            uintptr_t ms, uintptr_t ts)
+                            uint32_t vs, uint32_t tcs, uint32_t tes,
+                            uint32_t gs, uint32_t fs, uint32_t cs,
+                            uint32_t ms, uint32_t ts)
 {
    if (batch->index == 0) {
       /* always record the first event */
@@ -320,14 +322,14 @@ intel_measure_state_changed(const struct intel_measure_batch *batch,
       return true;
    }
 
-   return (last_snap->vs  != (uintptr_t) vs ||
-           last_snap->tcs != (uintptr_t) tcs ||
-           last_snap->tes != (uintptr_t) tes ||
-           last_snap->gs  != (uintptr_t) gs ||
-           last_snap->fs  != (uintptr_t) fs ||
-           last_snap->cs  != (uintptr_t) cs ||
-           last_snap->ms  != (uintptr_t) ms ||
-           last_snap->ts  != (uintptr_t) ts);
+   return (last_snap->vs  != vs ||
+           last_snap->tcs != tcs ||
+           last_snap->tes != tes ||
+           last_snap->gs  != gs ||
+           last_snap->fs  != fs ||
+           last_snap->cs  != cs ||
+           last_snap->ms  != ms ||
+           last_snap->ts  != ts);
 }
 
 /**
@@ -433,6 +435,7 @@ intel_measure_push_result(struct intel_measure_device *device,
       if (begin->type == INTEL_SNAPSHOT_SECONDARY_BATCH) {
          assert(begin->secondary != NULL);
          begin->secondary->batch_count = batch->batch_count;
+         begin->secondary->batch_size = 0;
          begin->secondary->primary_renderpass = batch->renderpass;
          intel_measure_push_result(device, begin->secondary);
          continue;
@@ -468,6 +471,7 @@ intel_measure_push_result(struct intel_measure_device *device,
          raw_timestamp_delta(prev_end_ts, buffered_result->start_ts);
       buffered_result->frame = batch->frame;
       buffered_result->batch_count = batch->batch_count;
+      buffered_result->batch_size = batch->batch_size;
       buffered_result->primary_renderpass = batch->primary_renderpass;
       buffered_result->event_index = i / 2;
       buffered_result->snapshot.event_count = end->event_count;
@@ -620,15 +624,15 @@ print_combined_results(struct intel_measure_device *measure_device,
    const struct intel_measure_snapshot *begin = &start_result->snapshot;
    uint32_t renderpass = (start_result->primary_renderpass)
       ? start_result->primary_renderpass : begin->renderpass;
-   fprintf(config.file, "%"PRIu64",%"PRIu64",%u,%u,%u,%u,%u,%s,%u,"
+   fprintf(config.file, "%"PRIu64",%"PRIu64",%u,%u,%"PRIu64",%u,%u,%u,%s,%u,"
            "0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,%.3lf,%.3lf\n",
            start_result->start_ts, current_result->end_ts,
-           start_result->frame, start_result->batch_count,
+           start_result->frame,
+           start_result->batch_count, start_result->batch_size,
            renderpass, start_result->event_index, event_count,
            begin->event_name, begin->count,
-           (uint32_t)begin->vs, (uint32_t)begin->tcs, (uint32_t)begin->tes,
-           (uint32_t)begin->gs, (uint32_t)begin->fs, (uint32_t)begin->cs,
-           (uint32_t)begin->ms, (uint32_t)begin->ts,
+           begin->vs, begin->tcs, begin->tes, begin->gs,
+           begin->fs, begin->cs, begin->ms, begin->ts,
            (double)duration_idle_ns / 1000.0,
            (double)duration_time_ns / 1000.0);
 }
@@ -639,6 +643,7 @@ print_combined_results(struct intel_measure_device *measure_device,
 void
 intel_measure_print_cpu_result(unsigned int frame,
                                unsigned int batch_count,
+                               uint64_t batch_size,
                                unsigned int event_index,
                                unsigned int event_count,
                                unsigned int count,
@@ -647,9 +652,9 @@ intel_measure_print_cpu_result(unsigned int frame,
    assert(config.cpu_measure);
    uint64_t start_ns = os_time_get_nano();
 
-   fprintf(config.file, "%"PRIu64",%u,%3u,%3u,%u,%s,%u\n",
-           start_ns, frame, batch_count, event_index, event_count,
-           event_name, count);
+   fprintf(config.file, "%"PRIu64",%u,%3u,%"PRIu64",%3u,%u,%s,%u\n",
+           start_ns, frame, batch_count, batch_size,
+           event_index, event_count, event_name, count);
 }
 
 /**
@@ -707,4 +712,3 @@ intel_measure_gather(struct intel_measure_device *measure_device,
    intel_measure_print(measure_device, info);
    pthread_mutex_unlock(&measure_device->mutex);
 }
-

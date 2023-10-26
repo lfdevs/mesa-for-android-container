@@ -1,7 +1,0 @@
-# [...]
-# Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
-# Image comparison failed: reference = 0, expected = 0:0:0:0, result = 0:0:0:3
-# Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
-# [...]
-wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail
-wayland-dEQP-EGL.functional.wide_color.window_888_colorspace_default,Fail

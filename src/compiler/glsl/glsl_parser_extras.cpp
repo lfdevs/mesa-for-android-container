@@ -71,7 +71,7 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->translation_unit.make_empty();
    this->symbols = new(mem_ctx) glsl_symbol_table;
 
-   this->linalloc = linear_alloc_parent(this, 0);
+   this->linalloc = linear_context(this);
 
    this->info_log = ralloc_strdup(mem_ctx, "");
    this->error = false;
@@ -317,6 +317,10 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
           sizeof(this->atomic_counter_offsets));
    this->allow_extension_directive_midshader =
       ctx->Const.AllowGLSLExtensionDirectiveMidShader;
+   this->alias_shader_extension =
+      ctx->Const.AliasShaderExtension;
+   this->allow_vertex_texture_bias =
+      ctx->Const.AllowVertexTextureBias;
    this->allow_glsl_120_subset_in_110 =
       ctx->Const.AllowGLSL120SubsetIn110;
    this->allow_builtin_variable_redeclaration =
@@ -815,16 +819,50 @@ void _mesa_glsl_extension::set_flags(_mesa_glsl_parse_state *state,
 }
 
 /**
+ * Check alias_shader_extension for any aliased shader extensions
+ */
+static const char *find_extension_alias(_mesa_glsl_parse_state *state, const char *name)
+{
+   char *exts, *field, *ext_alias = NULL;
+
+   /* Copy alias_shader_extension because strtok() is destructive. */
+   exts = strdup(state->alias_shader_extension);
+   if (exts) {
+      for (field = strtok(exts, ","); field != NULL; field = strtok(NULL, ",")) {
+         if(strncmp(name, field, strlen(name)) == 0) {
+            field = strstr(field, ":");
+            if(field) {
+               ext_alias = strdup(field + 1);
+            }
+            break;
+         }
+      }
+      
+      free(exts);
+   }
+   return ext_alias;
+}
+
+/**
  * Find an extension by name in _mesa_glsl_supported_extensions.  If
  * the name is not found, return NULL.
  */
-static const _mesa_glsl_extension *find_extension(const char *name)
+static const _mesa_glsl_extension *find_extension(_mesa_glsl_parse_state *state, const char *name)
 {
+   const char *ext_alias = NULL;
+   if (state->alias_shader_extension) {
+      ext_alias = find_extension_alias(state, name);
+      name = ext_alias ? ext_alias : name;
+   }
+   
    for (unsigned i = 0; i < ARRAY_SIZE(_mesa_glsl_supported_extensions); ++i) {
       if (strcmp(name, _mesa_glsl_supported_extensions[i].name) == 0) {
+         free((void *)ext_alias);
          return &_mesa_glsl_supported_extensions[i];
       }
    }
+
+   free((void *)ext_alias);
    return NULL;
 }
 
@@ -879,7 +917,7 @@ _mesa_glsl_process_extension(const char *name, YYLTYPE *name_locp,
          }
       }
    } else {
-      const _mesa_glsl_extension *extension = find_extension(name);
+      const _mesa_glsl_extension *extension = find_extension(state, name);
       if (extension &&
           (extension->compatible_with_state(state, api, gl_version) ||
            (state->consts->AllowGLSLCompatShaders &&
@@ -2070,11 +2108,11 @@ _mesa_glsl_copy_symbols_from_table(struct exec_list *shader_ir,
       const glsl_type *iface =
          src->get_interface("gl_PerVertex", ir_var_shader_in);
       if (iface)
-         dest->add_interface(iface->name, iface, ir_var_shader_in);
+         dest->add_interface(glsl_get_type_name(iface), iface, ir_var_shader_in);
 
       iface = src->get_interface("gl_PerVertex", ir_var_shader_out);
       if (iface)
-         dest->add_interface(iface->name, iface, ir_var_shader_out);
+         dest->add_interface(glsl_get_type_name(iface), iface, ir_var_shader_out);
    }
 }
 

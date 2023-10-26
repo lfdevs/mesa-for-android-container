@@ -83,14 +83,15 @@ dump_shader_info(struct ir3_shader_variant *v,
    util_debug_message(
       debug, SHADER_INFO,
       "%s shader: %u inst, %u nops, %u non-nops, %u mov, %u cov, "
-      "%u dwords, %u last-baryf, %u half, %u full, %u constlen, "
+      "%u dwords, %u last-baryf, %u last-helper, %u half, %u full, %u constlen, "
       "%u cat0, %u cat1, %u cat2, %u cat3, %u cat4, %u cat5, %u cat6, %u cat7, "
       "%u stp, %u ldp, %u sstall, %u (ss), %u systall, %u (sy), %d waves, "
       "%d loops\n",
       ir3_shader_stage(v), v->info.instrs_count, v->info.nops_count,
       v->info.instrs_count - v->info.nops_count, v->info.mov_count,
       v->info.cov_count, v->info.sizedwords, v->info.last_baryf,
-      v->info.max_half_reg + 1, v->info.max_reg + 1, v->constlen,
+      v->info.last_helper, v->info.max_half_reg + 1, v->info.max_reg + 1,
+      v->constlen,
       v->info.instrs_per_cat[0], v->info.instrs_per_cat[1],
       v->info.instrs_per_cat[2], v->info.instrs_per_cat[3],
       v->info.instrs_per_cat[4], v->info.instrs_per_cat[5],
@@ -319,13 +320,21 @@ ir3_shader_compute_state_create(struct pipe_context *pctx,
    if (ctx->screen->gen >= 6)
       ir3_nir_lower_io_to_bindless(nir);
 
+   enum ir3_wavesize_option api_wavesize = IR3_SINGLE_OR_DOUBLE;
+   enum ir3_wavesize_option real_wavesize = IR3_SINGLE_OR_DOUBLE;
+
+   if (ctx->screen->gen >= 6 && !ctx->screen->info->a6xx.supports_double_threadsize) {
+      api_wavesize = IR3_SINGLE_ONLY;
+      real_wavesize = IR3_SINGLE_ONLY;
+   }
+
    struct ir3_shader *shader =
       ir3_shader_from_nir(compiler, nir, &(struct ir3_shader_options){
                               /* TODO: force to single on a6xx with legacy
                                * ballot extension that uses 64-bit masks
                                */
-                              .api_wavesize = IR3_SINGLE_OR_DOUBLE,
-                              .real_wavesize = IR3_SINGLE_OR_DOUBLE,
+                              .api_wavesize = api_wavesize,
+                              .real_wavesize = real_wavesize,
                           }, NULL);
    shader->cs.req_input_mem = align(cso->req_input_mem, 4) / 4;     /* byte->dword */
    shader->cs.req_local_mem = cso->static_shared_mem;
@@ -654,4 +663,26 @@ ir3_update_max_tf_vtx(struct fd_context *ctx,
    }
 
    ctx->streamout.max_tf_vtx = maxvtxcnt;
+}
+
+void
+ir3_get_private_mem(struct fd_context *ctx, const struct ir3_shader_variant *so)
+{
+   uint32_t fibers_per_sp = ctx->screen->info->fibers_per_sp;
+   uint32_t num_sp_cores = ctx->screen->info->num_sp_cores;
+
+   uint32_t per_fiber_size = so->pvtmem_size;
+   if (per_fiber_size > ctx->pvtmem[so->pvtmem_per_wave].per_fiber_size) {
+      if (ctx->pvtmem[so->pvtmem_per_wave].bo)
+         fd_bo_del(ctx->pvtmem[so->pvtmem_per_wave].bo);
+
+      uint32_t per_sp_size = ALIGN(per_fiber_size * fibers_per_sp, 1 << 12);
+      uint32_t total_size = per_sp_size * num_sp_cores;
+
+      ctx->pvtmem[so->pvtmem_per_wave].per_fiber_size = per_fiber_size;
+      ctx->pvtmem[so->pvtmem_per_wave].per_sp_size = per_sp_size;
+      ctx->pvtmem[so->pvtmem_per_wave].bo = fd_bo_new(
+         ctx->screen->dev, total_size, FD_BO_NOMAP, "pvtmem_%s_%d",
+         so->pvtmem_per_wave ? "per_wave" : "per_fiber", per_fiber_size);
+   }
 }

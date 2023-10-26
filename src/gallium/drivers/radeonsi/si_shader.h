@@ -289,6 +289,8 @@ enum
    SI_VS_BLIT_SGPRS_POS = 3,
    SI_VS_BLIT_SGPRS_POS_COLOR = 7,
    SI_VS_BLIT_SGPRS_POS_TEXCOORD = 9,
+
+   MAX_SI_VS_BLIT_SGPRS = 10, /* +1 for the attribute ring address */
 };
 
 #define SI_NGG_CULL_TRIANGLES                (1 << 0)   /* this implies W, view.xy, and small prim culling */
@@ -490,7 +492,7 @@ struct si_shader_info {
    bool uses_block_id[3];
    bool uses_variable_block_size;
    bool uses_grid_size;
-   bool uses_subgroup_info;
+   bool uses_tg_size;
    bool writes_position;
    bool writes_psize;
    bool writes_clipvertex;
@@ -663,8 +665,6 @@ union si_shader_part_key {
       unsigned as_ls : 1;
       unsigned as_es : 1;
       unsigned as_ngg : 1;
-      /* Prologs for monolithic shaders shouldn't set EXEC. */
-      unsigned is_monolithic : 1;
    } vs_prolog;
    struct {
       struct si_tcs_epilog_bits states;
@@ -675,13 +675,10 @@ union si_shader_part_key {
       struct si_ps_prolog_bits states;
       unsigned wave32 : 1;
       unsigned num_input_sgprs : 6;
-      unsigned num_input_vgprs : 5;
       /* Color interpolation and two-side color selection. */
       unsigned colors_read : 8;       /* color input components read */
       unsigned num_interp_inputs : 5; /* BCOLOR is at this location */
-      unsigned face_vgpr_index : 5;
-      unsigned ancillary_vgpr_index : 5;
-      unsigned sample_coverage_vgpr_index : 5;
+      unsigned num_pos_inputs : 3;
       unsigned wqm : 1;
       char color_attr_index[2];
       signed char color_interp_vgpr_index[2]; /* -1 == constant */
@@ -821,9 +818,7 @@ struct si_shader_binary_info {
    uint8_t num_input_vgprs;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */
    bool uses_vmem_sampler_or_bvh;
-   signed char face_vgpr_index;
-   signed char ancillary_vgpr_index;
-   signed char sample_coverage_vgpr_index;
+   uint8_t num_ps_pos_inputs;
    bool uses_instanceid;
    uint8_t nr_pos_exports;
    uint8_t nr_param_exports;
@@ -842,6 +837,7 @@ struct si_shader_binary {
    /* Depends on binary type, either ELF or raw buffer. */
    const char *code_buffer;
    size_t code_size;
+   uint32_t exec_size;
 
    char *uploaded_code;
    size_t uploaded_code_size;
@@ -1005,7 +1001,6 @@ bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compi
 bool si_create_shader_variant(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                               struct si_shader *shader, struct util_debug_callback *debug);
 void si_shader_destroy(struct si_shader *shader);
-unsigned si_shader_io_get_unique_index_patch(unsigned semantic);
 unsigned si_shader_io_get_unique_index(unsigned semantic);
 bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader,
                              uint64_t scratch_va);

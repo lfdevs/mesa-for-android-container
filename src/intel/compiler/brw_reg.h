@@ -44,8 +44,10 @@
 
 #include <stdbool.h>
 #include "util/compiler.h"
-#include "main/macros.h"
-#include "program/prog_instruction.h"
+#include "util/glheader.h"
+#include "util/macros.h"
+#include "util/rounding.h"
+#include "util/u_math.h"
 #include "brw_eu_defines.h"
 #include "brw_reg_type.h"
 
@@ -68,6 +70,15 @@ struct intel_device_info;
  * with actual GRF allocations.
  */
 #define GFX7_MRF_HACK_START 112
+
+/**
+ * BRW hardware swizzles.
+ * Only defines XYZW to ensure it can be contained in 2 bits
+ */
+#define BRW_SWIZZLE_X 0
+#define BRW_SWIZZLE_Y 1
+#define BRW_SWIZZLE_Z 2
+#define BRW_SWIZZLE_W 3
 
 /** Number of message register file registers */
 #define BRW_MAX_MRF(gen) (gen == 6 ? 24 : 16)

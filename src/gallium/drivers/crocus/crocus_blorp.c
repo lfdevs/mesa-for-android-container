@@ -414,6 +414,18 @@ blorp_measure_end(struct blorp_batch *blorp_batch,
 {
 }
 
+static void
+blorp_emit_breakpoint_pre_draw(struct blorp_batch *batch)
+{
+   /* "Not implemented" */
+}
+
+static void
+blorp_emit_breakpoint_post_draw(struct blorp_batch *batch)
+{
+   /* "Not implemented" */
+}
+
 void
 genX(crocus_init_blorp)(struct crocus_context *ice)
 {

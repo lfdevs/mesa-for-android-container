@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -145,8 +145,8 @@ static const struct svga_tracked_state *hw_draw_state_sm5[] =
 static const struct svga_tracked_state *hw_draw_state_gl43[] =
 {
    &svga_need_tgsi_transform,
-   &svga_hw_uav,
    &svga_need_rawbuf_srv,
+   &svga_hw_uav,
    &svga_hw_fs,
    &svga_hw_gs,
    &svga_hw_tes,

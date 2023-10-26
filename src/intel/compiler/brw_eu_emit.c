@@ -3274,13 +3274,13 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
                                enum brw_message_target sfid,
                                uint32_t desc)
 {
-   const unsigned mlen = 1; /* g0 header */
+   const unsigned mlen = 1 * reg_unit(p->devinfo); /* g0 header */
     /* Completion signaled by write to register. No data returned. */
-   const unsigned rlen = 1;
+   const unsigned rlen = 1 * reg_unit(p->devinfo);
 
    brw_inst_set_sfid(p->devinfo, insn, sfid);
 
-   if (sfid == BRW_SFID_URB) {
+   if (sfid == BRW_SFID_URB && p->devinfo->ver < 20) {
       brw_set_desc(p, insn, brw_urb_fence_desc(p->devinfo) |
                             brw_message_desc(p->devinfo, mlen, rlen, true));
    } else {
@@ -3590,7 +3590,8 @@ brw_barrier(struct brw_codegen *p, struct brw_reg src)
    brw_set_dest(p, inst, retype(brw_null_reg(), BRW_REGISTER_TYPE_UW));
    brw_set_src0(p, inst, src);
    brw_set_src1(p, inst, brw_null_reg());
-   brw_set_desc(p, inst, brw_message_desc(devinfo, 1, 0, false));
+   brw_set_desc(p, inst, brw_message_desc(devinfo,
+                                          1 * reg_unit(devinfo), 0, false));
 
    brw_inst_set_sfid(devinfo, inst, BRW_SFID_MESSAGE_GATEWAY);
    brw_inst_set_gateway_subfuncid(devinfo, inst,

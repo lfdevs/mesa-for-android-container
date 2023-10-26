@@ -116,7 +116,6 @@ static const struct
       __ATTRIB(__DRI_ATTRIB_DOUBLE_BUFFER, doubleBufferMode),
       __ATTRIB(__DRI_ATTRIB_STEREO, stereoMode),
       __ATTRIB(__DRI_ATTRIB_AUX_BUFFERS, numAuxBuffers),
-      __ATTRIB(__DRI_ATTRIB_SWAP_METHOD, swapMethod),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGB, bindToTextureRgb),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGBA, bindToTextureRgba),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE, bindToMipmapTexture),
@@ -177,19 +176,6 @@ driConfigEqual(const __DRIcoreExtension *core,
          if (config->bindToTextureTargets != GLX_DONT_CARE &&
              glxValue != config->bindToTextureTargets)
             return GL_FALSE;
-         break;
-
-      case __DRI_ATTRIB_SWAP_METHOD:
-         if (value == __DRI_ATTRIB_SWAP_EXCHANGE)
-            glxValue = GLX_SWAP_EXCHANGE_OML;
-         else if (value == __DRI_ATTRIB_SWAP_COPY)
-            glxValue = GLX_SWAP_COPY_OML;
-         else
-            glxValue = GLX_SWAP_UNDEFINED_OML;
-
-         if (!scalarEqual(config, attrib, glxValue))
-            return GL_FALSE;
-
          break;
 
       /* Nerf some attributes we can safely ignore if the server claims to

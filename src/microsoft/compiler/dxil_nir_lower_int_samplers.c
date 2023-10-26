@@ -49,7 +49,7 @@ lower_sample_to_txf_for_integer_tex_filter(const nir_instr *instr,
    return (tex->dest_type & (nir_type_int | nir_type_uint));
 }
 
-static nir_ssa_def *
+static nir_def *
 dx_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
 {
    nir_tex_instr *tql;
@@ -85,10 +85,9 @@ dx_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
     * check for is_array though, in the worst case we create an additional
     * move the the optimization will remove later again. */
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   nir_ssa_def *ssa_src = nir_trim_vector(b, tex->src[coord_index].src.ssa,
+   nir_def *ssa_src = nir_trim_vector(b, tex->src[coord_index].src.ssa,
                                           coord_components);
-   nir_src src = nir_src_for_ssa(ssa_src);
-   nir_src_copy(&tql->src[0].src, &src, &tql->instr);
+   tql->src[0].src = nir_src_for_ssa(ssa_src);
    tql->src[0].src_type = nir_tex_src_coord;
 
    unsigned idx = 1;
@@ -99,33 +98,33 @@ dx_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
           tex->src[i].src_type == nir_tex_src_sampler_offset ||
           tex->src[i].src_type == nir_tex_src_texture_handle ||
           tex->src[i].src_type == nir_tex_src_sampler_handle) {
-         nir_src_copy(&tql->src[idx].src, &tex->src[i].src, &tql->instr);
+         tql->src[idx].src = nir_src_for_ssa(tex->src[i].src.ssa);
          tql->src[idx].src_type = tex->src[i].src_type;
          idx++;
       }
    }
 
-   nir_ssa_dest_init(&tql->instr, &tql->dest, 2, 32);
+   nir_def_init(&tql->instr, &tql->def, 2, 32);
    nir_builder_instr_insert(b, &tql->instr);
 
    /* DirectX LOD only has a value in x channel */
-   return nir_channel(b, &tql->dest.ssa, 0);
+   return nir_channel(b, &tql->def, 0);
 }
 
 typedef struct {
-   nir_ssa_def *coords;
-   nir_ssa_def *use_border_color;
+   nir_def *coords;
+   nir_def *use_border_color;
 } wrap_result_t;
 
 typedef struct {
-   nir_ssa_def *lod;
-   nir_ssa_def *size;
+   nir_def *lod;
+   nir_def *size;
    int ncoord_comp;
    wrap_result_t wrap[3];
 } wrap_lower_param_t;
 
 static void
-wrap_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
    /* clamp(coord, 0, size - 1) */
    wrap_params->coords = nir_fmin(b, nir_fadd_imm(b, size, -1.0f),
@@ -133,7 +132,7 @@ wrap_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size
 }
 
 static void
-wrap_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
    /* mod(coord, size)
     * This instruction must be exact, otherwise certain sizes result in
@@ -142,8 +141,8 @@ wrap_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
    nir_instr_as_alu(wrap_params->coords->parent_instr)->exact = true;
 }
 
-static nir_ssa_def *
-mirror(nir_builder *b, nir_ssa_def *coord)
+static nir_def *
+mirror(nir_builder *b, nir_def *coord)
 {
    /* coord if >= 0, otherwise -(1 + coord) */
    return nir_bcsel(b, nir_fge_imm(b, coord, 0.0f), coord,
@@ -151,17 +150,17 @@ mirror(nir_builder *b, nir_ssa_def *coord)
 }
 
 static void
-wrap_mirror_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_mirror_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
    /* (size − 1) − mirror(mod(coord, 2 * size) − size) */
-   nir_ssa_def *coord_mod2size = nir_fmod(b, wrap_params->coords, nir_fmul_imm(b, size, 2.0f));
+   nir_def *coord_mod2size = nir_fmod(b, wrap_params->coords, nir_fmul_imm(b, size, 2.0f));
    nir_instr_as_alu(coord_mod2size->parent_instr)->exact = true;
-   nir_ssa_def *a = nir_fsub(b, coord_mod2size, size);
+   nir_def *a = nir_fsub(b, coord_mod2size, size);
    wrap_params->coords = nir_fsub(b, nir_fadd_imm(b, size, -1.0f), mirror(b, a));
 }
 
 static void
-wrap_mirror_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_mirror_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
    /* clamp(mirror(coord), 0, size - 1) */
    wrap_params->coords = nir_fmin(b, nir_fadd_imm(b, size, -1.0f),
@@ -169,19 +168,19 @@ wrap_mirror_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_de
 }
 
 static void
-wrap_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
-   nir_ssa_def *is_low = nir_flt_imm(b, wrap_params->coords, 0.0);
-   nir_ssa_def *is_high = nir_fge(b, wrap_params->coords, size);
+   nir_def *is_low = nir_flt_imm(b, wrap_params->coords, 0.0);
+   nir_def *is_high = nir_fge(b, wrap_params->coords, size);
    wrap_params->use_border_color = nir_ior(b, is_low, is_high);
 }
 
 static void
-wrap_mirror_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
+wrap_mirror_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 {
    /* We have to take care of the boundaries */
-   nir_ssa_def *is_low = nir_flt(b, wrap_params->coords, nir_fmul_imm(b, size, -1.0));
-   nir_ssa_def *is_high = nir_flt(b, nir_fmul_imm(b, size, 2.0), wrap_params->coords);
+   nir_def *is_low = nir_flt(b, wrap_params->coords, nir_fmul_imm(b, size, -1.0));
+   nir_def *is_high = nir_flt(b, nir_fmul_imm(b, size, 2.0), wrap_params->coords);
    wrap_params->use_border_color = nir_ior(b, is_low, is_high);
 
    /* Within the boundaries this acts like mirror_repeat */
@@ -190,8 +189,8 @@ wrap_mirror_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 }
 
 static wrap_result_t
-wrap_coords(nir_builder *b, nir_ssa_def *coords, enum pipe_tex_wrap wrap,
-            nir_ssa_def *size)
+wrap_coords(nir_builder *b, nir_def *coords, enum pipe_tex_wrap wrap,
+            nir_def *size)
 {
    wrap_result_t result = {coords, nir_imm_false(b)};
 
@@ -220,11 +219,11 @@ wrap_coords(nir_builder *b, nir_ssa_def *coords, enum pipe_tex_wrap wrap,
    return result;
 }
 
-static nir_ssa_def *
+static nir_def *
 load_bordercolor(nir_builder *b, nir_tex_instr *tex, const dxil_wrap_sampler_state *active_state,
                  const dxil_texture_swizzle_state *tex_swizzle)
 {
-   int ndest_comp = nir_dest_num_components(tex->dest);
+   int ndest_comp = tex->def.num_components;
 
    unsigned swizzle[4] = {
       tex_swizzle->swizzle_r,
@@ -290,23 +289,22 @@ create_txf_from_tex(nir_builder *b, nir_tex_instr *tex)
       if (tex->src[i].src_type == nir_tex_src_texture_deref ||
           tex->src[i].src_type == nir_tex_src_texture_offset ||
           tex->src[i].src_type == nir_tex_src_texture_handle) {
-         nir_src_copy(&txf->src[idx].src, &tex->src[i].src, &txf->instr);
+         txf->src[idx].src = nir_src_for_ssa(tex->src[i].src.ssa);
          txf->src[idx].src_type = tex->src[i].src_type;
          idx++;
       }
    }
 
-   nir_ssa_dest_init(&txf->instr, &txf->dest, nir_tex_instr_dest_size(txf),
-                     32);
+   nir_def_init(&txf->instr, &txf->def, nir_tex_instr_dest_size(txf), 32);
    nir_builder_instr_insert(b, &txf->instr);
 
    return txf;
 }
 
-static nir_ssa_def *
+static nir_def *
 load_texel(nir_builder *b, nir_tex_instr *tex, wrap_lower_param_t *params)
 {
-   nir_ssa_def *texcoord = NULL;
+   nir_def *texcoord = NULL;
 
    /* Put coordinates back together */
    switch (tex->coord_components) {
@@ -326,23 +324,23 @@ load_texel(nir_builder *b, nir_tex_instr *tex, wrap_lower_param_t *params)
    texcoord = nir_f2i32(b, texcoord);
 
    nir_tex_instr *load = create_txf_from_tex(b, tex);
-   nir_tex_instr_add_src(load, nir_tex_src_lod, nir_src_for_ssa(params->lod));
-   nir_tex_instr_add_src(load, nir_tex_src_coord, nir_src_for_ssa(texcoord));
+   nir_tex_instr_add_src(load, nir_tex_src_lod, params->lod);
+   nir_tex_instr_add_src(load, nir_tex_src_coord, texcoord);
    b->cursor = nir_after_instr(&load->instr);
-   return &load->dest.ssa;
+   return &load->def;
 }
 
 typedef struct {
    const dxil_wrap_sampler_state *aws;
    float max_bias;
-   nir_ssa_def *size;
+   nir_def *size;
    int ncoord_comp;
 } lod_params;
 
-static nir_ssa_def *
+static nir_def *
 evalute_active_lod(nir_builder *b, nir_tex_instr *tex, lod_params *params)
 {
-   static nir_ssa_def *lod = NULL;
+   static nir_def *lod = NULL;
 
    /* Later we use min_lod for clamping the LOD to a legal value */
    float min_lod = MAX2(params->aws->min_lod, 0.0f);
@@ -357,12 +355,12 @@ evalute_active_lod(nir_builder *b, nir_tex_instr *tex, lod_params *params)
       int ddy_index = nir_tex_instr_src_index(tex, nir_tex_src_ddy);
       assert(ddx_index >= 0 && ddy_index >= 0);
 
-      nir_ssa_def *grad = nir_fmax(b,
+      nir_def *grad = nir_fmax(b,
                                    tex->src[ddx_index].src.ssa,
                                    tex->src[ddy_index].src.ssa);
 
-      nir_ssa_def *r = nir_fmul(b, grad, nir_i2f32(b, params->size));
-      nir_ssa_def *rho = nir_channel(b, r, 0);
+      nir_def *r = nir_fmul(b, grad, nir_i2f32(b, params->size));
+      nir_def *rho = nir_channel(b, r, 0);
       for (int i = 1; i < params->ncoord_comp; ++i)
          rho = nir_fmax(b, rho, nir_channel(b, r, i));
       lod = nir_flog2(b, rho);
@@ -391,7 +389,7 @@ evalute_active_lod(nir_builder *b, nir_tex_instr *tex, lod_params *params)
     * in compatibility contexts and as bias_texobj in core contexts, hence the
     * implementation here is the same in both cases.
     */
-   nir_ssa_def *lod_bias = nir_imm_float(b, params->aws->lod_bias);
+   nir_def *lod_bias = nir_imm_float(b, params->aws->lod_bias);
 
    if (unlikely(tex->op == nir_texop_txb)) {
       int bias_index = nir_tex_instr_src_index(tex, nir_tex_src_bias);
@@ -418,7 +416,7 @@ evalute_active_lod(nir_builder *b, nir_tex_instr *tex, lod_params *params)
 }
 
 
-static nir_ssa_def *
+static nir_def *
 lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
                                          void *options)
 {
@@ -443,14 +441,14 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
    b->cursor = nir_before_instr(instr);
 
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   nir_ssa_def *old_coord = tex->src[coord_index].src.ssa;
+   nir_def *old_coord = tex->src[coord_index].src.ssa;
    params.ncoord_comp = tex->coord_components;
    if (tex->is_array)
       params.ncoord_comp -= 1;
 
    /* This helper to get the texture size always uses LOD 0, and DirectX doesn't support
     * giving another LOD when querying the texture size */
-   nir_ssa_def *size0 = nir_get_texture_size(b, tex);
+   nir_def *size0 = nir_get_texture_size(b, tex);
 
    params.lod = nir_imm_int(b, 0);
 
@@ -470,16 +468,16 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
       params.size = nir_i2f32(b, size0);
    }
 
-   nir_ssa_def *new_coord = old_coord;
+   nir_def *new_coord = old_coord;
    if (!active_wrap_state->is_nonnormalized_coords) {
       /* Evaluate the integer lookup coordinates for the requested LOD, don't touch the
        * array index */
       if (!tex->is_array) {
          new_coord = nir_fmul(b, params.size, old_coord);
       } else {
-         nir_ssa_def *array_index = nir_channel(b, old_coord, params.ncoord_comp);
+         nir_def *array_index = nir_channel(b, old_coord, params.ncoord_comp);
          int mask = (1 << params.ncoord_comp) - 1;
-         nir_ssa_def *coord = nir_fmul(b, nir_channels(b, params.size, mask),
+         nir_def *coord = nir_fmul(b, nir_channels(b, params.size, mask),
                                           nir_channels(b, old_coord, mask));
          switch (params.ncoord_comp) {
          case 1:
@@ -496,7 +494,7 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
       }
    }
 
-   nir_ssa_def *coord_help[3];
+   nir_def *coord_help[3];
    for (int i = 0; i < params.ncoord_comp; ++i)
       coord_help[i] = nir_ffloor(b, nir_channel(b, new_coord, i));
 
@@ -507,12 +505,12 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
    /* Correct the texture coordinates for the offsets. */
    int offset_index = nir_tex_instr_src_index(tex, nir_tex_src_offset);
    if (offset_index >= 0) {
-      nir_ssa_def *offset = tex->src[offset_index].src.ssa;
+      nir_def *offset = tex->src[offset_index].src.ssa;
       for (int i = 0; i < params.ncoord_comp; ++i)
          coord_help[i] = nir_fadd(b, coord_help[i], nir_i2f32(b, nir_channel(b, offset, i)));
    }
 
-   nir_ssa_def *use_border_color = nir_imm_false(b);
+   nir_def *use_border_color = nir_imm_false(b);
 
    if (!active_wrap_state->skip_boundary_conditions) {
 
@@ -544,9 +542,9 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
                                                  &states->tex_swizzles[tex->sampler_index]:
                                                  &one2one;
 
-   nir_ssa_def *border_color = load_bordercolor(b, tex, active_wrap_state, swizzle);
+   nir_def *border_color = load_bordercolor(b, tex, active_wrap_state, swizzle);
    nir_if *border_else = nir_push_else(b, border_if);
-   nir_ssa_def *sampler_color = load_texel(b, tex, &params);
+   nir_def *sampler_color = load_texel(b, tex, &params);
    nir_pop_if(b, border_else);
 
    return nir_if_phi(b, border_color, sampler_color);

@@ -38,7 +38,12 @@ panvk_meta_blit(struct panvk_cmd_buffer *cmdbuf,
       {
          .format = blitinfo->dst.planes[0].format,
          .dim = MALI_TEXTURE_DIMENSION_2D,
-         .image = blitinfo->dst.planes[0].image,
+         .planes =
+            {
+               blitinfo->dst.planes[0].image,
+               blitinfo->dst.planes[1].image,
+               blitinfo->dst.planes[2].image,
+            },
          .nr_samples = blitinfo->dst.planes[0].image->layout.nr_samples,
          .first_level = blitinfo->dst.level,
          .last_level = blitinfo->dst.level,
@@ -93,7 +98,7 @@ panvk_meta_blit(struct panvk_cmd_buffer *cmdbuf,
       /* TODO: don't force preloads of dst resources if unneeded */
       views[1].format = blitinfo->dst.planes[1].format;
       views[1].dim = MALI_TEXTURE_DIMENSION_2D;
-      views[1].image = blitinfo->dst.planes[1].image;
+      views[1].planes[0] = blitinfo->dst.planes[1].image;
       views[1].nr_samples = blitinfo->dst.planes[1].image->layout.nr_samples;
       views[1].first_level = blitinfo->dst.level;
       views[1].last_level = blitinfo->dst.level;

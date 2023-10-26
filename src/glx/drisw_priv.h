@@ -56,6 +56,8 @@ struct drisw_screen
 
    void *driver;
    const char *name;
+
+   bool has_multibuffer;
 };
 
 struct drisw_drawable

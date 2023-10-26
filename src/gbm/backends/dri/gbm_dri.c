@@ -91,22 +91,6 @@ dri_lookup_egl_image_validated(void *image, void *data)
    return dri->lookup_image_validated(image, dri->lookup_user_data);
 }
 
-static __DRIbuffer *
-dri_get_buffers(__DRIdrawable * driDrawable,
-		 int *width, int *height,
-		 unsigned int *attachments, int count,
-		 int *out_count, void *data)
-{
-   struct gbm_dri_surface *surf = data;
-   struct gbm_dri_device *dri = gbm_dri_device(surf->base.gbm);
-
-   if (dri->get_buffers == NULL)
-      return NULL;
-
-   return dri->get_buffers(driDrawable, width, height, attachments,
-                           count, out_count, surf->dri_private);
-}
-
 static void
 dri_flush_front_buffer(__DRIdrawable * driDrawable, void *data)
 {
@@ -115,23 +99,6 @@ dri_flush_front_buffer(__DRIdrawable * driDrawable, void *data)
 
    if (dri->flush_front_buffer != NULL)
       dri->flush_front_buffer(driDrawable, surf->dri_private);
-}
-
-static __DRIbuffer *
-dri_get_buffers_with_format(__DRIdrawable * driDrawable,
-                            int *width, int *height,
-                            unsigned int *attachments, int count,
-                            int *out_count, void *data)
-{
-   struct gbm_dri_surface *surf = data;
-   struct gbm_dri_device *dri = gbm_dri_device(surf->base.gbm);
-
-   if (dri->get_buffers_with_format == NULL)
-      return NULL;
-
-   return
-      dri->get_buffers_with_format(driDrawable, width, height, attachments,
-                                   count, out_count, surf->dri_private);
 }
 
 static unsigned
@@ -244,15 +211,6 @@ static const __DRIimageLookupExtension image_lookup_extension = {
    .lookupEGLImageValidated = dri_lookup_egl_image_validated,
 };
 
-static const __DRIdri2LoaderExtension dri2_loader_extension = {
-   .base = { __DRI_DRI2_LOADER, 4 },
-
-   .getBuffers              = dri_get_buffers,
-   .flushFrontBuffer        = dri_flush_front_buffer,
-   .getBuffersWithFormat    = dri_get_buffers_with_format,
-   .getCapability           = dri_get_capability,
-};
-
 static const __DRIimageLoaderExtension image_loader_extension = {
    .base = { __DRI_IMAGE_LOADER, 2 },
 
@@ -279,7 +237,6 @@ static const __DRIkopperLoaderExtension kopper_loader_extension = {
 static const __DRIextension *gbm_dri_screen_extensions[] = {
    &image_lookup_extension.base,
    &use_invalidate.base,
-   &dri2_loader_extension.base,
    &image_loader_extension.base,
    &swrast_loader_extension.base,
    &kopper_loader_extension.base,
@@ -294,7 +251,7 @@ static struct dri_extension_match dri_core_extensions[] = {
 static struct dri_extension_match gbm_dri_device_extensions[] = {
    { __DRI_CORE, 1, offsetof(struct gbm_dri_device, core), false },
    { __DRI_MESA, 1, offsetof(struct gbm_dri_device, mesa), false },
-   { __DRI_DRI2, 4, offsetof(struct gbm_dri_device, dri2), false },
+   { __DRI_IMAGE_DRIVER, 1, offsetof(struct gbm_dri_device, image_driver), false },
 };
 
 static struct dri_extension_match gbm_swrast_device_extensions[] = {
@@ -408,22 +365,15 @@ dri_screen_create_sw(struct gbm_dri_device *dri)
    char *driver_name;
    int ret;
 
-   driver_name = strdup("zink");
+   driver_name = strdup("kms_swrast");
    if (!driver_name)
       return -errno;
 
    ret = dri_screen_create_for_driver(dri, driver_name);
-   if (ret != 0) {
-      driver_name = strdup("kms_swrast");
-      if (!driver_name)
-         return -errno;
-
-      ret = dri_screen_create_for_driver(dri, driver_name);
-      if (ret != 0)
-         ret = dri_screen_create_for_driver(dri, NULL);
-      if (ret != 0)
-         return ret;
-   }
+   if (ret != 0)
+      ret = dri_screen_create_for_driver(dri, NULL);
+   if (ret != 0)
+      return ret;
 
    dri->software = true;
    return 0;
@@ -564,7 +514,7 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
 
    /* If there is no query, fall back to the small table which was originally
     * here. */
-   if (dri->image->base.version <= 15 || !dri->image->queryDmaBufModifiers) {
+   if (!dri->image->queryDmaBufModifiers) {
       switch (format) {
       case GBM_FORMAT_XRGB8888:
       case GBM_FORMAT_ARGB8888:
@@ -591,8 +541,7 @@ gbm_dri_get_format_modifier_plane_count(struct gbm_device *gbm,
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
    uint64_t plane_count;
 
-   if (dri->image->base.version < 16 ||
-       !dri->image->queryDmaBufFormatModifierAttribs)
+   if (!dri->image->queryDmaBufFormatModifierAttribs)
       return -1;
 
    format = gbm_core.v0.format_canonicalize(format);
@@ -672,17 +621,6 @@ gbm_dri_bo_get_handle_for_plane(struct gbm_bo *_bo, int plane)
    union gbm_bo_handle ret;
    ret.s32 = -1;
 
-   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar) {
-      /* Preserve legacy behavior if plane is 0 */
-      if (plane == 0) {
-         /* NOTE: return _bo->handle, *NOT* bo->handle which is invalid at this point */
-         return _bo->v0.handle;
-      }
-
-      errno = ENOSYS;
-      return ret;
-   }
-
    if (plane >= get_number_planes(dri, bo->image)) {
       errno = EINVAL;
       return ret;
@@ -714,7 +652,7 @@ gbm_dri_bo_get_plane_fd(struct gbm_bo *_bo, int plane)
    struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
    int fd = -1;
 
-   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar) {
+   if (!dri->image || !dri->image->fromPlanar) {
       /* Preserve legacy behavior if plane is 0 */
       if (plane == 0)
          return gbm_dri_bo_get_fd(_bo);
@@ -754,7 +692,7 @@ gbm_dri_bo_get_stride(struct gbm_bo *_bo, int plane)
    __DRIimage *image;
    int stride = 0;
 
-   if (!dri->image || dri->image->base.version < 11 || !dri->image->fromPlanar) {
+   if (!dri->image || !dri->image->fromPlanar) {
       /* Preserve legacy behavior if plane is 0 */
       if (plane == 0)
          return _bo->v0.stride;
@@ -792,14 +730,6 @@ gbm_dri_bo_get_offset(struct gbm_bo *_bo, int plane)
    struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
    int offset = 0;
 
-   /* These error cases do not actually return an error code, as the user
-    * will also fail to obtain the handle/FD from the BO. In that case, the
-    * offset is irrelevant, as they have no buffer to offset into, so
-    * returning 0 is harmless.
-    */
-   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar)
-      return 0;
-
    if (plane >= get_number_planes(dri, bo->image))
       return 0;
 
@@ -826,11 +756,6 @@ gbm_dri_bo_get_modifier(struct gbm_bo *_bo)
 {
    struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
    struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
-
-   if (!dri->image || dri->image->base.version < 14) {
-      errno = ENOSYS;
-      return DRM_FORMAT_MOD_INVALID;
-   }
 
    /* Dumb buffers have no modifiers */
    if (!bo->image)
@@ -966,8 +891,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       int fourcc;
 
       /* Import with modifier requires createImageFromDmaBufs2 */
-      if (dri->image == NULL || dri->image->base.version < 15 ||
-          dri->image->createImageFromDmaBufs2 == NULL) {
+      if (dri->image->createImageFromDmaBufs2 == NULL) {
          errno = ENOSYS;
          return NULL;
       }
@@ -1139,8 +1063,7 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    /* Gallium drivers requires shared in order to get the handle/stride */
    dri_use |= __DRI_IMAGE_USE_SHARE;
 
-   if (modifiers && (dri->image->base.version < 14 ||
-       !dri->image->createImageWithModifiers)) {
+   if (modifiers && !dri->image->createImageWithModifiers) {
       errno = ENOSYS;
       goto failed;
    }
@@ -1182,15 +1105,16 @@ gbm_dri_bo_map(struct gbm_bo *_bo,
       return *map_data;
    }
 
-   if (!dri->image || dri->image->base.version < 12 || !dri->image->mapImage) {
-      errno = ENOSYS;
-      return NULL;
-   }
-
    mtx_lock(&dri->mutex);
-   if (!dri->context)
-      dri->context = dri->dri2->createNewContext(dri->screen, NULL,
-                                                 NULL, NULL);
+   if (!dri->context) {
+      unsigned error;
+
+      dri->context =
+         dri->image_driver->createContextAttribs(dri->screen,
+                                                 __DRI_API_OPENGL,
+                                                 NULL, NULL, 0, NULL,
+                                                 &error, NULL);
+   }
    assert(dri->context);
    mtx_unlock(&dri->mutex);
 
@@ -1213,8 +1137,7 @@ gbm_dri_bo_unmap(struct gbm_bo *_bo, void *map_data)
       return;
    }
 
-   if (!dri->context || !dri->image ||
-       dri->image->base.version < 12 || !dri->image->unmapImage)
+   if (!dri->context || !dri->image->unmapImage)
       return;
 
    dri->image->unmapImage(dri->context, bo->image, map_data);
@@ -1224,8 +1147,7 @@ gbm_dri_bo_unmap(struct gbm_bo *_bo, void *map_data)
     * on the mapping context. Since there is no explicit gbm flush
     * mechanism, we need to flush here.
     */
-   if (dri->flush->base.version >= 4)
-      dri->flush->flush_with_flags(dri->context, NULL, __DRI2_FLUSH_CONTEXT, 0);
+   dri->flush->flush_with_flags(dri->context, NULL, __DRI2_FLUSH_CONTEXT, 0);
 }
 
 
@@ -1238,9 +1160,7 @@ gbm_dri_surface_create(struct gbm_device *gbm,
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_surface *surf;
 
-   if (modifiers &&
-       (!dri->image || dri->image->base.version < 14 ||
-        !dri->image->createImageWithModifiers)) {
+   if (modifiers && !dri->image->createImageWithModifiers) {
       errno = ENOSYS;
       return NULL;
    }

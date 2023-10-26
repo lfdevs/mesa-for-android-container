@@ -38,18 +38,7 @@ glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
-shaders@point-vertex-id divisor,Fail
-shaders@point-vertex-id gl_instanceid,Fail
-shaders@point-vertex-id gl_instanceid divisor,Fail
-shaders@point-vertex-id gl_vertexid,Fail
-shaders@point-vertex-id gl_vertexid divisor,Fail
-shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
-shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
-spec@!opengl 1.1@linestipple,Fail
-spec@!opengl 1.1@linestipple@Factor 2x,Fail
-spec@!opengl 1.1@linestipple@Factor 3x,Fail
-spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
@@ -158,7 +147,6 @@ spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index2,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
-spec@arb_gl_spirv@execution@xfb@vs_block_array,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail
@@ -198,7 +186,6 @@ spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-double-fl
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec2-vec2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec3-vec3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
-spec@arb_shader_storage_buffer_object@execution@ssbo-atomiccompswap-int,Fail
 spec@arb_tessellation_shader@execution@gs-primitiveid-instanced,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
@@ -243,16 +230,9 @@ spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec3-vec3,Fail
 spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
 spec@glsl-4.50@execution@ssbo-atomiccompswap-int,Fail
 
-# New CTS failures in 1.3.5.0
-spec@arb_texture_cube_map_array@texsubimage cube_map_array,Fail
-
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
 
 # Debian 12 CI update, see https://gitlab.freedesktop.org/mesa/mesa/-/issues/9072
-spec@arb_pixel_buffer_object@cubemap pbo,Crash
-spec@arb_texture_rg@rg-teximage-01,Crash
-spec@ext_framebuffer_object@fbo-nodepth-test,Crash
-spec@ext_framebuffer_object@fbo-scissor-bitmap,Crash
 spec@ext_packed_float@multisample-formats 4 gl_ext_packed_float,Crash
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Crash
 spec@!opengl 1.0@gl-1.0-dlist-beginend,Crash

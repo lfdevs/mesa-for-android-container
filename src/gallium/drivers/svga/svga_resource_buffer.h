@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -355,6 +355,15 @@ static inline bool
 svga_was_buffer_rendered_to(const struct svga_buffer_surface *bufsurf)
 {
    return (bufsurf->surface_state == SVGA_SURFACE_STATE_RENDERED);
+}
+
+
+static inline bool
+svga_has_raw_buffer_view(struct svga_buffer *sbuf)
+{
+   return (sbuf->uav ||
+           (sbuf->key.persistent &&
+            (sbuf->key.flags & SVGA3D_SURFACE_BIND_RAW_VIEWS) != 0));
 }
 
 

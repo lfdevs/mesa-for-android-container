@@ -103,6 +103,9 @@ static const struct debug_control debug_control[] = {
    { "swsb-stall",  DEBUG_SWSB_STALL },
    { "heaps",       DEBUG_HEAPS },
    { "isl",         DEBUG_ISL },
+   { "sparse",      DEBUG_SPARSE },
+   { "draw_bkp",    DEBUG_DRAW_BKP },
+   { "bat-stats",   DEBUG_BATCH_STATS },
    { NULL,    0 }
 };
 
@@ -182,6 +185,9 @@ intel_debug_flag_for_shader_stage(gl_shader_stage stage)
 static uint64_t intel_debug_batch_frame_start = 0;
 static uint64_t intel_debug_batch_frame_stop = -1;
 
+uint32_t intel_debug_bkp_before_draw_count = 0;
+uint32_t intel_debug_bkp_after_draw_count = 0;
+
 static void
 brw_process_intel_debug_variable_once(void)
 {
@@ -192,6 +198,10 @@ brw_process_intel_debug_variable_once(void)
    intel_debug_batch_frame_stop =
       debug_get_num_option("INTEL_DEBUG_BATCH_FRAME_STOP", -1);
 
+   intel_debug_bkp_before_draw_count =
+      debug_get_num_option("INTEL_DEBUG_BKP_BEFORE_DRAW_COUNT", 0);
+   intel_debug_bkp_after_draw_count =
+      debug_get_num_option("INTEL_DEBUG_BKP_AFTER_DRAW_COUNT", 0);
 
    if (!(intel_simd & DEBUG_FS_SIMD))
       intel_simd |=   DEBUG_FS_SIMD;

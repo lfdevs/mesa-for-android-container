@@ -150,13 +150,22 @@
         },
         "gl40_baseline": {
             "extensions": {
-                "VK_KHR_maintenance2": 1
+                "VK_KHR_maintenance2": 1,
+                "VK_KHR_maintenance3": 1,
+                "VK_KHR_maintenance4": 1,
+                "VK_KHR_maintenance5": 1
             },
             "features": {
                 "VkPhysicalDeviceFeatures": {
                     "sampleRateShading": true,
                     "tessellationShader": true,
                     "imageCubeArray": true
+                },
+                "VkPhysicalDeviceMaintenance4Features": {
+                    "maintenance4": true
+                },
+                "VkPhysicalDeviceMaintenance5Features": {
+                    "maintenance5": true
                 }
             },
             "formats": {
@@ -387,7 +396,9 @@
                 "VK_EXT_extended_dynamic_state3": 1,
                 "VK_EXT_graphics_pipeline_library": 1,
                 "VK_EXT_non_seamless_cube_map": 1,
-                "VK_KHR_pipeline_library": 1
+                "VK_KHR_pipeline_library": 1,
+                "VK_EXT_attachment_feedback_loop_layout": 1,
+                "VK_EXT_attachment_feedback_loop_dynamic_state": 1
             },
             "features": {
                 "VkPhysicalDeviceExtendedDynamicStateFeaturesEXT": {
@@ -417,6 +428,12 @@
                 },
                 "VkPhysicalDeviceProvokingVertexFeaturesEXT": {
                     "provokingVertexLast": true
+                },
+                "VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT": {
+                    "attachmentFeedbackLoopLayout": true
+                },
+                "VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT": {
+                    "attachmentFeedbackLoopDynamicState": true
                 }
             },
             "properties": {

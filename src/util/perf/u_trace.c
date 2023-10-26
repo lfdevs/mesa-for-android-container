@@ -602,7 +602,7 @@ process_chunk(void *job, void *gdata, int thread_index)
       if (evt->tp->perfetto &&
           (p_atomic_read_relaxed(&utctx->enabled_traces) &
            U_TRACE_TYPE_PERFETTO_ACTIVE)) {
-         evt->tp->perfetto(utctx->pctx, ns, chunk->flush_data, evt->payload);
+         evt->tp->perfetto(utctx->pctx, ns, evt->tp->tp_idx, chunk->flush_data, evt->payload);
       }
 #endif
 
@@ -668,6 +668,7 @@ void
 u_trace_init(struct u_trace *ut, struct u_trace_context *utctx)
 {
    ut->utctx = utctx;
+   ut->num_traces = 0;
    list_inithead(&ut->trace_chunks);
 }
 
@@ -678,6 +679,7 @@ u_trace_fini(struct u_trace *ut)
     * have been flushed to the trace-context.
     */
    free_chunks(&ut->trace_chunks);
+   ut->num_traces = 0;
 }
 
 bool
@@ -773,6 +775,7 @@ u_trace_clone_append(struct u_trace_iterator begin_it,
          }
       }
 
+      into->num_traces += to_copy;
       to_chunk->num_traces += to_copy;
       from_idx += to_copy;
 
@@ -843,6 +846,7 @@ u_trace_appendv(struct u_trace *ut,
       .tp = tp,
       .payload = payload,
    };
+   ut->num_traces++;
 
    return payload;
 }
@@ -865,4 +869,5 @@ u_trace_flush(struct u_trace *ut, void *flush_data, bool free_data)
    /* transfer batch's log chunks to context: */
    list_splicetail(&ut->trace_chunks, &ut->utctx->flushed_trace_chunks);
    list_inithead(&ut->trace_chunks);
+   ut->num_traces = 0;
 }

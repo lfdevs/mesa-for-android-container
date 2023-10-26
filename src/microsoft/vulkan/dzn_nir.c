@@ -30,7 +30,7 @@
 #include "dxil_nir.h"
 #include "vk_nir_convert_ycbcr.h"
 
-static nir_ssa_def *
+static nir_def *
 dzn_nir_create_bo_desc(nir_builder *b,
                        nir_variable_mode mode,
                        uint32_t desc_set,
@@ -64,7 +64,7 @@ dzn_nir_create_bo_desc(nir_builder *b,
       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER :
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
    nir_address_format addr_format = nir_address_format_32bit_index_offset;
-   nir_ssa_def *index =
+   nir_def *index =
       nir_vulkan_resource_index(b,
                                 nir_address_format_num_components(addr_format),
                                 nir_address_format_bit_size(addr_format),
@@ -73,7 +73,7 @@ dzn_nir_create_bo_desc(nir_builder *b,
                                 .binding = binding,
                                 .desc_type = desc_type);
 
-   nir_ssa_def *desc =
+   nir_def *desc =
       nir_load_vulkan_descriptor(b,
                                  nir_address_format_num_components(addr_format),
                                  nir_address_format_bit_size(addr_format),
@@ -127,11 +127,11 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
                                      type_str[type]);
    b.shader->info.internal = true;
 
-   nir_ssa_def *params_desc =
+   nir_def *params_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ubo, 0, 0, "params", 0);
-   nir_ssa_def *draw_buf_desc =
+   nir_def *draw_buf_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 1, "draw_buf", ACCESS_NON_WRITEABLE);
-   nir_ssa_def *exec_buf_desc =
+   nir_def *exec_buf_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 2, "exec_buf", ACCESS_NON_READABLE);
 
    unsigned params_size;
@@ -140,24 +140,24 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
    else
       params_size = sizeof(struct dzn_indirect_draw_rewrite_params);
 
-   nir_ssa_def *params =
+   nir_def *params =
       nir_load_ubo(&b, params_size / 4, 32,
                    params_desc, nir_imm_int(&b, 0),
                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
 
-   nir_ssa_def *draw_stride = nir_channel(&b, params, 0);
-   nir_ssa_def *exec_stride =
+   nir_def *draw_stride = nir_channel(&b, params, 0);
+   nir_def *exec_stride =
       triangle_fan ?
       nir_imm_int(&b, sizeof(struct dzn_indirect_triangle_fan_draw_exec_params)) :
       nir_imm_int(&b, sizeof(struct dzn_indirect_draw_exec_params));
-   nir_ssa_def *index =
+   nir_def *index =
       nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
 
    if (indirect_count) {
-      nir_ssa_def *count_buf_desc =
+      nir_def *count_buf_desc =
          dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 3, "count_buf", ACCESS_NON_WRITEABLE);
 
-      nir_ssa_def *draw_count =
+      nir_def *draw_count =
          nir_load_ssbo(&b, 1, 32, count_buf_desc, nir_imm_int(&b, 0), .align_mul = 4);
 
       nir_push_if(&b, nir_ieq_imm(&b, index, 0));
@@ -169,27 +169,27 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
       nir_push_if(&b, nir_ult(&b, index, draw_count));
    }
 
-   nir_ssa_def *draw_offset = nir_imul(&b, draw_stride, index);
+   nir_def *draw_offset = nir_imul(&b, draw_stride, index);
 
    /* The first entry contains the indirect count */
-   nir_ssa_def *exec_offset =
+   nir_def *exec_offset =
       indirect_count ?
       nir_imul(&b, exec_stride, nir_iadd_imm(&b, index, 1)) : 
       nir_imul(&b, exec_stride, index);
 
-   nir_ssa_def *draw_info1 =
+   nir_def *draw_info1 =
       nir_load_ssbo(&b, 4, 32, draw_buf_desc, draw_offset, .align_mul = 4);
-   nir_ssa_def *draw_info2 =
+   nir_def *draw_info2 =
       indexed ?
       nir_load_ssbo(&b, 1, 32, draw_buf_desc,
                     nir_iadd_imm(&b, draw_offset, 16), .align_mul = 4) :
       nir_imm_int(&b, 0);
 
-   nir_ssa_def *first_vertex = nir_channel(&b, draw_info1, indexed ? 3 : 2);
-   nir_ssa_def *base_instance =
+   nir_def *first_vertex = nir_channel(&b, draw_info1, indexed ? 3 : 2);
+   nir_def *base_instance =
       indexed ? draw_info2 : nir_channel(&b, draw_info1, 3);
 
-   nir_ssa_def *exec_vals[8] = {
+   nir_def *exec_vals[8] = {
       first_vertex,
       base_instance,
       index,
@@ -197,7 +197,7 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
 
    if (triangle_fan) {
       /* Patch {vertex,index}_count and first_index */
-      nir_ssa_def *triangle_count =
+      nir_def *triangle_count =
          nir_usub_sat(&b, nir_channel(&b, draw_info1, 0), nir_imm_int(&b, 2));
       exec_vals[3] = nir_imul_imm(&b, triangle_count, 3);
       exec_vals[4] = nir_channel(&b, draw_info1, 1);
@@ -205,20 +205,20 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
       exec_vals[6] = first_vertex;
       exec_vals[7] = base_instance;
 
-      nir_ssa_def *triangle_fan_exec_buf_desc =
+      nir_def *triangle_fan_exec_buf_desc =
          dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 4,
                                 "triangle_fan_exec_buf",
                                 ACCESS_NON_READABLE);
-      nir_ssa_def *triangle_fan_index_buf_stride = nir_channel(&b, params, 1);
-      nir_ssa_def *triangle_fan_index_buf_addr_lo =
+      nir_def *triangle_fan_index_buf_stride = nir_channel(&b, params, 1);
+      nir_def *triangle_fan_index_buf_addr_lo =
          nir_iadd(&b, nir_channel(&b, params, 2),
                   nir_imul(&b, triangle_fan_index_buf_stride, index));
 
-      nir_ssa_def *triangle_fan_exec_vals[9] = { 0 };
+      nir_def *triangle_fan_exec_vals[9] = { 0 };
       uint32_t triangle_fan_exec_param_count = 0;
-      nir_ssa_def *addr_lo_overflow =
+      nir_def *addr_lo_overflow =
          nir_ult(&b, triangle_fan_index_buf_addr_lo, nir_channel(&b, params, 2));
-      nir_ssa_def *triangle_fan_index_buf_addr_hi =
+      nir_def *triangle_fan_index_buf_addr_hi =
          nir_iadd(&b, nir_channel(&b, params, 3),
                   nir_bcsel(&b, addr_lo_overflow, nir_imm_int(&b, 1), nir_imm_int(&b, 0)));
 
@@ -230,16 +230,16 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
          triangle_fan_exec_vals[triangle_fan_exec_param_count++] = nir_channel(&b, draw_info1, 0);
          uint32_t index_count_offset =
             offsetof(struct dzn_indirect_triangle_fan_draw_exec_params, indexed_draw.index_count);
-         nir_ssa_def *exec_buf_start =
+         nir_def *exec_buf_start =
             nir_load_ubo(&b, 2, 32,
                          params_desc, nir_imm_int(&b, 16),
                          .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
-         nir_ssa_def *exec_buf_start_lo =
+         nir_def *exec_buf_start_lo =
             nir_iadd(&b, nir_imm_int(&b, index_count_offset),
                      nir_iadd(&b, nir_channel(&b, exec_buf_start, 0),
                               nir_imul(&b, exec_stride, index)));
          addr_lo_overflow = nir_ult(&b, exec_buf_start_lo, nir_channel(&b, exec_buf_start, 0));
-         nir_ssa_def *exec_buf_start_hi =
+         nir_def *exec_buf_start_hi =
             nir_iadd(&b, nir_channel(&b, exec_buf_start, 0),
                      nir_bcsel(&b, addr_lo_overflow, nir_imm_int(&b, 1), nir_imm_int(&b, 0)));
          triangle_fan_exec_vals[triangle_fan_exec_param_count++] = exec_buf_start_lo;
@@ -258,9 +258,9 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
          prim_restart ?
          sizeof(struct dzn_indirect_triangle_fan_prim_restart_rewrite_index_exec_params) :
          sizeof(struct dzn_indirect_triangle_fan_rewrite_index_exec_params);
-      nir_ssa_def *triangle_fan_exec_stride =
+      nir_def *triangle_fan_exec_stride =
          nir_imm_int(&b, rewrite_index_exec_params);
-      nir_ssa_def *triangle_fan_exec_offset =
+      nir_def *triangle_fan_exec_offset =
          nir_imul(&b, triangle_fan_exec_stride, index);
 
       for (uint32_t i = 0; i < triangle_fan_exec_param_count; i += 4) {
@@ -273,7 +273,7 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type)
                         .write_mask = mask, .access = ACCESS_NON_READABLE, .align_mul = 4);
       }
 
-      nir_ssa_def *ibview_vals[] = {
+      nir_def *ibview_vals[] = {
          triangle_fan_index_buf_addr_lo,
          triangle_fan_index_buf_addr_hi,
          triangle_fan_index_buf_stride,
@@ -317,33 +317,33 @@ dzn_nir_triangle_fan_prim_restart_rewrite_index_shader(uint8_t old_index_size)
                                      old_index_size);
    b.shader->info.internal = true;
 
-   nir_ssa_def *params_desc =
+   nir_def *params_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ubo, 0, 0, "params", 0);
-   nir_ssa_def *new_index_buf_desc =
+   nir_def *new_index_buf_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 1,
                              "new_index_buf", ACCESS_NON_READABLE);
-   nir_ssa_def *old_index_buf_desc =
+   nir_def *old_index_buf_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 2,
                              "old_index_buf", ACCESS_NON_WRITEABLE);
-   nir_ssa_def *new_index_count_ptr_desc =
+   nir_def *new_index_count_ptr_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 3,
                              "new_index_count_ptr", ACCESS_NON_READABLE);
 
-   nir_ssa_def *params =
+   nir_def *params =
       nir_load_ubo(&b, sizeof(struct dzn_triangle_fan_prim_restart_rewrite_index_params) / 4, 32,
                    params_desc, nir_imm_int(&b, 0),
                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
 
-   nir_ssa_def *prim_restart_val =
+   nir_def *prim_restart_val =
       nir_imm_int(&b, old_index_size == 2 ? 0xffff : 0xffffffff);
    nir_variable *old_index_ptr_var =
       nir_local_variable_create(b.impl, glsl_uint_type(), "old_index_ptr_var");
-   nir_ssa_def *old_index_ptr = nir_channel(&b, params, 0);
+   nir_def *old_index_ptr = nir_channel(&b, params, 0);
    nir_store_var(&b, old_index_ptr_var, old_index_ptr, 1);
    nir_variable *new_index_ptr_var =
       nir_local_variable_create(b.impl, glsl_uint_type(), "new_index_ptr_var");
    nir_store_var(&b, new_index_ptr_var, nir_imm_int(&b, 0), 1);
-   nir_ssa_def *old_index_count = nir_channel(&b, params, 1);
+   nir_def *old_index_count = nir_channel(&b, params, 1);
    nir_variable *index0_var =
       nir_local_variable_create(b.impl, glsl_uint_type(), "index0_var");
    nir_store_var(&b, index0_var, prim_restart_val, 1);
@@ -395,20 +395,20 @@ dzn_nir_triangle_fan_prim_restart_rewrite_index_shader(uint8_t old_index_size)
    nir_push_loop(&b);
 
    old_index_ptr = nir_load_var(&b, old_index_ptr_var);
-   nir_ssa_def *index0 = nir_load_var(&b, index0_var);
+   nir_def *index0 = nir_load_var(&b, index0_var);
 
-   nir_ssa_def *read_index_count =
+   nir_def *read_index_count =
       nir_bcsel(&b, nir_ieq(&b, index0, prim_restart_val),
                 nir_imm_int(&b, 3), nir_imm_int(&b, 2));
    nir_push_if(&b, nir_ult(&b, old_index_count, nir_iadd(&b, old_index_ptr, read_index_count)));
    nir_jump(&b, nir_jump_break);
    nir_pop_if(&b, NULL);
 
-   nir_ssa_def *old_index_offset =
+   nir_def *old_index_offset =
       nir_imul_imm(&b, old_index_ptr, old_index_size);
 
    nir_push_if(&b, nir_ieq(&b, index0, prim_restart_val));
-   nir_ssa_def *index_val =
+   nir_def *index_val =
       nir_load_ssbo(&b, 1, 32, old_index_buf_desc,
                     old_index_size == 2 ? nir_iand_imm(&b, old_index_offset, ~3ULL) : old_index_offset,
                     .align_mul = 4);
@@ -423,12 +423,12 @@ dzn_nir_triangle_fan_prim_restart_rewrite_index_shader(uint8_t old_index_size)
    nir_jump(&b, nir_jump_continue);
    nir_pop_if(&b, NULL);
 
-   nir_ssa_def *index12 =
+   nir_def *index12 =
       nir_load_ssbo(&b, 2, 32, old_index_buf_desc,
                     old_index_size == 2 ? nir_iand_imm(&b, old_index_offset, ~3ULL) : old_index_offset,
                     .align_mul = 4);
    if (old_index_size == 2) {
-      nir_ssa_def *indices[] = {
+      nir_def *indices[] = {
          nir_iand_imm(&b, nir_channel(&b, index12, 0), 0xffff),
          nir_ushr_imm(&b, nir_channel(&b, index12, 0), 16),
          nir_iand_imm(&b, nir_channel(&b, index12, 1), 0xffff),
@@ -449,10 +449,10 @@ dzn_nir_triangle_fan_prim_restart_rewrite_index_shader(uint8_t old_index_size)
    nir_store_var(&b, index0_var, prim_restart_val, 1);
    nir_jump(&b, nir_jump_continue);
    nir_push_else(&b, NULL);
-   nir_ssa_def *new_indices =
+   nir_def *new_indices =
       nir_vec3(&b, nir_channel(&b, index12, 0), nir_channel(&b, index12, 1), index0);
-   nir_ssa_def *new_index_ptr = nir_load_var(&b, new_index_ptr_var);
-   nir_ssa_def *new_index_offset = nir_imul_imm(&b, new_index_ptr, sizeof(uint32_t));
+   nir_def *new_index_ptr = nir_load_var(&b, new_index_ptr_var);
+   nir_def *new_index_offset = nir_imul_imm(&b, new_index_ptr, sizeof(uint32_t));
    nir_store_ssbo(&b, new_indices, new_index_buf_desc,
                   new_index_offset,
                   .write_mask = 7, .access = ACCESS_NON_READABLE, .align_mul = 4);
@@ -480,36 +480,36 @@ dzn_nir_triangle_fan_rewrite_index_shader(uint8_t old_index_size)
                                      old_index_size);
    b.shader->info.internal = true;
 
-   nir_ssa_def *params_desc =
+   nir_def *params_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ubo, 0, 0, "params", 0);
-   nir_ssa_def *new_index_buf_desc =
+   nir_def *new_index_buf_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 1,
                              "new_index_buf", ACCESS_NON_READABLE);
 
-   nir_ssa_def *old_index_buf_desc = NULL;
+   nir_def *old_index_buf_desc = NULL;
    if (old_index_size > 0) {
       old_index_buf_desc =
          dzn_nir_create_bo_desc(&b, nir_var_mem_ssbo, 0, 2,
                                 "old_index_buf", ACCESS_NON_WRITEABLE);
    }
 
-   nir_ssa_def *params =
+   nir_def *params =
       nir_load_ubo(&b, sizeof(struct dzn_triangle_fan_rewrite_index_params) / 4, 32,
                    params_desc, nir_imm_int(&b, 0),
                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
 
-   nir_ssa_def *triangle = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
-   nir_ssa_def *new_indices;
+   nir_def *triangle = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   nir_def *new_indices;
 
    if (old_index_size > 0) {
-      nir_ssa_def *old_first_index = nir_channel(&b, params, 0);
-      nir_ssa_def *old_index0_offset =
+      nir_def *old_first_index = nir_channel(&b, params, 0);
+      nir_def *old_index0_offset =
          nir_imul_imm(&b, old_first_index, old_index_size);
-      nir_ssa_def *old_index1_offset =
+      nir_def *old_index1_offset =
          nir_imul_imm(&b, nir_iadd(&b, nir_iadd_imm(&b, triangle, 1), old_first_index),
                       old_index_size);
 
-      nir_ssa_def *old_index0 =
+      nir_def *old_index0 =
          nir_load_ssbo(&b, 1, 32, old_index_buf_desc,
                        old_index_size == 2 ? nir_iand_imm(&b, old_index0_offset, ~3ULL) : old_index0_offset,
                        .align_mul = 4);
@@ -520,12 +520,12 @@ dzn_nir_triangle_fan_rewrite_index_shader(uint8_t old_index_size)
                                nir_iand_imm(&b, old_index0, 0xffff));
       }
 
-      nir_ssa_def *old_index12 =
+      nir_def *old_index12 =
          nir_load_ssbo(&b, 2, 32, old_index_buf_desc,
                        old_index_size == 2 ? nir_iand_imm(&b, old_index1_offset, ~3ULL) : old_index1_offset,
                        .align_mul = 4);
       if (old_index_size == 2) {
-         nir_ssa_def *indices[] = {
+         nir_def *indices[] = {
             nir_iand_imm(&b, nir_channel(&b, old_index12, 0), 0xffff),
             nir_ushr_imm(&b, nir_channel(&b, old_index12, 0), 16),
             nir_iand_imm(&b, nir_channel(&b, old_index12, 1), 0xffff),
@@ -548,7 +548,7 @@ dzn_nir_triangle_fan_rewrite_index_shader(uint8_t old_index_size)
                   nir_imm_int(&b, 0));
    }
 
-   nir_ssa_def *new_index_offset =
+   nir_def *new_index_offset =
       nir_imul_imm(&b, triangle, 4 * 3);
 
    nir_store_ssbo(&b, new_indices, new_index_buf_desc,
@@ -567,7 +567,7 @@ dzn_nir_blit_vs(void)
                                      "dzn_meta_blit_vs()");
    b.shader->info.internal = true;
 
-   nir_ssa_def *params_desc =
+   nir_def *params_desc =
       dzn_nir_create_bo_desc(&b, nir_var_mem_ubo, 0, 0, "params", 0);
 
    nir_variable *out_pos =
@@ -582,8 +582,8 @@ dzn_nir_blit_vs(void)
    out_coords->data.location = VARYING_SLOT_TEX0;
    out_coords->data.driver_location = 1;
 
-   nir_ssa_def *vertex = nir_load_vertex_id(&b);
-   nir_ssa_def *coords_arr[4] = {
+   nir_def *vertex = nir_load_vertex_id(&b);
+   nir_def *coords_arr[4] = {
       nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 0),
                    .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
       nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 16),
@@ -593,14 +593,14 @@ dzn_nir_blit_vs(void)
       nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 48),
                    .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
    };
-   nir_ssa_def *coords =
+   nir_def *coords =
       nir_bcsel(&b, nir_ieq_imm(&b, vertex, 0), coords_arr[0],
                 nir_bcsel(&b, nir_ieq_imm(&b, vertex, 1), coords_arr[1],
                           nir_bcsel(&b, nir_ieq_imm(&b, vertex, 2), coords_arr[2], coords_arr[3])));
-   nir_ssa_def *pos =
+   nir_def *pos =
       nir_vec4(&b, nir_channel(&b, coords, 0), nir_channel(&b, coords, 1),
                nir_imm_float(&b, 0.0), nir_imm_float(&b, 1.0));
-   nir_ssa_def *z_coord =
+   nir_def *z_coord =
       nir_load_ubo(&b, 1, 32, params_desc, nir_imm_int(&b, 4 * 4 * sizeof(float)),
                    .align_mul = 64, .align_offset = 0, .range_base = 0, .range = ~0);
    coords = nir_vec3(&b, nir_channel(&b, coords, 2), nir_channel(&b, coords, 3), z_coord);
@@ -645,7 +645,7 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
                           "coord");
    coord_var->data.location = VARYING_SLOT_TEX0;
    coord_var->data.driver_location = 1;
-   nir_ssa_def *coord =
+   nir_def *coord =
       nir_trim_vector(&b, nir_load_var(&b, coord_var), coord_comps);
 
    uint32_t out_comps =
@@ -656,7 +656,7 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
                           "out");
    out->data.location = info->loc;
 
-   nir_ssa_def *res = NULL;
+   nir_def *res = NULL;
 
    if (info->resolve_mode != dzn_blit_resolve_none) {
       enum dzn_blit_resolve_mode resolve_mode = info->resolve_mode;
@@ -715,12 +715,12 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
                                            nir_imm_int(&b, 0));
 
          tex->src[3] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                           &tex_deref->dest.ssa);
+                                           &tex_deref->def);
 
-         nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+         nir_def_init(&tex->instr, &tex->def, 4, 32);
 
          nir_builder_instr_insert(&b, &tex->instr);
-         res = res ? nir_build_alu2(&b, resolve_op, res, &tex->dest.ssa) : &tex->dest.ssa;
+         res = res ? nir_build_alu2(&b, resolve_op, res, &tex->def) : &tex->def;
       }
 
       if (resolve_mode == dzn_blit_resolve_average)
@@ -747,7 +747,7 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
                                            nir_imm_int(&b, 0));
 
          tex->src[3] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                           &tex_deref->dest.ssa);
+                                           &tex_deref->def);
       } else {
          nir_variable *sampler_var =
             nir_variable_create(b.shader, nir_var_uniform, glsl_bare_sampler_type(), "sampler");
@@ -760,15 +760,15 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
          tex->coord_components = coord_comps;
 
          tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                           &tex_deref->dest.ssa);
+                                           &tex_deref->def);
 
          tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
-                                           &sampler_deref->dest.ssa);
+                                           &sampler_deref->def);
       }
 
-      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+      nir_def_init(&tex->instr, &tex->def, 4, 32);
       nir_builder_instr_insert(&b, &tex->instr);
-      res = &tex->dest.ssa;
+      res = &tex->def;
    }
 
    nir_store_var(&b, out, nir_trim_vector(&b, res, out_comps), 0xf);
@@ -776,17 +776,17 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
    return b.shader;
 }
 
-static nir_ssa_def *
+static nir_def *
 cull_face(nir_builder *b, nir_variable *vertices, bool ccw)
 {
-   nir_ssa_def *v0 =
+   nir_def *v0 =
       nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 0)));
-   nir_ssa_def *v1 =
+   nir_def *v1 =
       nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 1)));
-   nir_ssa_def *v2 =
+   nir_def *v2 =
       nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 2)));
 
-   nir_ssa_def *dir = nir_fdot(b, nir_cross4(b, nir_fsub(b, v1, v0),
+   nir_def *dir = nir_fdot(b, nir_cross4(b, nir_fsub(b, v1, v0),
                                                 nir_fsub(b, v2, v0)),
                                nir_imm_vec4(b, 0.0, 0.0, -1.0, 0.0));
    if (ccw)
@@ -810,13 +810,13 @@ copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 load_dynamic_depth_bias(nir_builder *b, struct dzn_nir_point_gs_info *info)
 {
    nir_address_format ubo_format = nir_address_format_32bit_index_offset;
    unsigned offset = offsetof(struct dxil_spirv_vertex_runtime_data, depth_bias);
 
-   nir_ssa_def *index = nir_vulkan_resource_index(
+   nir_def *index = nir_vulkan_resource_index(
       b, nir_address_format_num_components(ubo_format),
       nir_address_format_bit_size(ubo_format),
       nir_imm_int(b, 0),
@@ -824,7 +824,7 @@ load_dynamic_depth_bias(nir_builder *b, struct dzn_nir_point_gs_info *info)
       .binding = info->runtime_data_cbv.base_shader_register,
       .desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
-   nir_ssa_def *load_desc = nir_load_vulkan_descriptor(
+   nir_def *load_desc = nir_load_vulkan_descriptor(
       b, nir_address_format_num_components(ubo_format),
       nir_address_format_bit_size(ubo_format),
       index, .desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -891,7 +891,7 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
    front_facing_var->data.driver_location = num_vars;
    front_facing_var->data.interpolation = INTERP_MODE_FLAT;
 
-   nir_ssa_def *depth_bias_scale = NULL;
+   nir_def *depth_bias_scale = NULL;
    if (info->depth_bias) {
       switch (info->ds_fmt) {
       case DXGI_FORMAT_D16_UNORM:
@@ -903,13 +903,13 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
       case DXGI_FORMAT_D32_FLOAT:
       case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: {
          nir_deref_instr *deref_pos = nir_build_deref_var(b, pos_var);
-         nir_ssa_def *max_z = NULL;
+         nir_def *max_z = NULL;
          for (uint32_t i = 0; i < 3; ++i) {
-            nir_ssa_def *pos = nir_load_deref(b, nir_build_deref_array_imm(b, deref_pos, i));
-            nir_ssa_def *z = nir_iand_imm(b, nir_channel(b, pos, 2), 0x7fffffff);
+            nir_def *pos = nir_load_deref(b, nir_build_deref_array_imm(b, deref_pos, i));
+            nir_def *z = nir_iand_imm(b, nir_channel(b, pos, 2), 0x7fffffff);
             max_z = i == 0 ? z : nir_imax(b, z, max_z);
          }
-         nir_ssa_def *exponent = nir_ishr_imm(b, nir_iand_imm(b, max_z, 0x7f800000), 23);
+         nir_def *exponent = nir_ishr_imm(b, nir_iand_imm(b, max_z, 0x7f800000), 23);
          depth_bias_scale = nir_fexp2(b, nir_i2f32(b, nir_iadd_imm(b, exponent, -23)));
          break;
       }
@@ -925,8 +925,8 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
    nir_deref_instr *loop_index_deref = nir_build_deref_var(b, loop_index_var);
    nir_store_deref(b, loop_index_deref, nir_imm_int(b, 0), 1);
 
-   nir_ssa_def *cull_pass = nir_imm_true(b);
-   nir_ssa_def *front_facing;
+   nir_def *cull_pass = nir_imm_true(b);
+   nir_def *front_facing;
    assert(info->cull_mode != VK_CULL_MODE_FRONT_AND_BACK);
    if (info->cull_mode == VK_CULL_MODE_FRONT_BIT) {
       cull_pass = cull_face(b, pos_var, info->front_ccw);
@@ -946,8 +946,8 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
    nir_if *cull_check = nir_push_if(b, cull_pass);
    nir_loop *loop = nir_push_loop(b);
 
-   nir_ssa_def *loop_index = nir_load_deref(b, loop_index_deref);
-   nir_ssa_def *cmp = nir_ige(b, loop_index,
+   nir_def *loop_index = nir_load_deref(b, loop_index_deref);
+   nir_def *cmp = nir_ige(b, loop_index,
                               nir_imm_int(b, 3));
    nir_if *loop_check = nir_push_if(b, cmp);
    nir_jump(b, nir_jump_break);
@@ -958,10 +958,10 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
     *        EmitVertex();
     */
    for (unsigned i = 0; i < num_vars; ++i) {
-      nir_ssa_def *index = loop_index;
+      nir_def *index = loop_index;
       nir_deref_instr *in_value = nir_build_deref_array(b, nir_build_deref_var(b, in[i]), index);
       if (in[i] == pos_var && info->depth_bias) {
-         nir_ssa_def *bias_val;
+         nir_def *bias_val;
          if (info->depth_bias_dynamic) {
             bias_val = load_dynamic_depth_bias(b, info);
          } else {
@@ -969,8 +969,8 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
             bias_val = nir_imm_float(b, info->constant_depth_bias);
          }
          bias_val = nir_fmul(b, bias_val, depth_bias_scale);
-         nir_ssa_def *old_val = nir_load_deref(b, in_value);
-         nir_ssa_def *new_val = nir_vector_insert_imm(b, old_val,
+         nir_def *old_val = nir_load_deref(b, in_value);
+         nir_def *new_val = nir_vector_insert_imm(b, old_val,
                                                       nir_fadd(b, nir_channel(b, old_val, 2), bias_val),
                                                       2);
          nir_store_var(b, out[i], new_val, 0xf);

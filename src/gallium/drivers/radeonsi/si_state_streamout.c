@@ -115,6 +115,9 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
                      SI_CONTEXT_PFP_SYNC_ME;
    }
 
+   if (sctx->flags)
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+
    /* Streamout buffers must be bound in 2 places:
     * 1) in VGT by setting the VGT_STRMOUT registers
     * 2) as shader resources
@@ -135,7 +138,6 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
       if (!targets[i])
          continue;
 
-      si_context_add_resource_size(sctx, targets[i]->buffer);
       enabled_mask |= 1 << i;
 
       if (offsets[i] == ((unsigned)-1))
@@ -194,7 +196,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
       si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, NULL);
 
    if (wait_now)
-      sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+      si_emit_cache_flush_direct(sctx);
 }
 
 static void si_flush_vgt_streamout(struct si_context *sctx)
@@ -233,7 +235,7 @@ static void si_flush_vgt_streamout(struct si_context *sctx)
    radeon_end();
 }
 
-static void si_emit_streamout_begin(struct si_context *sctx)
+static void si_emit_streamout_begin(struct si_context *sctx, unsigned index)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct si_streamout_target **t = sctx->streamout.targets;
@@ -310,7 +312,7 @@ void si_emit_streamout_end(struct si_context *sctx)
    if (sctx->gfx_level >= GFX11) {
       /* Wait for streamout to finish before reading GDS_STRMOUT registers. */
       sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH;
-      sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+      si_emit_cache_flush_direct(sctx);
    } else {
       si_flush_vgt_streamout(sctx);
    }
@@ -327,6 +329,7 @@ void si_emit_streamout_end(struct si_context *sctx)
                          COPY_DATA_REG, NULL,
                          (R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 >> 2) + i);
          sctx->flags |= SI_CONTEXT_PFP_SYNC_ME;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
       } else {
          radeon_begin(cs);
          radeon_emit(PKT3(PKT3_STRMOUT_BUFFER_UPDATE, 4, 0));
@@ -361,7 +364,7 @@ void si_emit_streamout_end(struct si_context *sctx)
  * are no buffers bound.
  */
 
-static void si_emit_streamout_enable(struct si_context *sctx)
+static void si_emit_streamout_enable(struct si_context *sctx, unsigned index)
 {
    assert(sctx->gfx_level < GFX11);
 

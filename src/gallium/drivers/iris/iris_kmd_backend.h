@@ -39,6 +39,9 @@ struct iris_kmd_backend {
                           const struct intel_memory_class_instance **regions,
                           uint16_t regions_count, uint64_t size,
                           enum iris_heap heap_flags, unsigned alloc_flags);
+   uint32_t (*gem_create_userptr)(struct iris_bufmgr *bufmgr, void *ptr,
+                                  uint64_t size);
+   int (*gem_close)(struct iris_bufmgr *bufmgr, struct iris_bo *bo);
    bool (*bo_madvise)(struct iris_bo *bo, enum iris_madvice state);
    int (*bo_set_caching)(struct iris_bo *bo, bool cached);
    void *(*gem_mmap)(struct iris_bufmgr *bufmgr, struct iris_bo *bo);

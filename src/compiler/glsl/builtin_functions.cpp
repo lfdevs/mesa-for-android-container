@@ -144,7 +144,7 @@ deprecated_texture(const _mesa_glsl_parse_state *state)
 static bool
 deprecated_texture_derivatives_only(const _mesa_glsl_parse_state *state)
 {
-   return deprecated_texture(state) && derivatives_only(state);
+   return (deprecated_texture(state) && derivatives_only(state)) || state->allow_vertex_texture_bias;
 }
 
 static bool
@@ -825,12 +825,6 @@ static bool
 vote_or_v460_desktop(const _mesa_glsl_parse_state *state)
 {
    return state->EXT_shader_group_vote_enable || state->ARB_shader_group_vote_enable || v460_desktop(state);
-}
-
-static bool
-integer_functions_supported(const _mesa_glsl_parse_state *state)
-{
-   return state->extensions->MESA_shader_integer_functions;
 }
 
 static bool
@@ -5192,22 +5186,6 @@ builtin_builder::create_builtins()
                 NULL);
 
    add_function("helperInvocationEXT", _helper_invocation(), NULL);
-
-   add_function("__builtin_idiv64",
-                generate_ir::idiv64(mem_ctx, integer_functions_supported),
-                NULL);
-
-   add_function("__builtin_imod64",
-                generate_ir::imod64(mem_ctx, integer_functions_supported),
-                NULL);
-
-   add_function("__builtin_udiv64",
-                generate_ir::udiv64(mem_ctx, integer_functions_supported),
-                NULL);
-
-   add_function("__builtin_umod64",
-                generate_ir::umod64(mem_ctx, integer_functions_supported),
-                NULL);
 
    add_function("countLeadingZeros",
                 _countLeadingZeros(shader_integer_functions2,

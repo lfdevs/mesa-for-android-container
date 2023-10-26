@@ -207,7 +207,6 @@
  * 5. DST_ADDR_HI [31:0]
  * 6. COMMAND [29:22] | BYTE_COUNT [20:0]
  */
-#define PKT3_DMA_DATA                              0x50 /* GFX7+ */
 #define PKT3_DISPATCH_MESH_INDIRECT_MULTI          0x4C /* Indirect mesh shader only dispatch [GFX only], GFX10.3+ */
 #define   S_4C1_XYZ_DIM_REG(x)                        ((x & 0xFFFF))
 #define   S_4C1_DRAW_INDEX_REG(x)                     ((x & 0xFFFF) << 16)
@@ -223,10 +222,13 @@
 #define   S_4D1_XYZ_DIM_ENABLE(x)                     ((x & 1) << 30) /* GFX11+ */
 #define   S_4D1_MODE1_ENABLE(x)                       ((x & 1) << 29) /* GFX11+ */
 #define   S_4D1_LINEAR_DISPATCH_ENABLE(x)             ((x & 1) << 28) /* GFX11+ */
+#define PKT3_DISPATCH_MESH_DIRECT                  0x4E /* Direct mesh shader only dispatch [GFX only], GFX11+ */
+#define PKT3_DMA_DATA                              0x50 /* GFX7+ */
 #define PKT3_CONTEXT_REG_RMW                       0x51 /* older firmware versions on older chips don't have this */
 #define PKT3_ONE_REG_WRITE                         0x57 /* GFX6 only */
 #define PKT3_ACQUIRE_MEM                           0x58 /* GFX7+ */
 #define PKT3_REWIND                                0x59 /* GFX8+ [any ring] or GFX7 [compute ring only] */
+#define PKT3_PRIME_UTCL2                           0x5D
 #define PKT3_LOAD_UCONFIG_REG                      0x5E /* GFX7+ */
 #define PKT3_LOAD_SH_REG                           0x5F
 #define PKT3_LOAD_CONTEXT_REG                      0x61
@@ -256,26 +258,20 @@
 #define   S_AD4_XYZ_DIM_REG(x)                        ((x & 0xFFFF))
 #define PKT3_EVENT_WRITE_ZPASS                     0xB1 /* GFX11+ & PFP version >= 1458 */
 #define   EVENT_WRITE_ZPASS_PFP_VERSION               1458
-/* All PAIRS packets require GFX11+.
- *
- * SET_CONTEXT_REG_PAIRS:
- * SET_SH_REG_PAIRS:
- *   Format: header, (offset, value)^n.
- *   Don't use these because the PACKED variants are faster.
- *   - Consecutive offsets must not be equal.
- *   - RESET_FILTER_CAM must be set to 1.
- *
- * SET_CONTEXT_REG_PAIRS_PACKED:
- * SET_SH_REG_PAIRS_PACKED:
- * SET_SH_REG_PAIRS_PACKED_N:
- *   Format: header, count, (offset0 | (offset1 << 16), value0, value1)^(count / 2)
- *   - "count" is the register count and must be aligned to 2.
- *   - Consecutive offsets must not be equal.
- *   - RESET_FILTER_CAM must be set to 1.
- *   - If the register count is odd, write the first register again at the end to make it even.
- *   - The SH_*_PACKED* variants require register shadowing to be enabled.
- *   - The *_N variant is identical to the non-N variant, but the maximum allowed "count" is 14
- *     and it's faster.
+/* Use these on GFX11 with a high PFP firmware version (only dGPUs should have that, not APUs)
+ * because they are the fastest SET packets there. Sadly, we'll need 2 different packet codepaths,
+ * one for GFX11 dGPUs and the other one for GFX11 APUs.
+ *    SET_CONTEXT_REG_PAIRS_PACKED:
+ *    SET_SH_REG_PAIRS_PACKED:
+ *    SET_SH_REG_PAIRS_PACKED_N:
+ *      Format: header, count, (offset0 | (offset1 << 16), value0, value1)^(count / 2)
+ *      - "count" is the register count and must be aligned to 2.
+ *      - Consecutive offsets must not be equal.
+ *      - RESET_FILTER_CAM must be set to 1.
+ *      - If the register count is odd, write the first register again at the end to make it even.
+ *      - The SH_*_PACKED* variants require register shadowing to be enabled.
+ *      - The *_N variant is identical to the non-N variant, but the maximum allowed "count" is 14
+ *        and it's faster.
  */
 #define PKT3_SET_CONTEXT_REG_PAIRS                 0xB8 /* GFX11+, don't use */
 #define PKT3_SET_CONTEXT_REG_PAIRS_PACKED          0xB9 /* GFX11+ */
@@ -342,15 +338,20 @@
 #define SDMA_WRITE_SUB_OPCODE_LINEAR               0x0
 #define SDMA_WRITE_SUB_OPCODE_TILED                0x1
 #define CIK_SDMA_OPCODE_INDIRECT_BUFFER            0x4
-#define CIK_SDMA_PACKET_FENCE                      0x5
-#define CIK_SDMA_PACKET_TRAP                       0x6
-#define CIK_SDMA_PACKET_SEMAPHORE                  0x7
-#define CIK_SDMA_PACKET_CONSTANT_FILL              0xb
+#define CIK_SDMA_OPCODE_FENCE                      0x5
+#define SDMA_FENCE_MTYPE_UC                        0x3
+#define CIK_SDMA_OPCODE_TRAP                       0x6
+#define CIK_SDMA_OPCODE_SEMAPHORE                  0x7
+#define CIK_SDMA_OPCODE_POLL_REGMEM                0x8
+#define SDMA_POLL_MEM                              (1 << 31)
+#define SDMA_POLL_INTERVAL_160_CLK                 0xa
+#define SDMA_POLL_RETRY_INDEFINITELY               0xfff
+#define CIK_SDMA_OPCODE_CONSTANT_FILL              0xb
 #define CIK_SDMA_OPCODE_TIMESTAMP                  0xd
 #define SDMA_TS_SUB_OPCODE_SET_LOCAL_TIMESTAMP     0x0
 #define SDMA_TS_SUB_OPCODE_GET_LOCAL_TIMESTAMP     0x1
 #define SDMA_TS_SUB_OPCODE_GET_GLOBAL_TIMESTAMP    0x2
-#define CIK_SDMA_PACKET_SRBM_WRITE                 0xe
+#define CIK_SDMA_OPCODE_SRBM_WRITE                 0xe
 /* There is apparently an undocumented HW limitation that
    prevents the HW from copying the last 255 bytes of (1 << 22) - 1 */
 #define CIK_SDMA_COPY_MAX_SIZE    0x3fff00   /* almost 4 MB*/

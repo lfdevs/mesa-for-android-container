@@ -1173,14 +1173,7 @@ initOptionCache(driOptionCache *cache, const driOptionCache *info)
 #define DATADIR "/usr/share"
 #endif
 
-static const char *datadir = DATADIR "/drirc.d";
 static const char *execname;
-
-void
-driInjectDataDir(const char *dir)
-{
-   datadir = dir;
-}
 
 void
 driInjectExecName(const char *exec)
@@ -1216,10 +1209,15 @@ driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
    userData.execName = execname;
 
 #if WITH_XMLCONFIG
-   char *home;
+   char *home, *configdir;
 
-   parseConfigDir(&userData, datadir);
-   parseOneConfigFile(&userData, SYSCONFDIR "/drirc");
+   /* parse from either $DRIRC_CONFIGDIR or $datadir/drirc.d */
+   if ((configdir = getenv("DRIRC_CONFIGDIR")))
+      parseConfigDir(&userData, configdir);
+   else {
+      parseConfigDir(&userData, DATADIR "/drirc.d");
+      parseOneConfigFile(&userData, SYSCONFDIR "/drirc");
+   }
 
    if ((home = getenv("HOME"))) {
       char filename[PATH_MAX];

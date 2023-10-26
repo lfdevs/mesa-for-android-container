@@ -24,7 +24,6 @@
 #include <gtest/gtest.h>
 #include "brw_fs.h"
 #include "brw_cfg.h"
-#include "program/program.h"
 
 using namespace brw;
 
@@ -34,6 +33,7 @@ class scoreboard_test : public ::testing::Test {
 
 public:
    struct brw_compiler *compiler;
+   struct brw_compile_params params;
    struct intel_device_info *devinfo;
    void *ctx;
    struct brw_wm_prog_data *prog_data;
@@ -46,17 +46,22 @@ void scoreboard_test::SetUp()
    ctx = ralloc_context(NULL);
    compiler = rzalloc(ctx, struct brw_compiler);
    devinfo = rzalloc(ctx, struct intel_device_info);
+   devinfo->ver = 12;
+   devinfo->verx10 = devinfo->ver * 10;
+
    compiler->devinfo = devinfo;
+   brw_init_isa_info(&compiler->isa, devinfo);
+
+   params = {};
+   params.mem_ctx = ctx;
 
    prog_data = ralloc(ctx, struct brw_wm_prog_data);
    nir_shader *shader =
       nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
 
-   v = new fs_visitor(compiler, NULL, ctx, NULL, &prog_data->base, shader, 8,
+   v = new fs_visitor(compiler, &params, NULL, &prog_data->base, shader, 8,
                       false, false);
 
-   devinfo->ver = 12;
-   devinfo->verx10 = devinfo->ver * 10;
 }
 
 void scoreboard_test::TearDown()
@@ -881,6 +886,7 @@ TEST_F(scoreboard_test, conditional8)
 TEST_F(scoreboard_test, gfx125_RaR_over_different_pipes)
 {
    devinfo->verx10 = 125;
+   brw_init_isa_info(&compiler->isa, devinfo);
 
    const fs_builder &bld = v->bld;
 

@@ -32,6 +32,7 @@
 #include "util/u_string.h"
 
 #include "fd6_context.h"
+#include "fd6_pack.h"
 #include "fd6_zsa.h"
 
 /* update lza state based on stencil-test func:
@@ -105,8 +106,22 @@ fd6_zsa_state_create(struct pipe_context *pctx,
    so->writes_zs = util_writes_depth_stencil(cso);
    so->writes_z = util_writes_depth(cso);
 
-   so->rb_depth_cntl |=
-      A6XX_RB_DEPTH_CNTL_ZFUNC((enum adreno_compare_func)cso->depth_func); /* maps 1:1 */
+   enum adreno_compare_func depth_func =
+      (enum adreno_compare_func)cso->depth_func; /* maps 1:1 */
+
+   /* On some GPUs it is necessary to enable z test for depth bounds test
+    * when UBWC is enabled. Otherwise, the GPU would hang. FUNC_ALWAYS is
+    * required to pass z test. Relevant tests:
+    *  dEQP-VK.pipeline.extended_dynamic_state.two_draws_dynamic.depth_bounds_test_disable
+    *  dEQP-VK.dynamic_state.ds_state.depth_bounds_1
+    */
+   if (cso->depth_bounds_test && !cso->depth_enabled &&
+       ctx->screen->info->a6xx.depth_bounds_require_depth_test_quirk) {
+      so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
+      depth_func = FUNC_ALWAYS;
+   }
+
+   so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_ZFUNC(depth_func);
 
    if (cso->depth_enabled) {
       so->rb_depth_cntl |=
@@ -214,8 +229,15 @@ fd6_zsa_state_create(struct pipe_context *pctx,
                (enum adreno_compare_func)cso->alpha_func);
    }
 
+   if (cso->depth_bounds_test) {
+      so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_BOUNDS_ENABLE |
+                           A6XX_RB_DEPTH_CNTL_Z_READ_ENABLE;
+      so->lrz.z_bounds_enable = true;
+   }
+
+   /* Build the four state permutations (with/without alpha/depth-clamp)*/
    for (int i = 0; i < 4; i++) {
-      struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 9 * 4);
+      struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 12 * 4);
 
       OUT_PKT4(ring, REG_A6XX_RB_ALPHA_CONTROL, 1);
       OUT_RING(ring,
@@ -234,6 +256,9 @@ fd6_zsa_state_create(struct pipe_context *pctx,
       OUT_PKT4(ring, REG_A6XX_RB_STENCILMASK, 2);
       OUT_RING(ring, so->rb_stencilmask);
       OUT_RING(ring, so->rb_stencilwrmask);
+
+      OUT_REG(ring, A6XX_RB_Z_BOUNDS_MIN(cso->depth_bounds_min),
+                    A6XX_RB_Z_BOUNDS_MAX(cso->depth_bounds_max));
 
       so->stateobj[i] = ring;
    }

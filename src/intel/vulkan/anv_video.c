@@ -149,7 +149,7 @@ anv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
 
       ext->fieldOffsetGranularity.x = 0;
       ext->fieldOffsetGranularity.y = 0;
-      ext->maxLevelIdc = 51;
+      ext->maxLevelIdc = STD_VIDEO_H264_LEVEL_IDC_5_1;
       strcpy(pCapabilities->stdHeaderVersion.extensionName, VK_STD_VULKAN_VIDEO_CODEC_H264_DECODE_EXTENSION_NAME);
       pCapabilities->stdHeaderVersion.specVersion = VK_STD_VULKAN_VIDEO_CODEC_H264_DECODE_SPEC_VERSION;
       break;

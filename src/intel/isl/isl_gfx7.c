@@ -201,12 +201,23 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
    if (ISL_GFX_VER(dev) >= 12) {
       *flags &= ISL_TILING_LINEAR_BIT |
                 ISL_TILING_X_BIT |
-                ISL_TILING_ANY_Y_MASK;
+                ISL_TILING_Y0_BIT |
+                ISL_TILING_ICL_Yf_BIT |
+                ISL_TILING_ICL_Ys_BIT;
+   } else if (ISL_GFX_VER(dev) >= 11) {
+      *flags &= ISL_TILING_LINEAR_BIT |
+                ISL_TILING_X_BIT |
+                ISL_TILING_W_BIT |
+                ISL_TILING_Y0_BIT |
+                ISL_TILING_ICL_Yf_BIT |
+                ISL_TILING_ICL_Ys_BIT;
    } else if (ISL_GFX_VER(dev) >= 9) {
       *flags &= ISL_TILING_LINEAR_BIT |
                 ISL_TILING_X_BIT |
                 ISL_TILING_W_BIT |
-                ISL_TILING_ANY_Y_MASK;
+                ISL_TILING_Y0_BIT |
+                ISL_TILING_SKL_Yf_BIT |
+                ISL_TILING_SKL_Ys_BIT;
    } else {
       *flags &= ISL_TILING_LINEAR_BIT |
                 ISL_TILING_X_BIT |
@@ -214,16 +225,57 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
                 ISL_TILING_Y0_BIT;
    }
 
-   /* And... clear the Yf and Ys bits anyway because Anvil doesn't support
-    * them yet.
+   /* TODO: Investigate Yf failures (~5000 VK CTS failures at the time of this
+    *       writing).
     */
-   *flags &= ~ISL_TILING_Yf_BIT; /* FINISHME[SKL]: Support Yf */
-   *flags &= ~ISL_TILING_Ys_BIT; /* FINISHME[SKL]: Support Ys */
+   if (isl_format_is_compressed(info->format) ||
+       info->samples > 1 ||
+       info->dim == ISL_SURF_DIM_3D) {
+      *flags &= ~ISL_TILING_SKL_Yf_BIT; /* FINISHME[SKL]: Support Yf */
+      *flags &= ~ISL_TILING_ICL_Yf_BIT; /* FINISHME[ICL]: Support Yf */
+   }
 
    if (isl_surf_usage_is_depth(info->usage)) {
       /* Depth requires Y. */
       *flags &= ISL_TILING_ANY_Y_MASK;
    }
+
+   if (isl_surf_usage_is_depth_or_stencil(info->usage)) {
+      /* We choose to avoid Yf/Ys for 3D depth/stencil buffers. The swizzles
+       * for the Yf and Ys tilings are dependent on the image dimension. So,
+       * reads and writes should specify the same dimension to consistently
+       * interpret the data. This is not possible for 3D depth/stencil buffers
+       * however. Such buffers can be sampled from with a 3D view, but
+       * rendering is only possible with a 2D view due to the limitations of
+       * 3DSTATE_(DEPTH|STENCIL)_BUFFER.
+       */
+      if (info->dim == ISL_SURF_DIM_3D)
+         *flags &= ~ISL_TILING_STD_Y_MASK;
+   }
+
+   /* Again, Yf and Ys tilings for 3D have a different swizzling than a 2D
+    * surface. So filter them out if the usage wants 2D/3D compatibility.
+    */
+   if (info->usage & ISL_SURF_USAGE_2D_3D_COMPATIBLE_BIT)
+      *flags &= ~ISL_TILING_STD_Y_MASK;
+
+   /* For 3D storage images, we appear to have an undocumented dataport issue,
+    * where the RENDER_SURFACE_STATE::MinimumArrayElement is ignored with
+    * TileYs/TileYf.
+    *
+    * This is breaking VK_EXT_image_sliced_view_of_3d which is trying to
+    * access 3D images with an offset.
+    *
+    * It's unclear what the issue is but the behavior does not match
+    * simulation and there is no workaround related to 3D images & TileYs/Yf.
+    *
+    * We could workaround this issue by reading the offset from memory and add
+    * it to the imageLoad/Store() coordinates.
+    */
+   if (ISL_GFX_VER(dev) <= 11 &&
+       info->dim == ISL_SURF_DIM_3D &&
+       (info->usage & ISL_SURF_USAGE_STORAGE_BIT))
+      *flags &= ~ISL_TILING_STD_Y_MASK;
 
    if (isl_surf_usage_is_stencil(info->usage)) {
       if (ISL_GFX_VER(dev) >= 12) {
@@ -237,6 +289,19 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
       *flags &= ~ISL_TILING_W_BIT;
    }
 
+   /* ICL PRMs, Volume 5: Memory Data Formats, 1D Alignment Requirements:
+    *
+    *    Tiled Resource Mode | Bits per Element | Horizontal Alignment
+    *    TRMODE_NONE         |      Any         |         64
+    *
+    * The table does not list any other tiled resource modes. On the other hand,
+    * the SKL PRM has entries for TRMODE_64KB and TRMODE_4KB. This suggests that
+    * standard tilings are no longer officially supported for 1D surfaces. We don't
+    * really have a use-case for it anyway, so we choose to match the later docs.
+    */
+   if (info->dim == ISL_SURF_DIM_1D)
+      *flags &= ~ISL_TILING_STD_Y_MASK;
+
    /* MCS buffers are always Y-tiled */
    if (isl_format_get_layout(info->format)->txc == ISL_TXC_MCS)
       *flags &= ISL_TILING_Y0_BIT;
@@ -246,11 +311,9 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
          *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT |
                     ISL_TILING_Y0_BIT);
       } else if (ISL_GFX_VER(dev) >= 9) {
-         /* Note we let Yf even though it was cleared above. This is just for
-          * completeness.
-          */
          *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT |
-                    ISL_TILING_Y0_BIT | ISL_TILING_Yf_BIT);
+                    ISL_TILING_Y0_BIT |
+                    ISL_TILING_SKL_Yf_BIT | ISL_TILING_ICL_Yf_BIT);
       } else {
          /* Before Skylake, the display engine does not accept Y */
          *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT);

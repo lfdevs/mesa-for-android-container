@@ -31,6 +31,7 @@ vk_physical_device_init(struct vk_physical_device *pdevice,
                         struct vk_instance *instance,
                         const struct vk_device_extension_table *supported_extensions,
                         const struct vk_features *supported_features,
+                        const struct vk_properties *properties,
                         const struct vk_physical_device_dispatch_table *dispatch_table)
 {
    memset(pdevice, 0, sizeof(*pdevice));
@@ -42,6 +43,9 @@ vk_physical_device_init(struct vk_physical_device *pdevice,
 
    if (supported_features != NULL)
       pdevice->supported_features = *supported_features;
+
+   if (properties != NULL)
+      pdevice->properties = *properties;
 
    pdevice->dispatch_table = *dispatch_table;
 

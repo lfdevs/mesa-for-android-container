@@ -35,4 +35,5 @@ vklayer_intel_nullhw = shared_library(
 install_data(
   files('VkLayer_INTEL_nullhw.json'),
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'explicit_layer.d'),
+  install_tag : 'runtime',
 )

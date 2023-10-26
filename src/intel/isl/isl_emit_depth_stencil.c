@@ -58,12 +58,20 @@ static const uint32_t isl_encode_ds_surftype[] = {
    [ISL_SURF_DIM_3D] = SURFTYPE_3D,
 };
 
-#if GFX_VERx10 >= 125
+#if GFX_VER >= 9
 static const uint8_t isl_encode_tiling[] = {
-   [ISL_TILING_4]  = TILE4,
-   [ISL_TILING_64] = TILE64,
-};
+#if GFX_VERx10 >= 125
+   [ISL_TILING_4]          = TILE4,
+   [ISL_TILING_64]         = TILE64,
+#else
+   [ISL_TILING_Y0]         = NONE,
+   [ISL_TILING_SKL_Yf]     = TILEYF,
+   [ISL_TILING_SKL_Ys]     = TILEYS,
+   [ISL_TILING_ICL_Yf]     = TILEYF,
+   [ISL_TILING_ICL_Ys]     = TILEYS,
 #endif
+};
+#endif /* GFX_VER >= 9 */
 
 void
 isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
@@ -162,11 +170,18 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 
 #if GFX_VERx10 >= 125
       db.TiledMode = isl_encode_tiling[info->depth_surf->tiling];
-      db.MipTailStartLOD = 15;
+      db.MipTailStartLOD = info->depth_surf->miptail_start_level;
       db.CompressionMode = isl_aux_usage_has_ccs(info->hiz_usage);
       db.RenderCompressionFormat =
          isl_get_render_compression_format(info->depth_surf->format);
-#elif GFX_VER <= 6
+#elif GFX_VER >= 9
+      /* Gen9+ depth is always Y-tiled but it may be Y0, Yf, or Ys. */
+      assert(isl_tiling_is_any_y(info->depth_surf->tiling));
+      db.TiledResourceMode = isl_encode_tiling[info->depth_surf->tiling];
+      db.MipTailStartLOD = info->depth_surf->miptail_start_level;
+#elif GFX_VER >= 7
+      /* Gen7+ depth is always Y-tiled.  We don't even have a bit for it */
+#else
       assert(info->depth_surf->tiling == ISL_TILING_Y0);
       db.TiledSurface = true;
       db.TileWalk = TILEWALK_YMAJOR;
@@ -219,13 +234,13 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       db.StencilWriteEnable = true;
 #endif
 #if GFX_VERx10 >= 125
-      sb.TiledMode = isl_encode_tiling[info->stencil_surf->tiling];
-      sb.MipTailStartLOD = 15;
       sb.CompressionMode = isl_aux_usage_has_ccs(info->stencil_aux_usage);
       sb.RenderCompressionFormat =
          isl_get_render_compression_format(info->stencil_surf->format);
 #endif
 #if GFX_VER >= 12
+      sb.TiledMode = isl_encode_tiling[info->stencil_surf->tiling];
+      sb.MipTailStartLOD = info->stencil_surf->miptail_start_level;
       sb.StencilWriteEnable = true;
       sb.SurfaceType = SURFTYPE_2D;
       sb.Width = info->stencil_surf->logical_level0_px.width - 1;
@@ -299,6 +314,19 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
        */
       assert(info->hiz_surf->tiling == ISL_TILING_HIZ);
       hiz.TiledMode = TILE4;
+#elif GFX_VERx10 >= 120
+      /* From 3DSTATE_HIER_DEPTH_BUFFER_BODY::TiledMode,
+       *
+       *     HZ buffer only supports Tile Y mode.
+       *
+       * and
+       *
+       *    Value | Name
+       *    ----------------------------------------
+       *    0h    | No tiled resource (Tile Y Mode).
+       */
+      assert(info->hiz_surf->tiling == ISL_TILING_HIZ);
+      hiz.TiledMode = NONE;
 #endif
 
 #if GFX_VER >= 12

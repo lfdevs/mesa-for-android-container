@@ -170,9 +170,33 @@ const struct pan_blendable_format
    }
 #endif
 
+#if PAN_ARCH >= 7
+#define YUV_NO_SWAP (0)
+#define YUV_SWAP    (1)
+
+#define FMT_YUV(pipe, mali, swizzle, swap, siting, flags)                      \
+   [PIPE_FORMAT_##pipe] = {                                                    \
+      .hw = (MALI_YUV_SWIZZLE_##swizzle) | ((YUV_##swap) << 3) |               \
+            ((MALI_YUV_CR_SITING_##siting) << 9) | ((MALI_##mali) << 12),      \
+      .bind = FLAGS_##flags,                                                   \
+   }
+#endif
+
 /* clang-format off */
 const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(NONE,                    CONSTANT,        0000, L, VTR_),
+
+#if PAN_ARCH >= 7
+   /* Multiplane formats */
+   FMT_YUV(R8G8_R8B8_UNORM, YUYV8, UVYA, NO_SWAP, CENTER_Y, _T__),
+   FMT_YUV(G8R8_B8R8_UNORM, VYUY8, UYVA, SWAP,    CENTER_Y, _T__),
+   FMT_YUV(R8B8_R8G8_UNORM, YUYV8, VYUA, NO_SWAP, CENTER_Y, _T__),
+   FMT_YUV(B8R8_G8R8_UNORM, VYUY8, VUYA, SWAP,    CENTER_Y, _T__),
+   FMT_YUV(R8_G8B8_420_UNORM, Y8_UV8_420, YUVA, NO_SWAP, CENTER, _T__),
+   FMT_YUV(R8_B8G8_420_UNORM, Y8_UV8_420, YVUA, NO_SWAP, CENTER, _T__),
+   FMT_YUV(R8_G8_B8_420_UNORM, Y8_U8_V8_420, YUVA, NO_SWAP, CENTER, _T__),
+   FMT_YUV(R8_B8_G8_420_UNORM, Y8_U8_V8_420, YVUA, NO_SWAP, CENTER, _T__),
+#endif
 
 #if PAN_ARCH <= 7
    FMT(ETC1_RGB8,               ETC2_RGB8,       RGB1, L, _T__),

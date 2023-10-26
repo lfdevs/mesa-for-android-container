@@ -191,7 +191,7 @@ iris_create_engines_context(struct iris_context *ice)
 
    uint32_t engines_ctx;
    if (!intel_gem_create_context_engines(fd, flags, engines_info, num_batches,
-                                         engine_classes, &engines_ctx)) {
+                                         engine_classes, 0, &engines_ctx)) {
       free(engines_info);
       return -1;
    }

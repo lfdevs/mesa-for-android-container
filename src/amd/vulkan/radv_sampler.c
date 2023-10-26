@@ -198,7 +198,7 @@ radv_init_sampler(struct radv_device *device, struct radv_sampler *sampler, cons
    uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
    bool compat_mode =
       device->physical_device->rad_info.gfx_level == GFX8 || device->physical_device->rad_info.gfx_level == GFX9;
-   unsigned filter_mode = V_008F30_SQ_IMG_FILTER_MODE_BLEND;
+   unsigned filter_mode = radv_tex_filter_mode(sampler->vk.reduction_mode);
    unsigned depth_compare_func = V_008F30_SQ_TEX_DEPTH_COMPARE_NEVER;
    bool trunc_coord = (pCreateInfo->minFilter == VK_FILTER_NEAREST && pCreateInfo->magFilter == VK_FILTER_NEAREST) ||
                       device->physical_device->rad_info.conformant_trunc_coord;
@@ -209,23 +209,13 @@ radv_init_sampler(struct radv_device *device, struct radv_sampler *sampler, cons
    uint32_t border_color_ptr;
    bool disable_cube_wrap = pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT;
 
-   const struct VkSamplerReductionModeCreateInfo *sampler_reduction =
-      vk_find_struct_const(pCreateInfo->pNext, SAMPLER_REDUCTION_MODE_CREATE_INFO);
-   if (sampler_reduction)
-      filter_mode = radv_tex_filter_mode(sampler_reduction->reductionMode);
-
    if (pCreateInfo->compareEnable)
       depth_compare_func = radv_tex_compare(pCreateInfo->compareOp);
 
    sampler->border_color_slot = RADV_BORDER_COLOR_COUNT;
 
-   if (border_color == VK_BORDER_COLOR_FLOAT_CUSTOM_EXT || border_color == VK_BORDER_COLOR_INT_CUSTOM_EXT) {
-      const VkSamplerCustomBorderColorCreateInfoEXT *custom_border_color =
-         vk_find_struct_const(pCreateInfo->pNext, SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT);
-
-      assert(custom_border_color);
-
-      sampler->border_color_slot = radv_register_border_color(device, custom_border_color->customBorderColor);
+   if (vk_border_color_is_custom(border_color)) {
+      sampler->border_color_slot = radv_register_border_color(device, sampler->vk.border_color_value);
 
       /* Did we fail to find a slot? */
       if (sampler->border_color_slot == RADV_BORDER_COLOR_COUNT) {
@@ -278,20 +268,12 @@ radv_CreateSampler(VkDevice _device, const VkSamplerCreateInfo *pCreateInfo, con
    RADV_FROM_HANDLE(radv_device, device, _device);
    struct radv_sampler *sampler;
 
-   const struct VkSamplerYcbcrConversionInfo *ycbcr_conversion =
-      vk_find_struct_const(pCreateInfo->pNext, SAMPLER_YCBCR_CONVERSION_INFO);
-
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
-
-   sampler = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*sampler), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   sampler = vk_sampler_create(&device->vk, pCreateInfo, pAllocator, sizeof(*sampler));
    if (!sampler)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   vk_object_base_init(&device->vk, &sampler->base, VK_OBJECT_TYPE_SAMPLER);
-
    radv_init_sampler(device, sampler, pCreateInfo);
 
-   sampler->ycbcr_sampler = ycbcr_conversion ? vk_ycbcr_conversion_from_handle(ycbcr_conversion->conversion) : NULL;
    *pSampler = radv_sampler_to_handle(sampler);
 
    return VK_SUCCESS;
@@ -309,6 +291,5 @@ radv_DestroySampler(VkDevice _device, VkSampler _sampler, const VkAllocationCall
    if (sampler->border_color_slot != RADV_BORDER_COLOR_COUNT)
       radv_unregister_border_color(device, sampler->border_color_slot);
 
-   vk_object_base_finish(&sampler->base);
-   vk_free2(&device->vk.alloc, pAllocator, sampler);
+   vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
 }

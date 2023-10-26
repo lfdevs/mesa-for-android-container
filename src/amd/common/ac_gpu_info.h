@@ -17,6 +17,7 @@ extern "C" {
 
 #define AMD_MAX_SE         32
 #define AMD_MAX_SA_PER_SE  2
+#define AMD_MAX_WGP        60
 
 struct amdgpu_gpu_info;
 
@@ -25,6 +26,8 @@ struct amd_ip_info {
    uint8_t ver_minor;
    uint8_t ver_rev;
    uint8_t num_queues;
+   uint32_t ib_alignment;
+   uint32_t ib_pad_dw_mask;
 };
 
 struct radeon_info {
@@ -32,6 +35,7 @@ struct radeon_info {
    const char *name;
    char lowercase_name[32];
    const char *marketing_name;
+   char dev_filename[32];
    uint32_t num_se;           /* only enabled SEs */
    uint32_t num_rb;           /* only enabled RBs */
    uint32_t num_cu;           /* only enabled CUs */
@@ -74,9 +78,9 @@ struct radeon_info {
    uint32_t chip_rev; /* 0 = A0, 1 = A1, etc. */
 
    /* Flags. */
+   bool family_overridden; /* AMD_FORCE_FAMILY was used, skip command submission */
    bool is_pro_graphics;
    bool has_graphics; /* false if the chip is compute-only */
-   uint32_t ib_pad_dw_mask[AMD_NUM_IP_TYPES];
    bool has_clear_state;
    bool has_distributed_tess;
    bool has_dcc_constant_encode;
@@ -109,6 +113,9 @@ struct radeon_info {
    bool has_vrs_ds_export_bug;
    bool has_taskmesh_indirect0_bug;
    bool has_set_pairs_packets;
+   bool sdma_supports_sparse;      /* Whether SDMA can safely access sparse resources. */
+   bool sdma_supports_compression; /* Whether SDMA supports DCC and HTILE. */
+
 
    /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
     *
@@ -157,7 +164,6 @@ struct radeon_info {
 
    /* CP info. */
    bool gfx_ib_pad_with_type2;
-   unsigned ib_alignment; /* both start and size alignment */
    uint32_t me_fw_version;
    uint32_t me_fw_feature;
    uint32_t mec_fw_version;
@@ -186,7 +192,7 @@ struct radeon_info {
    uint32_t drm_major; /* version */
    uint32_t drm_minor;
    uint32_t drm_patchlevel;
-   uint8_t max_submitted_ibs[AMD_NUM_IP_TYPES];
+   uint32_t max_submitted_ibs[AMD_NUM_IP_TYPES];
    bool is_amdgpu;
    bool has_userptr;
    bool has_syncobj;
@@ -198,6 +204,7 @@ struct radeon_info {
    bool has_sparse_vm_mappings;
    bool has_scheduled_fence_dependency;
    bool has_gang_submit;
+   bool has_gpuvm_fault_query;
    bool has_pcie_bandwidth_info;
    bool has_stable_pstate;
    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
@@ -227,6 +234,7 @@ struct radeon_info {
    uint32_t min_good_cu_per_sa; /* min != max if SAs have different # of CUs */
    uint32_t max_se;             /* number of shader engines incl. disabled ones */
    uint32_t max_sa_per_se;      /* shader arrays per shader engine */
+   uint32_t num_cu_per_sh;
    uint32_t max_wave64_per_simd;
    uint32_t num_physical_sgprs_per_simd;
    uint32_t num_physical_wave64_vgprs_per_simd;

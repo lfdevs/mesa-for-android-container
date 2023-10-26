@@ -219,6 +219,7 @@ dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest
 dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_nearest_mirror
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_linear_repeat
 dEQP-GLES2.functional.texture.vertex.cube.wrap.repeat_mirror
+dEQP-GLES2.functional.uniform_api.random.79
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.int_ivec4_vertex
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.sampler2D_samplerCube_vertex
 dEQP-GLES2.functional.vertex_arrays.multiple_attributes.input_types.3_unsigned_short2_vec2_fixed2_vec2_unsigned_short2_vec2

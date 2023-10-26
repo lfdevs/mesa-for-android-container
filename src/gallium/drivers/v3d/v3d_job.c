@@ -383,9 +383,11 @@ v3d_get_job_for_fbo(struct v3d_context *v3d)
                 job->double_buffer = false;
         }
 
-        v3d_get_tile_buffer_size(job->msaa, job->double_buffer,
+        v3d_get_tile_buffer_size(&v3d->screen->devinfo,
+                                 job->msaa, job->double_buffer,
                                  job->nr_cbufs, job->cbufs, job->bbuf,
-                                 &job->tile_width, &job->tile_height,
+                                 &job->tile_width,
+                                 &job->tile_height,
                                  &job->internal_bpp);
 
         /* The dirty flags are tracking what's been updated while v3d->job has

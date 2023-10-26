@@ -52,22 +52,21 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
-   nir_ssa_def *img_coord = nir_vec4(&b, nir_channel(&b, global_id, 0), nir_channel(&b, global_id, 1),
-                                     nir_ssa_undef(&b, 1, 32), nir_ssa_undef(&b, 1, 32));
+   nir_def *global_id = get_global_ids(&b, 2);
+   nir_def *img_coord = nir_vec4(&b, nir_channel(&b, global_id, 0), nir_channel(&b, global_id, 1), nir_undef(&b, 1, 32),
+                                 nir_undef(&b, 1, 32));
 
-   nir_ssa_def *data =
-      nir_image_deref_load(&b, 4, 32, &nir_build_deref_var(&b, input_img)->dest.ssa, img_coord,
-                           nir_ssa_undef(&b, 1, 32), nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D);
+   nir_def *data = nir_image_deref_load(&b, 4, 32, &nir_build_deref_var(&b, input_img)->def, img_coord,
+                                        nir_undef(&b, 1, 32), nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D);
 
    /* We need a SCOPE_DEVICE memory_scope because ACO will avoid
     * creating a vmcnt(0) because it expects the L1 cache to keep memory
     * operations in-order for the same workgroup. The vmcnt(0) seems
     * necessary however. */
-   nir_scoped_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_DEVICE,
-                      .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_ssbo);
+   nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_DEVICE,
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_ssbo);
 
-   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, img_coord, nir_ssa_undef(&b, 1, 32), data,
+   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, img_coord, nir_undef(&b, 1, 32), data,
                          nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D);
    return b.shader;
 }

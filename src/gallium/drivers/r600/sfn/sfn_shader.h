@@ -278,7 +278,7 @@ protected:
 
    const ShaderInput& input(int base) const;
 
-   bool emit_simple_mov(nir_dest& dest, int chan, PVirtualValue src, Pin pin = pin_free);
+   bool emit_simple_mov(nir_def& def, int chan, PVirtualValue src, Pin pin = pin_free);
 
    template <typename T>
    using IOMap = std::map<int, T, std::less<int>, Allocator<std::pair<const int, T>>>;
@@ -297,8 +297,6 @@ private:
    bool scan_shader(const nir_function *impl);
    bool scan_uniforms(nir_variable *uniform);
    void allocate_reserved_registers();
-
-   void allocate_local_registers(const exec_list *registers);
 
    virtual int do_allocate_reserved_registers() = 0;
 
@@ -322,7 +320,11 @@ private:
    bool emit_group_barrier(nir_intrinsic_instr *intr);
    bool emit_shader_clock(nir_intrinsic_instr *instr);
    bool emit_wait_ack();
-   bool emit_scoped_barrier(nir_intrinsic_instr *instr);
+   bool emit_barrier(nir_intrinsic_instr *instr);
+   bool emit_load_reg(nir_intrinsic_instr *intr);
+   bool emit_load_reg_indirect(nir_intrinsic_instr *intr);
+   bool emit_store_reg(nir_intrinsic_instr *intr);
+   bool emit_store_reg_indirect(nir_intrinsic_instr *intr);
 
    bool equal_to(const Shader& other) const;
    void finalize();
@@ -394,12 +396,15 @@ private:
       Instr *last_gds_instr{nullptr};
       Instr *last_ssbo_instr{nullptr};
       Instr *last_kill_instr{nullptr};
+      std::unordered_map<int, Instr * > last_alu_with_indirect_reg;
       bool prepare_mem_barrier{false};
    };
 
    InstructionChain m_chain_instr;
    std::list<Instr *, Allocator<Instr *>> m_loops;
    int m_control_flow_depth{0};
+   std::list<nir_intrinsic_instr*> m_register_allocations;
+
 };
 
 std::pair<unsigned, unsigned>

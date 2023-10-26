@@ -105,7 +105,9 @@ void pvr_csb_init(struct pvr_device *device,
 void pvr_csb_finish(struct pvr_csb *csb)
 {
 #if defined(DEBUG)
-   assert(csb->relocation_mark_status == PVR_CSB_RELOCATION_MARK_CLEARED);
+   assert(csb->relocation_mark_status ==
+             PVR_CSB_RELOCATION_MARK_UNINITIALIZED ||
+          csb->relocation_mark_status == PVR_CSB_RELOCATION_MARK_CLEARED);
 #endif
 
    if (csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED) {
@@ -230,6 +232,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
       stream_link_space + PVRX(VDMCTRL_GUARD_SIZE_DEFAULT);
    const uint32_t cache_line_size =
       rogue_get_slc_cache_line_size(&csb->device->pdevice->dev_info);
+   size_t current_state_update_size = 0;
    struct pvr_bo *pvr_bo;
    VkResult result;
 
@@ -258,9 +261,11 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
 
    /* if this is not the first BO in csb */
    if (csb->pvr_bo) {
-      const size_t current_state_update_size =
-         (uint8_t *)csb->next - (uint8_t *)csb->relocation_mark;
+      bool zero_after_move = PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM);
       void *new_buffer = pvr_bo->bo->map;
+
+      current_state_update_size =
+         (uint8_t *)csb->next - (uint8_t *)csb->relocation_mark;
 
       assert(csb->relocation_mark != NULL);
       assert(csb->next >= csb->relocation_mark);
@@ -270,14 +275,16 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
 #if defined(DEBUG)
       assert(csb->relocation_mark_status == PVR_CSB_RELOCATION_MARK_SET);
       csb->relocation_mark_status = PVR_CSB_RELOCATION_MARK_SET_AND_CONSUMED;
-
-      memset(csb->relocation_mark, 0, current_state_update_size);
+      zero_after_move = true;
 #endif
+
+      if (zero_after_move)
+         memset(csb->relocation_mark, 0, current_state_update_size);
 
       csb->next = csb->relocation_mark;
 
-      csb->end += stream_link_space;
-      assert(csb->next + stream_link_space <= csb->end);
+      csb->end = (uint8_t *)csb->end + stream_link_space;
+      assert((uint8_t *)csb->next + stream_link_space <= (uint8_t *)csb->end);
 
       pvr_csb_emit_link_unmarked(csb, pvr_bo->vma->dev_addr, false);
    }
@@ -288,8 +295,8 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    /* Reserve space at the end, including the default guard padding, to make
     * sure we don't run out of space when a stream link is required.
     */
-   csb->end = csb->start + pvr_bo->bo->size - stream_reserved_space;
-   csb->next = csb->start;
+   csb->end = (uint8_t *)csb->start + pvr_bo->bo->size - stream_reserved_space;
+   csb->next = (uint8_t *)csb->start + current_state_update_size;
 
    list_addtail(&pvr_bo->link, &csb->pvr_bo_list);
 
@@ -328,7 +335,7 @@ void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords)
       mesa_logd_once("CS memory without relocation mark detected.");
 #endif
 
-   if (csb->next + required_space > csb->end) {
+   if ((uint8_t *)csb->next + required_space > (uint8_t *)csb->end) {
       bool ret = pvr_csb_buffer_extend(csb);
       if (!ret)
          return NULL;
@@ -336,7 +343,7 @@ void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords)
 
    p = csb->next;
 
-   csb->next += required_space;
+   csb->next = (uint8_t *)csb->next + required_space;
    assert(csb->next <= csb->end);
 
    return p;

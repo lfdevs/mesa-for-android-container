@@ -34,8 +34,8 @@
 #define imm1(b, x) nir_imm_float(b, x)
 #define imm3(b, x) nir_imm_vec3(b, x, x, x)
 
-static nir_ssa_def *
-swizzle(nir_builder *b, nir_ssa_def *src, int swizzle, int components)
+static nir_def *
+swizzle(nir_builder *b, nir_def *src, int swizzle, int components)
 {
    unsigned swizzle_arr[4];
    swizzle_arr[0] = GET_SWZ(swizzle, 0);
@@ -46,72 +46,72 @@ swizzle(nir_builder *b, nir_ssa_def *src, int swizzle, int components)
    return nir_swizzle(b, src, swizzle_arr, components);
 }
 
-static nir_ssa_def *
-swizzle_x(nir_builder *b, nir_ssa_def *src)
+static nir_def *
+swizzle_x(nir_builder *b, nir_def *src)
 {
    return nir_channel(b, src, 0);
 }
 
-static nir_ssa_def *
-swizzle_y(nir_builder *b, nir_ssa_def *src)
+static nir_def *
+swizzle_y(nir_builder *b, nir_def *src)
 {
    return nir_channel(b, src, 1);
 }
 
-static nir_ssa_def *
-swizzle_z(nir_builder *b, nir_ssa_def *src)
+static nir_def *
+swizzle_z(nir_builder *b, nir_def *src)
 {
    return nir_channel(b, src, 2);
 }
 
-static nir_ssa_def *
-swizzle_w(nir_builder *b, nir_ssa_def *src)
+static nir_def *
+swizzle_w(nir_builder *b, nir_def *src)
 {
    return nir_channel(b, src, 3);
 }
 
-static nir_ssa_def *
-blend_multiply(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_multiply(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = Cs*Cd */
    return nir_fmul(b, src, dst);
 }
 
-static nir_ssa_def *
-blend_screen(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_screen(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = Cs+Cd-Cs*Cd */
    return nir_fsub(b, nir_fadd(b, src, dst), nir_fmul(b, src, dst));
 }
 
-static nir_ssa_def *
-blend_overlay(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_overlay(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = 2*Cs*Cd, if Cd <= 0.5
     *            1-2*(1-Cs)*(1-Cd), otherwise
     */
-   nir_ssa_def *rule_1 = nir_fmul(b, nir_fmul(b, src, dst), imm3(b, 2.0));
-   nir_ssa_def *rule_2 =
+   nir_def *rule_1 = nir_fmul(b, nir_fmul(b, src, dst), imm3(b, 2.0));
+   nir_def *rule_2 =
       nir_fsub(b, imm3(b, 1.0), nir_fmul(b, nir_fmul(b, nir_fsub(b, imm3(b, 1.0), src), nir_fsub(b, imm3(b, 1.0), dst)), imm3(b, 2.0)));
    return nir_bcsel(b, nir_fge(b, imm3(b, 0.5f), dst), rule_1, rule_2);
 }
 
-static nir_ssa_def *
-blend_darken(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_darken(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = min(Cs,Cd) */
    return nir_fmin(b, src, dst);
 }
 
-static nir_ssa_def *
-blend_lighten(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_lighten(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = max(Cs,Cd) */
    return nir_fmax(b, src, dst);
 }
 
-static nir_ssa_def *
-blend_colordodge(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_colordodge(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   0, if Cd <= 0
@@ -123,8 +123,8 @@ blend_colordodge(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
                               nir_fmin(b, imm3(b, 1.0), nir_fdiv(b, dst, nir_fsub(b, imm3(b, 1.0), src)))));
 }
 
-static nir_ssa_def *
-blend_colorburn(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_colorburn(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   1, if Cd >= 1
@@ -136,20 +136,20 @@ blend_colorburn(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
                               nir_fsub(b, imm3(b, 1.0), nir_fmin(b, imm3(b, 1.0), nir_fdiv(b, nir_fsub(b, imm3(b, 1.0), dst), src)))));
 }
 
-static nir_ssa_def *
-blend_hardlight(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_hardlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = 2*Cs*Cd, if Cs <= 0.5
     *            1-2*(1-Cs)*(1-Cd), otherwise
     */
-   nir_ssa_def *rule_1 = nir_fmul(b, imm3(b, 2.0), nir_fmul(b, src, dst));
-   nir_ssa_def *rule_2 =
+   nir_def *rule_1 = nir_fmul(b, imm3(b, 2.0), nir_fmul(b, src, dst));
+   nir_def *rule_2 =
       nir_fsub(b, imm3(b, 1.0), nir_fmul(b, imm3(b, 2.0), nir_fmul(b, nir_fsub(b, imm3(b, 1.0), src), nir_fsub(b, imm3(b, 1.0), dst))));
    return nir_bcsel(b, nir_fge(b, imm3(b, 0.5), src), rule_1, rule_2);
 }
 
-static nir_ssa_def *
-blend_softlight(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_softlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   Cd-(1-2*Cs)*Cd*(1-Cd),
@@ -166,49 +166,49 @@ blend_softlight(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
     *            Cd*((16*Cd-12)*Cd+3) if Cs > 0.5 and Cd <= 0.25
     *            sqrt(Cd)-Cd,         otherwise
     */
-   nir_ssa_def *factor_1 = nir_fmul(b, dst, nir_fsub(b, imm3(b, 1.0), dst));
-   nir_ssa_def *factor_2 =
+   nir_def *factor_1 = nir_fmul(b, dst, nir_fsub(b, imm3(b, 1.0), dst));
+   nir_def *factor_2 =
       nir_fmul(b, dst, nir_fadd(b, nir_fmul(b, nir_fsub(b, nir_fmul(b, imm3(b, 16.0), dst), imm3(b, 12.0)), dst), imm3(b, 3.0)));
-   nir_ssa_def *factor_3 = nir_fsub(b, nir_fsqrt(b, dst), dst);
-   nir_ssa_def *factor = nir_bcsel(b, nir_fge(b, imm3(b, 0.5), src), factor_1,
+   nir_def *factor_3 = nir_fsub(b, nir_fsqrt(b, dst), dst);
+   nir_def *factor = nir_bcsel(b, nir_fge(b, imm3(b, 0.5), src), factor_1,
                                    nir_bcsel(b, nir_fge(b, imm3(b, 0.25), dst), factor_2, factor_3));
    return nir_fadd(b, dst, nir_fmul(b, nir_fsub(b, nir_fmul(b, imm3(b, 2.0), src), imm3(b, 1.0)), factor));
 }
 
-static nir_ssa_def *
-blend_difference(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_difference(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fabs(b, nir_fsub(b, dst, src));
 }
 
-static nir_ssa_def *
-blend_exclusion(nir_builder *b, nir_ssa_def *src, nir_ssa_def *dst)
+static nir_def *
+blend_exclusion(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fadd(b, src, nir_fsub(b, dst, nir_fmul(b, imm3(b, 2.0), nir_fmul(b, src, dst))));
 }
 
 /* Return the minimum of a vec3's components */
-static nir_ssa_def *
-minv3(nir_builder *b, nir_ssa_def *v)
+static nir_def *
+minv3(nir_builder *b, nir_def *v)
 {
    return nir_fmin(b, nir_fmin(b, swizzle_x(b, v), swizzle_y(b, v)), swizzle_z(b, v));
 }
 
 /* Return the maximum of a vec3's components */
-static nir_ssa_def *
-maxv3(nir_builder *b, nir_ssa_def *v)
+static nir_def *
+maxv3(nir_builder *b, nir_def *v)
 {
    return nir_fmax(b, nir_fmax(b, swizzle_x(b, v), swizzle_y(b, v)), swizzle_z(b, v));
 }
 
-static nir_ssa_def *
-lumv3(nir_builder *b, nir_ssa_def *c)
+static nir_def *
+lumv3(nir_builder *b, nir_def *c)
 {
    return nir_fdot(b, c, nir_imm_vec3(b, 0.30, 0.59, 0.11));
 }
 
-static nir_ssa_def *
-satv3(nir_builder *b, nir_ssa_def *c)
+static nir_def *
+satv3(nir_builder *b, nir_def *c)
 {
    return nir_fsub(b, maxv3(b, c), minv3(b, c));
 }
@@ -240,20 +240,20 @@ set_lum(nir_builder *b,
         nir_variable *cbase,
         nir_variable *clum)
 {
-   nir_ssa_def *cbase_def = nir_load_var(b, cbase);
+   nir_def *cbase_def = nir_load_var(b, cbase);
    nir_store_var(b, color, nir_fadd(b, cbase_def, nir_fsub(b, lumv3(b, nir_load_var(b, clum)), lumv3(b, cbase_def))), ~0);
 
    nir_variable *llum = add_temp_var(b, "__blend_lum", glsl_float_type());
    nir_variable *mincol = add_temp_var(b, "__blend_mincol", glsl_float_type());
    nir_variable *maxcol = add_temp_var(b, "__blend_maxcol", glsl_float_type());
 
-   nir_ssa_def *color_def = nir_load_var(b, color);
+   nir_def *color_def = nir_load_var(b, color);
    nir_store_var(b, llum, lumv3(b, color_def), ~0);
    nir_store_var(b, mincol, minv3(b, color_def), ~0);
    nir_store_var(b, maxcol, maxv3(b, color_def), ~0);
 
-   nir_ssa_def *mincol_def = nir_load_var(b, mincol);
-   nir_ssa_def *llum_def = nir_load_var(b, llum);
+   nir_def *mincol_def = nir_load_var(b, mincol);
+   nir_def *llum_def = nir_load_var(b, llum);
    nir_if *nif = nir_push_if(b, nir_flt(b, mincol_def, imm1(b, 0.0)));
 
    /* Add then block */
@@ -261,7 +261,7 @@ set_lum(nir_builder *b,
 
    /* Add else block */
    nir_push_else(b, nif);
-   nir_ssa_def *maxcol_def = nir_load_var(b, maxcol);
+   nir_def *maxcol_def = nir_load_var(b, maxcol);
    nir_if *nif2 = nir_push_if(b, nir_flt(b, imm1(b, 1.0), maxcol_def));
    nir_store_var(b, color, nir_fadd(b, llum_def, nir_fdiv(b, nir_fmul(b, nir_fsub(b, color_def, llum_def), nir_fsub(b, imm3(b, 1.0), llum_def)), nir_fsub(b, maxcol_def, llum_def))), ~0);
    nir_pop_if(b, nif2);
@@ -279,8 +279,8 @@ set_lum_sat(nir_builder *b,
             nir_variable *csat,
             nir_variable *clum)
 {
-   nir_ssa_def *cbase_def = nir_load_var(b, cbase);
-   nir_ssa_def *csat_def = nir_load_var(b, csat);
+   nir_def *cbase_def = nir_load_var(b, cbase);
+   nir_def *csat_def = nir_load_var(b, csat);
 
    nir_variable *sbase = add_temp_var(b, "__blend_sbase", glsl_float_type());
    nir_store_var(b, sbase, satv3(b, cbase_def), ~0);
@@ -290,10 +290,10 @@ set_lum_sat(nir_builder *b,
     * and interpolating the "middle" component based on its
     * original value relative to the smallest/largest.
     */
-   nir_ssa_def *sbase_def = nir_load_var(b, sbase);
+   nir_def *sbase_def = nir_load_var(b, sbase);
    nir_if *nif = nir_push_if(b, nir_flt(b, imm1(b, 0.0), sbase_def));
-   nir_ssa_def *ssat = satv3(b, csat_def);
-   nir_ssa_def *minbase = minv3(b, cbase_def);
+   nir_def *ssat = satv3(b, csat_def);
+   nir_def *minbase = minv3(b, cbase_def);
    nir_store_var(b, color, nir_fdiv(b, nir_fmul(b, nir_fsub(b, cbase_def, minbase), ssat), sbase_def), ~0);
    nir_push_else(b, nif);
    nir_store_var(b, color, imm3(b, 0.0), ~0);
@@ -302,7 +302,7 @@ set_lum_sat(nir_builder *b,
    set_lum(b, color, color, clum);
 }
 
-static nir_ssa_def *
+static nir_def *
 is_mode(nir_builder *b, nir_variable *mode, enum gl_advanced_blend_mode q)
 {
    return nir_ieq_imm(b, nir_load_var(b, mode), (unsigned) q);
@@ -312,7 +312,7 @@ static nir_variable *
 calc_blend_result(nir_builder *b,
                   nir_variable *mode,
                   nir_variable *fb,
-                  nir_ssa_def *blend_src,
+                  nir_def *blend_src,
                   GLbitfield blend_qualifiers)
 {
    nir_variable *result = add_temp_var(b, "__blend_result", glsl_vec4_type());
@@ -337,10 +337,10 @@ calc_blend_result(nir_builder *b,
    nir_variable *dst_rgb = add_temp_var(b, "__blend_dst_rgb", glsl_vec_type(3));
    nir_variable *dst_alpha = add_temp_var(b, "__blend_dst_a", glsl_float_type());
 
-   nir_ssa_def *fb_def = nir_load_var(b, fb);
+   nir_def *fb_def = nir_load_var(b, fb);
    nir_store_var(b, dst_alpha, swizzle_w(b, fb_def), ~0);
 
-   nir_ssa_def *dst_alpha_def = nir_load_var(b, dst_alpha);
+   nir_def *dst_alpha_def = nir_load_var(b, dst_alpha);
    nir_if *nif = nir_push_if(b, nir_feq(b, dst_alpha_def, imm1(b, 0.0)));
    nir_store_var(b, dst_rgb, imm3(b, 0.0), ~0);
    nir_push_else(b, nif);
@@ -348,7 +348,7 @@ calc_blend_result(nir_builder *b,
    nir_pop_if(b, nif);
 
    nir_store_var(b, src_alpha, swizzle_w(b, blend_src), ~0);
-   nir_ssa_def *src_alpha_def = nir_load_var(b, src_alpha);
+   nir_def *src_alpha_def = nir_load_var(b, src_alpha);
    nif = nir_push_if(b, nir_feq(b, src_alpha_def, imm1(b, 0.0)));
    nir_store_var(b, src_rgb, imm3(b, 0.0), ~0);
    nir_push_else(b, nif);
@@ -357,15 +357,15 @@ calc_blend_result(nir_builder *b,
 
    nir_variable *factor = add_temp_var(b, "__blend_factor", glsl_vec_type(3));
 
-   nir_ssa_def *src_rgb_def = nir_load_var(b, src_rgb);
-   nir_ssa_def *dst_rgb_def = nir_load_var(b, dst_rgb);
+   nir_def *src_rgb_def = nir_load_var(b, src_rgb);
+   nir_def *dst_rgb_def = nir_load_var(b, dst_rgb);
 
    unsigned choices = blend_qualifiers;
    while (choices) {
       enum gl_advanced_blend_mode choice = (enum gl_advanced_blend_mode)u_bit_scan(&choices);
 
       nir_if *iff = nir_push_if(b, is_mode(b, mode, choice));
-      nir_ssa_def *val = NULL;
+      nir_def *val = NULL;
 
       switch (choice) {
       case BLEND_MULTIPLY:
@@ -454,11 +454,11 @@ calc_blend_result(nir_builder *b,
    /* WRITEMASK_XYZ */
    nir_store_var(b, result, nir_pad_vec4(b, nir_fadd(b, nir_fadd(b, nir_fmul(b, nir_load_var(b, factor), nir_load_var(b, p0)), nir_fmul(b, src_rgb_def, nir_load_var(b, p1))), nir_fmul(b, dst_rgb_def, nir_load_var(b, p2)))), 0x7);
    /* WRITEMASK_W */
-   nir_ssa_def *val = nir_fadd(b, nir_fadd(b, nir_load_var(b, p0), nir_load_var(b, p1)), nir_load_var(b, p2));
+   nir_def *val = nir_fadd(b, nir_fadd(b, nir_load_var(b, p0), nir_load_var(b, p1)), nir_load_var(b, p2));
    nir_store_var(b, result, nir_vec4(b, val, val, val, val), 0x8);
 
    /* reset cursor to the end of the main function */
-   b->cursor = nir_after_block(nir_impl_last_block(b->impl));
+   b->cursor = nir_after_impl(b->impl);
 
    return result;
 }
@@ -466,10 +466,10 @@ calc_blend_result(nir_builder *b,
 /**
  * Dereference var, or var[0] if it's an array.
  */
-static nir_ssa_def *
+static nir_def *
 load_output(nir_builder *b, nir_variable *var)
 {
-   nir_ssa_def *var_def;
+   nir_def *var_def;
    if (glsl_type_is_array(var->type)) {
       var_def = nir_load_array_var_imm(b, var, 0);
    } else {
@@ -495,7 +495,7 @@ gl_nir_lower_blend_equation_advanced(nir_shader *sh, bool coherent)
 
    sh->info.fs.uses_sample_shading = true;
 
-   nir_builder b = nir_builder_at(nir_after_block(nir_impl_last_block(impl)));
+   nir_builder b = nir_builder_at(nir_after_impl(impl));
 
    nir_variable *fb = nir_variable_create(sh, nir_var_shader_out,
                                           glsl_vec4_type(),
@@ -539,12 +539,12 @@ gl_nir_lower_blend_equation_advanced(nir_shader *sh, bool coherent)
    /* Combine values written to outputs into a single RGBA blend source.
     * We assign <0, 0, 0, 1> to any components with no corresponding output.
     */
-   nir_ssa_def *blend_source;
+   nir_def *blend_source;
    if (outputs[0] &&
        glsl_get_vector_elements(glsl_without_array(outputs[0]->type)) == 4) {
       blend_source = load_output(&b, outputs[0]);
    } else {
-      nir_ssa_def *blend_comps[4];
+      nir_def *blend_comps[4];
       for (int i = 0; i < 4; i++) {
          nir_variable *var = outputs[i];
          if (var) {
@@ -570,7 +570,7 @@ gl_nir_lower_blend_equation_advanced(nir_shader *sh, bool coherent)
       if (glsl_type_is_array(outputs[i]->type)) {
          nir_store_array_var_imm(&b, outputs[i], 0, nir_load_var(&b, result_dest), 1 << i);
       } else {
-         nir_ssa_def *val = swizzle(&b, nir_load_var(&b, result_dest), i, 1);
+         nir_def *val = swizzle(&b, nir_load_var(&b, result_dest), i, 1);
          nir_store_var(&b, outputs[i], nir_vec4(&b, val, val, val, val), 1 << i);
       }
    }

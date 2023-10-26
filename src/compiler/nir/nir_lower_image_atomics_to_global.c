@@ -15,20 +15,16 @@
  */
 
 static bool
-lower(nir_builder *b, nir_instr *instr, UNUSED void *_)
+lower(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *_)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    nir_intrinsic_op address_op;
    bool swap;
 
-#define CASE(storage)                                                          \
-   case nir_intrinsic_##storage##_atomic:                                      \
-   case nir_intrinsic_##storage##_atomic_swap:                                 \
-      address_op = nir_intrinsic_##storage##_texel_address;                    \
-      swap = intr->intrinsic == nir_intrinsic_##storage##_atomic_swap;         \
+#define CASE(storage)                                                  \
+   case nir_intrinsic_##storage##_atomic:                              \
+   case nir_intrinsic_##storage##_atomic_swap:                         \
+      address_op = nir_intrinsic_##storage##_texel_address;            \
+      swap = intr->intrinsic == nir_intrinsic_##storage##_atomic_swap; \
       break;
 
    switch (intr->intrinsic) {
@@ -40,10 +36,10 @@ lower(nir_builder *b, nir_instr *instr, UNUSED void *_)
    }
 #undef CASE
 
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
    nir_atomic_op atomic_op = nir_intrinsic_atomic_op(intr);
    enum pipe_format format = nir_intrinsic_format(intr);
-   unsigned bit_size = nir_dest_bit_size(intr->dest);
+   unsigned bit_size = intr->def.bit_size;
 
    /* Even for "formatless" access, we know the size of the texel accessed,
     * since it's the size of the atomic. We can use that to synthesize a
@@ -64,7 +60,7 @@ lower(nir_builder *b, nir_instr *instr, UNUSED void *_)
    }
 
    /* Get the relevant texel address */
-   nir_ssa_def *address = nir_image_texel_address(
+   nir_def *address = nir_image_texel_address(
       b, 64, intr->src[0].ssa, intr->src[1].ssa, intr->src[2].ssa,
       .image_dim = nir_intrinsic_image_dim(intr),
       .image_array = nir_intrinsic_image_array(intr),
@@ -81,7 +77,7 @@ lower(nir_builder *b, nir_instr *instr, UNUSED void *_)
    }
 
    /* Build the global atomic */
-   nir_ssa_def *global;
+   nir_def *global;
    if (swap) {
       global = nir_global_atomic_swap(b, bit_size, address, intr->src[3].ssa,
                                       intr->src[4].ssa, .atomic_op = atomic_op);
@@ -93,16 +89,16 @@ lower(nir_builder *b, nir_instr *instr, UNUSED void *_)
    /* Replace the image atomic with the global atomic. Remove the image
     * explicitly because it has side effects so is not DCE'd.
     */
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, global);
-   nir_instr_remove(instr);
+   nir_def_rewrite_uses(&intr->def, global);
+   nir_instr_remove(&intr->instr);
    return true;
 }
 
 bool
 nir_lower_image_atomics_to_global(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader, lower,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
-                                       NULL);
+   return nir_shader_intrinsics_pass(shader, lower,
+                                     nir_metadata_block_index |
+                                        nir_metadata_dominance,
+                                     NULL);
 }

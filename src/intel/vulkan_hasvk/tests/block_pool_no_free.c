@@ -30,7 +30,7 @@
 #define BLOCKS_PER_THREAD 1024
 #define NUM_RUNS 64
 
-struct job {
+static struct job {
    pthread_t thread;
    unsigned id;
    struct anv_block_pool *pool;
@@ -146,7 +146,9 @@ static void run_test()
    pthread_mutex_destroy(&device.mutex);
 }
 
-int main(void)
+void block_pool_no_free_test(void);
+
+void block_pool_no_free_test(void)
 {
    for (unsigned i = 0; i < NUM_RUNS; i++)
       run_test();

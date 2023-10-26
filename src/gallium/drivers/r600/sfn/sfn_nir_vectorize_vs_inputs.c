@@ -51,7 +51,7 @@ r600_clone_deref_array(nir_builder *b,
 
    dst_tail = r600_clone_deref_array(b, dst_tail, parent);
 
-   return nir_build_deref_array(b, dst_tail, nir_ssa_for_src(b, src_head->arr.index, 1));
+   return nir_build_deref_array(b, dst_tail, src_head->arr.index.ssa);
 }
 
 static bool
@@ -146,28 +146,26 @@ r600_create_new_load(nir_builder *b,
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   assert(intr->dest.is_ssa);
-
    nir_intrinsic_instr *new_intr = nir_intrinsic_instr_create(b->shader, intr->intrinsic);
-   nir_ssa_dest_init(&new_intr->instr, &new_intr->dest, num_comps,
-                     intr->dest.ssa.bit_size);
+   nir_def_init(&new_intr->instr, &new_intr->def, num_comps,
+                intr->def.bit_size);
    new_intr->num_components = num_comps;
 
    nir_deref_instr *deref = nir_build_deref_var(b, var);
    deref = r600_clone_deref_array(b, deref, nir_src_as_deref(intr->src[0]));
 
-   new_intr->src[0] = nir_src_for_ssa(&deref->dest.ssa);
+   new_intr->src[0] = nir_src_for_ssa(&deref->def);
 
    if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset ||
        intr->intrinsic == nir_intrinsic_interp_deref_at_sample)
-      nir_src_copy(&new_intr->src[1], &intr->src[1], &new_intr->instr);
+      new_intr->src[1] = nir_src_for_ssa(intr->src[1].ssa);
 
    nir_builder_instr_insert(b, &new_intr->instr);
 
    for (unsigned i = 0; i < old_num_comps; ++i)
       channels[i] = comp - var->data.location_frac + i;
-   nir_ssa_def *load = nir_swizzle(b, &new_intr->dest.ssa, channels, old_num_comps);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, load);
+   nir_def *load = nir_swizzle(b, &new_intr->def, channels, old_num_comps);
+   nir_def_rewrite_uses(&intr->def, load);
 
    /* Remove the old load intrinsic */
    nir_instr_remove(&intr->instr);

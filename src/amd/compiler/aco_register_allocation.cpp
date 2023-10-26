@@ -1888,7 +1888,6 @@ handle_pseudo(ra_ctx& ctx, const RegisterFile& reg_file, Instruction* instr)
    case aco_opcode::p_create_vector:
    case aco_opcode::p_split_vector:
    case aco_opcode::p_parallelcopy:
-   case aco_opcode::p_wqm:
    case aco_opcode::p_start_linear_vgpr: break;
    default: return;
    }
@@ -2942,8 +2941,7 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                   if (get_reg_specified(ctx, register_file, rc, instr, reg))
                      definition->setFixed(reg);
                }
-            } else if (instr->opcode == aco_opcode::p_wqm ||
-                       instr->opcode == aco_opcode::p_parallelcopy ||
+            } else if (instr->opcode == aco_opcode::p_parallelcopy ||
                        (instr->opcode == aco_opcode::p_start_linear_vgpr &&
                         !instr->operands.empty())) {
                PhysReg reg = instr->operands[i].physReg();
@@ -2961,6 +2959,14 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                                                    parallelcopy, instr);
                update_renames(ctx, register_file, parallelcopy, instr, (UpdateRenames)0);
                definition->setFixed(reg);
+            } else if (instr_info.classes[(int)instr->opcode] == instr_class::wmma &&
+                       instr->operands[2].isTemp() && instr->operands[2].isKill() &&
+                       instr->operands[2].regClass() == definition->regClass()) {
+               /* For WMMA, the dest needs to either be equal to operands[2], or not overlap it.
+                * Here we set a policy of forcing them the same if operands[2] gets killed (and
+                * otherwise they don't overlap). This may not be optimal if RA would select a
+                * different location due to affinity, but that gets complicated very quickly. */
+               definition->setFixed(instr->operands[2].physReg());
             }
 
             if (!definition->isFixed()) {

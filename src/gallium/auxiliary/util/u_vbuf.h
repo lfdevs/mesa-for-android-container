@@ -81,7 +81,7 @@ void u_vbuf_set_vertex_elements(struct u_vbuf *mgr,
                                 const struct cso_velems_state *velems);
 void u_vbuf_unset_vertex_elements(struct u_vbuf *mgr);
 void u_vbuf_set_vertex_buffers(struct u_vbuf *mgr,
-                               unsigned start_slot, unsigned count,
+                               unsigned count,
                                unsigned unbind_num_trailing_slots,
                                bool take_ownership,
                                const struct pipe_vertex_buffer *bufs);

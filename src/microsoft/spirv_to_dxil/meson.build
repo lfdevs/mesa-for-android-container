@@ -33,7 +33,7 @@ libspirv_to_dxil = both_libraries(
   ],
   vs_module_defs : 'spirv_to_dxil.def',
   dependencies : [idep_nir, idep_vtn, idep_libdxil_compiler],
-  include_directories : [inc_include, inc_src, inc_compiler, inc_gallium],
+  include_directories : [inc_include, inc_src, inc_gallium],
   install : true,
 )
 
@@ -48,7 +48,7 @@ spirv_to_dxil = executable(
     'spirv2dxil.c',
   ),
   dependencies : [idep_nir, idep_libdxil_compiler, idep_getopt, idep_libspirv_to_dxil],
-  include_directories : [inc_include, inc_src, inc_compiler, inc_gallium],
+  include_directories : [inc_include, inc_src, inc_gallium],
   build_by_default : true,
   install : true,
 )

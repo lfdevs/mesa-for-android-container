@@ -415,6 +415,7 @@ virgl_drm_winsys_resource_cache_create(struct virgl_winsys *qws,
                                        uint32_t flags,
                                        uint32_t size)
 {
+   bool need_sync = false;
    struct virgl_drm_winsys *qdws = virgl_drm_winsys(qws);
    struct virgl_hw_res *res;
    struct virgl_resource_cache_entry *entry;
@@ -446,6 +447,13 @@ virgl_drm_winsys_resource_cache_create(struct virgl_winsys *qws,
    mtx_unlock(&qdws->mutex);
 
 alloc:
+   /* PIPE_BUFFER with VIRGL_BIND_CUSTOM flag will access data when attaching,
+    * in order to avoid race conditions we need to treat it as busy during
+    * creation
+    */
+   if (target == PIPE_BUFFER && (bind & VIRGL_BIND_CUSTOM))
+       need_sync = true;
+
    if (flags & (VIRGL_RESOURCE_FLAG_MAP_PERSISTENT |
                 VIRGL_RESOURCE_FLAG_MAP_COHERENT))
       res = virgl_drm_winsys_resource_create_blob(qws, target, format, bind,
@@ -456,7 +464,7 @@ alloc:
       res = virgl_drm_winsys_resource_create(qws, target, format, bind, width,
                                              height, depth, array_size,
                                              last_level, nr_samples, size,
-                                             true);
+                                             need_sync);
    return res;
 }
 

@@ -206,7 +206,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VS_LAYER_VIEWPORT:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_TGSI_DIV:
       return 1;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:

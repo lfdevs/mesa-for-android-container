@@ -534,6 +534,10 @@ i915_set_polygon_stipple(struct pipe_context *pipe,
 {
 }
 
+static const struct nir_to_tgsi_options ntt_options = {
+   .lower_fabs = true,
+};
+
 static void *
 i915_create_fs_state(struct pipe_context *pipe,
                      const struct pipe_shader_state *templ)
@@ -547,15 +551,14 @@ i915_create_fs_state(struct pipe_context *pipe,
 
    if (templ->type == PIPE_SHADER_IR_NIR) {
       nir_shader *s = templ->ir.nir;
+      ifs->internal = s->info.internal;
 
-      static const struct nir_to_tgsi_options ntt_options = {
-         .lower_fabs = true,
-      };
       ifs->state.tokens = nir_to_tgsi_options(s, pipe->screen, &ntt_options);
    } else {
       assert(templ->type == PIPE_SHADER_IR_TGSI);
       /* we need to keep a local copy of the tokens */
       ifs->state.tokens = tgsi_dup_tokens(templ->tokens);
+      ifs->internal = i915->no_log_program_errors;
    }
 
    ifs->state.type = PIPE_SHADER_IR_TGSI;
@@ -593,6 +596,7 @@ i915_delete_fs_state(struct pipe_context *pipe, void *shader)
 {
    struct i915_fragment_shader *ifs = (struct i915_fragment_shader *)shader;
 
+   ralloc_free(ifs->error);
    FREE(ifs->program);
    ifs->program = NULL;
    FREE((struct tgsi_token *)ifs->state.tokens);
@@ -603,13 +607,44 @@ i915_delete_fs_state(struct pipe_context *pipe, void *shader)
    FREE(ifs);
 }
 
+/* Does a test compile at link time to see if we'll be able to run this shader
+ * at runtime.  Return a string to the GLSL compiler for anything we should
+ * report as link failure.
+ */
+char *
+i915_test_fragment_shader_compile(struct pipe_screen *screen, nir_shader *s)
+{
+   struct i915_fragment_shader *ifs = CALLOC_STRUCT(i915_fragment_shader);
+   if (!ifs)
+      return NULL;
+
+   /* NTT takes ownership of the shader, give it a clone. */
+   s = nir_shader_clone(NULL, s);
+
+   ifs->internal = s->info.internal;
+   ifs->state.tokens = nir_to_tgsi_options(s, screen, &ntt_options);
+   ifs->state.type = PIPE_SHADER_IR_TGSI;
+
+   tgsi_scan_shader(ifs->state.tokens, &ifs->info);
+
+   i915_translate_fragment_program(NULL, ifs);
+
+   char *msg = NULL;
+   if (ifs->error)
+      msg = strdup(ifs->error);
+
+   i915_delete_fs_state(NULL, ifs);
+
+   return msg;
+}
+
 static void *
 i915_create_vs_state(struct pipe_context *pipe,
                      const struct pipe_shader_state *templ)
 {
    struct i915_context *i915 = i915_context(pipe);
 
-   struct pipe_shader_state from_nir = { PIPE_SHADER_IR_TGSI };
+   struct pipe_shader_state from_nir = {PIPE_SHADER_IR_TGSI};
    if (templ->type == PIPE_SHADER_IR_NIR) {
       nir_shader *s = templ->ir.nir;
 
@@ -717,8 +752,7 @@ i915_set_constant_buffer(struct pipe_context *pipe,
 static void
 i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned num,
-                       unsigned unbind_num_trailing_slots,
-                       bool take_ownership,
+                       unsigned unbind_num_trailing_slots, bool take_ownership,
                        struct pipe_sampler_view **views)
 {
    if (shader != PIPE_SHADER_FRAGMENT) {
@@ -752,7 +786,8 @@ i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
          pipe_sampler_view_reference(&i915->fragment_sampler_views[i], NULL);
          i915->fragment_sampler_views[i] = views[i];
       } else {
-         pipe_sampler_view_reference(&i915->fragment_sampler_views[i], views[i]);
+         pipe_sampler_view_reference(&i915->fragment_sampler_views[i],
+                                     views[i]);
       }
    }
 
@@ -824,7 +859,7 @@ i915_set_framebuffer_state(struct pipe_context *pipe,
                 sizeof(surf->color_swizzle));
          i915->dirty |= I915_NEW_COLOR_SWIZZLE;
       }
-   } 
+   }
    if (fb->zsbuf)
       draw_set_zs_format(i915->draw, fb->zsbuf->format);
 
@@ -956,21 +991,19 @@ i915_delete_rasterizer_state(struct pipe_context *pipe, void *raster)
 }
 
 static void
-i915_set_vertex_buffers(struct pipe_context *pipe, unsigned start_slot,
-                        unsigned count, unsigned unbind_num_trailing_slots,
-                        bool take_ownership,
+i915_set_vertex_buffers(struct pipe_context *pipe, unsigned count,
+                        unsigned unbind_num_trailing_slots, bool take_ownership,
                         const struct pipe_vertex_buffer *buffers)
 {
    struct i915_context *i915 = i915_context(pipe);
    struct draw_context *draw = i915->draw;
 
    util_set_vertex_buffers_count(i915->vertex_buffers, &i915->nr_vertex_buffers,
-                                 buffers, start_slot, count,
-                                 unbind_num_trailing_slots, take_ownership);
+                                 buffers, count, unbind_num_trailing_slots,
+                                 take_ownership);
 
    /* pass-through to draw module */
-   draw_set_vertex_buffers(draw, start_slot, count, unbind_num_trailing_slots,
-                           buffers);
+   draw_set_vertex_buffers(draw, count, unbind_num_trailing_slots, buffers);
 }
 
 static void *

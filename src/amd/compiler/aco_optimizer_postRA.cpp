@@ -507,6 +507,13 @@ try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
       if (is_overwritten_since(ctx, mov->operands[0], op_instr_idx))
          continue;
 
+      bool dpp8 = mov->isDPP8();
+
+      /* Fetch-inactive means exec is ignored, which allows us to combine across exec changes. */
+      if (!(dpp8 ? mov->dpp8().fetch_inactive : mov->dpp16().fetch_inactive) &&
+          is_overwritten_since(ctx, Operand(exec, ctx.program->lane_mask), op_instr_idx))
+         continue;
+
       /* We won't eliminate the DPP mov if the operand is used twice */
       bool op_used_twice = false;
       for (unsigned j = 0; j < instr->operands.size(); j++)
@@ -514,7 +521,6 @@ try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
       if (op_used_twice)
          continue;
 
-      bool dpp8 = mov->isDPP8();
       bool input_mods = can_use_input_modifiers(ctx.program->gfx_level, instr->opcode, i) &&
                         get_operand_size(instr, i) == 32;
       bool mov_uses_mods = mov->valu().neg[0] || mov->valu().abs[0];
@@ -542,13 +548,15 @@ try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
       if (dpp8) {
          DPP8_instruction* dpp = &instr->dpp8();
-         memcpy(dpp->lane_sel, mov->dpp8().lane_sel, sizeof(dpp->lane_sel));
+         dpp->lane_sel = mov->dpp8().lane_sel;
+         dpp->fetch_inactive = mov->dpp8().fetch_inactive;
          if (mov_uses_mods)
             instr->format = asVOP3(instr->format);
       } else {
          DPP16_instruction* dpp = &instr->dpp16();
          dpp->dpp_ctrl = mov->dpp16().dpp_ctrl;
          dpp->bound_ctrl = true;
+         dpp->fetch_inactive = mov->dpp16().fetch_inactive;
       }
       instr->valu().neg[0] ^= mov->valu().neg[0] && !instr->valu().abs[0];
       instr->valu().abs[0] |= mov->valu().abs[0];

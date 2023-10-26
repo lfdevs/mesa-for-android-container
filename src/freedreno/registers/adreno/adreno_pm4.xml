@@ -645,6 +645,9 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		non-visible draw calls.
 	</doc>
 	<value name="CP_FIXED_STRIDE_DRAW_TABLE" value="0x7f" variants="A7XX-"/>
+
+	<doc>Reset various on-chip state used for synchronization</doc>
+	<value name="CP_RESET_CONTEXT_STATE" value="0x1f" variants="A7XX-"/>
 </enum>
 
 
@@ -1016,6 +1019,20 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<reg64 offset="8" name="INDIRECT_COUNT" type="address"/>
 		<reg32 offset="10" name="STRIDE" type="uint"/>
 	</stripe>
+</domain>
+
+<domain name="CP_DRAW_AUTO" width="32">
+	<reg32 offset="0" name="0" type="vgt_draw_initiator_a4xx"/>
+	<reg32 offset="1" name="1">
+		<bitfield name="NUM_INSTANCES" low="0" high="31" type="uint"/>
+	</reg32>
+	<reg64 offset="2" name="NUM_VERTICES_BASE" type="address"/>
+	<reg32 offset="4" name="4">
+		<bitfield name="NUM_VERTICES_OFFSET" low="0" high="31" type="uint"/>
+	</reg32>
+	<reg32 offset="5" name="5">
+		<bitfield name="STRIDE" low="0" high="31" type="uint"/>
+	</reg32>
 </domain>
 
 <domain name="CP_DRAW_PRED_ENABLE_GLOBAL" width="32" varset="chip">
@@ -1566,11 +1583,11 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	</reg32>
 	<reg32 offset="2" name="2">
 	</reg32>
+	<reg32 offset="3" name="3"/>
 	<!-- second buffer looks like some cmdstream.. length in dwords: -->
-	<reg32 offset="3" name="3">
+	<reg32 offset="4" name="4">
 		<bitfield name="ADDR_1_LEN" low="0" high="31" type="uint"/>
 	</reg32>
-	<reg32 offset="4" name="4"/>
 	<reg32 offset="5" name="5">
 		<bitfield name="ADDR_1_LO" low="0" high="31"/>
 	</reg32>
@@ -2232,6 +2249,14 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	</reg32>
 	<reg32 offset="3" name="3">
 		<bitfield name="COUNT" low="0" high="31"/>
+	</reg32>
+</domain>
+
+<domain name="CP_RESET_CONTEXT_STATE" width="32">
+	<reg32 offset="0" name="0">
+		<bitfield name="CLEAR_ON_CHIP_TS" pos="0" type="boolean"/>
+		<bitfield name="CLEAR_RESOURCE_TABLE" pos="1" type="boolean"/>
+		<bitfield name="CLEAR_GLOBAL_LOCAL_TS" pos="2" type="boolean"/>
 	</reg32>
 </domain>
 

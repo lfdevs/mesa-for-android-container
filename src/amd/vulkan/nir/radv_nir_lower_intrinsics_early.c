@@ -43,7 +43,7 @@ radv_nir_lower_intrinsics_early(nir_shader *nir, const struct radv_pipeline_key 
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
          b.cursor = nir_before_instr(&intrin->instr);
 
-         nir_ssa_def *def = NULL;
+         nir_def *def = NULL;
          switch (intrin->intrinsic) {
          case nir_intrinsic_is_sparse_texels_resident:
             def = nir_ieq_imm(&b, intrin->src[0].ssa, 0);
@@ -60,7 +60,7 @@ radv_nir_lower_intrinsics_early(nir_shader *nir, const struct radv_pipeline_key 
             continue;
          }
 
-         nir_ssa_def_rewrite_uses(&intrin->dest.ssa, def);
+         nir_def_rewrite_uses(&intrin->def, def);
 
          nir_instr_remove(instr);
          progress = true;

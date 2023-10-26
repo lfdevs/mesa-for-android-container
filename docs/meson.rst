@@ -7,9 +7,6 @@ Compilation and Installation Using Meson
 For general information about Meson see the `Meson
 website <https://mesonbuild.com/>`__.
 
-**Mesa's Meson build system is generally considered stable and ready for
-production.**
-
 .. note::
 
    Mesa requires Meson >= 0.60.0 to build.

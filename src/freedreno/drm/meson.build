@@ -37,10 +37,6 @@ libfreedreno_drm_includes = [
   inc_freedreno,
   inc_include,
   inc_src,
-  inc_mapi,
-  inc_mesa,
-  inc_gallium,
-  inc_gallium_aux,
 ]
 
 libfreedreno_drm_msm_files = files(
@@ -54,13 +50,11 @@ libfreedreno_drm_msm_files = files(
 libfreedreno_drm_files += libfreedreno_drm_msm_files
 
 libfreedreno_drm_virtio_files = files(
-  'virtio/msm_proto.h',
   'virtio/virtio_bo.c',
   'virtio/virtio_device.c',
   'virtio/virtio_pipe.c',
   'virtio/virtio_priv.h',
   'virtio/virtio_ringbuffer.c',
-  'virtio/virtio_ringbuffer.h',
 )
 if freedreno_kmds.contains('virtio')
   libfreedreno_drm_files += libfreedreno_drm_virtio_files

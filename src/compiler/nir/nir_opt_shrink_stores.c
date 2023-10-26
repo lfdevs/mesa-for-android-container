@@ -48,8 +48,8 @@ opt_shrink_vectors_image_store(nir_builder *b, nir_intrinsic_instr *instr)
    if (components >= instr->num_components)
       return false;
 
-   nir_ssa_def *data = nir_trim_vector(b, instr->src[3].ssa, components);
-   nir_instr_rewrite_src(&instr->instr, &instr->src[3], nir_src_for_ssa(data));
+   nir_def *data = nir_trim_vector(b, instr->src[3].ssa, components);
+   nir_src_rewrite(&instr->src[3], data);
    instr->num_components = components;
 
    return true;
@@ -82,11 +82,9 @@ opt_shrink_store_instr(nir_builder *b, nir_intrinsic_instr *instr, bool shrink_i
    /* Trim the num_components stored according to the write mask. */
    unsigned write_mask = nir_intrinsic_write_mask(instr);
    unsigned last_bit = util_last_bit(write_mask);
-   if (last_bit < instr->num_components && instr->src[0].is_ssa) {
-      nir_ssa_def *def = nir_trim_vector(b, instr->src[0].ssa, last_bit);
-      nir_instr_rewrite_src(&instr->instr,
-                            &instr->src[0],
-                            nir_src_for_ssa(def));
+   if (last_bit < instr->num_components) {
+      nir_def *def = nir_trim_vector(b, instr->src[0].ssa, last_bit);
+      nir_src_rewrite(&instr->src[0], def);
       instr->num_components = last_bit;
 
       return true;
@@ -115,7 +113,7 @@ nir_opt_shrink_stores(nir_shader *shader, bool shrink_image_store)
       if (progress) {
          nir_metadata_preserve(impl,
                                nir_metadata_block_index |
-                               nir_metadata_dominance);
+                                  nir_metadata_dominance);
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);
       }

@@ -144,6 +144,10 @@ meson.build @dbaker @eric
 # R300
 /src/gallium/drivers/r300/ @ondracka @gawin
 
+# VirGL - Video
+/src/gallium/drivers/virgl/virgl_video.* @flynnjiang
+/src/virtio/virtio-gpu/virgl_video_hw.h @flynnjiang
+
 # VMware
 /src/gallium/drivers/svga/ @brianp @charmainel
 /src/gallium/winsys/svga/ @thomash @drawat

@@ -129,7 +129,6 @@ struct blitter_context
    unsigned cb_slot;
    struct pipe_constant_buffer saved_fs_constant_buffer;
 
-   unsigned vb_slot;
    struct pipe_vertex_buffer saved_vertex_buffer;
 
    unsigned saved_num_so_targets;
@@ -537,7 +536,7 @@ util_blitter_save_vertex_buffer_slot(struct blitter_context *blitter,
                                      struct pipe_vertex_buffer *vertex_buffers)
 {
    pipe_vertex_buffer_reference(&blitter->saved_vertex_buffer,
-                                &vertex_buffers[blitter->vb_slot]);
+                                &vertex_buffers[0]);
 }
 
 static inline void

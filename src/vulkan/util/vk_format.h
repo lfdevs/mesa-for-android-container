@@ -38,6 +38,9 @@ extern const enum pipe_format vk_format_map[];
 enum pipe_format
 vk_format_to_pipe_format(enum VkFormat vkformat);
 
+VkFormat
+vk_format_from_pipe_format(enum pipe_format format);
+
 VkImageAspectFlags
 vk_format_aspects(VkFormat format);
 
@@ -200,12 +203,6 @@ vk_format_get_blocksizebits(VkFormat format)
    return util_format_get_blocksizebits(vk_format_to_pipe_format(format));
 }
 
-static inline unsigned
-vk_format_get_plane_count(VkFormat format)
-{
-   return util_format_get_num_planes(vk_format_to_pipe_format(format));
-}
-
 VkFormat
 vk_format_get_plane_format(VkFormat format, unsigned plane_id);
 
@@ -235,6 +232,18 @@ struct vk_format_ycbcr_info {
 };
 
 const struct vk_format_ycbcr_info *vk_format_get_ycbcr_info(VkFormat format);
+
+static inline unsigned
+vk_format_get_plane_count(VkFormat format)
+{
+   const struct vk_format_ycbcr_info *ycbcr_info =
+      vk_format_get_ycbcr_info(format);
+   return ycbcr_info ? ycbcr_info->n_planes : 1;
+}
+
+VkClearColorValue
+vk_swizzle_color_value(VkClearColorValue color,
+                       VkComponentMapping swizzle, bool is_int);
 
 #ifdef __cplusplus
 }

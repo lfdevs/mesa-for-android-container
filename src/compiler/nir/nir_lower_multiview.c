@@ -22,8 +22,8 @@
  * IN THE SOFTWARE.
  */
 
-#include "nir_control_flow.h"
 #include "nir_builder.h"
+#include "nir_control_flow.h"
 
 /**
  * This file implements an optimization for multiview. Some GPU's have a
@@ -203,7 +203,7 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
    nir_cf_list body;
    nir_cf_list_extract(&body, &entrypoint->body);
 
-   nir_builder b = nir_builder_at(nir_after_cf_list(&entrypoint->body));
+   nir_builder b = nir_builder_at(nir_after_impl(entrypoint));
 
    /* Loop Index will go from 0 to view_count. */
    nir_variable *loop_index_var =
@@ -246,15 +246,15 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
     * original shader body.
     */
 
-   nir_loop* loop = nir_push_loop(&b);
+   nir_loop *loop = nir_push_loop(&b);
 
-   nir_ssa_def *loop_index = nir_load_deref(&b, loop_index_deref);
-   nir_ssa_def *cmp = nir_ige_imm(&b, loop_index, view_count);
+   nir_def *loop_index = nir_load_deref(&b, loop_index_deref);
+   nir_def *cmp = nir_ige_imm(&b, loop_index, view_count);
    nir_if *loop_check = nir_push_if(&b, cmp);
    nir_jump(&b, nir_jump_break);
    nir_pop_if(&b, loop_check);
 
-   nir_ssa_def *view_index =
+   nir_def *view_index =
       nir_load_deref(&b, nir_build_deref_array(&b, view_index_deref, loop_index));
    nir_deref_instr *pos_deref =
       nir_build_deref_array(&b, nir_build_deref_var(&b, pos_var), loop_index);
@@ -275,8 +275,7 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
 
          switch (intrin->intrinsic) {
          case nir_intrinsic_load_view_index: {
-            assert(intrin->dest.is_ssa);
-            nir_ssa_def_rewrite_uses(&intrin->dest.ssa, view_index);
+            nir_def_rewrite_uses(&intrin->def, view_index);
             break;
          }
 
@@ -285,8 +284,7 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
             if (var == pos_var) {
                nir_deref_instr *old_deref = nir_src_as_deref(intrin->src[0]);
 
-               nir_instr_rewrite_src(instr, &intrin->src[0],
-                                     nir_src_for_ssa(&pos_deref->dest.ssa));
+               nir_src_rewrite(&intrin->src[0], &pos_deref->def);
 
                /* Remove old deref since it has the wrong type. */
                nir_deref_instr_remove_if_unused(old_deref);
@@ -315,4 +313,3 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
    nir_metadata_preserve(entrypoint, nir_metadata_none);
    return true;
 }
-

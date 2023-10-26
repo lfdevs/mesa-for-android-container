@@ -2108,6 +2108,124 @@ vn_encode_VkResolveImageInfo2(struct vn_cs_encoder *enc, const VkResolveImageInf
     vn_encode_VkResolveImageInfo2_self(enc, val);
 }
 
+/* struct VkVertexInputBindingDescription2EXT chain */
+
+static inline size_t
+vn_sizeof_VkVertexInputBindingDescription2EXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkVertexInputBindingDescription2EXT_self(const VkVertexInputBindingDescription2EXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_uint32_t(&val->binding);
+    size += vn_sizeof_uint32_t(&val->stride);
+    size += vn_sizeof_VkVertexInputRate(&val->inputRate);
+    size += vn_sizeof_uint32_t(&val->divisor);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkVertexInputBindingDescription2EXT(const VkVertexInputBindingDescription2EXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkVertexInputBindingDescription2EXT_pnext(val->pNext);
+    size += vn_sizeof_VkVertexInputBindingDescription2EXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkVertexInputBindingDescription2EXT_pnext(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkVertexInputBindingDescription2EXT_self(struct vn_cs_encoder *enc, const VkVertexInputBindingDescription2EXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_encode_uint32_t(enc, &val->binding);
+    vn_encode_uint32_t(enc, &val->stride);
+    vn_encode_VkVertexInputRate(enc, &val->inputRate);
+    vn_encode_uint32_t(enc, &val->divisor);
+}
+
+static inline void
+vn_encode_VkVertexInputBindingDescription2EXT(struct vn_cs_encoder *enc, const VkVertexInputBindingDescription2EXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT });
+    vn_encode_VkVertexInputBindingDescription2EXT_pnext(enc, val->pNext);
+    vn_encode_VkVertexInputBindingDescription2EXT_self(enc, val);
+}
+
+/* struct VkVertexInputAttributeDescription2EXT chain */
+
+static inline size_t
+vn_sizeof_VkVertexInputAttributeDescription2EXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkVertexInputAttributeDescription2EXT_self(const VkVertexInputAttributeDescription2EXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_uint32_t(&val->location);
+    size += vn_sizeof_uint32_t(&val->binding);
+    size += vn_sizeof_VkFormat(&val->format);
+    size += vn_sizeof_uint32_t(&val->offset);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkVertexInputAttributeDescription2EXT(const VkVertexInputAttributeDescription2EXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkVertexInputAttributeDescription2EXT_pnext(val->pNext);
+    size += vn_sizeof_VkVertexInputAttributeDescription2EXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkVertexInputAttributeDescription2EXT_pnext(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkVertexInputAttributeDescription2EXT_self(struct vn_cs_encoder *enc, const VkVertexInputAttributeDescription2EXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_encode_uint32_t(enc, &val->location);
+    vn_encode_uint32_t(enc, &val->binding);
+    vn_encode_VkFormat(enc, &val->format);
+    vn_encode_uint32_t(enc, &val->offset);
+}
+
+static inline void
+vn_encode_VkVertexInputAttributeDescription2EXT(struct vn_cs_encoder *enc, const VkVertexInputAttributeDescription2EXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT });
+    vn_encode_VkVertexInputAttributeDescription2EXT_pnext(enc, val->pNext);
+    vn_encode_VkVertexInputAttributeDescription2EXT_self(enc, val);
+}
+
 /* struct VkBufferMemoryBarrier2 chain */
 
 static inline size_t
@@ -7867,6 +7985,86 @@ static inline void vn_decode_vkCmdResolveImage2_reply(struct vn_cs_decoder *dec,
     /* skip pResolveImageInfo */
 }
 
+static inline size_t vn_sizeof_vkCmdSetVertexInputEXT(VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetVertexInputEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_uint32_t(&vertexBindingDescriptionCount);
+    if (pVertexBindingDescriptions) {
+        cmd_size += vn_sizeof_array_size(vertexBindingDescriptionCount);
+        for (uint32_t i = 0; i < vertexBindingDescriptionCount; i++)
+            cmd_size += vn_sizeof_VkVertexInputBindingDescription2EXT(&pVertexBindingDescriptions[i]);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+    cmd_size += vn_sizeof_uint32_t(&vertexAttributeDescriptionCount);
+    if (pVertexAttributeDescriptions) {
+        cmd_size += vn_sizeof_array_size(vertexAttributeDescriptionCount);
+        for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
+            cmd_size += vn_sizeof_VkVertexInputAttributeDescription2EXT(&pVertexAttributeDescriptions[i]);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdSetVertexInputEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetVertexInputEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_uint32_t(enc, &vertexBindingDescriptionCount);
+    if (pVertexBindingDescriptions) {
+        vn_encode_array_size(enc, vertexBindingDescriptionCount);
+        for (uint32_t i = 0; i < vertexBindingDescriptionCount; i++)
+            vn_encode_VkVertexInputBindingDescription2EXT(enc, &pVertexBindingDescriptions[i]);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+    vn_encode_uint32_t(enc, &vertexAttributeDescriptionCount);
+    if (pVertexAttributeDescriptions) {
+        vn_encode_array_size(enc, vertexAttributeDescriptionCount);
+        for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
+            vn_encode_VkVertexInputAttributeDescription2EXT(enc, &pVertexAttributeDescriptions[i]);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+}
+
+static inline size_t vn_sizeof_vkCmdSetVertexInputEXT_reply(VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetVertexInputEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip vertexBindingDescriptionCount */
+    /* skip pVertexBindingDescriptions */
+    /* skip vertexAttributeDescriptionCount */
+    /* skip pVertexAttributeDescriptions */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdSetVertexInputEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdSetVertexInputEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip vertexBindingDescriptionCount */
+    /* skip pVertexBindingDescriptions */
+    /* skip vertexAttributeDescriptionCount */
+    /* skip pVertexAttributeDescriptions */
+}
+
 static inline size_t vn_sizeof_vkCmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
 {
     const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT;
@@ -10197,6 +10395,27 @@ static inline void vn_submit_vkCmdResolveImage2(struct vn_instance *vn_instance,
     }
 }
 
+static inline void vn_submit_vkCmdSetVertexInputEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions, struct vn_instance_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdSetVertexInputEXT(commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdSetVertexInputEXT_reply(commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions) : 0;
+
+    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdSetVertexInputEXT(enc, cmd_flags, commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions);
+        vn_instance_submit_command(vn_instance, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
 static inline void vn_submit_vkCmdSetColorWriteEnableEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables, struct vn_instance_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
@@ -12104,6 +12323,25 @@ static inline void vn_async_vkCmdResolveImage2(struct vn_instance *vn_instance, 
 {
     struct vn_instance_submit_command submit;
     vn_submit_vkCmdResolveImage2(vn_instance, 0, commandBuffer, pResolveImageInfo, &submit);
+}
+
+static inline void vn_call_vkCmdSetVertexInputEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    VN_TRACE_FUNC();
+
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdSetVertexInputEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions, &submit);
+    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    if (dec) {
+        vn_decode_vkCmdSetVertexInputEXT_reply(dec, commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions);
+        vn_instance_free_command_reply(vn_instance, &submit);
+    }
+}
+
+static inline void vn_async_vkCmdSetVertexInputEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdSetVertexInputEXT(vn_instance, 0, commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions, &submit);
 }
 
 static inline void vn_call_vkCmdSetColorWriteEnableEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)

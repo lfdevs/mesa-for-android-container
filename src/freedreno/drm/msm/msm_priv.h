@@ -31,8 +31,6 @@
 
 #include "util/timespec.h"
 
-#include "pipe/p_defines.h"
-
 #ifndef __user
 #define __user
 #endif

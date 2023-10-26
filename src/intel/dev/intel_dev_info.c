@@ -260,7 +260,7 @@ main(int argc, char *argv[])
          print_base_devinfo(&devinfo);
          print_regions_info(&devinfo);
          if (print_hwconfig)
-            intel_get_and_print_hwconfig_table(fd);
+            intel_get_and_print_hwconfig_table(fd, &devinfo);
          if (print_workarounds)
             print_wa_info(&devinfo);
       }

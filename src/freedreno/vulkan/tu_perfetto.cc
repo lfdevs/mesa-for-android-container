@@ -6,6 +6,7 @@
 #include <perfetto.h>
 
 #include "tu_perfetto.h"
+#include "tu_device.h"
 
 #include "util/hash_table.h"
 #include "util/perf/u_perfetto.h"
@@ -167,7 +168,7 @@ send_descriptors(TuRenderpassDataSource::TraceContext &ctx)
 static struct tu_perfetto_stage *
 stage_push(struct tu_device *dev)
 {
-   struct tu_perfetto_state *p = tu_device_get_perfetto_state(dev);
+   struct tu_perfetto_state *p = &dev->perfetto;
 
    if (p->stage_depth >= ARRAY_SIZE(p->stages)) {
       p->skipped_depth++;
@@ -182,7 +183,7 @@ typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderS
 static struct tu_perfetto_stage *
 stage_pop(struct tu_device *dev)
 {
-   struct tu_perfetto_state *p = tu_device_get_perfetto_state(dev);
+   struct tu_perfetto_state *p = &dev->perfetto;
 
    if (!p->stage_depth)
       return NULL;
@@ -245,8 +246,8 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
    struct tu_perfetto_stage *stage = stage_pop(dev);
    auto trace_flush_data =
       (const struct tu_u_trace_submission_data *) flush_data;
-   uint32_t submission_id =
-      tu_u_trace_submission_data_get_submit_id(trace_flush_data);
+   uint32_t submission_id = trace_flush_data->submission_id;
+   uint64_t gpu_ts_offset = trace_flush_data->gpu_ts_offset;
 
    if (!stage)
       return;
@@ -272,9 +273,9 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
 
       auto packet = tctx.NewTracePacket();
 
-      gpu_max_timestamp = MAX2(gpu_max_timestamp, ts_ns + gpu_timestamp_offset);
+      gpu_max_timestamp = MAX2(gpu_max_timestamp, ts_ns + gpu_ts_offset);
 
-      packet->set_timestamp(stage->start_ts + gpu_timestamp_offset);
+      packet->set_timestamp(stage->start_ts + gpu_ts_offset);
       packet->set_timestamp_clock_id(gpu_clock_id);
 
       auto event = packet->set_gpu_render_stage_event();
@@ -310,69 +311,23 @@ tu_perfetto_init(void)
    util_perfetto_init();
 
    perfetto::DataSourceDescriptor dsd;
+#ifdef ANDROID
+   /* AGI requires this name */
+   dsd.set_name("gpu.renderstages");
+#else
    dsd.set_name("gpu.renderstages.msm");
+#endif
    TuRenderpassDataSource::Register(dsd);
 }
 
 static void
-sync_timestamp(struct tu_device *dev)
+emit_sync_timestamp(uint64_t cpu_ts, uint64_t gpu_ts)
 {
-   uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
-   uint64_t gpu_ts = 0;
-
-   if (cpu_ts < next_clock_sync_ns)
-      return;
-
-   if (tu_device_get_gpu_timestamp(dev, &gpu_ts)) {
-      PERFETTO_ELOG("Could not sync CPU and GPU clocks");
-      return;
-   }
-
-   /* get cpu timestamp again because tu_device_get_gpu_timestamp can take
-    * >100us
-    */
-   cpu_ts = perfetto::base::GetBootTimeNs().count();
-
-   uint64_t current_suspend_count = 0;
-   /* If we fail to get it we will use a fallback */
-   tu_device_get_suspend_count(dev, &current_suspend_count);
-
-   /* convert GPU ts into ns: */
-   gpu_ts = tu_device_ticks_to_ns(dev, gpu_ts);
-
-   /* GPU timestamp is being reset after suspend-resume cycle.
-    * Perfetto requires clock snapshots to be monotonic,
-    * so we have to fix-up the time.
-    */
-   if (current_suspend_count != last_suspend_count) {
-      gpu_timestamp_offset = gpu_max_timestamp;
-      last_suspend_count = current_suspend_count;
-   }
-
-   gpu_ts += gpu_timestamp_offset;
-
-   /* Fallback check, detect non-monotonic cases which would happen
-    * if we cannot retrieve suspend count.
-    */
-   if (sync_gpu_ts > gpu_ts) {
-      gpu_ts += (gpu_max_timestamp - gpu_timestamp_offset);
-      gpu_timestamp_offset = gpu_max_timestamp;
-   }
-
-   if (sync_gpu_ts > gpu_ts) {
-      PERFETTO_ELOG("Non-monotonic gpu timestamp detected, bailing out");
-      return;
-   }
-
    TuRenderpassDataSource::Trace([=](auto tctx) {
       MesaRenderpassDataSource<TuRenderpassDataSource,
                                TuRenderpassTraits>::EmitClockSync(tctx, cpu_ts,
                                                                   gpu_ts, gpu_clock_id);
    });
-
-   gpu_max_timestamp = gpu_ts;
-   sync_gpu_ts = gpu_ts;
-   next_clock_sync_ns = cpu_ts + 30000000;
 }
 
 static void
@@ -390,15 +345,87 @@ emit_submit_id(uint32_t submission_id)
    });
 }
 
-void
-tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
+struct tu_perfetto_clocks
+tu_perfetto_submit(struct tu_device *dev,
+                   uint32_t submission_id,
+                   struct tu_perfetto_clocks *gpu_clocks)
 {
-   /* sync_timestamp isn't free */
-   if (!u_trace_perfetto_active(tu_device_get_u_trace(dev)))
-      return;
+   struct tu_perfetto_clocks clocks {};
+   if (gpu_clocks) {
+      clocks = *gpu_clocks;
+   }
 
-   sync_timestamp(dev);
+   if (!u_trace_perfetto_active(tu_device_get_u_trace(dev)))
+      return {};
+
+   clocks.cpu = perfetto::base::GetBootTimeNs().count();
+
+   if (gpu_clocks) {
+      /* TODO: It would be better to use CPU time that comes
+       * together with GPU time from the KGSL, but it's not
+       * equal to GetBootTimeNs.
+       */
+
+      clocks.gpu_ts_offset = MAX2(gpu_timestamp_offset, clocks.gpu_ts_offset);
+      gpu_timestamp_offset = clocks.gpu_ts_offset;
+      sync_gpu_ts = clocks.gpu_ts + clocks.gpu_ts_offset;
+   } else {
+      clocks.gpu_ts = 0;
+      clocks.gpu_ts_offset = gpu_timestamp_offset;
+
+      if (clocks.cpu < next_clock_sync_ns)
+         return clocks;
+
+      if (tu_device_get_gpu_timestamp(dev, &clocks.gpu_ts)) {
+         PERFETTO_ELOG("Could not sync CPU and GPU clocks");
+         return {};
+      }
+
+      clocks.gpu_ts = tu_device_ticks_to_ns(dev, clocks.gpu_ts);
+
+      /* get cpu timestamp again because tu_device_get_gpu_timestamp can take
+       * >100us
+       */
+      clocks.cpu = perfetto::base::GetBootTimeNs().count();
+
+      uint64_t current_suspend_count = 0;
+      /* If we fail to get it we will use a fallback */
+      tu_device_get_suspend_count(dev, &current_suspend_count);
+
+      /* GPU timestamp is being reset after suspend-resume cycle.
+       * Perfetto requires clock snapshots to be monotonic,
+       * so we have to fix-up the time.
+       */
+      if (current_suspend_count != last_suspend_count) {
+         gpu_timestamp_offset = gpu_max_timestamp;
+         last_suspend_count = current_suspend_count;
+      }
+      clocks.gpu_ts_offset = gpu_timestamp_offset;
+
+      uint64_t gpu_absolute_ts = clocks.gpu_ts + clocks.gpu_ts_offset;
+
+      /* Fallback check, detect non-monotonic cases which would happen
+       * if we cannot retrieve suspend count.
+       */
+      if (sync_gpu_ts > gpu_absolute_ts) {
+         gpu_absolute_ts += (gpu_max_timestamp - gpu_timestamp_offset);
+         gpu_timestamp_offset = gpu_max_timestamp;
+         clocks.gpu_ts = gpu_absolute_ts - gpu_timestamp_offset;
+      }
+
+      if (sync_gpu_ts > gpu_absolute_ts) {
+         PERFETTO_ELOG("Non-monotonic gpu timestamp detected, bailing out");
+         return {};
+      }
+
+      gpu_max_timestamp = clocks.gpu_ts;
+      sync_gpu_ts = clocks.gpu_ts;
+      next_clock_sync_ns = clocks.cpu + 30000000;
+   }
+
+   emit_sync_timestamp(clocks.cpu, clocks.gpu_ts + clocks.gpu_ts_offset);
    emit_submit_id(submission_id);
+   return clocks;
 }
 
 /*
@@ -415,8 +442,8 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
 
 #define CREATE_EVENT_CALLBACK(event_name, stage_id)                                 \
    void tu_perfetto_start_##event_name(                                             \
-      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
-      const struct trace_start_##event_name *payload)                               \
+      struct tu_device *dev, uint64_t ts_ns, uint16_t tp_idx,                       \
+      const void *flush_data, const struct trace_start_##event_name *payload)       \
    {                                                                                \
       stage_start(                                                                  \
          dev, ts_ns, stage_id, NULL, payload, sizeof(*payload),                     \
@@ -424,8 +451,8 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
    }                                                                                \
                                                                                     \
    void tu_perfetto_end_##event_name(                                               \
-      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
-      const struct trace_end_##event_name *payload)                                 \
+      struct tu_device *dev, uint64_t ts_ns, uint16_t tp_idx,                       \
+      const void *flush_data, const struct trace_end_##event_name *payload)         \
    {                                                                                \
       stage_end(                                                                    \
          dev, ts_ns, stage_id, flush_data, payload,                                 \
@@ -450,6 +477,7 @@ void
 tu_perfetto_start_cmd_buffer_annotation(
    struct tu_device *dev,
    uint64_t ts_ns,
+   uint16_t tp_idx,
    const void *flush_data,
    const struct trace_start_cmd_buffer_annotation *payload)
 {
@@ -462,6 +490,7 @@ void
 tu_perfetto_end_cmd_buffer_annotation(
    struct tu_device *dev,
    uint64_t ts_ns,
+   uint16_t tp_idx,
    const void *flush_data,
    const struct trace_end_cmd_buffer_annotation *payload)
 {
@@ -476,6 +505,7 @@ void
 tu_perfetto_start_cmd_buffer_annotation_rp(
    struct tu_device *dev,
    uint64_t ts_ns,
+   uint16_t tp_idx,
    const void *flush_data,
    const struct trace_start_cmd_buffer_annotation_rp *payload)
 {
@@ -488,6 +518,7 @@ void
 tu_perfetto_end_cmd_buffer_annotation_rp(
    struct tu_device *dev,
    uint64_t ts_ns,
+   uint16_t tp_idx,
    const void *flush_data,
    const struct trace_end_cmd_buffer_annotation_rp *payload)
 {

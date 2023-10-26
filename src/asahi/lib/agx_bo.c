@@ -63,6 +63,10 @@ agx_bo_cache_fetch(struct agx_device *dev, size_t size, uint32_t flags,
       if (entry->size < size || entry->flags != flags)
          continue;
 
+      /* Do not return more than 2x oversized BOs. */
+      if (entry->size > 2 * size)
+         continue;
+
       /* If the oldest BO in the cache is busy, likely so is
        * everything newer, so bail. */
       if (!agx_bo_wait(entry, dontwait ? 0 : INT64_MAX))
@@ -123,8 +127,9 @@ agx_bo_cache_put_locked(struct agx_bo *bo)
       printf("BO cache: %zu KiB (+%zu KiB from %s, hit/miss %" PRIu64
              "/%" PRIu64 ")\n",
              DIV_ROUND_UP(dev->bo_cache.size, 1024),
-             DIV_ROUND_UP(bo->size, 1024), bo->label, dev->bo_cache.hits,
-             dev->bo_cache.misses);
+             DIV_ROUND_UP(bo->size, 1024), bo->label,
+             p_atomic_read(&dev->bo_cache.hits),
+             p_atomic_read(&dev->bo_cache.misses));
    }
 
    /* Update label for debug */
@@ -220,9 +225,9 @@ agx_bo_create(struct agx_device *dev, unsigned size, enum agx_bo_flags flags,
 
    /* Update stats based on the first attempt to fetch */
    if (bo != NULL)
-      dev->bo_cache.hits++;
+      p_atomic_inc(&dev->bo_cache.hits);
    else
-      dev->bo_cache.misses++;
+      p_atomic_inc(&dev->bo_cache.misses);
 
    /* Otherwise, allocate a fresh BO. If allocation fails, we can try waiting
     * for something in the cache. But if there's no nothing suitable, we should

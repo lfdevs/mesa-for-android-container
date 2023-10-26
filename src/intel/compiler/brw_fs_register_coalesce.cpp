@@ -196,10 +196,10 @@ fs_visitor::register_coalesce()
    int src_size = 0;
    int channels_remaining = 0;
    unsigned src_reg = ~0u, dst_reg = ~0u;
-   int dst_reg_offset[MAX_VGRF_SIZE];
-   fs_inst *mov[MAX_VGRF_SIZE];
-   int dst_var[MAX_VGRF_SIZE];
-   int src_var[MAX_VGRF_SIZE];
+   int *dst_reg_offset = new int[MAX_VGRF_SIZE(devinfo)];
+   fs_inst **mov = new fs_inst *[MAX_VGRF_SIZE(devinfo)];
+   int *dst_var = new int[MAX_VGRF_SIZE(devinfo)];
+   int *src_var = new int[MAX_VGRF_SIZE(devinfo)];
 
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       if (!is_coalesce_candidate(this, inst))
@@ -215,10 +215,10 @@ fs_visitor::register_coalesce()
          src_reg = inst->src[0].nr;
 
          src_size = alloc.sizes[inst->src[0].nr];
-         assert(src_size <= MAX_VGRF_SIZE);
+         assert(src_size <= MAX_VGRF_SIZE(devinfo));
 
          channels_remaining = src_size;
-         memset(mov, 0, sizeof(mov));
+         memset(mov, 0, sizeof(*mov) * MAX_VGRF_SIZE(devinfo));
 
          dst_reg = inst->dst.nr;
       }
@@ -339,6 +339,11 @@ fs_visitor::register_coalesce()
 
       invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
    }
+
+   delete[] src_var;
+   delete[] dst_var;
+   delete[] mov;
+   delete[] dst_reg_offset;
 
    return progress;
 }

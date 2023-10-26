@@ -296,10 +296,8 @@ BEGIN_TEST(optimize.sdwa.extract_modifiers)
       Temp neg_byte0 = fneg(byte0);
       writeout(0, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], neg_byte0));
 
-      //~gfx8! v1: %neg = v_mul_f32 -1.0, %b
-      //~gfx8! v1: %res1 = v_mul_f32 %a, %neg dst_sel:dword src0_sel:dword src1_sel:ubyte0
-      //~gfx(9|10)! v1: %neg_byte0 = v_mul_f32 -1.0, %b dst_sel:ubyte0 src0_sel:dword src1_sel:dword
-      //~gfx(9|10)! v1: %res1 = v_mul_f32 %a, %neg_byte0
+      //! v1: %neg = v_mul_f32 -1.0, %b
+      //! v1: %res1 = v_mul_f32 %a, %neg dst_sel:dword src0_sel:dword src1_sel:ubyte0
       //! p_unit_test 1, %res1
       Temp neg = fneg(inputs[1]);
       Temp byte0_neg =
@@ -324,10 +322,8 @@ BEGIN_TEST(optimize.sdwa.extract_modifiers)
       Temp neg_abs_byte0 = fneg(abs_byte0);
       writeout(4, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], neg_abs_byte0));
 
-      //~gfx8! v1: %neg_abs = v_mul_f32 -1.0, %abs
-      //~gfx8! v1: %res5 = v_mul_f32 %a, %neg_abs dst_sel:dword src0_sel:dword src1_sel:ubyte0
-      //~gfx(9|10)! v1: %neg_abs_byte0 = v_mul_f32 -1.0, %abs dst_sel:ubyte0 src0_sel:dword src1_sel:dword
-      //~gfx(9|10)! v1: %res5 = v_mul_f32 %a, %neg_abs_byte0
+      //! v1: %neg_abs = v_mul_f32 -1.0, |%b|
+      //! v1: %res5 = v_mul_f32 %a, %neg_abs dst_sel:dword src0_sel:dword src1_sel:ubyte0
       //! p_unit_test 5, %res5
       Temp neg_abs = fneg(abs);
       Temp byte0_neg_abs =

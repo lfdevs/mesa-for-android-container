@@ -26,6 +26,7 @@
 
 #include "sfn_ra.h"
 
+#include "sfn_alu_defines.h"
 #include "sfn_debug.h"
 
 #include <cassert>
@@ -113,7 +114,7 @@ group_allocation(LiveRangeMap& lrm,
       if (group.priority > 0)
          color = 0;
 
-      while (color < 124) {
+      while (color < g_registers_end) {
          /* Find the coloring for the first channel */
          bool color_in_use = false;
          int comp = start_comp;
@@ -180,7 +181,7 @@ group_allocation(LiveRangeMap& lrm,
          break;
       }
 
-      if (color == 124)
+      if (color == g_registers_end)
          return false;
    }
 
@@ -205,7 +206,7 @@ scalar_allocation(LiveRangeMap& lrm, const Interference& interference)
 
          int color = 0;
 
-         while (color < 124) {
+         while (color < g_registers_end) {
             bool color_in_use = false;
             for (auto adj : adjecency) {
                if (live_ranges[adj].m_color == color) {
@@ -222,11 +223,88 @@ scalar_allocation(LiveRangeMap& lrm, const Interference& interference)
             r.m_color = color;
             break;
          }
-         if (color == 124)
+         if (color == g_registers_end)
             return false;
       }
    }
    return true;
+}
+
+struct AluRegister {
+   int lifetime;
+   LiveRangeEntry *lre;
+};
+
+static inline bool operator < (const AluRegister& lhs, const AluRegister& rhs)
+{
+   return lhs.lifetime > rhs.lifetime;
+}
+
+using AluClauseRegisters = std::priority_queue<AluRegister>;
+
+
+static void
+scalar_clause_local_allocation (LiveRangeMap& lrm, const Interference&  interference)
+{
+   for (int comp = 0; comp < 4; ++comp) {
+      AluClauseRegisters clause_reg;
+      auto& live_ranges = lrm.component(comp);
+      for (auto& r : live_ranges) {
+
+         sfn_log << SfnLog::merge << "LR: " << *r.m_register
+                 <<  "[ " << r.m_start << ", " << r.m_end
+                  << " ], AC: " << r.m_alu_clause_local
+                  << " Color; " << r.m_color << "\n";
+
+         if (r.m_color != -1)
+            continue;
+
+         if (r.m_start == -1 &&
+             r.m_end == -1)
+            continue;
+
+         if (!r.m_alu_clause_local)
+            continue;
+
+         int len = r.m_end - r.m_start;
+         if (len > 1) {
+            clause_reg.push({len, &r});
+            sfn_log << SfnLog::merge << "Consider " << *r.m_register
+                    << " for clause local\n";
+         }
+      }
+
+      while (!clause_reg.empty()) {
+         auto& r = clause_reg.top().lre;
+         clause_reg.pop();
+
+         sfn_log << SfnLog::merge << "Color " << *r->m_register << "\n";
+
+         auto& adjecency = interference.row(comp, r->m_register->index());
+
+         int color = g_clause_local_start;
+
+         while (color < g_clause_local_end) {
+            bool color_in_use = false;
+            for (auto adj : adjecency) {
+               if (live_ranges[adj].m_color == color) {
+                  color_in_use = true;
+                  break;
+               }
+            }
+
+            if (color_in_use) {
+               ++color;
+               continue;
+            }
+
+            r->m_color = color;
+            break;
+         }
+         if (color == g_clause_local_end)
+            break;
+      }
+   }
 }
 
 bool
@@ -288,6 +366,8 @@ register_allocation(LiveRangeMap& lrm)
 
    if (!group_allocation(lrm, interference, groups_sorted))
       return false;
+
+   scalar_clause_local_allocation(lrm, interference);
 
    if (!scalar_allocation(lrm, interference))
       return false;

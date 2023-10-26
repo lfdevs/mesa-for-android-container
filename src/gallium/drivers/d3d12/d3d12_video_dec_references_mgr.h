@@ -48,7 +48,7 @@ struct d3d12_video_decoder_references_manager
 
    bool is_pipe_buffer_underlying_output_decode_allocation()
    {
-      return (!is_reference_only() && is_array_of_textures());
+      return (is_reference_only() || is_array_of_textures());
    }
 
    void mark_all_references_as_unused();
@@ -145,8 +145,6 @@ struct d3d12_video_decoder_references_manager
    
    std::map<struct pipe_video_buffer *, uint8_t> m_DecodeTargetToOriginalIndex7Bits = { };
  
-   ComPtr<ID3D12Resource> m_pClearDecodedOutputTexture;
-
    const struct d3d12_screen *       m_pD3D12Screen;
    uint16_t                          m_invalidIndex;
    d3d12_video_decode_dpb_descriptor m_dpbDescriptor      = {};

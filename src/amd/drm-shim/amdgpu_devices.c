@@ -1319,8 +1319,8 @@ const struct amdgpu_device amdgpu_devices[] = {
       },
    },
    {
-      .name = "gfx1100",
-      .radeon_family = CHIP_GFX1100,
+      .name = "navi31",
+      .radeon_family = CHIP_NAVI31,
       .hw_ip_gfx = {
          .hw_ip_version_major = 11,
          .hw_ip_version_minor = 0,

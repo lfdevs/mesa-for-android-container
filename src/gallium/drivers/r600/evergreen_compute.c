@@ -49,7 +49,6 @@
 #include "evergreen_compute.h"
 #include "evergreen_compute_internal.h"
 #include "compute_memory_pool.h"
-#include "sb/sb_public.h"
 #include <inttypes.h>
 
 /**
@@ -167,7 +166,6 @@ static void evergreen_cs_set_vertex_buffer(struct r600_context *rctx,
 {
 	struct r600_vertexbuf_state *state = &rctx->cs_vertex_buffer_state;
 	struct pipe_vertex_buffer *vb = &state->vb[vb_index];
-	vb->stride = 1;
 	vb->buffer_offset = offset;
 	vb->buffer.resource = buffer;
 	vb->is_user_buffer = false;

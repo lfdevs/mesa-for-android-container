@@ -1130,9 +1130,37 @@ TEST_P(validation_test, one_src_two_dst)
    brw_inst_set_exec_size(&devinfo, last_inst, BRW_EXECUTE_16);
    brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_D);
    brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
-   brw_inst_set_src1_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+   brw_inst_set_src1_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_D);
 
    EXPECT_TRUE(validate(p));
+
+   clear_instructions(p);
+
+   brw_ADD(p, g0, g0, g0);
+   brw_inst_set_exec_size(&devinfo, last_inst, BRW_EXECUTE_16);
+   brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_D);
+   brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_D);
+   brw_inst_set_src1_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+
+   if (devinfo.ver >= 8) {
+      EXPECT_TRUE(validate(p));
+   } else {
+      EXPECT_FALSE(validate(p));
+   }
+
+   clear_instructions(p);
+
+   brw_ADD(p, g0, g0, g0);
+   brw_inst_set_exec_size(&devinfo, last_inst, BRW_EXECUTE_16);
+   brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_D);
+   brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+   brw_inst_set_src1_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+
+   if (devinfo.ver >= 8) {
+      EXPECT_TRUE(validate(p));
+   } else {
+      EXPECT_FALSE(validate(p));
+   }
 
    clear_instructions(p);
 

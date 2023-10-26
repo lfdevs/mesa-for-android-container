@@ -148,7 +148,8 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
                                                    &flush->batch);
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
-            u_trace_flush(&cmd_buffers[i]->trace, flush, false);
+           intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
+                                     &flush->ds, false);
          } else {
             u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
                                  u_trace_end_iterator(&cmd_buffers[i]->trace),
@@ -159,7 +160,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
       }
       anv_genX(device->info, emit_so_memcpy_fini)(&flush->memcpy_state);
 
-      u_trace_flush(&flush->ds.trace, flush, true);
+      intel_ds_queue_flush_data(&queue->ds, &flush->ds.trace, &flush->ds, true);
 
       if (flush->batch.status != VK_SUCCESS) {
          result = flush->batch.status;
@@ -168,7 +169,8 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
    } else {
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          assert(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-         u_trace_flush(&cmd_buffers[i]->trace, flush, i == (cmd_buffer_count - 1));
+         intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
+                                   &flush->ds, i == (cmd_buffer_count - 1));
       }
    }
 
@@ -293,7 +295,7 @@ anv_device_utrace_init(struct anv_device *device)
 void
 anv_device_utrace_finish(struct anv_device *device)
 {
-   u_trace_context_process(&device->ds.trace_context, true);
+   intel_ds_device_process(&device->ds, true);
    intel_ds_device_fini(&device->ds);
    anv_bo_pool_finish(&device->utrace_bo_pool);
 }

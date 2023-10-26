@@ -137,6 +137,7 @@ struct nv30_vertex_stateobj {
    struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
    struct translate *translate;
    bool need_conversion;
+   uint16_t strides[PIPE_MAX_ATTRIBS];
    unsigned num_elements;
    unsigned vtx_size;
    unsigned vtx_per_packet_max;

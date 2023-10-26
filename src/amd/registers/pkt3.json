@@ -269,19 +269,19 @@
   },
   {
    "chips": ["gfx6"],
-   "map": {"at": 1280, "to": "pkt3"},
+   "map": {"at": 1281, "to": "pkt3"},
    "name": "DMA_DATA_WORD0",
    "type_ref": "DMA_DATA_WORD0"
   },
   {
    "chips": ["gfx7", "gfx8", "gfx81"],
-   "map": {"at": 1280, "to": "pkt3"},
+   "map": {"at": 1281, "to": "pkt3"},
    "name": "DMA_DATA_WORD0",
    "type_ref": "DMA_DATA_WORD0_cik"
   },
   {
    "chips": ["gfx9", "gfx940", "gfx10", "gfx103", "gfx11"],
-   "map": {"at": 1280, "to": "pkt3"},
+   "map": {"at": 1281, "to": "pkt3"},
    "name": "DMA_DATA_WORD0",
    "type_ref": "DMA_DATA_WORD0_gfx9"
   },
@@ -292,7 +292,7 @@
   },
   {
    "chips": ["gfx6", "gfx7", "gfx8", "gfx81", "gfx9", "gfx940", "gfx10", "gfx103", "gfx11"],
-   "map": {"at": 1284, "to": "pkt3"},
+   "map": {"at": 1286, "to": "pkt3"},
    "name": "DST_ADDR_HI"
   },
   {
@@ -302,7 +302,7 @@
   },
   {
    "chips": ["gfx6", "gfx7", "gfx8", "gfx81", "gfx9", "gfx940", "gfx10", "gfx103", "gfx11"],
-   "map": {"at": 1283, "to": "pkt3"},
+   "map": {"at": 1285, "to": "pkt3"},
    "name": "DST_ADDR_LO"
   },
   {
@@ -341,12 +341,12 @@
   },
   {
    "chips": ["gfx6", "gfx7", "gfx8", "gfx81", "gfx9", "gfx940", "gfx10", "gfx103", "gfx11"],
-   "map": {"at": 1282, "to": "pkt3"},
+   "map": {"at": 1283, "to": "pkt3"},
    "name": "SRC_ADDR_HI"
   },
   {
    "chips": ["gfx6", "gfx7", "gfx8", "gfx81", "gfx9", "gfx940", "gfx10", "gfx103", "gfx11"],
-   "map": {"at": 1281, "to": "pkt3"},
+   "map": {"at": 1282, "to": "pkt3"},
    "name": "SRC_ADDR_LO"
   },
   {

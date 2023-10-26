@@ -75,11 +75,15 @@ bo_comparator(const void *ap, const void *bp)
 static VkResult
 radv_amdgpu_winsys_rebuild_bo_list(struct radv_amdgpu_winsys_bo *bo)
 {
+   u_rwlock_wrlock(&bo->lock);
+
    if (bo->bo_capacity < bo->range_count) {
       uint32_t new_count = MAX2(bo->bo_capacity * 2, bo->range_count);
       struct radv_amdgpu_winsys_bo **bos = realloc(bo->bos, new_count * sizeof(struct radv_amdgpu_winsys_bo *));
-      if (!bos)
+      if (!bos) {
+         u_rwlock_wrunlock(&bo->lock);
          return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
       bo->bos = bos;
       bo->bo_capacity = new_count;
    }
@@ -102,6 +106,7 @@ radv_amdgpu_winsys_rebuild_bo_list(struct radv_amdgpu_winsys_bo *bo)
       bo->bo_count = final_bo_count;
    }
 
+   u_rwlock_wrunlock(&bo->lock);
    return VK_SUCCESS;
 }
 
@@ -337,6 +342,7 @@ radv_amdgpu_winsys_bo_destroy(struct radeon_winsys *_ws, struct radeon_winsys_bo
 
       free(bo->bos);
       free(bo->ranges);
+      u_rwlock_destroy(&bo->lock);
    } else {
       if (ws->debug_all_bos)
          radv_amdgpu_global_bo_list_del(ws, bo);
@@ -409,6 +415,8 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
          result = VK_ERROR_OUT_OF_HOST_MEMORY;
          goto error_ranges_alloc;
       }
+
+      u_rwlock_init(&bo->lock);
 
       bo->ranges = ranges;
       bo->range_count = 1;
@@ -602,6 +610,7 @@ radv_amdgpu_winsys_bo_from_ptr(struct radeon_winsys *_ws, void *pointer, uint64_
    amdgpu_va_handle va_handle;
    uint64_t vm_alignment;
    VkResult result = VK_SUCCESS;
+   int ret;
 
    /* Just be robust for callers that might use NULL-ness for determining if things should be freed.
     */
@@ -611,8 +620,13 @@ radv_amdgpu_winsys_bo_from_ptr(struct radeon_winsys *_ws, void *pointer, uint64_
    if (!bo)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   if (amdgpu_create_bo_from_user_mem(ws->dev, pointer, size, &buf_handle)) {
-      result = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+   ret = amdgpu_create_bo_from_user_mem(ws->dev, pointer, size, &buf_handle);
+   if (ret) {
+      if (ret == -EINVAL) {
+         result = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+      } else {
+         result = VK_ERROR_UNKNOWN;
+      }
       goto error;
    }
 

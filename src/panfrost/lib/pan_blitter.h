@@ -44,7 +44,7 @@ struct pan_blit_info {
       struct {
          const struct pan_image *image;
          enum pipe_format format;
-      } planes[2];
+      } planes[MAX_IMAGE_PLANES];
       unsigned level;
       struct {
          int32_t x, y, z;

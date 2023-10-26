@@ -25,11 +25,12 @@ LLVMValueRef si_is_gs_thread(struct si_shader_context *ctx)
                         si_unpack_param(ctx, ctx->args->ac.merged_wave_info, 8, 8), "");
 }
 
-/* Pass GS inputs from ES to GS on GFX9. */
-static void si_set_es_return_value_for_gs(struct si_shader_context *ctx)
+void si_llvm_es_build_end(struct si_shader_context *ctx)
 {
-   if (!ctx->shader->is_monolithic)
-      ac_build_endif(&ctx->ac, ctx->merged_wrap_if_label);
+   if (ctx->screen->info.gfx_level < GFX9 || ctx->shader->is_monolithic)
+      return;
+
+   ac_build_endif(&ctx->ac, ctx->merged_wrap_if_label);
 
    LLVMValueRef ret = ctx->return_value;
 
@@ -62,12 +63,6 @@ static void si_set_es_return_value_for_gs(struct si_shader_context *ctx)
    ret = si_insert_input_ret_float(ctx, ret, ctx->args->ac.gs_invocation_id, vgpr++);
    ret = si_insert_input_ret_float(ctx, ret, ctx->args->ac.gs_vtx_offset[2], vgpr++);
    ctx->return_value = ret;
-}
-
-void si_llvm_es_build_end(struct si_shader_context *ctx)
-{
-   if (ctx->screen->info.gfx_level >= GFX9)
-      si_set_es_return_value_for_gs(ctx);
 }
 
 void si_llvm_gs_build_end(struct si_shader_context *ctx)

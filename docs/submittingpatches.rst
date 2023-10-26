@@ -100,7 +100,7 @@ Patch formatting
       Acked-by: Joe Hacker <jhacker@foo.com>
 
 -  When updating a merge request add all the tags (``Acked-by:``, ``Reviewed-by:``,
-   ``Fixes:``, ``Cc: mesa-stable`` and/or other) to the commit messages.
+   ``Fixes:``, ``Backport-to:`` and/or other) to the commit messages.
    This provides reviewers with quick feedback if the patch has already
    been reviewed.
 
@@ -131,8 +131,17 @@ is the preferred way to nominate a commit that should be backported.
 There are scripts that will figure out which releases to apply the patch
 to automatically, so you don't need to figure it out.
 
-Alternatively, you may use a "CC:" tag. Here are some examples of such a
-note::
+Alternatively, you may use the ``Backport-to:`` tag, as presented in the
+following example::
+
+    Backport-to: 21.0
+
+Multiple ``Backport-to:`` lines are allowed.
+
+The last option is deprecated and mostly here for historical reasons
+dating back to when patch submision was done via emails: using a ``Cc:``
+tag. Support for this tag will be removed at some point.
+Here are some examples of such a note::
 
     Cc: mesa-stable
     Cc: 20.0 <mesa-stable>
@@ -269,6 +278,34 @@ about solving a problem is a great way to learn your way around the
 project. The submitter is expected to evaluate whether they have an
 appropriate amount of review feedback from people who also understand
 the code before merging their patches.
+
+.. _merging:
+
+Merging merge requests
+----------------------
+
+Once a merge request has been appropriately reviewed, its author can decide to
+merge it.
+
+.. warning::
+   Pushing (``git push``) directly to ``main`` is forbidden. This bypasses all
+   the CI checks and is likely to cause issues for everyone else.
+
+.. warning::
+   Do not use the "Merge"/"Merge when pipeline succeeds"/"Set to auto-merge"
+   buttons.
+
+We use a `custom script <https://gitlab.com/marge-org/marge-bot>`__ to manage
+this, triggered by **assigning the MR** to the pseudo-user `@marge-bot
+<https://gitlab.freedesktop.org/marge-bot>`__.
+
+Authors who do not have ``Developer`` access (or above) should ask on the
+merge request for someone else to do it for them, or reach on
+:doc:`other channels <lists>` if the MR reviewers don't have access themselves.
+
+Do not merge someone else's MR unless you are sure they don't have a new
+version that they are testing locally for instance.
+**When in doubt, ask**, for instance by leaving a comment on that MR.
 
 Nominating a commit for a stable branch
 ---------------------------------------

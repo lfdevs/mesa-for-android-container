@@ -46,7 +46,7 @@ panvk_meta_clear_color_attachment_shader(struct panfrost_device *pdev,
       nir_variable_create(b.shader, nir_var_shader_out, out_type, "out");
    out->data.location = FRAG_RESULT_DATA0;
 
-   nir_ssa_def *clear_values =
+   nir_def *clear_values =
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = ~0);
    nir_store_var(&b, out, clear_values, 0xff);
 
@@ -325,7 +325,7 @@ panvk_meta_clear_color_img(struct panvk_cmd_buffer *cmdbuf,
    struct pan_image_view view = {
       .format = img->pimage.layout.format,
       .dim = MALI_TEXTURE_DIMENSION_2D,
-      .image = &img->pimage,
+      .planes[0] = &img->pimage,
       .nr_samples = img->pimage.layout.nr_samples,
       .swizzle = {PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z,
                   PIPE_SWIZZLE_W},
@@ -393,7 +393,7 @@ panvk_meta_clear_zs_img(struct panvk_cmd_buffer *cmdbuf,
    struct pan_image_view view = {
       .format = img->pimage.layout.format,
       .dim = MALI_TEXTURE_DIMENSION_2D,
-      .image = &img->pimage,
+      .planes[0] = &img->pimage,
       .nr_samples = img->pimage.layout.nr_samples,
       .swizzle = {PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z,
                   PIPE_SWIZZLE_W},

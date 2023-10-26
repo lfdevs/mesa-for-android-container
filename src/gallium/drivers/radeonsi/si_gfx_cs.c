@@ -12,6 +12,7 @@
 #include "util/u_log.h"
 #include "util/u_upload_mgr.h"
 #include "ac_debug.h"
+#include "si_utrace.h"
 
 void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_handle **fence)
 {
@@ -108,7 +109,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    /* Wait for draw calls to finish if needed. */
    if (wait_flags) {
       ctx->flags |= wait_flags;
-      ctx->emit_cache_flush(ctx, &ctx->gfx_cs);
+      si_emit_cache_flush_direct(ctx);
    }
    ctx->gfx_last_ib_is_busy = (wait_flags & wait_ps_cs) != wait_ps_cs;
 
@@ -129,8 +130,18 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    if (ctx->is_noop)
       flags |= RADEON_FLUSH_NOOP;
 
+   uint64_t start_ts = 0, submission_id = 0;
+   if (u_trace_perfetto_active(&ctx->ds.trace_context)) {
+      start_ts = si_ds_begin_submit(&ctx->ds_queue);
+      submission_id = ctx->ds_queue.submission_id;
+   }
+
    /* Flush the CS. */
    ws->cs_flush(cs, flags, &ctx->last_gfx_fence);
+
+   if (u_trace_perfetto_active(&ctx->ds.trace_context) && start_ts > 0) {
+      si_ds_end_submit(&ctx->ds_queue, start_ts);
+   }
 
    tc_driver_internal_flush_notify(ctx->tc);
    if (fence)
@@ -154,6 +165,9 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
 
    if (ctx->current_saved_cs)
       si_saved_cs_reference(&ctx->current_saved_cs, NULL);
+
+   if (u_trace_perfetto_active(&ctx->ds.trace_context))
+      si_utrace_flush(ctx, submission_id);
 
    si_begin_new_gfx_cs(ctx, false);
    ctx->gfx_flush_in_progress = false;
@@ -352,6 +366,9 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 {
    bool is_secure = false;
 
+   if (!first_cs)
+      u_trace_fini(&ctx->trace);
+
    if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
       is_secure = ctx->ws->cs_is_secure(&ctx->gfx_cs);
 
@@ -395,6 +412,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
     */
    if (ctx->screen->info.has_vgt_flush_ngg_legacy_bug && !ctx->ngg)
       ctx->flags |= SI_CONTEXT_VGT_FLUSH;
+
+   si_mark_atom_dirty(ctx, &ctx->atoms.s.cache_flush);
 
    if (ctx->screen->attribute_ring) {
       radeon_add_to_buffer_list(ctx, &ctx->gfx_cs, ctx->screen->attribute_ring,
@@ -532,7 +551,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 
    /* Invalidate various draw states so that they are emitted before
     * the first draw call. */
-   si_invalidate_draw_constants(ctx);
+   ctx->last_instance_count = SI_INSTANCE_COUNT_UNKNOWN;
    ctx->last_index_size = -1;
    /* Primitive restart is set to false by the gfx preamble on GFX11+. */
    ctx->last_primitive_restart_en = ctx->gfx_level >= GFX11 ? false : -1;
@@ -550,10 +569,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    ctx->num_buffered_gfx_sh_regs = 0;
    ctx->num_buffered_compute_sh_regs = 0;
 
-   if (ctx->scratch_buffer) {
-      si_context_add_resource_size(ctx, &ctx->scratch_buffer->b.b);
+   if (ctx->scratch_buffer)
       si_mark_atom_dirty(ctx, &ctx->atoms.s.scratch_state);
-   }
 
    if (ctx->streamout.suspended) {
       ctx->streamout.append_bitmask = ctx->streamout.enabled_mask;
@@ -566,6 +583,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    assert(!ctx->gfx_cs.prev_dw);
    ctx->initial_gfx_cs_size = ctx->gfx_cs.current.cdw;
 
+   u_trace_init(&ctx->trace, &ctx->ds.trace_context);
    /* All buffer references are removed on a flush, so si_check_needs_implicit_sync
     * cannot determine if si_make_CB_shader_coherent() needs to be called.
     * ctx->force_cb_shader_coherent will be cleared by the first call to
@@ -588,6 +606,15 @@ void si_trace_emit(struct si_context *sctx)
 
    if (sctx->log)
       u_log_flush(sctx->log);
+}
+
+/* timestamp logging for u_trace: */
+void si_emit_ts(struct si_context *sctx, struct si_resource* buffer, unsigned int offset)
+{
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
+   uint64_t va = buffer->gpu_address + offset;
+   si_cp_release_mem(sctx, cs, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_INT_SEL_NONE,
+                        EOP_DATA_SEL_TIMESTAMP, buffer, va, 0, PIPE_QUERY_TIMESTAMP);
 }
 
 void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned cp_coher_cntl)
@@ -659,6 +686,9 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
    uint32_t gcr_cntl = 0;
    unsigned cb_db_event = 0;
    unsigned flags = ctx->flags;
+
+   if (!flags)
+      return;
 
    if (!ctx->has_graphics) {
       /* Only process compute flags. */
@@ -913,9 +943,12 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
    ctx->flags = 0;
 }
 
-void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
+void gfx6_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
 {
    uint32_t flags = sctx->flags;
+
+   if (!flags)
+      return;
 
    if (!sctx->has_graphics) {
       /* Only process compute flags. */

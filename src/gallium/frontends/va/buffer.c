@@ -39,6 +39,12 @@
 #include <va/va_win32.h>
 #endif
 
+#ifndef VA_MAPBUFFER_FLAG_DEFAULT
+#define VA_MAPBUFFER_FLAG_DEFAULT 0
+#define VA_MAPBUFFER_FLAG_READ    1
+#define VA_MAPBUFFER_FLAG_WRITE   2
+#endif
+
 VAStatus
 vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
                  unsigned int size, unsigned int num_elements, void *data,
@@ -112,6 +118,12 @@ vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
 VAStatus
 vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
 {
+   return vlVaMapBuffer2(ctx, buf_id, pbuff, VA_MAPBUFFER_FLAG_DEFAULT);
+}
+
+VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
+                        void **pbuff, uint32_t flags)
+{
    vlVaDriver *drv;
    vlVaBuffer *buf;
 
@@ -135,6 +147,7 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
    if (buf->derived_surface.resource) {
       struct pipe_resource *resource;
       struct pipe_box box;
+      unsigned usage = 0;
       void *(*map_func)(struct pipe_context *,
              struct pipe_resource *resource,
              unsigned level,
@@ -153,9 +166,23 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
       else
          map_func = drv->pipe->texture_map;
 
-      *pbuff = map_func(drv->pipe, resource, 0,
-                        buf->type == VAEncCodedBufferType ?
-                        PIPE_MAP_READ : PIPE_MAP_WRITE,
+      if (flags == VA_MAPBUFFER_FLAG_DEFAULT) {
+         /* For VAImageBufferType, use PIPE_MAP_WRITE for now,
+          * PIPE_MAP_READ_WRITE degradate perf with two copies when map/unmap. */
+         if (buf->type == VAEncCodedBufferType)
+            usage = PIPE_MAP_READ;
+         else
+            usage = PIPE_MAP_WRITE;
+      }
+
+      if (flags & VA_MAPBUFFER_FLAG_READ)
+         usage |= PIPE_MAP_READ;
+      if (flags & VA_MAPBUFFER_FLAG_WRITE)
+         usage |= PIPE_MAP_WRITE;
+
+      assert(usage);
+
+      *pbuff = map_func(drv->pipe, resource, 0, usage,
                         &box, &buf->derived_surface.transfer);
       mtx_unlock(&drv->mutex);
 

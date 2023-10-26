@@ -227,3 +227,59 @@ TEST(RBTreeTest, InsertAndSearch)
         validate_search(&tree, i + 1, ARRAY_SIZE(test_numbers) - 1);
     }
 }
+
+TEST(RBTreeTest, FindFirst)
+{
+    struct rb_test_node nodes[100];
+    struct rb_tree tree;
+
+    rb_tree_init(&tree);
+
+    const int x = 13;
+
+    for (unsigned i = 0; i < ARRAY_SIZE(nodes); i++) {
+        nodes[i].key = x;
+        rb_tree_insert(&tree, &nodes[i].node, rb_test_node_cmp);
+    }
+
+    struct rb_node *n = rb_tree_search(&tree, &x, rb_test_node_cmp_void);
+
+    ASSERT_NE(nullptr, n);
+    EXPECT_EQ(nullptr, rb_node_prev(n));
+    EXPECT_EQ(n, rb_tree_first(&tree));
+}
+
+TEST(RBTreeTest, FindFirstOfMiddle)
+{
+    struct rb_test_node nodes[3 * 33];
+    struct rb_tree tree;
+
+    rb_tree_init(&tree);
+
+    unsigned i;
+    for (i = 0; i < ARRAY_SIZE(nodes) / 3; i++) {
+        nodes[i].key = i * 13;
+        rb_tree_insert(&tree, &nodes[i].node, rb_test_node_cmp);
+    }
+
+    const int x = i * 13;
+    for (/* empty */; i < 2 * ARRAY_SIZE(nodes) / 3; i++) {
+        nodes[i].key = x;
+        rb_tree_insert(&tree, &nodes[i].node, rb_test_node_cmp);
+    }
+
+    for (/* empty */; i < ARRAY_SIZE(nodes); i++) {
+        nodes[i].key = i * 13;
+        rb_tree_insert(&tree, &nodes[i].node, rb_test_node_cmp);
+    }
+
+    struct rb_node *n = rb_tree_search(&tree, &x, rb_test_node_cmp_void);
+
+    ASSERT_NE(nullptr, n);
+
+    struct rb_node *prev = rb_node_prev(n);
+
+    ASSERT_NE(nullptr, prev);
+
+    EXPECT_NE(rb_test_node_cmp(prev, n), 0);
+}

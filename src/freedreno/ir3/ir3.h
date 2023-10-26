@@ -86,6 +86,8 @@ struct ir3_info {
 
    uint16_t last_baryf; /* instruction # of last varying fetch */
 
+   uint16_t last_helper; /* last instruction to use helper invocations */
+
    /* Number of instructions of a given category: */
    uint16_t instrs_per_cat[8];
 };
@@ -313,24 +315,26 @@ typedef enum ir3_instruction_flags {
    /* (jp) flag is set on jump targets:
     */
    IR3_INSTR_JP = BIT(2),
-   IR3_INSTR_UL = BIT(3),
-   IR3_INSTR_3D = BIT(4),
-   IR3_INSTR_A = BIT(5),
-   IR3_INSTR_O = BIT(6),
-   IR3_INSTR_P = BIT(7),
-   IR3_INSTR_S = BIT(8),
-   IR3_INSTR_S2EN = BIT(9),
-   IR3_INSTR_SAT = BIT(10),
+   /* (eq) flag kills helper invocations when they are no longer needed */
+   IR3_INSTR_EQ = BIT(3),
+   IR3_INSTR_UL = BIT(4),
+   IR3_INSTR_3D = BIT(5),
+   IR3_INSTR_A = BIT(6),
+   IR3_INSTR_O = BIT(7),
+   IR3_INSTR_P = BIT(8),
+   IR3_INSTR_S = BIT(9),
+   IR3_INSTR_S2EN = BIT(10),
+   IR3_INSTR_SAT = BIT(11),
    /* (cat5/cat6) Bindless */
-   IR3_INSTR_B = BIT(11),
+   IR3_INSTR_B = BIT(12),
    /* (cat5/cat6) nonuniform */
-   IR3_INSTR_NONUNIF = BIT(12),
+   IR3_INSTR_NONUNIF = BIT(13),
    /* (cat5-only) Get some parts of the encoding from a1.x */
-   IR3_INSTR_A1EN = BIT(13),
+   IR3_INSTR_A1EN = BIT(14),
    /* meta-flags, for intermediate stages of IR, ie.
     * before register assignment is done:
     */
-   IR3_INSTR_MARK = BIT(14),
+   IR3_INSTR_MARK = BIT(15),
    IR3_INSTR_UNUSED = BIT(16),
 } ir3_instruction_flags;
 
@@ -441,6 +445,10 @@ struct ir3_instruction {
           */
          gl_system_value sysval;
       } input;
+      struct {
+         unsigned src_base, src_size;
+         unsigned dst_base;
+      } push_consts;
       struct {
          uint64_t value;
       } raw;
@@ -580,7 +588,7 @@ struct ir3_array {
    unsigned length;
    unsigned id;
 
-   struct nir_register *r;
+   struct nir_def *r;
 
    /* To avoid array write's from getting DCE'd, keep track of the
     * most recent write.  Any array access depends on the most
@@ -685,6 +693,12 @@ static inline struct ir3_block *
 ir3_start_block(struct ir3 *ir)
 {
    return list_first_entry(&ir->block_list, struct ir3_block, node);
+}
+
+static inline struct ir3_block *
+ir3_end_block(struct ir3 *ir)
+{
+   return list_last_entry(&ir->block_list, struct ir3_block, node);
 }
 
 static inline struct ir3_block *
@@ -1065,6 +1079,53 @@ is_input(struct ir3_instruction *instr)
    case OPC_BARY_F:
    case OPC_FLAT_B:
       return true;
+   default:
+      return false;
+   }
+}
+
+/* Whether non-helper invocations can read the value of helper invocations. We
+ * cannot insert (eq) before these instructions.
+ */
+static inline bool
+uses_helpers(struct ir3_instruction *instr)
+{
+   switch (instr->opc) {
+   /* These require helper invocations to be present */
+   case OPC_SAM:
+   case OPC_SAMB:
+   case OPC_GETLOD:
+   case OPC_DSX:
+   case OPC_DSY:
+   case OPC_DSXPP_1:
+   case OPC_DSYPP_1:
+   case OPC_DSXPP_MACRO:
+   case OPC_DSYPP_MACRO:
+   case OPC_QUAD_SHUFFLE_BRCST:
+   case OPC_QUAD_SHUFFLE_HORIZ:
+   case OPC_QUAD_SHUFFLE_VERT:
+   case OPC_QUAD_SHUFFLE_DIAG:
+   case OPC_META_TEX_PREFETCH:
+      return true;
+
+   /* Subgroup operations don't require helper invocations to be present, but
+    * will use helper invocations if they are present.
+    */
+   case OPC_BALLOT_MACRO:
+   case OPC_ANY_MACRO:
+   case OPC_ALL_MACRO:
+   case OPC_ELECT_MACRO:
+   case OPC_READ_FIRST_MACRO:
+   case OPC_READ_COND_MACRO:
+   case OPC_MOVMSK:
+   case OPC_BRCST_ACTIVE:
+      return true;
+
+   /* Catch lowered READ_FIRST/READ_COND. */
+   case OPC_MOV:
+      return (instr->dsts[0]->flags & IR3_REG_SHARED) &&
+             !(instr->srcs[0]->flags & IR3_REG_SHARED);
+
    default:
       return false;
    }
@@ -1700,6 +1761,9 @@ __ssa_srcp_n(struct ir3_instruction *instr, unsigned n)
 /* iterators for instructions: */
 #define foreach_instr(__instr, __list)                                         \
    list_for_each_entry (struct ir3_instruction, __instr, __list, node)
+#define foreach_instr_from(__instr, __start, __list)                           \
+   list_for_each_entry_from(struct ir3_instruction, __instr, &(__start)->node, \
+                            __list, node)
 #define foreach_instr_rev(__instr, __list)                                     \
    list_for_each_entry_rev (struct ir3_instruction, __instr, __list, node)
 #define foreach_instr_safe(__instr, __list)                                    \
@@ -2425,6 +2489,7 @@ INSTR1(QUAD_SHUFFLE_VERT)
 INSTR1(QUAD_SHUFFLE_DIAG)
 INSTR2NODST(LDC_K)
 INSTR2NODST(STC)
+INSTR2NODST(STSC)
 #ifndef GPU
 #elif GPU >= 600
 INSTR3NODST(STIB);
@@ -2476,6 +2541,7 @@ INSTR4(ATOMIC_S_XOR)
 /* cat7 instructions: */
 INSTR0(BAR)
 INSTR0(FENCE)
+INSTR0(CCINV)
 
 /* ************************************************************************* */
 #include "util/bitset.h"

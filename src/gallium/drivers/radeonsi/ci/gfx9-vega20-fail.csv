@@ -82,8 +82,6 @@ spec@arb_shader_clock@execution@clock2x32,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
-spec@arb_sparse_buffer@buffer-data,Fail
-spec@arb_sparse_buffer@commit,Fail
 spec@egl_ext_protected_content@conformance,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail

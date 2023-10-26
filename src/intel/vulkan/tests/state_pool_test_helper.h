@@ -23,49 +23,70 @@
 
 #include <pthread.h>
 
+#include "util/u_math.h"
+
 struct job {
-   struct anv_state_pool *pool;
+   struct state_pool_test_context *ctx;
    unsigned id;
    pthread_t thread;
-} jobs[NUM_THREADS];
+};
 
-pthread_barrier_t barrier;
+struct state_pool_test_context {
+   struct anv_state_pool *pool;
+   unsigned states_per_thread;
+   pthread_barrier_t barrier;
+
+   struct job *jobs;
+};
 
 static void *alloc_states(void *void_job)
 {
    struct job *job = void_job;
+   struct state_pool_test_context *ctx = job->ctx;
 
-   const unsigned chunk_size = 1 << (job->id % STATES_PER_THREAD_LOG2);
-   const unsigned num_chunks = STATES_PER_THREAD / chunk_size;
+   const unsigned states_per_thread_log2 = util_logbase2(ctx->states_per_thread);
+   const unsigned chunk_size = 1 << (job->id % states_per_thread_log2);
+   const unsigned num_chunks = ctx->states_per_thread / chunk_size;
 
    struct anv_state states[chunk_size];
 
-   pthread_barrier_wait(&barrier);
+   pthread_barrier_wait(&ctx->barrier);
 
    for (unsigned c = 0; c < num_chunks; c++) {
       for (unsigned i = 0; i < chunk_size; i++) {
-         states[i] = anv_state_pool_alloc(job->pool, 16, 16);
+         states[i] = anv_state_pool_alloc(ctx->pool, 16, 16);
          memset(states[i].map, 139, 16);
          ASSERT(states[i].offset != 0);
       }
 
       for (unsigned i = 0; i < chunk_size; i++)
-         anv_state_pool_free(job->pool, states[i]);
+         anv_state_pool_free(ctx->pool, states[i]);
    }
 
    return NULL;
 }
 
-static void run_state_pool_test(struct anv_state_pool *state_pool)
+static void run_state_pool_test(struct anv_state_pool *state_pool, unsigned num_threads,
+                                unsigned states_per_thread)
 {
-   pthread_barrier_init(&barrier, NULL, NUM_THREADS);
+   struct state_pool_test_context ctx = {
+      .pool = state_pool,
+      .states_per_thread = states_per_thread,
+      .jobs = calloc(num_threads, sizeof(struct job)),
+   };
+   pthread_barrier_init(&ctx.barrier, NULL, num_threads);
 
-   for (unsigned i = 0; i < NUM_THREADS; i++) {
-      jobs[i].pool = state_pool;
-      jobs[i].id = i;
-      pthread_create(&jobs[i].thread, NULL, alloc_states, &jobs[i]);
+   for (unsigned i = 0; i < num_threads; i++) {
+      struct job *job = &ctx.jobs[i];
+      job->ctx = &ctx;
+      job->id = i;
+      pthread_create(&job->thread, NULL, alloc_states, job);
    }
 
-   for (unsigned i = 0; i < NUM_THREADS; i++)
-      pthread_join(jobs[i].thread, NULL);
+   for (unsigned i = 0; i < num_threads; i++) {
+      struct job *job = &ctx.jobs[i];
+      pthread_join(job->thread, NULL);
+   }
+
+   free(ctx.jobs);
 }

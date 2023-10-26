@@ -85,6 +85,8 @@ static void pvr_image_setup_mip_levels(struct pvr_image *image)
    const uint32_t extent_alignment =
       image->vk.image_type == VK_IMAGE_TYPE_3D ? 4 : 1;
    const unsigned int cpp = vk_format_get_blocksize(image->vk.format);
+   VkExtent3D extent =
+      vk_image_extent_to_elements(&image->vk, image->physical_extent);
 
    /* Mip-mapped textures that are non-dword aligned need dword-aligned levels
     * so they can be TQd from.
@@ -96,20 +98,36 @@ static void pvr_image_setup_mip_levels(struct pvr_image *image)
    image->layer_size = 0;
 
    for (uint32_t i = 0; i < image->vk.mip_levels; i++) {
-      const uint32_t height = u_minify(image->physical_extent.height, i);
-      const uint32_t width = u_minify(image->physical_extent.width, i);
-      const uint32_t depth = u_minify(image->physical_extent.depth, i);
       struct pvr_mip_level *mip_level = &image->mip_levels[i];
 
-      mip_level->pitch = cpp * ALIGN(width, extent_alignment);
-      mip_level->height_pitch = ALIGN(height, extent_alignment);
+      mip_level->pitch = cpp * ALIGN(extent.width, extent_alignment);
+      mip_level->height_pitch = ALIGN(extent.height, extent_alignment);
       mip_level->size = image->vk.samples * mip_level->pitch *
                         mip_level->height_pitch *
-                        ALIGN(depth, extent_alignment);
+                        ALIGN(extent.depth, extent_alignment);
       mip_level->size = ALIGN(mip_level->size, level_alignment);
       mip_level->offset = image->layer_size;
 
       image->layer_size += mip_level->size;
+
+      extent.height = u_minify(extent.height, 1);
+      extent.width = u_minify(extent.width, 1);
+      extent.depth = u_minify(extent.depth, 1);
+   }
+
+   /* The hw calculates layer strides as if a full mip chain up until 1x1x1
+    * were present so we need to account for that in the `layer_size`.
+    */
+   while (extent.height != 1 || extent.width != 1 || extent.depth != 1) {
+      const uint32_t height_pitch = ALIGN(extent.height, extent_alignment);
+      const uint32_t pitch = cpp * ALIGN(extent.width, extent_alignment);
+
+      image->layer_size += image->vk.samples * pitch * height_pitch *
+                           ALIGN(extent.depth, extent_alignment);
+
+      extent.height = u_minify(extent.height, 1);
+      extent.width = u_minify(extent.width, 1);
+      extent.depth = u_minify(extent.depth, 1);
    }
 
    /* TODO: It might be useful to store the alignment in the image so it can be

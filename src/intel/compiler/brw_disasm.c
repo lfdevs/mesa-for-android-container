@@ -2222,41 +2222,95 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
          }
 
          case BRW_SFID_URB: {
-            unsigned opcode = brw_inst_urb_opcode(devinfo, inst);
-
-            format(file, " offset %"PRIu64, brw_inst_urb_global_offset(devinfo, inst));
-
-            space = 1;
-
-            err |= control(file, "urb opcode",
-                           devinfo->ver >= 7 ? gfx7_urb_opcode
-                                             : gfx5_urb_opcode,
-                           opcode, &space);
-
-            if (devinfo->ver >= 7 &&
-                brw_inst_urb_per_slot_offset(devinfo, inst)) {
-               string(file, " per-slot");
-            }
-
-            if (opcode == GFX8_URB_OPCODE_SIMD8_WRITE ||
-                opcode == GFX8_URB_OPCODE_SIMD8_READ) {
-               if (brw_inst_urb_channel_mask_present(devinfo, inst))
-                  string(file, " masked");
-            } else if (opcode != GFX125_URB_OPCODE_FENCE) {
-               err |= control(file, "urb swizzle", urb_swizzle,
-                              brw_inst_urb_swizzle_control(devinfo, inst),
+            if (devinfo->ver >= 20) {
+               format(file, " (");
+               const enum lsc_opcode op = lsc_msg_desc_opcode(devinfo, imm_desc);
+               err |= control(file, "operation", lsc_operation,
+                              op, &space);
+               format(file, ",");
+               err |= control(file, "addr_size", lsc_addr_size,
+                              lsc_msg_desc_addr_size(devinfo, imm_desc),
                               &space);
-            }
 
-            if (devinfo->ver < 7) {
-               err |= control(file, "urb allocate", urb_allocate,
-                              brw_inst_urb_allocate(devinfo, inst), &space);
-               err |= control(file, "urb used", urb_used,
-                              brw_inst_urb_used(devinfo, inst), &space);
-            }
-            if (devinfo->ver < 8) {
-               err |= control(file, "urb complete", urb_complete,
-                              brw_inst_urb_complete(devinfo, inst), &space);
+               format(file, ",");
+               err |= control(file, "data_size", lsc_data_size,
+                              lsc_msg_desc_data_size(devinfo, imm_desc),
+                              &space);
+               format(file, ",");
+               if (lsc_opcode_has_cmask(op)) {
+                  err |= control(file, "component_mask",
+                                 lsc_cmask_str,
+                                 lsc_msg_desc_cmask(devinfo, imm_desc),
+                                 &space);
+               } else {
+                  err |= control(file, "vector_size",
+                                 lsc_vect_size_str,
+                                 lsc_msg_desc_vect_size(devinfo, imm_desc),
+                                 &space);
+                  if (lsc_msg_desc_transpose(devinfo, imm_desc))
+                     format(file, ", transpose");
+               }
+               switch(op) {
+               case LSC_OP_LOAD_CMASK:
+               case LSC_OP_LOAD:
+                  format(file, ",");
+                  err |= control(file, "cache_load",
+                                 lsc_cache_load,
+                                 lsc_msg_desc_cache_ctrl(devinfo, imm_desc),
+                                 &space);
+                  break;
+               default:
+                  format(file, ",");
+                  err |= control(file, "cache_store",
+                                 lsc_cache_store,
+                                 lsc_msg_desc_cache_ctrl(devinfo, imm_desc),
+                                 &space);
+                  break;
+               }
+
+               format(file, " dst_len = %u,", lsc_msg_desc_dest_len(devinfo, imm_desc));
+               format(file, " src0_len = %u,", lsc_msg_desc_src0_len(devinfo, imm_desc));
+               format(file, " src1_len = %d", brw_message_ex_desc_ex_mlen(devinfo, imm_ex_desc));
+               err |= control(file, "address_type", lsc_addr_surface_type,
+                              lsc_msg_desc_addr_type(devinfo, imm_desc), &space);
+               format(file, " )");
+            } else {
+               unsigned urb_opcode = brw_inst_urb_opcode(devinfo, inst);
+
+               format(file, " offset %"PRIu64, brw_inst_urb_global_offset(devinfo, inst));
+
+               space = 1;
+
+               err |= control(file, "urb opcode",
+                              devinfo->ver >= 7 ? gfx7_urb_opcode
+                              : gfx5_urb_opcode,
+                              urb_opcode, &space);
+
+               if (devinfo->ver >= 7 &&
+                   brw_inst_urb_per_slot_offset(devinfo, inst)) {
+                  string(file, " per-slot");
+               }
+
+               if (urb_opcode == GFX8_URB_OPCODE_SIMD8_WRITE ||
+                   urb_opcode == GFX8_URB_OPCODE_SIMD8_READ) {
+                  if (brw_inst_urb_channel_mask_present(devinfo, inst))
+                     string(file, " masked");
+               } else if (urb_opcode != GFX125_URB_OPCODE_FENCE) {
+                  err |= control(file, "urb swizzle", urb_swizzle,
+                                 brw_inst_urb_swizzle_control(devinfo, inst),
+                                 &space);
+               }
+
+               if (devinfo->ver < 7) {
+                  err |= control(file, "urb allocate", urb_allocate,
+                                 brw_inst_urb_allocate(devinfo, inst), &space);
+                  err |= control(file, "urb used", urb_used,
+                                 brw_inst_urb_used(devinfo, inst), &space);
+               }
+               if (devinfo->ver < 8) {
+                  err |= control(file, "urb complete", urb_complete,
+                                 brw_inst_urb_complete(devinfo, inst), &space);
+               }
             }
             break;
          }

@@ -26,11 +26,10 @@
 #include "evergreen_compute.h"
 #include "r600d.h"
 
-#include "sb/sb_public.h"
-
 #include <errno.h>
 #include "pipe/p_shader_tokens.h"
 #include "util/u_debug.h"
+#include "util/u_endian.h"
 #include "util/u_memory.h"
 #include "util/u_screen.h"
 #include "util/u_simple_shaders.h"
@@ -46,17 +45,7 @@ static const struct debug_named_value r600_debug_options[] = {
 	/* features */
 	{ "nocpdma", DBG_NO_CP_DMA, "Disable CP DMA" },
 
-	/* shader backend */
-	{ "nosb", DBG_NO_SB, "Disable sb backend for graphics shaders" },
-	{ "sbdry", DBG_SB_DRY_RUN, "Don't use optimized bytecode (just print the dumps)" },
-	{ "sbstat", DBG_SB_STAT, "Print optimization statistics for shaders" },
-	{ "sbdump", DBG_SB_DUMP, "Print IR dumps after some optimization passes" },
-	{ "sbnofallback", DBG_SB_NO_FALLBACK, "Abort on errors instead of fallback" },
-	{ "sbdisasm", DBG_SB_DISASM, "Use sb disassembler for shader dumps" },
-	{ "sbsafemath", DBG_SB_SAFEMATH, "Disable unsafe math optimizations" },
-        { "nirsb", DBG_NIR_SB, "Enable NIR with SB optimizer"},
-
-	DEBUG_NAMED_VALUE_END /* must be last */
+        DEBUG_NAMED_VALUE_END /* must be last */
 };
 
 /*
@@ -69,8 +58,6 @@ static void r600_destroy_context(struct pipe_context *context)
 	unsigned sh, i;
 
 	r600_isa_destroy(rctx->isa);
-
-	r600_sb_context_destroy(rctx->sb_context);
 
 	for (sh = 0; sh < (rctx->b.gfx_level < EVERGREEN ? R600_NUM_HW_STAGES : EG_NUM_HW_STAGES); sh++) {
 		r600_resource_reference(&rctx->scratch_buffers[sh].buffer, NULL);
@@ -220,7 +207,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 	}
 
 	ws->cs_create(&rctx->b.gfx.cs, rctx->b.ctx, AMD_IP_GFX,
-                      r600_context_gfx_flush, rctx, false);
+                      r600_context_gfx_flush, rctx);
 	rctx->b.gfx.flush = r600_context_gfx_flush;
 
 	u_suballocator_init(&rctx->allocator_fetch_shader, &rctx->b.b, 64 * 1024,
@@ -338,7 +325,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 1;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
-		return !R600_BIG_ENDIAN && rscreen->b.info.has_userptr;
+		return !UTIL_ARCH_BIG_ENDIAN && rscreen->b.info.has_userptr;
 
 	case PIPE_CAP_COMPUTE:
 		return rscreen->b.gfx_level > R700;
@@ -421,11 +408,6 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_TWO_SIDED_COLOR:
 		return 0;
-	case PIPE_CAP_INT64_DIVMOD:
-		/* it is actually not supported, but the nir lowering handles this correctly whereas
-		 * the glsl lowering path seems to not initialize the buildins correctly.
-		 */
-		return 1;
 	case PIPE_CAP_CULL_DISTANCE:
 		return 1;
 
@@ -633,8 +615,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		ir |= 1 << PIPE_SHADER_IR_NIR;
 		return ir;
 	}
-	case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-		return 0;
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 		if (rscreen->b.family >= CHIP_CEDAR &&

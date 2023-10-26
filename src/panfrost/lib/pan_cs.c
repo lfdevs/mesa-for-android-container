@@ -58,18 +58,20 @@ mod_to_block_fmt(uint64_t mod)
 static enum mali_msaa
 mali_sampling_mode(const struct pan_image_view *view)
 {
-   if (view->image->layout.nr_samples > 1) {
-      assert(view->nr_samples == view->image->layout.nr_samples);
-      assert(view->image->layout.slices[0].surface_stride != 0);
+   unsigned nr_samples = pan_image_view_get_nr_samples(view);
+
+   if (nr_samples > 1) {
+      assert(view->nr_samples == nr_samples);
+      assert(view->planes[0]->layout.slices[0].surface_stride != 0);
       return MALI_MSAA_LAYERED;
    }
 
-   if (view->nr_samples > view->image->layout.nr_samples) {
-      assert(view->image->layout.nr_samples == 1);
+   if (view->nr_samples > nr_samples) {
+      assert(nr_samples == 1);
       return MALI_MSAA_AVERAGE;
    }
 
-   assert(view->nr_samples == view->image->layout.nr_samples);
+   assert(view->nr_samples == nr_samples);
    assert(view->nr_samples == 1);
 
    return MALI_MSAA_SINGLE;
@@ -113,7 +115,7 @@ GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size)
 
 #if PAN_ARCH <= 6
    if (fb->rt_count == 1 && fb->rts[0].view && !fb->rts[0].discard &&
-       fb->rts[0].view->image->layout.crc)
+       pan_image_view_has_crc(fb->rts[0].view))
       return 0;
 
    return -1;
@@ -123,7 +125,7 @@ GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size)
 
    for (unsigned i = 0; i < fb->rt_count; i++) {
       if (!fb->rts[i].view || fb->rts[0].discard ||
-          !fb->rts[i].view->image->layout.crc)
+          !pan_image_view_has_crc(fb->rts[i].view))
          continue;
 
       bool valid = *(fb->rts[i].crc_valid);
@@ -199,6 +201,7 @@ pan_prepare_s(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
    if (!s)
       return;
 
+   const struct pan_image *image = pan_image_view_get_zs_image(s);
    unsigned level = s->first_level;
 
    ext->s_msaa = mali_sampling_mode(s);
@@ -206,16 +209,16 @@ pan_prepare_s(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
    struct pan_surface surf;
    pan_iview_get_surface(s, 0, 0, 0, &surf);
 
-   assert(s->image->layout.modifier ==
+   assert(image->layout.modifier ==
              DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED ||
-          s->image->layout.modifier == DRM_FORMAT_MOD_LINEAR);
+          image->layout.modifier == DRM_FORMAT_MOD_LINEAR);
    ext->s_writeback_base = surf.data;
-   ext->s_writeback_row_stride = s->image->layout.slices[level].row_stride;
+   ext->s_writeback_row_stride = image->layout.slices[level].row_stride;
    ext->s_writeback_surface_stride =
-      (s->image->layout.nr_samples > 1)
-         ? s->image->layout.slices[level].surface_stride
+      (pan_image_view_get_nr_samples(s) > 1)
+         ? image->layout.slices[level].surface_stride
          : 0;
-   ext->s_block_format = mod_to_block_fmt(s->image->layout.modifier);
+   ext->s_block_format = mod_to_block_fmt(image->layout.modifier);
    ext->s_write_format = translate_s_format(s->format);
 }
 
@@ -227,6 +230,7 @@ pan_prepare_zs(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
    if (!zs)
       return;
 
+   const struct pan_image *image = pan_image_view_get_zs_image(zs);
    unsigned level = zs->first_level;
 
    ext->zs_msaa = mali_sampling_mode(zs);
@@ -234,9 +238,9 @@ pan_prepare_zs(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
    struct pan_surface surf;
    pan_iview_get_surface(zs, 0, 0, 0, &surf);
    UNUSED const struct pan_image_slice_layout *slice =
-      &zs->image->layout.slices[level];
+      &image->layout.slices[level];
 
-   if (drm_is_afbc(zs->image->layout.modifier)) {
+   if (drm_is_afbc(image->layout.modifier)) {
 #if PAN_ARCH >= 9
       ext->zs_writeback_base = surf.afbc.header;
       ext->zs_writeback_row_stride = slice->row_stride;
@@ -247,7 +251,7 @@ pan_prepare_zs(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
 #else
 #if PAN_ARCH >= 6
       ext->zs_afbc_row_stride =
-         pan_afbc_stride_blocks(zs->image->layout.modifier, slice->row_stride);
+         pan_afbc_stride_blocks(image->layout.modifier, slice->row_stride);
 #else
       ext->zs_block_format = MALI_BLOCK_FORMAT_AFBC;
       ext->zs_afbc_body_size = 0x1000;
@@ -259,21 +263,21 @@ pan_prepare_zs(const struct pan_fb_info *fb, struct MALI_ZS_CRC_EXTENSION *ext)
       ext->zs_afbc_body = surf.afbc.body;
 #endif
    } else {
-      assert(zs->image->layout.modifier ==
+      assert(image->layout.modifier ==
                 DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED ||
-             zs->image->layout.modifier == DRM_FORMAT_MOD_LINEAR);
+             image->layout.modifier == DRM_FORMAT_MOD_LINEAR);
 
       /* TODO: Z32F(S8) support, which is always linear */
 
       ext->zs_writeback_base = surf.data;
-      ext->zs_writeback_row_stride = zs->image->layout.slices[level].row_stride;
+      ext->zs_writeback_row_stride = image->layout.slices[level].row_stride;
       ext->zs_writeback_surface_stride =
-         (zs->image->layout.nr_samples > 1)
-            ? zs->image->layout.slices[level].surface_stride
+         (pan_image_view_get_nr_samples(zs) > 1)
+            ? image->layout.slices[level].surface_stride
             : 0;
    }
 
-   ext->zs_block_format = mod_to_block_fmt(zs->image->layout.modifier);
+   ext->zs_block_format = mod_to_block_fmt(image->layout.modifier);
    ext->zs_write_format = translate_zs_format(zs->format);
    if (ext->zs_write_format == MALI_ZS_FORMAT_D24S8)
       ext->s_writeback_base = ext->zs_writeback_base;
@@ -289,10 +293,12 @@ pan_prepare_crc(const struct pan_fb_info *fb, int rt_crc,
    assert(rt_crc < fb->rt_count);
 
    const struct pan_image_view *rt = fb->rts[rt_crc].view;
+   const struct pan_image *image = pan_image_view_get_rt_image(rt);
    const struct pan_image_slice_layout *slice =
-      &rt->image->layout.slices[rt->first_level];
+      &image->layout.slices[rt->first_level];
+
    ext->crc_base =
-      rt->image->data.bo->ptr.gpu + rt->image->data.offset + slice->crc.offset;
+      image->data.bo->ptr.gpu + image->data.offset + slice->crc.offset;
    ext->crc_row_stride = slice->crc.stride;
 
 #if PAN_ARCH >= 7
@@ -498,6 +504,8 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx, unsigned cbuf_offset,
       return;
    }
 
+   const struct pan_image *image = pan_image_view_get_rt_image(rt);
+
    cfg->write_enable = true;
    cfg->dithering_enable = true;
 
@@ -505,29 +513,29 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx, unsigned cbuf_offset,
    assert(rt->last_level == rt->first_level);
    assert(rt->last_layer == rt->first_layer);
 
-   int row_stride = rt->image->layout.slices[level].row_stride;
+   int row_stride = image->layout.slices[level].row_stride;
 
    /* Only set layer_stride for layered MSAA rendering  */
 
-   unsigned layer_stride = (rt->image->layout.nr_samples > 1)
-                              ? rt->image->layout.slices[level].surface_stride
+   unsigned layer_stride = (pan_image_view_get_nr_samples(rt) > 1)
+                              ? image->layout.slices[level].surface_stride
                               : 0;
 
    cfg->writeback_msaa = mali_sampling_mode(rt);
 
    pan_rt_init_format(rt, cfg);
 
-   cfg->writeback_block_format = mod_to_block_fmt(rt->image->layout.modifier);
+   cfg->writeback_block_format = mod_to_block_fmt(image->layout.modifier);
 
    struct pan_surface surf;
    pan_iview_get_surface(rt, 0, 0, 0, &surf);
 
-   if (drm_is_afbc(rt->image->layout.modifier)) {
+   if (drm_is_afbc(image->layout.modifier)) {
 #if PAN_ARCH >= 9
-      if (rt->image->layout.modifier & AFBC_FORMAT_MOD_YTR)
+      if (image->layout.modifier & AFBC_FORMAT_MOD_YTR)
          cfg->afbc.yuv_transform = true;
 
-      cfg->afbc.wide_block = panfrost_afbc_is_wide(rt->image->layout.modifier);
+      cfg->afbc.wide_block = panfrost_afbc_is_wide(image->layout.modifier);
       cfg->afbc.header = surf.afbc.header;
       cfg->afbc.body_offset = surf.afbc.body - surf.afbc.header;
       assert(surf.afbc.body >= surf.afbc.header);
@@ -535,14 +543,13 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx, unsigned cbuf_offset,
       cfg->afbc.compression_mode = pan_afbc_compression_mode(rt->format);
       cfg->afbc.row_stride = row_stride;
 #else
-      const struct pan_image_slice_layout *slice =
-         &rt->image->layout.slices[level];
+      const struct pan_image_slice_layout *slice = &image->layout.slices[level];
 
 #if PAN_ARCH >= 6
       cfg->afbc.row_stride =
-         pan_afbc_stride_blocks(rt->image->layout.modifier, slice->row_stride);
+         pan_afbc_stride_blocks(image->layout.modifier, slice->row_stride);
       cfg->afbc.afbc_wide_block_enable =
-         panfrost_afbc_is_wide(rt->image->layout.modifier);
+         panfrost_afbc_is_wide(image->layout.modifier);
 #else
       cfg->afbc.chunk_size = 9;
       cfg->afbc.sparse = true;
@@ -552,12 +559,12 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx, unsigned cbuf_offset,
       cfg->afbc.header = surf.afbc.header;
       cfg->afbc.body = surf.afbc.body;
 
-      if (rt->image->layout.modifier & AFBC_FORMAT_MOD_YTR)
+      if (image->layout.modifier & AFBC_FORMAT_MOD_YTR)
          cfg->afbc.yuv_transform_enable = true;
 #endif
    } else {
-      assert(rt->image->layout.modifier == DRM_FORMAT_MOD_LINEAR ||
-             rt->image->layout.modifier ==
+      assert(image->layout.modifier == DRM_FORMAT_MOD_LINEAR ||
+             image->layout.modifier ==
                 DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED);
       cfg->rgb.base = surf.data;
       cfg->rgb.row_stride = row_stride;
@@ -676,11 +683,11 @@ pan_fix_frame_shader_mode(enum mali_pre_post_frame_shader_mode mode,
 static bool
 pan_force_clean_write_rt(const struct pan_image_view *rt, unsigned tile_size)
 {
-   if (!drm_is_afbc(rt->image->layout.modifier))
+   const struct pan_image *image = pan_image_view_get_rt_image(rt);
+   if (!drm_is_afbc(image->layout.modifier))
       return false;
 
-   unsigned superblock =
-      panfrost_afbc_superblock_width(rt->image->layout.modifier);
+   unsigned superblock = panfrost_afbc_superblock_width(image->layout.modifier);
 
    assert(superblock >= 16);
    assert(tile_size <= 16 * 16);
@@ -827,7 +834,7 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
          continue;
 
       cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
-                     tile_size * fb->rts[i].view->image->layout.nr_samples;
+                     tile_size * pan_image_view_get_nr_samples(fb->rts[i].view);
 
       if (i != crc_rt)
          *(fb->rts[i].crc_valid) = false;
@@ -870,6 +877,7 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
 
       if (fb->rt_count && fb->rts[0].view) {
          const struct pan_image_view *rt = fb->rts[0].view;
+         const struct pan_image *image = pan_image_view_get_rt_image(rt);
 
          const struct util_format_description *desc =
             util_format_description(rt->format);
@@ -896,25 +904,26 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
          cfg.color_write_enable = !fb->rts[0].discard;
          cfg.color_writeback.base = surf.data;
          cfg.color_writeback.row_stride =
-            rt->image->layout.slices[level].row_stride;
+            image->layout.slices[level].row_stride;
 
-         cfg.color_block_format = mod_to_block_fmt(rt->image->layout.modifier);
+         cfg.color_block_format = mod_to_block_fmt(image->layout.modifier);
          assert(cfg.color_block_format == MALI_BLOCK_FORMAT_LINEAR ||
                 cfg.color_block_format ==
                    MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED);
 
-         if (rt->image->layout.crc) {
+         if (pan_image_view_has_crc(rt)) {
             const struct pan_image_slice_layout *slice =
-               &rt->image->layout.slices[level];
+               &image->layout.slices[level];
 
             cfg.crc_buffer.row_stride = slice->crc.stride;
-            cfg.crc_buffer.base = rt->image->data.bo->ptr.gpu +
-                                  rt->image->data.offset + slice->crc.offset;
+            cfg.crc_buffer.base =
+               image->data.bo->ptr.gpu + image->data.offset + slice->crc.offset;
          }
       }
 
       if (fb->zs.view.zs) {
          const struct pan_image_view *zs = fb->zs.view.zs;
+         const struct pan_image *image = pan_image_view_get_zs_image(zs);
          unsigned level = zs->first_level;
          struct pan_surface surf;
 
@@ -922,9 +931,8 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
 
          cfg.zs_write_enable = !fb->zs.discard.z;
          cfg.zs_writeback.base = surf.data;
-         cfg.zs_writeback.row_stride =
-            zs->image->layout.slices[level].row_stride;
-         cfg.zs_block_format = mod_to_block_fmt(zs->image->layout.modifier);
+         cfg.zs_writeback.row_stride = image->layout.slices[level].row_stride;
+         cfg.zs_block_format = mod_to_block_fmt(image->layout.modifier);
          assert(cfg.zs_block_format == MALI_BLOCK_FORMAT_LINEAR ||
                 cfg.zs_block_format == MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED);
 

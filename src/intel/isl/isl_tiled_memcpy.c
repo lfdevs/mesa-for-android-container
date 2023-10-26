@@ -406,6 +406,203 @@ linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from linear to Tile-4 layout.
+ *
+ * \copydoc tile_copy_fn
+ */
+static inline void
+linear_to_tile4(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                uint32_t y0, uint32_t y3,
+                char *dst, const char *src,
+                int32_t src_pitch,
+                uint32_t swizzle_bit,
+                isl_mem_copy_fn mem_copy,
+                isl_mem_copy_fn mem_copy_align16)
+{
+   /* Tile 4 consist of columns that are 'ytile_span' wide and each 64B tile
+    * block consists of 4 row of Y-tile ordered data.
+    * Each 512B block within a 4kB tile contains 8 such block.
+    *
+    * To calculate the tiled  offset, we need to identify:
+    * Block X and Block Y offset at each 512B block boundary in X and Y
+    * direction.
+    *
+    * A Tile4 has the following layout :
+    *
+    *                |<------------- 128 B-------------------|
+    *                _________________________________________
+    * 512B blk(Blk0)^|  0 |  1 |  2 |  3 |  8 |  9 | 10 | 11 | ^ 512B blk(Blk1)
+    * (cell 0..7))  v|  4 |  5 |  6 |  7 | 12 | 13 | 14 | 15 | v (cell 8..15))
+    *                -----------------------------------------
+    *                | 16 | 17 | 18 | 19 | 24 | 25 | 26 | 27 |
+    *                | 20 | 21 | 22 | 23 | 28 | 29 | 30 | 31 |
+    *                -----------------------------------------
+    *                | 32 | 33 | 34 | 35 | 40 | 41 | 42 | 43 |
+    *                | 36 | 37 | 38 | 39 | 44 | 45 | 46 | 47 |
+    *                -----------------------------------------
+    *                | 48 | 49 | 50 | 51 | 56 | 57 | 58 | 59 |
+    *                | 52 | 53 | 54 | 55 | 60 | 61 | 62 | 63 |
+    *                -----------------------------------------
+    *
+    * The tile is divided in 512B blocks[Blk0..Blk7], themselves made of 2
+    * rows of 256B sub-blocks.
+    *
+    * Each sub-block is composed of 4 64B elements[cell(0)-cell(3)] (a cell
+    * in the figure above).
+    *
+    * Each 64B cell represents 4 rows of data.[cell(0), cell(1), .., cell(63)]
+    *
+    *
+    *   Block X - Adds 256B to offset when we encounter block boundary in
+    *             X direction.(Ex: Blk 0 --> Blk 1(BlkX_off = 256))
+    *   Block Y - Adds 512B to offset when we encounter block boundary in
+    *             Y direction.(Ex: Blk 0 --> Blk 3(BlkY_off = 512))
+    *
+    *   (x / ytile_span) * cacheline_size_B //Byte offset in the X dir of
+    *                                         the containing 64B block
+    *   x % ytile_span //Byte offset in X dir within a 64B block/cacheline
+    *
+    *   (y % 4) * 16 // Byte offset of the Y dir within a 64B block/cacheline
+    *   (y / 4) * 256// Byte offset of the Y dir within 512B block after 1 row
+    *                   of 64B blocks/cachelines
+    *
+    * The copy destination offset for each range copied is the sum of
+    * Block X offset 'BlkX_off', Block Y offset 'BlkY_off', X offset 'xo'
+    * and a Y offset 'yo.'
+    */
+   const uint32_t column_width = ytile_span;
+   const uint32_t tile4_blkh = 4;
+
+   assert(ytile_span * tile4_blkh == 64);
+   const uint32_t cacheline_size_B = 64;
+
+   /* Find intermediate Y offsets that are aligned to a 64B element
+    * (4 rows), so that we can do fully 64B memcpys on those.
+    */
+   uint32_t y1 = MIN2(y3, ALIGN_UP(y0, 4));
+   uint32_t y2 = MAX2(y1, ALIGN_DOWN(y3, 4));
+
+   /* xsb0 and xsb1 are the byte offset within a 256B sub block for x0 and x1 */
+   uint32_t xsb0 = (x0 % ytile_span) + (x0 / ytile_span) * cacheline_size_B;
+   uint32_t xsb1 = (x1 % ytile_span) + (x1 / ytile_span) * cacheline_size_B;
+
+   uint32_t Blkxsb0_off = ALIGN_DOWN(xsb0, 256);
+   uint32_t Blky0_off = (y0 / 8) * 512;
+
+   uint32_t BlkX_off, BlkY_off;
+
+   uint32_t x, yo, Y0, Y2;
+
+   /* Y0 determines the initial byte offset in the Y direction */
+   Y0 = (y0 / 4) * 256 + (y0 % 4) * ytile_span;
+
+   /* Y2 determines the byte offset required for reaching y2 if y2 doesn't map
+    * exactly to 512B block boundary
+    */
+   Y2 = y2 * 4 * column_width;
+
+   src += (ptrdiff_t)y0 * src_pitch;
+
+   /* To maximize memcpy speed, we do the copy in 3 parts :
+    *   - copy the first lines that are not aligned to the 64B cell's height (4 rows)
+    *   - copy the lines that are aligned to 64B cell's height
+    *   - copy the remaining lines not making up for a full 64B cell's height
+    */
+   if (y0 != y1) {
+      for (yo = Y0; yo < Y0 + (y1 - y0) * column_width; yo += column_width) {
+         uint32_t xo = xsb1;
+
+         if (x0 != x1)
+            mem_copy(dst + (Blky0_off + Blkxsb0_off) + (xsb0 + yo), src + x0, x1 - x0);
+
+         for (x = x1; x < x2; x += ytile_span) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+
+            mem_copy_align16(dst + (Blky0_off + BlkX_off) + (xo + yo), src + x, ytile_span);
+            xo += cacheline_size_B;
+         }
+
+         if (x3 != x2) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+            mem_copy_align16(dst + (Blky0_off + BlkX_off) + (xo + yo), src + x2, x3 - x2);
+         }
+
+         src += src_pitch;
+      }
+   }
+
+   for (yo = y1 * 4 * column_width; yo < y2 * 4 * column_width; yo += 16 * column_width) {
+      uint32_t xo = xsb1;
+      BlkY_off = ALIGN_DOWN(yo, 512);
+
+      if (x0 != x1) {
+         mem_copy(dst + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 0 * column_width),
+                  src + x0 + 0 * src_pitch, x1 - x0);
+         mem_copy(dst + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 1 * column_width),
+                  src + x0 + 1 * src_pitch, x1 - x0);
+         mem_copy(dst + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 2 * column_width),
+                  src + x0 + 2 * src_pitch, x1 - x0);
+         mem_copy(dst + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 3 * column_width),
+                  src + x0 + 3 * src_pitch, x1 - x0);
+      }
+
+      for (x = x1; x < x2; x += ytile_span) {
+         BlkX_off = ALIGN_DOWN(xo, 256);
+
+         mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo+ 0 * column_width),
+                          src + x + 0 * src_pitch, ytile_span);
+         mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo + 1 * column_width),
+                          src + x + 1 * src_pitch, ytile_span);
+         mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo + 2 * column_width),
+                          src + x + 2 * src_pitch, ytile_span);
+         mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo + 3 * column_width),
+                          src + x + 3 * src_pitch, ytile_span);
+
+         xo += cacheline_size_B;
+      }
+
+      if (x2 != x3) {
+         BlkX_off = ALIGN_DOWN(xo, 256);
+
+         mem_copy(dst + (BlkY_off + BlkX_off) + (xo + yo + 0 * column_width),
+                  src + x2 + 0 * src_pitch, x3 - x2);
+         mem_copy(dst + (BlkY_off + BlkX_off) + (xo + yo + 1 * column_width),
+                  src + x2 + 1 * src_pitch, x3 - x2);
+         mem_copy(dst + (BlkY_off + BlkX_off) + (xo + yo + 2 * column_width),
+                  src + x2 + 2 * src_pitch, x3 - x2);
+         mem_copy(dst + (BlkY_off + BlkX_off) + (xo + yo + 3 * column_width),
+                  src + x2 + 3 * src_pitch, x3 - x2);
+      }
+
+      src += 4 * src_pitch;
+   }
+
+   if (y2 != y3) {
+      for (yo = Y2; yo < Y2 + (y3 - y2) * column_width; yo += column_width) {
+         uint32_t xo = xsb1;
+         BlkY_off = ALIGN_DOWN(yo, 512);
+
+         if (x0 != x1)
+            mem_copy(dst + (BlkY_off + Blkxsb0_off) + (xsb0 + yo), src + x0, x1 - x0);
+
+         for (x = x1; x < x2; x += ytile_span) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+
+            mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo), src + x, ytile_span);
+            xo += cacheline_size_B;
+         }
+
+         if (x3 != x2) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+            mem_copy_align16(dst + (BlkY_off + BlkX_off) + (xo + yo), src + x2, x3 - x2);
+         }
+
+         src += src_pitch;
+      }
+   }
+}
+
+/**
  * Copy texture data from X tile layout to linear.
  *
  * \copydoc tile_copy_fn
@@ -569,6 +766,201 @@ ytiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    }
 }
 
+
+/**
+ * Copy texture data from linear to Tile-4 layout.
+ *
+ * \copydoc tile_copy_fn
+ */
+static inline void
+tile4_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                uint32_t y0, uint32_t y3,
+                char *dst, const char *src,
+                int32_t dst_pitch,
+                uint32_t swizzle_bit,
+                isl_mem_copy_fn mem_copy,
+                isl_mem_copy_fn mem_copy_align16)
+{
+
+   /* Tile 4 consist of columns that are 'ytile_span' wide and each 64B tile block
+    * consists of 4 row of Y-tile ordered data.
+    * Each 512B block within a 4kB tile contains 8 such block.
+    *
+    * To calculate the tiled  offset, we need to identify:
+    * Block X and Block Y offset at each 512B block boundary in X and Y direction.
+    *
+    * Refer to the Tile4 layout diagram in linear_to_tile4() function.
+    *
+    * The tile is divided in 512B blocks[Blk0..Blk7], themselves made of 2
+    * rows of 256B sub-blocks
+    *
+    * Each sub-block is composed of 4 64B elements[cell(0)-cell(3)].
+    *
+    * Each 64B cell represents 4 rows of data.[cell(0), cell(1), .., cell(63)]
+    *
+    *
+    *   Block X - Adds 256B to offset when we encounter block boundary in
+    *             X direction.(Ex: Blk 0 --> Blk 1(BlkX_off = 256))
+    *   Block Y - Adds 512B to offset when we encounter block boundary in
+    *             Y direction.(Ex: Blk 0 --> Blk 3(BlkY_off = 512))
+    *
+    *   (x / ytile_span) * cacheline_size_B //Byte offset in the X dir of the
+    *                                         containing 64B block
+    *   x % ytile_span //Byte offset in X dir within a 64B block/cacheline
+    *
+    *   (y % 4) * 16 // Byte offset of the Y dir within a 64B block/cacheline
+    *   (y / 4) * 256// Byte offset of the Y dir within 512B block after 1 row
+    *                   of 64B blocks/cachelines
+    *
+    * The copy destination offset for each range copied is the sum of
+    * Block X offset 'BlkX_off', Block Y offset 'BlkY_off', X offset 'xo'
+    * and a Y offset 'yo.'
+    */
+
+   const uint32_t column_width = ytile_span;
+   const uint32_t tile4_blkh = 4;
+
+   assert(ytile_span * tile4_blkh == 64);
+   const uint32_t cacheline_size_B = 64;
+
+   /* Find intermediate Y offsets that are aligned to a 64B element
+    * (4 rows), so that we can do fully 64B memcpys on those.
+    */
+   uint32_t y1 = MIN2(y3, ALIGN_UP(y0, 4));
+   uint32_t y2 = MAX2(y1, ALIGN_DOWN(y3, 4));
+
+   /* xsb0 and xsb1 are the byte offset within a 256B sub block for x0 and x1 */
+   uint32_t xsb0 = (x0 % ytile_span) + (x0 / ytile_span) * cacheline_size_B;
+   uint32_t xsb1 = (x1 % ytile_span) + (x1 / ytile_span) * cacheline_size_B;
+
+   uint32_t Blkxsb0_off = ALIGN_DOWN(xsb0, 256);
+   uint32_t Blky0_off = (y0 / 8) * 512;
+
+   uint32_t BlkX_off, BlkY_off;
+
+   uint32_t x, yo, Y0, Y2;
+
+   /* Y0 determines the initial byte offset in the Y direction */
+   Y0 = (y0 / 4) * 256 + (y0 % 4) * 16;
+
+   /* Y2 determines the byte offset required for reaching y2 if y2 doesn't map
+    * exactly to 512B block boundary
+    */
+   Y2 = y2 * 4 * column_width;
+
+   dst += (ptrdiff_t)y0 * dst_pitch;
+
+   /* To maximize memcpy speed, we do the copy in 3 parts :
+    *   - copy the first lines that are not aligned to the 64B cell's height (4 rows)
+    *   - copy the lines that are aligned to 64B cell's height
+    *   - copy the remaining lines not making up for a full 64B cell's height
+    */
+   if (y0 != y1) {
+      for (yo = Y0; yo < Y0 + (y1 - y0) * column_width; yo += column_width) {
+         uint32_t xo = xsb1;
+
+         if (x0 != x1)
+            mem_copy(dst + x0, src + (Blky0_off + Blkxsb0_off) + (xsb0 + yo), x1 - x0);
+
+         for (x = x1; x < x2; x += ytile_span) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+
+            mem_copy_align16(dst + x, src + (Blky0_off + BlkX_off) + (xo + yo), ytile_span);
+            xo += cacheline_size_B;
+         }
+
+         if (x3 != x2) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+            mem_copy_align16(dst + x2, src + (Blky0_off + BlkX_off) + (xo + yo), x3 - x2);
+         }
+
+         dst += dst_pitch;
+      }
+   }
+
+   for (yo = y1 * 4 * column_width; yo < y2 * 4 * column_width; yo += 16 * column_width) {
+      uint32_t xo = xsb1;
+      BlkY_off = ALIGN_DOWN(yo, 512);
+
+      if (x0 != x1) {
+         mem_copy(dst + x0 + 0 * dst_pitch,
+                  src + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 0 * column_width),
+                  x1 - x0);
+         mem_copy(dst + x0 + 1 * dst_pitch,
+                  src + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 1 * column_width),
+                  x1 - x0);
+         mem_copy(dst + x0 + 2 * dst_pitch,
+                  src + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 2 * column_width),
+                  x1 - x0);
+         mem_copy(dst + x0 + 3 * dst_pitch,
+                  src + (BlkY_off + Blkxsb0_off) + (xsb0 + yo + 3 * column_width),
+                  x1 - x0);
+      }
+
+      for (x = x1; x < x2; x += ytile_span) {
+         BlkX_off = ALIGN_DOWN(xo, 256);
+
+         mem_copy_align16(dst + x + 0 * dst_pitch,
+                          src + (BlkY_off + BlkX_off) + (xo + yo + 0 * column_width),
+                          ytile_span);
+         mem_copy_align16(dst + x + 1 * dst_pitch,
+                          src + (BlkY_off + BlkX_off) + (xo + yo + 1 * column_width),
+                          ytile_span);
+         mem_copy_align16(dst + x + 2 * dst_pitch,
+                          src + (BlkY_off + BlkX_off) + (xo + yo + 2 * column_width),
+                          ytile_span);
+         mem_copy_align16(dst + x + 3 * dst_pitch,
+                          src + (BlkY_off + BlkX_off) + (xo + yo + 3 * column_width),
+                          ytile_span);
+
+         xo += cacheline_size_B;
+      }
+
+      if (x2 != x3) {
+         BlkX_off = ALIGN_DOWN(xo, 256);
+
+         mem_copy(dst + x2 + 0 * dst_pitch,
+                  src + (BlkY_off + BlkX_off) + (xo + yo + 0 * column_width),
+                  x3 - x2);
+         mem_copy(dst + x2 + 1 * dst_pitch,
+                  src + (BlkY_off + BlkX_off) + (xo + yo + 1 * column_width),
+                  x3 - x2);
+         mem_copy(dst + x2 + 2 * dst_pitch,
+                  src + (BlkY_off + BlkX_off) + (xo + yo + 2 * column_width),
+                  x3 - x2);
+         mem_copy(dst + x2 + 3 * dst_pitch,
+                  src + (BlkY_off + BlkX_off) + (xo + yo + 3 * column_width),
+                  x3 - x2);
+      }
+
+      dst += 4 * dst_pitch;
+   }
+
+   if (y2 != y3) {
+      for (yo = Y2; yo < Y2 + (y3 - y2) * column_width; yo += column_width) {
+         uint32_t xo = xsb1;
+         BlkY_off = ALIGN_DOWN(yo, 512);
+
+         if (x0 != x1)
+            mem_copy(dst + x0, src + (BlkY_off + Blkxsb0_off) + (xsb0 + yo), x1 - x0);
+
+         for (x = x1; x < x2; x += ytile_span) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+
+            mem_copy_align16(dst + x, src + (BlkY_off + BlkX_off) + (xo + yo), ytile_span);
+            xo += cacheline_size_B;
+         }
+
+         if (x3 != x2) {
+            BlkX_off = ALIGN_DOWN(xo, 256);
+            mem_copy_align16(dst + x2, src + (BlkY_off + BlkX_off) + (xo + yo), x3 - x2);
+         }
+
+         dst += dst_pitch;
+      }
+   }
+}
+
 #if defined(INLINE_SSE41)
 static ALWAYS_INLINE void *
 _memcpy_streaming_load(void *dest, const void *src, size_t count)
@@ -705,6 +1097,49 @@ linear_to_ytiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from linear to tile 4 layout, faster.
+ *
+ * Same as \ref linear_to_tile4 but faster, because it passes constant
+ * parameters for common cases, allowing the compiler to inline code
+ * optimized for those cases.
+ *
+ * \copydoc tile_copy_fn
+ */
+static FLATTEN void
+linear_to_tile4_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                        uint32_t y0, uint32_t y1,
+                        char *dst, const char *src,
+                        int32_t src_pitch,
+                        uint32_t swizzle_bit,
+                        isl_memcpy_type copy_type)
+{
+   isl_mem_copy_fn mem_copy = choose_copy_function(copy_type);
+   assert(swizzle_bit == 0);
+
+   if (x0 == 0 && x3 == ytile_width && y0 == 0 && y1 == ytile_height) {
+      if (mem_copy == memcpy)
+         return linear_to_tile4(0, 0, ytile_width, ytile_width, 0, ytile_height,
+                                 dst, src, src_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
+         return linear_to_tile4(0, 0, ytile_width, ytile_width, 0, ytile_height,
+                                 dst, src, src_pitch, swizzle_bit,
+                                 rgba8_copy, rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
+   } else {
+      if (mem_copy == memcpy)
+         return linear_to_tile4(x0, x1, x2, x3, y0, y1,
+                                 dst, src, src_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
+         return linear_to_tile4(x0, x1, x2, x3, y0, y1,
+                                 dst, src, src_pitch, swizzle_bit,
+                                 rgba8_copy, rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
+   }
+}
+
+/**
  * Copy texture data from X tile layout to linear, faster.
  *
  * Same as \ref xtile_to_linear but faster, because it passes constant
@@ -817,6 +1252,61 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from tile4 layout to linear, faster.
+ *
+ * Same as \ref tile4_to_linear but faster, because it passes constant
+ * parameters for common cases, allowing the compiler to inline code
+ * optimized for those cases.
+ *
+ * \copydoc tile_copy_fn
+ */
+static FLATTEN void
+tile4_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                        uint32_t y0, uint32_t y1,
+                        char *dst, const char *src,
+                        int32_t dst_pitch,
+                        uint32_t swizzle_bit,
+                        isl_memcpy_type copy_type)
+{
+   isl_mem_copy_fn mem_copy = choose_copy_function(copy_type);
+   assert(swizzle_bit == 0);
+
+   if (x0 == 0 && x3 == ytile_width && y0 == 0 && y1 == ytile_height) {
+      if (mem_copy == memcpy)
+         return tile4_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
+         return tile4_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
+                                 dst, src, dst_pitch, swizzle_bit,
+                                 rgba8_copy, rgba8_copy_aligned_src);
+#if defined(INLINE_SSE41)
+      else if (copy_type == ISL_MEMCPY_STREAMING_LOAD)
+         return tile4_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
+                                 dst, src, dst_pitch, swizzle_bit,
+                                 memcpy, _memcpy_streaming_load);
+#endif
+      else
+         unreachable("not reached");
+   } else {
+      if (mem_copy == memcpy)
+         return tile4_to_linear(x0, x1, x2, x3, y0, y1,
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
+         return tile4_to_linear(x0, x1, x2, x3, y0, y1,
+                                 dst, src, dst_pitch, swizzle_bit,
+                                 rgba8_copy, rgba8_copy_aligned_src);
+#if defined(INLINE_SSE41)
+      else if (copy_type == ISL_MEMCPY_STREAMING_LOAD)
+         return tile4_to_linear(x0, x1, x2, x3, y0, y1,
+                                 dst, src, dst_pitch, swizzle_bit,
+                                 memcpy, _memcpy_streaming_load);
+#endif
+      else
+         unreachable("not reached");
+   }
+}
+
+/**
  * Copy from linear to tiled texture.
  *
  * Divide the region given by X range [xt1, xt2) and Y range [yt1, yt2) into
@@ -853,6 +1343,11 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
       th = ytile_height;
       span = ytile_span;
       tile_copy = linear_to_ytiled_faster;
+   } else if (tiling == ISL_TILING_4) {
+      tw = ytile_width;
+      th = ytile_height;
+      span = ytile_span;
+      tile_copy = linear_to_tile4_faster;
    } else {
       unreachable("unsupported tiling");
    }
@@ -944,6 +1439,11 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
       th = ytile_height;
       span = ytile_span;
       tile_copy = ytiled_to_linear_faster;
+   } else if (tiling == ISL_TILING_4) {
+      tw = ytile_width;
+      th = ytile_height;
+      span = ytile_span;
+      tile_copy = tile4_to_linear_faster;
    } else {
       unreachable("unsupported tiling");
    }

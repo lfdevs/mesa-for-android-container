@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -86,17 +86,14 @@ struct vmw_winsys_screen
    } ioctl;
 
    struct {
-      struct pb_manager *gmr;
-      struct pb_manager *gmr_mm;
-      struct pb_manager *gmr_fenced;
-      struct pb_manager *gmr_slab;
-      struct pb_manager *gmr_slab_fenced;
+      struct pb_manager *dma_base;
+      struct pb_manager *dma_mm;
       struct pb_manager *query_mm;
       struct pb_manager *query_fenced;
-      struct pb_manager *mob_fenced;
-      struct pb_manager *mob_cache;
-      struct pb_manager *mob_shader_slab;
-      struct pb_manager *mob_shader_slab_fenced;
+      struct pb_manager *dma_fenced;
+      struct pb_manager *dma_cache;
+      struct pb_manager *dma_slab;
+      struct pb_manager *dma_slab_fenced;
    } pools;
 
    struct pb_fence_ops *fence_ops;
@@ -241,7 +238,6 @@ vmw_ioctl_releasefromcpu(struct vmw_region *region,
 bool vmw_ioctl_init(struct vmw_winsys_screen *vws);
 bool vmw_pools_init(struct vmw_winsys_screen *vws);
 bool vmw_query_pools_init(struct vmw_winsys_screen *vws);
-bool vmw_mob_pools_init(struct vmw_winsys_screen *vws);
 bool vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws);
 
 void vmw_ioctl_cleanup(struct vmw_winsys_screen *vws);

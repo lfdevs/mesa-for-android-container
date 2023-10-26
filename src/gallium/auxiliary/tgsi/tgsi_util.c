@@ -351,24 +351,6 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
 }
 
 /**
- * Convert a tgsi_ind_register into a tgsi_src_register
- */
-struct tgsi_src_register
-tgsi_util_get_src_from_ind(const struct tgsi_ind_register *reg)
-{
-   struct tgsi_src_register src = { 0 };
-
-   src.File = reg->File;
-   src.Index = reg->Index;
-   src.SwizzleX = reg->Swizzle;
-   src.SwizzleY = reg->Swizzle;
-   src.SwizzleZ = reg->Swizzle;
-   src.SwizzleW = reg->Swizzle;
-
-   return src;
-}
-
-/**
  * Return the dimension of the texture coordinates (layer included for array
  * textures), as well as the location of the shadow reference value or the
  * sample index.

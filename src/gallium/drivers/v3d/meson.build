@@ -34,7 +34,6 @@ files_libv3d = files(
   'v3d_query.c',
   'v3d_query.h',
   'v3d_query_pipe.c',
-  'v3d_query_perfcnt.c',
   'v3d_resource.c',
   'v3d_resource.h',
   'v3d_screen.c',
@@ -47,8 +46,10 @@ files_per_version = files(
   'v3dx_emit.c',
   'v3dx_format_table.c',
   'v3dx_job.c',
+  'v3dx_query_perfcnt.c',
   'v3dx_rcl.c',
   'v3dx_state.c',
+  'v3dx_tfu.c',
 )
 
 v3d_args = ['-DV3D_BUILD_NEON']
@@ -58,7 +59,7 @@ if dep_v3dv3.found()
   v3d_args += '-DUSE_V3D_SIMULATOR'
 endif
 
-v3d_versions = ['33', '42']
+v3d_versions = ['33', '42', '71']
 
 per_version_libs = []
 foreach ver : v3d_versions

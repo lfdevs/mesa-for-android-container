@@ -83,8 +83,9 @@ struct radeon_decoder {
    bool vcn_dec_sw_ring;
    struct rvcn_sq_var sq;
 
-   struct rvid_buffer msg_fb_it_probs_buffers[NUM_BUFFERS];
-   struct rvid_buffer bs_buffers[NUM_BUFFERS];
+   struct rvid_buffer *msg_fb_it_probs_buffers;
+   unsigned num_dec_bufs;
+   struct rvid_buffer *bs_buffers;
    struct rvid_buffer dpb;
    struct rvid_buffer ctx;
    struct rvid_buffer sessionctx;

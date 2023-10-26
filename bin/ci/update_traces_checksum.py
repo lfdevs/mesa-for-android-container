@@ -70,7 +70,7 @@ def gather_results(
 
                 # parse artifact
                 results_json_bz2 = cur_job.artifact(path="results/results.json.bz2", streamed=False)
-                results_json = bz2.decompress(results_json_bz2).decode("utf-8")
+                results_json = bz2.decompress(results_json_bz2).decode("utf-8", errors="replace")
                 results = json.loads(results_json)
 
                 for _, value in results["tests"].items():
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         cur_project = get_gitlab_project(gl, "mesa")
 
         print(f"Revision: {args.rev}")
-        pipe = wait_for_pipeline(cur_project, args.rev)
+        (pipe, cur_project) = wait_for_pipeline([cur_project], args.rev)
         print(f"Pipeline: {pipe.web_url}")
         gather_results(cur_project, pipe)
 

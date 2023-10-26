@@ -35,10 +35,7 @@ static bool
 nir_instr_worklist_add_srcs_cb(nir_src *src, void *state)
 {
    nir_instr_worklist *wl = state;
-
-   if (src->is_ssa)
-      nir_instr_worklist_push_tail(wl, src->ssa->parent_instr);
-
+   nir_instr_worklist_push_tail(wl, src->ssa->parent_instr);
    return true;
 }
 

@@ -423,8 +423,10 @@ pvr_process_event_cmd_barrier(struct pvr_device *device,
    uint32_t src_wait_count = 0;
    VkResult result;
 
-   assert(!(src_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
-   assert(!(dst_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
+   assert(!(src_mask & ~(PVR_PIPELINE_STAGE_ALL_BITS |
+                         PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT)));
+   assert(!(dst_mask & ~(PVR_PIPELINE_STAGE_ALL_BITS |
+                         PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT)));
 
    u_foreach_bit (stage, src_mask) {
       if (queue->last_job_signal_sync[stage]) {
@@ -845,8 +847,14 @@ static VkResult pvr_process_queue_signals(struct pvr_queue *queue,
       uint32_t wait_count = 0;
 
       for (uint32_t i = 0; i < PVR_JOB_TYPE_MAX; i++) {
-         if (!(signal_stage_src & BITFIELD_BIT(i)) ||
-             !queue->last_job_signal_sync[i])
+         /* Exception for occlusion query jobs since that's something internal,
+          * so the user provided syncs won't ever have it as a source stage.
+          */
+         if (!(signal_stage_src & BITFIELD_BIT(i)) &&
+             i != PVR_JOB_TYPE_OCCLUSION_QUERY)
+            continue;
+
+         if (!queue->last_job_signal_sync[i])
             continue;
 
          signal_waits[wait_count++] = (struct vk_sync_wait){

@@ -25,6 +25,7 @@ const struct agx_opcode_info agx_opcodes_info[AGX_NUM_OPCODES] = {
       "${opcode}", ${op.srcs}, ${op.dests}, ${" | ".join(imms)},
       ${make_encoding(op.encoding_32)},
       ${make_encoding(op.encoding_16)},
+      AGX_SCHEDULE_CLASS_${op.schedule_class.upper()},
       ${int(op.is_float)},
       ${int(op.can_eliminate)},
       ${int(op.can_reorder)},

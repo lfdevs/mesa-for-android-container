@@ -58,35 +58,34 @@ nir_lower_uniforms_to_ubo_instr(nir_builder *b, nir_instr *instr, void *data)
    /* Increase all UBO binding points by 1. */
    if (intr->intrinsic == nir_intrinsic_load_ubo &&
        !b->shader->info.first_ubo_is_default_ubo) {
-      nir_ssa_def *old_idx = nir_ssa_for_src(b, intr->src[0], 1);
-      nir_ssa_def *new_idx = nir_iadd_imm(b, old_idx, 1);
-      nir_instr_rewrite_src(&intr->instr, &intr->src[0],
-                            nir_src_for_ssa(new_idx));
+      nir_def *old_idx = intr->src[0].ssa;
+      nir_def *new_idx = nir_iadd_imm(b, old_idx, 1);
+      nir_src_rewrite(&intr->src[0], new_idx);
       return true;
    }
 
    if (intr->intrinsic == nir_intrinsic_load_uniform) {
-      nir_ssa_def *ubo_idx = nir_imm_int(b, 0);
-      nir_ssa_def *uniform_offset = nir_ssa_for_src(b, intr->src[0], 1);
+      nir_def *ubo_idx = nir_imm_int(b, 0);
+      nir_def *uniform_offset = intr->src[0].ssa;
 
-      assert(intr->dest.ssa.bit_size >= 8);
-      nir_ssa_def *load_result;
+      assert(intr->def.bit_size >= 8);
+      nir_def *load_result;
       if (state->load_vec4) {
          /* No asking us to generate load_vec4 when you've packed your uniforms
           * as dwords instead of vec4s.
           */
          assert(!state->dword_packed);
-         load_result = nir_load_ubo_vec4(b, intr->num_components, intr->dest.ssa.bit_size,
-                                         ubo_idx, uniform_offset, .base=nir_intrinsic_base(intr));
+         load_result = nir_load_ubo_vec4(b, intr->num_components, intr->def.bit_size,
+                                         ubo_idx, uniform_offset, .base = nir_intrinsic_base(intr));
       } else {
          /* For PIPE_CAP_PACKED_UNIFORMS, the uniforms are packed with the
           * base/offset in dword units instead of vec4 units.
           */
          int multiplier = state->dword_packed ? 4 : 16;
-         load_result = nir_load_ubo(b, intr->num_components, intr->dest.ssa.bit_size,
-                             ubo_idx,
-                             nir_iadd_imm(b, nir_imul_imm(b, uniform_offset, multiplier),
-                                          nir_intrinsic_base(intr) * multiplier));
+         load_result = nir_load_ubo(b, intr->num_components, intr->def.bit_size,
+                                    ubo_idx,
+                                    nir_iadd_imm(b, nir_imul_imm(b, uniform_offset, multiplier),
+                                                 nir_intrinsic_base(intr) * multiplier));
          nir_intrinsic_instr *load = nir_instr_as_intrinsic(load_result->parent_instr);
 
          /* If it's const, set the alignment to our known constant offset.  If
@@ -100,17 +99,16 @@ nir_lower_uniforms_to_ubo_instr(nir_builder *b, nir_instr *instr, void *data)
          if (nir_src_is_const(intr->src[0])) {
             nir_intrinsic_set_align(load, NIR_ALIGN_MUL_MAX,
                                     (nir_src_as_uint(intr->src[0]) +
-                                    nir_intrinsic_base(intr) * multiplier) %
-                                    NIR_ALIGN_MUL_MAX);
+                                     nir_intrinsic_base(intr) * multiplier) %
+                                       NIR_ALIGN_MUL_MAX);
          } else {
-            nir_intrinsic_set_align(load, MAX2(multiplier,
-                                             intr->dest.ssa.bit_size / 8), 0);
+            nir_intrinsic_set_align(load, MAX2(multiplier, intr->def.bit_size / 8), 0);
          }
 
          nir_intrinsic_set_range_base(load, nir_intrinsic_base(intr) * multiplier);
          nir_intrinsic_set_range(load, nir_intrinsic_range(intr) * multiplier);
       }
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, load_result);
+      nir_def_rewrite_uses(&intr->def, load_result);
 
       nir_instr_remove(&intr->instr);
       return true;
@@ -132,7 +130,7 @@ nir_lower_uniforms_to_ubo(nir_shader *shader, bool dword_packed, bool load_vec4)
    progress = nir_shader_instructions_pass(shader,
                                            nir_lower_uniforms_to_ubo_instr,
                                            nir_metadata_block_index |
-                                           nir_metadata_dominance,
+                                              nir_metadata_dominance,
                                            &state);
 
    if (progress) {
@@ -163,8 +161,8 @@ nir_lower_uniforms_to_ubo(nir_shader *shader, bool dword_packed, bool load_vec4)
             .location = -1,
          };
          ubo->interface_type =
-               glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
-                                   false, "__ubo0_interface");
+            glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                                false, "__ubo0_interface");
       }
    }
 

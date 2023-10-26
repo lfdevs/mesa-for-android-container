@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1091
+
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# FEDORA_X86_64_BUILD_TAG
+
 set -e
 set -o xtrace
 
@@ -14,6 +19,7 @@ EPHEMERAL=(
         "pkgconfig(epoxy)"
         "pkgconfig(gbm)"
         "pkgconfig(openssl)"
+        python3-pip
         unzip
         xz
 )
@@ -30,7 +36,7 @@ DEPS=(
     glslang
     kernel-headers
     llvm-devel
-    meson
+    ninja-build
     "pkgconfig(LLVMSPIRVLib)"
     "pkgconfig(SPIRV-Tools)"
     "pkgconfig(dri2proto)"
@@ -90,18 +96,14 @@ tar -xvf $XORGMACROS_VERSION.tar.bz2 && rm $XORGMACROS_VERSION.tar.bz2
 cd $XORGMACROS_VERSION; ./configure; make install; cd ..
 rm -rf $XORGMACROS_VERSION
 
+# We need at least 1.2 for Rust's `debug_assertions`
+pip install meson==1.2.0
+
 . .gitlab-ci/container/build-mold.sh
 
 . .gitlab-ci/container/build-libdrm.sh
 
 . .gitlab-ci/container/build-wayland.sh
-
-pushd /usr/local
-git clone https://gitlab.freedesktop.org/mesa/shader-db.git --depth 1
-rm -rf shader-db/.git
-cd shader-db
-make
-popd
 
 
 ############### Uninstall the build software

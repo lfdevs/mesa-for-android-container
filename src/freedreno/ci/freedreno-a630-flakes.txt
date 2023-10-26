@@ -212,3 +212,6 @@ gmem-unaligned-dEQP-VK.renderpass.suballocation.load_store_op_none.depthstencil_
 
 KHR-GL46.buffer_storage.map_persistent_dispatch
 KHR-GL46.buffer_storage.map_persistent_flush
+
+# recently started flaking towards to UnexpectedPass
+spec@ext_external_objects@vk-depth-display@D24S8

@@ -577,8 +577,24 @@
     <field name="FBD" size="64" start="28:0" type="address"/>
   </struct>
 
+  <enum name="Surface Type">
+    <value name="32" value="0"/>
+    <value name="64" value="1"/>
+    <value name="32 With Row Stride" value="2"/>
+    <value name="64 With Strides" value="3"/>
+  </enum>
+
   <struct name="Surface" align="8">
     <field name="Pointer" size="64" start="0:0" type="address"/>
+  </struct>
+
+  <struct name="Surface 32" align="4">
+    <field name="Pointer" size="32" start="0:0" type="address"/>
+  </struct>
+
+  <struct name="Surface 32 With Row Stride" align="8">
+    <field name="Pointer" size="32" start="0:0" type="address"/>
+    <field name="Row stride" size="32" start="1:0" type="int"/>
   </struct>
 
   <struct name="Surface With Stride" align="8">
@@ -616,8 +632,7 @@
     <field name="Format" size="22" start="2:0" type="Pixel Format"/>
     <field name="Dimension" size="2" start="2:22" type="Texture Dimension"/>
     <field name="Texel ordering" size="4" start="2:24" type="Texture Layout"/>
-    <field name="Surface pointer is 64b" size="1" start="2:28" type="bool" default="true"/>
-    <field name="Manual stride" size="1" start="2:29" type="bool" default="false"/>
+    <field name="Surface Type" size="2" start="2:28" type="Surface Type" default="64 With Strides"/>
     <field name="Levels" size="8" start="3:24" type="uint" modifier="minus(1)" default="1"/>
     <field name="Swizzle" size="12" start="4:0" type="uint"/>
   </struct>

@@ -27,7 +27,6 @@
 #include "nir_phi_builder.h"
 #include "nir_vla.h"
 
-
 struct deref_node {
    struct deref_node *parent;
    const struct glsl_type *type;
@@ -223,6 +222,9 @@ get_deref_node(nir_deref_instr *deref, struct lower_variables_state *state)
    if (!nir_deref_mode_must_be(deref, nir_var_function_temp))
       return NULL;
 
+   if (glsl_type_is_cmat(deref->type))
+      return NULL;
+
    struct deref_node *node = get_deref_node_recur(deref, state);
    if (!node)
       return NULL;
@@ -246,8 +248,8 @@ get_deref_node(nir_deref_instr *deref, struct lower_variables_state *state)
 /* \sa foreach_deref_node_match */
 static void
 foreach_deref_node_worker(struct deref_node *node, nir_deref_instr **path,
-                          void (* cb)(struct deref_node *node,
-                                      struct lower_variables_state *state),
+                          void (*cb)(struct deref_node *node,
+                                     struct lower_variables_state *state),
                           struct lower_variables_state *state)
 {
    if (*path == NULL) {
@@ -297,8 +299,8 @@ foreach_deref_node_worker(struct deref_node *node, nir_deref_instr **path,
  */
 static void
 foreach_deref_node_match(nir_deref_path *path,
-                         void (* cb)(struct deref_node *node,
-                                     struct lower_variables_state *state),
+                         void (*cb)(struct deref_node *node,
+                                    struct lower_variables_state *state),
                          struct lower_variables_state *state)
 {
    assert(path->path[0]->deref_type == nir_deref_type_var);
@@ -412,15 +414,15 @@ register_load_instr(nir_intrinsic_instr *load_instr,
     * expect any array derefs at all after vars_to_ssa.
     */
    if (node == UNDEF_NODE) {
-      nir_ssa_undef_instr *undef =
-         nir_ssa_undef_instr_create(state->shader,
-                                    load_instr->num_components,
-                                    load_instr->dest.ssa.bit_size);
+      nir_undef_instr *undef =
+         nir_undef_instr_create(state->shader,
+                                load_instr->num_components,
+                                load_instr->def.bit_size);
 
       nir_instr_insert_before(&load_instr->instr, &undef->instr);
       nir_instr_remove(&load_instr->instr);
 
-      nir_ssa_def_rewrite_uses(&load_instr->dest.ssa, &undef->def);
+      nir_def_rewrite_uses(&load_instr->def, &undef->def);
       return true;
    }
 
@@ -603,18 +605,14 @@ rename_variables(struct lower_variables_state *state)
             for (unsigned i = intrin->num_components; i < NIR_MAX_VEC_COMPONENTS; i++)
                mov->src[0].swizzle[i] = 0;
 
-            assert(intrin->dest.is_ssa);
-
-            mov->dest.write_mask = (1 << intrin->num_components) - 1;
-            nir_ssa_dest_init(&mov->instr, &mov->dest.dest,
-                              intrin->num_components,
-                              intrin->dest.ssa.bit_size);
+            nir_def_init(&mov->instr, &mov->def,
+                         intrin->num_components, intrin->def.bit_size);
 
             nir_instr_insert_before(&intrin->instr, &mov->instr);
             nir_instr_remove(&intrin->instr);
 
-            nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     &mov->dest.dest.ssa);
+            nir_def_rewrite_uses(&intrin->def,
+                                 &mov->def);
             break;
          }
 
@@ -630,8 +628,7 @@ rename_variables(struct lower_variables_state *state)
             /* Should have been removed before rename_variables(). */
             assert(node != UNDEF_NODE);
 
-            assert(intrin->src[1].is_ssa);
-            nir_ssa_def *value = intrin->src[1].ssa;
+            nir_def *value = intrin->src[1].ssa;
 
             if (!node->lower_to_ssa)
                continue;
@@ -639,7 +636,7 @@ rename_variables(struct lower_variables_state *state)
             assert(intrin->num_components ==
                    glsl_get_vector_elements(node->type));
 
-            nir_ssa_def *new_def;
+            nir_def *new_def;
             b.cursor = nir_before_instr(&intrin->instr);
 
             unsigned wrmask = nir_intrinsic_write_mask(intrin);
@@ -655,18 +652,18 @@ rename_variables(struct lower_variables_state *state)
                new_def = nir_swizzle(&b, value, swiz,
                                      intrin->num_components);
             } else {
-               nir_ssa_def *old_def =
+               nir_def *old_def =
                   nir_phi_builder_value_get_block_def(node->pb_value, block);
                /* For writemasked store_var intrinsics, we combine the newly
                 * written values with the existing contents of unwritten
                 * channels, creating a new SSA value for the whole vector.
                 */
-               nir_ssa_scalar srcs[NIR_MAX_VEC_COMPONENTS];
+               nir_scalar srcs[NIR_MAX_VEC_COMPONENTS];
                for (unsigned i = 0; i < intrin->num_components; i++) {
                   if (wrmask & (1 << i)) {
-                     srcs[i] = nir_get_ssa_scalar(value, i);
+                     srcs[i] = nir_get_scalar(value, i);
                   } else {
-                     srcs[i] = nir_get_ssa_scalar(old_def, i);
+                     srcs[i] = nir_get_scalar(old_def, i);
                   }
                }
                new_def = nir_vec_scalars(&b, srcs, intrin->num_components);
@@ -806,7 +803,7 @@ nir_lower_vars_to_ssa_impl(nir_function_impl *impl)
    nir_phi_builder_finish(state.phi_builder);
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+                                  nir_metadata_dominance);
 
    ralloc_free(state.dead_ctx);
 

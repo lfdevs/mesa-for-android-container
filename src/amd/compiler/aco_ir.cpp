@@ -89,7 +89,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       case GFX9: program->family = CHIP_VEGA10; break;
       case GFX10: program->family = CHIP_NAVI10; break;
       case GFX10_3: program->family = CHIP_NAVI21; break;
-      case GFX11: program->family = CHIP_GFX1100; break;
+      case GFX11: program->family = CHIP_NAVI31; break;
       default: program->family = CHIP_UNKNOWN; break;
       }
    } else {
@@ -119,7 +119,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       program->dev.sgpr_limit =
          108; /* includes VCC, which can be treated as s[106-107] on GFX10+ */
 
-      if (family == CHIP_GFX1100 || family == CHIP_GFX1101) {
+      if (family == CHIP_NAVI31 || family == CHIP_NAVI32) {
          program->dev.physical_vgprs = program->wave_size == 32 ? 1536 : 768;
          program->dev.vgpr_alloc_granule = program->wave_size == 32 ? 24 : 12;
       } else {
@@ -399,6 +399,10 @@ can_use_DPP(amd_gfx_level gfx_level, const aco_ptr<Instruction>& instr, bool dpp
          return false;
    }
 
+   /* According to LLVM, it's unsafe to combine DPP into v_cmpx. */
+   if (instr->writes_exec())
+      return false;
+
    /* simpler than listing all VOP3P opcodes which do not support DPP */
    if (instr->isVOP3P()) {
       return instr->opcode == aco_opcode::v_fma_mix_f32 ||
@@ -451,13 +455,14 @@ convert_to_DPP(amd_gfx_level gfx_level, aco_ptr<Instruction>& instr, bool dpp8)
 
    if (dpp8) {
       DPP8_instruction* dpp = &instr->dpp8();
-      for (unsigned i = 0; i < 8; i++)
-         dpp->lane_sel[i] = i;
+      dpp->lane_sel = 0xfac688; /* [0,1,2,3,4,5,6,7] */
+      dpp->fetch_inactive = gfx_level >= GFX10;
    } else {
       DPP16_instruction* dpp = &instr->dpp16();
       dpp->dpp_ctrl = dpp_quad_perm(0, 1, 2, 3);
       dpp->row_mask = 0xf;
       dpp->bank_mask = 0xf;
+      dpp->fetch_inactive = gfx_level >= GFX10;
    }
 
    instr->valu().neg = tmp->valu().neg;
@@ -648,6 +653,7 @@ instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op)
 
 /* On GFX11, for some instructions, bit 7 of the destination/operand vgpr is opsel and the field
  * only supports v0-v127.
+ * The first three bits are used for operands 0-2, and the 4th bit is used for the destination.
  */
 uint8_t
 get_gfx11_true16_mask(aco_opcode op)
@@ -860,6 +866,7 @@ needs_exec_mask(const Instruction* instr)
       case aco_opcode::p_logical_start:
       case aco_opcode::p_logical_end:
       case aco_opcode::p_startpgm:
+      case aco_opcode::p_end_wqm:
       case aco_opcode::p_init_scratch: return instr->reads_exec();
       case aco_opcode::p_start_linear_vgpr: return instr->operands.size();
       default: break;
@@ -1206,7 +1213,7 @@ wait_imm::wait_imm(uint16_t vm_, uint16_t exp_, uint16_t lgkm_, uint16_t vs_)
 
 wait_imm::wait_imm(enum amd_gfx_level gfx_level, uint16_t packed) : vs(unset_counter)
 {
-   if (gfx_level == GFX11) {
+   if (gfx_level >= GFX11) {
       vm = (packed >> 10) & 0x3f;
       lgkm = (packed >> 4) & 0x3f;
       exp = packed & 0x7;
@@ -1235,28 +1242,22 @@ wait_imm::pack(enum amd_gfx_level gfx_level) const
 {
    uint16_t imm = 0;
    assert(exp == unset_counter || exp <= 0x7);
-   switch (gfx_level) {
-   case GFX11:
+   if (gfx_level >= GFX11) {
       assert(lgkm == unset_counter || lgkm <= 0x3f);
       assert(vm == unset_counter || vm <= 0x3f);
       imm = ((vm & 0x3f) << 10) | ((lgkm & 0x3f) << 4) | (exp & 0x7);
-      break;
-   case GFX10:
-   case GFX10_3:
+   } else if (gfx_level >= GFX10) {
       assert(lgkm == unset_counter || lgkm <= 0x3f);
       assert(vm == unset_counter || vm <= 0x3f);
       imm = ((vm & 0x30) << 10) | ((lgkm & 0x3f) << 8) | ((exp & 0x7) << 4) | (vm & 0xf);
-      break;
-   case GFX9:
+   } else if (gfx_level >= GFX9) {
       assert(lgkm == unset_counter || lgkm <= 0xf);
       assert(vm == unset_counter || vm <= 0x3f);
       imm = ((vm & 0x30) << 10) | ((lgkm & 0xf) << 8) | ((exp & 0x7) << 4) | (vm & 0xf);
-      break;
-   default:
+   } else {
       assert(lgkm == unset_counter || lgkm <= 0xf);
       assert(vm == unset_counter || vm <= 0xf);
       imm = ((lgkm & 0xf) << 8) | ((exp & 0x7) << 4) | (vm & 0xf);
-      break;
    }
    if (gfx_level < GFX9 && vm == wait_imm::unset_counter)
       imm |= 0xc000; /* should have no effect on pre-GFX9 and now we won't have to worry about the
@@ -1283,6 +1284,19 @@ wait_imm::empty() const
 {
    return vm == unset_counter && exp == unset_counter && lgkm == unset_counter &&
           vs == unset_counter;
+}
+
+void
+wait_imm::print(FILE* output) const
+{
+   if (exp != unset_counter)
+      fprintf(output, "exp: %u\n", exp);
+   if (vm != unset_counter)
+      fprintf(output, "vm: %u\n", vm);
+   if (lgkm != unset_counter)
+      fprintf(output, "lgkm: %u\n", lgkm);
+   if (vs != unset_counter)
+      fprintf(output, "vs: %u\n", vs);
 }
 
 bool

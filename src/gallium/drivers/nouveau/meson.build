@@ -188,16 +188,6 @@ libnouveau = static_library(
   dependencies : [dep_libdrm, idep_nouveau_codegen, dep_libdrm_nouveau, idep_mesautil, idep_nir_headers],
 )
 
-nouveau_compiler = executable(
-  'nouveau_compiler',
-  'nouveau_compiler.c',
-  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_mesautil, idep_nir, idep_nouveau_codegen],
-  include_directories : [inc_src, inc_include, inc_gallium, inc_gallium_aux],
-  link_with : [libnouveau_codegen, libnouveau, libgallium],
-  build_by_default : with_tools.contains('nouveau'),
-  install : with_tools.contains('nouveau'),
-)
-
 driver_nouveau = declare_dependency(
   compile_args : '-DGALLIUM_NOUVEAU',
   dependencies : [idep_nir, idep_nouveau_codegen],

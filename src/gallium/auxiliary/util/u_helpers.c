@@ -47,16 +47,14 @@
 void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
                                   uint32_t *enabled_buffers,
                                   const struct pipe_vertex_buffer *src,
-                                  unsigned start_slot, unsigned count,
+                                  unsigned count,
                                   unsigned unbind_num_trailing_slots,
                                   bool take_ownership)
 {
    unsigned i;
    uint32_t bitmask = 0;
 
-   dst += start_slot;
-
-   *enabled_buffers &= ~u_bit_consecutive(start_slot, count);
+   *enabled_buffers &= ~BITFIELD_MASK(count);
 
    if (src) {
       for (i = 0; i < count; i++) {
@@ -72,7 +70,7 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
       /* Copy over the other members of pipe_vertex_buffer. */
       memcpy(dst, src, count * sizeof(struct pipe_vertex_buffer));
 
-      *enabled_buffers |= bitmask << start_slot;
+      *enabled_buffers |= bitmask;
    }
    else {
       /* Unreference the buffers. */
@@ -91,7 +89,7 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
 void util_set_vertex_buffers_count(struct pipe_vertex_buffer *dst,
                                    unsigned *dst_count,
                                    const struct pipe_vertex_buffer *src,
-                                   unsigned start_slot, unsigned count,
+                                   unsigned count,
                                    unsigned unbind_num_trailing_slots,
                                    bool take_ownership)
 {
@@ -103,7 +101,7 @@ void util_set_vertex_buffers_count(struct pipe_vertex_buffer *dst,
          enabled_buffers |= (1ull << i);
    }
 
-   util_set_vertex_buffers_mask(dst, &enabled_buffers, src, start_slot,
+   util_set_vertex_buffers_mask(dst, &enabled_buffers, src,
                                 count, unbind_num_trailing_slots,
                                 take_ownership);
 

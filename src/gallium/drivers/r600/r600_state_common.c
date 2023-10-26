@@ -30,6 +30,7 @@
 
 #include "util/format/u_format_s3tc.h"
 #include "util/u_draw.h"
+#include "util/u_endian.h"
 #include "util/u_index_modify.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
@@ -543,13 +544,6 @@ static void r600_delete_dsa_state(struct pipe_context *ctx, void *state)
 	free(dsa);
 }
 
-static void r600_bind_vertex_elements(struct pipe_context *ctx, void *state)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-
-	r600_set_cso_state(rctx, &rctx->vertex_fetch_shader, state);
-}
-
 static void r600_delete_vertex_elements(struct pipe_context *ctx, void *state)
 {
 	struct r600_fetch_shader *shader = (struct r600_fetch_shader*)state;
@@ -560,22 +554,37 @@ static void r600_delete_vertex_elements(struct pipe_context *ctx, void *state)
 
 void r600_vertex_buffers_dirty(struct r600_context *rctx)
 {
-	if (rctx->vertex_buffer_state.dirty_mask) {
+	struct r600_fetch_shader *shader = (struct r600_fetch_shader*)rctx->vertex_fetch_shader.cso;
+	if (shader && (rctx->vertex_buffer_state.dirty_mask & shader->buffer_mask)) {
 		rctx->vertex_buffer_state.atom.num_dw = (rctx->b.gfx_level >= EVERGREEN ? 12 : 11) *
-					       util_bitcount(rctx->vertex_buffer_state.dirty_mask);
+					       util_bitcount(rctx->vertex_buffer_state.dirty_mask & shader->buffer_mask);
 		r600_mark_atom_dirty(rctx, &rctx->vertex_buffer_state.atom);
 	}
 }
 
+static void r600_bind_vertex_elements(struct pipe_context *ctx, void *state)
+{
+	struct r600_context *rctx = (struct r600_context *)ctx;
+	struct r600_fetch_shader *prev = (struct r600_fetch_shader*)rctx->vertex_fetch_shader.cso;
+	struct r600_fetch_shader *cso = state;
+
+	r600_set_cso_state(rctx, &rctx->vertex_fetch_shader, state);
+	if (!prev || (cso && cso->buffer_mask &&
+		      (prev->buffer_mask != cso->buffer_mask || memcmp(cso->strides, prev->strides, util_last_bit(cso->buffer_mask))))) {
+		rctx->vertex_buffer_state.dirty_mask |= cso ? cso->buffer_mask : 0;
+		r600_vertex_buffers_dirty(rctx);
+	}
+}
+
 static void r600_set_vertex_buffers(struct pipe_context *ctx,
-				    unsigned start_slot, unsigned count,
+				    unsigned count,
 				    unsigned unbind_num_trailing_slots,
 				    bool take_ownership,
 				    const struct pipe_vertex_buffer *input)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_vertexbuf_state *state = &rctx->vertex_buffer_state;
-	struct pipe_vertex_buffer *vb = state->vb + start_slot;
+	struct pipe_vertex_buffer *vb = state->vb;
 	unsigned i;
 	uint32_t disable_mask = 0;
 	/* These are the new buffers set by this function. */
@@ -585,11 +594,9 @@ static void r600_set_vertex_buffers(struct pipe_context *ctx,
 	if (input) {
 		for (i = 0; i < count; i++) {
 			if (likely((input[i].buffer.resource != vb[i].buffer.resource) ||
-				   (vb[i].stride != input[i].stride) ||
 				   (vb[i].buffer_offset != input[i].buffer_offset) ||
 				   (vb[i].is_user_buffer != input[i].is_user_buffer))) {
 				if (input[i].buffer.resource) {
-					vb[i].stride = input[i].stride;
 					vb[i].buffer_offset = input[i].buffer_offset;
 					if (take_ownership) {
 						pipe_resource_reference(&vb[i].buffer.resource, NULL);
@@ -625,9 +632,6 @@ static void r600_set_vertex_buffers(struct pipe_context *ctx,
 		pipe_resource_reference(&vb[count + i].buffer.resource, NULL);
 	}
 	disable_mask |= ((1ull << unbind_num_trailing_slots) - 1) << count;
-
-	disable_mask <<= start_slot;
-	new_buffer_mask <<= start_slot;
 
 	rctx->vertex_buffer_state.enabled_mask &= ~disable_mask;
 	rctx->vertex_buffer_state.dirty_mask &= rctx->vertex_buffer_state.enabled_mask;
@@ -1295,7 +1299,7 @@ static void r600_set_constant_buffer(struct pipe_context *ctx,
 
 	if (ptr) {
 		/* Upload the user buffer. */
-		if (R600_BIG_ENDIAN) {
+		if (UTIL_ARCH_BIG_ENDIAN) {
 			uint32_t *tmpPtr;
 			unsigned i, size = input->buffer_size;
 
@@ -2284,7 +2288,7 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 		 * and the indices are emitted via PKT3_DRAW_INDEX_IMMD.
 		 * Indirect draws never use immediate indices.
 		 * Note: Instanced rendering in combination with immediate indices hangs. */
-		if (has_user_indices && (R600_BIG_ENDIAN || indirect ||
+		if (has_user_indices && (UTIL_ARCH_BIG_ENDIAN || indirect ||
 						 info->instance_count > 1 ||
 						 draws[0].count*index_size > 20)) {
 			unsigned start_offset = draws[0].start * index_size;
@@ -2436,8 +2440,8 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 	if (index_size) {
 		radeon_emit(cs, PKT3(PKT3_INDEX_TYPE, 0, 0));
 		radeon_emit(cs, index_size == 4 ?
-				(VGT_INDEX_32 | (R600_BIG_ENDIAN ? VGT_DMA_SWAP_32_BIT : 0)) :
-				(VGT_INDEX_16 | (R600_BIG_ENDIAN ? VGT_DMA_SWAP_16_BIT : 0)));
+				(VGT_INDEX_32 | (UTIL_ARCH_BIG_ENDIAN ? VGT_DMA_SWAP_32_BIT : 0)) :
+				(VGT_INDEX_16 | (UTIL_ARCH_BIG_ENDIAN ? VGT_DMA_SWAP_16_BIT : 0)));
 
 		if (has_user_indices) {
 			unsigned size_bytes = draws[0].count*index_size;
@@ -3259,7 +3263,7 @@ uint32_t r600_translate_colorformat(enum amd_gfx_level chip, enum pipe_format fo
 
 uint32_t r600_colorformat_endian_swap(uint32_t colorformat, bool do_endian_swap)
 {
-	if (R600_BIG_ENDIAN) {
+	if (UTIL_ARCH_BIG_ENDIAN) {
 		switch(colorformat) {
 		/* 8-bit buffers. */
 		case V_0280A0_COLOR_4_4:

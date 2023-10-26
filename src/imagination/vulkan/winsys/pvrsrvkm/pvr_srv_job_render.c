@@ -299,8 +299,8 @@ static uint32_t pvr_rogue_get_ppp_screen_val(uint32_t width, uint32_t height)
    uint32_t val;
 
    pvr_csb_pack (&val, CR_PPP_SCREEN, state) {
-      state.pixxmax = width;
-      state.pixymax = height;
+      state.pixxmax = width - 1;
+      state.pixymax = height - 1;
    }
 
    return val;
@@ -879,17 +879,17 @@ static void pvr_srv_fragment_cmd_ext_stream_load(
    assert((const uint8_t *)ext_stream_ptr - stream == stream_len);
 }
 
-static void pvr_srv_fragment_cmd_init(
-   const struct pvr_winsys_render_submit_info *submit_info,
-   struct rogue_fwif_cmd_3d *cmd,
-   const struct pvr_device_info *dev_info)
+static void
+pvr_srv_fragment_cmd_init(struct rogue_fwif_cmd_3d *cmd,
+                          const struct pvr_winsys_fragment_state *state,
+                          const struct pvr_device_info *dev_info,
+                          uint32_t frame_num)
 {
-   const struct pvr_winsys_fragment_state *state = &submit_info->fragment;
    uint32_t ext_stream_offset;
 
    memset(cmd, 0, sizeof(*cmd));
 
-   cmd->cmd_shared.cmn.frame_num = submit_info->frame_num;
+   cmd->cmd_shared.cmn.frame_num = frame_num;
 
    ext_stream_offset = pvr_srv_fragment_cmd_stream_load(cmd,
                                                         state->fw_stream,
@@ -944,7 +944,11 @@ VkResult pvr_srv_winsys_render_submit(
    struct pvr_srv_sync *srv_signal_sync_frag;
 
    struct rogue_fwif_cmd_ta geom_cmd;
-   struct rogue_fwif_cmd_3d frag_cmd;
+   struct rogue_fwif_cmd_3d frag_cmd = { 0 };
+   struct rogue_fwif_cmd_3d pr_cmd = { 0 };
+
+   uint8_t *frag_cmd_ptr = NULL;
+   uint32_t frag_cmd_size = 0;
 
    uint32_t current_sync_value = sync_prim->value;
    uint32_t geom_sync_update_value;
@@ -962,10 +966,20 @@ VkResult pvr_srv_winsys_render_submit(
 
    pvr_srv_geometry_cmd_init(submit_info, sync_prim, &geom_cmd, dev_info);
 
-   if (submit_info->run_frag)
-      pvr_srv_fragment_cmd_init(submit_info, &frag_cmd, dev_info);
-   else
-      memset(&frag_cmd, 0, sizeof(frag_cmd));
+   pvr_srv_fragment_cmd_init(&pr_cmd,
+                             &submit_info->fragment_pr,
+                             dev_info,
+                             submit_info->frame_num);
+
+   if (submit_info->has_fragment_job) {
+      pvr_srv_fragment_cmd_init(&frag_cmd,
+                                &submit_info->fragment,
+                                dev_info,
+                                submit_info->frame_num);
+
+      frag_cmd_ptr = (uint8_t *)&frag_cmd;
+      frag_cmd_size = sizeof(frag_cmd);
+   }
 
    if (submit_info->geometry.wait) {
       struct pvr_srv_sync *srv_wait_sync =
@@ -1005,7 +1019,7 @@ VkResult pvr_srv_winsys_render_submit(
    /* Geometery is always kicked */
    geom_sync_update_value = ++current_sync_value;
 
-   if (submit_info->run_frag) {
+   if (submit_info->has_fragment_job) {
       frag_sync_update_count = 1;
       frag_sync_update_value = ++current_sync_value;
    }
@@ -1044,18 +1058,16 @@ VkResult pvr_srv_winsys_render_submit(
                                         "FRAG",
                                         sizeof(geom_cmd),
                                         (uint8_t *)&geom_cmd,
-                                        /* Currently no support for PRs. */
-                                        0,
-                                        /* Currently no support for PRs. */
-                                        NULL,
-                                        sizeof(frag_cmd),
-                                        (uint8_t *)&frag_cmd,
+                                        sizeof(pr_cmd),
+                                        (uint8_t *)&pr_cmd,
+                                        frag_cmd_size,
+                                        frag_cmd_ptr,
                                         submit_info->job_num,
                                         /* Always kick the TA. */
                                         true,
                                         /* Always kick a PR. */
                                         true,
-                                        submit_info->run_frag,
+                                        submit_info->has_fragment_job,
                                         false,
                                         0,
                                         rt_data_handle,

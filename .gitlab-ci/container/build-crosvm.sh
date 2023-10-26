@@ -6,13 +6,13 @@ set -ex
 git config --global user.email "mesa@example.com"
 git config --global user.name "Mesa CI"
 
-CROSVM_VERSION=d0cbf0b23eb4bd2355b011184025c7c5d8749376
+CROSVM_VERSION=e3815e62d675ef436956a992e0ed58b7309c759d
 git clone --single-branch -b main --no-checkout https://chromium.googlesource.com/crosvm/crosvm /platform/crosvm
 pushd /platform/crosvm
 git checkout "$CROSVM_VERSION"
 git submodule update --init
 
-VIRGLRENDERER_VERSION=45bb2449b81336b88c267b1c1735f3b4946c7b3a
+VIRGLRENDERER_VERSION=10120c0d9ebdc00eae1b5c9f7c98fc0d198ba602
 rm -rf third_party/virglrenderer
 git clone --single-branch -b main --no-checkout https://gitlab.freedesktop.org/virgl/virglrenderer.git third_party/virglrenderer
 pushd third_party/virglrenderer

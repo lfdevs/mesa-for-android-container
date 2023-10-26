@@ -45,6 +45,7 @@
 #include "util/list.h"
 #include "util/macros.h"
 #include "vk_object.h"
+#include "vk_sampler.h"
 #include "vk_sync.h"
 
 #define VK_VENDOR_ID_IMAGINATION 0x1010
@@ -238,7 +239,7 @@ CHECK_STRUCT_FIELD_SIZE(pvr_combined_image_sampler_descriptor,
 #undef CHECK_STRUCT_FIELD_SIZE
 
 struct pvr_sampler {
-   struct vk_object_base base;
+   struct vk_sampler vk;
 
    union pvr_sampler_descriptor descriptor;
 };

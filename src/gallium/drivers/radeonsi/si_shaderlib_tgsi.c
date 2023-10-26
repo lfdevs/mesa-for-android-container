@@ -39,6 +39,10 @@ void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type, 
    if (!ureg)
       return NULL;
 
+   /* Add 1 for the attribute ring address. */
+   if (sctx->gfx_level >= GFX11 && type != UTIL_BLITTER_ATTRIB_NONE)
+      vs_blit_property++;
+
    /* Tell the shader to load VS inputs from SGPRs: */
    ureg_property(ureg, TGSI_PROPERTY_VS_BLIT_SGPRS_AMD, vs_blit_property);
    ureg_property(ureg, TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION, true);
@@ -382,110 +386,6 @@ void *si_create_query_result_cs(struct si_context *sctx)
    state.prog = tokens;
 
    return sctx->b.create_compute_state(&sctx->b, &state);
-}
-
-void *si_clear_render_target_shader(struct pipe_context *ctx)
-{
-   static const char text[] =
-      "COMP\n"
-      "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
-      "PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
-      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-      "DCL SV[0], THREAD_ID\n"
-      "DCL SV[1], BLOCK_ID\n"
-      "DCL IMAGE[0], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
-      "DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
-      "DCL TEMP[0..3], LOCAL\n"
-      "IMM[0] UINT32 {8, 1, 0, 0}\n"
-      "MOV TEMP[0].xyz, CONST[0][0].xyzw\n"
-      "UMAD TEMP[1].xyz, SV[1].xyzz, IMM[0].xxyy, SV[0].xyzz\n"
-      "UADD TEMP[2].xyz, TEMP[1].xyzx, TEMP[0].xyzx\n"
-      "MOV TEMP[3].xyzw, CONST[0][1].xyzw\n"
-      "STORE IMAGE[0], TEMP[2].xyzz, TEMP[3], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
-      "END\n";
-
-   struct tgsi_token tokens[1024];
-   struct pipe_compute_state state = {0};
-
-   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
-      assert(false);
-      return NULL;
-   }
-
-   state.ir_type = PIPE_SHADER_IR_TGSI;
-   state.prog = tokens;
-
-   return ctx->create_compute_state(ctx, &state);
-}
-
-/* TODO: Didn't really test 1D_ARRAY */
-void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx)
-{
-   static const char text[] =
-      "COMP\n"
-      "PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
-      "PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
-      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-      "DCL SV[0], THREAD_ID\n"
-      "DCL SV[1], BLOCK_ID\n"
-      "DCL IMAGE[0], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
-      "DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
-      "DCL TEMP[0..3], LOCAL\n"
-      "IMM[0] UINT32 {64, 1, 0, 0}\n"
-      "MOV TEMP[0].xy, CONST[0][0].xzzw\n"
-      "UMAD TEMP[1].xy, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
-      "UADD TEMP[2].xy, TEMP[1].xyzx, TEMP[0].xyzx\n"
-      "MOV TEMP[3].xyzw, CONST[0][1].xyzw\n"
-      "STORE IMAGE[0], TEMP[2].xyzz, TEMP[3], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
-      "END\n";
-
-   struct tgsi_token tokens[1024];
-   struct pipe_compute_state state = {0};
-
-   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
-      assert(false);
-      return NULL;
-   }
-
-   state.ir_type = PIPE_SHADER_IR_TGSI;
-   state.prog = tokens;
-
-   return ctx->create_compute_state(ctx, &state);
-}
-
-void *si_clear_12bytes_buffer_shader(struct pipe_context *ctx)
-{
-   static const char text[] = "COMP\n"
-                              "PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
-                              "PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
-                              "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-                              "PROPERTY CS_USER_DATA_COMPONENTS_AMD 3\n"
-                              "DCL SV[0], THREAD_ID\n"
-                              "DCL SV[1], BLOCK_ID\n"
-                              "DCL SV[2], CS_USER_DATA_AMD\n"
-                              "DCL BUFFER[0]\n"
-                              "DCL TEMP[0..0]\n"
-                              "IMM[0] UINT32 {64, 1, 12, 0}\n"
-                              "UMAD TEMP[0].x, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
-                              "UMUL TEMP[0].x, TEMP[0].xyzz, IMM[0].zzzz\n" // 12 bytes
-                              "STORE BUFFER[0].xyz, TEMP[0].xxxx, SV[2].xyzz%s\n"
-                              "END\n";
-   char final_text[2048];
-   struct tgsi_token tokens[1024];
-   struct pipe_compute_state state = {0};
-
-   snprintf(final_text, sizeof(final_text), text,
-            SI_COMPUTE_DST_CACHE_POLICY != L2_LRU ? ", STREAM_CACHE_POLICY" : "");
-
-   if (!tgsi_text_translate(final_text, tokens, ARRAY_SIZE(tokens))) {
-      assert(false);
-      return NULL;
-   }
-
-   state.ir_type = PIPE_SHADER_IR_TGSI;
-   state.prog = tokens;
-
-   return ctx->create_compute_state(ctx, &state);
 }
 
 /* Load samples from the image, and copy them to the same image. This looks like

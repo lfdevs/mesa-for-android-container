@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "util/log.h"
 #include "vk_alloc.h"
 #include "vk_dispatch_table.h"
 #include <vulkan/vulkan.h>
@@ -344,6 +345,15 @@ wsi_common_bind_swapchain_image(const struct wsi_device *wsi,
 
 bool
 wsi_common_vk_instance_supports_present_wait(const struct vk_instance *instance);
+
+#define wsi_common_vk_warn_once(warning) \
+   do { \
+      static int warned = false; \
+      if (!warned) { \
+         mesa_loge(warning); \
+         warned = true; \
+      } \
+   } while (0)
 
 #ifdef __cplusplus
 }

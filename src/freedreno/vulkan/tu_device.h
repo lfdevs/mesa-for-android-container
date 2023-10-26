@@ -58,7 +58,7 @@ struct tu_memory_heap {
     *
     * Align it to 64 bits to make atomic operations faster on 32 bit platforms.
     */
-   VkDeviceSize      used __attribute__ ((aligned (8)));
+   alignas(8) VkDeviceSize used;
 };
 
 struct tu_physical_device
@@ -88,6 +88,11 @@ struct tu_physical_device
    uint64_t gmem_base;
    uint32_t ccu_offset_gmem;
    uint32_t ccu_offset_bypass;
+
+   /* Amount of usable descriptor sets, this excludes any reserved set */
+   uint32_t usable_sets;
+   /* Index of the reserved descriptor set, may be -1 if unset */
+   int32_t reserved_set_idx;
 
    bool has_set_iova;
    uint64_t va_start;
@@ -142,6 +147,13 @@ struct tu_instance
     * suffer a performance loss with conservative LRZ.
     */
    bool conservative_lrz;
+
+   /* If to internally reserve a descriptor set for descriptor set
+    * dynamic offsets, a descriptor set can be freed at the cost of
+    * being unable to use the feature. As it is a part of the Vulkan
+    * core, this is enabled by default.
+    */
+   bool reserve_descriptor_set;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
@@ -153,6 +165,7 @@ struct tu_queue
    struct tu_device *device;
 
    uint32_t msm_queue_id;
+   uint32_t priority;
 
    int fence;           /* timestamp/fence of the last queue submission */
 };
@@ -201,6 +214,9 @@ struct tu6_global
    volatile uint32_t breadcrumb_cpu_sync_seqno;
    uint32_t _pad4;
 
+   volatile uint32_t userspace_fence;
+   uint32_t _pad5;
+
    /* note: larger global bo will be used for customBorderColors */
    struct bcolor_entry bcolor_builtin[TU_BORDER_COLOR_BUILTIN], bcolor[];
 };
@@ -223,6 +239,8 @@ enum tu_gralloc_type
    TU_GRALLOC_OTHER,
 };
 #endif
+
+struct tu_virtio_device;
 
 struct tu_device
 {
@@ -270,6 +288,12 @@ struct tu_device
    struct tu_suballocator autotune_suballoc;
    mtx_t autotune_mutex;
 
+   /* KGSL requires a small chunk of GPU mem to retrieve raw GPU time on
+    * each submission.
+    */
+   struct tu_suballocator kgsl_profiling_suballoc;
+   mtx_t kgsl_profiling_mutex;
+
    /* the blob seems to always use 8K factor and 128K param sizes, copy them */
 #define TU_TESS_FACTOR_SIZE (8 * 1024)
 #define TU_TESS_PARAM_SIZE (128 * 1024)
@@ -280,6 +304,8 @@ struct tu_device
    struct ir3_shader_variant *global_shader_variants[GLOBAL_SH_COUNT];
    struct ir3_shader *global_shaders[GLOBAL_SH_COUNT];
    uint64_t global_shader_va[GLOBAL_SH_COUNT];
+
+   struct tu_shader *empty_tcs, *empty_tes, *empty_gs, *empty_fs, *empty_fs_fdm;
 
    uint32_t vsc_draw_strm_pitch;
    uint32_t vsc_prim_strm_pitch;
@@ -349,6 +375,10 @@ struct tu_device
    enum tu_gralloc_type gralloc_type;
 #endif
 
+#ifdef TU_HAS_VIRTIO
+   struct tu_virtio_device *vdev;
+#endif
+
    uint32_t submit_count;
 
    /* Address space and global fault count for this local_fd with DRM backend */
@@ -361,6 +391,7 @@ struct tu_device
    #endif
 
    bool use_z24uint_s8uint;
+   bool use_lrz;
 };
 VK_DEFINE_HANDLE_CASTS(tu_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
 
@@ -446,7 +477,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler, base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
 
 uint64_t
-tu_get_system_heap_size(void);
+tu_get_system_heap_size(struct tu_physical_device *physical_device);
 
 VkResult
 tu_physical_device_init(struct tu_physical_device *device,
@@ -508,6 +539,14 @@ struct tu_u_trace_submission_data
    uint32_t cmd_buffer_count;
    uint32_t last_buffer_with_tracepoints;
    struct tu_u_trace_cmd_data *cmd_trace_data;
+
+   /* GPU time is reset on GPU power cycle and the GPU time
+    * offset may change between submissions due to power cycle.
+    */
+   uint64_t gpu_ts_offset;
+
+   /* KGSL needs a GPU memory to write submission timestamps into */
+   struct tu_suballoc_bo kgsl_timestamp_bo;
 };
 
 VkResult

@@ -123,10 +123,10 @@ static uint64_t pvr_srv_get_alloc_flags(uint32_t ws_flags)
     * userspace mappings. Check to see if there's any situations where we
     * wouldn't want this to be the case.
     */
-   uint64_t srv_flags = PVR_SRV_MEMALLOCFLAG_GPU_READABLE |
-                        PVR_SRV_MEMALLOCFLAG_GPU_WRITEABLE |
-                        PVR_SRV_MEMALLOCFLAG_KERNEL_CPU_MAPPABLE |
-                        PVR_SRV_MEMALLOCFLAG_CPU_UNCACHED_WC;
+   uint64_t srv_flags =
+      PVR_SRV_MEMALLOCFLAG_GPU_READABLE | PVR_SRV_MEMALLOCFLAG_GPU_WRITEABLE |
+      PVR_SRV_MEMALLOCFLAG_KERNEL_CPU_MAPPABLE |
+      PVR_SRV_MEMALLOCFLAG_CPU_UNCACHED_WC | PVR_SRV_MEMALLOCFLAG_ZERO_ON_ALLOC;
 
    if (ws_flags & PVR_WINSYS_BO_FLAG_CPU_ACCESS) {
       srv_flags |= PVR_SRV_MEMALLOCFLAG_CPU_READABLE |
@@ -140,9 +140,6 @@ static uint64_t pvr_srv_get_alloc_flags(uint32_t ws_flags)
 
    if (ws_flags & PVR_WINSYS_BO_FLAG_PM_FW_PROTECT)
       srv_flags |= PVR_SRV_MEMALLOCFLAG_DEVICE_FLAG(PM_FW_PROTECT);
-
-   if (ws_flags & PVR_WINSYS_BO_FLAG_ZERO_ON_ALLOC)
-      srv_flags |= PVR_SRV_MEMALLOCFLAG_ZERO_ON_ALLOC;
 
    return srv_flags;
 }
@@ -323,11 +320,7 @@ VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo)
       return result;
    }
 
-   VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map,
-                                bo->size,
-                                0,
-                                srv_bo->flags &
-                                   PVR_SRV_MEMALLOCFLAG_ZERO_ON_ALLOC));
+   VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, true));
 
    buffer_acquire(srv_bo);
 

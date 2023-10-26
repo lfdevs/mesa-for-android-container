@@ -41,7 +41,7 @@ extern "C" {
 struct rb_node {
     /** Parent and color of this node
      *
-     * The least significant bit represents the color and is est to 1 for
+     * The least significant bit represents the color and is set to 1 for
      * black and 0 for red.  The other bits are the pointer to the parent
      * and that pointer can be retrieved by masking off the bottom bit and
      * casting to a pointer.
@@ -72,7 +72,12 @@ struct rb_tree {
 };
 
 /** Initialize a red-black tree */
-void rb_tree_init(struct rb_tree *T);
+static inline void
+rb_tree_init(struct rb_tree *T)
+{
+    T->root = NULL;
+}
+
 
 /** Returns true if the red-black tree is empty */
 static inline bool
@@ -80,6 +85,26 @@ rb_tree_is_empty(const struct rb_tree *T)
 {
     return T->root == NULL;
 }
+
+/** Get the first (left-most) node in the tree or NULL */
+struct rb_node *rb_tree_first(struct rb_tree *T);
+
+/** Get the last (right-most) node in the tree or NULL */
+struct rb_node *rb_tree_last(struct rb_tree *T);
+
+/** Get the next node (to the right) in the tree or NULL */
+struct rb_node *rb_node_next(struct rb_node *node);
+
+/** Get the next previous (to the left) in the tree or NULL */
+struct rb_node *rb_node_prev(struct rb_node *node);
+
+#ifdef __cplusplus
+/* This macro will not work correctly if `t' uses virtual inheritance. */
+#define rb_tree_offsetof(t, f, p) \
+   (((char *) &((t *) p)->f) - ((char *) p))
+#else
+#define rb_tree_offsetof(t, f, p) offsetof(t, f)
+#endif
 
 /** Retrieve the data structure containing a node
  *
@@ -90,7 +115,7 @@ rb_tree_is_empty(const struct rb_tree *T)
  * \param   field   The rb_node field in the containing data structure
  */
 #define rb_node_data(type, node, field) \
-    ((type *)(((char *)(node)) - offsetof(type, field)))
+    ((type *)(((char *)(node)) - rb_tree_offsetof(type, field, node)))
 
 /** Insert a node into a tree at a particular location
  *
@@ -170,12 +195,23 @@ rb_tree_search(struct rb_tree *T, const void *key,
     struct rb_node *x = T->root;
     while (x != NULL) {
         int c = cmp(x, key);
-        if (c < 0)
+        if (c < 0) {
             x = x->left;
-        else if (c > 0)
+        } else if (c > 0) {
             x = x->right;
-        else
-            return x;
+        } else {
+            /* x is the first *encountered* node matching the key. There may
+             * be other nodes in the left subtree that also match the key.
+             */
+            while (true) {
+                struct rb_node *prev = rb_node_prev(x);
+
+                if (prev == NULL || cmp(prev, key) != 0)
+                    return x;
+
+                x = prev;
+            }
+        }
     }
 
     return x;
@@ -184,11 +220,11 @@ rb_tree_search(struct rb_tree *T, const void *key,
 /** Sloppily search the tree for a node
  *
  * This function searches the tree for a given node.  If a node with a
- * matching key exists, that first matching node found will be returned.
- * If no node with an exactly matching key exists, the node returned will
- * be either the right-most node comparing less than \p key or the
- * right-most node comparing greater than \p key.  If the tree is empty,
- * NULL is returned.
+ * matching key exists, that first encountered matching node found (there may
+ * be other matching nodes in the left subtree) will be returned.  If no node
+ * with an exactly matching key exists, the node returned will be either the
+ * right-most node comparing less than \p key or the right-most node comparing
+ * greater than \p key.  If the tree is empty, NULL is returned.
  *
  * \param   T       The red-black tree to search
  *
@@ -218,18 +254,6 @@ rb_tree_search_sloppy(struct rb_tree *T, const void *key,
 
     return y;
 }
-
-/** Get the first (left-most) node in the tree or NULL */
-struct rb_node *rb_tree_first(struct rb_tree *T);
-
-/** Get the last (right-most) node in the tree or NULL */
-struct rb_node *rb_tree_last(struct rb_tree *T);
-
-/** Get the next node (to the right) in the tree or NULL */
-struct rb_node *rb_node_next(struct rb_node *node);
-
-/** Get the next previous (to the left) in the tree or NULL */
-struct rb_node *rb_node_prev(struct rb_node *node);
 
 #define rb_node_next_or_null(n) ((n) == NULL ? NULL : rb_node_next(n))
 #define rb_node_prev_or_null(n) ((n) == NULL ? NULL : rb_node_prev(n))

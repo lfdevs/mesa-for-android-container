@@ -167,7 +167,7 @@ radv_BindBufferMemory2(VkDevice _device, uint32_t bindInfoCount, const VkBindBuf
 
 static void
 radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize size, VkBufferCreateFlags flags,
-                                    VkBufferUsageFlags usage, VkMemoryRequirements2 *pMemoryRequirements)
+                                    VkBufferUsageFlags2KHR usage, VkMemoryRequirements2 *pMemoryRequirements)
 {
    pMemoryRequirements->memoryRequirements.memoryTypeBits =
       ((1u << device->physical_device->memory_properties.memoryTypeCount) - 1u) &
@@ -182,13 +182,14 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
     * vkGetGeneratedCommandsMemoryRequirementsNV. (we have to make sure their
     * intersection is non-zero at least)
     */
-   if ((usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) && device->uses_device_generated_commands)
+   if ((usage & VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR) && device->uses_device_generated_commands)
       pMemoryRequirements->memoryRequirements.memoryTypeBits |= device->physical_device->memory_types_32bit;
 
    /* Force 32-bit address-space for descriptor buffers usage because they are passed to shaders
     * through 32-bit pointers.
     */
-   if (usage & (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
+   if (usage &
+       (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
       pMemoryRequirements->memoryRequirements.memoryTypeBits = device->physical_device->memory_types_32bit;
 
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)
@@ -200,7 +201,7 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
     * the root ids of instances. The hardware also needs bvh nodes to
     * be 64 byte aligned.
     */
-   if (usage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR)
+   if (usage & VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR)
       pMemoryRequirements->memoryRequirements.alignment = MAX2(pMemoryRequirements->memoryRequirements.alignment, 64);
 
    pMemoryRequirements->memoryRequirements.size = align64(size, pMemoryRequirements->memoryRequirements.alignment);
@@ -219,14 +220,23 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
    }
 }
 
+static const VkBufferUsageFlagBits2KHR
+radv_get_buffer_usage_flags(const VkBufferCreateInfo *pCreateInfo)
+{
+   const VkBufferUsageFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(pCreateInfo->pNext, BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   return flags2 ? flags2->usage : pCreateInfo->usage;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 radv_GetDeviceBufferMemoryRequirements(VkDevice _device, const VkDeviceBufferMemoryRequirements *pInfo,
                                        VkMemoryRequirements2 *pMemoryRequirements)
 {
    RADV_FROM_HANDLE(radv_device, device, _device);
+   const VkBufferUsageFlagBits2KHR usage_flags = radv_get_buffer_usage_flags(pInfo->pCreateInfo);
 
-   radv_get_buffer_memory_requirements(device, pInfo->pCreateInfo->size, pInfo->pCreateInfo->flags,
-                                       pInfo->pCreateInfo->usage, pMemoryRequirements);
+   radv_get_buffer_memory_requirements(device, pInfo->pCreateInfo->size, pInfo->pCreateInfo->flags, usage_flags,
+                                       pMemoryRequirements);
 }
 
 VKAPI_ATTR VkDeviceAddress VKAPI_CALL

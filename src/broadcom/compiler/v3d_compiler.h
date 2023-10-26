@@ -392,13 +392,7 @@ static inline uint8_t v3d_slot_get_component(struct v3d_varying_slot slot)
         return slot.slot_and_component & 3;
 }
 
-enum v3d_execution_environment {
-   V3D_ENVIRONMENT_OPENGL = 0,
-   V3D_ENVIRONMENT_VULKAN,
-};
-
 struct v3d_key {
-        void *shader_state;
         struct {
                 uint8_t swizzle[4];
         } tex[V3D_MAX_TEXTURE_SAMPLERS];
@@ -414,8 +408,6 @@ struct v3d_key {
         bool robust_uniform_access;
         bool robust_storage_access;
         bool robust_image_access;
-
-        enum v3d_execution_environment environment;
 };
 
 struct v3d_fs_key {
@@ -613,6 +605,11 @@ struct v3d_ra_node_info {
         struct {
                 uint32_t priority;
                 uint8_t class_bits;
+                bool is_program_end;
+                bool unused;
+
+                /* V3D 7.x */
+                bool is_ldunif_dst;
         } *info;
         uint32_t alloc_count;
 };
@@ -629,7 +626,7 @@ struct v3d_compile {
         void *debug_output_data;
 
         /**
-         * Mapping from nir_register * or nir_ssa_def * to array of struct
+         * Mapping from nir_register * or nir_def * to array of struct
          * qreg for the values.
          */
         struct hash_table *def_ht;
@@ -648,7 +645,7 @@ struct v3d_compile {
                 uint32_t output_fifo_size;
 
                 struct {
-                        nir_dest *dest;
+                        nir_def *def;
                         uint8_t num_components;
                         uint8_t component_mask;
                 } flush[MAX_TMU_QUEUE_SIZE];
@@ -1149,15 +1146,15 @@ bool vir_is_raw_mov(struct qinst *inst);
 bool vir_is_tex(const struct v3d_device_info *devinfo, struct qinst *inst);
 bool vir_is_add(struct qinst *inst);
 bool vir_is_mul(struct qinst *inst);
-bool vir_writes_r3(const struct v3d_device_info *devinfo, struct qinst *inst);
-bool vir_writes_r4(const struct v3d_device_info *devinfo, struct qinst *inst);
+bool vir_writes_r3_implicitly(const struct v3d_device_info *devinfo, struct qinst *inst);
+bool vir_writes_r4_implicitly(const struct v3d_device_info *devinfo, struct qinst *inst);
 struct qreg vir_follow_movs(struct v3d_compile *c, struct qreg reg);
 uint8_t vir_channels_written(struct qinst *inst);
 struct qreg ntq_get_src(struct v3d_compile *c, nir_src src, int i);
-void ntq_store_dest(struct v3d_compile *c, nir_dest *dest, int chan,
-                    struct qreg result);
+void ntq_store_def(struct v3d_compile *c, nir_def *def, int chan,
+                   struct qreg result);
 bool ntq_tmu_fifo_overflow(struct v3d_compile *c, uint32_t components);
-void ntq_add_pending_tmu_flush(struct v3d_compile *c, nir_dest *dest,
+void ntq_add_pending_tmu_flush(struct v3d_compile *c, nir_def *def,
                                uint32_t component_mask);
 void ntq_flush_tmu(struct v3d_compile *c);
 void vir_emit_thrsw(struct v3d_compile *c);

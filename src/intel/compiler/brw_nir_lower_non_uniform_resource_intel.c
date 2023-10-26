@@ -36,9 +36,6 @@ nir_instr_is_resource_intel(nir_instr *instr)
 static bool
 add_src_instr(nir_src *src, void *state)
 {
-   if (!src->is_ssa)
-      return true;
-
    struct util_dynarray *inst_array = state;
    util_dynarray_foreach(inst_array, nir_instr *, instr_ptr) {
       if (*instr_ptr == src->ssa->parent_instr)
@@ -52,7 +49,7 @@ add_src_instr(nir_src *src, void *state)
 
 static nir_intrinsic_instr *
 find_resource_intel(struct util_dynarray *inst_array,
-                    nir_ssa_def *def)
+                    nir_def *def)
 {
    /* If resouce_intel is already directly in front of the instruction, there
     * is nothing to do.
@@ -119,9 +116,6 @@ brw_nir_lower_non_uniform_intrinsic(nir_builder *b,
 
    b->cursor = nir_before_instr(&intrin->instr);
 
-   if (!intrin->src[source].is_ssa)
-      return false;
-
    util_dynarray_clear(inst_array);
 
    nir_intrinsic_instr *old_resource_intel =
@@ -137,8 +131,8 @@ brw_nir_lower_non_uniform_intrinsic(nir_builder *b,
    nir_intrinsic_instr *new_resource_intel =
       nir_instr_as_intrinsic(new_instr);
 
-   nir_src_rewrite_ssa(&new_resource_intel->src[1], intrin->src[source].ssa);
-   nir_src_rewrite_ssa(&intrin->src[source], &new_resource_intel->dest.ssa);
+   nir_src_rewrite(&new_resource_intel->src[1], intrin->src[source].ssa);
+   nir_src_rewrite(&intrin->src[source], &new_resource_intel->def);
 
    return true;
 }
@@ -156,9 +150,6 @@ brw_nir_lower_non_uniform_tex(nir_builder *b,
           tex->src[s].src_type != nir_tex_src_sampler_handle)
          continue;
 
-      if (!tex->src[s].src.is_ssa)
-         continue;
-
       util_dynarray_clear(inst_array);
 
       nir_intrinsic_instr *old_resource_intel =
@@ -174,8 +165,8 @@ brw_nir_lower_non_uniform_tex(nir_builder *b,
       nir_intrinsic_instr *new_resource_intel =
          nir_instr_as_intrinsic(new_instr);
 
-      nir_src_rewrite_ssa(&new_resource_intel->src[1], tex->src[s].src.ssa);
-      nir_src_rewrite_ssa(&tex->src[s].src, &new_resource_intel->dest.ssa);
+      nir_src_rewrite(&new_resource_intel->src[1], tex->src[s].src.ssa);
+      nir_src_rewrite(&tex->src[s].src, &new_resource_intel->def);
 
       progress = true;
    }
@@ -289,23 +280,19 @@ skip_resource_intel_cleanup(nir_instr *instr)
 
 static bool
 brw_nir_cleanup_resource_intel_instr(nir_builder *b,
-                                     nir_instr *instr,
+                                     nir_intrinsic_instr *intrin,
                                      void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    if (intrin->intrinsic != nir_intrinsic_resource_intel)
       return false;
 
    bool progress = false;
-   nir_foreach_use_safe(src, &intrin->dest.ssa) {
-      if (!src->is_if && skip_resource_intel_cleanup(src->parent_instr))
+   nir_foreach_use_safe(src, &intrin->def) {
+      if (!nir_src_is_if(src) && skip_resource_intel_cleanup(nir_src_parent_instr(src)))
          continue;
 
       progress = true;
-      nir_src_rewrite_ssa(src, intrin->src[1].ssa);
+      nir_src_rewrite(src, intrin->src[1].ssa);
    }
 
    return progress;
@@ -320,7 +307,7 @@ brw_nir_cleanup_resource_intel(nir_shader *shader)
 {
    void *mem_ctx = ralloc_context(NULL);
 
-   bool ret = nir_shader_instructions_pass(shader,
+   bool ret = nir_shader_intrinsics_pass(shader,
                                            brw_nir_cleanup_resource_intel_instr,
                                            nir_metadata_block_index |
                                            nir_metadata_dominance,

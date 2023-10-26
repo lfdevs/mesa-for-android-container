@@ -49,6 +49,7 @@ struct ac_shader_args {
       uint8_t size;
       bool skip : 1;
       bool pending_vmem : 1; /* Loaded from VMEM and needs waitcnt before use. */
+      bool preserved : 1;
    } args[AC_MAX_ARGS];
 
    uint16_t arg_count;
@@ -102,7 +103,22 @@ struct ac_shader_args {
    struct ac_arg gs2vs_offset;      /* legacy GS */
    struct ac_arg gs_wave_id;        /* legacy GS */
    struct ac_arg gs_attr_offset;    /* gfx11+: attribute ring offset in 512B increments */
-   struct ac_arg gs_vtx_offset[6];  /* GFX6-8: [0-5], GFX9+: [0-2] packed */
+
+   /* GS vertex indices/offsets:
+    *
+    * GFX6-8: [0-5] 6x uint32, multiplied by VGT_ESGS_RING_ITEMSIZE by hw
+    * GFX9-11 non-passthrough: [0-2] 6x packed uint16, multiplied by VGT_ESGS_RING_ITEMSIZE by hw
+    *
+    * GFX10-11 passthrough: [0] 1x uint32 with the following bitfields matching the prim export:
+    *    [0:8]    vertex index 0
+    *    [9]      edgeflag 0
+    *    [10:18]  vertex index 1
+    *    [19]     edgeflag 1
+    *    [20:28]  vertex index 2
+    *    [29]     edgeflag 2
+    *    [31]     0 (valid prim)
+    */
+   struct ac_arg gs_vtx_offset[6];
    struct ac_arg gs_prim_id;
    struct ac_arg gs_invocation_id;
 
@@ -126,6 +142,7 @@ struct ac_shader_args {
    struct ac_arg linear_sample;
    struct ac_arg linear_center;
    struct ac_arg linear_centroid;
+   struct ac_arg pos_fixed_pt;
 
    /* CS */
    struct ac_arg local_invocation_ids;
@@ -145,14 +162,14 @@ struct ac_shader_args {
 
    /* RT */
    struct {
-      struct ac_arg shader_pc;
+      struct ac_arg uniform_shader_addr;
       struct ac_arg sbt_descriptors;
       struct ac_arg launch_size;
       struct ac_arg launch_size_addr;
       struct ac_arg launch_id;
       struct ac_arg dynamic_callable_stack_base;
-      struct ac_arg traversal_shader;
-      struct ac_arg next_shader;
+      struct ac_arg traversal_shader_addr;
+      struct ac_arg shader_addr;
       struct ac_arg shader_record;
       struct ac_arg payload_offset;
       struct ac_arg ray_origin;
@@ -174,6 +191,7 @@ struct ac_shader_args {
 void ac_add_arg(struct ac_shader_args *info, enum ac_arg_regfile regfile, unsigned registers,
                 enum ac_arg_type type, struct ac_arg *arg);
 void ac_add_return(struct ac_shader_args *info, enum ac_arg_regfile regfile);
+void ac_add_preserved(struct ac_shader_args *info, const struct ac_arg *arg);
 void ac_compact_ps_vgpr_args(struct ac_shader_args *info, uint32_t spi_ps_input);
 
 #endif

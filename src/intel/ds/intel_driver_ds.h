@@ -68,9 +68,11 @@ enum intel_ds_queue_stage {
    INTEL_DS_QUEUE_STAGE_QUEUE,
    INTEL_DS_QUEUE_STAGE_FRAME,
    INTEL_DS_QUEUE_STAGE_CMD_BUFFER,
-   INTEL_DS_QUEUE_STAGE_GENERATE_DRAWS,
+   INTEL_DS_QUEUE_STAGE_INTERNAL_OPS,
    INTEL_DS_QUEUE_STAGE_STALL,
    INTEL_DS_QUEUE_STAGE_COMPUTE,
+   INTEL_DS_QUEUE_STAGE_AS,
+   INTEL_DS_QUEUE_STAGE_RT,
    INTEL_DS_QUEUE_STAGE_RENDER_PASS,
    INTEL_DS_QUEUE_STAGE_BLORP,
    INTEL_DS_QUEUE_STAGE_DRAW,
@@ -111,6 +113,12 @@ struct intel_ds_device {
     * IntelRenderpassDataSource::Trace)
     */
    uint64_t event_id;
+
+   /* Tracepoint name perfetto identifiers for each of the events. */
+   uint64_t tracepoint_iids[64];
+
+   /* Protects submissions of u_trace data to trace_context */
+   simple_mtx_t trace_context_mutex;
 
    struct u_trace_context trace_context;
 
@@ -182,6 +190,13 @@ void intel_ds_flush_data_init(struct intel_ds_flush_data *data,
                               uint64_t submission_id);
 
 void intel_ds_flush_data_fini(struct intel_ds_flush_data *data);
+
+void intel_ds_queue_flush_data(struct intel_ds_queue *queue,
+                               struct u_trace *ut,
+                               struct intel_ds_flush_data *data,
+                               bool free_data);
+
+void intel_ds_device_process(struct intel_ds_device *device, bool eof);
 
 #ifdef HAVE_PERFETTO
 

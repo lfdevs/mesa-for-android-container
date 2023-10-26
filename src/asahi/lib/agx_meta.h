@@ -27,6 +27,7 @@ enum agx_meta_op {
 struct agx_meta_key {
    struct agx_tilebuffer_layout tib;
    enum agx_meta_op op[8];
+   unsigned reserved_preamble;
 };
 
 struct agx_meta_shader {

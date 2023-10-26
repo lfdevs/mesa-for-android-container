@@ -2,7 +2,7 @@
 
 set -ex
 
-ANGLE_REV="82f1cee01a9ea24960e8f23b24d348fccbe0aae0"
+ANGLE_REV="0518a3ff4d4e7e5b2ce8203358f719613a31c118"
 
 # DEPOT tools
 git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git

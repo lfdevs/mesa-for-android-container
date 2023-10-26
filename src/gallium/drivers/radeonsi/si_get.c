@@ -130,7 +130,6 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MEMOBJ:
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_SHADER_CLOCK:
    case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
@@ -161,6 +160,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT: /* TODO: remove if it's slow */
    case PIPE_CAP_NULL_TEXTURES:
+   case PIPE_CAP_HAS_CONST_BW:
       return 1;
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
@@ -485,7 +485,6 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
    case PIPE_SHADER_CAP_INTEGERS:
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR: /* lowered in finalize_nir */
    case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR: /* lowered in finalize_nir */
       return 1;
@@ -572,7 +571,8 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
    enum pipe_video_format codec = u_reduce_video_profile(profile);
    bool fully_supported_profile = ((profile >= PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE) &&
                                    (profile <= PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH)) ||
-                                  (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN);
+                                  (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN) ||
+                                  (profile == PIPE_VIDEO_PROFILE_AV1_MAIN);
 
    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
       if (!(sscreen->info.ip[AMD_IP_VCE].num_queues ||
@@ -748,6 +748,17 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
             return 1;
          else
             return 0;
+      case PIPE_VIDEO_CAP_EFC_SUPPORTED:
+         return ((sscreen->info.family >= CHIP_RENOIR) &&
+                 !(sscreen->debug_flags & DBG(NO_EFC)));
+
+      case PIPE_VIDEO_CAP_ENC_MAX_REFERENCES_PER_FRAME:
+         if (sscreen->info.vcn_ip_version >= VCN_3_0_0) {
+            int refPicList0 = 1;
+            int refPicList1 = codec == PIPE_VIDEO_FORMAT_MPEG4_AVC ? 1 : 0;
+            return refPicList0 | (refPicList1 << 16);
+         } else
+            return 1;
 
       default:
          return 0;
@@ -854,6 +865,7 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
          return PIPE_FORMAT_NV12;
 
    case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
+      return false;
    case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED: {
       enum pipe_video_format format = u_reduce_video_profile(profile);
 
@@ -898,6 +910,8 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
             return 0;
          }
       }
+   case PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP:
+      return true;
    default:
       return 0;
    }
@@ -1206,8 +1220,8 @@ static void si_init_renderer_string(struct si_screen *sscreen)
       snprintf(kernel_version, sizeof(kernel_version), ", %s", uname_data.release);
 
    snprintf(sscreen->renderer_string, sizeof(sscreen->renderer_string),
-            "%s (%sLLVM " MESA_LLVM_VERSION_STRING ", DRM %i.%i%s)", first_name, second_name,
-            sscreen->info.drm_major, sscreen->info.drm_minor, kernel_version);
+            "%s (radeonsi, %sLLVM " MESA_LLVM_VERSION_STRING ", DRM %i.%i%s)", first_name,
+            second_name, sscreen->info.drm_major, sscreen->info.drm_minor, kernel_version);
 }
 
 static int si_get_screen_fd(struct pipe_screen *screen)
@@ -1262,7 +1276,7 @@ void si_init_screen_get_functions(struct si_screen *sscreen)
       .lower_flrp32 = true,
       .lower_flrp64 = true,
       .lower_fdiv = true,
-      .lower_bitfield_insert_to_bitfield_select = true,
+      .lower_bitfield_insert = true,
       .lower_bitfield_extract = true,
       /*        |---------------------------------- Performance & Availability --------------------------------|
        *        |MAD/MAC/MADAK/MADMK|MAD_LEGACY|MAC_LEGACY|    FMA     |FMAC/FMAAK/FMAMK|FMA_LEGACY|PK_FMA_F16,|Best choice
@@ -1317,6 +1331,9 @@ void si_init_screen_get_functions(struct si_screen *sscreen)
       .has_sudot_4x8 = sscreen->info.has_accelerated_dot_product && sscreen->info.gfx_level >= GFX11,
       .has_udot_4x8 = sscreen->info.has_accelerated_dot_product,
       .has_dot_2x16 = sscreen->info.has_accelerated_dot_product && sscreen->info.gfx_level < GFX11,
+      .has_bfe = true,
+      .has_bfm = true,
+      .has_bitfield_select = true,
       .optimize_sample_mask_in = true,
       .max_unroll_iterations = 128,
       .max_unroll_iterations_aggressive = 128,

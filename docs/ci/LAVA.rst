@@ -9,6 +9,11 @@ of a new kernel during development), and our workloads can easily
 take down boards when mistakes are made (kernel oopses, OOMs that
 take out critical system services).
 
+Available LAVA labs
+-------------------
+- Collabora `[dashboard] <https://lava.collabora.dev/scheduler/device_types>`__ (without authentication only health check jobs are displayed)
+- Lima [dashboard not available]
+
 Mesa-LAVA software architecture
 -------------------------------
 

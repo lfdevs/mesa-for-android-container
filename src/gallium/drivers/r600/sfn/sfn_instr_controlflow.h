@@ -40,7 +40,6 @@ public:
       cf_loop_end,
       cf_loop_break,
       cf_loop_continue,
-      cf_stream_write,
       cf_wait_ack
    };
 
@@ -81,6 +80,8 @@ public:
 
    AluInstr *predicate() const { return m_predicate; }
    AluInstr *predicate() { return m_predicate; }
+
+   uint32_t slots() const override;
 
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;

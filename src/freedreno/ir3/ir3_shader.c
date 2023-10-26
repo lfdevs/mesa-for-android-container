@@ -298,13 +298,11 @@ alloc_variant(struct ir3_shader *shader, const struct ir3_shader_key *key,
 
    v->num_ssbos = info->num_ssbos;
    v->num_ibos = info->num_ssbos + info->num_images;
-   v->num_reserved_user_consts = shader->num_reserved_user_consts;
-   v->api_wavesize = shader->api_wavesize;
-   v->real_wavesize = shader->real_wavesize;
+   v->shader_options = shader->options;
 
    if (!v->binning_pass) {
       v->const_state = rzalloc_size(v, sizeof(*v->const_state));
-      v->const_state->shared_consts_enable = shader->shared_consts_enable;
+      v->const_state->push_consts_type = shader->options.push_consts_type;
    }
 
    return v;
@@ -578,7 +576,7 @@ trim_constlens(unsigned *constlens, unsigned first_stage, unsigned last_stage,
  * order to satisfy all shared constlen limits.
  */
 uint32_t
-ir3_trim_constlen(struct ir3_shader_variant **variants,
+ir3_trim_constlen(const struct ir3_shader_variant **variants,
                   const struct ir3_compiler *compiler)
 {
    unsigned constlens[MESA_SHADER_STAGES] = {};
@@ -589,7 +587,7 @@ ir3_trim_constlen(struct ir3_shader_variant **variants,
       if (variants[i]) {
          constlens[i] = variants[i]->constlen;
          shared_consts_enable =
-            ir3_const_state(variants[i])->shared_consts_enable;
+            ir3_const_state(variants[i])->push_consts_type == IR3_PUSH_CONSTS_SHARED;
       }
    }
 
@@ -641,10 +639,7 @@ ir3_shader_from_nir(struct ir3_compiler *compiler, nir_shader *nir,
    if (stream_output)
       memcpy(&shader->stream_output, stream_output,
              sizeof(shader->stream_output));
-   shader->num_reserved_user_consts = options->reserved_user_consts;
-   shader->api_wavesize = options->api_wavesize;
-   shader->real_wavesize = options->real_wavesize;
-   shader->shared_consts_enable = options->shared_consts_enable;
+   shader->options = *options;
    shader->nir = nir;
 
    ir3_disk_cache_init_shader_key(compiler, shader);
@@ -836,7 +831,7 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
               const_state->immediates[i * 4 + 3]);
    }
 
-   isa_decode(bin, so->info.sizedwords * 4, out,
+   isa_disasm(bin, so->info.sizedwords * 4, out,
               &(struct isa_decode_options){
                  .gpu_id = ir->compiler->gen * 100,
                  .show_errors = true,
@@ -872,9 +867,10 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
       so->info.cov_count, so->info.sizedwords);
 
    fprintf(out,
-           "; %s prog %d/%d: %u last-baryf, %d half, %d full, %u constlen\n",
+           "; %s prog %d/%d: %u last-baryf, %u last-helper, %d half, %d full, %u constlen\n",
            type, so->shader_id, so->id, so->info.last_baryf,
-           so->info.max_half_reg + 1, so->info.max_reg + 1, so->constlen);
+           so->info.last_helper, so->info.max_half_reg + 1,
+           so->info.max_reg + 1, so->constlen);
 
    fprintf(
       out,

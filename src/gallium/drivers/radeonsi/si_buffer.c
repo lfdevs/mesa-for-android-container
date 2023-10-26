@@ -130,9 +130,6 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
       res->flags |= RADEON_FLAG_DISCARDABLE;
    }
 
-   /* Set expected VRAM and GART usage for the buffer. */
-   res->memory_usage_kb = MAX2(1, size / 1024);
-
    if (res->domains & RADEON_DOMAIN_VRAM) {
       /* We don't want to evict buffers from VRAM by mapping them for CPU access,
        * because they might never be moved back again. If a buffer is large enough,
@@ -272,7 +269,6 @@ void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *d
    sdst->b.b.bind = ssrc->b.b.bind;
    sdst->flags = ssrc->flags;
 
-   assert(sdst->memory_usage_kb == ssrc->memory_usage_kb);
    assert(sdst->bo_size == ssrc->bo_size);
    assert(sdst->bo_alignment_log2 == ssrc->bo_alignment_log2);
    assert(sdst->domains == ssrc->domains);
@@ -633,7 +629,6 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
    }
 
    buf->gpu_address = ws->buffer_get_virtual_address(buf->buf);
-   buf->memory_usage_kb = templ->width0 / 1024;
    return &buf->b.b;
 }
 

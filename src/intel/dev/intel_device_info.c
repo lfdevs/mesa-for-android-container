@@ -1064,6 +1064,7 @@ static const struct intel_device_info intel_device_info_sg1 = {
    .has_64bit_int = false,                                      \
    .has_integer_dword_mul = false,                              \
    .gt = _gt, .num_slices = _slices, .l3_banks = _l3,           \
+   .num_subslices = dual_subslices(1), /* updated by topology */\
    .ver = 12,                                                   \
    .has_pln = false,                                            \
    .has_sample_with_hiz = false,                                \
@@ -1091,7 +1092,6 @@ static const struct intel_device_info intel_device_info_sg1 = {
    XEHP_FEATURES(0, 1, 0),                                      \
    .display_ver = 13,                                           \
    .revision = 4, /* For offline compiler */                    \
-   .num_subslices = dual_subslices(1),                          \
    .apply_hwconfig = true,                                      \
    .has_coarse_pixel_primitive_and_cb = true,                   \
    .has_mesh_shading = true,                                    \
@@ -1126,7 +1126,6 @@ static const struct intel_device_info intel_device_info_atsm_g11 = {
 #define MTL_FEATURES                                            \
    /* (Sub)slice info comes from the kernel topology info */    \
    XEHP_FEATURES(0, 1, 0),                                      \
-   .num_subslices = dual_subslices(1),                          \
    .has_local_mem = false,                                      \
    .has_aux_map = true,                                         \
    .apply_hwconfig = true,                                      \
@@ -1345,6 +1344,7 @@ intel_device_info_init_common(int pci_id,
       break;
    case 11:
    case 12:
+   case 20:
       devinfo->max_wm_threads = 128 /* threads-per-PSD */
                               * devinfo->num_slices
                               * 8; /* subslices per slice */
@@ -1383,10 +1383,10 @@ intel_device_info_apply_workarounds(struct intel_device_info *devinfo)
 
    /* Fixes issues with:
     * dEQP-GLES31.functional.geometry_shading.layered.render_with_default_layer_cubemap
-    * when running on ADL-N platform.
+    * when running on GFX12 platforms with small EU count.
     */
    const uint32_t eu_total = intel_device_info_eu_total(devinfo);
-   if (devinfo->platform == INTEL_PLATFORM_ADL && eu_total < 32)
+   if (devinfo->verx10 == 120 && eu_total <= 32)
       devinfo->urb.max_entries[MESA_SHADER_GEOMETRY] = 1024;
 }
 

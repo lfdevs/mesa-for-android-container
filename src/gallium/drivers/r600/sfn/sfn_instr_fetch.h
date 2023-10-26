@@ -81,8 +81,6 @@ public:
    }
    uint32_t src_offset() const { return m_src_offset; }
 
-   uint32_t resource_id() const __attribute__((deprecated)) { return resource_base(); }
-
    EVFetchType fetch_type() const { return m_fetch_type; }
    EVTXDataFormat data_format() const { return m_data_format; }
    void set_num_format(EVFetchNumFormat nf) { m_num_format = nf; }

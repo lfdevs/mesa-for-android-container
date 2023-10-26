@@ -3,6 +3,7 @@
 
 src/**/asahi/**/*
 src/**/panfrost/**/*
+src/gallium/drivers/i915
 src/amd/vulkan/**/*
 src/amd/compiler/**/*
 src/egl/**/*

@@ -1277,3 +1277,9 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
 spec@nv_shader_atomic_float@execution@ssbo-atomicexchange-float,Fail
 
 spec@arb_viewport_array@display-list,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_image,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_sampler,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_image,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_sampler,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_image,Fail
+spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_sampler,Fail

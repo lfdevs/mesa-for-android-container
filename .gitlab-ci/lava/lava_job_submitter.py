@@ -58,7 +58,7 @@ except ImportError as e:
 
 # Timeout in seconds to decide if the device from the dispatched LAVA job has
 # hung or not due to the lack of new log output.
-DEVICE_HANGING_TIMEOUT_SEC = int(getenv("LAVA_DEVICE_HANGING_TIMEOUT_SEC",  5*60))
+DEVICE_HANGING_TIMEOUT_SEC = int(getenv("DEVICE_HANGING_TIMEOUT_SEC",  5*60))
 
 # How many seconds the script should wait before try a new polling iteration to
 # check if the dispatched LAVA job is running or waiting in the job queue.

@@ -66,21 +66,21 @@ is_block_reachable(nir_function_impl* impl, nir_block* known_reachable, nir_bloc
 
 /* Check whether the given SSA def is only used by cross-lane instructions. */
 bool
-only_used_by_cross_lane_instrs(nir_ssa_def* ssa, bool follow_phis = true)
+only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
 {
    nir_foreach_use (src, ssa) {
-      switch (src->parent_instr->type) {
+      switch (nir_src_parent_instr(src)->type) {
       case nir_instr_type_alu: {
-         nir_alu_instr* alu = nir_instr_as_alu(src->parent_instr);
+         nir_alu_instr* alu = nir_instr_as_alu(nir_src_parent_instr(src));
          if (alu->op != nir_op_unpack_64_2x32_split_x && alu->op != nir_op_unpack_64_2x32_split_y)
             return false;
-         if (!only_used_by_cross_lane_instrs(&alu->dest.dest.ssa, follow_phis))
+         if (!only_used_by_cross_lane_instrs(&alu->def, follow_phis))
             return false;
 
          continue;
       }
       case nir_instr_type_intrinsic: {
-         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(src->parent_instr);
+         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
          if (intrin->intrinsic != nir_intrinsic_read_invocation &&
              intrin->intrinsic != nir_intrinsic_read_first_invocation &&
              intrin->intrinsic != nir_intrinsic_lane_permute_16_amd)
@@ -93,8 +93,8 @@ only_used_by_cross_lane_instrs(nir_ssa_def* ssa, bool follow_phis = true)
          if (!follow_phis)
             return false;
 
-         nir_phi_instr* phi = nir_instr_as_phi(src->parent_instr);
-         if (!only_used_by_cross_lane_instrs(&phi->dest.ssa, false))
+         nir_phi_instr* phi = nir_instr_as_phi(nir_src_parent_instr(src));
+         if (!only_used_by_cross_lane_instrs(&phi->def, false))
             return false;
 
          continue;
@@ -178,13 +178,13 @@ sanitize_cf_list(nir_function_impl* impl, struct exec_list* cf_list)
 }
 
 void
-apply_nuw_to_ssa(isel_context* ctx, nir_ssa_def* ssa)
+apply_nuw_to_ssa(isel_context* ctx, nir_def* ssa)
 {
-   nir_ssa_scalar scalar;
+   nir_scalar scalar;
    scalar.def = ssa;
    scalar.comp = 0;
 
-   if (!nir_ssa_scalar_is_alu(scalar) || nir_ssa_scalar_alu_op(scalar) != nir_op_iadd)
+   if (!nir_scalar_is_alu(scalar) || nir_scalar_alu_op(scalar) != nir_op_iadd)
       return;
 
    nir_alu_instr* add = nir_instr_as_alu(ssa->parent_instr);
@@ -192,11 +192,11 @@ apply_nuw_to_ssa(isel_context* ctx, nir_ssa_def* ssa)
    if (add->no_unsigned_wrap)
       return;
 
-   nir_ssa_scalar src0 = nir_ssa_scalar_chase_alu_src(scalar, 0);
-   nir_ssa_scalar src1 = nir_ssa_scalar_chase_alu_src(scalar, 1);
+   nir_scalar src0 = nir_scalar_chase_alu_src(scalar, 0);
+   nir_scalar src1 = nir_scalar_chase_alu_src(scalar, 1);
 
-   if (nir_ssa_scalar_is_const(src0)) {
-      nir_ssa_scalar tmp = src0;
+   if (nir_scalar_is_const(src0)) {
+      nir_scalar tmp = src0;
       src0 = src1;
       src1 = tmp;
    }
@@ -250,7 +250,7 @@ get_reg_class(isel_context* ctx, RegType type, unsigned components, unsigned bit
 }
 
 void
-setup_tcs_info(isel_context* ctx, nir_shader* nir, nir_shader* vs)
+setup_tcs_info(isel_context* ctx)
 {
    ctx->tcs_in_out_eq = ctx->program->info.vs.tcs_in_out_eq;
    ctx->tcs_temp_only_inputs = ctx->program->info.vs.tcs_temp_only_input_mask;
@@ -262,7 +262,7 @@ setup_lds_size(isel_context* ctx, nir_shader* nir)
    /* TCS and GFX9 GS are special cases, already in units of the allocation granule. */
    if (ctx->stage.has(SWStage::TCS))
       ctx->program->config->lds_size = ctx->program->info.tcs.num_lds_blocks;
-   else if (ctx->stage == vertex_geometry_gs || ctx->stage == tess_eval_geometry_gs)
+   else if (ctx->stage.hw == AC_HW_LEGACY_GEOMETRY_SHADER && ctx->options->gfx_level >= GFX9)
       ctx->program->config->lds_size = ctx->program->info.gfx9_gs_ring_lds_size;
    else
       ctx->program->config->lds_size =
@@ -340,8 +340,7 @@ init_context(isel_context* ctx, nir_shader* shader)
             switch (instr->type) {
             case nir_instr_type_alu: {
                nir_alu_instr* alu_instr = nir_instr_as_alu(instr);
-               RegType type =
-                  nir_dest_is_divergent(alu_instr->dest.dest) ? RegType::vgpr : RegType::sgpr;
+               RegType type = alu_instr->def.divergent ? RegType::vgpr : RegType::sgpr;
                switch (alu_instr->op) {
                case nir_op_fmul:
                case nir_op_fmulz:
@@ -435,7 +434,7 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_ishr:
                case nir_op_ushr:
                   /* packed 16bit instructions have to be VGPR */
-                  type = alu_instr->dest.dest.ssa.num_components == 2 ? RegType::vgpr : type;
+                  type = alu_instr->def.num_components == 2 ? RegType::vgpr : type;
                   FALLTHROUGH;
                default:
                   for (unsigned i = 0; i < nir_op_infos[alu_instr->op].num_inputs; i++) {
@@ -445,9 +444,9 @@ init_context(isel_context* ctx, nir_shader* shader)
                   break;
                }
 
-               RegClass rc = get_reg_class(ctx, type, alu_instr->dest.dest.ssa.num_components,
-                                           alu_instr->dest.dest.ssa.bit_size);
-               regclasses[alu_instr->dest.dest.ssa.index] = rc;
+               RegClass rc =
+                  get_reg_class(ctx, type, alu_instr->def.num_components, alu_instr->def.bit_size);
+               regclasses[alu_instr->def.index] = rc;
                break;
             }
             case nir_instr_type_load_const: {
@@ -462,8 +461,8 @@ init_context(isel_context* ctx, nir_shader* shader)
                if (!nir_intrinsic_infos[intrinsic->intrinsic].has_dest)
                   break;
                if (intrinsic->intrinsic == nir_intrinsic_strict_wqm_coord_amd) {
-                  regclasses[intrinsic->dest.ssa.index] =
-                     RegClass::get(RegType::vgpr, intrinsic->dest.ssa.num_components * 4 +
+                  regclasses[intrinsic->def.index] =
+                     RegClass::get(RegType::vgpr, intrinsic->def.num_components * 4 +
                                                      nir_intrinsic_base(intrinsic))
                         .as_linear();
                   break;
@@ -536,14 +535,15 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_bvh64_intersect_ray_amd:
                case nir_intrinsic_load_vector_arg_amd:
                case nir_intrinsic_load_rt_dynamic_callable_stack_base_amd:
-               case nir_intrinsic_ordered_xfb_counter_add_amd: type = RegType::vgpr; break;
+               case nir_intrinsic_ordered_xfb_counter_add_amd:
+               case nir_intrinsic_cmat_muladd_amd: type = RegType::vgpr; break;
                case nir_intrinsic_load_shared:
                case nir_intrinsic_load_shared2_amd:
                   /* When the result of these loads is only used by cross-lane instructions,
                    * it is beneficial to use a VGPR destination. This is because this allows
                    * to put the s_waitcnt further down, which decreases latency.
                    */
-                  if (only_used_by_cross_lane_instrs(&intrinsic->dest.ssa)) {
+                  if (only_used_by_cross_lane_instrs(&intrinsic->def)) {
                      type = RegType::vgpr;
                      break;
                   }
@@ -561,7 +561,7 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_ubo:
                case nir_intrinsic_load_ssbo:
                case nir_intrinsic_load_global_amd:
-                  type = nir_dest_is_divergent(intrinsic->dest) ? RegType::vgpr : RegType::sgpr;
+                  type = intrinsic->def.divergent ? RegType::vgpr : RegType::sgpr;
                   break;
                case nir_intrinsic_load_view_index:
                   type = ctx->stage == fragment_fs ? RegType::vgpr : RegType::sgpr;
@@ -574,39 +574,38 @@ init_context(isel_context* ctx, nir_shader* shader)
                   }
                   break;
                }
-               RegClass rc = get_reg_class(ctx, type, intrinsic->dest.ssa.num_components,
-                                           intrinsic->dest.ssa.bit_size);
-               regclasses[intrinsic->dest.ssa.index] = rc;
+               RegClass rc =
+                  get_reg_class(ctx, type, intrinsic->def.num_components, intrinsic->def.bit_size);
+               regclasses[intrinsic->def.index] = rc;
                break;
             }
             case nir_instr_type_tex: {
                nir_tex_instr* tex = nir_instr_as_tex(instr);
-               RegType type = nir_dest_is_divergent(tex->dest) ? RegType::vgpr : RegType::sgpr;
+               RegType type = tex->def.divergent ? RegType::vgpr : RegType::sgpr;
 
                if (tex->op == nir_texop_texture_samples) {
-                  assert(!tex->dest.ssa.divergent);
+                  assert(!tex->def.divergent);
                }
 
-               RegClass rc =
-                  get_reg_class(ctx, type, tex->dest.ssa.num_components, tex->dest.ssa.bit_size);
-               regclasses[tex->dest.ssa.index] = rc;
+               RegClass rc = get_reg_class(ctx, type, tex->def.num_components, tex->def.bit_size);
+               regclasses[tex->def.index] = rc;
                break;
             }
-            case nir_instr_type_ssa_undef: {
-               unsigned num_components = nir_instr_as_ssa_undef(instr)->def.num_components;
-               unsigned bit_size = nir_instr_as_ssa_undef(instr)->def.bit_size;
+            case nir_instr_type_undef: {
+               unsigned num_components = nir_instr_as_undef(instr)->def.num_components;
+               unsigned bit_size = nir_instr_as_undef(instr)->def.bit_size;
                RegClass rc = get_reg_class(ctx, RegType::sgpr, num_components, bit_size);
-               regclasses[nir_instr_as_ssa_undef(instr)->def.index] = rc;
+               regclasses[nir_instr_as_undef(instr)->def.index] = rc;
                break;
             }
             case nir_instr_type_phi: {
                nir_phi_instr* phi = nir_instr_as_phi(instr);
                RegType type = RegType::sgpr;
-               unsigned num_components = phi->dest.ssa.num_components;
-               assert((phi->dest.ssa.bit_size != 1 || num_components == 1) &&
+               unsigned num_components = phi->def.num_components;
+               assert((phi->def.bit_size != 1 || num_components == 1) &&
                       "Multiple components not supported on boolean phis.");
 
-               if (nir_dest_is_divergent(phi->dest)) {
+               if (phi->def.divergent) {
                   type = RegType::vgpr;
                } else {
                   nir_foreach_phi_src (src, phi) {
@@ -615,10 +614,10 @@ init_context(isel_context* ctx, nir_shader* shader)
                   }
                }
 
-               RegClass rc = get_reg_class(ctx, type, num_components, phi->dest.ssa.bit_size);
-               if (rc != regclasses[phi->dest.ssa.index])
+               RegClass rc = get_reg_class(ctx, type, num_components, phi->def.bit_size);
+               if (rc != regclasses[phi->def.index])
                   done = false;
-               regclasses[phi->dest.ssa.index] = rc;
+               regclasses[phi->def.index] = rc;
                break;
             }
             default: break;
@@ -627,8 +626,8 @@ init_context(isel_context* ctx, nir_shader* shader)
       }
    }
 
-   ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input;
-   ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input;
+   ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input_ena;
+   ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input_addr;
 
    ctx->cf_info.nir_to_aco = std::move(nir_to_aco);
 
@@ -651,9 +650,8 @@ isel_context
 setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* const* shaders,
                    ac_shader_config* config, const struct aco_compiler_options* options,
                    const struct aco_shader_info* info, const struct ac_shader_args* args,
-                   bool is_ps_epilog)
+                   SWStage sw_stage)
 {
-   SWStage sw_stage = SWStage::None;
    for (unsigned i = 0; i < shader_count; i++) {
       switch (shaders[i]->info.stage) {
       case MESA_SHADER_VERTEX: sw_stage = sw_stage | SWStage::VS; break;
@@ -675,11 +673,6 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
       }
    }
 
-   if (is_ps_epilog) {
-      assert(shader_count == 0 && !shaders);
-      sw_stage = SWStage::FS;
-   }
-
    init_program(program, Stage{info->hw_stage, sw_stage}, info, options->gfx_level, options->family,
                 options->wgp_mode, config);
 
@@ -696,10 +689,7 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
    ASSERTED bool mesh_shading = ctx.stage.has(SWStage::TS) || ctx.stage.has(SWStage::MS);
    assert(!mesh_shading || ctx.program->gfx_level >= GFX10_3);
 
-   if (ctx.stage == tess_control_hs)
-      setup_tcs_info(&ctx, shaders[0], NULL);
-   else if (ctx.stage == vertex_tess_control_hs)
-      setup_tcs_info(&ctx, shaders[1], shaders[0]);
+   setup_tcs_info(&ctx);
 
    calc_min_waves(program);
 

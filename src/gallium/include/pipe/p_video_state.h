@@ -186,6 +186,7 @@ struct pipe_picture_desc
    uint8_t *decrypt_key;
    uint32_t key_size;
    enum pipe_format input_format;
+   bool input_full_range;
    enum pipe_format output_format;
    /* A fence used on PIPE_VIDEO_ENTRYPOINT_DECODE/PROCESSING to signal job completion */
    struct pipe_fence_handle **fence;
@@ -511,12 +512,23 @@ struct pipe_h264_enc_seq_param
    struct {
       uint32_t aspect_ratio_info_present_flag: 1;
       uint32_t timing_info_present_flag: 1;
+      uint32_t video_signal_type_present_flag: 1;
+      uint32_t colour_description_present_flag: 1;
+      uint32_t chroma_loc_info_present_flag: 1;
    } vui_flags;
    uint32_t aspect_ratio_idc;
    uint32_t sar_width;
    uint32_t sar_height;
    uint32_t num_units_in_tick;
    uint32_t time_scale;
+   uint32_t video_format;
+   uint32_t video_full_range_flag;
+   uint32_t colour_primaries;
+   uint32_t transfer_characteristics;
+   uint32_t matrix_coefficients;
+   uint32_t chroma_sample_loc_type_top_field;
+   uint32_t chroma_sample_loc_type_bottom_field;
+   uint32_t max_num_reorder_frames;
 };
 
 struct pipe_h264_enc_picture_desc
@@ -595,12 +607,22 @@ struct pipe_h265_enc_seq_param
    struct {
       uint32_t aspect_ratio_info_present_flag: 1;
       uint32_t timing_info_present_flag: 1;
+      uint32_t video_signal_type_present_flag: 1;
+      uint32_t colour_description_present_flag: 1;
+      uint32_t chroma_loc_info_present_flag: 1;
    } vui_flags;
    uint32_t aspect_ratio_idc;
    uint32_t sar_width;
    uint32_t sar_height;
    uint32_t num_units_in_tick;
    uint32_t time_scale;
+   uint32_t video_format;
+   uint32_t video_full_range_flag;
+   uint32_t colour_primaries;
+   uint32_t transfer_characteristics;
+   uint32_t matrix_coefficients;
+   uint32_t chroma_sample_loc_type_top_field;
+   uint32_t chroma_sample_loc_type_bottom_field;
 };
 
 struct pipe_h265_enc_pic_param
@@ -1362,6 +1384,7 @@ struct pipe_av1_picture_desc
       uint16_t slice_data_row[256];
       uint16_t slice_data_col[256];
       uint8_t slice_data_anchor_frame_idx[256];
+      uint16_t slice_count;
    } slice_parameter;
 };
 

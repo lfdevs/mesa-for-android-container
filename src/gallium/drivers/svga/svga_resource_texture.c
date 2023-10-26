@@ -43,6 +43,7 @@
 #include "svga_resource_texture.h"
 #include "svga_resource_buffer.h"
 #include "svga_sampler_view.h"
+#include "svga_surface.h"
 #include "svga_winsys.h"
 #include "svga_debug.h"
 
@@ -1347,6 +1348,51 @@ svga_texture_transfer_map_can_upload(const struct svga_screen *svgascreen,
 
 
 /**
+ *  Return TRUE if the same texture is bound to the specified
+ *  surface view and a backing resource is created for the surface view.
+ */
+static bool
+need_update_texture_resource(struct pipe_surface *surf,
+		             struct svga_texture *tex)
+{
+   struct svga_texture *stex = svga_texture(surf->texture);
+   struct svga_surface *s = svga_surface(surf);
+
+   return (stex == tex && s->handle != tex->handle);
+}
+
+
+/**
+ *  Make sure the texture resource is up-to-date. If the texture is
+ *  currently bound to a render target view and a backing resource is
+ *  created, we will need to update the original resource with the
+ *  changes in the backing resource.
+ */
+static void
+svga_validate_texture_resource(struct svga_context *svga,
+		               struct svga_texture *tex)
+{
+   if (svga_was_texture_rendered_to(tex) == false)
+      return;
+
+   if ((svga->state.hw_draw.has_backed_views == false) ||
+       (tex->backed_handle == NULL))
+      return;
+
+   struct pipe_surface *s;
+   for (unsigned i = 0; i < svga->state.hw_clear.num_rendertargets; i++) {
+      s = svga->state.hw_clear.rtv[i];
+      if (s && need_update_texture_resource(s, tex))
+         svga_propagate_surface(svga, s, true);
+   }
+
+   s = svga->state.hw_clear.dsv;
+   if (s && need_update_texture_resource(s, tex))
+      svga_propagate_surface(svga, s, true);
+}
+
+
+/**
  * Use upload buffer for the transfer map request.
  */
 void *
@@ -1355,12 +1401,21 @@ svga_texture_transfer_map_upload(struct svga_context *svga,
 {
    struct pipe_resource *texture = st->base.resource;
    struct pipe_resource *tex_buffer = NULL;
+   struct svga_texture *tex = svga_texture(texture);
    void *tex_map;
    unsigned nblocksx, nblocksy;
    unsigned offset;
    unsigned upload_size;
 
    assert(svga->tex_upload);
+
+   /* Validate the texture resource in case there is any changes
+    * in the backing resource that needs to be updated to the original
+    * texture resource first before the transfer upload occurs, otherwise,
+    * the later update from backing resource to original will overwrite the
+    * changes in this transfer map update.
+    */
+   svga_validate_texture_resource(svga, tex);
 
    st->upload.box.x = st->base.box.x;
    st->upload.box.y = st->base.box.y;
@@ -1407,7 +1462,6 @@ svga_texture_transfer_map_upload(struct svga_context *svga,
 
 #ifdef DEBUG
    if (util_format_is_compressed(texture->format)) {
-      struct svga_texture *tex = svga_texture(texture);
       unsigned blockw, blockh, bytesPerBlock;
 
       svga_format_size(tex->key.format, &blockw, &blockh, &bytesPerBlock);

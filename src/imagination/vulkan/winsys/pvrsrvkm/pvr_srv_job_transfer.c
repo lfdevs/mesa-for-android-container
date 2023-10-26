@@ -169,16 +169,16 @@ pvr_srv_transfer_cmd_stream_load(struct rogue_fwif_cmd_transfer *const cmd,
    stream_ptr += pvr_cmd_length(CR_USC_PIXEL_OUTPUT_CTRL);
 
    regs->usc_clear_register0 = *stream_ptr;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER0);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    regs->usc_clear_register1 = *stream_ptr;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER1);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    regs->usc_clear_register2 = *stream_ptr;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER2);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    regs->usc_clear_register3 = *stream_ptr;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER3);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    regs->isp_mtile_size = *stream_ptr;
    stream_ptr += pvr_cmd_length(CR_ISP_MTILE_SIZE);

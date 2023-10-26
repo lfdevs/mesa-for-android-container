@@ -70,6 +70,7 @@
 #include "vk_physical_device.h"
 #include "vk_queue.h"
 #include "vk_sync.h"
+#include "vulkan/util/vk_enum_to_str.h"
 #include "wsi_common.h"
 
 #ifdef HAVE_VALGRIND
@@ -96,18 +97,14 @@ struct pvr_physical_device {
    /* Back-pointer to instance */
    struct pvr_instance *instance;
 
-   char *name;
    char *render_path;
    char *display_path;
 
    struct pvr_winsys *ws;
    struct pvr_device_info dev_info;
-
    struct pvr_device_runtime_info dev_runtime_info;
 
    VkPhysicalDeviceMemoryProperties memory;
-
-   uint8_t pipeline_cache_uuid[VK_UUID_SIZE];
 
    struct wsi_device wsi_device;
 
@@ -459,7 +456,11 @@ struct pvr_sub_cmd_gfx {
    bool modifies_depth;
    bool modifies_stencil;
 
+   /* Store the render to a scratch buffer. */
    bool barrier_store;
+   /* Load the render (stored with a `barrier_store`) as a background to the
+    * current render.
+    */
    bool barrier_load;
 
    const struct pvr_query_pool *query_pool;
@@ -827,12 +828,6 @@ struct pvr_cmd_buffer {
    struct list_head sub_cmds;
 };
 
-struct pvr_pipeline_cache {
-   struct vk_object_base base;
-
-   struct pvr_device *device;
-};
-
 struct pvr_stage_allocation_descriptor_state {
    struct pvr_pds_upload pds_code;
    /* Since we upload the code segment separately from the data segment
@@ -997,6 +992,7 @@ struct pvr_private_compute_pipeline {
    uint32_t pds_data_size_dw;
    uint32_t pds_temps_used;
    uint32_t coeff_regs_count;
+   uint32_t unified_store_regs_count;
    VkExtent3D workgroup_size;
 
    /* Used by pvr_compute_update_shared_private(). */
@@ -1210,7 +1206,8 @@ CHECK_MASK_SIZE(pvr_load_op,
 #undef CHECK_MASK_SIZE
 
 uint32_t pvr_calc_fscommon_size_and_tiles_in_flight(
-   const struct pvr_physical_device *pdevice,
+   const struct pvr_device_info *dev_info,
+   const struct pvr_device_runtime_info *dev_runtime_info,
    uint32_t fs_common_size,
    uint32_t min_tiles_in_flight);
 
@@ -1477,10 +1474,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_device_memory,
                                VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)
 VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_image, vk.base, VkImage, VK_OBJECT_TYPE_IMAGE)
-VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_pipeline_cache,
-                               base,
-                               VkPipelineCache,
-                               VK_OBJECT_TYPE_PIPELINE_CACHE)
 VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_buffer,
                                vk.base,
                                VkBuffer,
@@ -1507,7 +1500,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_descriptor_pool,
                                VkDescriptorPool,
                                VK_OBJECT_TYPE_DESCRIPTOR_POOL)
 VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_sampler,
-                               base,
+                               vk.base,
                                VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
 VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_pipeline_layout,
@@ -1546,8 +1539,14 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_render_pass,
  *    sType and pNext members) any chained structures with sType values not
  *    defined by extensions supported by that component.
  */
-#define pvr_debug_ignored_stype(sType) \
-   mesa_logd("%s: ignored VkStructureType %u\n", __func__, (sType))
+#define pvr_debug_ignored_stype(sType)                  \
+   do {                                                 \
+      const VkStructureType _type = (sType);            \
+      mesa_logd("%s: ignored VkStructureType %s(%u)\n", \
+                __func__,                               \
+                vk_StructureType_to_str(_type),         \
+                _type);                                 \
+   } while (0)
 
 #define PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer)                  \
    do {                                                                      \

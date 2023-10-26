@@ -18,6 +18,7 @@ STABLE_EPHEMERAL=" \
 apt-get update
 
 apt-get install -y --no-remove \
+        $EXTRA_LOCAL_PACKAGES \
         $STABLE_EPHEMERAL \
         apt-utils \
         bison \
@@ -57,7 +58,6 @@ apt-get install -y --no-remove \
         libxxf86vm-dev \
         libwayland-egl-backend-dev \
         make \
-        meson \
         ninja-build \
         openssh-server \
         pkgconf \
@@ -78,6 +78,9 @@ apt-get install -y --no-remove \
 
 # Needed for ci-fairy, this revision is able to upload files to S3
 pip3 install --break-system-packages git+http://gitlab.freedesktop.org/freedesktop/ci-templates@ffe4d1b10aab7534489f0c4bbc4c5899df17d3f2
+
+# We need at least 1.2 for Rust's `debug_assertions`
+pip3 install --break-system-packages meson==1.2.0
 
 . .gitlab-ci/container/build-rust.sh
 

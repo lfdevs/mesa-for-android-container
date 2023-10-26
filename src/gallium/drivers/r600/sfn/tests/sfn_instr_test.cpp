@@ -401,7 +401,7 @@ TEST_F(InstrTest, test_alu_write_no_dest)
 TEST_F(InstrTest, test_tex_basic)
 {
    TexInstr tex(
-      TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, 17);
+      TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 17, nullptr, 1);
 
    EXPECT_EQ(tex.opcode(), TexInstr::sample);
 
@@ -414,8 +414,8 @@ TEST_F(InstrTest, test_tex_basic)
       EXPECT_EQ(tex.dest_swizzle(i), i);
    }
 
-   EXPECT_EQ(tex.resource_base(), 1);
    EXPECT_EQ(tex.resource_id(), 17);
+   EXPECT_EQ(tex.sampler_id(), 1);
 
    EXPECT_TRUE(tex.end_group());
 
@@ -474,7 +474,7 @@ TEST_F(InstrTest, test_tex_basic)
 TEST_F(InstrTest, test_tex_gather4)
 {
    TexInstr tex(
-      TexInstr::gather4, RegisterVec4(131), {0, 1, 2, 3}, RegisterVec4(132), 2, 19);
+      TexInstr::gather4, RegisterVec4(131), {0, 1, 2, 3}, RegisterVec4(132), 2, nullptr, 19);
 
    EXPECT_EQ(tex.opcode(), TexInstr::gather4);
 
@@ -487,8 +487,8 @@ TEST_F(InstrTest, test_tex_gather4)
       EXPECT_EQ(tex.dest_swizzle(i), i);
    }
 
-   EXPECT_EQ(tex.resource_base(), 2);
-   EXPECT_EQ(tex.resource_id(), 19);
+   EXPECT_EQ(tex.resource_id(), 2);
+   EXPECT_EQ(tex.sampler_id(), 19);
 
    for (int i = 0; i < 3; ++i)
       EXPECT_EQ(tex.get_offset(i), 0);
@@ -505,38 +505,38 @@ TEST_F(InstrTest, test_tex_gather4)
 TEST_F(InstrTest, test_tex_neq)
 {
    TexInstr tex_ref(
-      TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, 17);
+      TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 17);
    EXPECT_EQ(tex_ref, tex_ref);
 
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample_c, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample_c, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(130), {0, 1, 2, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(130), {0, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(130), {0, 1, 2, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(130), {0, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 17));
 
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {7, 1, 2, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(129), {7, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {0, 7, 2, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(129), {0, 7, 2, 3}, RegisterVec4(130), 1, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {0, 1, 7, 3}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(129), {0, 1, 7, 3}, RegisterVec4(130), 1, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 7}, RegisterVec4(130), 1, 17));
+         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 7}, RegisterVec4(130), 1, nullptr, 17));
 
    EXPECT_NE(tex_ref,
              TexInstr(TexInstr::sample,
@@ -544,6 +544,7 @@ TEST_F(InstrTest, test_tex_neq)
                       {0, 1, 2, 3},
                       RegisterVec4(130, false, {7, 1, 2, 3}),
                       1,
+                      nullptr,
                       17));
    EXPECT_NE(tex_ref,
              TexInstr(TexInstr::sample,
@@ -551,6 +552,7 @@ TEST_F(InstrTest, test_tex_neq)
                       {0, 1, 2, 3},
                       RegisterVec4(130, false, {0, 7, 2, 3}),
                       1,
+                      nullptr,
                       17));
    EXPECT_NE(tex_ref,
              TexInstr(TexInstr::sample,
@@ -558,6 +560,7 @@ TEST_F(InstrTest, test_tex_neq)
                       {0, 1, 2, 3},
                       RegisterVec4(130, false, {0, 1, 7, 3}),
                       1,
+                      nullptr,
                       17));
    EXPECT_NE(tex_ref,
              TexInstr(TexInstr::sample,
@@ -565,16 +568,17 @@ TEST_F(InstrTest, test_tex_neq)
                       {0, 1, 2, 3},
                       RegisterVec4(130, false, {0, 1, 2, 7}),
                       1,
+                      nullptr,
                       17));
 
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 2, 17));
+         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 2, nullptr, 17));
    EXPECT_NE(
       tex_ref,
       TexInstr(
-         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, 18));
+         TexInstr::sample, RegisterVec4(129), {0, 1, 2, 3}, RegisterVec4(130), 1, nullptr, 18));
 
    /*
    auto tex_with_sampler_offset = tex_ref;
@@ -672,7 +676,7 @@ TEST_F(InstrTest, test_fetch_basic)
    EXPECT_EQ(fetch.src(), Register(201, 2, pin_none));
    EXPECT_EQ(fetch.src_offset(), 0);
 
-   EXPECT_EQ(fetch.resource_base(), 1);
+   EXPECT_EQ(fetch.resource_id(), 1);
    EXPECT_FALSE(fetch.resource_offset());
 
    EXPECT_EQ(fetch.fetch_type(), vertex_data);
@@ -879,7 +883,7 @@ TEST_F(InstrTest, test_fetch_basic2)
    EXPECT_EQ(fetch.src(), Register(202, 3, pin_none));
    EXPECT_EQ(fetch.src_offset(), 1);
 
-   EXPECT_EQ(fetch.resource_base(), 3);
+   EXPECT_EQ(fetch.resource_id(), 3);
    EXPECT_EQ(*fetch.resource_offset(), Register(300, 1, pin_none));
 
    EXPECT_EQ(fetch.fetch_type(), no_index_offset);

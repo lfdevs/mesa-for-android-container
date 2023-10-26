@@ -434,7 +434,7 @@ extern "C" fn cl_link_program(
     options: *const ::std::os::raw::c_char,
     num_input_programs: cl_uint,
     input_programs: *const cl_program,
-    pfn_notify: Option<ProgramCB>,
+    pfn_notify: Option<FuncProgramCB>,
     user_data: *mut ::std::os::raw::c_void,
     errcode_ret: *mut cl_int,
 ) -> cl_program {

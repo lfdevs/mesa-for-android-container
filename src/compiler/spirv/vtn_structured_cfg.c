@@ -1286,7 +1286,7 @@ vtn_emit_branch(struct vtn_builder *b, const struct vtn_block *block,
       /* Launches mesh shader workgroups from the task shader.
        * Arguments are: vec(x, y, z), payload pointer
        */
-      nir_ssa_def *dimensions =
+      nir_def *dimensions =
          nir_vec3(&b->nb, vtn_get_nir_ssa(b, w[1]),
                           vtn_get_nir_ssa(b, w[2]),
                           vtn_get_nir_ssa(b, w[3]));
@@ -1353,7 +1353,7 @@ vtn_emit_block(struct vtn_builder *b, struct vtn_block *block,
       struct vtn_successor *else_succ = &block->successors[1];
       struct vtn_construct *c = block->parent;
 
-      nir_ssa_def *cond = vtn_get_nir_ssa(b, block->branch[1]);
+      nir_def *cond = vtn_get_nir_ssa(b, block->branch[1]);
       if (then_succ->block == else_succ->block)
          cond = nir_imm_true(&b->nb);
 
@@ -1411,14 +1411,14 @@ vtn_emit_block(struct vtn_builder *b, struct vtn_block *block,
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 vtn_switch_case_condition(struct vtn_builder *b, struct vtn_construct *swtch,
-                          nir_ssa_def *sel, struct vtn_case *cse)
+                          nir_def *sel, struct vtn_case *cse)
 {
    vtn_assert(swtch->type == vtn_construct_type_switch);
 
    if (cse->is_default) {
-      nir_ssa_def *any = nir_imm_false(&b->nb);
+      nir_def *any = nir_imm_false(&b->nb);
 
       struct vtn_block *header = b->func->ordered_blocks[swtch->start_pos];
 
@@ -1434,7 +1434,7 @@ vtn_switch_case_condition(struct vtn_builder *b, struct vtn_construct *swtch,
 
       return nir_inot(&b->nb, any);
    } else {
-      nir_ssa_def *cond = nir_imm_false(&b->nb);
+      nir_def *cond = nir_imm_false(&b->nb);
       util_dynarray_foreach(&cse->values, uint64_t, val)
          cond = nir_ior(&b->nb, cond, nir_ieq_imm(&b->nb, sel, *val));
       return cond;
@@ -1703,8 +1703,8 @@ vtn_emit_cf_func_structured(struct vtn_builder *b, struct vtn_function *func,
             struct vtn_construct *swtch = next->parent;
             struct vtn_block *header = func->ordered_blocks[swtch->start_pos];
 
-            nir_ssa_def *sel = vtn_get_nir_ssa(b, header->branch[1]);
-            nir_ssa_def *case_condition =
+            nir_def *sel = vtn_get_nir_ssa(b, header->branch[1]);
+            nir_def *case_condition =
                vtn_switch_case_condition(b, swtch, sel, block->switch_case);
             if (next->fallthrough_var) {
                case_condition =

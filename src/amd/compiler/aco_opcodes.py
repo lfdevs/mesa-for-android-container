@@ -48,6 +48,7 @@ class InstrClass(Enum):
    VMem = 17
    Waitcnt = 18
    Other = 19
+   WMMA = 20
 
 class Format(Enum):
    PSEUDO = 0
@@ -160,7 +161,11 @@ class Format(Enum):
          return [('uint16_t', 'dpp_ctrl', None),
                  ('uint8_t', 'row_mask', '0xF'),
                  ('uint8_t', 'bank_mask', '0xF'),
-                 ('bool', 'bound_ctrl', 'true')]
+                 ('bool', 'bound_ctrl', 'true'),
+                 ('bool', 'fetch_inactive', 'true')]
+      elif self == Format.DPP8:
+         return [('uint32_t', 'lane_sel', 0),
+                 ('bool', 'fetch_inactive', 'true')]
       elif self == Format.VOP3P:
          return [('uint8_t', 'opsel_lo', None),
                  ('uint8_t', 'opsel_hi', None)]
@@ -192,6 +197,8 @@ class Format(Enum):
          for i in range(min(num_operands, 2)):
             res += 'instr->sel[{0}] = SubdwordSel(op{0}.op.bytes(), 0, false);'.format(i)
          res += 'instr->dst_sel = SubdwordSel(def0.bytes(), 0, false);\n'
+      elif self in [Format.DPP16, Format.DPP8]:
+         res += 'instr->fetch_inactive &= program->gfx_level >= GFX10;\n'
       return res
 
 
@@ -328,26 +335,26 @@ opcode("p_reload")
 opcode("p_start_linear_vgpr")
 opcode("p_end_linear_vgpr")
 
-opcode("p_wqm")
+opcode("p_end_wqm")
 opcode("p_discard_if")
 opcode("p_demote_to_helper")
 opcode("p_is_helper")
 opcode("p_exit_early_if")
 
-# simulates proper bpermute behavior on GFX6
+# simulates proper bpermute behavior using v_readlane_b32
 # definitions: result VGPR, temp EXEC, clobbered VCC
 # operands: index, input data
-opcode("p_bpermute_gfx6")
+opcode("p_bpermute_readlane")
 
-# simulates proper bpermute behavior on GFX10
+# simulates proper wave64 bpermute behavior using shared vgprs (for GFX10/10.3)
 # definitions: result VGPR, temp EXEC, clobbered SCC
 # operands: index * 4, input data, same half (bool)
-opcode("p_bpermute_gfx10w64")
+opcode("p_bpermute_shared_vgpr")
 
-# simulates proper bpermute behavior on GFX11
+# simulates proper wave64 bpermute behavior using v_permlane64_b32 (for GFX11+)
 # definitions: result VGPR, temp EXEC, clobbered SCC
 # operands: linear VGPR, index * 4, input data, same half (bool)
-opcode("p_bpermute_gfx11w64")
+opcode("p_bpermute_permlane")
 
 # creates a lane mask where only the first active lane is selected
 opcode("p_elect")
@@ -374,6 +381,10 @@ opcode("p_interp_gfx11")
 
 # performs dual source MRTs swizzling and emits exports on GFX11
 opcode("p_dual_src_export_gfx11")
+
+# Let shader end with specific registers set to wanted value, used by multi part
+# shader to pass arguments to next part.
+opcode("p_end_with_regs")
 
 # SOP2 instructions: 2 scalar inputs, 1 scalar output (+optional scc)
 SOP2 = {
@@ -1041,6 +1052,12 @@ opcode("v_dot8_i32_iu4", -1, -1, -1, 0x18, Format.VOP3P, InstrClass.Valu32)
 opcode("v_dot8_u32_u4", -1, 0x2b, 0x19, 0x19, Format.VOP3P, InstrClass.Valu32)
 opcode("v_dot2_f32_f16", -1, 0x23, 0x13, 0x13, Format.VOP3P, InstrClass.Valu32)
 opcode("v_dot2_f32_bf16", -1, -1, -1, 0x1a, Format.VOP3P, InstrClass.Valu32)
+opcode("v_wmma_f32_16x16x16_f16", -1, -1, -1, 0x40, Format.VOP3P, InstrClass.WMMA, False, False)
+opcode("v_wmma_f32_16x16x16_bf16", -1, -1, -1, 0x41, Format.VOP3P, InstrClass.WMMA, False, False)
+opcode("v_wmma_f16_16x16x16_f16", -1, -1, -1, 0x42, Format.VOP3P, InstrClass.WMMA, False, False)
+opcode("v_wmma_bf16_16x16x16_bf16", -1, -1, -1, 0x43, Format.VOP3P, InstrClass.WMMA, False, False)
+opcode("v_wmma_i32_16x16x16_iu8", -1, -1, -1, 0x44, Format.VOP3P, InstrClass.WMMA, False, False)
+opcode("v_wmma_i32_16x16x16_iu4", -1, -1, -1, 0x45, Format.VOP3P, InstrClass.WMMA, False, False)
 
 
 # VINTRP (GFX6 - GFX10.3) instructions:
@@ -1064,7 +1081,7 @@ VINTERP = {
    (0x05, "v_interp_p2_rtz_f16_f32_inreg"),
 }
 for (code, name) in VINTERP:
-   opcode(name, -1, -1, -1, code, Format.VINTERP_INREG, InstrClass.Valu32)
+   opcode(name, -1, -1, -1, code, Format.VINTERP_INREG, InstrClass.Valu32, False, True)
 
 
 # VOP3 instructions: 3 inputs, 1 output

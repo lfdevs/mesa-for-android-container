@@ -211,7 +211,9 @@ ureg_load_tex(struct ureg_program *ureg, struct ureg_dst out,
       /* Nearest filtering floors and then converts to integer, and then
        * applies clamp to edge as clamp(coord, 0, dim - 1).
        * u_blitter only uses this when the coordinates are in bounds,
-       * so no clamping is needed.
+       * so no clamping is needed and we can use trunc instead of floor. trunc
+       * with f2i will get optimized out in NIR where f2i has round-to-zero
+       * behaviour already.
        */
       unsigned wrmask = tex_target == TGSI_TEXTURE_1D ||
                         tex_target == TGSI_TEXTURE_1D_ARRAY ? TGSI_WRITEMASK_X :
@@ -219,7 +221,7 @@ ureg_load_tex(struct ureg_program *ureg, struct ureg_dst out,
                                                         TGSI_WRITEMASK_XY;
 
       ureg_MOV(ureg, temp, coord);
-      ureg_FLR(ureg, ureg_writemask(temp, wrmask), ureg_src(temp));
+      ureg_TRUNC(ureg, ureg_writemask(temp, wrmask), ureg_src(temp));
       ureg_F2I(ureg, temp, ureg_src(temp));
 
       if (load_level_zero)

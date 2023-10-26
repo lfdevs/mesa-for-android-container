@@ -151,7 +151,7 @@ st_nir_make_clearcolor_shader(struct st_context *st)
    b.shader->num_uniforms = 1;
 
    /* Read clear color from constant buffer */
-   nir_ssa_def *clear_color = nir_load_uniform(&b, 4, 32, nir_imm_int(&b,0),
+   nir_def *clear_color = nir_load_uniform(&b, 4, 32, nir_imm_int(&b,0),
                                                .range = 16,
                                                .dest_type = nir_type_float32);
 

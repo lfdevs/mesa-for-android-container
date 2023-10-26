@@ -26,17 +26,16 @@ struct data {
  * which ones have been processed.
  */
 static unsigned
-insert_store(nir_builder *b, nir_ssa_def *reg, nir_alu_instr *vec,
+insert_store(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
              unsigned start_idx)
 {
    assert(start_idx < nir_op_infos[vec->op].num_inputs);
-   assert(vec->src[start_idx].src.is_ssa);
-   nir_ssa_def *src = vec->src[start_idx].src.ssa;
+   nir_def *src = vec->src[start_idx].src.ssa;
 
-   unsigned num_components = nir_dest_num_components(vec->dest.dest);
+   unsigned num_components = vec->def.num_components;
    assert(num_components == nir_op_infos[vec->op].num_inputs);
    unsigned write_mask = 0;
-   unsigned swiz[NIR_MAX_VEC_COMPONENTS] = {0};
+   unsigned swiz[NIR_MAX_VEC_COMPONENTS] = { 0 };
 
    for (unsigned i = start_idx; i < num_components; i++) {
       if (vec->src[i].src.ssa == src) {
@@ -46,7 +45,7 @@ insert_store(nir_builder *b, nir_ssa_def *reg, nir_alu_instr *vec,
    }
 
    /* No sense storing from undef, just return the write mask */
-   if (src->parent_instr->type == nir_instr_type_ssa_undef)
+   if (src->parent_instr->type == nir_instr_type_undef)
       return write_mask;
 
    b->cursor = nir_before_instr(&vec->instr);
@@ -70,20 +69,19 @@ has_replicated_dest(nir_alu_instr *alu)
  * can then call insert_mov as normal.
  */
 static unsigned
-try_coalesce(nir_builder *b, nir_ssa_def *reg, nir_alu_instr *vec,
+try_coalesce(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
              unsigned start_idx, struct data *data)
 {
    assert(start_idx < nir_op_infos[vec->op].num_inputs);
-   assert(vec->src[start_idx].src.is_ssa);
 
    /* If we are going to do a reswizzle, then the vecN operation must be the
     * only use of the source value.
     */
    nir_foreach_use_including_if(src, vec->src[start_idx].src.ssa) {
-      if (src->is_if)
+      if (nir_src_is_if(src))
          return 0;
 
-      if (src->parent_instr != &vec->instr)
+      if (nir_src_parent_instr(src) != &vec->instr)
          return 0;
    }
 
@@ -127,13 +125,13 @@ try_coalesce(nir_builder *b, nir_ssa_def *reg, nir_alu_instr *vec,
       for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
          swizzles[j][i] = src_alu->src[j].swizzle[i];
 
-   unsigned dest_components = nir_dest_num_components(vec->dest.dest);
+   unsigned dest_components = vec->def.num_components;
    assert(dest_components == nir_op_infos[vec->op].num_inputs);
 
    /* Generate the final write mask */
    nir_component_mask_t write_mask = 0;
    for (unsigned i = start_idx; i < dest_components; i++) {
-      if (vec->src[i].src.ssa != &src_alu->dest.dest.ssa)
+      if (vec->src[i].src.ssa != &src_alu->def)
          continue;
 
       write_mask |= BITFIELD_BIT(i);
@@ -167,24 +165,23 @@ try_coalesce(nir_builder *b, nir_ssa_def *reg, nir_alu_instr *vec,
 
       /* Clear the no longer needed vec source */
       if (valid)
-         nir_instr_rewrite_src(&vec->instr, &vec->src[i].src, NIR_SRC_INIT);
+         nir_instr_clear_src(&vec->instr, &vec->src[i].src);
    }
 
    /* We've cleared the only use of the destination */
-   assert(list_is_empty(&src_alu->dest.dest.ssa.uses));
+   assert(list_is_empty(&src_alu->def.uses));
 
    /* ... so we can replace it with the bigger destination accommodating the
     * whole vector that will be masked for the store.
     */
-   unsigned bit_size = nir_dest_bit_size(vec->dest.dest);
-   assert(bit_size == src_alu->dest.dest.ssa.bit_size);
-   nir_ssa_dest_init(&src_alu->instr, &src_alu->dest.dest,
-                     dest_components, bit_size);
-   src_alu->dest.write_mask = nir_component_mask(dest_components);
+   unsigned bit_size = vec->def.bit_size;
+   assert(bit_size == src_alu->def.bit_size);
+   nir_def_init(&src_alu->instr, &src_alu->def, dest_components,
+                bit_size);
 
    /* Then we can store that ALU result directly into the register */
    b->cursor = nir_after_instr(&src_alu->instr);
-   nir_build_store_reg(b, &src_alu->dest.dest.ssa,
+   nir_build_store_reg(b, &src_alu->def,
                        reg, .write_mask = write_mask);
 
    return write_mask;
@@ -198,11 +195,10 @@ lower(nir_builder *b, nir_instr *instr, void *data_)
       return false;
 
    nir_alu_instr *vec = nir_instr_as_alu(instr);
-   if (vec->op == nir_op_mov || !nir_op_is_vec(vec->op))
+   if (!nir_op_is_vec(vec->op))
       return false;
 
-   assert(vec->dest.dest.is_ssa);
-   unsigned num_components = nir_dest_num_components(vec->dest.dest);
+   unsigned num_components = vec->def.num_components;
 
    /* Special case: if all sources are the same, just swizzle instead to avoid
     * the extra copies from a register.
@@ -217,8 +213,8 @@ lower(nir_builder *b, nir_instr *instr, void *data_)
 
    if (need_reg) {
       /* We'll replace with a register. Declare one for the purpose. */
-      nir_ssa_def *reg = nir_decl_reg(b, num_components,
-                                      nir_dest_bit_size(vec->dest.dest), 0);
+      nir_def *reg = nir_decl_reg(b, num_components,
+                                  vec->def.bit_size, 0);
 
       unsigned finished_write_mask = 0;
       for (unsigned i = 0; i < num_components; i++) {
@@ -231,20 +227,19 @@ lower(nir_builder *b, nir_instr *instr, void *data_)
             finished_write_mask |= insert_store(b, reg, vec, i);
       }
 
-      nir_rewrite_uses_to_load_reg(b, &vec->dest.dest.ssa, reg);
+      nir_rewrite_uses_to_load_reg(b, &vec->def, reg);
    } else {
       /* Otherwise, we replace with a swizzle */
-      unsigned swiz[NIR_MAX_VEC_COMPONENTS] = {0};
+      unsigned swiz[NIR_MAX_VEC_COMPONENTS] = { 0 };
 
       for (unsigned i = 0; i < num_components; ++i) {
-         assert(vec->src[i].src.is_ssa);
          swiz[i] = vec->src[i].swizzle[0];
       }
 
       b->cursor = nir_before_instr(instr);
-      nir_ssa_def *swizzled = nir_swizzle(b, vec->src[0].src.ssa, swiz,
-                                          num_components);
-      nir_ssa_def_rewrite_uses(&vec->dest.dest.ssa, swizzled);
+      nir_def *swizzled = nir_swizzle(b, vec->src[0].src.ssa, swiz,
+                                      num_components);
+      nir_def_rewrite_uses(&vec->def, swizzled);
    }
 
    nir_instr_remove(&vec->instr);
@@ -263,5 +258,6 @@ nir_lower_vec_to_regs(nir_shader *shader, nir_instr_writemask_filter_cb cb,
 
    return nir_shader_instructions_pass(shader, lower,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance, &data);
+                                          nir_metadata_dominance,
+                                       &data);
 }

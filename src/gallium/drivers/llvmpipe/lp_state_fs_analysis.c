@@ -28,149 +28,9 @@
 
 #include "util/u_memory.h"
 #include "util/u_math.h"
-#include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_dump.h"
 #include "lp_debug.h"
 #include "lp_state.h"
 #include "nir.h"
-
-/*
- * Detect Aero minification shaders.
- *
- * Aero does not use texture mimaps when a window gets animated and its shaped
- * bended. Instead it uses the average of 4 nearby texels. This is the simplest
- * of such shader, but there are several variations:
- *
- *   FRAG
- *   DCL IN[0], GENERIC[1], PERSPECTIVE
- *   DCL IN[1], GENERIC[2], PERSPECTIVE
- *   DCL IN[2], GENERIC[3], PERSPECTIVE
- *   DCL OUT[0], COLOR
- *   DCL SAMP[0]
- *   DCL TEMP[0..3]
- *   IMM FLT32 {     0.2500,     0.0000,     0.0000,     0.0000 }
- *   MOV TEMP[0].x, IN[0].zzzz
- *   MOV TEMP[0].y, IN[0].wwww
- *   MOV TEMP[1].x, IN[1].zzzz
- *   MOV TEMP[1].y, IN[1].wwww
- *   TEX TEMP[0], TEMP[0], SAMP[0], 2D
- *   TEX TEMP[2], IN[0], SAMP[0], 2D
- *   TEX TEMP[3], IN[1], SAMP[0], 2D
- *   TEX TEMP[1], TEMP[1], SAMP[0], 2D
- *   ADD TEMP[0], TEMP[0], TEMP[2]
- *   ADD TEMP[0], TEMP[3], TEMP[0]
- *   ADD TEMP[0], TEMP[1], TEMP[0]
- *   MUL TEMP[0], TEMP[0], IN[2]
- *   MUL TEMP[0], TEMP[0], IMM[0].xxxx
- *   MOV OUT[0], TEMP[0]
- *   END
- *
- * Texture coordinates are interleaved like the Gaussian blur shaders, but
- * unlike the later there isn't structure in the sub-pixel positioning of the
- * texels, other than being disposed in a diamond-like shape. For example,
- * these are the relative offsets of the texels relative to the average:
- *
- *    x offset   y offset
- *   --------------------
- *    0.691834   -0.21360
- *   -0.230230   -0.64160
- *   -0.692406    0.21356
- *    0.230802    0.64160
- *
- *  These shaders are typically used with linear min/mag filtering, but the
- *  linear filtering provides very little visual improvement compared to the
- *  performance impact it has. The ultimate purpose of detecting these shaders
- *  is to override with nearest texture filtering.
- */
-static inline bool
-match_aero_minification_shader(const struct tgsi_token *tokens,
-                               const struct lp_tgsi_info *info)
-{
-   struct tgsi_parse_context parse;
-   unsigned coord_mask;
-   bool has_quarter_imm;
-   unsigned index, chan;
-
-   if ((info->base.opcode_count[TGSI_OPCODE_TEX] != 4 &&
-        info->base.opcode_count[TGSI_OPCODE_SAMPLE] != 4) ||
-       info->num_texs != 4) {
-      return false;
-   }
-
-   /*
-    * Ensure the texture coordinates are interleaved as in the example above.
-    */
-
-   coord_mask = 0;
-   for (index = 0; index < 4; ++index) {
-      const struct lp_tgsi_texture_info *tex = &info->tex[index];
-      if (tex->sampler_unit != 0 ||
-          tex->texture_unit != 0 ||
-          tex->coord[0].file != TGSI_FILE_INPUT ||
-          tex->coord[1].file != TGSI_FILE_INPUT ||
-          tex->coord[0].u.index != tex->coord[1].u.index ||
-          (tex->coord[0].swizzle % 2) != 0 ||
-          tex->coord[1].swizzle != tex->coord[0].swizzle + 1) {
-         return false;
-      }
-
-      coord_mask |= 1 << (tex->coord[0].u.index*2 + tex->coord[0].swizzle/2);
-   }
-   if (coord_mask != 0xf) {
-      return false;
-   }
-
-   /*
-    * Ensure it has the 0.25 immediate.
-    */
-
-   has_quarter_imm = false;
-
-   tgsi_parse_init(&parse, tokens);
-
-   while (!tgsi_parse_end_of_tokens(&parse)) {
-      tgsi_parse_token(&parse);
-
-      switch (parse.FullToken.Token.Type) {
-      case TGSI_TOKEN_TYPE_DECLARATION:
-         break;
-
-      case TGSI_TOKEN_TYPE_INSTRUCTION:
-         goto finished;
-
-      case TGSI_TOKEN_TYPE_IMMEDIATE:
-         {
-            const unsigned size =
-                  parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
-            assert(size <= 4);
-            for (chan = 0; chan < size; ++chan) {
-               if (parse.FullToken.FullImmediate.u[chan].Float == 0.25f) {
-                  has_quarter_imm = true;
-                  goto finished;
-               }
-            }
-         }
-         break;
-
-      case TGSI_TOKEN_TYPE_PROPERTY:
-         break;
-
-      default:
-         assert(0);
-         goto finished;
-      }
-   }
-finished:
-
-   tgsi_parse_free(&parse);
-
-   if (!has_quarter_imm) {
-      return false;
-   }
-
-   return true;
-}
-
 
 /*
  * Check if the given nir_src comes directly from a FS input.
@@ -178,10 +38,6 @@ finished:
 static bool
 is_fs_input(const nir_src *src)
 {
-   if (!src->is_ssa) {
-      return false;
-   }
-
    const nir_instr *parent = src->ssa[0].parent_instr;
    if (!parent) {
       return false;
@@ -232,10 +88,6 @@ get_nir_input_info(const nir_alu_src *src,
                    unsigned *input_index,
                    int *input_component)
 {
-   if (!src->src.is_ssa) {
-      return false;
-   }
-
    // The parent instr should be a nir_intrinsic_load_deref.
    const nir_instr *parent = src->src.ssa[0].parent_instr;
    if (!parent || parent->type != nir_instr_type_intrinsic) {
@@ -243,8 +95,7 @@ get_nir_input_info(const nir_alu_src *src,
    }
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(parent);
    if (!intrin ||
-       intrin->intrinsic != nir_intrinsic_load_deref ||
-       !intrin->src[0].is_ssa) {
+       intrin->intrinsic != nir_intrinsic_load_deref) {
       return false;
    }
 
@@ -513,6 +364,14 @@ llvmpipe_nir_is_linear_compat(struct nir_shader *shader,
                               struct lp_tgsi_info *info)
 {
    int num_tex = info->num_texs;
+
+   if (util_bitcount64(shader->info.inputs_read) > LP_MAX_LINEAR_INPUTS)
+      return false;
+   
+   if (!shader->info.outputs_written || shader->info.fs.color_is_dual_source ||
+       (shader->info.outputs_written & ~BITFIELD64_BIT(FRAG_RESULT_DATA0)))
+      return false;
+
    info->num_texs = 0;
    nir_foreach_function_impl(impl, shader) {
       if (!llvmpipe_nir_fn_is_linear_compat(shader, impl, info))
@@ -530,11 +389,7 @@ llvmpipe_nir_is_linear_compat(struct nir_shader *shader,
 void
 llvmpipe_fs_analyse_nir(struct lp_fragment_shader *shader)
 {
-   if (shader->info.base.num_inputs <= LP_MAX_LINEAR_INPUTS &&
-       shader->info.base.num_outputs == 1 &&
-       shader->info.base.output_semantic_name[0] == TGSI_SEMANTIC_COLOR &&
-       shader->info.base.output_semantic_index[0] == 0 &&
-       !shader->info.indirect_textures &&
+   if (!shader->info.indirect_textures &&
        !shader->info.sampler_texture_units_different &&
        shader->info.num_texs <= LP_MAX_LINEAR_TEXTURES &&
        llvmpipe_nir_is_linear_compat(shader->base.ir.nir, &shader->info)) {
@@ -544,35 +399,3 @@ llvmpipe_fs_analyse_nir(struct lp_fragment_shader *shader)
    }
 }
 
-
-/*
- * Analyze the given TGSI fragment shader and set its shader->kind field
- * to LP_FS_KIND_x.
- */
-void
-llvmpipe_fs_analyse(struct lp_fragment_shader *shader,
-                    const struct tgsi_token *tokens)
-{
-   if (shader->info.base.num_inputs <= LP_MAX_LINEAR_INPUTS &&
-       shader->info.base.num_outputs == 1 &&
-       !shader->info.indirect_textures &&
-       !shader->info.sampler_texture_units_different &&
-       !shader->info.unclamped_immediates &&
-       shader->info.num_texs <= LP_MAX_LINEAR_TEXTURES &&
-       (shader->info.base.opcode_count[TGSI_OPCODE_TEX] +
-        shader->info.base.opcode_count[TGSI_OPCODE_SAMPLE] +
-        shader->info.base.opcode_count[TGSI_OPCODE_MOV] +
-        shader->info.base.opcode_count[TGSI_OPCODE_MUL] +
-        shader->info.base.opcode_count[TGSI_OPCODE_RET] +
-        shader->info.base.opcode_count[TGSI_OPCODE_END] ==
-        shader->info.base.num_instructions)) {
-      shader->kind = LP_FS_KIND_LLVM_LINEAR;
-   } else {
-      shader->kind = LP_FS_KIND_GENERAL;
-   }
-
-   if (shader->kind == LP_FS_KIND_GENERAL &&
-       match_aero_minification_shader(tokens, &shader->info)) {
-      shader->kind = LP_FS_KIND_AERO_MINIFICATION;
-   }
-}

@@ -126,7 +126,7 @@ kopper_init_screen(struct dri_screen *screen)
 
    bool success;
    if (screen->fd != -1)
-      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd);
+      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false);
    else
       success = pipe_loader_vk_probe_dri(&screen->dev, NULL);
 
@@ -191,11 +191,20 @@ get_dri_format(enum pipe_format pf)
    case PIPE_FORMAT_R16G16B16X16_FLOAT:
       image_format = __DRI_IMAGE_FORMAT_XBGR16161616F;
       break;
+   case PIPE_FORMAT_B5G6R5_UNORM:
+      image_format = __DRI_IMAGE_FORMAT_RGB565;
+      break;
    case PIPE_FORMAT_B5G5R5A1_UNORM:
       image_format = __DRI_IMAGE_FORMAT_ARGB1555;
       break;
-   case PIPE_FORMAT_B5G6R5_UNORM:
-      image_format = __DRI_IMAGE_FORMAT_RGB565;
+   case PIPE_FORMAT_R5G5B5A1_UNORM:
+      image_format = __DRI_IMAGE_FORMAT_ABGR1555;
+      break;
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+      image_format = __DRI_IMAGE_FORMAT_ARGB4444;
+      break;
+   case PIPE_FORMAT_R4G4B4A4_UNORM:
+      image_format = __DRI_IMAGE_FORMAT_ABGR4444;
       break;
    case PIPE_FORMAT_BGRX8888_UNORM:
       image_format = __DRI_IMAGE_FORMAT_XRGB8888;
@@ -253,6 +262,10 @@ image_format_to_fourcc(int format)
    case __DRI_IMAGE_FORMAT_ABGR2101010: return DRM_FORMAT_ABGR2101010;
    case __DRI_IMAGE_FORMAT_XBGR16161616F: return DRM_FORMAT_XBGR16161616F;
    case __DRI_IMAGE_FORMAT_ABGR16161616F: return DRM_FORMAT_ABGR16161616F;
+   case __DRI_IMAGE_FORMAT_ARGB1555: return DRM_FORMAT_ARGB1555;
+   case __DRI_IMAGE_FORMAT_ABGR1555: return DRM_FORMAT_ABGR1555;
+   case __DRI_IMAGE_FORMAT_ARGB4444: return DRM_FORMAT_ARGB4444;
+   case __DRI_IMAGE_FORMAT_ABGR4444: return DRM_FORMAT_ABGR4444;
    }
    return 0;
 }
@@ -395,7 +408,7 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
    struct dri_screen *screen = drawable->screen;
 
 #ifdef HAVE_DRI3_MODIFIERS
-   if (screen->has_modifiers) {
+   if (drawable->has_modifiers) {
       xcb_dri3_buffers_from_pixmap_cookie_t bps_cookie;
       xcb_dri3_buffers_from_pixmap_reply_t *bps_reply;
       xcb_generic_error_t *error;
@@ -554,8 +567,7 @@ XXX do this once swapinterval is hooked up
    /* pixmaps always have front buffers.
     * Exchange swaps also mandate fake front buffers.
     */
-   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
-       draw->swap_method == __DRI_ATTRIB_SWAP_EXCHANGE)
+   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW)
       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
 #endif
 
@@ -893,13 +905,15 @@ static __DRIdrawable *
 kopperCreateNewDrawable(__DRIscreen *psp,
                         const __DRIconfig *config,
                         void *data,
-                        int is_pixmap)
+                        __DRIkopperDrawableInfo *info)
 {
     assert(data != NULL);
 
     struct dri_screen *screen = dri_screen(psp);
     struct dri_drawable *drawable =
-       screen->create_drawable(screen, &config->modes, is_pixmap, data);
+       screen->create_drawable(screen, &config->modes, info->is_pixmap, data);
+   if (drawable)
+      drawable->has_modifiers = screen->has_modifiers && info->multiplanes_available;
 
     return opaque_dri_drawable(drawable);
 }

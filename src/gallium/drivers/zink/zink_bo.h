@@ -145,14 +145,15 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
 static ALWAYS_INLINE bool
 zink_bo_has_unflushed_usage(const struct zink_bo *bo)
 {
-   return (zink_batch_usage_is_unflushed(bo->reads.u) && bo->reads.submit_count == bo->reads.u->submit_count) ||
-          (zink_batch_usage_is_unflushed(bo->writes.u) && bo->writes.submit_count == bo->writes.u->submit_count);
+   return zink_batch_usage_is_unflushed(bo->reads.u) ||
+          zink_batch_usage_is_unflushed(bo->writes.u);
 }
 
 static ALWAYS_INLINE bool
 zink_bo_has_usage(const struct zink_bo *bo)
 {
-   return (zink_batch_usage_exists(bo->reads.u) && bo->reads.submit_count == bo->reads.u->submit_count) ||
+   return zink_bo_has_unflushed_usage(bo) ||
+          (zink_batch_usage_exists(bo->reads.u) && bo->reads.submit_count == bo->reads.u->submit_count) ||
           (zink_batch_usage_exists(bo->writes.u) && bo->writes.submit_count == bo->writes.u->submit_count);
 }
 

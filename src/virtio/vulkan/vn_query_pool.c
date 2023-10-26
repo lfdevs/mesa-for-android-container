@@ -114,6 +114,7 @@ vn_CreateQueryPool(VkDevice device,
     */
    switch (dev->physical_device->renderer_driver_id) {
    case VK_DRIVER_ID_ARM_PROPRIETARY:
+   case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_TURNIP:
       pool->saturate_on_overflow = true;
       break;

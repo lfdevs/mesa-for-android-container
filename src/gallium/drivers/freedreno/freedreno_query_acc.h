@@ -138,6 +138,9 @@ copy_result(struct fd_ringbuffer *ring, enum pipe_query_value_type result_type,
             struct fd_resource *dst, unsigned dst_offset,
             struct fd_resource *src, unsigned src_offset)
 {
+   fd_ringbuffer_attach_bo(ring, dst->bo);
+   fd_ringbuffer_attach_bo(ring, src->bo);
+
    OUT_PKT7(ring, CP_MEM_TO_MEM, 5);
    OUT_RING(ring, COND(result_type >= PIPE_QUERY_TYPE_I64, CP_MEM_TO_MEM_0_DOUBLE));
    OUT_RELOC(ring, dst->bo, dst_offset, 0, 0);

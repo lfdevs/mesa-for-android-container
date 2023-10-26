@@ -55,7 +55,11 @@ quiet printf "%s\n" "Running vkd3d-proton testsuite..."
 set +e
 if ! /vkd3d-proton-tests/x64/bin/d3d12 > "$RESULTS/vkd3d-proton.log";
 then
-    error printf "%s\n" "Failed, see vkd3d-proton.log!"
+    # Check if the executable finished (ie. no segfault).
+    if ! grep "tests executed" "$RESULTS/vkd3d-proton.log" > /dev/null; then
+        error printf "%s\n" "Failed, see vkd3d-proton.log!"
+        exit 1
+    fi
 
     # Collect all the failures
     VKD3D_PROTON_RESULTS="${VKD3D_PROTON_RESULTS:-vkd3d-proton-results}"
@@ -75,9 +79,8 @@ then
     if ! diff -q ".gitlab-ci/vkd3d-proton/$VKD3D_PROTON_RESULTS.txt.baseline" "$RESULTSFILE"; then
         error printf "%s\n" "Changes found, see vkd3d-proton.log!"
         quiet diff --color=always -u ".gitlab-ci/vkd3d-proton/$VKD3D_PROTON_RESULTS.txt.baseline" "$RESULTSFILE"
+        exit 1
     fi
-
-    exit 1
 fi
 
 printf "%s\n" "vkd3d-proton execution: SUCCESS"

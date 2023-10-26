@@ -702,15 +702,11 @@ crocus_clear_texture(struct pipe_context *ctx,
    struct crocus_context *ice = (void *) ctx;
    struct crocus_screen *screen = (void *) ctx->screen;
    const struct intel_device_info *devinfo = &screen->devinfo;
-   struct crocus_resource *res = (void *) p_res;
 
    if (devinfo->ver < 6) {
       u_default_clear_texture(ctx, p_res, level, box, data);
       return;
    }
-
-   if (crocus_resource_unfinished_aux_import(res))
-      crocus_resource_finish_aux_import(ctx->screen, res);
 
    if (util_format_is_depth_or_stencil(p_res->format)) {
       const struct util_format_unpack_description *fmt_unpack =

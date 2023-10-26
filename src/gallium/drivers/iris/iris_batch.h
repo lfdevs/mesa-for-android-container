@@ -99,7 +99,7 @@ struct iris_batch {
          uint32_t exec_flags;
       } i915;
       struct {
-         uint32_t engine_id;
+         uint32_t exec_queue_id;
       } xe;
    };
 

@@ -100,6 +100,7 @@ util_vasprintf(char **ret, const char *format, va_list ap)
 
 #define asprintf util_asprintf
 static inline int
+   PRINTFLIKE(2, 3)
 util_asprintf(char **str, const char *fmt, ...)
 {
    int ret;

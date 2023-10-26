@@ -1497,7 +1497,7 @@ glcpp_parser_create(struct gl_context *gl_ctx,
    glcpp_lex_init_extra (parser, &parser->scanner);
    parser->defines = _mesa_hash_table_create(NULL, _mesa_hash_string,
                                              _mesa_key_string_equal);
-   parser->linalloc = linear_alloc_parent(parser, 0);
+   parser->linalloc = linear_context(parser);
    parser->active = NULL;
    parser->lexing_directive = 0;
    parser->lexing_version_directive = 0;

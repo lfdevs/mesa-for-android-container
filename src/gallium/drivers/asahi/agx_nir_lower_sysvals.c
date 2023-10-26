@@ -7,20 +7,24 @@
 #include "util/bitset.h"
 #include "util/u_dynarray.h"
 #include "agx_state.h"
+#include "nir.h"
+#include "nir_builder_opcodes.h"
+#include "nir_intrinsics.h"
+#include "nir_intrinsics_indices.h"
 
 /*
  * Lower all system values to uniform loads. This pass tries to compact ranges
  * of contiguous uploaded uniforms to reduce the draw-time overhead of uploading
  * many tiny ranges. To do so, it works in 4 steps:
  *
- * 1. Lower NIR sysvals to loads from the system value buffers (as placeholder
- *    load_preambles)
- * 2. Walk the NIR, recording the placeholder load_preambles.
+ * 1. Lower NIR sysvals to loads from the system value buffers.
+ * 2. Walk the NIR, recording loads from system value buffers.
  * 2. Walk the ranges of uniforms needed, compacting into contiguous ranges.
  * 3. Fill in the load_preamble instructions with the real uniforms.
  */
 
-#define MAX_TABLE_SIZE sizeof(struct agx_draw_uniforms)
+#define MAX_TABLE_SIZE sizeof(struct agx_stage_uniforms)
+static_assert(sizeof(struct agx_draw_uniforms) <= MAX_TABLE_SIZE, "packed");
 
 struct table_state {
    /* Bitset of 16-bit uniforms pushed */
@@ -33,100 +37,116 @@ struct table_state {
 };
 
 struct state {
-   /* Array of load_preamble nir_intrinsic_instr's to fix up at the end */
-   struct util_dynarray load_preambles;
+   /* Array of nir_intrinsic_instr's to fix up at the end */
+   struct util_dynarray loads;
 
    struct table_state tables[AGX_NUM_SYSVAL_TABLES];
 };
 
-static nir_ssa_def *
+static nir_def *
 load_sysval(nir_builder *b, unsigned dim, unsigned bitsize, uint8_t table,
             uint16_t offset)
 {
-   /* Encode as a sideband */
-   uint32_t packed = (((uint32_t)table) << 16) | ((uint32_t)offset);
-   return nir_load_preamble(b, dim, bitsize, .base = packed);
+   return nir_load_sysval_agx(b, dim, bitsize, .desc_set = table,
+                              .binding = offset);
 }
 
-static nir_ssa_def *
+static nir_def *
 load_sysval_root(nir_builder *b, unsigned dim, unsigned bitsize, void *ptr)
 {
    return load_sysval(b, dim, bitsize, AGX_SYSVAL_TABLE_ROOT, (uintptr_t)ptr);
 }
 
-static nir_ssa_def *
+static nir_def *
 load_sysval_indirect(nir_builder *b, unsigned dim, unsigned bitsize,
-                     uint8_t table, void *base, nir_ssa_def *offset_el)
+                     uint8_t table, void *base, nir_def *offset_el)
 {
-   nir_ssa_scalar scalar = {offset_el, 0};
+   nir_scalar scalar = {offset_el, 0};
    unsigned stride = (dim * bitsize) / 8;
 
-   if (nir_ssa_scalar_is_const(scalar)) {
+   if (nir_scalar_is_const(scalar)) {
       /* Load the sysval directly */
       return load_sysval(
          b, dim, bitsize, table,
-         (uintptr_t)base + (nir_ssa_scalar_as_uint(scalar) * stride));
+         (uintptr_t)base + (nir_scalar_as_uint(scalar) * stride));
    } else {
       /* Load the base address of the table */
       struct agx_draw_uniforms *u = NULL;
-      nir_ssa_def *table_base = load_sysval_root(b, 1, 64, &u->tables[table]);
+      nir_def *table_base = load_sysval_root(b, 1, 64, &u->tables[table]);
 
       /* Load address of the array in the table */
-      nir_ssa_def *array_base = nir_iadd_imm(b, table_base, (uintptr_t)base);
+      nir_def *array_base = nir_iadd_imm(b, table_base, (uintptr_t)base);
 
       /* Index into the table and load */
-      nir_ssa_def *address = nir_iadd(
+      nir_def *address = nir_iadd(
          b, array_base, nir_u2u64(b, nir_imul_imm(b, offset_el, stride)));
       return nir_load_global_constant(b, address, bitsize / 8, dim, bitsize);
    }
 }
 
-static nir_ssa_def *
+static unsigned
+stage_table(nir_builder *b)
+{
+   assert(b->shader->info.stage < PIPE_SHADER_TYPES);
+   return AGX_SYSVAL_STAGE(b->shader->info.stage);
+}
+
+static nir_def *
+load_ubo(nir_builder *b, nir_intrinsic_instr *intr, void *bases)
+{
+   nir_def *base =
+      load_sysval_indirect(b, 1, 64, stage_table(b), bases, intr->src[0].ssa);
+
+   nir_def *address = nir_iadd(b, base, nir_u2u64(b, intr->src[1].ssa));
+
+   return nir_load_global_constant(b, address, nir_intrinsic_align(intr),
+                                   intr->num_components, intr->def.bit_size);
+}
+
+static nir_def *
 lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
 {
    struct agx_draw_uniforms *u = NULL;
+   struct agx_stage_uniforms *s = NULL;
 
    switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+      return load_ubo(b, intr, s->ubo_base);
    case nir_intrinsic_load_vbo_base_agx:
-      return load_sysval_indirect(b, 1, 64, AGX_SYSVAL_TABLE_ROOT,
-                                  &u->vs.vbo_base, intr->src[0].ssa);
-   case nir_intrinsic_load_ubo_base_agx:
-      return load_sysval_indirect(b, 1, 64, AGX_SYSVAL_TABLE_ROOT, u->ubo_base,
+      return load_sysval_indirect(b, 1, 64, AGX_SYSVAL_TABLE_ROOT, &u->vbo_base,
                                   intr->src[0].ssa);
-   case nir_intrinsic_load_texture_base_agx:
-      return load_sysval_root(b, 1, 64, &u->texture_base);
    case nir_intrinsic_load_blend_const_color_r_float:
-      return load_sysval_root(b, 1, 32, &u->fs.blend_constant[0]);
+      return load_sysval_root(b, 1, 32, &u->blend_constant[0]);
    case nir_intrinsic_load_blend_const_color_g_float:
-      return load_sysval_root(b, 1, 32, &u->fs.blend_constant[1]);
+      return load_sysval_root(b, 1, 32, &u->blend_constant[1]);
    case nir_intrinsic_load_blend_const_color_b_float:
-      return load_sysval_root(b, 1, 32, &u->fs.blend_constant[2]);
+      return load_sysval_root(b, 1, 32, &u->blend_constant[2]);
    case nir_intrinsic_load_blend_const_color_a_float:
-      return load_sysval_root(b, 1, 32, &u->fs.blend_constant[3]);
+      return load_sysval_root(b, 1, 32, &u->blend_constant[3]);
    case nir_intrinsic_load_api_sample_mask_agx:
-      return load_sysval_root(b, 1, 16, &u->fs.sample_mask);
+      return load_sysval_root(b, 1, 16, &u->sample_mask);
    case nir_intrinsic_load_sample_positions_agx:
-      return load_sysval_root(b, 1, 32, &u->fs.ppp_multisamplectl);
+      return load_sysval_root(b, 1, 32, &u->ppp_multisamplectl);
    case nir_intrinsic_load_ssbo_address:
-      return load_sysval_indirect(b, 1, 64, AGX_SYSVAL_TABLE_ROOT,
-                                  &u->ssbo_base, intr->src[0].ssa);
+      return load_sysval_indirect(b, 1, 64, stage_table(b), &s->ssbo_base,
+                                  intr->src[0].ssa);
    case nir_intrinsic_get_ssbo_size:
-      return load_sysval_indirect(b, 1, 32, AGX_SYSVAL_TABLE_ROOT,
-                                  &u->ssbo_size, intr->src[0].ssa);
+      return load_sysval_indirect(b, 1, 32, stage_table(b), &s->ssbo_size,
+                                  intr->src[0].ssa);
    case nir_intrinsic_load_num_workgroups:
       return load_sysval(b, 3, 32, AGX_SYSVAL_TABLE_GRID, 0);
+   case nir_intrinsic_load_layer_id_written_agx:
+      return load_sysval_root(b, 1, 16, &u->layer_id_written);
    case nir_intrinsic_load_xfb_address:
-      return load_sysval_root(b, 1, 64,
-                              &u->vs.xfb.base[nir_intrinsic_base(intr)]);
+      return load_sysval_root(b, 1, 64, &u->xfb.base[nir_intrinsic_base(intr)]);
    case nir_intrinsic_load_xfb_size:
-      return load_sysval_root(b, 1, 32,
-                              &u->vs.xfb.size[nir_intrinsic_base(intr)]);
+      return load_sysval_root(b, 1, 32, &u->xfb.size[nir_intrinsic_base(intr)]);
    case nir_intrinsic_load_xfb_index_buffer:
-      return load_sysval_root(b, 1, 64, &u->vs.xfb.index_buffer);
+      return load_sysval_root(b, 1, 64, &u->xfb.index_buffer);
    case nir_intrinsic_load_base_vertex:
-      return load_sysval_root(b, 1, 32, &u->vs.xfb.base_vertex);
+      return load_sysval_root(b, 1, 32, &u->xfb.base_vertex);
    case nir_intrinsic_load_num_vertices:
-      return load_sysval_root(b, 1, 32, &u->vs.xfb.num_vertices);
+      return load_sysval_root(b, 1, 32, &u->xfb.num_vertices);
    default:
       return NULL;
    }
@@ -137,35 +157,34 @@ static bool
 lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
 {
    b->cursor = nir_before_instr(instr);
-   nir_dest *dest;
-   nir_ssa_def *replacement = NULL;
+   nir_def *old;
+   nir_def *replacement = NULL;
 
    if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-      dest = &intr->dest;
+      old = &intr->def;
       replacement = lower_intrinsic(b, intr);
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
-      dest = &tex->dest;
+      old = &tex->def;
 
       if (tex->op != nir_texop_lod_bias_agx)
          return false;
 
-      struct agx_draw_uniforms *u = NULL;
+      struct agx_stage_uniforms *s = NULL;
 
       int src_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
       if (src_idx >= 0) {
-         replacement =
-            load_sysval_indirect(b, 1, 16, AGX_SYSVAL_TABLE_ROOT, u->lod_bias,
-                                 tex->src[src_idx].src.ssa);
+         replacement = load_sysval_indirect(
+            b, 1, 16, stage_table(b), s->lod_bias, tex->src[src_idx].src.ssa);
       } else {
-         replacement =
-            load_sysval_root(b, 1, 16, &u->lod_bias[tex->sampler_index]);
+         replacement = load_sysval(b, 1, 16, stage_table(b),
+                                   (uintptr_t)&s->lod_bias[tex->sampler_index]);
       }
    }
 
    if (replacement != NULL) {
-      nir_ssa_def_rewrite_uses(&dest->ssa, replacement);
+      nir_def_rewrite_uses(old, replacement);
       return true;
    } else {
       return false;
@@ -174,24 +193,19 @@ lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
 
 /* Step 2: Record system value loads */
 static bool
-record_loads(nir_builder *b, nir_instr *instr, void *data)
+record_loads(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
+   if (intr->intrinsic != nir_intrinsic_load_sysval_agx)
       return false;
 
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic != nir_intrinsic_load_preamble)
-      return false;
-
-   assert(nir_dest_bit_size(intr->dest) >= 16 && "no 8-bit sysvals");
-   unsigned dim = nir_dest_num_components(intr->dest);
-   unsigned element_size = nir_dest_bit_size(intr->dest) / 16;
+   assert(intr->def.bit_size >= 16 && "no 8-bit sysvals");
+   unsigned dim = intr->def.num_components;
+   unsigned element_size = intr->def.bit_size / 16;
    unsigned length = dim * element_size;
 
    struct state *state = data;
-   unsigned base = nir_intrinsic_base(intr);
-   struct table_state *table = &state->tables[base >> 16];
-   unsigned offset = base & 0xFFFF;
+   struct table_state *table = &state->tables[nir_intrinsic_desc_set(intr)];
+   unsigned offset = nir_intrinsic_binding(intr);
    assert((offset % 2) == 0 && "all entries are aligned by ABI");
 
    BITSET_SET_RANGE(table->pushed, (offset / 2), (offset / 2) + length - 1);
@@ -203,7 +217,7 @@ record_loads(nir_builder *b, nir_instr *instr, void *data)
          table->element_size[(offset / 2) + i] = element_size;
    }
 
-   util_dynarray_append(&state->load_preambles, nir_intrinsic_instr *, intr);
+   util_dynarray_append(&state->loads, nir_intrinsic_instr *, intr);
    return false;
 }
 
@@ -275,52 +289,85 @@ lay_out_table(struct agx_compiled_shader *shader, struct table_state *state,
    return uniform;
 }
 
+/* Reserve u0_u1 for the texture base if needed for internal bindless operation.
+ * When we have too many textures/images for the available texture state
+ * registers, an early lowering pass in the driver spills some textures/images
+ * out of texture state registers and instead accesses them as bindless
+ * internally. That pass assumes u0_u1 points to the texture descriptors
+ * otherwise bound to texture state registers.
+ */
+static void
+reserve_internal_bindless(struct state *state, enum pipe_shader_type stage)
+{
+   struct table_state *table = &state->tables[AGX_SYSVAL_STAGE(stage)];
+   struct agx_stage_uniforms *s = NULL;
+   const unsigned len_words = sizeof(s->texture_base) / sizeof(uint16_t);
+
+   static_assert(offsetof(struct agx_stage_uniforms, texture_base) == 0, "ABI");
+   static_assert(sizeof(s->texture_base) == 8, "64-bit pointer");
+
+   BITSET_SET_RANGE(table->pushed, 0, len_words - 1);
+
+   for (unsigned i = 0; i < len_words; ++i)
+      table->element_size[i] = len_words;
+}
+
 static unsigned
 lay_out_uniforms(struct agx_compiled_shader *shader, struct state *state)
 {
    unsigned uniform = 0;
 
-   /* Lay out each system value table */
-   for (uint8_t t = 0; t < AGX_NUM_SYSVAL_TABLES; ++t)
+   /* Lay out each system value table. We do this backwards to ensure the first
+    * uniform goes to the bindless texture base.
+    */
+   for (int t = AGX_NUM_SYSVAL_TABLES - 1; t >= 0; --t)
       uniform = lay_out_table(shader, &state->tables[t], t, uniform);
 
    /* Step 4: Fill in the loads */
-   util_dynarray_foreach(&state->load_preambles, nir_intrinsic_instr *, intr) {
-      uint32_t base = nir_intrinsic_base(*intr);
-      uint8_t table = base >> 16;
-      uint16_t offset = base & 0xFFFF;
+   util_dynarray_foreach(&state->loads, nir_intrinsic_instr *, intr_) {
+      nir_intrinsic_instr *intr = *intr_;
+      uint8_t table = nir_intrinsic_desc_set(intr);
+      uint16_t offset = nir_intrinsic_binding(intr);
 
       struct agx_push_range *range =
          find_push_range_containing(shader, table, offset);
 
-      nir_intrinsic_set_base(*intr,
-                             range->uniform + ((offset - range->offset) / 2));
+      nir_builder b = nir_builder_at(nir_instr_remove(&(intr->instr)));
+
+      nir_def *repl = nir_load_preamble(
+         &b, intr->def.num_components, intr->def.bit_size,
+         .base = range->uniform + ((offset - range->offset) / 2));
+
+      nir_def_rewrite_uses(&intr->def, repl);
    }
 
    return uniform;
 }
 
 bool
-agx_nir_lower_sysvals(nir_shader *shader, struct agx_compiled_shader *compiled,
-                      unsigned *push_size)
+agx_nir_lower_sysvals(nir_shader *shader)
 {
-   bool progress = nir_shader_instructions_pass(
+   return nir_shader_instructions_pass(
       shader, lower_sysvals, nir_metadata_block_index | nir_metadata_dominance,
       NULL);
+}
 
-   if (!progress) {
-      *push_size = 0;
-      return false;
-   }
-
+bool
+agx_nir_layout_uniforms(nir_shader *shader, bool internal_bindless,
+                        struct agx_compiled_shader *compiled,
+                        unsigned *push_size)
+{
    struct state state = {0};
-   nir_shader_instructions_pass(
-      shader, record_loads, nir_metadata_block_index | nir_metadata_dominance,
-      &state);
+   nir_shader_intrinsics_pass(shader, record_loads,
+                              nir_metadata_block_index | nir_metadata_dominance,
+                              &state);
+
+   if (internal_bindless)
+      reserve_internal_bindless(&state, shader->info.stage);
 
    *push_size = lay_out_uniforms(compiled, &state);
 
-   util_dynarray_fini(&state.load_preambles);
+   util_dynarray_fini(&state.loads);
 
    return true;
 }

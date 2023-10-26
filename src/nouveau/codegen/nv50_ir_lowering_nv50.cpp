@@ -641,7 +641,6 @@ private:
    virtual bool visit(Function *);
 
    bool handleRDSV(Instruction *);
-   bool handleWRSV(Instruction *);
 
    bool handlePFETCH(Instruction *);
    bool handleEXPORT(Instruction *);
@@ -656,7 +655,6 @@ private:
 
    bool handleDIV(Instruction *);
    bool handleSQRT(Instruction *);
-   bool handlePOW(Instruction *);
 
    bool handleSET(Instruction *);
    bool handleSLCT(CmpInstruction *);
@@ -1227,23 +1225,6 @@ NV50LoweringPreSSA::handleSELP(Instruction *i)
 }
 
 bool
-NV50LoweringPreSSA::handleWRSV(Instruction *i)
-{
-   Symbol *sym = i->getSrc(0)->asSym();
-
-   // these are all shader outputs, $sreg are not writeable
-   uint32_t addr = targ->getSVAddress(FILE_SHADER_OUTPUT, sym);
-   if (addr >= 0x400)
-      return false;
-   sym = bld.mkSymbol(FILE_SHADER_OUTPUT, 0, i->sType, addr);
-
-   bld.mkStore(OP_EXPORT, i->dType, sym, i->getIndirect(0, 0), i->getSrc(1));
-
-   bld.getBB()->remove(i);
-   return true;
-}
-
-bool
 NV50LoweringPreSSA::handleCALL(Instruction *i)
 {
    if (prog->getType() == Program::TYPE_COMPUTE) {
@@ -1360,22 +1341,6 @@ NV50LoweringPreSSA::handleSQRT(Instruction *i)
    bld.setPosition(i, true);
    i->op = OP_RSQ;
    bld.mkOp1(OP_RCP, i->dType, i->getDef(0), i->getDef(0));
-
-   return true;
-}
-
-bool
-NV50LoweringPreSSA::handlePOW(Instruction *i)
-{
-   LValue *val = bld.getScratch();
-
-   bld.mkOp1(OP_LG2, TYPE_F32, val, i->getSrc(0));
-   bld.mkOp2(OP_MUL, TYPE_F32, val, i->getSrc(1), val)->dnz = 1;
-   bld.mkOp1(OP_PREEX2, TYPE_F32, val, val);
-
-   i->op = OP_EX2;
-   i->setSrc(0, val);
-   i->setSrc(1, NULL);
 
    return true;
 }
@@ -2215,8 +2180,6 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleSLCT(i->asCmp());
    case OP_SELP:
       return handleSELP(i);
-   case OP_POW:
-      return handlePOW(i);
    case OP_DIV:
       return handleDIV(i);
    case OP_SQRT:
@@ -2242,8 +2205,6 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleBUFQ(i);
    case OP_RDSV:
       return handleRDSV(i);
-   case OP_WRSV:
-      return handleWRSV(i);
    case OP_CALL:
       return handleCALL(i);
    case OP_PRECONT:

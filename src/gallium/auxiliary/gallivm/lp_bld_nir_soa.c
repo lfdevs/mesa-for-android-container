@@ -1893,7 +1893,7 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
 {
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    struct gallivm_state *gallivm = bld_base->base.gallivm;
-   struct lp_build_context *bld_broad = get_int_bld(bld_base, true, instr->dest.ssa.bit_size);
+   struct lp_build_context *bld_broad = get_int_bld(bld_base, true, instr->def.bit_size);
    switch (instr->intrinsic) {
    case nir_intrinsic_load_instance_id:
       result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.instance_id);
@@ -1917,8 +1917,6 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
       LLVMValueRef tmp[3];
       for (unsigned i = 0; i < 3; i++) {
          tmp[i] = bld->system_values.block_id[i];
-         if (instr->dest.ssa.bit_size == 64)
-            tmp[i] = LLVMBuildZExt(gallivm->builder, tmp[i], bld_base->uint64_bld.elem_type, "");
          result[i] = lp_build_broadcast_scalar(bld_broad, tmp[i]);
       }
       break;
@@ -1934,8 +1932,6 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
       LLVMValueRef tmp[3];
       for (unsigned i = 0; i < 3; i++) {
          tmp[i] = bld->system_values.grid_size[i];
-         if (instr->dest.ssa.bit_size == 64)
-            tmp[i] = LLVMBuildZExt(gallivm->builder, tmp[i], bld_base->uint64_bld.elem_type, "");
          result[i] = lp_build_broadcast_scalar(bld_broad, tmp[i]);
       }
       break;
@@ -2698,6 +2694,19 @@ emit_launch_mesh_workgroups(struct lp_build_nir_context *bld_base,
    lp_build_endif(&ifthen);
 }
 
+static void
+emit_call(struct lp_build_nir_context *bld_base,
+          struct lp_build_fn *fn,
+          int num_args,
+          LLVMValueRef *args)
+{
+   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+
+   args[0] = mask_vec(bld_base);
+   args[1] = bld->call_context_ptr;
+   LLVMBuildCall2(bld_base->base.gallivm->builder, fn->fn_type, fn->fn, args, num_args, "");
+}
+
 static LLVMValueRef get_scratch_thread_offsets(struct gallivm_state *gallivm,
                                                struct lp_type type,
                                                unsigned scratch_size)
@@ -2804,10 +2813,95 @@ emit_clock(struct lp_build_nir_context *bld_base,
    dst[1] = lp_build_broadcast_scalar(uint_bld, hi);
 }
 
-void lp_build_nir_soa(struct gallivm_state *gallivm,
-                      struct nir_shader *shader,
-                      const struct lp_build_tgsi_params *params,
-                      LLVMValueRef (*outputs)[4])
+LLVMTypeRef
+lp_build_cs_func_call_context(struct gallivm_state *gallivm, int length,
+                              LLVMTypeRef context_type, LLVMTypeRef resources_type)
+{
+   LLVMTypeRef args[LP_NIR_CALL_CONTEXT_MAX_ARGS];
+
+   args[LP_NIR_CALL_CONTEXT_CONTEXT] = LLVMPointerType(context_type, 0);
+   args[LP_NIR_CALL_CONTEXT_RESOURCES] = LLVMPointerType(resources_type, 0);
+   args[LP_NIR_CALL_CONTEXT_SHARED] = LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0); /* shared_ptr */
+   args[LP_NIR_CALL_CONTEXT_SCRATCH] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0); /* scratch ptr */
+   args[LP_NIR_CALL_CONTEXT_WORK_DIM] = LLVMInt32TypeInContext(gallivm->context); /* work_dim */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_0] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[0] */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_1] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[1] */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_2] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[2] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[0] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[1] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[2] */
+
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[0] */
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[1] */
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[2] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[0] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[1] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[2] */
+
+   LLVMTypeRef stype = LLVMStructTypeInContext(gallivm->context, args, LP_NIR_CALL_CONTEXT_MAX_ARGS, 0);
+   return stype;
+}
+
+static void
+build_call_context(struct lp_build_nir_soa_context *bld)
+{
+   struct gallivm_state *gallivm = bld->bld_base.base.gallivm;
+   bld->call_context_ptr = lp_build_alloca(gallivm, bld->call_context_type, "callcontext");
+   LLVMValueRef call_context = LLVMGetUndef(bld->call_context_type);
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->context_ptr, LP_NIR_CALL_CONTEXT_CONTEXT, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->resources_ptr, LP_NIR_CALL_CONTEXT_RESOURCES, "");
+   if (bld->shared_ptr) {
+      call_context = LLVMBuildInsertValue(gallivm->builder,
+                                          call_context, bld->shared_ptr, LP_NIR_CALL_CONTEXT_SHARED, "");
+   } else {
+      call_context = LLVMBuildInsertValue(gallivm->builder, call_context,
+                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0)),
+                                          LP_NIR_CALL_CONTEXT_SHARED, "");
+   }
+   if (bld->scratch_ptr) {
+      call_context = LLVMBuildInsertValue(gallivm->builder,
+                                          call_context, bld->scratch_ptr, LP_NIR_CALL_CONTEXT_SCRATCH, "");
+   } else {
+      call_context = LLVMBuildInsertValue(gallivm->builder, call_context,
+                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0)),
+                                          LP_NIR_CALL_CONTEXT_SCRATCH, "");
+   }
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.work_dim, LP_NIR_CALL_CONTEXT_WORK_DIM, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.thread_id[0], LP_NIR_CALL_CONTEXT_THREAD_ID_0, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.thread_id[1], LP_NIR_CALL_CONTEXT_THREAD_ID_1, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.thread_id[2], LP_NIR_CALL_CONTEXT_THREAD_ID_2, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_id[0], LP_NIR_CALL_CONTEXT_BLOCK_ID_0, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_id[1], LP_NIR_CALL_CONTEXT_BLOCK_ID_1, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_id[2], LP_NIR_CALL_CONTEXT_BLOCK_ID_2, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.grid_size[0], LP_NIR_CALL_CONTEXT_GRID_SIZE_0, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.grid_size[1], LP_NIR_CALL_CONTEXT_GRID_SIZE_1, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.grid_size[2], LP_NIR_CALL_CONTEXT_GRID_SIZE_2, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_size[0], LP_NIR_CALL_CONTEXT_BLOCK_SIZE_0, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_size[1], LP_NIR_CALL_CONTEXT_BLOCK_SIZE_1, "");
+   call_context = LLVMBuildInsertValue(gallivm->builder,
+                                       call_context, bld->system_values.block_size[2], LP_NIR_CALL_CONTEXT_BLOCK_SIZE_2, "");
+   LLVMBuildStore(gallivm->builder, call_context, bld->call_context_ptr);
+}
+
+void lp_build_nir_soa_func(struct gallivm_state *gallivm,
+                           struct nir_shader *shader,
+                           nir_function_impl *impl,
+                           const struct lp_build_tgsi_params *params,
+                           LLVMValueRef (*outputs)[4])
 {
    struct lp_build_nir_soa_context bld;
    const struct lp_type type = params->type;
@@ -2914,6 +3008,7 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    bld.bld_base.read_invocation = emit_read_invocation;
    bld.bld_base.helper_invocation = emit_helper_invocation;
    bld.bld_base.interp_at = emit_interp_at;
+   bld.bld_base.call = emit_call;
    bld.bld_base.load_scratch = emit_load_scratch;
    bld.bld_base.store_scratch = emit_store_scratch;
    bld.bld_base.load_const = emit_load_const;
@@ -2921,14 +3016,17 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    bld.bld_base.set_vertex_and_primitive_count = emit_set_vertex_and_primitive_count;
    bld.bld_base.launch_mesh_workgroups = emit_launch_mesh_workgroups;
 
+   bld.bld_base.fns = params->fns;
+   bld.bld_base.func = params->current_func;
    bld.mask = params->mask;
    bld.inputs = params->inputs;
    bld.outputs = outputs;
    bld.consts_ptr = params->consts_ptr;
    bld.ssbo_ptr = params->ssbo_ptr;
    bld.sampler = params->sampler;
-//   bld.bld_base.info = params->info;
 
+   bld.context_type = params->context_type;
+   bld.context_ptr = params->context_ptr;
    bld.resources_type = params->resources_type;
    bld.resources_ptr = params->resources_ptr;
    bld.thread_data_type = params->thread_data_type;
@@ -2940,7 +3038,7 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    bld.coro = params->coro;
    bld.kernel_args_ptr = params->kernel_args;
    bld.indirects = 0;
-   if (params->info->indirect_files & (1 << TGSI_FILE_INPUT))
+   if (shader->info.inputs_read_indirectly)
       bld.indirects |= nir_var_shader_in;
 
    bld.gs_iface = params->gs_iface;
@@ -2965,20 +3063,31 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    }
    lp_exec_mask_init(&bld.exec_mask, &bld.bld_base.int_bld);
 
-   bld.system_values = *params->system_values;
+   if (params->system_values)
+      bld.system_values = *params->system_values;
 
    bld.bld_base.shader = shader;
 
    bld.scratch_size = ALIGN(shader->scratch_size, 8);
-   if (shader->scratch_size) {
+   if (params->scratch_ptr)
+      bld.scratch_ptr = params->scratch_ptr;
+   else if (shader->scratch_size) {
       bld.scratch_ptr = lp_build_array_alloca(gallivm,
                                               LLVMInt8TypeInContext(gallivm->context),
                                               lp_build_const_int32(gallivm, bld.scratch_size * type.length),
                                               "scratch");
    }
 
+   if (shader->info.stage == MESA_SHADER_KERNEL) {
+      bld.call_context_type = lp_build_cs_func_call_context(gallivm, type.length, bld.context_type, bld.resources_type);
+      if (!params->call_context_ptr) {
+         build_call_context(&bld);
+      } else
+         bld.call_context_ptr = params->call_context_ptr;
+   }
+
    emit_prologue(&bld);
-   lp_build_nir_llvm(&bld.bld_base, shader);
+   lp_build_nir_llvm(&bld.bld_base, shader, impl);
 
    if (bld.gs_iface) {
       LLVMBuilderRef builder = bld.bld_base.base.gallivm->builder;
@@ -2999,4 +3108,15 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
       }
    }
    lp_exec_mask_fini(&bld.exec_mask);
+}
+
+void lp_build_nir_soa(struct gallivm_state *gallivm,
+                      struct nir_shader *shader,
+                      const struct lp_build_tgsi_params *params,
+                      LLVMValueRef (*outputs)[4])
+{
+   lp_build_nir_prepasses(shader);
+   lp_build_nir_soa_func(gallivm, shader,
+                         nir_shader_get_entrypoint(shader),
+                         params, outputs);
 }

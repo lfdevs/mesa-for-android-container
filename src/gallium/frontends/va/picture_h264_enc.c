@@ -29,6 +29,13 @@
 #include "util/u_video.h"
 #include "va_private.h"
 
+#include "util/vl_rbsp.h"
+
+enum H264NALUnitType {
+    H264_NAL_SPS        = 7,
+    H264_NAL_PPS        = 8,
+};
+
 VAStatus
 vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
@@ -313,6 +320,185 @@ vlVaHandleVAEncMiscParameterTypeFrameRateH264(vlVaContext *context, VAEncMiscPar
    } else {
       context->desc.h264enc.rate_ctrl[temporal_id].frame_rate_num = fr->framerate;
       context->desc.h264enc.rate_ctrl[temporal_id].frame_rate_den = 1;
+   }
+
+   return VA_STATUS_SUCCESS;
+}
+
+static void parseEncHrdParamsH264(struct vl_rbsp *rbsp)
+{
+   unsigned i, cpb_cnt_minus1;
+
+   cpb_cnt_minus1 = vl_rbsp_ue(rbsp);
+   vl_rbsp_u(rbsp, 4); /* bit_rate_scale */
+   vl_rbsp_u(rbsp, 4); /* cpb_size_scale */
+   for (i = 0; i <= cpb_cnt_minus1; ++i) {
+      vl_rbsp_ue(rbsp); /* bit_rate_value_minus1[i] */
+      vl_rbsp_ue(rbsp); /* cpb_size_value_minus1[i] */
+      vl_rbsp_u(rbsp, 1); /* cbr_flag[i] */
+   }
+   vl_rbsp_u(rbsp, 5); /* initial_cpb_removal_delay_length_minus1 */
+   vl_rbsp_u(rbsp, 5); /* cpb_removal_delay_length_minus1 */
+   vl_rbsp_u(rbsp, 5); /* dpb_output_delay_length_minus1 */
+   vl_rbsp_u(rbsp, 5); /* time_offset_length */
+}
+
+static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
+{
+   unsigned i, profile_idc, num_ref_frames_in_pic_order_cnt_cycle;
+   unsigned nal_hrd_parameters_present_flag, vcl_hrd_parameters_present_flag;
+
+   profile_idc = vl_rbsp_u(rbsp, 8);
+
+   vl_rbsp_u(rbsp, 8); /* constraint_set_flags */
+   vl_rbsp_u(rbsp, 8); /* level_idc */
+
+   vl_rbsp_ue(rbsp); /* seq_parameter_set_id */
+
+   if (profile_idc == 100 || profile_idc == 110 ||
+       profile_idc == 122 || profile_idc == 244 || profile_idc == 44 ||
+       profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
+       profile_idc == 128 || profile_idc == 138 || profile_idc == 139 ||
+       profile_idc == 134 || profile_idc == 135) {
+
+      if (vl_rbsp_ue(rbsp) == 3) /* chroma_format_idc */
+         vl_rbsp_u(rbsp, 1); /* separate_colour_plane_flag */
+
+      vl_rbsp_ue(rbsp); /* bit_depth_luma_minus8 */
+      vl_rbsp_ue(rbsp); /* bit_depth_chroma_minus8 */
+      vl_rbsp_u(rbsp, 1); /* qpprime_y_zero_transform_bypass_flag */
+
+      if (vl_rbsp_u(rbsp, 1)) /* seq_scaling_matrix_present_flag */
+         return; /* TODO */
+   }
+
+   vl_rbsp_ue(rbsp); /* log2_max_frame_num_minus4 */
+   vl_rbsp_ue(rbsp); /* pic_order_cnt_type */
+
+   if (context->desc.h264enc.seq.pic_order_cnt_type == 0)
+      vl_rbsp_ue(rbsp); /* log2_max_pic_order_cnt_lsb_minus4 */
+   else if (context->desc.h264enc.seq.pic_order_cnt_type == 1) {
+      vl_rbsp_u(rbsp, 1); /* delta_pic_order_always_zero_flag */
+      vl_rbsp_se(rbsp); /* offset_for_non_ref_pic */
+      vl_rbsp_se(rbsp); /* offset_for_top_to_bottom_field */
+      num_ref_frames_in_pic_order_cnt_cycle = vl_rbsp_ue(rbsp);
+      for (i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; ++i)
+         vl_rbsp_se(rbsp); /* offset_for_ref_frame[i] */
+   }
+
+   vl_rbsp_ue(rbsp); /* max_num_ref_frames */
+   vl_rbsp_u(rbsp, 1); /* gaps_in_frame_num_value_allowed_flag */
+   vl_rbsp_ue(rbsp); /* pic_width_in_mbs_minus1 */
+   vl_rbsp_ue(rbsp); /* pic_height_in_map_units_minus1 */
+   if (!vl_rbsp_u(rbsp, 1)) /* frame_mbs_only_flag */
+      vl_rbsp_u(rbsp, 1); /* mb_adaptive_frame_field_flag */
+
+   vl_rbsp_u(rbsp, 1); /* direct_8x8_inference_flag */
+   if (vl_rbsp_u(rbsp, 1)) { /* frame_cropping_flag */
+      vl_rbsp_ue(rbsp); /* frame_crop_left_offset */
+      vl_rbsp_ue(rbsp); /* frame_crop_right_offset */
+      vl_rbsp_ue(rbsp); /* frame_crop_top_offset */
+      vl_rbsp_ue(rbsp); /* frame_crop_bottom_offset */
+   }
+
+   context->desc.h264enc.seq.vui_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+   if (context->desc.h264enc.seq.vui_parameters_present_flag) {
+      context->desc.h264enc.seq.vui_flags.aspect_ratio_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.aspect_ratio_info_present_flag) {
+         if (vl_rbsp_u(rbsp, 8) == 255) { /* aspect_ratio_idc == Extended_SAR */
+            vl_rbsp_u(rbsp, 16); /* sar_width */
+            vl_rbsp_u(rbsp, 16); /* sar_height */
+         }
+      }
+
+      if (vl_rbsp_u(rbsp, 1)) /* overscan_info_present_flag */
+         vl_rbsp_u(rbsp, 1); /* overscan_appropriate_flag */
+
+      context->desc.h264enc.seq.vui_flags.video_signal_type_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.video_signal_type_present_flag) {
+         context->desc.h264enc.seq.video_format = vl_rbsp_u(rbsp, 3);
+         context->desc.h264enc.seq.video_full_range_flag = vl_rbsp_u(rbsp, 1);
+         context->desc.h264enc.seq.vui_flags.colour_description_present_flag = vl_rbsp_u(rbsp, 1);
+         if (context->desc.h264enc.seq.vui_flags.colour_description_present_flag) {
+            context->desc.h264enc.seq.colour_primaries = vl_rbsp_u(rbsp, 8);
+            context->desc.h264enc.seq.transfer_characteristics = vl_rbsp_u(rbsp, 8);
+            context->desc.h264enc.seq.matrix_coefficients = vl_rbsp_u(rbsp, 8);
+         }
+      }
+
+      context->desc.h264enc.seq.vui_flags.chroma_loc_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.chroma_loc_info_present_flag) {
+         context->desc.h264enc.seq.chroma_sample_loc_type_top_field = vl_rbsp_ue(rbsp);
+         context->desc.h264enc.seq.chroma_sample_loc_type_bottom_field = vl_rbsp_ue(rbsp);
+      }
+
+      if (vl_rbsp_u(rbsp, 1)) { /* timing_info_present_flag */
+         vl_rbsp_u(rbsp, 32); /* num_units_in_tick */
+         vl_rbsp_u(rbsp, 32); /* time_scale */
+         vl_rbsp_u(rbsp, 1); /* fixed_frame_rate_flag */
+      }
+
+      nal_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+      if (nal_hrd_parameters_present_flag)
+         parseEncHrdParamsH264(rbsp);
+
+      vcl_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+      if (vcl_hrd_parameters_present_flag)
+         parseEncHrdParamsH264(rbsp);
+
+      if (nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag)
+         vl_rbsp_u(rbsp, 1); /* low_delay_hrd_flag */
+
+      vl_rbsp_u(rbsp, 1); /* pic_struct_present_flag */
+
+      if (vl_rbsp_u(rbsp, 1)) { /* bitstream_restriction_flag */
+         vl_rbsp_u(rbsp, 1); /* motion_vectors_over_pic_boundaries_flag */
+         vl_rbsp_ue(rbsp); /* max_bytes_per_pic_denom */
+         vl_rbsp_ue(rbsp); /* max_bits_per_mb_denom */
+         vl_rbsp_ue(rbsp); /* log2_max_mv_length_horizontal */
+         vl_rbsp_ue(rbsp); /* log2_max_mv_length_vertical */
+         context->desc.h264enc.seq.max_num_reorder_frames = vl_rbsp_ue(rbsp);
+         vl_rbsp_ue(rbsp); /* max_dec_frame_buffering */
+      }
+   }
+}
+
+VAStatus
+vlVaHandleVAEncPackedHeaderDataBufferTypeH264(vlVaContext *context, vlVaBuffer *buf)
+{
+   struct vl_vlc vlc = {0};
+   vl_vlc_init(&vlc, 1, (const void * const*)&buf->data, &buf->size);
+
+   while (vl_vlc_bits_left(&vlc) > 0) {
+      /* search the first 64 bytes for a startcode */
+      for (int i = 0; i < 64 && vl_vlc_bits_left(&vlc) >= 24; ++i) {
+         if (vl_vlc_peekbits(&vlc, 24) == 0x000001)
+            break;
+         vl_vlc_eatbits(&vlc, 8);
+         vl_vlc_fillbits(&vlc);
+      }
+      vl_vlc_eatbits(&vlc, 24); /* eat the startcode */
+
+      if (vl_vlc_valid_bits(&vlc) < 15)
+         vl_vlc_fillbits(&vlc);
+
+      vl_vlc_eatbits(&vlc, 3);
+      unsigned nal_unit_type = vl_vlc_get_uimsbf(&vlc, 5);
+
+      struct vl_rbsp rbsp;
+      vl_rbsp_init(&rbsp, &vlc, ~0, context->packed_header_emulation_bytes);
+
+      switch(nal_unit_type) {
+      case H264_NAL_SPS:
+         parseEncSpsParamsH264(context, &rbsp);
+         break;
+      case H264_NAL_PPS:
+      default:
+         break;
+      }
+
+      if (!context->packed_header_emulation_bytes)
+         break;
    }
 
    return VA_STATUS_SUCCESS;

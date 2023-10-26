@@ -55,12 +55,12 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
       ralloc_array(any_hit, nir_parameter, ARRAY_SIZE(params));
    memcpy(impl->function->params, params, sizeof(params));
 
-   nir_builder build = nir_builder_at(nir_before_cf_list(&impl->body));
+   nir_builder build = nir_builder_at(nir_before_impl(impl));
    nir_builder *b = &build;
 
-   nir_ssa_def *commit_ptr = nir_load_param(b, 0);
-   nir_ssa_def *hit_t = nir_load_param(b, 1);
-   nir_ssa_def *hit_kind = nir_load_param(b, 2);
+   nir_def *commit_ptr = nir_load_param(b, 0);
+   nir_def *hit_t = nir_load_param(b, 1);
+   nir_def *hit_kind = nir_load_param(b, 2);
 
    nir_deref_instr *commit =
       nir_build_deref_cast(b, commit_ptr, nir_var_function_temp,
@@ -92,13 +92,13 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
                break;
 
             case nir_intrinsic_load_ray_t_max:
-               nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+               nir_def_rewrite_uses(&intrin->def,
                                         hit_t);
                nir_instr_remove(&intrin->instr);
                break;
 
             case nir_intrinsic_load_ray_hit_kind:
-               nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+               nir_def_rewrite_uses(&intrin->def,
                                         hit_kind);
                nir_instr_remove(&intrin->instr);
                break;
@@ -154,10 +154,10 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
 
    nir_function_impl *impl = nir_shader_get_entrypoint(intersection);
 
-   nir_builder build = nir_builder_at(nir_before_cf_list(&impl->body));
+   nir_builder build = nir_builder_at(nir_before_impl(impl));
    nir_builder *b = &build;
 
-   nir_ssa_def *t_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
+   nir_def *t_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
    nir_variable *commit =
       nir_local_variable_create(impl, glsl_bool_type(), "ray_commit");
    nir_store_var(b, commit, nir_imm_false(b), 0x1);
@@ -169,8 +169,8 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
       nir_push_if(b, nir_load_var(b, commit));
       {
          /* Set the "valid" bit in mem_hit */
-         nir_ssa_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
-         nir_ssa_def *flags_dw_addr = nir_iadd_imm(b, ray_addr, 12);
+         nir_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
+         nir_def *flags_dw_addr = nir_iadd_imm(b, ray_addr, 12);
          nir_store_global(b, flags_dw_addr, 4,
             nir_ior(b, nir_load_global(b, flags_dw_addr, 4, 1, 32),
                        nir_imm_int(b, 1 << 16)), 0x1 /* write_mask */);
@@ -193,10 +193,10 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
             switch (intrin->intrinsic) {
             case nir_intrinsic_report_ray_intersection: {
                b->cursor = nir_instr_remove(&intrin->instr);
-               nir_ssa_def *hit_t = nir_ssa_for_src(b, intrin->src[0], 1);
-               nir_ssa_def *hit_kind = nir_ssa_for_src(b, intrin->src[1], 1);
-               nir_ssa_def *min_t = nir_load_ray_t_min(b);
-               nir_ssa_def *max_t = nir_load_global(b, t_addr, 4, 1, 32);
+               nir_def *hit_t = intrin->src[0].ssa;
+               nir_def *hit_kind = intrin->src[1].ssa;
+               nir_def *min_t = nir_load_ray_t_min(b);
+               nir_def *max_t = nir_load_global(b, t_addr, 4, 1, 32);
 
                /* bool commit_tmp = false; */
                nir_variable *commit_tmp =
@@ -213,8 +213,8 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                   if (any_hit_impl != NULL) {
                      nir_push_if(b, nir_inot(b, nir_load_leaf_opaque_intel(b)));
                      {
-                        nir_ssa_def *params[] = {
-                           &nir_build_deref_var(b, commit_tmp)->dest.ssa,
+                        nir_def *params[] = {
+                           &nir_build_deref_var(b, commit_tmp)->def,
                            hit_t,
                            hit_kind,
                         };
@@ -235,8 +235,8 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                }
                nir_pop_if(b, NULL);
 
-               nir_ssa_def *accepted = nir_load_var(b, commit_tmp);
-               nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+               nir_def *accepted = nir_load_var(b, commit_tmp);
+               nir_def_rewrite_uses(&intrin->def,
                                         accepted);
                break;
             }

@@ -13,7 +13,6 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::mem::{size_of, MaybeUninit};
 use std::ops::BitAnd;
-use std::os::raw::c_void;
 use std::slice;
 use std::sync::Arc;
 
@@ -292,15 +291,6 @@ pub fn event_list_from_cl(
 pub fn to_maybeuninit_vec<T: Copy>(v: Vec<T>) -> Vec<MaybeUninit<T>> {
     // In my tests the compiler was smart enough to turn this into a noop
     v.into_iter().map(MaybeUninit::new).collect()
-}
-
-pub fn check_cb<T>(cb: &Option<T>, user_data: *mut c_void) -> CLResult<()> {
-    // CL_INVALID_VALUE if pfn_notify is NULL but user_data is not NULL.
-    if cb.is_none() && !user_data.is_null() {
-        return Err(CL_INVALID_VALUE);
-    }
-
-    Ok(())
 }
 
 pub fn checked_compare(a: usize, o: cmp::Ordering, b: u64) -> bool {

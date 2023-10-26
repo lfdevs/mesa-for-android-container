@@ -143,11 +143,11 @@ SOURCES = [
     {
         'api': 'spirv',
         'sources': [
-            Source('src/compiler/spirv/spirv.h',                    'https://github.com/KhronosGroup/SPIRV-Headers/raw/master/include/spirv/unified1/spirv.h'),
-            Source('src/compiler/spirv/spirv.core.grammar.json',    'https://github.com/KhronosGroup/SPIRV-Headers/raw/master/include/spirv/unified1/spirv.core.grammar.json'),
-            Source('src/compiler/spirv/OpenCL.std.h',               'https://github.com/KhronosGroup/SPIRV-Headers/raw/master/include/spirv/unified1/OpenCL.std.h'),
-            Source('src/compiler/spirv/GLSL.std.450.h',             'https://github.com/KhronosGroup/SPIRV-Headers/raw/master/include/spirv/unified1/GLSL.std.450.h'),
-            Source('src/compiler/spirv/GLSL.ext.AMD.h',             'https://github.com/KhronosGroup/glslang/raw/master/SPIRV/GLSL.ext.AMD.h'),  # FIXME: is this the canonical source?
+            Source('src/compiler/spirv/spirv.h',                    'https://github.com/KhronosGroup/SPIRV-Headers/raw/main/include/spirv/unified1/spirv.h'),
+            Source('src/compiler/spirv/spirv.core.grammar.json',    'https://github.com/KhronosGroup/SPIRV-Headers/raw/main/include/spirv/unified1/spirv.core.grammar.json'),
+            Source('src/compiler/spirv/OpenCL.std.h',               'https://github.com/KhronosGroup/SPIRV-Headers/raw/main/include/spirv/unified1/OpenCL.std.h'),
+            Source('src/compiler/spirv/GLSL.std.450.h',             'https://github.com/KhronosGroup/SPIRV-Headers/raw/main/include/spirv/unified1/GLSL.std.450.h'),
+            Source('src/compiler/spirv/GLSL.ext.AMD.h',             'https://github.com/KhronosGroup/glslang/raw/main/SPIRV/GLSL.ext.AMD.h'),  # FIXME: is this the canonical source?
         ],
     },
 

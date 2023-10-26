@@ -53,4 +53,5 @@ vklayer_mesa_device_select = shared_library(
 install_data(
   files('VkLayer_MESA_device_select.json'),
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'implicit_layer.d'),
+  install_tag : 'runtime',
 )

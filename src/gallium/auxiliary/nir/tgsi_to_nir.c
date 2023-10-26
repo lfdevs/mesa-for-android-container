@@ -52,7 +52,7 @@
 
 struct ttn_reg_info {
    /** nir register handle containing this TGSI index. */
-   nir_ssa_def *reg;
+   nir_def *reg;
    nir_variable *var;
    /** Offset (in vec4s) from the start of var for this TGSI index. */
    int offset;
@@ -65,12 +65,12 @@ struct ttn_compile {
 
    struct ttn_reg_info *output_regs;
    struct ttn_reg_info *temp_regs;
-   nir_ssa_def **imm_defs;
+   nir_def **imm_defs;
 
    unsigned num_samp_types;
    nir_alu_type *samp_types;
 
-   nir_ssa_def *addr_reg;
+   nir_def *addr_reg;
 
    nir_variable **inputs;
    nir_variable **outputs;
@@ -225,7 +225,7 @@ ttn_emit_declaration(struct ttn_compile *c)
          }
       } else {
          for (i = 0; i < array_size; i++) {
-            nir_ssa_def *reg = nir_decl_reg(b, 4, 32, 0);
+            nir_def *reg = nir_decl_reg(b, 4, 32, 0);
             c->temp_regs[decl->Range.First + i].reg = reg;
             c->temp_regs[decl->Range.First + i].var = NULL;
             c->temp_regs[decl->Range.First + i].offset = 0;
@@ -355,7 +355,7 @@ ttn_emit_declaration(struct ttn_compile *c)
              * for the outputs and emit stores to the real outputs at the end of
              * the shader.
              */
-            nir_ssa_def *reg = nir_decl_reg(b, 4, 32,
+            nir_def *reg = nir_decl_reg(b, 4, 32,
                                             is_array ? array_size : 0);
 
             var->data.mode = nir_var_shader_out;
@@ -481,7 +481,7 @@ ttn_emit_immediate(struct ttn_compile *c)
    nir_builder_instr_insert(b, &load_const->instr);
 }
 
-static nir_ssa_def *
+static nir_def *
 ttn_src_for_indirect(struct ttn_compile *c, struct tgsi_ind_register *indirect);
 
 /* generate either a constant or indirect deref chain for accessing an
@@ -492,7 +492,7 @@ ttn_array_deref(struct ttn_compile *c, nir_variable *var, unsigned offset,
                 struct tgsi_ind_register *indirect)
 {
    nir_deref_instr *deref = nir_build_deref_var(&c->build, var);
-   nir_ssa_def *index = nir_imm_int(&c->build, offset);
+   nir_def *index = nir_imm_int(&c->build, offset);
    if (indirect)
       index = nir_iadd(&c->build, index, ttn_src_for_indirect(c, indirect));
    return nir_build_deref_array(&c->build, deref, index);
@@ -501,17 +501,17 @@ ttn_array_deref(struct ttn_compile *c, nir_variable *var, unsigned offset,
 /* Special case: Turn the frontface varying into a load of the
  * frontface variable, and create the vector as required by TGSI.
  */
-static nir_ssa_def *
+static nir_def *
 ttn_emulate_tgsi_front_face(struct ttn_compile *c)
 {
-   nir_ssa_def *tgsi_frontface[4];
+   nir_def *tgsi_frontface[4];
 
    if (c->cap_face_is_sysval) {
       /* When it's a system value, it should be an integer vector: (F, 0, 0, 1)
        * F is 0xffffffff if front-facing, 0 if not.
        */
 
-      nir_ssa_def *frontface = nir_load_front_face(&c->build, 1);
+      nir_def *frontface = nir_load_front_face(&c->build, 1);
 
       tgsi_frontface[0] = nir_bcsel(&c->build,
                              frontface,
@@ -526,7 +526,7 @@ ttn_emulate_tgsi_front_face(struct ttn_compile *c)
        */
 
       assert(c->input_var_face);
-      nir_ssa_def *frontface = nir_load_var(&c->build, c->input_var_face);
+      nir_def *frontface = nir_load_var(&c->build, c->input_var_face);
 
       tgsi_frontface[0] = nir_bcsel(&c->build,
                              frontface,
@@ -557,7 +557,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
       if (c->temp_regs[index].var) {
          unsigned offset = c->temp_regs[index].offset;
          nir_variable *var = c->temp_regs[index].var;
-         nir_ssa_def *load = nir_load_deref(&c->build,
+         nir_def *load = nir_load_deref(&c->build,
                ttn_array_deref(c, var, offset, indirect));
 
          src = nir_src_for_ssa(load);
@@ -580,7 +580,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
       break;
 
    case TGSI_FILE_SYSTEM_VALUE: {
-      nir_ssa_def *load;
+      nir_def *load;
 
       assert(!indirect);
       assert(!dim);
@@ -614,7 +614,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
          load = nir_load_local_invocation_id(b);
          break;
       case TGSI_SEMANTIC_BLOCK_ID:
-         load = nir_load_workgroup_id(b, 32);
+         load = nir_load_workgroup_id(b);
          break;
       case TGSI_SEMANTIC_BLOCK_SIZE:
          load = nir_load_workgroup_size(b);
@@ -707,7 +707,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
          srcn++;
       }
 
-      nir_ssa_def *offset;
+      nir_def *offset;
       if (op == nir_intrinsic_load_ubo) {
          /* UBO loads don't have a base offset. */
          offset = nir_imm_int(b, index);
@@ -742,10 +742,10 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
       }
       load->src[srcn++] = nir_src_for_ssa(offset);
 
-      nir_ssa_dest_init(&load->instr, &load->dest, 4, 32);
+      nir_def_init(&load->instr, &load->def, 4, 32);
       nir_builder_instr_insert(b, &load->instr);
 
-      src = nir_src_for_ssa(&load->dest.ssa);
+      src = nir_src_for_ssa(&load->def);
       break;
    }
 
@@ -757,7 +757,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
    return src;
 }
 
-static nir_ssa_def *
+static nir_def *
 ttn_src_for_indirect(struct ttn_compile *c, struct tgsi_ind_register *indirect)
 {
    nir_builder *b = &c->build;
@@ -789,7 +789,7 @@ ttn_get_var(struct ttn_compile *c, struct tgsi_full_dst_register *tgsi_fdst)
    return NULL;
 }
 
-static nir_ssa_def *
+static nir_def *
 ttn_get_src(struct ttn_compile *c, struct tgsi_full_src_register *tgsi_fsrc,
             int src_idx)
 {
@@ -837,7 +837,7 @@ ttn_get_src(struct ttn_compile *c, struct tgsi_full_src_register *tgsi_fsrc,
    src.swizzle[2] = tgsi_src->SwizzleZ;
    src.swizzle[3] = tgsi_src->SwizzleW;
 
-   nir_ssa_def *def = nir_mov_alu(b, src, 4);
+   nir_def *def = nir_mov_alu(b, src, 4);
 
    if (tgsi_type_is_64bit(tgsi_src_type))
       def = nir_bitcast_vector(b, def, 64);
@@ -857,10 +857,10 @@ ttn_get_src(struct ttn_compile *c, struct tgsi_full_src_register *tgsi_fsrc,
    return def;
 }
 
-static nir_ssa_def *
-ttn_alu(nir_builder *b, nir_op op, unsigned dest_bitsize, nir_ssa_def **src)
+static nir_def *
+ttn_alu(nir_builder *b, nir_op op, unsigned dest_bitsize, nir_def **src)
 {
-   nir_ssa_def *def = nir_build_alu_src_arr(b, op, src);
+   nir_def *def = nir_build_alu_src_arr(b, op, src);
    if (def->bit_size == 1)
       def = nir_ineg(b, nir_b2iN(b, def, dest_bitsize));
    assert(def->bit_size == dest_bitsize);
@@ -887,10 +887,10 @@ ttn_alu(nir_builder *b, nir_op op, unsigned dest_bitsize, nir_ssa_def **src)
  *  dst.z = 2^{src.x}
  *  dst.w = 1.0
  */
-static nir_ssa_def *
-ttn_exp(nir_builder *b, nir_ssa_def **src)
+static nir_def *
+ttn_exp(nir_builder *b, nir_def **src)
 {
-   nir_ssa_def *srcx = ttn_channel(b, src[0], X);
+   nir_def *srcx = ttn_channel(b, src[0], X);
 
    return nir_vec4(b, nir_fexp2(b, nir_ffloor(b, srcx)),
                       nir_fsub(b, srcx, nir_ffloor(b, srcx)),
@@ -904,11 +904,11 @@ ttn_exp(nir_builder *b, nir_ssa_def **src)
  *  dst.z = \log_2{|src.x|}
  *  dst.w = 1.0
  */
-static nir_ssa_def *
-ttn_log(nir_builder *b, nir_ssa_def **src)
+static nir_def *
+ttn_log(nir_builder *b, nir_def **src)
 {
-   nir_ssa_def *abs_srcx = nir_fabs(b, ttn_channel(b, src[0], X));
-   nir_ssa_def *log2 = nir_flog2(b, abs_srcx);
+   nir_def *abs_srcx = nir_fabs(b, ttn_channel(b, src[0], X));
+   nir_def *log2 = nir_flog2(b, abs_srcx);
 
    return nir_vec4(b, nir_ffloor(b, log2),
                       nir_fdiv(b, abs_srcx, nir_fexp2(b, nir_ffloor(b, log2))),
@@ -922,8 +922,8 @@ ttn_log(nir_builder *b, nir_ssa_def **src)
  *   dst.z = src0.z
  *   dst.w = src1.w
  */
-static nir_ssa_def *
-ttn_dst(nir_builder *b, nir_ssa_def **src)
+static nir_def *
+ttn_dst(nir_builder *b, nir_def **src)
 {
    return nir_vec4(b, nir_imm_float(b, 1.0),
                       nir_fmul(b, ttn_channel(b, src[0], Y),
@@ -938,16 +938,16 @@ ttn_dst(nir_builder *b, nir_ssa_def **src)
  *  dst.z = (src.x > 0.0) ? max(src.y, 0.0)^{clamp(src.w, -128.0, 128.0))} : 0
  *  dst.w = 1.0
  */
-static nir_ssa_def *
-ttn_lit(nir_builder *b, nir_ssa_def **src)
+static nir_def *
+ttn_lit(nir_builder *b, nir_def **src)
 {
-   nir_ssa_def *src0_y = ttn_channel(b, src[0], Y);
-   nir_ssa_def *wclamp = nir_fmax(b, nir_fmin(b, ttn_channel(b, src[0], W),
+   nir_def *src0_y = ttn_channel(b, src[0], Y);
+   nir_def *wclamp = nir_fmax(b, nir_fmin(b, ttn_channel(b, src[0], W),
                                               nir_imm_float(b, 128.0)),
                                   nir_imm_float(b, -128.0));
-   nir_ssa_def *pow = nir_fpow(b, nir_fmax(b, src0_y, nir_imm_float(b, 0.0)),
+   nir_def *pow = nir_fpow(b, nir_fmax(b, src0_y, nir_imm_float(b, 0.0)),
                                wclamp);
-   nir_ssa_def *z = nir_bcsel(b, nir_flt_imm(b, ttn_channel(b, src[0], X), 0.0),
+   nir_def *z = nir_bcsel(b, nir_flt_imm(b, ttn_channel(b, src[0], X), 0.0),
                                  nir_imm_float(b, 0.0), pow);
 
    return nir_vec4(b, nir_imm_float(b, 1.0),
@@ -959,7 +959,7 @@ ttn_lit(nir_builder *b, nir_ssa_def **src)
 static void
 ttn_barrier(nir_builder *b)
 {
-   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP);
+   nir_barrier(b, .execution_scope = SCOPE_WORKGROUP);
 }
 
 static void
@@ -970,11 +970,11 @@ ttn_kill(nir_builder *b)
 }
 
 static void
-ttn_kill_if(nir_builder *b, nir_ssa_def **src)
+ttn_kill_if(nir_builder *b, nir_def **src)
 {
    /* flt must be exact, because NaN shouldn't discard. (apps rely on this) */
    b->exact = true;
-   nir_ssa_def *cmp = nir_bany(b, nir_flt_imm(b, src[0], 0.0));
+   nir_def *cmp = nir_bany(b, nir_flt_imm(b, src[0], 0.0));
    b->exact = false;
 
    nir_discard_if(b, cmp);
@@ -1167,8 +1167,8 @@ add_ssbo_var(struct ttn_compile *c, int binding)
    }
 }
 
-static nir_ssa_def *
-ttn_tex(struct ttn_compile *c, nir_ssa_def **src)
+static nir_def *
+ttn_tex(struct ttn_compile *c, nir_def **src)
 {
    nir_builder *b = &c->build;
    struct tgsi_full_instruction *tgsi_inst = &c->token->FullInstruction;
@@ -1290,10 +1290,10 @@ ttn_tex(struct ttn_compile *c, nir_ssa_def **src)
    unsigned src_number = 0;
 
    instr->src[src_number] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                                &deref->dest.ssa);
+                                                &deref->def);
    src_number++;
    instr->src[src_number] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
-                                                &deref->dest.ssa);
+                                                &deref->def);
    src_number++;
 
    instr->src[src_number] =
@@ -1401,10 +1401,10 @@ ttn_tex(struct ttn_compile *c, nir_ssa_def **src)
    assert(src_number == num_srcs);
    assert(src_number == instr->num_srcs);
 
-   nir_ssa_dest_init(&instr->instr, &instr->dest,
-                     nir_tex_instr_dest_size(instr), 32);
+   nir_def_init(&instr->instr, &instr->def,
+                nir_tex_instr_dest_size(instr), 32);
    nir_builder_instr_insert(b, &instr->instr);
-   return nir_pad_vector_imm_int(b, &instr->dest.ssa, 0, 4);
+   return nir_pad_vector_imm_int(b, &instr->def, 0, 4);
 }
 
 /* TGSI_OPCODE_TXQ is actually two distinct operations:
@@ -1416,8 +1416,8 @@ ttn_tex(struct ttn_compile *c, nir_ssa_def **src)
  *
  * dst.xyz map to NIR txs opcode, and dst.w maps to query_levels
  */
-static nir_ssa_def *
-ttn_txq(struct ttn_compile *c, nir_ssa_def **src)
+static nir_def *
+ttn_txq(struct ttn_compile *c, nir_def **src)
 {
    nir_builder *b = &c->build;
    struct tgsi_full_instruction *tgsi_inst = &c->token->FullInstruction;
@@ -1451,25 +1451,24 @@ ttn_txq(struct ttn_compile *c, nir_ssa_def **src)
    nir_deref_instr *deref = nir_build_deref_var(b, var);
 
    txs->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
 
    qlv->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
 
    /* lod: */
    txs->src[1] = nir_tex_src_for_ssa(nir_tex_src_lod,
                                      ttn_channel(b, src[0], X));
 
-   nir_ssa_dest_init(&txs->instr, &txs->dest, nir_tex_instr_dest_size(txs),
-                     32);
+   nir_def_init(&txs->instr, &txs->def, nir_tex_instr_dest_size(txs), 32);
    nir_builder_instr_insert(b, &txs->instr);
 
-   nir_ssa_dest_init(&qlv->instr, &qlv->dest, 1, 32);
+   nir_def_init(&qlv->instr, &qlv->def, 1, 32);
    nir_builder_instr_insert(b, &qlv->instr);
 
    return nir_vector_insert_imm(b,
-                                nir_pad_vector_imm_int(b, &txs->dest.ssa, 0, 4),
-                                &qlv->dest.ssa, 3);
+                                nir_pad_vector_imm_int(b, &txs->def, 0, 4),
+                                &qlv->def, 3);
 }
 
 static enum glsl_base_type
@@ -1504,8 +1503,8 @@ get_mem_qualifier(struct tgsi_full_instruction *tgsi_inst)
    return access;
 }
 
-static nir_ssa_def *
-ttn_mem(struct ttn_compile *c, nir_ssa_def **src)
+static nir_def *
+ttn_mem(struct ttn_compile *c, nir_def **src)
 {
    nir_builder *b = &c->build;
    struct tgsi_full_instruction *tgsi_inst = &c->token->FullInstruction;
@@ -1593,14 +1592,14 @@ ttn_mem(struct ttn_compile *c, nir_ssa_def **src)
 
       nir_intrinsic_set_access(instr, image_deref->var->data.access);
 
-      instr->src[0] = nir_src_for_ssa(&image_deref->dest.ssa);
+      instr->src[0] = nir_src_for_ssa(&image_deref->def);
       instr->src[1] = nir_src_for_ssa(src[addr_src_index]);
 
       /* Set the sample argument, which is undefined for single-sample images. */
       if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_MS) {
          instr->src[2] = nir_src_for_ssa(ttn_channel(b, src[addr_src_index], W));
       } else {
-         instr->src[2] = nir_src_for_ssa(nir_ssa_undef(b, 1, 32));
+         instr->src[2] = nir_src_for_ssa(nir_undef(b, 1, 32));
       }
 
       if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_LOAD) {
@@ -1622,10 +1621,9 @@ ttn_mem(struct ttn_compile *c, nir_ssa_def **src)
 
 
    if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_LOAD) {
-      nir_ssa_dest_init(&instr->instr, &instr->dest, instr->num_components,
-                        32);
+      nir_def_init(&instr->instr, &instr->def, instr->num_components, 32);
       nir_builder_instr_insert(b, &instr->instr);
-      return nir_pad_vector_imm_int(b, &instr->dest.ssa, 0, 4);
+      return nir_pad_vector_imm_int(b, &instr->def, 0, 4);
    } else {
       nir_builder_instr_insert(b, &instr->instr);
       return NULL;
@@ -1824,7 +1822,7 @@ ttn_emit_instruction(struct ttn_compile *c)
    if (tgsi_op == TGSI_OPCODE_END)
       return;
 
-   nir_ssa_def *src[TGSI_FULL_MAX_SRC_REGISTERS];
+   nir_def *src[TGSI_FULL_MAX_SRC_REGISTERS];
    for (i = 0; i < tgsi_inst->Instruction.NumSrcRegs; i++) {
       src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);
    }
@@ -1840,7 +1838,7 @@ ttn_emit_instruction(struct ttn_compile *c)
    /* If this is non-NULL after the switch, it will be written to the
     * corresponding register/variable/etc after.
     */
-   nir_ssa_def *dst = NULL;
+   nir_def *dst = NULL;
 
    switch (tgsi_op) {
    case TGSI_OPCODE_RSQ:
@@ -2044,7 +2042,7 @@ ttn_emit_instruction(struct ttn_compile *c)
                       tgsi_dst->Register.WriteMask);
    } else {
       unsigned index = tgsi_dst->Register.Index;
-      nir_ssa_def *reg = NULL;
+      nir_def *reg = NULL;
       unsigned base_offset = 0;
 
       if (tgsi_dst->Register.File == TGSI_FILE_TEMPORARY) {
@@ -2062,7 +2060,7 @@ ttn_emit_instruction(struct ttn_compile *c)
       }
 
       if (tgsi_dst->Register.Indirect) {
-         nir_ssa_def *indirect = ttn_src_for_indirect(c, &tgsi_dst->Indirect);
+         nir_def *indirect = ttn_src_for_indirect(c, &tgsi_dst->Indirect);
          nir_store_reg_indirect(b, dst, reg, indirect, .base = base_offset,
                                 .write_mask = tgsi_dst->Register.WriteMask);
       } else {
@@ -2090,7 +2088,7 @@ ttn_add_output_stores(struct ttn_compile *c)
       if (!var)
          continue;
 
-      nir_ssa_def *store_value =
+      nir_def *store_value =
          nir_build_load_reg(b, 4, 32, c->output_regs[i].reg,
                             .base = c->output_regs[i].offset);
 
@@ -2130,7 +2128,7 @@ ttn_add_output_stores(struct ttn_compile *c)
             continue;
 
          nir_deref_instr *deref = nir_build_deref_var(b, c->clipdist);
-         nir_ssa_def *zero = nir_imm_zero(b, 1, 32);
+         nir_def *zero = nir_imm_zero(b, 1, 32);
          unsigned offset = var->data.location == VARYING_SLOT_CLIP_DIST1 ? 4 : 0;
          unsigned size = var->data.location == VARYING_SLOT_CLIP_DIST1 ?
                           b->shader->info.clip_distance_array_size :
@@ -2138,7 +2136,7 @@ ttn_add_output_stores(struct ttn_compile *c)
          for (unsigned i = offset; i < size; i++) {
             /* deref the array member and store each component */
             nir_deref_instr *component_deref = nir_build_deref_array_imm(b, deref, i);
-            nir_ssa_def *val = zero;
+            nir_def *val = zero;
             if (store_mask & BITFIELD_BIT(i - offset))
                val = nir_channel(b, store_value, i - offset);
             nir_store_deref(b, component_deref, val, 0x1);
@@ -2333,7 +2331,7 @@ ttn_compile_init(const void *tgsi_tokens,
                                   scan.file_max[TGSI_FILE_OUTPUT] + 1);
    c->temp_regs = rzalloc_array(c, struct ttn_reg_info,
                                 scan.file_max[TGSI_FILE_TEMPORARY] + 1);
-   c->imm_defs = rzalloc_array(c, nir_ssa_def *,
+   c->imm_defs = rzalloc_array(c, nir_def *,
                                scan.file_max[TGSI_FILE_IMMEDIATE] + 1);
 
    c->num_samp_types = scan.file_max[TGSI_FILE_SAMPLER_VIEW] + 1;
@@ -2439,10 +2437,10 @@ lower_clipdistance_to_array(nir_shader *nir)
    struct set *deletes = _mesa_set_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
    nir_foreach_function_impl(impl, nir) {
       bool func_progress = false;
-      nir_builder b = nir_builder_at(nir_before_block(nir_start_block(impl)));
+      nir_builder b = nir_builder_at(nir_before_impl(impl));
       /* create a new deref for the arrayed clipdistance variable at the start of the function */
       nir_deref_instr *clipdist_deref = nir_build_deref_var(&b, dist0);
-      nir_ssa_def *zero = nir_imm_zero(&b, 1, 32);
+      nir_def *zero = nir_imm_zero(&b, 1, 32);
       nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             /* filter through until a clipdistance store is reached */
@@ -2462,7 +2460,7 @@ lower_clipdistance_to_array(nir_shader *nir)
             for (unsigned i = 0; i < nir->info.clip_distance_array_size; i++) {
                /* deref the array member and store each component */
                nir_deref_instr *component_deref = nir_build_deref_array_imm(&b, clipdist_deref, i);
-               nir_ssa_def *val = zero;
+               nir_def *val = zero;
                if (wrmask & BITFIELD_BIT(i - offset))
                   val = nir_channel(&b, intr->src[1].ssa, i - offset);
                nir_store_deref(&b, component_deref, val, 0x1);

@@ -303,9 +303,7 @@ void
 _mesa_update_texture_object_swizzle(struct gl_context *ctx,
                                     struct gl_texture_object *texObj)
 {
-   if (texObj->Attrib.BaseLevel >= MAX_TEXTURE_LEVELS)
-      return;
-   const struct gl_texture_image *img = texObj->Image[0][texObj->Attrib.BaseLevel];
+   const struct gl_texture_image *img = _mesa_base_tex_image(texObj);
    if (!img)
       return;
 

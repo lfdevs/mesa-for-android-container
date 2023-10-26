@@ -23,6 +23,7 @@
 
 #include <inttypes.h> /* for PRIx64 macro */
 #include "ir_print_visitor.h"
+#include "linker_util.h"
 #include "compiler/glsl_types.h"
 #include "glsl_parser_extras.h"
 #include "main/macros.h"
@@ -45,6 +46,20 @@ ir_instruction::fprint(FILE *f) const
    deconsted->accept(&v);
 }
 
+static void
+glsl_print_type(FILE *f, const glsl_type *t)
+{
+   if (t->is_array()) {
+      fprintf(f, "(array ");
+      glsl_print_type(f, t->fields.array);
+      fprintf(f, " %u)", t->length);
+   } else if (t->is_struct() && !is_gl_identifier(glsl_get_type_name(t))) {
+      fprintf(f, "%s@%p", glsl_get_type_name(t), (void *) t);
+   } else {
+      fprintf(f, "%s", glsl_get_type_name(t));
+   }
+}
+
 extern "C" {
 void
 _mesa_print_ir(FILE *f, exec_list *instructions,
@@ -55,7 +70,7 @@ _mesa_print_ir(FILE *f, exec_list *instructions,
 	 const glsl_type *const s = state->user_structures[i];
 
 	 fprintf(f, "(structure (%s) (%s@%p) (%u) (\n",
-                 s->name, s->name, (void *) s, s->length);
+                 glsl_get_type_name(s), glsl_get_type_name(s), (void *) s, s->length);
 
 	 for (unsigned j = 0; j < s->length; j++) {
 	    fprintf(f, "\t((");

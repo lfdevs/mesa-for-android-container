@@ -692,7 +692,7 @@ ast_type_qualifier::merge_into_in_qualifier(YYLTYPE *loc,
                                             ast_node* &node)
 {
    bool r = true;
-   void *lin_ctx = state->linalloc;
+   linear_ctx *lin_ctx = state->linalloc;
 
    /* We create the gs_input_layout node before merging so, in the future, no
     * more repeated nodes will be created as we will have the flag set.

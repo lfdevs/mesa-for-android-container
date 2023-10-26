@@ -333,12 +333,12 @@ struct texenv_fragment_program {
 
    nir_variable *sampler_vars[MAX_TEXTURE_COORD_UNITS];
 
-   nir_ssa_def *src_texture[MAX_TEXTURE_COORD_UNITS];
+   nir_def *src_texture[MAX_TEXTURE_COORD_UNITS];
    /* ssa-def containing each texture unit's sampled texture color,
     * else NULL.
     */
 
-   nir_ssa_def *src_previous;   /**< Color from previous stage */
+   nir_def *src_previous;   /**< Color from previous stage */
 };
 
 static nir_variable *
@@ -374,7 +374,7 @@ register_state_var(struct texenv_fragment_program *p,
    return var;
 }
 
-static nir_ssa_def *
+static nir_def *
 load_state_var(struct texenv_fragment_program *p,
                gl_state_index s0,
                gl_state_index s1,
@@ -386,7 +386,7 @@ load_state_var(struct texenv_fragment_program *p,
    return nir_load_var(p->b, var);
 }
 
-static nir_ssa_def *
+static nir_def *
 load_input(struct texenv_fragment_program *p, gl_varying_slot slot,
            const struct glsl_type *type)
 {
@@ -399,7 +399,7 @@ load_input(struct texenv_fragment_program *p, gl_varying_slot slot,
    return nir_load_var(p->b, var);
 }
 
-static nir_ssa_def *
+static nir_def *
 get_current_attrib(struct texenv_fragment_program *p, GLuint attrib)
 {
    return load_state_var(p, STATE_CURRENT_ATTRIB_MAYBE_VP_CLAMPED,
@@ -407,7 +407,7 @@ get_current_attrib(struct texenv_fragment_program *p, GLuint attrib)
                          glsl_vec4_type());
 }
 
-static nir_ssa_def *
+static nir_def *
 get_gl_Color(struct texenv_fragment_program *p)
 {
    if (p->state->inputs_available & VARYING_BIT_COL0) {
@@ -417,7 +417,7 @@ get_gl_Color(struct texenv_fragment_program *p)
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 get_source(struct texenv_fragment_program *p,
            GLuint src, GLuint unit)
 {
@@ -462,13 +462,13 @@ get_source(struct texenv_fragment_program *p,
    }
 }
 
-static nir_ssa_def *
+static nir_def *
 emit_combine_source(struct texenv_fragment_program *p,
                     GLuint unit,
                     GLuint source,
                     GLuint operand)
 {
-   nir_ssa_def *src;
+   nir_def *src;
 
    src = get_source(p, source, unit);
 
@@ -480,7 +480,7 @@ emit_combine_source(struct texenv_fragment_program *p,
       return src->num_components == 1 ? src : nir_channel(p->b, src, 3);
 
    case TEXENV_OPR_ONE_MINUS_ALPHA: {
-      nir_ssa_def *scalar =
+      nir_def *scalar =
          src->num_components == 1 ? src : nir_channel(p->b, src, 3);
 
       return nir_fsub_imm(p->b, 1.0, scalar);
@@ -535,8 +535,8 @@ static GLboolean args_match( const struct state_key *key, GLuint unit )
    return GL_TRUE;
 }
 
-static nir_ssa_def *
-smear(nir_builder *b, nir_ssa_def *val)
+static nir_def *
+smear(nir_builder *b, nir_def *val)
 {
    if (val->num_components != 1)
       return val;
@@ -544,15 +544,15 @@ smear(nir_builder *b, nir_ssa_def *val)
    return nir_replicate(b, val, 4);
 }
 
-static nir_ssa_def *
+static nir_def *
 emit_combine(struct texenv_fragment_program *p,
              GLuint unit,
              GLuint nr,
              GLuint mode,
              const struct gl_tex_env_argument *opt)
 {
-   nir_ssa_def *src[MAX_COMBINER_TERMS];
-   nir_ssa_def *tmp0, *tmp1;
+   nir_def *src[MAX_COMBINER_TERMS];
+   nir_def *tmp0, *tmp1;
    GLuint i;
 
    assert(nr <= MAX_COMBINER_TERMS);
@@ -619,7 +619,7 @@ emit_combine(struct texenv_fragment_program *p,
 /**
  * Generate instructions for one texture unit's env/combiner mode.
  */
-static nir_ssa_def *
+static nir_def *
 emit_texenv(struct texenv_fragment_program *p, GLuint unit)
 {
    const struct state_key *key = p->state;
@@ -662,7 +662,7 @@ emit_texenv(struct texenv_fragment_program *p, GLuint unit)
    else
       alpha_saturate = GL_FALSE;
 
-   nir_ssa_def *val;
+   nir_def *val;
 
    /* Emit the RGB and A combine ops
     */
@@ -697,7 +697,7 @@ emit_texenv(struct texenv_fragment_program *p, GLuint unit)
       val = smear(p->b, val);
       if (rgb_saturate)
          val = nir_fsat(p->b, val);
-      nir_ssa_def *rgb = val;
+      nir_def *rgb = val;
 
       val = emit_combine(p, unit,
                          key->unit[unit].NumArgsA,
@@ -709,7 +709,7 @@ emit_texenv(struct texenv_fragment_program *p, GLuint unit)
 
       if (alpha_saturate)
          val = nir_fsat(p->b, val);
-      nir_ssa_def *a = val;
+      nir_def *a = val;
 
       val = nir_vector_insert_imm(p->b, rgb, a, 3);
    }
@@ -717,7 +717,7 @@ emit_texenv(struct texenv_fragment_program *p, GLuint unit)
    /* Deal with the final shift:
     */
    if (alpha_shift || rgb_shift) {
-      nir_ssa_def *shift;
+      nir_def *shift;
 
       if (rgb_shift == alpha_shift) {
          shift = nir_imm_float(p->b, (float)(1 << rgb_shift));
@@ -747,7 +747,7 @@ load_texture(struct texenv_fragment_program *p, GLuint unit)
       return;
 
    const GLuint texTarget = p->state->unit[unit].source_index;
-   nir_ssa_def *texcoord;
+   nir_def *texcoord;
 
    if (!(p->state->inputs_available & (VARYING_BIT_TEX0 << unit))) {
       texcoord = get_current_attrib(p, VERT_ATTRIB_TEX0 + unit);
@@ -800,11 +800,11 @@ load_texture(struct texenv_fragment_program *p, GLuint unit)
 
    nir_deref_instr *deref = nir_build_deref_var(p->b, var);
    tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
    tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
-                                     &deref->dest.ssa);
+                                     &deref->def);
 
-   nir_ssa_def *src2 =
+   nir_def *src2 =
       nir_channels(p->b, texcoord,
                    nir_component_mask(tex->coord_components));
    tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_coord, src2);
@@ -814,13 +814,13 @@ load_texture(struct texenv_fragment_program *p, GLuint unit)
 
    if (p->state->unit[unit].shadow) {
       tex->is_shadow = true;
-      nir_ssa_def *src4 =
+      nir_def *src4 =
          nir_channel(p->b, texcoord, tex->coord_components);
       tex->src[4] = nir_tex_src_for_ssa(nir_tex_src_comparator, src4);
    }
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
-   p->src_texture[unit] = &tex->dest.ssa;
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
+   p->src_texture[unit] = &tex->def;
 
    nir_builder_instr_insert(p->b, &tex->instr);
    BITSET_SET(p->b->shader->info.textures_used, unit);
@@ -899,12 +899,12 @@ emit_instructions(struct texenv_fragment_program *p)
       }
    }
 
-   nir_ssa_def *cf = get_source(p, TEXENV_SRC_PREVIOUS, 0);
+   nir_def *cf = get_source(p, TEXENV_SRC_PREVIOUS, 0);
 
    if (key->separate_specular) {
-      nir_ssa_def *spec_result = cf;
+      nir_def *spec_result = cf;
 
-      nir_ssa_def *secondary;
+      nir_def *secondary;
       if (p->state->inputs_available & VARYING_BIT_COL1)
          secondary = load_input(p, VARYING_SLOT_COL1, glsl_vec4_type());
       else

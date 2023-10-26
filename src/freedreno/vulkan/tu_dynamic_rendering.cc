@@ -152,14 +152,14 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
                                         old_cmds[i]->pre_chain.trace_renderpass_end);
          }
 
-         tu_cmd_render(cmd_buffer);
+         TU_CALLX(dev, tu_cmd_render)(cmd_buffer);
 
          tu_cs_emit_pkt7(&cmd_buffer->cs, CP_MEM_WRITE, 3);
          tu_cs_emit_qw(&cmd_buffer->cs,
                        global_iova(cmd_buffer, dynamic_rendering_fence));
          tu_cs_emit(&cmd_buffer->cs, dev->dynamic_rendering_fence);
 
-         tu_EndCommandBuffer(tu_cmd_buffer_to_handle(cmd_buffer));
+         TU_CALLX(dev, tu_EndCommandBuffer)(tu_cmd_buffer_to_handle(cmd_buffer));
          util_dynarray_append(&cmds, struct tu_cmd_buffer *, cmd_buffer);
          cmd_buffer = NULL;
          break;
@@ -223,4 +223,3 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
 
    return VK_SUCCESS;
 }
-

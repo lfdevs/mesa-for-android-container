@@ -413,6 +413,12 @@ public:
     */
    unsigned flags_written(const intel_device_info *devinfo) const;
 
+   /**
+    * Return true if this instruction is a sampler message gathering residency
+    * data.
+    */
+   bool has_sampler_residency() const;
+
    fs_reg dst;
    fs_reg *src;
 

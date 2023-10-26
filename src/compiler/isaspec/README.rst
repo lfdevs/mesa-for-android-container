@@ -1,1 +1,1 @@
-../../../docs/drivers/freedreno/isaspec.rst
+../../../docs/isaspec.rst

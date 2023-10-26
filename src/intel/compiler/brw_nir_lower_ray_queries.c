@@ -37,7 +37,7 @@ struct lowering_state {
    uint32_t n_queries;
 
    struct brw_nir_rt_globals_defs globals;
-   nir_ssa_def *rq_globals;
+   nir_def *rq_globals;
 };
 
 struct brw_ray_query {
@@ -98,7 +98,7 @@ create_internal_var(struct brw_ray_query *rq, struct lowering_state *state)
 
 
 
-static nir_ssa_def *
+static nir_def *
 get_ray_query_shadow_addr(nir_builder *b,
                           nir_deref_instr *deref,
                           struct lowering_state *state,
@@ -117,7 +117,7 @@ get_ray_query_shadow_addr(nir_builder *b,
    /* Base address in the shadow memory of the variable associated with this
     * ray query variable.
     */
-   nir_ssa_def *base_addr =
+   nir_def *base_addr =
       nir_iadd_imm(b, state->globals.resume_sbt_addr,
                    brw_rt_ray_queries_shadow_stack_size(state->devinfo) * rq->id);
 
@@ -131,7 +131,7 @@ get_ray_query_shadow_addr(nir_builder *b,
    nir_deref_instr **p = &path.path[1];
    for (; *p; p++) {
       if ((*p)->deref_type == nir_deref_type_array) {
-         nir_ssa_def *index = nir_ssa_for_src(b, (*p)->arr.index, 1);
+         nir_def *index = (*p)->arr.index.ssa;
 
          /**/
          *out_state_deref = nir_build_deref_array(b, *out_state_deref, index);
@@ -140,7 +140,7 @@ get_ray_query_shadow_addr(nir_builder *b,
          uint64_t size = MAX2(1, glsl_get_aoa_size((*p)->type)) *
             brw_rt_ray_queries_shadow_stack_size(state->devinfo);
 
-         nir_ssa_def *mul = nir_amul_imm(b, nir_i2i64(b, index), size);
+         nir_def *mul = nir_amul_imm(b, nir_i2i64(b, index), size);
 
          base_addr = nir_iadd(b, base_addr, mul);
       } else {
@@ -151,7 +151,7 @@ get_ray_query_shadow_addr(nir_builder *b,
    nir_deref_path_finish(&path);
 
    /* Add the lane offset to the shadow memory address */
-   nir_ssa_def *lane_offset =
+   nir_def *lane_offset =
       nir_imul_imm(
          b,
          nir_iadd(
@@ -169,14 +169,14 @@ get_ray_query_shadow_addr(nir_builder *b,
 static void
 update_trace_ctrl_level(nir_builder *b,
                         nir_deref_instr *state_deref,
-                        nir_ssa_def **out_old_ctrl,
-                        nir_ssa_def **out_old_level,
-                        nir_ssa_def *new_ctrl,
-                        nir_ssa_def *new_level)
+                        nir_def **out_old_ctrl,
+                        nir_def **out_old_level,
+                        nir_def *new_ctrl,
+                        nir_def *new_level)
 {
-   nir_ssa_def *old_value = nir_load_deref(b, state_deref);
-   nir_ssa_def *old_ctrl = nir_ishr_imm(b, old_value, 2);
-   nir_ssa_def *old_level = nir_iand_imm(b, old_value, 0x3);
+   nir_def *old_value = nir_load_deref(b, state_deref);
+   nir_def *old_ctrl = nir_ishr_imm(b, old_value, 2);
+   nir_def *old_level = nir_iand_imm(b, old_value, 0x3);
 
    if (out_old_ctrl)
       *out_old_ctrl = old_ctrl;
@@ -194,16 +194,16 @@ update_trace_ctrl_level(nir_builder *b,
       if (!new_level)
          new_level = old_level;
 
-      nir_ssa_def *new_value = nir_ior(b, nir_ishl_imm(b, new_ctrl, 2), new_level);
+      nir_def *new_value = nir_ior(b, nir_ishl_imm(b, new_ctrl, 2), new_level);
       nir_store_deref(b, state_deref, new_value, 0x1);
    }
 }
 
 static void
 fill_query(nir_builder *b,
-           nir_ssa_def *hw_stack_addr,
-           nir_ssa_def *shadow_stack_addr,
-           nir_ssa_def *ctrl)
+           nir_def *hw_stack_addr,
+           nir_def *shadow_stack_addr,
+           nir_def *ctrl)
 {
    brw_nir_memcpy_global(b, hw_stack_addr, 64, shadow_stack_addr, 64,
                          BRW_RT_SIZEOF_RAY_QUERY);
@@ -211,8 +211,8 @@ fill_query(nir_builder *b,
 
 static void
 spill_query(nir_builder *b,
-            nir_ssa_def *hw_stack_addr,
-            nir_ssa_def *shadow_stack_addr)
+            nir_def *hw_stack_addr,
+            nir_def *shadow_stack_addr)
 {
    brw_nir_memcpy_global(b, shadow_stack_addr, 64, hw_stack_addr, 64,
                          BRW_RT_SIZEOF_RAY_QUERY);
@@ -229,16 +229,16 @@ lower_ray_query_intrinsic(nir_builder *b,
    b->cursor = nir_instr_remove(&intrin->instr);
 
    nir_deref_instr *ctrl_level_deref;
-   nir_ssa_def *shadow_stack_addr =
+   nir_def *shadow_stack_addr =
       get_ray_query_shadow_addr(b, deref, state, &ctrl_level_deref);
-   nir_ssa_def *hw_stack_addr =
+   nir_def *hw_stack_addr =
       brw_nir_rt_sync_stack_addr(b, state->globals.base_mem_addr, state->devinfo);
-   nir_ssa_def *stack_addr = shadow_stack_addr ? shadow_stack_addr : hw_stack_addr;
+   nir_def *stack_addr = shadow_stack_addr ? shadow_stack_addr : hw_stack_addr;
 
    switch (intrin->intrinsic) {
    case nir_intrinsic_rq_initialize: {
-      nir_ssa_def *as_addr = intrin->src[1].ssa;
-      nir_ssa_def *ray_flags = intrin->src[2].ssa;
+      nir_def *as_addr = intrin->src[1].ssa;
+      nir_def *ray_flags = intrin->src[2].ssa;
       /* From the SPIR-V spec:
        *
        *    "Only the 8 least-significant bits of Cull Mask are used by
@@ -247,13 +247,13 @@ lower_ray_query_intrinsic(nir_builder *b,
        *    Only the 16 least-significant bits of Miss Index are used by
        *    this instruction - other bits are ignored."
        */
-      nir_ssa_def *cull_mask = nir_iand_imm(b, intrin->src[3].ssa, 0xff);
-      nir_ssa_def *ray_orig = intrin->src[4].ssa;
-      nir_ssa_def *ray_t_min = intrin->src[5].ssa;
-      nir_ssa_def *ray_dir = intrin->src[6].ssa;
-      nir_ssa_def *ray_t_max = intrin->src[7].ssa;
+      nir_def *cull_mask = nir_iand_imm(b, intrin->src[3].ssa, 0xff);
+      nir_def *ray_orig = intrin->src[4].ssa;
+      nir_def *ray_t_min = intrin->src[5].ssa;
+      nir_def *ray_dir = intrin->src[6].ssa;
+      nir_def *ray_t_max = intrin->src[7].ssa;
 
-      nir_ssa_def *root_node_ptr =
+      nir_def *root_node_ptr =
          brw_nir_rt_acceleration_structure_to_root_node(b, as_addr);
 
       struct brw_nir_rt_mem_ray_defs ray_defs = {
@@ -266,7 +266,7 @@ lower_ray_query_intrinsic(nir_builder *b,
          .t_far = ray_t_max,
       };
 
-      nir_ssa_def *ray_addr =
+      nir_def *ray_addr =
          brw_nir_rt_mem_ray_addr(b, stack_addr, BRW_RT_BVH_LEVEL_WORLD);
 
       brw_nir_rt_query_mark_init(b, stack_addr);
@@ -280,13 +280,13 @@ lower_ray_query_intrinsic(nir_builder *b,
    }
 
    case nir_intrinsic_rq_proceed: {
-      nir_ssa_def *not_done =
+      nir_def *not_done =
          nir_inot(b, brw_nir_rt_query_done(b, stack_addr));
-      nir_ssa_def *not_done_then, *not_done_else;
+      nir_def *not_done_then, *not_done_else;
 
       nir_push_if(b, not_done);
       {
-         nir_ssa_def *ctrl, *level;
+         nir_def *ctrl, *level;
          update_trace_ctrl_level(b, ctrl_level_deref,
                                  &ctrl, &level,
                                  NULL,
@@ -324,7 +324,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       }
       nir_pop_if(b, NULL);
       not_done = nir_if_phi(b, not_done_then, not_done_else);
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, not_done);
+      nir_def_rewrite_uses(&intrin->def, not_done);
       break;
    }
 
@@ -366,7 +366,7 @@ lower_ray_query_intrinsic(nir_builder *b,
                                         BRW_RT_BVH_LEVEL_OBJECT);
       brw_nir_rt_load_mem_hit_from_addr(b, &hit_in, stack_addr, committed);
 
-      nir_ssa_def *sysval = NULL;
+      nir_def *sysval = NULL;
       switch (nir_intrinsic_ray_query_value(intrin)) {
       case nir_ray_query_value_intersection_type:
          if (committed) {
@@ -417,7 +417,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       }
 
       case nir_ray_query_value_intersection_geometry_index: {
-         nir_ssa_def *geometry_index_dw =
+         nir_def *geometry_index_dw =
             nir_load_global(b, nir_iadd_imm(b, hit_in.prim_leaf_ptr, 4), 4,
                             1, 32);
          sysval = nir_iand_imm(b, geometry_index_dw, BITFIELD_MASK(29));
@@ -490,7 +490,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       }
 
       assert(sysval);
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, sysval);
+      nir_def_rewrite_uses(&intrin->def, sysval);
       break;
    }
 
@@ -503,7 +503,7 @@ static void
 lower_ray_query_impl(nir_function_impl *impl, struct lowering_state *state)
 {
    nir_builder _b, *b = &_b;
-   _b = nir_builder_at(nir_before_block(nir_start_block(impl)));
+   _b = nir_builder_at(nir_before_impl(impl));
 
    state->rq_globals = nir_load_ray_query_global_intel(b);
 

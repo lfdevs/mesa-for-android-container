@@ -34,6 +34,7 @@
 #include <sys/types.h>
 
 #include "egl_dri2.h"
+#include "eglglobals.h"
 #include "kopper_interface.h"
 #include "loader.h"
 
@@ -219,34 +220,28 @@ static const __DRIextension *swrast_loader_extensions[] = {
 };
 
 static bool
-surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
+surfaceless_probe_device(_EGLDisplay *disp, bool swrast, bool zink)
 {
-#define MAX_DRM_DEVICES 64
    const unsigned node_type = swrast ? DRM_NODE_PRIMARY : DRM_NODE_RENDER;
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   drmDevicePtr device, devices[MAX_DRM_DEVICES] = {NULL};
-   int i, num_devices;
+   _EGLDevice *dev_list = _eglGlobal.DeviceList;
+   drmDevicePtr device;
 
-   num_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
-   if (num_devices < 0)
-      return false;
+   while (dev_list) {
+      if (!_eglDeviceSupports(dev_list, _EGL_DEVICE_DRM))
+         goto next;
 
-   for (i = 0; i < num_devices; ++i) {
-      device = devices[i];
+      device = _eglDeviceDrm(dev_list);
+      assert(device);
 
       if (!(device->available_nodes & (1 << node_type)))
-         continue;
+         goto next;
 
       dri2_dpy->fd_render_gpu = loader_open_device(device->nodes[node_type]);
       if (dri2_dpy->fd_render_gpu < 0)
-         continue;
+         goto next;
 
-      disp->Device = _eglAddDevice(dri2_dpy->fd_render_gpu, swrast);
-      if (!disp->Device) {
-         close(dri2_dpy->fd_render_gpu);
-         dri2_dpy->fd_render_gpu = -1;
-         continue;
-      }
+      disp->Device = dev_list;
 
       char *driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
       if (swrast) {
@@ -264,23 +259,25 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
          dri2_dpy->driver_name = driver_name;
       }
 
-      if (dri2_dpy->driver_name && dri2_load_driver_dri3(disp))
+      if (dri2_dpy->driver_name && dri2_load_driver_dri3(disp)) {
+         if (swrast || zink)
+            dri2_dpy->loader_extensions = swrast_loader_extensions;
+         else
+            dri2_dpy->loader_extensions = image_loader_extensions;
          break;
+      }
 
       free(dri2_dpy->driver_name);
       dri2_dpy->driver_name = NULL;
       close(dri2_dpy->fd_render_gpu);
       dri2_dpy->fd_render_gpu = -1;
+
+   next:
+      dev_list = _eglDeviceNext(dev_list);
    }
-   drmFreeDevices(devices, num_devices);
 
-   if (i == num_devices)
+   if (!dev_list)
       return false;
-
-   if (swrast)
-      dri2_dpy->loader_extensions = swrast_loader_extensions;
-   else
-      dri2_dpy->loader_extensions = image_loader_extensions;
 
    return true;
 }
@@ -291,7 +288,7 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    dri2_dpy->fd_render_gpu = -1;
-   disp->Device = _eglAddDevice(dri2_dpy->fd_render_gpu, true);
+   disp->Device = _eglFindDevice(dri2_dpy->fd_render_gpu, true);
    assert(disp->Device);
 
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
@@ -311,22 +308,19 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
 EGLBoolean
 dri2_initialize_surfaceless(_EGLDisplay *disp)
 {
-   struct dri2_egl_display *dri2_dpy;
    const char *err;
    bool driver_loaded = false;
-
-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
+   struct dri2_egl_display *dri2_dpy = dri2_display_create();
    if (!dri2_dpy)
-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
+      return EGL_FALSE;
 
-   dri2_dpy->fd_render_gpu = -1;
-   dri2_dpy->fd_display_gpu = -1;
    disp->DriverData = (void *)dri2_dpy;
 
    /* When ForceSoftware is false, we try the HW driver.  When ForceSoftware
     * is true, we try kms_swrast and swrast in order.
     */
-   driver_loaded = surfaceless_probe_device(disp, disp->Options.ForceSoftware);
+   driver_loaded = surfaceless_probe_device(disp, disp->Options.ForceSoftware,
+                                            disp->Options.Zink);
    if (!driver_loaded && disp->Options.ForceSoftware) {
       _eglLog(_EGL_DEBUG, "Falling back to surfaceless swrast without DRM.");
       driver_loaded = surfaceless_probe_device_sw(disp);

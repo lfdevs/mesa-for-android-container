@@ -21,9 +21,9 @@ st_nir_lower_position_invariant(struct nir_shader *s, bool aos,
                                 struct gl_program_parameter_list *paramList)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(s);
-   nir_builder b = nir_builder_at(nir_before_block(nir_start_block(impl)));
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
 
-   nir_ssa_def *mvp[4];
+   nir_def *mvp[4];
    for (int i = 0; i < 4; i++) {
       gl_state_index16 tokens[STATE_LENGTH] = {
           aos ? STATE_MVP_MATRIX : STATE_MVP_MATRIX_TRANSPOSE, 0, i, i};
@@ -32,12 +32,12 @@ st_nir_lower_position_invariant(struct nir_shader *s, bool aos,
       mvp[i] = nir_load_var(&b, var);
    }
 
-   nir_ssa_def *result;
-   nir_ssa_def *in_pos = nir_load_var(&b, nir_get_variable_with_location(s, nir_var_shader_in,
+   nir_def *result;
+   nir_def *in_pos = nir_load_var(&b, nir_get_variable_with_location(s, nir_var_shader_in,
                                                                          VERT_ATTRIB_POS, glsl_vec4_type()));
    s->info.inputs_read |= VERT_BIT_POS;
    if (aos) {
-      nir_ssa_def *chans[4];
+      nir_def *chans[4];
       for (int i = 0; i < 4; i++)
          chans[i] = nir_fdot4(&b, mvp[i], in_pos);
       result = nir_vec4(&b, chans[0], chans[1], chans[2], chans[3]);

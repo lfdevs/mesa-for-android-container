@@ -447,6 +447,19 @@ svga_create_uav_list(struct svga_context *svga,
                 &svga->curr.shader_buffers[shader][i];
             struct pipe_resource *res = cur_sbuf->resource;
             SVGA3dUAViewId uaViewId;
+	    enum pipe_error ret;
+
+            /* Use srv rawbuffer to access readonly shader buffer */
+	    if (svga_shader_buffer_can_use_srv(svga, shader, i, cur_sbuf)) {
+               ret = svga_shader_buffer_bind_srv(svga, shader, i, cur_sbuf);
+               if (ret != PIPE_OK)
+                  return ret;
+               continue;
+	    } else {
+               ret = svga_shader_buffer_unbind_srv(svga, shader, i, cur_sbuf);
+               if (ret != PIPE_OK)
+                  return ret;
+            }
 
             if (res) {
                /* Get the buffer handle that can be bound as uav. */

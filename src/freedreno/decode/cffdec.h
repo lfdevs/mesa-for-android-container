@@ -46,7 +46,7 @@ enum query_mode {
 
 struct cffdec_options {
    struct fd_dev_id dev_id;
-   unsigned gpu_id;
+   const struct fd_dev_info *info;
    int draw_filter;
    int color;
    int dump_shaders;

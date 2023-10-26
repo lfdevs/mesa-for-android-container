@@ -92,12 +92,6 @@ rb_node_maximum(struct rb_node *node)
     return node;
 }
 
-void
-rb_tree_init(struct rb_tree *T)
-{
-    T->root = NULL;
-}
-
 /**
  * Replace the subtree of T rooted at u with the subtree rooted at v
  *

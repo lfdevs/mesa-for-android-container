@@ -953,18 +953,18 @@ void r300_emit_vertex_arrays(struct r300_context* r300, int offset,
             size1 = hw_format_size[i];
             size2 = hw_format_size[i+1];
 
-            OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(vb1->stride) |
-                   R300_VBPNTR_SIZE1(size2) | R300_VBPNTR_STRIDE1(vb2->stride));
-            OUT_CS(vb1->buffer_offset + velem[i].src_offset   + offset * vb1->stride);
-            OUT_CS(vb2->buffer_offset + velem[i+1].src_offset + offset * vb2->stride);
+            OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(velem[i].src_stride) |
+                   R300_VBPNTR_SIZE1(size2) | R300_VBPNTR_STRIDE1(velem[i+1].src_stride));
+            OUT_CS(vb1->buffer_offset + velem[i].src_offset   + offset * velem[i].src_stride);
+            OUT_CS(vb2->buffer_offset + velem[i+1].src_offset + offset * velem[i+1].src_stride);
         }
 
         if (vertex_array_count & 1) {
             vb1 = &vbuf[velem[i].vertex_buffer_index];
             size1 = hw_format_size[i];
 
-            OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(vb1->stride));
-            OUT_CS(vb1->buffer_offset + velem[i].src_offset + offset * vb1->stride);
+            OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(velem[i].src_stride));
+            OUT_CS(vb1->buffer_offset + velem[i].src_offset + offset * velem[i].src_stride);
         }
 
         for (i = 0; i < vertex_array_count; i++) {
@@ -982,18 +982,18 @@ void r300_emit_vertex_arrays(struct r300_context* r300, int offset,
             if (velem[i].instance_divisor) {
                 stride1 = 0;
                 offset1 = vb1->buffer_offset + velem[i].src_offset +
-                          (instance_id / velem[i].instance_divisor) * vb1->stride;
+                          (instance_id / velem[i].instance_divisor) * velem[i].src_stride;
             } else {
-                stride1 = vb1->stride;
-                offset1 = vb1->buffer_offset + velem[i].src_offset + offset * vb1->stride;
+                stride1 = velem[i].src_stride;
+                offset1 = vb1->buffer_offset + velem[i].src_offset + offset * velem[i].src_stride;
             }
             if (velem[i+1].instance_divisor) {
                 stride2 = 0;
                 offset2 = vb2->buffer_offset + velem[i+1].src_offset +
-                          (instance_id / velem[i+1].instance_divisor) * vb2->stride;
+                          (instance_id / velem[i+1].instance_divisor) * velem[i+1].src_stride;
             } else {
-                stride2 = vb2->stride;
-                offset2 = vb2->buffer_offset + velem[i+1].src_offset + offset * vb2->stride;
+                stride2 = velem[i+1].src_stride;
+                offset2 = vb2->buffer_offset + velem[i+1].src_offset + offset * velem[i+1].src_stride;
             }
 
             OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(stride1) |
@@ -1009,10 +1009,10 @@ void r300_emit_vertex_arrays(struct r300_context* r300, int offset,
             if (velem[i].instance_divisor) {
                 stride1 = 0;
                 offset1 = vb1->buffer_offset + velem[i].src_offset +
-                          (instance_id / velem[i].instance_divisor) * vb1->stride;
+                          (instance_id / velem[i].instance_divisor) * velem[i].src_stride;
             } else {
-                stride1 = vb1->stride;
-                offset1 = vb1->buffer_offset + velem[i].src_offset + offset * vb1->stride;
+                stride1 = velem[i].src_stride;
+                offset1 = vb1->buffer_offset + velem[i].src_offset + offset * velem[i].src_stride;
             }
 
             OUT_CS(R300_VBPNTR_SIZE0(size1) | R300_VBPNTR_STRIDE0(stride1));

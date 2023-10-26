@@ -1,5 +1,8 @@
 
 BasedOnStyle: InheritParentConfig
+DisableFormat: false
+
+ColumnLimit: 100
 
 # ACO clang-format rules:
 Language: Cpp

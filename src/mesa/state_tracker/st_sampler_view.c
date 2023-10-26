@@ -361,10 +361,19 @@ st_get_sampler_view_format(const struct st_context *st,
    GLenum baseFormat = _mesa_base_tex_image(texObj)->_BaseFormat;
    format = texObj->surface_based ? texObj->surface_format : texObj->pt->format;
 
+   /* From OpenGL 4.3 spec, "Combined Depth/Stencil Textures":
+    *
+    *    "The DEPTH_STENCIL_TEXTURE_MODE is ignored for non
+    *     depth/stencil textures.
+    */
+   const bool has_combined_ds =
+      baseFormat == GL_DEPTH_STENCIL;
+
    if (baseFormat == GL_DEPTH_COMPONENT ||
        baseFormat == GL_DEPTH_STENCIL ||
        baseFormat == GL_STENCIL_INDEX) {
-      if (texObj->StencilSampling || baseFormat == GL_STENCIL_INDEX)
+      if ((texObj->StencilSampling && has_combined_ds) ||
+          baseFormat == GL_STENCIL_INDEX)
          format = util_format_stencil_only(format);
 
       return format;
@@ -387,12 +396,17 @@ st_get_sampler_view_format(const struct st_context *st,
       }
       FALLTHROUGH;
    case PIPE_FORMAT_NV21:
-      if (texObj->pt->format == PIPE_FORMAT_G8_B8R8_420_UNORM) {
-         format = PIPE_FORMAT_G8_B8R8_420_UNORM;
+      if (texObj->pt->format == PIPE_FORMAT_R8_B8G8_420_UNORM) {
+         format = PIPE_FORMAT_R8_B8G8_420_UNORM;
          break;
       }
       FALLTHROUGH;
    case PIPE_FORMAT_IYUV:
+      if (texObj->pt->format == PIPE_FORMAT_R8_G8_B8_420_UNORM ||
+          texObj->pt->format == PIPE_FORMAT_R8_B8_G8_420_UNORM) {
+         format = texObj->pt->format;
+         break;
+      }
       format = PIPE_FORMAT_R8_UNORM;
       break;
    case PIPE_FORMAT_P010:

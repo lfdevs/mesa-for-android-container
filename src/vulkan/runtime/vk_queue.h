@@ -145,6 +145,24 @@ struct vk_queue {
     */
    struct util_dynarray labels;
    bool region_begin;
+
+#ifdef ANDROID
+   /** SYNC_FD signal semaphore for vkQueueSignalReleaseImageANDROID
+    *
+    * VK_ANDROID_native_buffer enforces explicit fencing on the present api
+    * boundary. To avoid assuming all waitSemaphores exportable to sync file
+    * and to capture pending cmds in the queue, we do a simple submission and
+    * signal a SYNC_FD handle type external sempahore for native fence export.
+    *
+    * This plays the same role as wsi_swapchain::dma_buf_semaphore for WSI.
+    * The VK_ANDROID_native_buffer spec hides the swapchain object from the
+    * icd, so we have to cache the semaphore in common vk_queue.
+    *
+    * This also makes it easier to add additional cmds to prepare the wsi
+    * image for implementations requiring such (e.g. for layout transition).
+    */
+   VkSemaphore anb_semaphore;
+#endif
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_queue, base, VkQueue, VK_OBJECT_TYPE_QUEUE)

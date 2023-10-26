@@ -83,7 +83,7 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL, &d3d12_screen(ctx->base.screen)->nir_options, "passthrough");
    nir_shader *nir = b.shader;
 
-   nir_ssa_def *invocation_id = nir_load_invocation_id(&b);
+   nir_def *invocation_id = nir_load_invocation_id(&b);
    uint64_t varying_mask = key->varyings->mask;
 
    while(varying_mask) {
@@ -123,8 +123,8 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
    gl_TessLevelOuter->data.compact = 1;
 
    nir_variable *state_var_inner = NULL, *state_var_outer = NULL;
-   nir_ssa_def *load_inner = d3d12_get_state_var(&b, D3D12_STATE_VAR_DEFAULT_INNER_TESS_LEVEL, "d3d12_TessLevelInner", glsl_vec_type(2), &state_var_inner);
-   nir_ssa_def *load_outer = d3d12_get_state_var(&b, D3D12_STATE_VAR_DEFAULT_OUTER_TESS_LEVEL, "d3d12_TessLevelOuter", glsl_vec4_type(), &state_var_outer);
+   nir_def *load_inner = d3d12_get_state_var(&b, D3D12_STATE_VAR_DEFAULT_INNER_TESS_LEVEL, "d3d12_TessLevelInner", glsl_vec_type(2), &state_var_inner);
+   nir_def *load_outer = d3d12_get_state_var(&b, D3D12_STATE_VAR_DEFAULT_OUTER_TESS_LEVEL, "d3d12_TessLevelOuter", glsl_vec4_type(), &state_var_outer);
 
    for (unsigned i = 0; i < 2; i++) {
       nir_deref_instr *store_idx = nir_build_deref_array_imm(&b, nir_build_deref_var(&b, gl_TessLevelInner), i);

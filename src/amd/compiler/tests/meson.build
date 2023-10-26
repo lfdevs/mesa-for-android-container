@@ -59,7 +59,7 @@ test(
                 '-DACO_TEST_PYTHON_BIN="@0@"'.format(prog_python.full_path())] +
                cpp_args_aco,
     include_directories : [
-      inc_include, inc_src, inc_compiler, inc_mesa, inc_mapi, inc_amd, inc_amd_common, inc_amd_common_llvm,
+      inc_include, inc_src, inc_amd, inc_amd_common, inc_amd_common_llvm,
     ],
     link_with : [
       libamd_common, libamd_common_llvm, libvulkan_radeon,

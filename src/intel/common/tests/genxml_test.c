@@ -129,7 +129,7 @@ test_two_levels(struct intel_spec *spec) {
 
 int main(int argc, char **argv)
 {
-   struct intel_spec *spec = intel_spec_load_filename(GENXML_PATH);
+   struct intel_spec *spec = intel_spec_load_filename(GENXML_DIR, GENXML_FILE);
 
    if (argc > 1 && strcmp(argv[1], "-quiet") == 0)
       quiet = true;

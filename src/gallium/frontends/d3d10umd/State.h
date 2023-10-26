@@ -33,7 +33,7 @@
 
 #include "DriverIncludes.h"
 #include "util/u_hash_table.h"
-
+#include "cso_cache/cso_context.h"
 
 #define SUPPORT_MSAA 0
 #define SUPPORT_D3D10_1 0
@@ -67,8 +67,10 @@ struct Device
 {
    struct pipe_context *pipe;
 
+   struct cso_context *cso;
    struct pipe_framebuffer_state fb;
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
+   unsigned vertex_strides[PIPE_MAX_ATTRIBS];
    struct pipe_resource *index_buffer;
    unsigned restart_index;
    unsigned index_size;
@@ -102,6 +104,8 @@ struct Device
 
    Query *pPredicate;
    BOOL PredicateValue;
+
+   BOOL velems_changed;
 };
 
 
@@ -322,7 +326,7 @@ CastPipeShader(D3D10DDI_HSHADER hShader)
 
 struct ElementLayout
 {
-   void *handle;
+   struct cso_velems_state *velems;
 };
 
 

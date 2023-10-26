@@ -330,7 +330,6 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_GL_SPIRV:
    case PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS:
-   case PIPE_CAP_INT64_DIVMOD:
       return 1;
 
    /* nir related caps */
@@ -438,8 +437,6 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 1;
    case PIPE_SHADER_CAP_INTEGERS:
-      return 1;
-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
    case PIPE_SHADER_CAP_INT64_ATOMICS:

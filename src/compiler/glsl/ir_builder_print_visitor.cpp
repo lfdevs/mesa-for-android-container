@@ -228,12 +228,12 @@ ir_builder_print_visitor::visit(ir_variable *ir)
    if (ir->data.mode == ir_var_temporary) {
       print_with_indent("ir_variable *const r%04X = body.make_temp(glsl_type::%s_type, \"%s\");\n",
                         my_index,
-                        ir->type->name,
+                        glsl_get_type_name(ir->type),
                         ir->name);
    } else {
       print_with_indent("ir_variable *const r%04X = new(mem_ctx) ir_variable(glsl_type::%s_type, \"%s\", %s);\n",
                         my_index,
-                        ir->type->name,
+                        glsl_get_type_name(ir->type),
                         ir->name,
                         mode_str);
 
@@ -287,7 +287,7 @@ ir_builder_print_visitor::visit_enter(ir_function_signature *ir)
    indentation++;
    print_with_indent("ir_function_signature *const sig =\n");
    print_with_indent("   new(mem_ctx) ir_function_signature(glsl_type::%s_type, avail);\n",
-                     ir->return_type->name);
+                     glsl_get_type_name(ir->return_type));
 
    print_with_indent("ir_factory body(&sig->body, mem_ctx);\n");
    print_with_indent("sig->is_defined = true;\n\n");
@@ -338,7 +338,7 @@ ir_builder_print_visitor::print_without_declaration(const ir_constant *ir)
 
    if (memcmp(&ir->value, &all_zero, sizeof(all_zero)) == 0) {
       print_without_indent("ir_constant::zero(mem_ctx, glsl_type::%s_type)",
-                           ir->type->name);
+                           glsl_get_type_name(ir->type));
    }
 }
 
@@ -426,7 +426,7 @@ ir_builder_print_visitor::visit(ir_constant *ir)
 
       print_with_indent("ir_constant *const r%04X = new(mem_ctx) ir_constant(glsl_type::%s_type, &r%04X_data);\n",
                         my_index,
-                        ir->type->name,
+                        glsl_get_type_name(ir->type),
                         my_index);
    }
 

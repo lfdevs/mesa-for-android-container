@@ -931,8 +931,8 @@ bool
 NVC0LoweringPass::handleTEX(TexInstruction *i)
 {
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
-   const int arg = i->tex.target.getArgCount();
-   const int lyr = arg - (i->tex.target.isMS() ? 2 : 1);
+   const int arg = i->tex.target.getArgCount() - i->tex.target.isMS();
+   const int lyr = arg - 1;
    const int chipset = prog->getTarget()->getChipset();
 
    /* Only normalize in the non-explicit derivatives case. For explicit
@@ -1024,9 +1024,24 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
       if (i->tex.target.isArray()) {
          LValue *layer = new_LValue(func, FILE_GPR);
          Value *src = i->getSrc(lyr);
-         const int sat = (i->op == OP_TXF) ? 1 : 0;
-         DataType sTy = (i->op == OP_TXF) ? TYPE_U32 : TYPE_F32;
-         bld.mkCvt(OP_CVT, TYPE_U16, layer, sTy, src)->saturate = sat;
+         /* Vulkan requires that a negative index on a texelFetch() count as
+          * out-of-bounds but a negative index on any other texture operation
+          * gets clamped to 0.  (See the spec section entitled "(u,v,w,a) to
+          * (i,j,k,l,n) Transformation And Array Layer Selection").
+          *
+          * For TXF, we take a U32 MAX with 0xffff, ensuring that negative
+          * array indices clamp to 0xffff and will be considered out-of-bounds
+          * by the hardware (there are a maximum of 2048 array indices in an
+          * image descriptor).  For everything else, we use a saturating F32
+          * to U16 conversion which will clamp negative array indices to 0 and
+          * large positive indices to 0xffff.  The hardware will further clamp
+          * positive array indices to the maximum in the image descriptor.
+          */
+         if (i->op == OP_TXF) {
+            bld.mkOp2(OP_MIN, TYPE_U32, layer, src, bld.loadImm(NULL, 0xffff));
+         } else {
+            bld.mkCvt(OP_CVT, TYPE_U16, layer, TYPE_F32, src)->saturate = true;
+         }
          if (i->op != OP_TXD || chipset < NVISA_GM107_CHIPSET) {
             for (int s = dim; s >= 1; --s)
                i->setSrc(s, i->getSrc(s - 1));
@@ -1092,9 +1107,11 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
       }
 
       if (arrayIndex) {
-         int sat = (i->op == OP_TXF) ? 1 : 0;
-         DataType sTy = (i->op == OP_TXF) ? TYPE_U32 : TYPE_F32;
-         bld.mkCvt(OP_CVT, TYPE_U16, src, sTy, arrayIndex)->saturate = sat;
+         if (i->op == OP_TXF) {
+            bld.mkOp2(OP_MIN, TYPE_U32, src, arrayIndex, bld.loadImm(NULL, 0xffff));
+         } else {
+            bld.mkCvt(OP_CVT, TYPE_U16, src, TYPE_F32, arrayIndex)->saturate = true;
+         }
       } else {
          bld.loadImm(src, 0);
       }
@@ -2360,7 +2377,7 @@ NVC0LoweringPass::handleSurfaceOpNVE4(TexInstruction *su)
 {
    processSurfaceCoordsNVE4(su);
 
-   if (su->op == OP_SULDP) {
+   if (su->op == OP_SULDP && su->tex.format) {
       convertSurfaceFormat(su, NULL);
       insertOOBSurfaceOpResult(su);
    }
@@ -2561,7 +2578,7 @@ NVC0LoweringPass::handleSurfaceOpNVC0(TexInstruction *su)
 
    processSurfaceCoordsNVC0(su);
 
-   if (su->op == OP_SULDP) {
+   if (su->op == OP_SULDP && su->tex.format) {
       convertSurfaceFormat(su, NULL);
       insertOOBSurfaceOpResult(su);
    }
@@ -2767,7 +2784,7 @@ NVC0LoweringPass::handleSurfaceOpGM107(TexInstruction *su)
    Instruction *loaded[4] = {};
    TexInstruction *su2 = processSurfaceCoordsGM107(su, loaded);
 
-   if (su->op == OP_SULDP) {
+   if (su->op == OP_SULDP && su->tex.format) {
       convertSurfaceFormat(su, loaded);
    }
 
@@ -2782,27 +2799,6 @@ NVC0LoweringPass::handleSurfaceOpGM107(TexInstruction *su)
       su2->dType = su->dType;
       su2->sType = su->sType;
    }
-}
-
-bool
-NVC0LoweringPass::handleWRSV(Instruction *i)
-{
-   Instruction *st;
-   Symbol *sym;
-   uint32_t addr;
-
-   // must replace, $sreg are not writeable
-   addr = targ->getSVAddress(FILE_SHADER_OUTPUT, i->getSrc(0)->asSym());
-   if (addr >= 0x400)
-      return false;
-   sym = bld.mkSymbol(FILE_SHADER_OUTPUT, 0, i->sType, addr);
-
-   st = bld.mkStore(OP_EXPORT, i->dType, sym, i->getIndirect(0, 0),
-                    i->getSrc(1));
-   st->perPatch = i->perPatch;
-
-   bld.getBB()->remove(i);
-   return true;
 }
 
 void
@@ -2916,6 +2912,14 @@ NVC0LoweringPass::handleLDST(Instruction *i)
 void
 NVC0LoweringPass::readTessCoord(LValue *dst, int c)
 {
+   // In case of SPIRV the domain can be specified in the tesc shader,
+   // but this should be passed to tese shader by merge_tess_info.
+   const uint8_t domain = prog->driver_out->prop.tp.domain;
+   assert(
+      domain == MESA_PRIM_LINES ||
+      domain == MESA_PRIM_TRIANGLES ||
+      domain == MESA_PRIM_QUADS);
+
    Value *laneid = bld.getSSA();
    Value *x, *y;
 
@@ -2930,7 +2934,8 @@ NVC0LoweringPass::readTessCoord(LValue *dst, int c)
       y = dst;
    } else {
       assert(c == 2);
-      if (prog->driver_out->prop.tp.domain != MESA_PRIM_TRIANGLES) {
+      if (domain != MESA_PRIM_TRIANGLES) {
+         // optimize out tesscoord.z
          bld.mkMov(dst, bld.loadImm(NULL, 0));
          return;
       }
@@ -2943,6 +2948,7 @@ NVC0LoweringPass::readTessCoord(LValue *dst, int c)
       bld.mkFetch(y, TYPE_F32, FILE_SHADER_OUTPUT, 0x2f4, NULL, laneid);
 
    if (c == 2) {
+      // compute tesscoord.z from x, y
       bld.mkOp2(OP_ADD, TYPE_F32, dst, x, y);
       bld.mkOp2(OP_SUB, TYPE_F32, dst, bld.loadImm(NULL, 1.0f), dst);
    }
@@ -3162,22 +3168,6 @@ NVC0LoweringPass::handleSQRT(Instruction *i)
 }
 
 bool
-NVC0LoweringPass::handlePOW(Instruction *i)
-{
-   LValue *val = bld.getScratch();
-
-   bld.mkOp1(OP_LG2, TYPE_F32, val, i->getSrc(0));
-   bld.mkOp2(OP_MUL, TYPE_F32, val, i->getSrc(1), val)->dnz = 1;
-   bld.mkOp1(OP_PREEX2, TYPE_F32, val, val);
-
-   i->op = OP_EX2;
-   i->setSrc(0, val);
-   i->setSrc(1, NULL);
-
-   return true;
-}
-
-bool
 NVC0LoweringPass::handleEXPORT(Instruction *i)
 {
    if (prog->getType() == Program::TYPE_FRAGMENT) {
@@ -3337,8 +3327,6 @@ NVC0LoweringPass::visit(Instruction *i)
       bld.mkOp1(OP_PREEX2, TYPE_F32, i->getDef(0), i->getSrc(0));
       i->setSrc(0, i->getDef(0));
       break;
-   case OP_POW:
-      return handlePOW(i);
    case OP_DIV:
       return handleDIV(i);
    case OP_MOD:
@@ -3353,8 +3341,6 @@ NVC0LoweringPass::visit(Instruction *i)
       return handleOUT(i);
    case OP_RDSV:
       return handleRDSV(i);
-   case OP_WRSV:
-      return handleWRSV(i);
    case OP_STORE:
    case OP_LOAD:
       handleLDST(i);

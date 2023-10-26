@@ -89,7 +89,7 @@ static void rogue_nir_passes(struct rogue_build_ctx *ctx,
 
    /* Load inputs to scalars (single registers later). */
    /* TODO: Fitrp can process multiple frag inputs at once, scalarise I/O. */
-   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_in);
+   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_in, NULL, NULL);
 
    /* Optimize GL access qualifiers. */
    const nir_opt_access_options opt_access_options = {
@@ -102,7 +102,7 @@ static void rogue_nir_passes(struct rogue_build_ctx *ctx,
       NIR_PASS_V(nir, rogue_nir_pfo);
 
    /* Load outputs to scalars (single registers later). */
-   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_out);
+   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_shader_out, NULL, NULL);
 
    /* Lower ALU operations to scalars. */
    NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
@@ -115,7 +115,7 @@ static void rogue_nir_passes(struct rogue_build_ctx *ctx,
               nir_lower_explicit_io,
               nir_var_mem_ubo,
               spirv_options.ubo_addr_format);
-   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_mem_ubo);
+   NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_mem_ubo, NULL, NULL);
    NIR_PASS_V(nir, rogue_nir_lower_io);
 
    /* Algebraic opts. */

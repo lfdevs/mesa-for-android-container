@@ -27,13 +27,17 @@
 #include <llvm/IR/DiagnosticPrinter.h>
 #include <llvm/IR/DiagnosticInfo.h>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/IPO/Internalize.h>
 #include <llvm-c/Target.h>
 #ifdef HAVE_CLOVER_SPIRV
 #include <LLVMSPIRVLib/LLVMSPIRVLib.h>
 #endif
 
+#include <llvm-c/TargetMachine.h>
+#include <llvm-c/Transforms/PassBuilder.h>
+#include <llvm/Support/CBindingWrapping.h>
 #include <clang/CodeGen/CodeGenAction.h>
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Frontend/TextDiagnosticBuffer.h>
@@ -411,7 +415,11 @@ namespace {
          #undef EXT
       }
 
-      return SPIRV::TranslatorOpts(maximum_spirv_version, spirv_extensions);
+      auto translator_opts = SPIRV::TranslatorOpts(maximum_spirv_version, spirv_extensions);
+#if LLVM_VERSION_MAJOR >= 13
+      translator_opts.setPreserveOCLKernelArgTypeMetadataThroughString(true);
+#endif
+      return translator_opts;
    }
 #endif
 }
@@ -439,10 +447,10 @@ clover::llvm::compile_program(const std::string &source,
 
 namespace {
    void
-   optimize(Module &mod, unsigned optimization_level,
+   optimize(Module &mod,
+            const std::string& ir_target,
+            unsigned optimization_level,
             bool internalize_symbols) {
-      ::llvm::legacy::PassManager pm;
-
       // By default, the function internalizer pass will look for a function
       // called "main" and then mark all other functions as internal.  Marking
       // functions as internal enables the optimizer to perform optimizations
@@ -458,19 +466,53 @@ namespace {
       if (internalize_symbols) {
          std::vector<std::string> names =
             map(std::mem_fn(&Function::getName), get_kernels(mod));
-         pm.add(::llvm::createInternalizePass(
+         internalizeModule(mod,
                       [=](const ::llvm::GlobalValue &gv) {
                          return std::find(names.begin(), names.end(),
                                           gv.getName()) != names.end();
-                      }));
+                      });
       }
 
-      ::llvm::PassManagerBuilder pmb;
-      pmb.OptLevel = optimization_level;
-      pmb.LibraryInfo = new ::llvm::TargetLibraryInfoImpl(
-         ::llvm::Triple(mod.getTargetTriple()));
-      pmb.populateModulePassManager(pm);
-      pm.run(mod);
+
+      const char *opt_str = NULL;
+      LLVMCodeGenOptLevel level;
+      switch (optimization_level) {
+      case 0:
+      default:
+         opt_str = "default<O0>";
+         level = LLVMCodeGenLevelNone;
+         break;
+      case 1:
+         opt_str = "default<O1>";
+         level = LLVMCodeGenLevelLess;
+         break;
+      case 2:
+         opt_str = "default<O2>";
+         level = LLVMCodeGenLevelDefault;
+         break;
+      case 3:
+         opt_str = "default<O3>";
+         level = LLVMCodeGenLevelAggressive;
+         break;
+      }
+
+      const target &target = ir_target;
+      LLVMTargetRef targ;
+      char *err_message;
+
+      if (LLVMGetTargetFromTriple(target.triple.c_str(), &targ, &err_message))
+         return;
+      LLVMTargetMachineRef tm =
+         LLVMCreateTargetMachine(targ, target.triple.c_str(),
+                                 target.cpu.c_str(), "", level,
+                                 LLVMRelocDefault, LLVMCodeModelDefault);
+
+      if (!tm)
+         return;
+      LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
+      LLVMRunPasses(wrap(&mod), opt_str, tm, opts);
+
+      LLVMDisposeTargetMachine(tm);
    }
 
    std::unique_ptr<Module>
@@ -500,7 +542,7 @@ clover::llvm::link_program(const std::vector<binary> &binaries,
    auto c = create_compiler_instance(dev, dev.ir_target(), options, r_log);
    auto mod = link(*ctx, *c, binaries, r_log);
 
-   optimize(*mod, c->getCodeGenOpts().OptimizationLevel, !create_library);
+   optimize(*mod, dev.ir_target(), c->getCodeGenOpts().OptimizationLevel, !create_library);
 
    static std::atomic_uint seq(0);
    const std::string id = "." + mod->getModuleIdentifier() + "-" +

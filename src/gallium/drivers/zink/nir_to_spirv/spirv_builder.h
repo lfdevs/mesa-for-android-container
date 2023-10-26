@@ -187,12 +187,16 @@ SpvId
 spirv_builder_emit_load(struct spirv_builder *b, SpvId result_type,
                         SpvId pointer);
 
+SpvId
+spirv_builder_emit_load_aligned(struct spirv_builder *b, SpvId result_type, SpvId pointer, unsigned alignment);
 void
 spirv_builder_emit_atomic_store(struct spirv_builder *b, SpvId pointer, SpvScope scope,
                                 SpvMemorySemanticsMask semantics, SpvId object);
 
 void
 spirv_builder_emit_store(struct spirv_builder *b, SpvId pointer, SpvId object);
+void
+spirv_builder_emit_store_aligned(struct spirv_builder *b, SpvId pointer, SpvId object, unsigned alignment);
 
 SpvId
 spirv_builder_emit_access_chain(struct spirv_builder *b, SpvId result_type,

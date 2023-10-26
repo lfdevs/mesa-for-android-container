@@ -1060,7 +1060,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_sampler, base, VkSampler,
          panvk_arch_name(name, v7)(__VA_ARGS__);                               \
          break;                                                                \
       default:                                                                 \
-         unreachable("Invalid arch");                                          \
+         unreachable("Unsupported architecture");                              \
       }                                                                        \
    } while (0)
 

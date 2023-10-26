@@ -68,9 +68,6 @@ tgsi_util_get_src_usage_mask(enum tgsi_opcode opcode,
                              enum tgsi_texture_type tex_target,
                              enum tgsi_texture_type mem_target);
 
-struct tgsi_src_register
-tgsi_util_get_src_from_ind(const struct tgsi_ind_register *reg);
-
 int
 tgsi_util_get_texture_coord_dim(enum tgsi_texture_type tgsi_tex);
 

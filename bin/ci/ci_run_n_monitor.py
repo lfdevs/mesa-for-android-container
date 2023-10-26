@@ -17,14 +17,20 @@ import re
 from subprocess import check_output
 import sys
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from itertools import chain
-from typing import Optional
+from typing import Literal, Optional
 
 import gitlab
 from colorama import Fore, Style
-from gitlab_common import get_gitlab_project, read_token, wait_for_pipeline
+from gitlab_common import (
+    get_gitlab_project,
+    read_token,
+    wait_for_pipeline,
+    pretty_duration,
+)
 from gitlab_gql import GitlabGQL, create_job_needs_dag, filter_dag, print_dag
 
 GITLAB_URL = "https://gitlab.freedesktop.org"
@@ -49,10 +55,15 @@ STATUS_COLORS = {
 COMPLETED_STATUSES = ["success", "failed"]
 
 
-def print_job_status(job) -> None:
+def print_job_status(job, new_status=False) -> None:
     """It prints a nice, colored job status with a link to the job."""
     if job.status == "canceled":
         return
+
+    if job.duration:
+        duration = job.duration
+    elif job.started_at:
+        duration = time.perf_counter() - time.mktime(job.started_at.timetuple())
 
     print(
         STATUS_COLORS[job.status]
@@ -60,23 +71,8 @@ def print_job_status(job) -> None:
         + URL_START
         + f"{job.web_url}\a{job.name}"
         + URL_END
-        + f" :: {job.status}"
-        + Style.RESET_ALL
-    )
-
-
-def print_job_status_change(job) -> None:
-    """It reports job status changes."""
-    if job.status == "canceled":
-        return
-
-    print(
-        STATUS_COLORS[job.status]
-        + "🗘 job "
-        + URL_START
-        + f"{job.web_url}\a{job.name}"
-        + URL_END
-        + f" has new status: {job.status}"
+        + (f" has new status: {job.status}" if new_status else f" :: {job.status}")
+        + (f" ({pretty_duration(duration)})" if job.started_at else "")
         + Style.RESET_ALL
     )
 
@@ -91,82 +87,80 @@ def pretty_wait(sec: int) -> None:
 def monitor_pipeline(
     project,
     pipeline,
-    target_job: Optional[str],
+    target_job: str,
     dependencies,
     force_manual: bool,
-    stress: bool,
+    stress: int,
 ) -> tuple[Optional[int], Optional[int]]:
     """Monitors pipeline and delegate canceling jobs"""
-    statuses = {}
-    target_statuses = {}
-    stress_succ = 0
-    stress_fail = 0
+    statuses: dict[str, str] = defaultdict(str)
+    target_statuses: dict[str, str] = defaultdict(str)
+    stress_status_counter = defaultdict(lambda: defaultdict(int))
+    target_id = None
 
-    if target_job:
-        target_jobs_regex = re.compile(target_job.strip())
+    target_jobs_regex = re.compile(target_job.strip())
 
     while True:
         to_cancel = []
         for job in pipeline.jobs.list(all=True, sort="desc"):
             # target jobs
-            if target_job and target_jobs_regex.match(job.name):
-                if force_manual and job.status == "manual":
-                    enable_job(project, job, True)
+            if target_jobs_regex.match(job.name):
+                target_id = job.id
 
                 if stress and job.status in ["success", "failed"]:
-                    if job.status == "success":
-                        stress_succ += 1
-                    if job.status == "failed":
-                        stress_fail += 1
-                    retry_job(project, job)
-
-                if (job.id not in target_statuses) or (
-                    job.status not in target_statuses[job.id]
-                ):
-                    print_job_status_change(job)
-                    target_statuses[job.id] = job.status
+                    if (
+                        stress < 0
+                        or sum(stress_status_counter[job.name].values()) < stress
+                    ):
+                        enable_job(project, job, "retry", force_manual)
+                        stress_status_counter[job.name][job.status] += 1
                 else:
-                    print_job_status(job)
+                    enable_job(project, job, "target", force_manual)
 
+                print_job_status(job, job.status not in target_statuses[job.name])
+                target_statuses[job.name] = job.status
                 continue
 
             # all jobs
-            if (job.id not in statuses) or (job.status not in statuses[job.id]):
-                print_job_status_change(job)
-                statuses[job.id] = job.status
+            if job.status != statuses[job.name]:
+                print_job_status(job, True)
+                statuses[job.name] = job.status
 
-            # dependencies and cancelling the rest
+            # run dependencies and cancel the rest
             if job.name in dependencies:
-                if job.status == "manual":
-                    enable_job(project, job, False)
-
-            elif target_job and job.status not in [
-                "canceled",
-                "success",
-                "failed",
-                "skipped",
-            ]:
+                enable_job(project, job, "dep", True)
+            else:
                 to_cancel.append(job)
 
-        if target_job:
-            cancel_jobs(project, to_cancel)
+        cancel_jobs(project, to_cancel)
 
         if stress:
-            print(
-                "∑ succ: " + str(stress_succ) + "; fail: " + str(stress_fail),
-                flush=False,
-            )
-            pretty_wait(REFRESH_WAIT_JOBS)
-            continue
+            enough = True
+            for job_name, status in stress_status_counter.items():
+                print(
+                    f"{job_name}\tsucc: {status['success']}; "
+                    f"fail: {status['failed']}; "
+                    f"total: {sum(status.values())} of {stress}",
+                    flush=False,
+                )
+                if stress < 0 or sum(status.values()) < stress:
+                    enough = False
+
+            if not enough:
+                pretty_wait(REFRESH_WAIT_JOBS)
+                continue
 
         print("---------------------------------", flush=False)
 
         if len(target_statuses) == 1 and {"running"}.intersection(
             target_statuses.values()
         ):
-            return next(iter(target_statuses)), None
+            return target_id, None
 
-        if {"failed", "canceled"}.intersection(target_statuses.values()):
+        if (
+            {"failed"}.intersection(target_statuses.values())
+            and not set(["running", "pending"]).intersection(target_statuses.values())
+        ):
             return None, 1
 
         if {"success", "manual"}.issuperset(target_statuses.values()):
@@ -175,27 +169,43 @@ def monitor_pipeline(
         pretty_wait(REFRESH_WAIT_JOBS)
 
 
-def enable_job(project, job, target: bool) -> None:
-    """enable manual job"""
+def enable_job(
+    project, job, action_type: Literal["target", "dep", "retry"], force_manual: bool
+) -> None:
+    """enable job"""
+    if (
+        (job.status in ["success", "failed"] and action_type != "retry")
+        or (job.status == "manual" and not force_manual)
+        or job.status in ["skipped", "running", "created", "pending"]
+    ):
+        return
+
     pjob = project.jobs.get(job.id, lazy=True)
-    pjob.play()
-    if target:
+
+    if job.status in ["success", "failed", "canceled"]:
+        pjob.retry()
+    else:
+        pjob.play()
+
+    if action_type == "target":
         jtype = "🞋 "
+    elif action_type == "retry":
+        jtype = "↻"
     else:
         jtype = "(dependency)"
-    print(Fore.MAGENTA + f"{jtype} job {job.name} manually enabled" + Style.RESET_ALL)
 
-
-def retry_job(project, job) -> None:
-    """retry job"""
-    pjob = project.jobs.get(job.id, lazy=True)
-    pjob.retry()
-    jtype = "↻"
     print(Fore.MAGENTA + f"{jtype} job {job.name} manually enabled" + Style.RESET_ALL)
 
 
 def cancel_job(project, job) -> None:
     """Cancel GitLab job"""
+    if job.status in [
+        "canceled",
+        "success",
+        "failed",
+        "skipped",
+    ]:
+        return
     pjob = project.jobs.get(job.id, lazy=True)
     pjob.cancel()
     print(f"♲ {job.name}", end=" ")
@@ -238,7 +248,12 @@ def parse_args() -> None:
         epilog="Example: mesa-monitor.py --rev $(git rev-parse HEAD) "
         + '--target ".*traces" ',
     )
-    parser.add_argument("--target", metavar="target-job", help="Target job")
+    parser.add_argument(
+        "--target",
+        metavar="target-job",
+        help="Target job regex. For multiple targets, separate with pipe | character",
+        required=True,
+    )
     parser.add_argument(
         "--token",
         metavar="token",
@@ -247,18 +262,37 @@ def parse_args() -> None:
     parser.add_argument(
         "--force-manual", action="store_true", help="Force jobs marked as manual"
     )
-    parser.add_argument("--stress", action="store_true", help="Stresstest job(s)")
+    parser.add_argument(
+        "--stress",
+        default=0,
+        type=int,
+        help="Stresstest job(s). Number or repetitions or -1 for infinite.",
+    )
+    parser.add_argument(
+        "--project",
+        default="mesa",
+        help="GitLab project in the format <user>/<project> or just <project>",
+    )
 
     mutex_group1 = parser.add_mutually_exclusive_group()
     mutex_group1.add_argument(
-        "--rev", metavar="revision", help="repository git revision (default: HEAD)"
+        "--rev", default="HEAD", metavar="revision", help="repository git revision (default: HEAD)"
     )
     mutex_group1.add_argument(
         "--pipeline-url",
         help="URL of the pipeline to use, instead of auto-detecting it.",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # argparse doesn't support groups inside add_mutually_exclusive_group(),
+    # which means we can't just put `--project` and `--rev` in a group together,
+    # we have to do this by heand instead.
+    if args.pipeline_url and args.project != parser.get_default("project"):
+        # weird phrasing but it's the error add_mutually_exclusive_group() gives
+        parser.error("argument --project: not allowed with argument --pipeline-url")
+
+    return args
 
 
 def find_dependencies(target_job: str, project_path: str, sha: str) -> set[str]:
@@ -305,10 +339,11 @@ if __name__ == "__main__":
             pipe = cur_project.pipelines.get(pipeline_id)
             REV = pipe.sha
         else:
-            cur_project = get_gitlab_project(gl, "mesa")
-            if not REV:
-                REV = check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
-            pipe = wait_for_pipeline(cur_project, REV)
+            REV = check_output(['git', 'rev-parse', REV]).decode('ascii').strip()
+
+            mesa_project = gl.projects.get("mesa/mesa")
+            user_project = get_gitlab_project(gl, args.project)
+            (pipe, cur_project) = wait_for_pipeline([mesa_project, user_project], REV)
 
         print(f"Revision: {REV}")
         print(f"Pipeline: {pipe.web_url}")

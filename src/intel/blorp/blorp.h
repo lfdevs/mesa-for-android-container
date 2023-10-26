@@ -109,6 +109,9 @@ enum blorp_batch_flags {
 
    /** Use the hardware blitter to perform any operations in this batch */
    BLORP_BATCH_USE_BLITTER = (1 << 4),
+
+   /** Need a PSS Stall Sync, Wa_18019816803. */
+   BLORP_BATCH_NEED_PSS_STALL_SYNC = (1 << 5),
 };
 
 struct blorp_batch {

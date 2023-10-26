@@ -63,6 +63,15 @@ agx_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
       unreachable("Unsupported blit");
    }
 
+   /* Legalize compression /before/ calling into u_blitter to avoid recursion.
+    * u_blitter bans recursive usage.
+    */
+   agx_legalize_compression(ctx, agx_resource(info->dst.resource),
+                            info->dst.format);
+
+   agx_legalize_compression(ctx, agx_resource(info->src.resource),
+                            info->src.format);
+
    agx_blitter_save(ctx, ctx->blitter, info->render_condition_enable);
    util_blitter_blit(ctx->blitter, info);
 }

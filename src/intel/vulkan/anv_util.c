@@ -93,3 +93,60 @@ anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
    if (bits & ANV_PIPE_CCS_CACHE_FLUSH_BIT)
       fputs("+ccs_flush ", f);
 }
+
+const char *
+anv_gfx_state_bit_to_str(enum anv_gfx_state_bits state)
+{
+#define NAME(name) case ANV_GFX_STATE_##name: return #name;
+   switch (state) {
+      NAME(URB);
+      NAME(VF_STATISTICS);
+      NAME(VF_SGVS);
+      NAME(VF_SGVS_2);
+      NAME(VF_SGVS_INSTANCING);
+      NAME(PRIMITIVE_REPLICATION);
+      NAME(MULTISAMPLE);
+      NAME(SBE);
+      NAME(SBE_SWIZ);
+      NAME(SO_DECL_LIST);
+      NAME(VS);
+      NAME(HS);
+      NAME(DS);
+      NAME(GS);
+      NAME(PS);
+      NAME(PS_EXTRA);
+      NAME(SBE_MESH);
+      NAME(CLIP_MESH);
+      NAME(MESH_CONTROL);
+      NAME(MESH_SHADER);
+      NAME(MESH_DISTRIB);
+      NAME(TASK_CONTROL);
+      NAME(TASK_SHADER);
+      NAME(TASK_REDISTRIB);
+      NAME(BLEND_STATE_POINTERS);
+      NAME(CLIP);
+      NAME(CC_STATE);
+      NAME(CPS);
+      NAME(DEPTH_BOUNDS);
+      NAME(INDEX_BUFFER);
+      NAME(LINE_STIPPLE);
+      NAME(PS_BLEND);
+      NAME(RASTER);
+      NAME(SAMPLE_MASK);
+      NAME(SAMPLE_PATTERN);
+      NAME(SCISSOR);
+      NAME(SF);
+      NAME(STREAMOUT);
+      NAME(TE);
+      NAME(VERTEX_INPUT);
+      NAME(VF);
+      NAME(VF_TOPOLOGY);
+      NAME(VFG);
+      NAME(VIEWPORT_CC);
+      NAME(VIEWPORT_SF_CLIP);
+      NAME(WM);
+      NAME(WM_DEPTH_STENCIL);
+      NAME(PMA_FIX);
+   default: unreachable("invalid state");
+   }
+}

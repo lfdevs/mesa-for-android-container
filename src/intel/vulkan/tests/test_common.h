@@ -21,19 +21,27 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "dev/intel_device_info.h"
 
-#define ASSERT(cond)                                                    \
-   do {                                                                 \
-      if (!(cond)) {                                                    \
-         fprintf(stderr, "%s:%d: Test assertion `%s` failed.\n",        \
-                 __FILE__, __LINE__, # cond);                           \
-         abort();                                                       \
-      }                                                                 \
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define ASSERT(cond)                                                               \
+   do {                                                                            \
+      if (!(cond)) {                                                               \
+         FAIL_IN_GTEST(__FILE__, __LINE__, "Test assertion `" # cond               \
+                                           "` failed.");                           \
+      }                                                                            \
    } while (false)
 
 static inline void test_device_info_init(struct intel_device_info *info)
 {
    info->mem_alignment = 4096;
 }
+
+void FAIL_IN_GTEST(const char *file_path, unsigned line_number, const char *msg);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

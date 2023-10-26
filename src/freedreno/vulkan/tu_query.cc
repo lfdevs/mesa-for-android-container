@@ -19,6 +19,8 @@
 #include "tu_cs.h"
 #include "tu_device.h"
 
+#include "common/freedreno_gpu_event.h"
+
 #define NSEC_PER_SEC 1000000000ull
 #define WAIT_TIMEOUT 5
 #define STAT_COUNT ((REG_A6XX_RBBM_PRIMCTR_10_LO - REG_A6XX_RBBM_PRIMCTR_0_LO) / 2 + 1)
@@ -603,6 +605,7 @@ copy_query_value_gpu(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, src_iova);
 }
 
+template <chip CHIP>
 static void
 emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
                              struct tu_cs *cs,
@@ -615,7 +618,7 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
                              VkQueryResultFlags flags)
 {
    /* Flush cache for the buffer to copy to. */
-   tu_emit_cache_flush(cmdbuf);
+   tu_emit_cache_flush<CHIP>(cmdbuf);
 
    /* From the Vulkan 1.1.130 spec:
     *
@@ -697,6 +700,7 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
    }
 }
 
+template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
                            VkQueryPool queryPool,
@@ -719,14 +723,16 @@ tu_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-      return emit_copy_query_pool_results(cmdbuf, cs, pool, firstQuery,
-               queryCount, buffer, dstOffset, stride, flags);
+      return emit_copy_query_pool_results<CHIP>(cmdbuf, cs, pool, firstQuery,
+                                                queryCount, buffer, dstOffset,
+                                                stride, flags);
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
       unreachable("allowCommandBufferQueryCopies is false");
    default:
       assert(!"Invalid query type");
    }
 }
+TU_GENX(tu_CmdCopyQueryPoolResults);
 
 static void
 emit_reset_query_pool(struct tu_cmd_buffer *cmdbuf,
@@ -815,6 +821,7 @@ tu_ResetQueryPool(VkDevice device,
    }
 }
 
+template <chip CHIP>
 static void
 emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
                            struct tu_query_pool *pool,
@@ -840,13 +847,20 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
-   tu_cs_emit_regs(cs,
-                   A6XX_RB_SAMPLE_COUNT_ADDR(.qword = begin_iova));
-
-   tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
-   tu_cs_emit(cs, ZPASS_DONE);
+   if (CHIP == A6XX) {
+      tu_cs_emit_regs(cs,
+                        A6XX_RB_SAMPLE_COUNT_ADDR(.qword = begin_iova));
+      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
+      tu_cs_emit(cs, ZPASS_DONE);
+   } else {
+      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
+      tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
+                                       .write_sample_count = true).value);
+      tu_cs_emit_qw(cs, begin_iova);
+   }
 }
 
+template <chip CHIP>
 static void
 emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
                       struct tu_query_pool *pool,
@@ -868,7 +882,7 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
                         CP_COND_REG_EXEC_0_BINNING);
       }
 
-      tu6_emit_event_write(cmdbuf, cs, START_PRIMITIVE_CTRS);
+      tu_emit_event_write<CHIP>(cmdbuf, cs, FD_START_PRIMITIVE_CTRS);
 
       tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
       tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
@@ -880,11 +894,11 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
    }
 
    if (is_pipeline_query_with_fragment_stage(pool->pipeline_statistics)) {
-      tu6_emit_event_write(cmdbuf, cs, START_FRAGMENT_CTRS);
+      tu_emit_event_write<CHIP>(cmdbuf, cs, FD_START_FRAGMENT_CTRS);
    }
 
    if (is_pipeline_query_with_compute_stage(pool->pipeline_statistics)) {
-      tu6_emit_event_write(cmdbuf, cs, START_COMPUTE_CTRS);
+      tu_emit_event_write<CHIP>(cmdbuf, cs, FD_START_COMPUTE_CTRS);
    }
 
    tu_cs_emit_wfi(cs);
@@ -985,6 +999,7 @@ emit_begin_perf_query(struct tu_cmd_buffer *cmdbuf,
    tu_cond_exec_end(cs);
 }
 
+template <chip CHIP>
 static void
 emit_begin_xfb_query(struct tu_cmd_buffer *cmdbuf,
                      struct tu_query_pool *pool,
@@ -995,9 +1010,10 @@ emit_begin_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t begin_iova = primitive_query_iova(pool, query, begin, 0, 0);
 
    tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS(.qword = begin_iova));
-   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
+   tu_emit_event_write<CHIP>(cmdbuf, cs, FD_WRITE_PRIMITIVE_COUNTS);
 }
 
+template <chip CHIP>
 static void
 emit_begin_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
                                 struct tu_query_pool *pool,
@@ -1023,7 +1039,7 @@ emit_begin_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
                            CP_COND_REG_EXEC_0_BINNING);
    }
 
-   tu6_emit_event_write(cmdbuf, cs, START_PRIMITIVE_CTRS);
+   tu_emit_event_write<CHIP>(cmdbuf, cs, FD_START_PRIMITIVE_CTRS);
 
    tu_cs_emit_wfi(cs);
 
@@ -1038,6 +1054,7 @@ emit_begin_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
    }
 }
 
+template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdBeginQuery(VkCommandBuffer commandBuffer,
                  VkQueryPool queryPool,
@@ -1054,19 +1071,19 @@ tu_CmdBeginQuery(VkCommandBuffer commandBuffer,
        * GL_SAMPLES_PASSED and GL_ANY_SAMPLES_PASSED, so we can similarly
        * ignore the VK_QUERY_CONTROL_PRECISE_BIT flag here.
        */
-      emit_begin_occlusion_query(cmdbuf, pool, query);
+      emit_begin_occlusion_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
-      emit_begin_xfb_query(cmdbuf, pool, query, 0);
+      emit_begin_xfb_query<CHIP>(cmdbuf, pool, query, 0);
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      emit_begin_prim_generated_query(cmdbuf, pool, query);
+      emit_begin_prim_generated_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
       emit_begin_perf_query(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-      emit_begin_stat_query(cmdbuf, pool, query);
+      emit_begin_stat_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
       unreachable("Unimplemented query type");
@@ -1074,7 +1091,9 @@ tu_CmdBeginQuery(VkCommandBuffer commandBuffer,
       assert(!"Invalid query type");
    }
 }
+TU_GENX(tu_CmdBeginQuery);
 
+template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdBeginQueryIndexedEXT(VkCommandBuffer commandBuffer,
                            VkQueryPool queryPool,
@@ -1088,16 +1107,18 @@ tu_CmdBeginQueryIndexedEXT(VkCommandBuffer commandBuffer,
 
    switch (pool->type) {
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
-      emit_begin_xfb_query(cmdbuf, pool, query, index);
+      emit_begin_xfb_query<CHIP>(cmdbuf, pool, query, index);
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      emit_begin_prim_generated_query(cmdbuf, pool, query);
+      emit_begin_prim_generated_query<CHIP>(cmdbuf, pool, query);
       break;
    default:
       assert(!"Invalid query type");
    }
 }
+TU_GENX(tu_CmdBeginQueryIndexedEXT);
 
+template <chip CHIP>
 static void
 emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
                          struct tu_query_pool *pool,
@@ -1133,11 +1154,18 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
-   tu_cs_emit_regs(cs,
-                   A6XX_RB_SAMPLE_COUNT_ADDR(.qword = end_iova));
-
-   tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
-   tu_cs_emit(cs, ZPASS_DONE);
+   if (CHIP == A6XX) {
+      tu_cs_emit_regs(cs,
+                        A6XX_RB_SAMPLE_COUNT_ADDR(.qword = end_iova));
+      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
+      tu_cs_emit(cs, ZPASS_DONE);
+   } else {
+      /* A7XX TODO: Calculate (end - begin) via ZPASS_DONE. */
+      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 3);
+      tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
+                                       .write_sample_count = true).value);
+      tu_cs_emit_qw(cs, end_iova);
+   }
 
    tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
    tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_NE) |
@@ -1181,6 +1209,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
  * query inside of secondary cmd buffer - for such case we ought to track
  * the status of pipeline stats query.
  */
+template <chip CHIP>
 static void
 emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
                          struct tu_cs *cs,
@@ -1195,7 +1224,7 @@ emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
          is_pipeline_query_with_vertex_stage(cmdbuf->inherited_pipeline_statistics);
 
       if (!need_cond_exec) {
-         tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
+         tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
       } else {
          tu_cs_reserve(cs, 7 + 2);
          /* Check that pipeline stats query is not running, only then
@@ -1207,7 +1236,7 @@ emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
          tu_cs_emit(cs, CP_COND_EXEC_4_REF(0x2));
          tu_cs_emit(cs, 2); /* Cond execute the next 2 DWORDS */
 
-         tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
+         tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
       }
    }
 
@@ -1218,6 +1247,7 @@ emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
    }
 }
 
+template <chip CHIP>
 static void
 emit_end_stat_query(struct tu_cmd_buffer *cmdbuf,
                     struct tu_query_pool *pool,
@@ -1235,15 +1265,15 @@ emit_end_stat_query(struct tu_cmd_buffer *cmdbuf,
        * we are inside VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT inside of a
        * renderpass, because it is already stopped.
        */
-      emit_stop_primitive_ctrs(cmdbuf, cs, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+      emit_stop_primitive_ctrs<CHIP>(cmdbuf, cs, VK_QUERY_TYPE_PIPELINE_STATISTICS);
    }
 
    if (is_pipeline_query_with_fragment_stage(pool->pipeline_statistics)) {
-      tu6_emit_event_write(cmdbuf, cs, STOP_FRAGMENT_CTRS);
+      tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_FRAGMENT_CTRS);
    }
 
    if (is_pipeline_query_with_compute_stage(pool->pipeline_statistics)) {
-      tu6_emit_event_write(cmdbuf, cs, STOP_COMPUTE_CTRS);
+      tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_COMPUTE_CTRS);
    }
 
    tu_cs_emit_wfi(cs);
@@ -1360,6 +1390,7 @@ emit_end_perf_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, 0x1);
 }
 
+template <chip CHIP>
 static void
 emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
                    struct tu_query_pool *pool,
@@ -1378,10 +1409,10 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t available_iova = query_available_iova(pool, query);
 
    tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS(.qword = end_iova));
-   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
+   tu_emit_event_write<CHIP>(cmdbuf, cs, FD_WRITE_PRIMITIVE_COUNTS);
 
    tu_cs_emit_wfi(cs);
-   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS);
+   tu_emit_event_write<CHIP>(cmdbuf, cs, FD_CACHE_FLUSH);
 
    /* Set the count of written primitives */
    tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 9);
@@ -1392,7 +1423,7 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, end_written_iova);
    tu_cs_emit_qw(cs, begin_written_iova);
 
-   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS);
+   tu_emit_event_write<CHIP>(cmdbuf, cs, FD_CACHE_FLUSH);
 
    /* Set the count of generated primitives */
    tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 9);
@@ -1409,6 +1440,7 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, 0x1);
 }
 
+template <chip CHIP>
 static void
 emit_end_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
                               struct tu_query_pool *pool,
@@ -1452,7 +1484,7 @@ emit_end_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
    /* Should be after waiting for mem writes to have up to date info
     * about which query is running.
     */
-   emit_stop_primitive_ctrs(cmdbuf, cs, VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT);
+   emit_stop_primitive_ctrs<CHIP>(cmdbuf, cs, VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT);
 
    if (cmdbuf->state.pass) {
       tu_cond_exec_end(cs);
@@ -1505,6 +1537,7 @@ handle_multiview_queries(struct tu_cmd_buffer *cmd,
    }
 }
 
+template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdEndQuery(VkCommandBuffer commandBuffer,
                VkQueryPool queryPool,
@@ -1516,19 +1549,19 @@ tu_CmdEndQuery(VkCommandBuffer commandBuffer,
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      emit_end_occlusion_query(cmdbuf, pool, query);
+      emit_end_occlusion_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
-      emit_end_xfb_query(cmdbuf, pool, query, 0);
+      emit_end_xfb_query<CHIP>(cmdbuf, pool, query, 0);
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      emit_end_prim_generated_query(cmdbuf, pool, query);
+      emit_end_prim_generated_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
       emit_end_perf_query(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-      emit_end_stat_query(cmdbuf, pool, query);
+      emit_end_stat_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
       unreachable("Unimplemented query type");
@@ -1538,7 +1571,9 @@ tu_CmdEndQuery(VkCommandBuffer commandBuffer,
 
    handle_multiview_queries(cmdbuf, pool, query);
 }
+TU_GENX(tu_CmdEndQuery);
 
+template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer,
                          VkQueryPool queryPool,
@@ -1552,15 +1587,16 @@ tu_CmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer,
    switch (pool->type) {
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
       assert(index <= 4);
-      emit_end_xfb_query(cmdbuf, pool, query, index);
+      emit_end_xfb_query<CHIP>(cmdbuf, pool, query, index);
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      emit_end_prim_generated_query(cmdbuf, pool, query);
+      emit_end_prim_generated_query<CHIP>(cmdbuf, pool, query);
       break;
    default:
       assert(!"Invalid query type");
    }
 }
+TU_GENX(tu_CmdEndQueryIndexedEXT);
 
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdWriteTimestamp2(VkCommandBuffer commandBuffer,

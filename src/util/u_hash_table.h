@@ -33,8 +33,9 @@
 #define U_HASH_TABLE_H_
 
 
-#include "pipe/p_defines.h"
+#include "util/detect.h"
 #include "util/hash_table.h"
+#include "util/macros.h"
 
 
 #ifdef __cplusplus

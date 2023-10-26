@@ -48,13 +48,16 @@ static void *blit_compute_shader(struct pipe_context *ctx)
       "DCL IMAGE[0], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
       "DCL SAMP[0]\n"
       "DCL SVIEW[0], 2D_ARRAY, FLOAT\n"
-      "DCL CONST[0][0..2]\n" // 0:xyzw 1:xyzw
+      "DCL CONST[0][0..3]\n" // 0:xyzw 1:xyzw
       "DCL TEMP[0..4], LOCAL\n"
       "IMM[0] UINT32 {64, 1, 0, 0}\n"
+      "IMM[1] FLT32 {0.5, 0, 0, 0}\n"
 
       "UMAD TEMP[0].xyz, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
       "U2F TEMP[1].xyz, TEMP[0]\n"
+      "ADD TEMP[1].xy, TEMP[1].xyyy, IMM[1].xxxx\n"
       "MAD TEMP[2].xyz, TEMP[1], CONST[0][1], CONST[0][0]\n"
+      "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[0][3].xyyy\n"
       "TEX_LZ TEMP[3], TEMP[2], SAMP[0], 2D_ARRAY\n"
       "UADD TEMP[4].xyz, TEMP[0], CONST[0][2]\n"
       "STORE IMAGE[0], TEMP[4], TEMP[3], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
@@ -75,7 +78,7 @@ static void *blit_compute_shader(struct pipe_context *ctx)
 }
 
 void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_info,
-                       void **compute_state, bool half_texel_offset)
+                       void **compute_state)
 {
    if (blit_info->src.box.width == 0 || blit_info->src.box.height == 0 ||
        blit_info->dst.box.width == 0 || blit_info->dst.box.height == 0)
@@ -90,10 +93,9 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
    float x_scale = blit_info->src.box.width / (float)blit_info->dst.box.width;
    float y_scale = blit_info->src.box.height / (float)blit_info->dst.box.height;
    float z_scale = blit_info->src.box.depth / (float)blit_info->dst.box.depth;
-   float offset = half_texel_offset ? 0.5 : 0.0;
 
-   unsigned data[] = {u_bitcast_f2u((blit_info->src.box.x + offset) / (float)src->width0),
-                      u_bitcast_f2u((blit_info->src.box.y + offset) / (float)src->height0),
+   unsigned data[] = {u_bitcast_f2u(blit_info->src.box.x / (float)src->width0),
+                      u_bitcast_f2u(blit_info->src.box.y / (float)src->height0),
                       u_bitcast_f2u(blit_info->src.box.z),
                       u_bitcast_f2u(0),
                       u_bitcast_f2u(x_scale / src->width0),
@@ -103,6 +105,10 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
                       blit_info->dst.box.x,
                       blit_info->dst.box.y,
                       blit_info->dst.box.z,
+                      0,
+                      u_bitcast_f2u((blit_info->src.box.width - 0.5) / (float)src->width0),
+                      u_bitcast_f2u((blit_info->src.box.height - 0.5) / (float)src->height0),
+                      0,
                       0};
 
    struct pipe_constant_buffer cb = {0};

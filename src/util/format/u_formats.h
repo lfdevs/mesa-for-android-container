@@ -368,6 +368,8 @@ enum pipe_format {
    PIPE_FORMAT_R8B8_R8G8_UNORM,
    PIPE_FORMAT_G8R8_B8R8_UNORM,
    PIPE_FORMAT_B8R8_G8R8_UNORM,
+   PIPE_FORMAT_G8B8_G8R8_UNORM,
+   PIPE_FORMAT_B8G8_R8G8_UNORM,
 
    PIPE_FORMAT_R8G8B8X8_SNORM,
    PIPE_FORMAT_R8G8B8X8_SRGB,
@@ -511,7 +513,10 @@ enum pipe_format {
    PIPE_FORMAT_XYUV,
 
    PIPE_FORMAT_R8_G8B8_420_UNORM,
+   PIPE_FORMAT_R8_B8G8_420_UNORM,
    PIPE_FORMAT_G8_B8R8_420_UNORM,
+   PIPE_FORMAT_R8_G8_B8_420_UNORM,
+   PIPE_FORMAT_R8_B8_G8_420_UNORM,
    PIPE_FORMAT_G8_B8_R8_420_UNORM,
    PIPE_FORMAT_R8_G8_B8_UNORM,
    PIPE_FORMAT_Y8_UNORM,
@@ -651,6 +656,37 @@ pipe_format_to_chroma_format(enum pipe_format format)
          return PIPE_VIDEO_CHROMA_FORMAT_NONE;
    }
 }
+
+/**
+ * Texture & format swizzles
+ */
+enum pipe_swizzle {
+   PIPE_SWIZZLE_X,
+   PIPE_SWIZZLE_Y,
+   PIPE_SWIZZLE_Z,
+   PIPE_SWIZZLE_W,
+   PIPE_SWIZZLE_0,
+   PIPE_SWIZZLE_1,
+   PIPE_SWIZZLE_NONE,
+   PIPE_SWIZZLE_MAX, /**< Number of enums counter (must be last) */
+};
+
+#define PIPE_MASK_R  0x1
+#define PIPE_MASK_G  0x2
+#define PIPE_MASK_B  0x4
+#define PIPE_MASK_A  0x8
+#define PIPE_MASK_RGBA 0xf
+#define PIPE_MASK_Z  0x10
+#define PIPE_MASK_S  0x20
+#define PIPE_MASK_ZS 0x30
+#define PIPE_MASK_RGBAZS (PIPE_MASK_RGBA|PIPE_MASK_ZS)
+
+union pipe_color_union
+{
+   float f[4];
+   int i[4];
+   unsigned int ui[4];
+};
 
 #ifdef __cplusplus
 }

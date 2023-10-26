@@ -63,7 +63,7 @@ Bug fixes
 - [REGRESSION][BISECTED] iris: Qutebrowser/QtWebEngine sporadically flashes the window in white
 - Flickering Intel Uhd 620 Graphics
 - Vulkan Wayland WSI returns empty surface formats
-- [radeon, rs690] piglit spec@glsl-1.10@execution@built-in-functions@fs-atan-float + 10 other 'atan' tests crash (mesa-22dev)
+- [radeon, rs690] piglit spec\@glsl-1.10\@execution\@built-in-functions\@fs-atan-float + 10 other 'atan' tests crash (mesa-22dev)
 - [bisected] artifacts in vaapi h.264 playback
 - [bisected] artifacts in vaapi h.264 playback
 - radv: msaa regression

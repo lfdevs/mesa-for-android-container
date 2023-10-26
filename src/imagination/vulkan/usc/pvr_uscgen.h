@@ -137,10 +137,11 @@ struct pvr_tq_frag_sh_reg_layout {
 
 /* TODO: Shader caching (not pipeline caching) support. */
 
-void pvr_uscgen_per_job_eot(uint32_t emit_count,
-                            const uint32_t *emit_state,
-                            unsigned *temps_used,
-                            struct util_dynarray *binary);
+void pvr_uscgen_eot(const char *name,
+                    uint32_t emit_count,
+                    const uint32_t *emit_state,
+                    unsigned *temps_used,
+                    struct util_dynarray *binary);
 
 void pvr_uscgen_nop(struct util_dynarray *binary);
 

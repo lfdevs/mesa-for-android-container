@@ -42,28 +42,28 @@ build_fmask_copy_compute_shader(struct radv_device *dev, int samples)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
-   nir_ssa_def *wg_id = nir_load_workgroup_id(&b, 32);
-   nir_ssa_def *block_size = nir_imm_ivec3(&b, b.shader->info.workgroup_size[0], b.shader->info.workgroup_size[1],
-                                           b.shader->info.workgroup_size[2]);
+   nir_def *invoc_id = nir_load_local_invocation_id(&b);
+   nir_def *wg_id = nir_load_workgroup_id(&b);
+   nir_def *block_size = nir_imm_ivec3(&b, b.shader->info.workgroup_size[0], b.shader->info.workgroup_size[1],
+                                       b.shader->info.workgroup_size[2]);
 
-   nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
+   nir_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
    /* Get coordinates. */
-   nir_ssa_def *src_coord = nir_trim_vector(&b, global_id, 2);
-   nir_ssa_def *dst_coord = nir_vec4(&b, nir_channel(&b, src_coord, 0), nir_channel(&b, src_coord, 1),
-                                     nir_ssa_undef(&b, 1, 32), nir_ssa_undef(&b, 1, 32));
+   nir_def *src_coord = nir_trim_vector(&b, global_id, 2);
+   nir_def *dst_coord = nir_vec4(&b, nir_channel(&b, src_coord, 0), nir_channel(&b, src_coord, 1), nir_undef(&b, 1, 32),
+                                 nir_undef(&b, 1, 32));
 
    nir_tex_src frag_mask_srcs[] = {{
       .src_type = nir_tex_src_coord,
       .src = nir_src_for_ssa(src_coord),
    }};
-   nir_ssa_def *frag_mask =
+   nir_def *frag_mask =
       nir_build_tex_deref_instr(&b, nir_texop_fragment_mask_fetch_amd, nir_build_deref_var(&b, input_img), NULL,
                                 ARRAY_SIZE(frag_mask_srcs), frag_mask_srcs);
 
    /* Get the maximum sample used in this fragment. */
-   nir_ssa_def *max_sample_index = nir_imm_int(&b, 0);
+   nir_def *max_sample_index = nir_imm_int(&b, 0);
    for (uint32_t s = 0; s < samples; s++) {
       /* max_sample_index = MAX2(max_sample_index, (frag_mask >> (s * 4)) & 0xf) */
       max_sample_index = nir_umax(&b, max_sample_index,
@@ -75,7 +75,7 @@ build_fmask_copy_compute_shader(struct radv_device *dev, int samples)
 
    nir_loop *loop = nir_push_loop(&b);
    {
-      nir_ssa_def *sample_id = nir_load_var(&b, counter);
+      nir_def *sample_id = nir_load_var(&b, counter);
 
       nir_tex_src frag_fetch_srcs[] = {{
                                           .src_type = nir_tex_src_coord,
@@ -85,11 +85,10 @@ build_fmask_copy_compute_shader(struct radv_device *dev, int samples)
                                           .src_type = nir_tex_src_ms_index,
                                           .src = nir_src_for_ssa(sample_id),
                                        }};
-      nir_ssa_def *outval =
-         nir_build_tex_deref_instr(&b, nir_texop_fragment_fetch_amd, nir_build_deref_var(&b, input_img), NULL,
-                                   ARRAY_SIZE(frag_fetch_srcs), frag_fetch_srcs);
+      nir_def *outval = nir_build_tex_deref_instr(&b, nir_texop_fragment_fetch_amd, nir_build_deref_var(&b, input_img),
+                                                  NULL, ARRAY_SIZE(frag_fetch_srcs), frag_fetch_srcs);
 
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, dst_coord, sample_id, outval,
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, dst_coord, sample_id, outval,
                             nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_MS);
 
       radv_break_on_count(&b, counter, max_sample_index);

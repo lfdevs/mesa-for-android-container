@@ -124,7 +124,7 @@ vtn_handle_function_call(struct vtn_builder *b, SpvOp opcode,
                                    glsl_get_bare_type(ret_type->type),
                                    "return_tmp");
       ret_deref = nir_build_deref_var(&b->nb, ret_tmp);
-      call->params[param_idx++] = nir_src_for_ssa(&ret_deref->dest.ssa);
+      call->params[param_idx++] = nir_src_for_ssa(&ret_deref->def);
    }
 
    for (unsigned i = 0; i < vtn_callee->type->length; i++) {
@@ -201,6 +201,9 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       if (func_type->return_type->base_type != vtn_base_type_void)
          num_params++;
 
+      func->should_inline = b->func->control & SpvFunctionControlInlineMask;
+      func->dont_inline = b->func->control & SpvFunctionControlDontInlineMask;
+
       func->num_params = num_params;
       func->params = ralloc_array(b->shader, nir_parameter, num_params);
 
@@ -225,7 +228,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
        * directly in our OpFunctionParameter handler.
        */
       nir_function_impl *impl = nir_function_impl_create(func);
-      b->nb = nir_builder_at(nir_before_cf_list(&impl->body));
+      b->nb = nir_builder_at(nir_before_impl(impl));
       b->nb.exact = b->exact;
 
       b->func_param_idx = 0;
@@ -543,7 +546,7 @@ vtn_emit_cf_func_unstructured(struct vtn_builder *b, struct vtn_function *func,
       }
 
       case SpvOpBranchConditional: {
-         nir_ssa_def *cond = vtn_ssa_value(b, block->branch[1])->def;
+         nir_def *cond = vtn_ssa_value(b, block->branch[1])->def;
          struct vtn_block *then_block = vtn_block(b, block->branch[2]);
          struct vtn_block *else_block = vtn_block(b, block->branch[3]);
 
@@ -564,7 +567,7 @@ vtn_emit_cf_func_unstructured(struct vtn_builder *b, struct vtn_function *func,
          list_inithead(&cases);
          vtn_parse_switch(b, block->branch, &cases);
 
-         nir_ssa_def *sel = vtn_get_nir_ssa(b, block->branch[1]);
+         nir_def *sel = vtn_get_nir_ssa(b, block->branch[1]);
 
          struct vtn_case *def = NULL;
          vtn_foreach_case(cse, &cases) {
@@ -574,7 +577,7 @@ vtn_emit_cf_func_unstructured(struct vtn_builder *b, struct vtn_function *func,
                continue;
             }
 
-            nir_ssa_def *cond = nir_imm_false(&b->nb);
+            nir_def *cond = nir_imm_false(&b->nb);
             util_dynarray_foreach(&cse->values, uint64_t, val)
                cond = nir_ior(&b->nb, cond, nir_ieq_imm(&b->nb, sel, *val));
 
@@ -626,7 +629,7 @@ vtn_function_emit(struct vtn_builder *b, struct vtn_function *func,
    }
 
    nir_function_impl *impl = func->nir_func->impl;
-   b->nb = nir_builder_at(nir_after_cf_list(&impl->body));
+   b->nb = nir_builder_at(nir_after_impl(impl));
    b->func = func;
    b->nb.exact = b->exact;
    b->phi_table = _mesa_pointer_hash_table_create(b);

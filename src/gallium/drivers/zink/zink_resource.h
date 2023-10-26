@@ -180,7 +180,7 @@ zink_batch_resource_usage_set(struct zink_batch *batch, struct zink_resource *re
          if (acquire)
             util_dynarray_append(&batch->state->acquires, VkSemaphore, acquire);
       }
-      if (write && !res->obj->is_buffer) {
+      if (write) {
          if (!res->valid && res->fb_bind_count)
             batch->state->ctx->rp_loadop_changed = true;
          res->valid = true;

@@ -422,8 +422,6 @@ st_draw_quad(struct st_context *st,
    struct pipe_vertex_buffer vb = {0};
    struct st_util_vertex *verts;
 
-   vb.stride = sizeof(struct st_util_vertex);
-
    u_upload_alloc(st->pipe->stream_uploader, 0,
                   4 * sizeof(struct st_util_vertex), 4,
                   &vb.buffer_offset, &vb.buffer.resource, (void **) &verts);
@@ -477,7 +475,7 @@ st_draw_quad(struct st_context *st,
 
    u_upload_unmap(st->pipe->stream_uploader);
 
-   cso_set_vertex_buffers(st->cso_context, 0, 1, 0, false, &vb);
+   cso_set_vertex_buffers(st->cso_context, 1, 0, false, &vb);
    st->last_num_vbuffers = MAX2(st->last_num_vbuffers, 1);
 
    if (num_instances > 1) {

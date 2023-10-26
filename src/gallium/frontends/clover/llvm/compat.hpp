@@ -68,8 +68,13 @@ namespace clover {
    namespace llvm {
       namespace compat {
 
+#if LLVM_VERSION_MAJOR >= 18
+         const auto CGFT_ObjectFile = ::llvm::CodeGenFileType::ObjectFile;
+         const auto CGFT_AssemblyFile = ::llvm::CodeGenFileType::AssemblyFile;
+#else
          const auto CGFT_ObjectFile = ::llvm::CGFT_ObjectFile;
          const auto CGFT_AssemblyFile = ::llvm::CGFT_AssemblyFile;
+#endif
          typedef ::llvm::CodeGenFileType CodeGenFileType;
 
          const clang::InputKind ik_opencl = clang::Language::OpenCL;

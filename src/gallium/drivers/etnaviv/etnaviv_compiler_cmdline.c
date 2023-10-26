@@ -145,6 +145,7 @@ main(int argc, char **argv)
       errx(1, "could not parse `%s'", filename);
 
    tgsi_parse_init(&parse, toks);
+   glsl_type_singleton_init_or_ref();
 
    struct etna_compiler *compiler = etna_compiler_create(NULL, &specs_gc2000);
 
@@ -167,4 +168,5 @@ main(int argc, char **argv)
 
    etna_dump_shader(v);
    etna_destroy_shader(v);
+   glsl_type_singleton_decref();
 }

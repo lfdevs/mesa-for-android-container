@@ -21,7 +21,7 @@ BinPackParameters: true
 
 BreakBeforeBraces: Custom
 
-ColumnLimit: 100
+ColumnLimit: 0
 PenaltyBreakBeforeFirstCallParameter: 1
 PenaltyExcessCharacter: 100
 
@@ -117,8 +117,10 @@ ForEachMacros:
   - nir_foreach_variable_with_modes
   - nir_foreach_variable_with_modes_safe
 
-  - nir_foreach_register
-  - nir_foreach_register_safe
+  - nir_foreach_reg_decl
+  - nir_foreach_reg_decl_safe
+  - nir_foreach_reg_load
+  - nir_foreach_reg_store
 
   - nir_foreach_if_use
   - nir_foreach_if_use_safe
@@ -126,9 +128,6 @@ ForEachMacros:
   - nir_foreach_use_including_if
   - nir_foreach_use_including_if_safe
   - nir_foreach_use_safe
-
-  - nir_foreach_def
-  - nir_foreach_def_safe
 
   - nir_foreach_phi_src
   - nir_foreach_phi_src_safe
@@ -155,11 +154,10 @@ ForEachMacros:
 
   - nir_foreach_block
   - nir_foreach_block_in_cf_node
+  - nir_foreach_block_in_cf_node_reverse
   - nir_foreach_block_reverse
   - nir_foreach_block_reverse_safe
   - nir_foreach_block_safe
-
-  - nir_foreach_src
 
 # egl
   - egl_relax
@@ -314,3 +312,10 @@ ForEachMacros:
   - pan_foreach_instr_in_block_rev
   - pan_foreach_predecessor
   - pan_foreach_successor
+
+# Disable clang formatting by default. Drivers that use clang-format
+# inherit from this .clang-format file and re-enable formatting:
+#
+# DisableFormat: false
+#
+DisableFormat: true

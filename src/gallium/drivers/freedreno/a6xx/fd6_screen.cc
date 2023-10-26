@@ -120,6 +120,11 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
       retval |= PIPE_BIND_INDEX_BUFFER;
    }
 
+   if ((usage & PIPE_BIND_BLENDABLE) && has_color &&
+       !util_format_is_pure_integer(format)) {
+      retval |= PIPE_BIND_BLENDABLE;
+   }
+
    if (retval != usage) {
       DBG("not supported: format=%s, target=%d, sample_count=%d, "
           "usage=%x, retval=%x",
@@ -157,9 +162,14 @@ fd6_screen_init(struct pipe_screen *pscreen)
 
    screen->max_rts = A6XX_MAX_RENDER_TARGETS;
 
-   screen->ccu_offset_bypass = screen->info->num_ccu * A6XX_CCU_DEPTH_SIZE;
-   screen->ccu_offset_gmem = (screen->gmemsize_bytes -
-         screen->info->num_ccu * A6XX_CCU_GMEM_COLOR_SIZE);
+   uint32_t depth_cache_size =
+      screen->info->num_ccu * screen->info->a6xx.sysmem_per_ccu_cache_size;
+   uint32_t color_cache_size =
+      (screen->info->num_ccu * screen->info->a6xx.sysmem_per_ccu_cache_size) /
+      (1 << screen->info->a6xx.gmem_ccu_color_cache_fraction);
+
+   screen->ccu_offset_bypass = depth_cache_size;
+   screen->ccu_offset_gmem = screen->gmemsize_bytes - color_cache_size;
 
    /* Currently only FB_READ forces GMEM path, mostly because we'd have to
     * deal with cmdstream patching otherwise..

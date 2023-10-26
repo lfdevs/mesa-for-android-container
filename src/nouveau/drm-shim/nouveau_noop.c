@@ -26,13 +26,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
-#include <nouveau_drm.h>
+#include "drm-uapi/nouveau_drm.h"
 #include "nouveau/nvif/ioctl.h"
 #include "nouveau/nvif/cl0080.h"
 #include "drm-shim/drm_shim.h"
 #include "util//u_math.h"
 
-#include "../gallium/drivers/nouveau/nv_object.xml.h"
+#include "../../gallium/drivers/nouveau/nv_object.xml.h"
 bool drm_shim_driver_prefers_first_render_node = true;
 
 struct nouveau_device {

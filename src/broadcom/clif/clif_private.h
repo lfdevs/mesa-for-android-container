@@ -101,6 +101,8 @@ bool v3d41_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
                             const uint8_t *cl, uint32_t *size, bool reloc_mode);
 bool v3d42_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
                             const uint8_t *cl, uint32_t *size, bool reloc_mode);
+bool v3d71_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
+                            const uint8_t *cl, uint32_t *size, bool reloc_mode);
 
 static inline void
 out(struct clif_dump *clif, const char *fmt, ...)

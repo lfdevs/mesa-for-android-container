@@ -410,6 +410,7 @@ lp_setup_bind_framebuffer(struct lp_setup_context *setup,
    setup->framebuffer.y0 = 0;
    setup->framebuffer.x1 = fb->width-1;
    setup->framebuffer.y1 = fb->height-1;
+   setup->viewport_index_slot = -1;
    setup->dirty |= LP_SETUP_NEW_SCISSOR;
 }
 
@@ -1335,6 +1336,11 @@ lp_setup_create(struct pipe_context *pipe,
    }
 
    lp_setup_init_vbuf(setup);
+
+   setup->psize_slot = -1;
+   setup->viewport_index_slot = -1;
+   setup->layer_slot = -1;
+   setup->face_slot = -1;
 
    /* Used only in update_state():
     */

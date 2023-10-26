@@ -18,8 +18,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#if !FD_REPLAY_KGSL
 #include <xf86drm.h>
 #include "drm-uapi/msm_drm.h"
+#else
+#include "../vulkan/msm_kgsl.h"
+#endif
+
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -43,6 +49,9 @@
  * - echo 1 > /sys/module/msm/parameters/rd_full
  *
  * Requires kernel with MSM_INFO_SET_IOVA support.
+ * In case userspace IOVAs are not supported, like on KGSL, we have to
+ * pre-allocate a single buffer and hope it always allocated starting
+ * from the same address.
  *
  * TODO: Misrendering, would require marking framebuffer images
  *       at each renderpass in order to fetch and decode them.
@@ -55,6 +64,8 @@
  */
 
 static const char *exename = NULL;
+
+static const uint64_t FAKE_ADDRESS_SPACE_SIZE = 1024 * 1024 * 1024;
 
 static int handle_file(const char *filename, uint32_t first_submit,
                        uint32_t last_submit, uint32_t submit_to_override,
@@ -166,6 +177,19 @@ struct device {
    struct util_vma_heap vma;
 
    struct u_vector cmdstreams;
+
+   uint64_t shader_log_iova;
+   uint64_t cp_log_iova;
+
+   bool has_set_iova;
+
+   uint32_t va_id;
+   void *va_map;
+   uint64_t va_iova;
+
+#ifdef FD_REPLAY_KGSL
+   uint32_t context_id;
+#endif
 };
 
 void buffer_mem_free(struct device *dev, struct buffer *buf);
@@ -193,43 +217,6 @@ rb_buffer_search_cmp(const struct rb_node *node, const void *addrptr)
    else if (buf->iova > iova)
       return 1;
    return 0;
-}
-
-static struct device *
-device_create()
-{
-   struct device *dev = calloc(sizeof(struct device), 1);
-
-   dev->fd = drmOpenWithType("msm", NULL, DRM_NODE_RENDER);
-   if (dev->fd < 0) {
-      errx(1, "Cannot open MSM fd!");
-   }
-
-   uint64_t va_start, va_size;
-
-   struct drm_msm_param req = {
-      .pipe = MSM_PIPE_3D0,
-      .param = MSM_PARAM_VA_START,
-   };
-
-   int ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
-   va_start = req.value;
-
-   if (!ret) {
-      req.param = MSM_PARAM_VA_SIZE;
-      ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
-      va_size = req.value;
-   }
-
-   if (ret) {
-      err(1, "MSM_INFO_SET_IOVA is unsupported");
-   }
-
-   rb_tree_init(&dev->buffers);
-   util_vma_heap_init(&dev->vma, va_start, ROUND_DOWN_TO(va_size, 4096));
-   u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
-
-   return dev;
 }
 
 static struct buffer *
@@ -261,6 +248,84 @@ device_free_unused_buffers(struct device *dev)
    }
 }
 
+static void
+device_print_shader_log(struct device *dev)
+{
+   struct shader_log {
+      uint64_t cur_iova;
+      union {
+         uint32_t entries_u32[0];
+         float entries_float[0];
+      };
+   };
+
+   if (dev->shader_log_iova != 0)
+   {
+      struct buffer *buf = device_get_buffer(dev, dev->shader_log_iova);
+      if (buf) {
+         struct shader_log *log = buf->map + (dev->shader_log_iova - buf->iova);
+         uint32_t count = (log->cur_iova - dev->shader_log_iova -
+                           offsetof(struct shader_log, entries_u32)) / 4;
+
+         printf("Shader Log Entries: %u\n", count);
+
+         for (uint32_t i = 0; i < count; i++) {
+            printf("[%u] %08x %.4f\n", i, log->entries_u32[i],
+                   log->entries_float[i]);
+         }
+
+         printf("========================================\n");
+      }
+   }
+}
+
+static void
+device_print_cp_log(struct device *dev)
+{
+   struct cp_log {
+      uint64_t cur_iova;
+      uint64_t tmp;
+      uint64_t first_entry_size;
+   };
+
+   struct cp_log_entry {
+      uint64_t size;
+      uint32_t data[0];
+   };
+
+   if (dev->cp_log_iova == 0)
+      return;
+
+   struct buffer *buf = device_get_buffer(dev, dev->cp_log_iova);
+   if (!buf)
+      return;
+
+   struct cp_log *log = buf->map + (dev->cp_log_iova - buf->iova);
+   if (log->first_entry_size == 0)
+      return;
+
+   struct cp_log_entry *log_entry =
+      buf->map + offsetof(struct cp_log, first_entry_size);
+   uint32_t idx = 0;
+   while (log_entry->size != 0) {
+      printf("\nCP Log [%u]:\n", idx++);
+      uint32_t dwords = log_entry->size / 4;
+
+      for (uint32_t i = 0; i < dwords; i++) {
+         if (i % 8 == 0)
+            printf("\t");
+         printf("%08x ", log_entry->data[i]);
+         if (i % 8 == 7)
+            printf("\n");
+      }
+      printf("\n");
+
+      log_entry = (void *)log_entry + log_entry->size +
+                  offsetof(struct cp_log_entry, data);
+   }
+}
+
+#if !FD_REPLAY_KGSL
 static inline void
 get_abs_timeout(struct drm_msm_timespec *tv, uint64_t ns)
 {
@@ -268,6 +333,76 @@ get_abs_timeout(struct drm_msm_timespec *tv, uint64_t ns)
    clock_gettime(CLOCK_MONOTONIC, &t);
    tv->tv_sec = t.tv_sec + ns / 1000000000;
    tv->tv_nsec = t.tv_nsec + ns % 1000000000;
+}
+
+static struct device *
+device_create()
+{
+   struct device *dev = calloc(sizeof(struct device), 1);
+
+   dev->fd = drmOpenWithType("msm", NULL, DRM_NODE_RENDER);
+   if (dev->fd < 0) {
+      errx(1, "Cannot open MSM fd!");
+   }
+
+   uint64_t va_start, va_size;
+
+   struct drm_msm_param req = {
+      .pipe = MSM_PIPE_3D0,
+      .param = MSM_PARAM_VA_START,
+   };
+
+   int ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
+   va_start = req.value;
+
+   if (!ret) {
+      req.param = MSM_PARAM_VA_SIZE;
+      ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
+      va_size = req.value;
+
+      dev->has_set_iova = true;
+   }
+
+   if (ret) {
+      printf("MSM_INFO_SET_IOVA is not supported!\n");
+
+      struct drm_msm_gem_new req_new = {.size = FAKE_ADDRESS_SPACE_SIZE, .flags = MSM_BO_CACHED_COHERENT};
+      drmCommandWriteRead(dev->fd, DRM_MSM_GEM_NEW, &req_new, sizeof(req_new));
+      dev->va_id = req_new.handle;
+
+      struct drm_msm_gem_info req_info = {
+         .handle = req_new.handle,
+         .info = MSM_INFO_GET_IOVA,
+      };
+
+      drmCommandWriteRead(dev->fd,
+                                 DRM_MSM_GEM_INFO, &req_info, sizeof(req_info));
+      dev->va_iova = req_info.value;
+
+      struct drm_msm_gem_info req_offset = {
+         .handle = req_new.handle,
+         .info = MSM_INFO_GET_OFFSET,
+      };
+
+      drmCommandWriteRead(dev->fd, DRM_MSM_GEM_INFO, &req_offset, sizeof(req_offset));
+
+      dev->va_map = mmap(0, FAKE_ADDRESS_SPACE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       dev->fd, req_offset.value);
+      if (dev->va_map == MAP_FAILED) {
+         err(1, "mmap failure");
+      }
+
+      va_start = dev->va_iova;
+      va_size = FAKE_ADDRESS_SPACE_SIZE;
+
+      printf("Allocated iova %" PRIx64 "\n", dev->va_iova);
+   }
+
+   rb_tree_init(&dev->buffers);
+   util_vma_heap_init(&dev->vma, va_start, ROUND_DOWN_TO(va_size, 4096));
+   u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
+
+   return dev;
 }
 
 static void
@@ -285,7 +420,6 @@ device_submit_cmdstreams(struct device *dev)
    struct cmdstream *cmd;
    u_vector_foreach(cmd, &dev->cmdstreams) {
       struct buffer *cmdstream_buf = device_get_buffer(dev, cmd->iova);
-      cmdstream_buf->flags = MSM_SUBMIT_BO_DUMP;
 
       uint32_t bo_idx = 0;
       rb_tree_foreach (struct buffer, buf, &dev->buffers, node) {
@@ -295,10 +429,17 @@ device_submit_cmdstreams(struct device *dev)
          bo_idx++;
       }
 
+      if (cmdstream_buf)
+         cmdstream_buf->flags = MSM_SUBMIT_BO_DUMP;
+
       struct drm_msm_gem_submit_cmd *submit_cmd = &cmds[idx];
       submit_cmd->type = MSM_SUBMIT_CMD_BUF;
       submit_cmd->submit_idx = bo_idx;
-      submit_cmd->submit_offset = cmd->iova - cmdstream_buf->iova;
+      if (dev->has_set_iova) {
+         submit_cmd->submit_offset = cmd->iova - cmdstream_buf->iova;
+      } else {
+         submit_cmd->submit_offset = cmd->iova - dev->va_iova;
+      }
       submit_cmd->size = cmd->size;
       submit_cmd->pad = 0;
       submit_cmd->nr_relocs = 0;
@@ -313,17 +454,29 @@ device_submit_cmdstreams(struct device *dev)
          bo_count++;
    }
 
+   if (!dev->has_set_iova) {
+      bo_count = 1;
+   }
+
    struct drm_msm_gem_submit_bo *bo_list =
       calloc(sizeof(struct drm_msm_gem_submit_bo), bo_count);
 
-   uint32_t bo_idx = 0;
-   rb_tree_foreach (struct buffer, buf, &dev->buffers, node) {
-      struct drm_msm_gem_submit_bo *submit_bo = &bo_list[bo_idx++];
-      submit_bo->handle = buf->gem_handle;
-      submit_bo->flags = buf->flags | MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE;
-      submit_bo->presumed = buf->iova;
+   if (dev->has_set_iova) {
+      uint32_t bo_idx = 0;
+      rb_tree_foreach (struct buffer, buf, &dev->buffers, node) {
+         struct drm_msm_gem_submit_bo *submit_bo = &bo_list[bo_idx++];
+         submit_bo->handle = buf->gem_handle;
+         submit_bo->flags =
+            buf->flags | MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE;
+         submit_bo->presumed = buf->iova;
 
-      buf->flags = 0;
+         buf->flags = 0;
+      }
+   } else {
+      bo_list[0].handle = dev->va_id;
+      bo_list[0].flags =
+         MSM_SUBMIT_BO_DUMP | MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE;
+      bo_list[0].presumed = dev->va_iova;
    }
 
    struct drm_msm_gem_submit submit_req = {
@@ -365,12 +518,22 @@ device_submit_cmdstreams(struct device *dev)
 
    u_vector_finish(&dev->cmdstreams);
    u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
+
+   device_print_shader_log(dev);
+   device_print_cp_log(dev);
 }
 
 static void
 buffer_mem_alloc(struct device *dev, struct buffer *buf)
 {
    util_vma_heap_alloc_addr(&dev->vma, buf->iova, buf->size);
+
+   if (!dev->has_set_iova) {
+      uint64_t offset = buf->iova - dev->va_iova;
+      assert(offset < FAKE_ADDRESS_SPACE_SIZE && (offset + buf->size) <= FAKE_ADDRESS_SPACE_SIZE);
+      buf->map = ((uint8_t*)dev->va_map) + offset;
+      return;
+   }
 
    {
       struct drm_msm_gem_new req = {.size = buf->size, .flags = MSM_BO_WC};
@@ -424,15 +587,149 @@ buffer_mem_alloc(struct device *dev, struct buffer *buf)
 void
 buffer_mem_free(struct device *dev, struct buffer *buf)
 {
-   munmap(buf->map, buf->size);
+   if (dev->has_set_iova) {
+      munmap(buf->map, buf->size);
 
-   struct drm_gem_close req = {
-      .handle = buf->gem_handle,
-   };
-   drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
+      struct drm_gem_close req = {
+         .handle = buf->gem_handle,
+      };
+      drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
+   }
 
    util_vma_heap_free(&dev->vma, buf->iova, buf->size);
 }
+
+#else
+static int
+safe_ioctl(int fd, unsigned long request, void *arg)
+{
+   int ret;
+
+   do {
+      ret = ioctl(fd, request, arg);
+   } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
+
+   return ret;
+}
+
+static struct device *
+device_create()
+{
+   struct device *dev = calloc(sizeof(struct device), 1);
+
+   static const char path[] = "/dev/kgsl-3d0";
+
+   dev->fd = open(path, O_RDWR | O_CLOEXEC);
+   if (dev->fd < 0) {
+      errx(1, "Cannot open KGSL fd!");
+   }
+
+   struct kgsl_gpumem_alloc_id req = {
+      .size = FAKE_ADDRESS_SPACE_SIZE,
+      .flags = KGSL_MEMFLAGS_IOCOHERENT,
+   };
+
+   int ret = safe_ioctl(dev->fd, IOCTL_KGSL_GPUMEM_ALLOC_ID, &req);
+   if (ret) {
+      err(1, "IOCTL_KGSL_GPUMEM_ALLOC_ID failure");
+   }
+
+   dev->va_id = req.id;
+   dev->va_iova = req.gpuaddr;
+   dev->va_map = mmap(0, FAKE_ADDRESS_SPACE_SIZE, PROT_READ | PROT_WRITE,
+                      MAP_SHARED, dev->fd, req.id << 12);
+
+   rb_tree_init(&dev->buffers);
+   util_vma_heap_init(&dev->vma, req.gpuaddr, ROUND_DOWN_TO(FAKE_ADDRESS_SPACE_SIZE, 4096));
+   u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
+
+   struct kgsl_drawctxt_create drawctxt_req = {
+      .flags = KGSL_CONTEXT_SAVE_GMEM |
+              KGSL_CONTEXT_NO_GMEM_ALLOC |
+              KGSL_CONTEXT_PREAMBLE,
+   };
+
+   ret = safe_ioctl(dev->fd, IOCTL_KGSL_DRAWCTXT_CREATE, &drawctxt_req);
+   if (ret) {
+      err(1, "IOCTL_KGSL_DRAWCTXT_CREATE failure");
+   }
+
+   printf("Allocated iova %" PRIx64 "\n", dev->va_iova);
+
+   dev->context_id = drawctxt_req.drawctxt_id;
+
+   return dev;
+}
+
+static void
+device_submit_cmdstreams(struct device *dev)
+{
+   device_free_unused_buffers(dev);
+   device_mark_buffers(dev);
+
+   if (!u_vector_length(&dev->cmdstreams))
+      return;
+
+   struct kgsl_command_object cmds[u_vector_length(&dev->cmdstreams)];
+
+   uint32_t idx = 0;
+   struct cmdstream *cmd;
+   u_vector_foreach(cmd, &dev->cmdstreams) {
+      struct kgsl_command_object *submit_cmd = &cmds[idx++];
+      submit_cmd->gpuaddr = cmd->iova;
+      submit_cmd->size = cmd->size;
+      submit_cmd->flags = KGSL_CMDLIST_IB;
+      submit_cmd->id = dev->va_id;
+   }
+
+   struct kgsl_gpu_command submit_req = {
+      .flags = KGSL_CMDBATCH_SUBMIT_IB_LIST,
+      .cmdlist = (uintptr_t) &cmds,
+      .cmdsize = sizeof(struct kgsl_command_object),
+      .numcmds = u_vector_length(&dev->cmdstreams),
+      .numsyncs = 0,
+      .context_id = dev->context_id,
+   };
+
+   int ret = safe_ioctl(dev->fd, IOCTL_KGSL_GPU_COMMAND, &submit_req);
+
+   if (ret) {
+      err(1, "IOCTL_KGSL_GPU_COMMAND failure %d", ret);
+   }
+
+   struct kgsl_device_waittimestamp_ctxtid wait = {
+      .context_id = dev->context_id,
+      .timestamp = submit_req.timestamp,
+      .timeout = 3000,
+   };
+
+   ret = safe_ioctl(dev->fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID, &wait);
+
+   if (ret) {
+      err(1, "IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID failure %d", ret);
+   }
+
+   u_vector_finish(&dev->cmdstreams);
+   u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
+
+   device_print_shader_log(dev);
+   device_print_cp_log(dev);
+}
+
+static void
+buffer_mem_alloc(struct device *dev, struct buffer *buf)
+{
+   util_vma_heap_alloc_addr(&dev->vma, buf->iova, buf->size);
+
+   buf->map = ((uint8_t*)dev->va_map) + (buf->iova - dev->va_iova);
+}
+
+void
+buffer_mem_free(struct device *dev, struct buffer *buf)
+{
+   util_vma_heap_free(&dev->vma, buf->iova, buf->size);
+}
+#endif
 
 static void
 upload_buffer(struct device *dev, uint64_t iova, unsigned int size,
@@ -444,6 +741,7 @@ upload_buffer(struct device *dev, uint64_t iova, unsigned int size,
       buf = calloc(sizeof(struct buffer), 1);
       buf->iova = iova;
       buf->size = size;
+
       rb_tree_insert(&dev->buffers, &buf->node, rb_buffer_insert_cmp);
 
       buffer_mem_alloc(dev, buf);
@@ -462,14 +760,21 @@ static int
 override_cmdstream(struct device *dev, struct cmdstream *cs,
                    const char *cmdstreamgen)
 {
+#if FD_REPLAY_KGSL
+   static const char *tmpfilename = "/sdcard/Download/cmdstream_override.rd";
+#else
    static const char *tmpfilename = "/tmp/cmdstream_override.rd";
+#endif
+
 
    /* Find a free space for the new cmdstreams and resources we will use
     * when overriding existing cmdstream.
     */
    /* TODO: should the size be configurable? */
    uint64_t hole_size = 32 * 1024 * 1024;
+   dev->vma.alloc_high = true;
    uint64_t hole_iova = util_vma_heap_alloc(&dev->vma, hole_size, 4096);
+   dev->vma.alloc_high = false;
    util_vma_heap_free(&dev->vma, hole_iova, hole_size);
 
    char cmd[2048];
@@ -517,6 +822,16 @@ override_cmdstream(struct device *dev, struct cmdstream *cs,
 
          cs->iova = gpuaddr;
          cs->size = sizedwords * sizeof(uint32_t);
+         break;
+      }
+      case RD_SHADER_LOG_BUFFER: {
+         unsigned int sizedwords;
+         parse_addr(ps.buf, ps.sz, &sizedwords, &dev->shader_log_iova);
+         break;
+      }
+      case RD_CP_LOG_BUFFER: {
+         unsigned int sizedwords;
+         parse_addr(ps.buf, ps.sz, &sizedwords, &dev->cp_log_iova);
          break;
       }
       default:

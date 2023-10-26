@@ -21,10 +21,10 @@
  * IN THE SOFTWARE.
  */
 
+#include "compiler/nir_types.h"
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_deref.h"
-#include "compiler/nir_types.h"
 
 /*
  * Lowers all copy intrinsics to sequences of load/store intrinsics.
@@ -96,7 +96,6 @@ nir_lower_deref_copy_instr(nir_builder *b, nir_intrinsic_instr *copy)
    /* Unfortunately, there's just no good way to handle wildcards except to
     * flip the chain around and walk the list from variable to final pointer.
     */
-   assert(copy->src[0].is_ssa && copy->src[1].is_ssa);
    nir_deref_instr *dst = nir_instr_as_deref(copy->src[0].ssa->parent_instr);
    nir_deref_instr *src = nir_instr_as_deref(copy->src[1].ssa->parent_instr);
 
@@ -106,21 +105,17 @@ nir_lower_deref_copy_instr(nir_builder *b, nir_intrinsic_instr *copy)
 
    b->cursor = nir_before_instr(&copy->instr);
    emit_deref_copy_load_store(b, dst_path.path[0], &dst_path.path[1],
-                                 src_path.path[0], &src_path.path[1],
-                                 nir_intrinsic_dst_access(copy),
-                                 nir_intrinsic_src_access(copy));
+                              src_path.path[0], &src_path.path[1],
+                              nir_intrinsic_dst_access(copy),
+                              nir_intrinsic_src_access(copy));
 
    nir_deref_path_finish(&dst_path);
    nir_deref_path_finish(&src_path);
 }
 
 static bool
-lower_var_copies_instr(nir_builder *b, nir_instr *instr, void *data)
+lower_var_copies_instr(nir_builder *b, nir_intrinsic_instr *copy, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
    if (copy->intrinsic != nir_intrinsic_copy_deref)
       return false;
 
@@ -142,9 +137,8 @@ nir_lower_var_copies(nir_shader *shader)
 {
    shader->info.var_copies_lowered = true;
 
-   return nir_shader_instructions_pass(shader,
-                                       lower_var_copies_instr,
+   return nir_shader_intrinsics_pass(shader, lower_var_copies_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        NULL);
 }

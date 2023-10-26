@@ -25,6 +25,7 @@
 #include <sys/mman.h>
 
 #include "common/intel_gem.h"
+#include "common/i915/intel_gem.h"
 #include "dev/intel_debug.h"
 
 #include "drm-uapi/i915_drm.h"
@@ -34,6 +35,19 @@
 #include "iris/iris_context.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BUFMGR
+
+static int
+i915_gem_set_domain(struct iris_bufmgr *bufmgr, uint32_t handle,
+                    uint32_t read_domains, uint32_t write_domains)
+{
+   struct drm_i915_gem_set_domain sd = {
+      .handle = handle,
+      .read_domains = read_domains,
+      .write_domain = write_domains,
+   };
+   return intel_ioctl(iris_bufmgr_get_fd(bufmgr),
+                      DRM_IOCTL_I915_GEM_SET_DOMAIN, &sd);
+}
 
 static uint32_t
 i915_gem_create(struct iris_bufmgr *bufmgr,
@@ -74,9 +88,9 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
       .num_regions = regions_count,
       .regions = (uintptr_t)i915_regions,
    };
-   intel_gem_add_ext(&create.extensions,
-                     I915_GEM_CREATE_EXT_MEMORY_REGIONS,
-                     &ext_regions.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_GEM_CREATE_EXT_MEMORY_REGIONS,
+                          &ext_regions.base);
 
    if (iris_bufmgr_vram_size(bufmgr) > 0 &&
        !intel_vram_all_mappable(devinfo) &&
@@ -88,9 +102,9 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
       .flags = 0,
    };
    if (alloc_flags & BO_ALLOC_PROTECTED) {
-      intel_gem_add_ext(&create.extensions,
-                        I915_GEM_CREATE_EXT_PROTECTED_CONTENT,
-                        &protected_param.base);
+      intel_i915_gem_add_ext(&create.extensions,
+                             I915_GEM_CREATE_EXT_PROTECTED_CONTENT,
+                             &protected_param.base);
    }
 
    /* Set PAT param */
@@ -98,14 +112,21 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
    if (devinfo->has_set_pat_uapi) {
       set_pat_param.pat_index =
          iris_pat_index_for_bo_flags(devinfo, alloc_flags);
-      intel_gem_add_ext(&create.extensions,
-                        I915_GEM_CREATE_EXT_SET_PAT,
-                        &set_pat_param.base);
+      intel_i915_gem_add_ext(&create.extensions,
+                             I915_GEM_CREATE_EXT_SET_PAT,
+                             &set_pat_param.base);
    }
 
    if (intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_I915_GEM_CREATE_EXT,
                    &create))
       return 0;
+
+   if (iris_bufmgr_vram_size(bufmgr) == 0)
+      /* Calling set_domain() will allocate pages for the BO outside of the
+       * struct mutex lock in the kernel, which is more efficient than waiting
+       * to create them during the first execbuf that uses the BO.
+       */
+      i915_gem_set_domain(bufmgr, create.handle, I915_GEM_DOMAIN_CPU, 0);
 
    return create.handle;
 }
@@ -267,8 +288,9 @@ i915_batch_submit(struct iris_batch *batch)
    struct drm_i915_gem_exec_object2 *validation_list =
       malloc(batch->exec_count * sizeof(*validation_list));
 
-   unsigned *index_for_handle =
-      calloc(batch->max_gem_handle + 1, sizeof(unsigned));
+   size_t sz = (batch->max_gem_handle + 1) * sizeof(int);
+   int *index_for_handle = malloc(sz);
+   memset(index_for_handle, -1, sz);
 
    unsigned validation_count = 0;
    for (int i = 0; i < batch->exec_count; i++) {
@@ -276,8 +298,8 @@ i915_batch_submit(struct iris_batch *batch)
       assert(bo->gem_handle != 0);
 
       bool written = BITSET_TEST(batch->bos_written, i);
-      unsigned prev_index = index_for_handle[bo->gem_handle];
-      if (prev_index > 0) {
+      int prev_index = index_for_handle[bo->gem_handle];
+      if (prev_index != -1) {
          if (written)
             validation_list[prev_index].flags |= EXEC_OBJECT_WRITE;
       } else {
@@ -390,10 +412,47 @@ i915_gem_vm_unbind(struct iris_bo *bo)
    return true;
 }
 
+static int
+i915_gem_close(struct iris_bufmgr *bufmgr, struct iris_bo *bo)
+{
+   struct drm_gem_close close = {
+      .handle = bo->gem_handle,
+   };
+   return intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_GEM_CLOSE, &close);
+}
+
+static uint32_t
+i915_gem_create_userptr(struct iris_bufmgr *bufmgr, void *ptr, uint64_t size)
+{
+   const struct intel_device_info *devinfo = iris_bufmgr_get_device_info(bufmgr);
+   struct drm_i915_gem_userptr arg = {
+      .user_ptr = (uintptr_t)ptr,
+      .user_size = size,
+      .flags = devinfo->has_userptr_probe ? I915_USERPTR_PROBE : 0,
+   };
+   if (intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_I915_GEM_USERPTR, &arg))
+      return 0;
+
+   if (!devinfo->has_userptr_probe) {
+      /* Check the buffer for validity before we try and use it in a batch */
+      if (i915_gem_set_domain(bufmgr, arg.handle, I915_GEM_DOMAIN_CPU, 0)) {
+         struct drm_gem_close close = {
+               .handle = arg.handle,
+         };
+         intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_GEM_CLOSE, &close);
+         return 0;
+      }
+   }
+
+   return arg.handle;
+}
+
 const struct iris_kmd_backend *i915_get_backend(void)
 {
    static const struct iris_kmd_backend i915_backend = {
       .gem_create = i915_gem_create,
+      .gem_create_userptr = i915_gem_create_userptr,
+      .gem_close = i915_gem_close,
       .bo_madvise = i915_bo_madvise,
       .bo_set_caching = i915_bo_set_caching,
       .gem_mmap = i915_gem_mmap,

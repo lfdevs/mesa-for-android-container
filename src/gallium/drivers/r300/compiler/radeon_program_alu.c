@@ -397,13 +397,7 @@ static void transform_r300_vertex_CMP(struct radeon_compiler* c,
 {
 	/* R5xx has a CMP, but we can use it only if it reads from less than
 	 * three different temps. */
-	if (c->is_r500 &&
-	    (inst->U.I.SrcReg[0].File != RC_FILE_TEMPORARY ||
-	     inst->U.I.SrcReg[1].File != RC_FILE_TEMPORARY ||
-	     inst->U.I.SrcReg[2].File != RC_FILE_TEMPORARY ||
-	     inst->U.I.SrcReg[0].Index == inst->U.I.SrcReg[1].Index ||
-	     inst->U.I.SrcReg[1].Index == inst->U.I.SrcReg[2].Index ||
-	     inst->U.I.SrcReg[0].Index == inst->U.I.SrcReg[2].Index))
+	if (c->is_r500 && !rc_inst_has_three_diff_temp_srcs(inst))
 		return;
 
 	/* There is no decent CMP available on r300, so let's rig one up.

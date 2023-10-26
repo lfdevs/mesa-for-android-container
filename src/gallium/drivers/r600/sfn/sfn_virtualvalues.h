@@ -444,7 +444,7 @@ public:
    uint32_t nchannels() const;
    uint32_t frac() const { return m_frac; }
 
-   void add_parent_to_elements(Instr *instr);
+   void add_parent_to_elements(int chan, Instr *instr);
 
    const Register& operator()(size_t idx, size_t chan) const;
 

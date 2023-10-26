@@ -252,6 +252,16 @@ impl Device {
         for f in FORMATS {
             let mut fs = HashMap::new();
             for t in CL_IMAGE_TYPES {
+                // the CTS doesn't test them, so let's not advertize them by accident if they are
+                // broken
+                if t == CL_MEM_OBJECT_IMAGE1D_BUFFER
+                    && [CL_RGB, CL_RGBx].contains(&f.cl_image_format.image_channel_order)
+                    && ![CL_UNORM_SHORT_565, CL_UNORM_SHORT_555]
+                        .contains(&f.cl_image_format.image_channel_data_type)
+                {
+                    continue;
+                }
+
                 let mut flags: cl_uint = 0;
                 if self.screen.is_format_supported(
                     f.pipe,
@@ -304,10 +314,11 @@ impl Device {
 
         // CL_DEVICE_MAX_PARAMETER_SIZE
         // For this minimum value, only a maximum of 128 arguments can be passed to a kernel
-        if screen.shader_param(
+        if (screen.shader_param(
             pipe_shader_type::PIPE_SHADER_COMPUTE,
             pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE,
-        ) < 128
+        ) as u32)
+            < 128
         {
             return false;
         }
@@ -541,6 +552,7 @@ impl Device {
         add_ext(1, 0, 0, "cl_khr_local_int32_base_atomics");
         add_ext(1, 0, 0, "cl_khr_local_int32_extended_atomics");
 
+        add_spirv("SPV_KHR_expect_assume");
         add_spirv("SPV_KHR_float_controls");
         add_spirv("SPV_KHR_integer_dot_product");
         add_spirv("SPV_KHR_no_integer_wrap_decoration");
@@ -647,7 +659,7 @@ impl Device {
             pipe_loader_device_type::NUM_PIPE_LOADER_DEVICE_TYPES => CL_DEVICE_TYPE_CUSTOM,
         };
 
-        if internal && res == CL_DEVICE_TYPE_GPU {
+        if internal && res == CL_DEVICE_TYPE_GPU && self.screen.driver_name() != "zink" {
             res |= CL_DEVICE_TYPE_DEFAULT;
         }
 
@@ -839,7 +851,7 @@ impl Device {
 
     pub fn param_max_size(&self) -> usize {
         min(
-            self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE),
+            self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) as u32,
             32 * 1024,
         ) as usize
     }

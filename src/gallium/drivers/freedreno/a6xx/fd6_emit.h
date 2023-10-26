@@ -64,6 +64,7 @@ enum fd6_state_id {
    FD6_GROUP_BLEND,
    FD6_GROUP_SCISSOR,
    FD6_GROUP_BLEND_COLOR,
+   FD6_GROUP_SAMPLE_LOCATIONS,
    FD6_GROUP_SO,
    FD6_GROUP_VS_BINDLESS,
    FD6_GROUP_HS_BINDLESS,
@@ -200,11 +201,11 @@ struct fd6_emit {
    /* cached to avoid repeated lookups: */
    const struct fd6_program_state *prog;
 
-   struct ir3_shader_variant *vs;
-   struct ir3_shader_variant *hs;
-   struct ir3_shader_variant *ds;
-   struct ir3_shader_variant *gs;
-   struct ir3_shader_variant *fs;
+   const struct ir3_shader_variant *vs;
+   const struct ir3_shader_variant *hs;
+   const struct ir3_shader_variant *ds;
+   const struct ir3_shader_variant *gs;
+   const struct ir3_shader_variant *fs;
 
    struct fd6_state state;
 };

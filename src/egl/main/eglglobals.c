@@ -83,6 +83,7 @@ struct _egl_global _eglGlobal = {
 
 #if !DETECT_OS_WINDOWS
       "EGL_EXT_platform_device"
+      " EGL_EXT_explicit_device"
 #endif
 #ifdef HAVE_WAYLAND_PLATFORM
       " EGL_EXT_platform_wayland"

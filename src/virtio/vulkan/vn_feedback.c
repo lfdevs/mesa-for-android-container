@@ -35,7 +35,7 @@ vn_feedback_buffer_create(struct vn_device *dev,
 {
    const bool exclusive = dev->queue_family_count == 1;
    const VkPhysicalDeviceMemoryProperties *mem_props =
-      &dev->physical_device->memory_properties.memoryProperties;
+      &dev->physical_device->memory_properties;
    VkDevice dev_handle = vn_device_to_handle(dev);
    struct vn_feedback_buffer *feedback_buf;
    VkResult result;
@@ -514,24 +514,37 @@ vn_feedback_cmd_record(VkCommandBuffer cmd_handle,
 }
 
 void
-vn_feedback_query_copy_cmd_record(VkCommandBuffer cmd_handle,
-                                  VkQueryPool pool_handle,
-                                  uint32_t query,
-                                  uint32_t count)
+vn_feedback_query_cmd_record(VkCommandBuffer cmd_handle,
+                             VkQueryPool pool_handle,
+                             uint32_t query,
+                             uint32_t count,
+                             bool copy)
 {
    struct vn_query_pool *pool = vn_query_pool_from_handle(pool_handle);
-
    if (!pool->feedback)
       return;
 
    /* Results are always 64 bit and include availability bit (also 64 bit) */
-   const size_t slot_size = (pool->result_array_size * 8) + 8;
-   const size_t offset = slot_size * query;
+   const VkDeviceSize slot_size = (pool->result_array_size * 8) + 8;
+   const VkDeviceSize offset = slot_size * query;
+   const VkDeviceSize buf_size = slot_size * count;
 
    /* The first synchronization scope of vkCmdCopyQueryPoolResults does not
     * include the query feedback buffer. Insert a barrier to ensure ordering
     * against feedback buffer fill cmd injected in vkCmdResetQueryPool.
+    *
+    * The second synchronization scope of vkCmdResetQueryPool does not include
+    * the query feedback buffer. Insert a barrer to ensure ordering against
+    * prior cmds referencing the queries.
+    *
+    * For srcAccessMask, VK_ACCESS_TRANSFER_WRITE_BIT is sufficient since the
+    * gpu cache invalidation for feedback buffer fill in vkResetQueryPool is
+    * done implicitly via queue submission.
     */
+   const VkPipelineStageFlags src_stage_mask =
+      copy ? VK_PIPELINE_STAGE_TRANSFER_BIT
+           : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
    const VkBufferMemoryBarrier buf_barrier_before = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
       .pNext = NULL,
@@ -541,76 +554,45 @@ vn_feedback_query_copy_cmd_record(VkCommandBuffer cmd_handle,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .buffer = pool->feedback->buffer,
       .offset = offset,
-      .size = slot_size * count,
+      .size = buf_size,
    };
-   vn_CmdPipelineBarrier(cmd_handle, VK_PIPELINE_STAGE_TRANSFER_BIT,
+   vn_CmdPipelineBarrier(cmd_handle, src_stage_mask,
                          VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 1,
                          &buf_barrier_before, 0, NULL);
 
-   /* Per spec: "The first synchronization scope includes all commands
-    * which reference the queries in queryPool indicated by query that
-    * occur earlier in submission order. If flags does not include
-    * VK_QUERY_RESULT_WAIT_BIT, vkCmdEndQueryIndexedEXT,
-    * vkCmdWriteTimestamp2, vkCmdEndQuery, and vkCmdWriteTimestamp are
-    * excluded from this scope."
-    *
-    * Set VK_QUERY_RESULT_WAIT_BIT to ensure ordering after
-    * vkCmdEndQuery or vkCmdWriteTimestamp makes the query available.
-    *
-    * Set VK_QUERY_RESULT_64_BIT as we can convert it to 32 bit if app
-    * requested that.
-    */
-   vn_CmdCopyQueryPoolResults(cmd_handle, pool_handle, query, count,
-                              pool->feedback->buffer, offset, slot_size,
-                              VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
-                                 VK_QUERY_RESULT_64_BIT |
-                                 VK_QUERY_RESULT_WAIT_BIT);
-
-   /* Per spec: "vkCmdCopyQueryPoolResults is considered to be a transfer
-    * operation, and its writes to buffer memory must be synchronized using
-    * VK_PIPELINE_STAGE_TRANSFER_BIT and VK_ACCESS_TRANSFER_WRITE_BIT
-    * before using the results."
-    */
-   vn_feedback_cmd_record_flush_barrier(cmd_handle, pool->feedback->buffer,
-                                        offset, slot_size * count);
-}
-
-void
-vn_feedback_query_reset_cmd_record(VkCommandBuffer cmd_handle,
-                                   VkQueryPool pool_handle,
-                                   uint32_t first_query,
-                                   uint32_t count)
-{
-   struct vn_query_pool *pool = vn_query_pool_from_handle(pool_handle);
-
-   if (!pool->feedback)
-      return;
-
-   /* Results are always 64 bit and include availability bit (also 64 bit) */
-   const size_t slot_size = (pool->result_array_size * 8) + 8;
-   const size_t offset = slot_size * first_query;
-
-   const VkBufferMemoryBarrier buf_barrier_before = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-      .pNext = NULL,
-      .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .buffer = pool->feedback->buffer,
-      .offset = offset,
-      .size = slot_size * count,
-   };
-
-   vn_CmdPipelineBarrier(cmd_handle, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 1,
-                         &buf_barrier_before, 0, NULL);
-
-   vn_CmdFillBuffer(cmd_handle, pool->feedback->buffer, offset,
-                    slot_size * count, 0);
+   if (copy) {
+      /* Per spec: "The first synchronization scope includes all commands
+       * which reference the queries in queryPool indicated by query that
+       * occur earlier in submission order. If flags does not include
+       * VK_QUERY_RESULT_WAIT_BIT, vkCmdEndQueryIndexedEXT,
+       * vkCmdWriteTimestamp2, vkCmdEndQuery, and vkCmdWriteTimestamp are
+       * excluded from this scope."
+       *
+       * Set VK_QUERY_RESULT_WAIT_BIT to ensure ordering after
+       * vkCmdEndQuery or vkCmdWriteTimestamp makes the query available.
+       *
+       * Set VK_QUERY_RESULT_64_BIT as we can convert it to 32 bit if app
+       * requested that.
+       *
+       * Per spec: "vkCmdCopyQueryPoolResults is considered to be a transfer
+       * operation, and its writes to buffer memory must be synchronized using
+       * VK_PIPELINE_STAGE_TRANSFER_BIT and VK_ACCESS_TRANSFER_WRITE_BIT
+       * before using the results."
+       *
+       * So we can reuse the flush barrier after this copy cmd.
+       */
+      vn_CmdCopyQueryPoolResults(cmd_handle, pool_handle, query, count,
+                                 pool->feedback->buffer, offset, slot_size,
+                                 VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
+                                    VK_QUERY_RESULT_64_BIT |
+                                    VK_QUERY_RESULT_WAIT_BIT);
+   } else {
+      vn_CmdFillBuffer(cmd_handle, pool->feedback->buffer, offset, buf_size,
+                       0);
+   }
 
    vn_feedback_cmd_record_flush_barrier(cmd_handle, pool->feedback->buffer,
-                                        offset, slot_size * count);
+                                        offset, buf_size);
 }
 
 VkResult

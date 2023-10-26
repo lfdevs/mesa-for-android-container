@@ -192,7 +192,7 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4,
                 /* not vc4->dirty tracked: vc4->last_index_bias */
                 uint32_t offset = (vb->buffer_offset +
                                    elem->src_offset +
-                                   vb->stride * (index_bias +
+                                   elem->src_stride * (index_bias +
                                                  extra_index_bias));
                 uint32_t vb_size = rsc->bo->size - offset;
                 uint32_t elem_size =
@@ -201,16 +201,16 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4,
                 cl_emit(&job->shader_rec, ATTRIBUTE_RECORD, attr) {
                         attr.address = cl_address(rsc->bo, offset);
                         attr.number_of_bytes_minus_1 = elem_size - 1;
-                        attr.stride = vb->stride;
+                        attr.stride = elem->src_stride;
                         attr.coordinate_shader_vpm_offset =
                                 vc4->prog.cs->vattr_offsets[i];
                         attr.vertex_shader_vpm_offset =
                                 vc4->prog.vs->vattr_offsets[i];
                 }
 
-                if (vb->stride > 0) {
+                if (elem->src_stride > 0) {
                         max_index = MIN2(max_index,
-                                         (vb_size - elem_size) / vb->stride);
+                                         (vb_size - elem_size) / elem->src_stride);
                 }
         }
 

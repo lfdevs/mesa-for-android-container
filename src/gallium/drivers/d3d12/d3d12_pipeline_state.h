@@ -40,9 +40,11 @@ struct d3d12_root_signature;
 struct d3d12_vertex_elements_state {
    D3D12_INPUT_ELEMENT_DESC elements[PIPE_MAX_ATTRIBS];
    enum pipe_format format_conversion[PIPE_MAX_ATTRIBS];
+   uint16_t strides[PIPE_MAX_ATTRIBS];
    unsigned num_elements:6; // <= PIPE_MAX_ATTRIBS
+   unsigned num_buffers:6; // <= PIPE_MAX_ATTRIBS
    unsigned needs_format_emulation:1;
-   unsigned unused:25;
+   unsigned unused:19;
 };
 
 struct d3d12_rasterizer_state {

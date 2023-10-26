@@ -57,17 +57,17 @@ prep_build_phi(struct repair_ssa_state *state)
 static nir_block *
 get_src_block(nir_src *src)
 {
-   if (src->is_if) {
-      return nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
-   } else if (src->parent_instr->type == nir_instr_type_phi) {
+   if (nir_src_is_if(src)) {
+      return nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
+   } else if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
       return exec_node_data(nir_phi_src, src, src)->pred;
    } else {
-      return src->parent_instr->block;
+      return nir_src_parent_instr(src)->block;
    }
 }
 
 static bool
-repair_ssa_def(nir_ssa_def *def, void *void_state)
+repair_ssa_def(nir_def *def, void *void_state)
 {
    struct repair_ssa_state *state = void_state;
 
@@ -103,7 +103,7 @@ repair_ssa_def(nir_ssa_def *def, void *void_state)
          continue;
       }
 
-      nir_ssa_def *block_def =
+      nir_def *block_def =
          nir_phi_builder_value_get_block_def(val, block);
       if (block_def == def)
          continue;
@@ -112,10 +112,10 @@ repair_ssa_def(nir_ssa_def *def, void *void_state)
        * isn't a cast, we need to wrap it in a cast so we don't loose any
        * deref information.
        */
-      if (!src->is_if &&
+      if (!nir_src_is_if(src) &&
           def->parent_instr->type == nir_instr_type_deref &&
-          src->parent_instr->type == nir_instr_type_deref &&
-          nir_instr_as_deref(src->parent_instr)->deref_type != nir_deref_type_cast) {
+          nir_src_parent_instr(src)->type == nir_instr_type_deref &&
+          nir_instr_as_deref(nir_src_parent_instr(src))->deref_type != nir_deref_type_cast) {
          nir_deref_instr *cast =
             nir_deref_instr_create(state->impl->function->shader,
                                    nir_deref_type_cast);
@@ -126,17 +126,17 @@ repair_ssa_def(nir_ssa_def *def, void *void_state)
          cast->parent = nir_src_for_ssa(block_def);
          cast->cast.ptr_stride = nir_deref_instr_array_stride(deref);
 
-         nir_ssa_dest_init(&cast->instr, &cast->dest, def->num_components,
-                           def->bit_size);
-         nir_instr_insert(nir_before_instr(src->parent_instr),
+         nir_def_init(&cast->instr, &cast->def, def->num_components,
+                      def->bit_size);
+         nir_instr_insert(nir_before_instr(nir_src_parent_instr(src)),
                           &cast->instr);
-         block_def = &cast->dest.ssa;
+         block_def = &cast->def;
       }
 
-      if (src->is_if)
-         nir_if_rewrite_condition(src->parent_if, nir_src_for_ssa(block_def));
+      if (nir_src_is_if(src))
+         nir_src_rewrite(&nir_src_parent_if(src)->condition, block_def);
       else
-         nir_instr_rewrite_src(src->parent_instr, src, nir_src_for_ssa(block_def));
+         nir_src_rewrite(src, block_def);
    }
 
    return true;
@@ -152,17 +152,17 @@ nir_repair_ssa_impl(nir_function_impl *impl)
    state.progress = false;
 
    nir_metadata_require(impl, nir_metadata_block_index |
-                              nir_metadata_dominance);
+                                 nir_metadata_dominance);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
-         nir_foreach_ssa_def(instr, repair_ssa_def, &state);
+         nir_foreach_def(instr, repair_ssa_def, &state);
       }
    }
 
    if (state.progress)
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+                                     nir_metadata_dominance);
 
    if (state.phi_builder) {
       nir_phi_builder_finish(state.phi_builder);

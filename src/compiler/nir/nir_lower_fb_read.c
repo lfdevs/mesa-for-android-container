@@ -47,20 +47,17 @@
  */
 
 static bool
-nir_lower_fb_read_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+nir_lower_fb_read_instr(nir_builder *b, nir_intrinsic_instr *intr,
+                        UNUSED void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_output)
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_ssa_def *fragcoord = nir_load_frag_coord(b);
-   nir_ssa_def *sampid = nir_load_sample_id(b);
-   nir_ssa_def *layer = nir_load_layer_id(b);
+   nir_def *fragcoord = nir_load_frag_coord(b);
+   nir_def *sampid = nir_load_sample_id(b);
+   nir_def *layer = nir_load_layer_id(b);
    fragcoord = nir_f2i32(b, fragcoord);
 
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, 3);
@@ -76,10 +73,10 @@ nir_lower_fb_read_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
    tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle,
                                      nir_imm_intN_t(b, io.location - FRAG_RESULT_DATA0, 32));
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
 
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, &tex->dest.ssa);
+   nir_def_rewrite_uses(&intr->def, &tex->def);
 
    return true;
 }
@@ -89,8 +86,8 @@ nir_lower_fb_read(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   return nir_shader_instructions_pass(shader, nir_lower_fb_read_instr,
+   return nir_shader_intrinsics_pass(shader, nir_lower_fb_read_instr,
                                        nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                          nir_metadata_dominance,
                                        NULL);
 }

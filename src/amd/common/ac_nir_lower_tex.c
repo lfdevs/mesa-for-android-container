@@ -35,26 +35,26 @@
  * the selcoords major axis.
  */
 static void
-build_cube_select(nir_builder *b, nir_ssa_def *ma, nir_ssa_def *id, nir_ssa_def *deriv,
-                  nir_ssa_def **out_ma, nir_ssa_def **out_sc, nir_ssa_def **out_tc)
+build_cube_select(nir_builder *b, nir_def *ma, nir_def *id, nir_def *deriv,
+                  nir_def **out_ma, nir_def **out_sc, nir_def **out_tc)
 {
-   nir_ssa_def *deriv_x = nir_channel(b, deriv, 0);
-   nir_ssa_def *deriv_y = nir_channel(b, deriv, 1);
-   nir_ssa_def *deriv_z = nir_channel(b, deriv, 2);
+   nir_def *deriv_x = nir_channel(b, deriv, 0);
+   nir_def *deriv_y = nir_channel(b, deriv, 1);
+   nir_def *deriv_z = nir_channel(b, deriv, 2);
 
-   nir_ssa_def *is_ma_positive = nir_fge_imm(b, ma, 0.0);
-   nir_ssa_def *sgn_ma =
+   nir_def *is_ma_positive = nir_fge_imm(b, ma, 0.0);
+   nir_def *sgn_ma =
       nir_bcsel(b, is_ma_positive, nir_imm_float(b, 1.0), nir_imm_float(b, -1.0));
-   nir_ssa_def *neg_sgn_ma = nir_fneg(b, sgn_ma);
+   nir_def *neg_sgn_ma = nir_fneg(b, sgn_ma);
 
-   nir_ssa_def *is_ma_z = nir_fge_imm(b, id, 4.0);
-   nir_ssa_def *is_ma_y = nir_fge_imm(b, id, 2.0);
+   nir_def *is_ma_z = nir_fge_imm(b, id, 4.0);
+   nir_def *is_ma_y = nir_fge_imm(b, id, 2.0);
    is_ma_y = nir_iand(b, is_ma_y, nir_inot(b, is_ma_z));
-   nir_ssa_def *is_not_ma_x = nir_ior(b, is_ma_z, is_ma_y);
+   nir_def *is_not_ma_x = nir_ior(b, is_ma_z, is_ma_y);
 
    /* Select sc */
-   nir_ssa_def *tmp = nir_bcsel(b, is_not_ma_x, deriv_x, deriv_z);
-   nir_ssa_def *sgn =
+   nir_def *tmp = nir_bcsel(b, is_not_ma_x, deriv_x, deriv_z);
+   nir_def *sgn =
       nir_bcsel(b, is_ma_y, nir_imm_float(b, 1.0), nir_bcsel(b, is_ma_z, sgn_ma, neg_sgn_ma));
    *out_sc = nir_fmul(b, tmp, sgn);
 
@@ -69,10 +69,10 @@ build_cube_select(nir_builder *b, nir_ssa_def *ma, nir_ssa_def *id, nir_ssa_def 
 }
 
 static void
-prepare_cube_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coord, nir_src *ddx,
+prepare_cube_coords(nir_builder *b, nir_tex_instr *tex, nir_def **coord, nir_src *ddx,
                     nir_src *ddy, const ac_nir_lower_tex_options *options)
 {
-   nir_ssa_def *coords[NIR_MAX_VEC_COMPONENTS] = {0};
+   nir_def *coords[NIR_MAX_VEC_COMPONENTS] = {0};
    for (unsigned i = 0; i < (*coord)->num_components; i++)
       coords[i] = nir_channel(b, *coord, i);
 
@@ -98,12 +98,12 @@ prepare_cube_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coord, nir
    if (tex->is_array && options->gfx_level <= GFX8 && coords[3])
       coords[3] = nir_fmax(b, coords[3], nir_imm_float(b, 0.0));
 
-   nir_ssa_def *cube_coords = nir_cube_amd(b, nir_vec(b, coords, 3));
-   nir_ssa_def *sc = nir_channel(b, cube_coords, 1);
-   nir_ssa_def *tc = nir_channel(b, cube_coords, 0);
-   nir_ssa_def *ma = nir_channel(b, cube_coords, 2);
-   nir_ssa_def *invma = nir_frcp(b, nir_fabs(b, ma));
-   nir_ssa_def *id = nir_channel(b, cube_coords, 3);
+   nir_def *cube_coords = nir_cube_amd(b, nir_vec(b, coords, 3));
+   nir_def *sc = nir_channel(b, cube_coords, 1);
+   nir_def *tc = nir_channel(b, cube_coords, 0);
+   nir_def *ma = nir_channel(b, cube_coords, 2);
+   nir_def *invma = nir_frcp(b, nir_fabs(b, ma));
+   nir_def *id = nir_channel(b, cube_coords, 3);
 
    if (ddx || ddy) {
       sc = nir_fmul(b, sc, invma);
@@ -132,15 +132,15 @@ prepare_cube_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coord, nir
           * seems awfully quiet about how textureGrad for cube
           * maps should be handled.
           */
-         nir_ssa_def *deriv_ma, *deriv_sc, *deriv_tc;
+         nir_def *deriv_ma, *deriv_sc, *deriv_tc;
          build_cube_select(b, ma, id, i ? ddy->ssa : ddx->ssa, &deriv_ma, &deriv_sc, &deriv_tc);
 
          deriv_ma = nir_fmul(b, deriv_ma, invma);
 
-         nir_ssa_def *x = nir_fsub(b, nir_fmul(b, deriv_sc, invma), nir_fmul(b, deriv_ma, sc));
-         nir_ssa_def *y = nir_fsub(b, nir_fmul(b, deriv_tc, invma), nir_fmul(b, deriv_ma, tc));
+         nir_def *x = nir_fsub(b, nir_fmul(b, deriv_sc, invma), nir_fmul(b, deriv_ma, sc));
+         nir_def *y = nir_fsub(b, nir_fmul(b, deriv_tc, invma), nir_fmul(b, deriv_ma, tc));
 
-         nir_instr_rewrite_src_ssa(&tex->instr, i ? ddy : ddx, nir_vec2(b, x, y));
+         nir_src_rewrite(i ? ddy : ddx, nir_vec2(b, x, y));
       }
 
       sc = nir_fadd_imm(b, sc, 1.5);
@@ -159,20 +159,20 @@ prepare_cube_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coord, nir
 }
 
 static bool
-lower_array_layer_round_even(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coords)
+lower_array_layer_round_even(nir_builder *b, nir_tex_instr *tex, nir_def **coords)
 {
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
    if (coord_index < 0 || nir_tex_instr_src_type(tex, coord_index) != nir_type_float)
       return false;
 
    unsigned layer = tex->coord_components - 1;
-   nir_ssa_def *rounded_layer = nir_fround_even(b, nir_channel(b, *coords, layer));
+   nir_def *rounded_layer = nir_fround_even(b, nir_channel(b, *coords, layer));
    *coords = nir_vector_insert_imm(b, *coords, rounded_layer, layer);
    return true;
 }
 
 static bool
-lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coords,
+lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_def **coords,
                  const ac_nir_lower_tex_options *options)
 {
    bool progress = false;
@@ -190,11 +190,11 @@ lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coords,
    nir_src *ddy = ddy_idx >= 0 ? &tex->src[ddy_idx].src : NULL;
 
    if (tex->sampler_dim == GLSL_SAMPLER_DIM_1D) {
-      nir_ssa_def *y =
+      nir_def *y =
          nir_imm_floatN_t(b, tex->op == nir_texop_txf ? 0.0 : 0.5, (*coords)->bit_size);
       if (tex->is_array && (*coords)->num_components > 1) {
-         nir_ssa_def *x = nir_channel(b, *coords, 0);
-         nir_ssa_def *idx = nir_channel(b, *coords, 1);
+         nir_def *x = nir_channel(b, *coords, 0);
+         nir_def *idx = nir_channel(b, *coords, 1);
          *coords = nir_vec3(b, x, y, idx);
       } else {
          *coords = nir_vec2(b, *coords, y);
@@ -203,15 +203,15 @@ lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_ssa_def **coords,
       int offset_src = nir_tex_instr_src_index(tex, nir_tex_src_offset);
       if (offset_src >= 0) {
          nir_src *offset = &tex->src[offset_src].src;
-         nir_ssa_def *zero = nir_imm_intN_t(b, 0, offset->ssa->bit_size);
-         nir_instr_rewrite_src_ssa(&tex->instr, offset, nir_vec2(b, offset->ssa, zero));
+         nir_def *zero = nir_imm_intN_t(b, 0, offset->ssa->bit_size);
+         nir_src_rewrite(offset, nir_vec2(b, offset->ssa, zero));
       }
 
       if (ddx || ddy) {
-         nir_ssa_def *def = nir_vec2(b, ddx->ssa, nir_imm_floatN_t(b, 0.0, ddx->ssa->bit_size));
-         nir_instr_rewrite_src_ssa(&tex->instr, ddx, def);
+         nir_def *def = nir_vec2(b, ddx->ssa, nir_imm_floatN_t(b, 0.0, ddx->ssa->bit_size));
+         nir_src_rewrite(ddx, def);
          def = nir_vec2(b, ddy->ssa, nir_imm_floatN_t(b, 0.0, ddy->ssa->bit_size));
-         nir_instr_rewrite_src_ssa(&tex->instr, ddy, def);
+         nir_src_rewrite(ddy, def);
       }
    } else if (tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) {
       prepare_cube_coords(b, tex, coords, ddx, ddy, options);
@@ -233,10 +233,10 @@ lower_tex(nir_builder *b, nir_instr *instr, void *options_)
       return false;
 
    b->cursor = nir_before_instr(instr);
-   nir_ssa_def *coords = tex->src[coord_idx].src.ssa;
+   nir_def *coords = tex->src[coord_idx].src.ssa;
    if (lower_tex_coords(b, tex, &coords, options)) {
       tex->coord_components = coords->num_components;
-      nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[coord_idx].src, coords);
+      nir_src_rewrite(&tex->src[coord_idx].src, coords);
       return true;
    }
 
@@ -249,15 +249,15 @@ typedef struct {
 } coord_info;
 
 static bool
-can_move_coord(nir_ssa_scalar scalar, coord_info *info)
+can_move_coord(nir_scalar scalar, coord_info *info)
 {
    if (scalar.def->bit_size != 32)
       return false;
 
-   if (nir_ssa_scalar_is_const(scalar))
+   if (nir_scalar_is_const(scalar))
       return true;
 
-   if (scalar.def->parent_instr->type != nir_instr_type_intrinsic)
+   if (!nir_scalar_is_intrinsic(scalar))
       return false;
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(scalar.def->parent_instr);
@@ -270,10 +270,10 @@ can_move_coord(nir_ssa_scalar scalar, coord_info *info)
    if (intrin->intrinsic != nir_intrinsic_load_interpolated_input)
       return false;
 
-   nir_ssa_scalar coord_x = nir_ssa_scalar_resolved(intrin->src[0].ssa, 0);
-   nir_ssa_scalar coord_y = nir_ssa_scalar_resolved(intrin->src[0].ssa, 1);
-   if (coord_x.def->parent_instr->type != nir_instr_type_intrinsic || coord_x.comp != 0 ||
-       coord_y.def->parent_instr->type != nir_instr_type_intrinsic || coord_y.comp != 1)
+   nir_scalar coord_x = nir_scalar_resolved(intrin->src[0].ssa, 0);
+   nir_scalar coord_y = nir_scalar_resolved(intrin->src[0].ssa, 1);
+   if (!nir_scalar_is_intrinsic(coord_x) || coord_x.comp != 0 ||
+       !nir_scalar_is_intrinsic(coord_y) || coord_y.comp != 1)
       return false;
 
    nir_intrinsic_instr *intrin_x = nir_instr_as_intrinsic(coord_x.def->parent_instr);
@@ -297,22 +297,22 @@ struct move_tex_coords_state {
    nir_builder toplevel_b;
 };
 
-static nir_ssa_def *
-build_coordinate(struct move_tex_coords_state *state, nir_ssa_scalar scalar, coord_info info)
+static nir_def *
+build_coordinate(struct move_tex_coords_state *state, nir_scalar scalar, coord_info info)
 {
    nir_builder *b = &state->toplevel_b;
 
-   if (nir_ssa_scalar_is_const(scalar))
-      return nir_imm_intN_t(b, nir_ssa_scalar_as_uint(scalar), scalar.def->bit_size);
+   if (nir_scalar_is_const(scalar))
+      return nir_imm_intN_t(b, nir_scalar_as_uint(scalar), scalar.def->bit_size);
 
    ASSERTED nir_src offset = *nir_get_io_offset_src(info.load);
    assert(nir_src_is_const(offset) && !nir_src_as_uint(offset));
 
-   nir_ssa_def *zero = nir_imm_int(b, 0);
-   nir_ssa_def *res;
+   nir_def *zero = nir_imm_int(b, 0);
+   nir_def *res;
    if (info.bary) {
       enum glsl_interp_mode interp_mode = nir_intrinsic_interp_mode(info.bary);
-      nir_ssa_def *bary = nir_load_system_value(b, info.bary->intrinsic, interp_mode, 2, 32);
+      nir_def *bary = nir_load_system_value(b, info.bary->intrinsic, interp_mode, 2, 32);
       res = nir_load_interpolated_input(b, 1, 32, bary, zero);
    } else {
       res = nir_load_input(b, 1, 32, zero);
@@ -351,11 +351,11 @@ move_tex_coords(struct move_tex_coords_state *state, nir_function_impl *impl, ni
       return false;
 
    nir_tex_src *src = &tex->src[nir_tex_instr_src_index(tex, nir_tex_src_coord)];
-   nir_ssa_scalar components[NIR_MAX_VEC_COMPONENTS];
+   nir_scalar components[NIR_MAX_VEC_COMPONENTS];
    coord_info infos[NIR_MAX_VEC_COMPONENTS];
    bool can_move_all = true;
    for (unsigned i = 0; i < tex->coord_components; i++) {
-      components[i] = nir_ssa_scalar_resolved(src->src.ssa, i);
+      components[i] = nir_scalar_resolved(src->src.ssa, i);
       can_move_all &= can_move_coord(components[i], &infos[i]);
    }
    if (!can_move_all)
@@ -384,9 +384,9 @@ move_tex_coords(struct move_tex_coords_state *state, nir_function_impl *impl, ni
       return false;
 
    for (unsigned i = 0; i < tex->coord_components; i++)
-      components[i] = nir_get_ssa_scalar(build_coordinate(state, components[i], infos[i]), 0);
+      components[i] = nir_get_scalar(build_coordinate(state, components[i], infos[i]), 0);
 
-   nir_ssa_def *linear_vgpr = nir_vec_scalars(&state->toplevel_b, components, tex->coord_components);
+   nir_def *linear_vgpr = nir_vec_scalars(&state->toplevel_b, components, tex->coord_components);
    lower_tex_coords(&state->toplevel_b, tex, &linear_vgpr, state->options);
 
    linear_vgpr = nir_strict_wqm_coord_amd(&state->toplevel_b, linear_vgpr, coord_base * 4);
@@ -394,7 +394,7 @@ move_tex_coords(struct move_tex_coords_state *state, nir_function_impl *impl, ni
    nir_tex_instr_remove_src(tex, nir_tex_instr_src_index(tex, nir_tex_src_coord));
    tex->coord_components = 0;
 
-   nir_tex_instr_add_src(tex, nir_tex_src_backend1, nir_src_for_ssa(linear_vgpr));
+   nir_tex_instr_add_src(tex, nir_tex_src_backend1, linear_vgpr);
 
    int offset_src = nir_tex_instr_src_index(tex, nir_tex_src_offset);
    if (offset_src >= 0) /* Workaround requirement in nir_tex_instr_src_size(). */
@@ -420,26 +420,26 @@ move_fddxy(struct move_tex_coords_state *state, nir_function_impl *impl, nir_alu
       return false;
    }
 
-   unsigned num_components = instr->dest.dest.ssa.num_components;
-   nir_ssa_scalar components[NIR_MAX_VEC_COMPONENTS];
+   unsigned num_components = instr->def.num_components;
+   nir_scalar components[NIR_MAX_VEC_COMPONENTS];
    coord_info infos[NIR_MAX_VEC_COMPONENTS];
    bool can_move_all = true;
    for (unsigned i = 0; i < num_components; i++) {
-      components[i] = nir_ssa_scalar_chase_alu_src(nir_get_ssa_scalar(&instr->dest.dest.ssa, i), 0);
-      components[i] = nir_ssa_scalar_chase_movs(components[i]);
+      components[i] = nir_scalar_chase_alu_src(nir_get_scalar(&instr->def, i), 0);
+      components[i] = nir_scalar_chase_movs(components[i]);
       can_move_all &= can_move_coord(components[i], &infos[i]);
    }
    if (!can_move_all || state->num_wqm_vgprs + num_components > state->options->max_wqm_vgprs)
       return false;
 
    for (unsigned i = 0; i < num_components; i++) {
-      nir_ssa_def *def = build_coordinate(state, components[i], infos[i]);
-      components[i] = nir_get_ssa_scalar(def, 0);
+      nir_def *def = build_coordinate(state, components[i], infos[i]);
+      components[i] = nir_get_scalar(def, 0);
    }
 
-   nir_ssa_def *def = nir_vec_scalars(&state->toplevel_b, components, num_components);
+   nir_def *def = nir_vec_scalars(&state->toplevel_b, components, num_components);
    def = nir_build_alu1(&state->toplevel_b, instr->op, def);
-   nir_ssa_def_rewrite_uses(&instr->dest.dest.ssa, def);
+   nir_def_rewrite_uses(&instr->def, def);
 
    state->num_wqm_vgprs += num_components;
 

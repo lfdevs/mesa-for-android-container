@@ -38,6 +38,7 @@
 #include "vk_alloc.h"
 #include "vk_format.h"
 #include "vk_log.h"
+#include "vk_render_pass.h"
 
 /*****************************************************************************
   PDS pre-baked program generation parameters and variables.
@@ -254,7 +255,7 @@ pvr_create_subpass_load_op(struct pvr_device *device,
          pass->attachments[attachment_idx].vk_format;
 
       if (pass->attachments[attachment_idx].sample_count > 1)
-         load_op->clears_loads_state.unresolved_msaa_mask = BITFIELD_BIT(i);
+         load_op->clears_loads_state.unresolved_msaa_mask |= BITFIELD_BIT(i);
 
       if (hw_subpass->color_initops[i] == VK_ATTACHMENT_LOAD_OP_LOAD)
          load_op->clears_loads_state.rt_load_mask |= BITFIELD_BIT(i);
@@ -296,7 +297,7 @@ pvr_create_render_load_op(struct pvr_device *device,
          pass->attachments[color_init->index].vk_format;
 
       if (pass->attachments[color_init->index].sample_count > 1)
-         load_op->clears_loads_state.unresolved_msaa_mask = BITFIELD_BIT(i);
+         load_op->clears_loads_state.unresolved_msaa_mask |= BITFIELD_BIT(i);
 
       if (color_init->op == VK_ATTACHMENT_LOAD_OP_LOAD)
          load_op->clears_loads_state.rt_load_mask |= BITFIELD_BIT(i);
@@ -522,13 +523,32 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
       struct pvr_render_subpass *subpass = &pass->subpasses[i];
 
       subpass->pipeline_bind_point = desc->pipelineBindPoint;
-      subpass->sample_count = 1;
+
+      /* From the Vulkan spec. 1.3.265
+       * VUID-VkSubpassDescription2-multisampledRenderToSingleSampled-06872:
+       *
+       *   "If none of the VK_AMD_mixed_attachment_samples extension, the
+       *   VK_NV_framebuffer_mixed_samples extension, or the
+       *   multisampledRenderToSingleSampled feature are enabled, all
+       *   attachments in pDepthStencilAttachment or pColorAttachments that are
+       *   not VK_ATTACHMENT_UNUSED must have the same sample count"
+       *
+       */
+      subpass->sample_count = VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
+
+      if (desc->pDepthStencilAttachment) {
+         uint32_t index = desc->pDepthStencilAttachment->attachment;
+
+         if (index != VK_ATTACHMENT_UNUSED)
+            subpass->sample_count = pass->attachments[index].sample_count;
+
+         subpass->depth_stencil_attachment = index;
+      } else {
+         subpass->depth_stencil_attachment = VK_ATTACHMENT_UNUSED;
+      }
 
       subpass->color_count = desc->colorAttachmentCount;
       if (subpass->color_count > 0) {
-         bool has_used_color_attachment = false;
-         uint32_t index;
-
          subpass->color_attachments = subpass_attachments;
          subpass_attachments += subpass->color_count;
 
@@ -539,18 +559,16 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
             if (subpass->color_attachments[j] == VK_ATTACHMENT_UNUSED)
                continue;
 
-            index = subpass->color_attachments[j];
-            subpass->sample_count = pass->attachments[index].sample_count;
-            has_used_color_attachment = true;
-         }
-
-         if (!has_used_color_attachment && desc->pDepthStencilAttachment &&
-             desc->pDepthStencilAttachment->attachment !=
-                VK_ATTACHMENT_UNUSED) {
-            index = desc->pDepthStencilAttachment->attachment;
-            subpass->sample_count = pass->attachments[index].sample_count;
+            if (subpass->sample_count == VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM) {
+               uint32_t index;
+               index = subpass->color_attachments[j];
+               subpass->sample_count = pass->attachments[index].sample_count;
+            }
          }
       }
+
+      if (subpass->sample_count == VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM)
+         subpass->sample_count = VK_SAMPLE_COUNT_1_BIT;
 
       if (desc->pResolveAttachments) {
          subpass->resolve_attachments = subpass_attachments;
@@ -571,13 +589,6 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
             subpass->input_attachments[j] =
                desc->pInputAttachments[j].attachment;
          }
-      }
-
-      if (desc->pDepthStencilAttachment) {
-         subpass->depth_stencil_attachment =
-            desc->pDepthStencilAttachment->attachment;
-      } else {
-         subpass->depth_stencil_attachment = VK_ATTACHMENT_UNUSED;
       }
 
       /* Give the dependencies a slice of the subpass_attachments array. */
@@ -601,10 +612,16 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
           dep->dstSubpass != VK_SUBPASS_EXTERNAL &&
           dep->srcSubpass != dep->dstSubpass) {
          struct pvr_render_subpass *subpass = &pass->subpasses[dep->dstSubpass];
+         bool is_dep_fb_local =
+            vk_subpass_dependency_is_fb_local(dep,
+                                              dep->srcStageMask,
+                                              dep->dstStageMask);
 
          subpass->dep_list[subpass->dep_count] = dep->srcSubpass;
-         if (pvr_subpass_has_msaa_input_attachment(subpass, pCreateInfo))
+         if (pvr_subpass_has_msaa_input_attachment(subpass, pCreateInfo) ||
+             !is_dep_fb_local) {
             subpass->flush_on_dep[subpass->dep_count] = true;
+         }
 
          subpass->dep_count++;
       }

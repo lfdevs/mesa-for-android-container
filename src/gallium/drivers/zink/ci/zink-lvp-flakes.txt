@@ -25,3 +25,12 @@ glx@glx-multithread-texture
 
 # does not happen very often, but rarely does
 KHR-GL46.limits.max_fragment_interpolation_offset
+
+# no output timeout, probably stuck in some X11 connection thing
+spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve depthstencil
+
+# segfault in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/48719777 and others
+spec@ext_texture_array@texsubimage array
+
+# crash in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/48476882 and others
+KHR-GL46.layout_location.sampler_2d_shadow

@@ -65,8 +65,6 @@ spec@arb_program_interface_query@arb_program_interface_query-getprogramresourcei
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
-spec@arb_sparse_buffer@buffer-data,Fail
-spec@arb_sparse_buffer@commit,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_ext_protected_content@conformance,Fail

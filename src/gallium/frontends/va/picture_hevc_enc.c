@@ -340,6 +340,7 @@ static unsigned profile_tier_level(struct vl_rbsp *rbsp,
 static void parseEncSpsParamsH265(vlVaContext *context, struct vl_rbsp *rbsp)
 {
    int sps_max_sub_layers_minus1;
+   unsigned i, sps_sub_layer_ordering_info_present_flag;
 
    vl_rbsp_u(rbsp, 4);     /* sps_video_parameter_set_id */
    sps_max_sub_layers_minus1 = vl_rbsp_u(rbsp, 3);
@@ -363,6 +364,79 @@ static void parseEncSpsParamsH265(vlVaContext *context, struct vl_rbsp *rbsp)
       context->desc.h265enc.seq.conf_win_right_offset = vl_rbsp_ue(rbsp);
       context->desc.h265enc.seq.conf_win_top_offset = vl_rbsp_ue(rbsp);
       context->desc.h265enc.seq.conf_win_bottom_offset = vl_rbsp_ue(rbsp);
+   }
+
+   vl_rbsp_ue(rbsp); /* bit_depth_luma_minus8 */
+   vl_rbsp_ue(rbsp); /* bit_depth_chroma_minus8 */
+   vl_rbsp_ue(rbsp); /* log2_max_pic_order_cnt_lsb_minus4 */
+
+   sps_sub_layer_ordering_info_present_flag = vl_rbsp_u(rbsp, 1);
+   i = sps_sub_layer_ordering_info_present_flag ? 0 : sps_max_sub_layers_minus1;
+   for (; i <= sps_max_sub_layers_minus1; ++i) {
+      vl_rbsp_ue(rbsp); /* sps_max_dec_pic_buffering_minus1[i] */
+      vl_rbsp_ue(rbsp); /* sps_max_num_reorder_pics[i] */
+      vl_rbsp_ue(rbsp); /* sps_max_latency_increase_plus1[i] */
+   }
+
+   vl_rbsp_ue(rbsp); /* log2_min_luma_coding_block_size_minus3 */
+   vl_rbsp_ue(rbsp); /* log2_diff_max_min_luma_coding_block_size */
+   vl_rbsp_ue(rbsp); /* log2_min_luma_transform_block_size_minus2 */
+   vl_rbsp_ue(rbsp); /* log2_diff_max_min_luma_transform_block_size */
+   vl_rbsp_ue(rbsp); /* max_transform_hierarchy_depth_inter */
+   vl_rbsp_ue(rbsp); /* max_transform_hierarchy_depth_intra */
+
+   if (vl_rbsp_u(rbsp, 1)) /* scaling_list_enabled_flag */
+      return; /* TODO */
+
+   vl_rbsp_u(rbsp, 1); /* amp_enabled_flag */
+   vl_rbsp_u(rbsp, 1); /* sample_adaptive_offset_enabled_flag */
+   if (vl_rbsp_u(rbsp, 1)) { /* pcm_enabled_flag */
+      vl_rbsp_u(rbsp, 4); /* pcm_sample_bit_depth_luma_minus1 */
+      vl_rbsp_u(rbsp, 4); /* pcm_sample_bit_depth_chroma_minus1 */
+      vl_rbsp_ue(rbsp); /* log2_min_pcm_luma_coding_block_size_minus3 */
+      vl_rbsp_ue(rbsp); /* log2_diff_max_min_pcm_luma_coding_block_size */
+      vl_rbsp_u(rbsp, 1); /* pcm_loop_filter_disabled_flag */
+   }
+
+   if (vl_rbsp_ue(rbsp)) /* num_short_term_ref_pic_sets */
+      return; /* TODO */
+
+   if (vl_rbsp_u(rbsp, 1)) /* long_term_ref_pics_present_flag */
+      return; /* TODO */
+
+   vl_rbsp_u(rbsp, 1); /* sps_temporal_mvp_enabled_flag */
+   vl_rbsp_u(rbsp, 1); /* strong_intra_smoothing_enabled_flag */
+
+   context->desc.h265enc.seq.vui_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+   if (context->desc.h265enc.seq.vui_parameters_present_flag) {
+      context->desc.h265enc.seq.vui_flags.aspect_ratio_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h265enc.seq.vui_flags.aspect_ratio_info_present_flag) {
+         if (vl_rbsp_u(rbsp, 8) == 255) { /* aspect_ratio_idc == Extended_SAR */
+            vl_rbsp_u(rbsp, 16); /* sar_width */
+            vl_rbsp_u(rbsp, 16); /* sar_height */
+         }
+      }
+
+      if (vl_rbsp_u(rbsp, 1)) /* overscan_info_present_flag */
+         vl_rbsp_u(rbsp, 1); /* overscan_appropriate_flag */
+
+      context->desc.h265enc.seq.vui_flags.video_signal_type_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h265enc.seq.vui_flags.video_signal_type_present_flag) {
+         context->desc.h265enc.seq.video_format = vl_rbsp_u(rbsp, 3);
+         context->desc.h265enc.seq.video_full_range_flag = vl_rbsp_u(rbsp, 1);
+         context->desc.h265enc.seq.vui_flags.colour_description_present_flag = vl_rbsp_u(rbsp, 1);
+         if (context->desc.h265enc.seq.vui_flags.colour_description_present_flag) {
+            context->desc.h265enc.seq.colour_primaries = vl_rbsp_u(rbsp, 8);
+            context->desc.h265enc.seq.transfer_characteristics = vl_rbsp_u(rbsp, 8);
+            context->desc.h265enc.seq.matrix_coefficients = vl_rbsp_u(rbsp, 8);
+         }
+      }
+
+      context->desc.h265enc.seq.vui_flags.chroma_loc_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h265enc.seq.vui_flags.chroma_loc_info_present_flag) {
+         context->desc.h265enc.seq.chroma_sample_loc_type_top_field = vl_rbsp_ue(rbsp);
+         context->desc.h265enc.seq.chroma_sample_loc_type_bottom_field = vl_rbsp_ue(rbsp);
+      }
    }
 }
 
@@ -391,7 +465,7 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
       vl_vlc_eatbits(&vlc, 3);
 
       struct vl_rbsp rbsp;
-      vl_rbsp_init(&rbsp, &vlc, ~0);
+      vl_rbsp_init(&rbsp, &vlc, ~0, context->packed_header_emulation_bytes);
 
       switch(nal_unit_type) {
       case HEVC_NAL_SPS:
@@ -402,6 +476,9 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
       default:
          break;
       }
+
+      if (!context->packed_header_emulation_bytes)
+         break;
    }
 
    return VA_STATUS_SUCCESS;

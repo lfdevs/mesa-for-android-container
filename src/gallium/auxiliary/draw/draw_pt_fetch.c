@@ -137,7 +137,6 @@ draw_pt_fetch_prepare(struct pt_fetch *fetch,
    }
 }
 
-
 void
 draw_pt_fetch_run(struct pt_fetch *fetch,
                   const unsigned *elts,
@@ -152,7 +151,7 @@ draw_pt_fetch_run(struct pt_fetch *fetch,
                             i,
                             ((char *)draw->pt.user.vbuffer[i].map +
                              draw->pt.vertex_buffer[i].buffer_offset),
-                            draw->pt.vertex_buffer[i].stride,
+                            draw->pt.vertex_strides[i],
                             draw->pt.max_index);
    }
 
@@ -179,7 +178,7 @@ draw_pt_fetch_run_linear(struct pt_fetch *fetch,
                             i,
                             ((char *)draw->pt.user.vbuffer[i].map +
                              draw->pt.vertex_buffer[i].buffer_offset),
-                            draw->pt.vertex_buffer[i].stride,
+                            draw->pt.vertex_strides[i],
                             draw->pt.max_index);
    }
 

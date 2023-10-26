@@ -342,9 +342,9 @@ static const struct anv_format _4444_formats[] = {
 
 static const struct anv_format ycbcr_formats[] = {
    ycbcr_fmt(VK_FORMAT_G8B8G8R8_422_UNORM, 1,
-             y_plane(0, ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
+             y_plane(0, ISL_FORMAT_YCRCB_NORMAL, RGBA, _ISL_SWIZZLE(RED, GREEN, BLUE, ZERO), 1, 1)),
    ycbcr_fmt(VK_FORMAT_B8G8R8G8_422_UNORM, 1,
-             y_plane(0, ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
+             y_plane(0, ISL_FORMAT_YCRCB_SWAPY, RGBA, _ISL_SWIZZLE(RED, GREEN, BLUE, ZERO), 1, 1)),
    ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, 3,
              y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
              chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
@@ -725,6 +725,9 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
       if (!isl_drm_modifier_get_score(devinfo, isl_mod_info->modifier))
          return 0;
 
+      /* No modifiers have compression on platforms supported by hasvk. */
+      assert(!isl_drm_modifier_has_aux(isl_mod_info->modifier));
+
       /* Try to restrict the supported formats to those in drm_fourcc.h. The
        * VK_EXT_image_drm_format_modifier does not require this (after all, two
        * Vulkan apps could share an image by exchanging its VkFormat instead of
@@ -780,29 +783,6 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
             anv_finishme("support more multi-planar formats with DRM modifiers");
             return 0;
          }
-
-         /* Currently there is no way to properly map memory planes to format
-          * planes and aux planes due to the lack of defined ABI for external
-          * multi-planar images.
-          */
-         if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
-            return 0;
-         }
-      }
-
-      if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
-         /* Rejection DISJOINT for consistency with the GL driver. In
-          * eglCreateImage, we require that the dma_buf for the primary surface
-          * and the dma_buf for its aux surface refer to the same bo.
-          */
-         flags &= ~VK_FORMAT_FEATURE_2_DISJOINT_BIT;
-
-         /* When the hardware accesses a storage image, it bypasses the aux
-          * surface. We could support storage access on images with aux
-          * modifiers by resolving the aux surface prior to the storage access.
-          */
-         flags &= ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
-         flags &= ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_ATOMIC_BIT;
       }
    }
 
@@ -875,14 +855,10 @@ get_drm_format_modifier_properties_list(const struct anv_physical_device *physic
       if (!features)
          continue;
 
-      uint32_t planes = anv_format->n_planes;
-      if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE)
-         ++planes;
-
       vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out, out_props) {
          *out_props = (VkDrmFormatModifierPropertiesEXT) {
             .drmFormatModifier = isl_mod_info->modifier,
-            .drmFormatModifierPlaneCount = planes,
+            .drmFormatModifierPlaneCount = anv_format->n_planes,
             .drmFormatModifierTilingFeatures = features,
          };
       };
@@ -909,14 +885,10 @@ get_drm_format_modifier_properties_list_2(const struct anv_physical_device *phys
       if (!features2)
          continue;
 
-      uint32_t planes = anv_format->n_planes;
-      if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE)
-         ++planes;
-
       vk_outarray_append_typed(VkDrmFormatModifierProperties2EXT, &out, out_props) {
          *out_props = (VkDrmFormatModifierProperties2EXT) {
             .drmFormatModifier = isl_mod_info->modifier,
-            .drmFormatModifierPlaneCount = planes,
+            .drmFormatModifierPlaneCount = anv_format->n_planes,
             .drmFormatModifierTilingFeatures = features2,
          };
       };
@@ -1200,15 +1172,6 @@ anv_get_image_format_properties(
       if (format->n_planes == 1 &&
           !(info->flags & VK_IMAGE_CREATE_ALIAS_BIT)) {
           goto unsupported;
-      }
-
-      if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
-         /* Rejection DISJOINT for consistency with the GL driver. In
-          * eglCreateImage, we require that the dma_buf for the primary surface
-          * and the dma_buf for its aux surface refer to the same bo.
-          */
-         goto unsupported;
       }
    }
 

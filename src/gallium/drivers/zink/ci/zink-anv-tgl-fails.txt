@@ -1,7 +1,3 @@
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_scissored_masked,Fail
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_scissored,Fail
-multisample-dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored,Fail
-
 # "Fail, buffer content is not well preserved when age > 0 (Fail)"
 dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear_clear,Fail
 dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear,Fail
@@ -122,14 +118,6 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 
-shaders@point-vertex-id divisor,Fail
-shaders@point-vertex-id gl_instanceid divisor,Fail
-shaders@point-vertex-id gl_instanceid,Fail
-shaders@point-vertex-id gl_vertexid divisor,Fail
-shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
-shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
-shaders@point-vertex-id gl_vertexid,Fail
-
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
@@ -180,19 +168,12 @@ spec@!opengl 2.1@polygon-stipple-fs,Fail
 
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 
-spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
-
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index2,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 
-spec@arb_gl_spirv@execution@xfb@vs_block_array,Fail
 
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_gpu_shader_fp64@execution@glsl-fs-loop-unroll-mul-fp64,Fail
@@ -585,7 +566,6 @@ spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32F_ARB,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32I_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA8,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA8I_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA8UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
@@ -615,7 +595,6 @@ spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32F_ARB,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32I_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA8,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA8I_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA8UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
@@ -705,5 +684,4 @@ spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-fs-getuniformdv,Crash
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-gs-getuniformdv,Crash
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-getuniformdv,Crash
 
-# ../src/util/simple_mtx.h:131: simple_mtx_unlock: Assertion `c != _SIMPLE_MTX_INVALID_VALUE' failed.
-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.programs.link,Crash
+spec@arb_fragment_layer_viewport@layer-no-gs,Fail

@@ -92,6 +92,9 @@ static struct v3d_simulator_state {
         /** Last performance monitor ID. */
         uint32_t last_perfid;
 
+        /** Total performance counters */
+        uint32_t perfcnt_total;
+
         struct util_dynarray bin_oom;
         int refcount;
 } sim_state = {
@@ -436,15 +439,15 @@ v3d_simulator_perfmon_switch(int fd, uint32_t perfid)
 
         perfmon = v3d_get_simulator_perfmon(fd, file->active_perfid);
         if (perfmon)
-                v3d41_simulator_perfmon_stop(sim_state.v3d,
-                                             perfmon->ncounters,
-                                             perfmon->values);
+                v3d_X_simulator(perfmon_stop)(sim_state.v3d,
+                                              perfmon->ncounters,
+                                              perfmon->values);
 
         perfmon = v3d_get_simulator_perfmon(fd, perfid);
         if (perfmon)
-                v3d41_simulator_perfmon_start(sim_state.v3d,
-                                              perfmon->ncounters,
-                                              perfmon->counters);
+                v3d_X_simulator(perfmon_start)(sim_state.v3d,
+                                               perfmon->ncounters,
+                                               perfmon->counters);
 
         file->active_perfid = perfid;
 }
@@ -489,11 +492,7 @@ v3d_simulator_submit_cl_ioctl(int fd, struct drm_v3d_submit_cl *submit)
         bin_fd = fd;
 
         v3d_simulator_perfmon_switch(fd, submit->perfmon_id);
-
-        if (sim_state.ver >= 41)
-                v3d41_simulator_submit_cl_ioctl(sim_state.v3d, submit, file->gmp->ofs);
-        else
-                v3d33_simulator_submit_cl_ioctl(sim_state.v3d, submit, file->gmp->ofs);
+        v3d_X_simulator(submit_cl_ioctl)(sim_state.v3d, submit, file->gmp->ofs);
 
         util_dynarray_foreach(&sim_state.bin_oom, struct v3d_simulator_bo *,
                               sim_bo) {
@@ -633,15 +632,6 @@ v3d_simulator_gem_close_ioctl(int fd, struct drm_gem_close *args)
 }
 
 static int
-v3d_simulator_get_param_ioctl(int fd, struct drm_v3d_get_param *args)
-{
-        if (sim_state.ver >= 41)
-                return v3d41_simulator_get_param_ioctl(sim_state.v3d, args);
-        else
-                return v3d33_simulator_get_param_ioctl(sim_state.v3d, args);
-}
-
-static int
 v3d_simulator_submit_tfu_ioctl(int fd, struct drm_v3d_submit_tfu *args)
 {
         struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
@@ -652,10 +642,7 @@ v3d_simulator_submit_tfu_ioctl(int fd, struct drm_v3d_submit_tfu *args)
         v3d_simulator_copy_in_handle(file, args->bo_handles[2]);
         v3d_simulator_copy_in_handle(file, args->bo_handles[3]);
 
-        if (sim_state.ver >= 41)
-                ret = v3d41_simulator_submit_tfu_ioctl(sim_state.v3d, args);
-        else
-                ret = v3d33_simulator_submit_tfu_ioctl(sim_state.v3d, args);
+        ret = v3d_X_simulator(submit_tfu_ioctl)(sim_state.v3d, args);
 
         v3d_simulator_copy_out_handle(file, args->bo_handles[0]);
 
@@ -682,11 +669,8 @@ v3d_simulator_submit_csd_ioctl(int fd, struct drm_v3d_submit_csd *args)
 
         v3d_simulator_perfmon_switch(fd, args->perfmon_id);
 
-        if (sim_state.ver >= 41)
-                ret = v3d41_simulator_submit_csd_ioctl(sim_state.v3d, args,
-                                                       file->gmp->ofs);
-        else
-                ret = -1;
+        ret = v3d_X_simulator(submit_csd_ioctl)(sim_state.v3d, args,
+                                                file->gmp->ofs);
 
         for (int i = 0; i < args->bo_handle_count; i++)
                 v3d_simulator_copy_out_handle(file, bo_handles[i]);
@@ -716,7 +700,7 @@ v3d_simulator_perfmon_create_ioctl(int fd, struct drm_v3d_perfmon_create *args)
 
         perfmon->ncounters = args->ncounters;
         for (int i = 0; i < args->ncounters; i++) {
-                if (args->counters[i] >= V3D_PERFCNT_NUM) {
+                if (args->counters[i] >= sim_state.perfcnt_total) {
                         ralloc_free(perfmon);
                         return -EINVAL;
                 } else {
@@ -797,7 +781,7 @@ v3d_simulator_ioctl(int fd, unsigned long request, void *args)
                 return 0;
 
         case DRM_IOCTL_V3D_GET_PARAM:
-                return v3d_simulator_get_param_ioctl(fd, args);
+                return v3d_X_simulator(get_param_ioctl)(sim_state.v3d, args);
 
         case DRM_IOCTL_GEM_CLOSE:
                 return v3d_simulator_gem_close_ioctl(fd, args);
@@ -880,10 +864,8 @@ v3d_simulator_init_global()
 
         util_dynarray_init(&sim_state.bin_oom, NULL);
 
-        if (sim_state.ver >= 41)
-                v3d41_simulator_init_regs(sim_state.v3d);
-        else
-                v3d33_simulator_init_regs(sim_state.v3d);
+        v3d_X_simulator(init_regs)(sim_state.v3d);
+        v3d_X_simulator(get_perfcnt_total)(&sim_state.perfcnt_total);
 }
 
 struct v3d_simulator_file *

@@ -20,6 +20,7 @@ liblvp_files = files(
     'lvp_image.c',
     'lvp_formats.c',
     'lvp_inline_uniforms.c',
+    'lvp_lower_exec_graph.c',
     'lvp_lower_vulkan_resource.c',
     'lvp_lower_vulkan_resource.h',
     'lvp_lower_input_attachments.c',
@@ -45,7 +46,7 @@ liblavapipe_st = static_library(
   [liblvp_files, lvp_entrypoints, sha1_h],
   c_args : [ c_msvc_compat_args, lvp_flags],
   gnu_symbol_visibility : 'hidden',
-  include_directories : [ inc_include, inc_src, inc_util, inc_gallium, inc_compiler, inc_gallium_aux, inc_llvmpipe ],
+  include_directories : [ inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux, inc_llvmpipe ],
   dependencies : [ dep_llvm, idep_nir, idep_mesautil, idep_vulkan_util, idep_vulkan_wsi,
                    idep_vulkan_runtime, lvp_deps ]
 )

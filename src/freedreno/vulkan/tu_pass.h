@@ -90,6 +90,10 @@ struct tu_render_pass_attachment
    bool cond_store_allowed;
 
    int32_t gmem_offset_stencil[TU_GMEM_LAYOUT_COUNT];
+
+   /* The subpass id in which the attachment will be used first/last. */
+   uint32_t first_subpass_idx;
+   uint32_t last_subpass_idx;
 };
 
 struct tu_render_pass

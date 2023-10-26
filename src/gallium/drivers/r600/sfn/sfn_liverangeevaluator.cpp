@@ -65,12 +65,12 @@ public:
 
    void finalize();
 
-private:
-   void record_write(const Register *reg);
-   void record_read(const Register *reg, LiveRangeEntry::EUse use);
 
-   void record_write(const RegisterVec4& reg, const RegisterVec4::Swizzle& swizzle);
-   void record_read(const RegisterVec4& reg, LiveRangeEntry::EUse use);
+   void record_write(int block, const Register *reg);
+   void record_read(int block, const Register *reg, LiveRangeEntry::EUse use);
+
+   void record_write(int block, const RegisterVec4& reg, const RegisterVec4::Swizzle& swizzle);
+   void record_read(int block, const RegisterVec4 &reg, LiveRangeEntry::EUse use);
 
    void scope_if();
    void scope_else();
@@ -86,9 +86,12 @@ private:
    LiveRangeMap& m_live_range_map;
    RegisterAccess m_register_access;
 
+   int m_block{0};
    int m_line{0};
    int m_if_id{1};
    int m_loop_id{1};
+
+   const static int NO_ALU_BLOCK = -1;
 };
 
 LiveRangeEvaluator::LiveRangeEvaluator() {}
@@ -117,22 +120,29 @@ LiveRangeInstrVisitor::finalize()
    for (int i = 0; i < 4; ++i) {
 
       auto& live_ranges = m_live_range_map.component(i);
+
       for (const auto& r : live_ranges) {
          if (r.m_register->has_flag(Register::pin_end))
-            record_read(r.m_register, LiveRangeEntry::use_unspecified);
+            record_read(NO_ALU_BLOCK, r.m_register, LiveRangeEntry::use_unspecified);
       }
 
       auto& comp_access = m_register_access.component(i);
 
       for (size_t i = 0; i < comp_access.size(); ++i) {
-         sfn_log << SfnLog::merge << "Evaluae access for " << *live_ranges[i].m_register
-                 << "\n";
+         sfn_log << SfnLog::merge << "Evaluae access for " << *live_ranges[i].m_register << ":";
 
          auto& rca = comp_access[i];
          rca.update_required_live_range();
          live_ranges[i].m_start = rca.range().start;
          live_ranges[i].m_end = rca.range().end;
          live_ranges[i].m_use = rca.use_type();
+         live_ranges[i].m_alu_clause_local = rca.alu_clause_local();
+
+
+         sfn_log << SfnLog::merge << " [" << live_ranges[i].m_start
+                 << ", ] " << live_ranges[i].m_end
+                 << "ACL: " << live_ranges[i].m_alu_clause_local
+                 << "\n";
       }
    }
 }
@@ -155,28 +165,27 @@ LiveRangeInstrVisitor::LiveRangeInstrVisitor(LiveRangeMap& live_range_map):
       const auto& comp = live_range_map.component(i);
       for (const auto& r : comp) {
          if (r.m_register->has_flag(Register::pin_start))
-            record_write(r.m_register);
+            record_write(NO_ALU_BLOCK, r.m_register);
       }
    }
    m_line = 1;
 }
 
 void
-LiveRangeInstrVisitor::record_write(const RegisterVec4& reg,
-                                    const RegisterVec4::Swizzle& swizzle)
+LiveRangeInstrVisitor::record_write(int block, const RegisterVec4& reg, const RegisterVec4::Swizzle &swizzle)
 {
    for (int i = 0; i < 4; ++i) {
       if (swizzle[i] < 6 && reg[i]->chan() < 4)
-         record_write(reg[i]);
+         record_write(block, reg[i]);
    }
 }
 
 void
-LiveRangeInstrVisitor::record_read(const RegisterVec4& reg, LiveRangeEntry::EUse use)
+LiveRangeInstrVisitor::record_read(int block, const RegisterVec4& reg, LiveRangeEntry::EUse use)
 {
    for (int i = 0; i < 4; ++i) {
       if (reg[i]->chan() < 4)
-         record_read(reg[i], use);
+         record_read(block, reg[i], use);
    }
 }
 
@@ -249,12 +258,12 @@ LiveRangeInstrVisitor::visit(AluInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    if (instr->has_alu_flag(alu_write))
-      record_write(instr->dest());
+      record_write(m_block, instr->dest());
    for (unsigned i = 0; i < instr->n_sources(); ++i) {
-      record_read(instr->src(i).as_register(), LiveRangeEntry::use_unspecified);
+      record_read(m_block, instr->src(i).as_register(), LiveRangeEntry::use_unspecified);
       auto uniform = instr->src(i).as_uniform();
       if (uniform && uniform->buf_addr()) {
-         record_read(uniform->buf_addr()->as_register(), LiveRangeEntry::use_unspecified);
+         record_read(m_block, uniform->buf_addr()->as_register(), LiveRangeEntry::use_unspecified);
       }
    }
 }
@@ -271,13 +280,16 @@ void
 LiveRangeInstrVisitor::visit(TexInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
-   record_write(instr->dst(), instr->all_dest_swizzle());
+   record_write(NO_ALU_BLOCK, instr->dst(), instr->all_dest_swizzle());
 
    auto src = instr->src();
-   record_read(src, LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, src, LiveRangeEntry::use_unspecified);
 
    if (instr->resource_offset())
-      record_read(instr->resource_offset(), LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, instr->resource_offset(), LiveRangeEntry::use_unspecified);
+
+   if (instr->sampler_offset())
+      record_read(NO_ALU_BLOCK, instr->sampler_offset(), LiveRangeEntry::use_unspecified);
 }
 
 void
@@ -285,23 +297,24 @@ LiveRangeInstrVisitor::visit(ExportInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
-   record_read(src, LiveRangeEntry::use_export);
+   record_read(NO_ALU_BLOCK, src, LiveRangeEntry::use_export);
 }
 
 void
 LiveRangeInstrVisitor::visit(FetchInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
-   record_write(instr->dst(), instr->all_dest_swizzle());
+   record_write(NO_ALU_BLOCK, instr->dst(), instr->all_dest_swizzle());
    auto& src = instr->src();
    if (src.chan() < 4) /* Channel can be 7 to disable source */
-      record_read(&src, LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, &src, LiveRangeEntry::use_unspecified);
 }
 
 void
 LiveRangeInstrVisitor::visit(Block *instr)
 {
-   sfn_log << SfnLog::merge << "Visit block\n";
+   m_block = instr->id();
+   sfn_log << SfnLog::merge << "Visit block " << m_block << "\n";
    for (auto i : *instr) {
       i->accept(*this);
       if (i->end_group())
@@ -317,15 +330,15 @@ LiveRangeInstrVisitor::visit(ScratchIOInstr *instr)
    for (int i = 0; i < 4; ++i) {
       if ((1 << i) & instr->write_mask()) {
          if (instr->is_read())
-            record_write(src[i]);
+            record_write(NO_ALU_BLOCK, src[i]);
          else
-            record_read(src[i], LiveRangeEntry::use_unspecified);
+            record_read(NO_ALU_BLOCK, src[i], LiveRangeEntry::use_unspecified);
       }
    }
 
    auto addr = instr->address();
    if (addr)
-      record_read(addr, LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, addr, LiveRangeEntry::use_unspecified);
 }
 
 void
@@ -333,7 +346,7 @@ LiveRangeInstrVisitor::visit(StreamOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
-   record_read(src, LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, src, LiveRangeEntry::use_unspecified);
 }
 
 void
@@ -341,11 +354,11 @@ LiveRangeInstrVisitor::visit(MemRingOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
-   record_read(src, LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, src, LiveRangeEntry::use_unspecified);
 
    auto idx = instr->export_index();
    if (idx && idx->as_register())
-      record_read(idx->as_register(), LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, idx->as_register(), LiveRangeEntry::use_unspecified);
 }
 
 void
@@ -379,37 +392,40 @@ LiveRangeInstrVisitor::visit(ControlFlowInstr *instr)
 void
 LiveRangeInstrVisitor::visit(IfInstr *instr)
 {
+   int b = m_block;
+   m_block = -1;
    instr->predicate()->accept(*this);
    scope_if();
+   m_block = b;
 }
 
 void
 LiveRangeInstrVisitor::visit(GDSInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
-   record_read(instr->src(), LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, instr->src(), LiveRangeEntry::use_unspecified);
    if (instr->resource_offset())
-      record_read(instr->resource_offset(), LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, instr->resource_offset(), LiveRangeEntry::use_unspecified);
    if (instr->dest())
-      record_write(instr->dest());
+      record_write(NO_ALU_BLOCK, instr->dest());
 }
 
 void
 LiveRangeInstrVisitor::visit(RatInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
-   record_read(instr->value(), LiveRangeEntry::use_unspecified);
-   record_read(instr->addr(), LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, instr->value(), LiveRangeEntry::use_unspecified);
+   record_read(NO_ALU_BLOCK, instr->addr(), LiveRangeEntry::use_unspecified);
 
    auto idx = instr->resource_offset();
    if (idx)
-      record_read(idx, LiveRangeEntry::use_unspecified);
+      record_read(NO_ALU_BLOCK, idx, LiveRangeEntry::use_unspecified);
 }
 
 void
 LiveRangeInstrVisitor::visit(WriteTFInstr *instr)
 {
-   record_read(instr->value(), LiveRangeEntry::use_export);
+   record_read(NO_ALU_BLOCK, instr->value(), LiveRangeEntry::use_export);
 }
 
 void
@@ -427,7 +443,7 @@ LiveRangeInstrVisitor::visit(UNUSED LDSReadInstr *instr)
 }
 
 void
-LiveRangeInstrVisitor::record_write(const Register *reg)
+LiveRangeInstrVisitor::record_write(int block, const Register *reg)
 {
    if (reg->has_flag(Register::addr_or_idx))
       return;
@@ -436,26 +452,26 @@ LiveRangeInstrVisitor::record_write(const Register *reg)
    if (addr) {
 
       if (addr->as_register() && !addr->as_register()->has_flag(Register::addr_or_idx))
-         record_read(addr->as_register(), LiveRangeEntry::use_unspecified);
+         record_read(block, addr->as_register(), LiveRangeEntry::use_unspecified);
 
       const auto av = static_cast<const LocalArrayValue *>(reg);
       auto& array = av->array();
 
-      sfn_log << SfnLog::merge << array << " write:" << m_line << "\n";
+      sfn_log << SfnLog::merge << array << " write:" << block << ":" << m_line << "\n";
 
       for (auto i = 0u; i < array.size(); ++i) {
          auto& rav = m_register_access(array(i, reg->chan()));
-         rav.record_write(m_line > 0 ? m_line - 1 : 0, m_current_scope);
+         rav.record_write(block, m_line > 0 ? m_line - 1 : 0, m_current_scope);
       }
    } else {
       auto& ra = m_register_access(*reg);
-      sfn_log << SfnLog::merge << *reg << " write:" << m_line << "\n";
-      ra.record_write(m_line, m_current_scope);
+      sfn_log << SfnLog::merge << *reg << " write:" << block << ":" << m_line << "\n";
+      ra.record_write(block, m_line, m_current_scope);
    }
 }
 
 void
-LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use)
+LiveRangeInstrVisitor::record_read(int block, const Register *reg, LiveRangeEntry::EUse use)
 {
    if (!reg)
       return;
@@ -467,21 +483,21 @@ LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use
    if (addr) {
       if (addr->as_register() && !addr->as_register()->has_flag(Register::addr_or_idx)) {
          auto& ra = m_register_access(*addr->as_register());
-         ra.record_read(m_line, m_current_scope, use);
+         ra.record_read(block, m_line, m_current_scope, use);
       }
 
       const auto av = static_cast<const LocalArrayValue *>(reg);
       auto& array = av->array();
-      sfn_log << SfnLog::merge << array << " read:" << m_line << "\n";
+      sfn_log << SfnLog::merge << array << " read:" << block << ":" << m_line << "\n";
 
       for (auto i = 0u; i < array.size(); ++i) {
          auto& rav = m_register_access(array(i, reg->chan()));
-         rav.record_read(m_line + 1, m_current_scope, use);
+         rav.record_read(block, m_line + 1, m_current_scope, use);
       }
    } else {
-      sfn_log << SfnLog::merge << *reg << " read:" << m_line << "\n";
+      sfn_log << SfnLog::merge << *reg << " read:" << block << ":" << m_line << "\n";
       auto& ra = m_register_access(*reg);
-      ra.record_read(m_line, m_current_scope, use);
+      ra.record_read(block, m_line, m_current_scope, use);
    }
 }
 

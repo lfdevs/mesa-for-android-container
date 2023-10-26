@@ -16,7 +16,7 @@ NUMBER_OF_ATTEMPTS_LAVA_BOOT = int(getenv("LAVA_NUMBER_OF_ATTEMPTS_LAVA_BOOT", 3
 # Supports any integers in [0, 100].
 # The scheduler considers the job priority when ordering the queue
 # to consider which job should run next.
-JOB_PRIORITY = int(getenv("LAVA_JOB_PRIORITY", 75))
+JOB_PRIORITY = int(getenv("JOB_PRIORITY", 75))
 
 
 def has_ssh_support(job_submitter: "LAVAJobSubmitter") -> bool:

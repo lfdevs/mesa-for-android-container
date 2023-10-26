@@ -95,8 +95,8 @@ public:
       nir_src *offset;
       PVirtualValue gather_comp;
       PVirtualValue ms_index;
-      PVirtualValue texture_offset;
-      PRegister resource_offset;
+      PRegister texture_offset;
+      PRegister sampler_offset;
       nir_src *backend1;
       nir_src *backend2;
 
@@ -112,9 +112,10 @@ public:
             const RegisterVec4& dest,
             const RegisterVec4::Swizzle& dest_swizzle,
             const RegisterVec4& src,
-            unsigned sid,
-            unsigned rid,
-            PRegister sampler_offs = nullptr);
+            unsigned resource_id,
+            PRegister resource_offs,
+            int sampler_id = 0,
+            PRegister sampler_offset = nullptr);
 
    TexInstr(const TexInstr& orig) = delete;
    TexInstr(const TexInstr&& orig) = delete;
@@ -128,7 +129,11 @@ public:
    auto& src() { return m_src; }
 
    unsigned opcode() const { return m_opcode; }
-   unsigned resource_id() const { return m_resource_id; }
+
+   unsigned sampler_id() const { return m_sampler.resource_id(); }
+   auto sampler_offset() const { return m_sampler.resource_offset(); }
+   void set_sampler_offset(PRegister offs) { m_sampler.set_resource_offset(offs); }
+   auto sampler_index_mode() const { return m_sampler.resource_index_mode(); }
 
    void set_offset(unsigned index, int32_t val);
    int get_offset(unsigned index) const;
@@ -152,7 +157,7 @@ public:
    auto prepare_instr() const { return m_prepare_instr; }
 
    bool replace_source(PRegister old_src, PVirtualValue new_src) override;
-   void update_indirect_addr(PRegister addr) override;
+   void update_indirect_addr(PRegister old_reg, PRegister addr) override;
 
    uint8_t allowed_src_chan_mask() const override;
 
@@ -180,9 +185,9 @@ private:
    emit_tex_texture_samples(nir_tex_instr *instr, Inputs& src, Shader& shader);
    static bool emit_lowered_tex(nir_tex_instr *instr, Inputs& src, Shader& shader);
    static void emit_set_gradients(
-      nir_tex_instr *tex, int sampler_id, Inputs& src, TexInstr *irt, Shader& shader);
+      nir_tex_instr *tex, int texture_id, Inputs& src, TexInstr *irt, Shader& shader);
    static void emit_set_offsets(
-      nir_tex_instr *tex, int sampler_id, Inputs& src, TexInstr *irt, Shader& shader);
+      nir_tex_instr *tex, int texture_id, Inputs& src, TexInstr *irt, Shader& shader);
 
    bool set_coord_offsets(nir_src *offset);
    void set_rect_coordinate_flags(nir_tex_instr *instr);
@@ -196,10 +201,11 @@ private:
    std::bitset<num_tex_flag> m_tex_flags;
    int m_coord_offset[3];
    int m_inst_mode;
-   unsigned m_resource_id;
 
    static const std::map<Opcode, std::string> s_opcode_map;
    std::list<TexInstr *, Allocator<TexInstr *>> m_prepare_instr;
+
+   Resource m_sampler;
 };
 
 bool

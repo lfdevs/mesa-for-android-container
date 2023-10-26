@@ -40,16 +40,22 @@
 #include "v3d_simulator.h"
 #include "v3d_simulator_wrapper.h"
 
+#include "common/v3d_performance_counters.h"
+
 #include "util/macros.h"
 #include "util/bitscan.h"
 #include "drm-uapi/v3d_drm.h"
 
 #define HW_REGISTER_RO(x) (x)
 #define HW_REGISTER_RW(x) (x)
-#if V3D_VERSION >= 41
-#include "libs/core/v3d/registers/4.1.35.0/v3d.h"
+#if V3D_VERSION == 71
+#include "libs/core/v3d/registers/7.1.6.0/v3d.h"
+#else
+#if V3D_VERSION == 41 || V3D_VERSION == 42
+#include "libs/core/v3d/registers/4.2.14.0/v3d.h"
 #else
 #include "libs/core/v3d/registers/3.3.0.0/v3d.h"
+#endif
 #endif
 
 #define V3D_WRITE(reg, val) v3d_hw_write_reg(v3d, reg, val)
@@ -178,38 +184,48 @@ v3d_flush_caches(struct v3d_hw *v3d)
         v3d_flush_l2t(v3d);
 }
 
+#if V3D_VERSION < 71
+#define TFU_REG(NAME) V3D_TFU_ ## NAME
+#else
+#define TFU_REG(NAME) V3D_IFC_ ## NAME
+#endif
+
+
 int
 v3dX(simulator_submit_tfu_ioctl)(struct v3d_hw *v3d,
                                  struct drm_v3d_submit_tfu *args)
 {
-        int last_vtct = V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET;
+        int last_vtct = V3D_READ(TFU_REG(CS)) & V3D_TFU_CS_CVTCT_SET;
 
-        V3D_WRITE(V3D_TFU_IIA, args->iia);
-        V3D_WRITE(V3D_TFU_IIS, args->iis);
-        V3D_WRITE(V3D_TFU_ICA, args->ica);
-        V3D_WRITE(V3D_TFU_IUA, args->iua);
-        V3D_WRITE(V3D_TFU_IOA, args->ioa);
-        V3D_WRITE(V3D_TFU_IOS, args->ios);
-        V3D_WRITE(V3D_TFU_COEF0, args->coef[0]);
-        V3D_WRITE(V3D_TFU_COEF1, args->coef[1]);
-        V3D_WRITE(V3D_TFU_COEF2, args->coef[2]);
-        V3D_WRITE(V3D_TFU_COEF3, args->coef[3]);
+        V3D_WRITE(TFU_REG(IIA), args->iia);
+        V3D_WRITE(TFU_REG(IIS), args->iis);
+        V3D_WRITE(TFU_REG(ICA), args->ica);
+        V3D_WRITE(TFU_REG(IUA), args->iua);
+        V3D_WRITE(TFU_REG(IOA), args->ioa);
+#if V3D_VERSION >= 71
+        V3D_WRITE(TFU_REG(IOC), args->v71.ioc);
+#endif
+        V3D_WRITE(TFU_REG(IOS), args->ios);
+        V3D_WRITE(TFU_REG(COEF0), args->coef[0]);
+        V3D_WRITE(TFU_REG(COEF1), args->coef[1]);
+        V3D_WRITE(TFU_REG(COEF2), args->coef[2]);
+        V3D_WRITE(TFU_REG(COEF3), args->coef[3]);
 
-        V3D_WRITE(V3D_TFU_ICFG, args->icfg);
+        V3D_WRITE(TFU_REG(ICFG), args->icfg);
 
-        while ((V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET) == last_vtct) {
+        while ((V3D_READ(TFU_REG(CS)) & V3D_TFU_CS_CVTCT_SET) == last_vtct) {
                 v3d_hw_tick(v3d);
         }
 
         return 0;
 }
 
-#if V3D_VERSION >= 41
 int
 v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
                                  struct drm_v3d_submit_csd *args,
                                  uint32_t gmp_ofs)
 {
+#if V3D_VERSION >= 41
         int last_completed_jobs = (V3D_READ(V3D_CSD_0_STATUS) &
                                    V3D_CSD_0_STATUS_NUM_COMPLETED_JOBS_SET);
         g_gmp_ofs = gmp_ofs;
@@ -223,6 +239,9 @@ v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
         V3D_WRITE(V3D_CSD_0_QUEUED_CFG4, args->cfg[4]);
         V3D_WRITE(V3D_CSD_0_QUEUED_CFG5, args->cfg[5]);
         V3D_WRITE(V3D_CSD_0_QUEUED_CFG6, args->cfg[6]);
+#if V3D_VERSION >= 71
+        V3D_WRITE(V3D_CSD_0_QUEUED_CFG7, 0);
+#endif
         /* CFG0 kicks off the job */
         V3D_WRITE(V3D_CSD_0_QUEUED_CFG0, args->cfg[0]);
 
@@ -239,8 +258,10 @@ v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
         v3d_flush_caches(v3d);
 
         return 0;
-}
+#else
+        return -1;
 #endif
+}
 
 int
 v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
@@ -310,16 +331,17 @@ v3d_isr_core(struct v3d_hw *v3d,
                 return;
         }
 
+#if V3D_VERSION <= 42
         if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
                 fprintf(stderr, "GMP violation at 0x%08x\n",
                         V3D_READ(V3D_GMP_VIO_ADDR));
-                abort();
         } else {
                 fprintf(stderr,
                         "Unexpected ISR with core status 0x%08x\n",
                         core_status);
         }
         abort();
+#endif
 }
 
 static void
@@ -396,6 +418,18 @@ v3d_isr_hub(struct v3d_hw *v3d)
         }
 
         handle_mmu_interruptions(v3d, hub_status);
+
+#if V3D_VERSION == 71
+        if (hub_status & V3D_HUB_CTL_INT_STS_INT_GMPV_SET) {
+                fprintf(stderr, "GMP violation at 0x%08x\n",
+                        V3D_READ(V3D_GMP_VIO_ADDR));
+        } else {
+                fprintf(stderr,
+                        "Unexpected ISR with status 0x%08x\n",
+                        hub_status);
+        }
+        abort();
+#endif
 }
 
 static void
@@ -436,8 +470,11 @@ v3dX(simulator_init_regs)(struct v3d_hw *v3d)
          * for tracing. Perhaps we should evaluate to do the same here and add
          * some debug options.
          */
-        uint32_t core_interrupts = (V3D_CTL_0_INT_STS_INT_GMPV_SET |
-                                    V3D_CTL_0_INT_STS_INT_OUTOMEM_SET);
+        uint32_t core_interrupts = V3D_CTL_0_INT_STS_INT_OUTOMEM_SET;
+#if V3D_VERSION <= 42
+        core_interrupts |= V3D_CTL_0_INT_STS_INT_GMPV_SET;
+#endif
+
         V3D_WRITE(V3D_CTL_0_INT_MSK_SET, ~core_interrupts);
         V3D_WRITE(V3D_CTL_0_INT_MSK_CLR, core_interrupts);
 
@@ -447,6 +484,9 @@ v3dX(simulator_init_regs)(struct v3d_hw *v3d)
             V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET |  /* CAP exceeded */
             V3D_HUB_CTL_INT_STS_INT_TFUC_SET); /* TFU conversion */
 
+#if V3D_VERSION == 71
+        hub_interrupts |= V3D_HUB_CTL_INT_STS_INT_GMPV_SET;
+#endif
         V3D_WRITE(V3D_HUB_CTL_INT_MSK_SET, ~hub_interrupts);
         V3D_WRITE(V3D_HUB_CTL_INT_MSK_CLR, hub_interrupts);
 
@@ -509,7 +549,8 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
 #define V3D_PCTR_0_SRC_N(x) (V3D_PCTR_0_SRC_0_3 + 4 * (x))
 #define V3D_PCTR_0_SRC_N_SHIFT(x) ((x) * 8)
 #define V3D_PCTR_0_SRC_N_MASK(x) (BITFIELD_RANGE(V3D_PCTR_0_SRC_N_SHIFT(x), \
-                                                 V3D_PCTR_0_SRC_N_SHIFT(x) + 6))
+                                                 V3D_PCTR_0_SRC_N_SHIFT(x) + \
+                                                 V3D_PCTR_0_SRC_0_3_PCTRS0_MSB))
 #endif
 
 void
@@ -547,6 +588,11 @@ void v3dX(simulator_perfmon_stop)(struct v3d_hw *v3d,
 
         V3D_WRITE(V3D_PCTR_0_EN, 0);
 #endif
+}
+
+void v3dX(simulator_get_perfcnt_total)(uint32_t *count)
+{
+        *count = ARRAY_SIZE(v3d_performance_counters);
 }
 
 #endif /* USE_V3D_SIMULATOR */

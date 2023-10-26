@@ -38,8 +38,8 @@
  */
 
 struct mir_address {
-   nir_ssa_scalar A;
-   nir_ssa_scalar B;
+   nir_scalar A;
+   nir_scalar B;
 
    midgard_index_address_format type;
    unsigned shift;
@@ -47,17 +47,12 @@ struct mir_address {
 };
 
 static bool
-mir_args_ssa(nir_ssa_scalar s, unsigned count)
+mir_args_ssa(nir_scalar s, unsigned count)
 {
    nir_alu_instr *alu = nir_instr_as_alu(s.def->parent_instr);
 
    if (count > nir_op_infos[alu->op].num_inputs)
       return false;
-
-   for (unsigned i = 0; i < count; ++i) {
-      if (!alu->src[i].src.is_ssa)
-         return false;
-   }
 
    return true;
 }
@@ -67,13 +62,13 @@ mir_args_ssa(nir_ssa_scalar s, unsigned count)
 static void
 mir_match_constant(struct mir_address *address)
 {
-   if (address->A.def && nir_ssa_scalar_is_const(address->A)) {
-      address->bias += nir_ssa_scalar_as_uint(address->A);
+   if (address->A.def && nir_scalar_is_const(address->A)) {
+      address->bias += nir_scalar_as_uint(address->A);
       address->A.def = NULL;
    }
 
-   if (address->B.def && nir_ssa_scalar_is_const(address->B)) {
-      address->bias += nir_ssa_scalar_as_uint(address->B);
+   if (address->B.def && nir_scalar_is_const(address->B)) {
+      address->bias += nir_scalar_as_uint(address->B);
       address->B.def = NULL;
    }
 }
@@ -86,29 +81,29 @@ mir_match_constant(struct mir_address *address)
 static void
 mir_match_iadd(struct mir_address *address, bool first_free)
 {
-   if (!address->B.def || !nir_ssa_scalar_is_alu(address->B))
+   if (!address->B.def || !nir_scalar_is_alu(address->B))
       return;
 
    if (!mir_args_ssa(address->B, 2))
       return;
 
-   nir_op op = nir_ssa_scalar_alu_op(address->B);
+   nir_op op = nir_scalar_alu_op(address->B);
 
    if (op != nir_op_iadd)
       return;
 
-   nir_ssa_scalar op1 = nir_ssa_scalar_chase_alu_src(address->B, 0);
-   nir_ssa_scalar op2 = nir_ssa_scalar_chase_alu_src(address->B, 1);
+   nir_scalar op1 = nir_scalar_chase_alu_src(address->B, 0);
+   nir_scalar op2 = nir_scalar_chase_alu_src(address->B, 1);
 
-   if (nir_ssa_scalar_is_const(op1) &&
-       nir_ssa_scalar_as_uint(op1) <= MAX_POSITIVE_OFFSET) {
-      address->bias += nir_ssa_scalar_as_uint(op1);
+   if (nir_scalar_is_const(op1) &&
+       nir_scalar_as_uint(op1) <= MAX_POSITIVE_OFFSET) {
+      address->bias += nir_scalar_as_uint(op1);
       address->B = op2;
-   } else if (nir_ssa_scalar_is_const(op2) &&
-              nir_ssa_scalar_as_uint(op2) <= MAX_POSITIVE_OFFSET) {
-      address->bias += nir_ssa_scalar_as_uint(op2);
+   } else if (nir_scalar_is_const(op2) &&
+              nir_scalar_as_uint(op2) <= MAX_POSITIVE_OFFSET) {
+      address->bias += nir_scalar_as_uint(op2);
       address->B = op1;
-   } else if (!nir_ssa_scalar_is_const(op1) && !nir_ssa_scalar_is_const(op2) &&
+   } else if (!nir_scalar_is_const(op1) && !nir_scalar_is_const(op2) &&
               first_free && !address->A.def) {
       address->A = op1;
       address->B = op2;
@@ -120,16 +115,16 @@ mir_match_iadd(struct mir_address *address, bool first_free)
 static void
 mir_match_u2u64(struct mir_address *address)
 {
-   if (!address->B.def || !nir_ssa_scalar_is_alu(address->B))
+   if (!address->B.def || !nir_scalar_is_alu(address->B))
       return;
 
    if (!mir_args_ssa(address->B, 1))
       return;
 
-   nir_op op = nir_ssa_scalar_alu_op(address->B);
+   nir_op op = nir_scalar_alu_op(address->B);
    if (op != nir_op_u2u64)
       return;
-   nir_ssa_scalar arg = nir_ssa_scalar_chase_alu_src(address->B, 0);
+   nir_scalar arg = nir_scalar_chase_alu_src(address->B, 0);
 
    address->B = arg;
    address->type = midgard_index_address_u32;
@@ -140,16 +135,16 @@ mir_match_u2u64(struct mir_address *address)
 static void
 mir_match_i2i64(struct mir_address *address)
 {
-   if (!address->B.def || !nir_ssa_scalar_is_alu(address->B))
+   if (!address->B.def || !nir_scalar_is_alu(address->B))
       return;
 
    if (!mir_args_ssa(address->B, 1))
       return;
 
-   nir_op op = nir_ssa_scalar_alu_op(address->B);
+   nir_op op = nir_scalar_alu_op(address->B);
    if (op != nir_op_i2i64)
       return;
-   nir_ssa_scalar arg = nir_ssa_scalar_chase_alu_src(address->B, 0);
+   nir_scalar arg = nir_scalar_chase_alu_src(address->B, 0);
 
    address->B = arg;
    address->type = midgard_index_address_s32;
@@ -160,22 +155,22 @@ mir_match_i2i64(struct mir_address *address)
 static void
 mir_match_ishl(struct mir_address *address)
 {
-   if (!address->B.def || !nir_ssa_scalar_is_alu(address->B))
+   if (!address->B.def || !nir_scalar_is_alu(address->B))
       return;
 
    if (!mir_args_ssa(address->B, 2))
       return;
 
-   nir_op op = nir_ssa_scalar_alu_op(address->B);
+   nir_op op = nir_scalar_alu_op(address->B);
    if (op != nir_op_ishl)
       return;
-   nir_ssa_scalar op1 = nir_ssa_scalar_chase_alu_src(address->B, 0);
-   nir_ssa_scalar op2 = nir_ssa_scalar_chase_alu_src(address->B, 1);
+   nir_scalar op1 = nir_scalar_chase_alu_src(address->B, 0);
+   nir_scalar op2 = nir_scalar_chase_alu_src(address->B, 1);
 
-   if (!nir_ssa_scalar_is_const(op2))
+   if (!nir_scalar_is_const(op2))
       return;
 
-   unsigned shift = nir_ssa_scalar_as_uint(op2);
+   unsigned shift = nir_scalar_as_uint(op2);
    if (shift > 0x7)
       return;
 
@@ -188,25 +183,25 @@ mir_match_ishl(struct mir_address *address)
 static void
 mir_match_mov(struct mir_address *address)
 {
-   if (address->A.def && nir_ssa_scalar_is_alu(address->A)) {
-      nir_op op = nir_ssa_scalar_alu_op(address->A);
+   if (address->A.def && nir_scalar_is_alu(address->A)) {
+      nir_op op = nir_scalar_alu_op(address->A);
 
       if (op == nir_op_mov && mir_args_ssa(address->A, 1))
-         address->A = nir_ssa_scalar_chase_alu_src(address->A, 0);
+         address->A = nir_scalar_chase_alu_src(address->A, 0);
    }
 
-   if (address->B.def && nir_ssa_scalar_is_alu(address->B)) {
-      nir_op op = nir_ssa_scalar_alu_op(address->B);
+   if (address->B.def && nir_scalar_is_alu(address->B)) {
+      nir_op op = nir_scalar_alu_op(address->B);
 
       if (op == nir_op_mov && mir_args_ssa(address->B, 1))
-         address->B = nir_ssa_scalar_chase_alu_src(address->B, 0);
+         address->B = nir_scalar_chase_alu_src(address->B, 0);
    }
 }
 
 /* Tries to pattern match into mir_address */
 
 static struct mir_address
-mir_match_offset(nir_ssa_def *offset, bool first_free, bool extend)
+mir_match_offset(nir_def *offset, bool first_free, bool extend)
 {
    struct mir_address address = {
       .B = {.def = offset},
@@ -242,22 +237,6 @@ mir_set_offset(compiler_context *ctx, midgard_instruction *ins, nir_src *offset,
    /* Sign extend instead of zero extend in case the address is something
     * like `base + offset + 20`, where offset could be negative. */
    bool force_sext = (nir_src_bit_size(*offset) < 64);
-
-   if (!offset->is_ssa) {
-      ins->load_store.bitsize_toggle = true;
-      ins->load_store.arg_comp = seg & 0x3;
-      ins->load_store.arg_reg = (seg >> 2) & 0x7;
-      ins->src[2] = nir_src_index(ctx, offset);
-      ins->src_types[2] = nir_type_uint | nir_src_bit_size(*offset);
-
-      if (force_sext)
-         ins->load_store.index_format = midgard_index_address_s32;
-      else
-         ins->load_store.index_format = midgard_index_address_u64;
-
-      return;
-   }
-
    bool first_free = (seg == LDST_GLOBAL);
 
    struct mir_address match = mir_match_offset(offset->ssa, first_free, true);
@@ -297,7 +276,6 @@ mir_set_offset(compiler_context *ctx, midgard_instruction *ins, nir_src *offset,
 void
 mir_set_ubo_offset(midgard_instruction *ins, nir_src *src, unsigned bias)
 {
-   assert(src->is_ssa);
    struct mir_address match = mir_match_offset(src->ssa, false, false);
 
    if (match.B.def) {

@@ -2,7 +2,7 @@
 
 import argparse
 import ast
-import xml.parsers.expat
+import intel_genxml
 import re
 import sys
 import copy
@@ -430,10 +430,6 @@ class Value(object):
 
 class Parser(object):
     def __init__(self):
-        self.parser = xml.parsers.expat.ParserCreate()
-        self.parser.StartElementHandler = self.start_element
-        self.parser.EndElementHandler = self.end_element
-
         self.instruction = None
         self.structs = {}
         # Set of enum names we've seen.
@@ -448,22 +444,15 @@ class Parser(object):
     def gen_guard(self):
         return self.gen_prefix("{0}_PACK_H".format(self.platform))
 
-    def start_element(self, name, attrs):
-        if name == "genxml":
-            self.platform = attrs["name"]
-            self.gen = attrs["gen"].replace('.', '')
-            print(pack_header % {'license': license, 'platform': self.platform, 'guard': self.gen_guard()})
-        elif name in ("instruction", "struct", "register"):
+    def process_item(self, item):
+        name = item.tag
+        assert name != "genxml"
+        attrs = item.attrib
+
+        if name in ("instruction", "struct", "register"):
             if name == "instruction":
                 self.instruction = safe_name(attrs["name"])
                 self.length_bias = int(attrs["bias"])
-                if "engine" in attrs:
-                    self.instruction_engines = set(attrs["engine"].split('|'))
-                else:
-                    # When an instruction doesn't have the engine specified,
-                    # it is considered to be for all engines, so 'None' is used
-                    # to signify that the instruction belongs to all engines.
-                    self.instruction_engines = None
             elif name == "struct":
                 self.struct = safe_name(attrs["name"])
                 self.structs[attrs["name"]] = 1
@@ -497,8 +486,14 @@ class Parser(object):
                 self.prefix = None
         elif name == "value":
             self.values.append(Value(attrs))
+        elif name in ("import", "exclude"):
+            pass
+        else:
+            assert False
 
-    def end_element(self, name):
+        for child_item in item:
+            self.process_item(child_item)
+
         if name  == "instruction":
             self.emit_instruction()
             self.instruction = None
@@ -519,8 +514,10 @@ class Parser(object):
         elif name  == "enum":
             self.emit_enum()
             self.enum = None
-        elif name == "genxml":
-            print('#endif /* %s */' % self.gen_guard())
+        elif name in ("import", "exclude", "value"):
+            pass
+        else:
+            assert False
 
     def emit_template_struct(self, name, group):
         print("struct %s {" % self.gen_prefix(name))
@@ -547,8 +544,6 @@ class Parser(object):
 
     def emit_instruction(self):
         name = self.instruction
-        if self.instruction_engines and not self.instruction_engines & self.engines:
-            return
 
         if not self.length is None:
             print('#define %-33s %6d' %
@@ -611,10 +606,14 @@ class Parser(object):
             print('   %-36s = %6d,' % (name.upper(), value.value))
         print('};\n')
 
-    def parse(self, filename):
-        file = open(filename, "rb")
-        self.parser.ParseFile(file)
-        file.close()
+    def emit_genxml(self, genxml):
+        root = genxml.et.getroot()
+        self.platform = root.attrib["name"]
+        self.gen = root.attrib["gen"].replace('.', '')
+        print(pack_header % {'license': license, 'platform': self.platform, 'guard': self.gen_guard()})
+        for item in root:
+            self.process_item(item)
+        print('#endif /* %s */' % self.gen_guard())
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -634,18 +633,19 @@ def parse_args():
 def main():
     pargs = parse_args()
 
-    input_file = pargs.xml_source
-    engines = pargs.engines.split(',')
+    engines = set(pargs.engines.split(','))
     valid_engines = [ 'render', 'blitter', 'video' ]
-    if set(engines) - set(valid_engines):
+    if engines - set(valid_engines):
         print("Invalid engine specified, valid engines are:\n")
         for e in valid_engines:
             print("\t%s" % e)
         sys.exit(1)
 
+    genxml = intel_genxml.GenXml(pargs.xml_source)
+    genxml.filter_engines(engines)
+    genxml.merge_imported()
     p = Parser()
-    p.engines = set(engines)
-    p.parse(input_file)
+    p.emit_genxml(genxml)
 
 if __name__ == '__main__':
     main()

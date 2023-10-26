@@ -16,12 +16,7 @@
 #include "vn_feedback.h"
 
 struct vn_queue {
-   struct vn_object_base base;
-
-   struct vn_device *device;
-   uint32_t family;
-   uint32_t index;
-   uint32_t flags;
+   struct vn_queue_base base;
 
    /* only used if renderer supports multiple timelines */
    uint32_t ring_idx;
@@ -29,16 +24,13 @@ struct vn_queue {
    /* wait fence used for vn_QueueWaitIdle */
    VkFence wait_fence;
 
-   /* sync fence used for Android wsi */
-   VkFence sync_fence;
-
    /* semaphore for gluing vkQueueSubmit feedback commands to
     * vkQueueBindSparse
     */
    VkSemaphore sparse_semaphore;
    uint64_t sparse_semaphore_counter;
 };
-VK_DEFINE_HANDLE_CASTS(vn_queue, base.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
+VK_DEFINE_HANDLE_CASTS(vn_queue, base.base.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
 enum vn_sync_type {
    /* no payload */

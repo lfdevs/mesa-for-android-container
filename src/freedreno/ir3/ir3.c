@@ -72,7 +72,8 @@ is_shared_consts(struct ir3_compiler *compiler,
                  struct ir3_const_state *const_state,
                  struct ir3_register *reg)
 {
-   if (const_state->shared_consts_enable && reg->flags & IR3_REG_CONST) {
+   if (const_state->push_consts_type == IR3_PUSH_CONSTS_SHARED &&
+       reg->flags & IR3_REG_CONST) {
       uint32_t min_const_reg = regid(compiler->shared_consts_base_offset, 0);
       uint32_t max_const_reg =
          regid(compiler->shared_consts_base_offset +
@@ -136,9 +137,9 @@ ir3_should_double_threadsize(struct ir3_shader_variant *v, unsigned regs_count)
    const struct ir3_compiler *compiler = v->compiler;
 
    /* If the user forced a particular wavesize respect that. */
-   if (v->real_wavesize == IR3_SINGLE_ONLY)
+   if (v->shader_options.real_wavesize == IR3_SINGLE_ONLY)
       return false;
-   if (v->real_wavesize == IR3_DOUBLE_ONLY)
+   if (v->shader_options.real_wavesize == IR3_DOUBLE_ONLY)
       return true;
 
    /* We can't support more than compiler->branchstack_size diverging threads
@@ -293,6 +294,7 @@ ir3_collect_info(struct ir3_shader_variant *v)
    info->sizedwords = info->size / 4;
 
    bool in_preamble = false;
+   bool has_eq = false;
 
    foreach_block (block, &shader->block_list) {
       int sfu_delay = 0, mem_delay = 0;
@@ -324,6 +326,15 @@ ir3_collect_info(struct ir3_shader_variant *v)
          if ((instr->opc == OPC_BARY_F || instr->opc == OPC_FLAT_B) &&
              (instr->dsts[0]->flags & IR3_REG_EI))
             info->last_baryf = info->instrs_count;
+
+         if ((instr->opc == OPC_NOP) && (instr->flags & IR3_INSTR_EQ)) {
+            info->last_helper = info->instrs_count;
+            has_eq = true;
+         }
+
+         if (v->type == MESA_SHADER_FRAGMENT && v->need_pixlod &&
+             instr->opc == OPC_END && !v->prefetch_end_of_quad && !has_eq)
+            info->last_helper = info->instrs_count;
 
          if (instr->opc == OPC_SHPS)
             in_preamble = true;

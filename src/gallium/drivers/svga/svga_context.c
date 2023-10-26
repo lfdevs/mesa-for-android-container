@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -314,6 +314,8 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
           sizeof(svga->state.hw_draw.enabled_constbufs));
    memset(svga->state.hw_draw.enabled_rawbufs, 0,
           sizeof(svga->state.hw_draw.enabled_rawbufs));
+   memset(svga->state.hw_draw.enabled_raw_shaderbufs, 0,
+          sizeof(svga->state.hw_draw.enabled_raw_shaderbufs));
    memset(svga->state.hw_draw.rawbufs, 0,
           sizeof(svga->state.hw_draw.rawbufs));
    svga->state.hw_draw.ib = NULL;

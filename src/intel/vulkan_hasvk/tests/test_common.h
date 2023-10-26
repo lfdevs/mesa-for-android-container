@@ -21,14 +21,22 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "dev/intel_device_info.h"
 
-#define ASSERT(cond)                                                    \
-   do {                                                                 \
-      if (!(cond)) {                                                    \
-         fprintf(stderr, "%s:%d: Test assertion `%s` failed.\n",        \
-                 __FILE__, __LINE__, # cond);                           \
-         abort();                                                       \
-      }                                                                 \
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define ASSERT(cond)                                                               \
+   do {                                                                            \
+      if (!(cond)) {                                                               \
+         FAIL_IN_GTEST(__FILE__, __LINE__, "Test assertion `" # cond               \
+                                           "` failed.");                           \
+      }                                                                            \
    } while (false)
+
+void FAIL_IN_GTEST(const char *file_path, unsigned line_number, const char *msg);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

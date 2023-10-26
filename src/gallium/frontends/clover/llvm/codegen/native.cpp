@@ -121,7 +121,11 @@ namespace {
 #else
                                 ::llvm::None, ::llvm::None,
 #endif
+#if LLVM_VERSION_MAJOR >= 18
+                                ::llvm::CodeGenOptLevel::Default) };
+#else
                                 ::llvm::CodeGenOpt::Default) };
+#endif
       if (!tm)
          fail(r_log, build_error(),
               "Could not create TargetMachine: " + target.triple);

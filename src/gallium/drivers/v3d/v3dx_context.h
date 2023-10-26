@@ -51,3 +51,23 @@ void v3dX(get_internal_type_bpp_for_output_format)(uint32_t format,
  */
 bool v3dX(tfu_supports_tex_format)(uint32_t tex_format,
                                    bool for_mipmap);
+
+bool v3dX(tfu)(struct pipe_context *pctx,
+               struct pipe_resource *pdst,
+               struct pipe_resource *psrc,
+               unsigned int src_level,
+               unsigned int base_level,
+               unsigned int last_level,
+               unsigned int src_layer,
+               unsigned int dst_layer,
+               bool for_mipmap);
+
+int v3dX(get_driver_query_group_info_perfcnt)(struct v3d_screen *screen,
+                                              unsigned index,
+                                              struct pipe_driver_query_group_info *info);
+int v3dX(get_driver_query_info_perfcnt)(struct v3d_screen *screen,
+                                        unsigned index,
+                                        struct pipe_driver_query_info *info);
+struct pipe_query *v3dX(create_batch_query_perfcnt)(struct v3d_context *v3d,
+                                                    unsigned num_queries,
+                                                    unsigned *query_types);

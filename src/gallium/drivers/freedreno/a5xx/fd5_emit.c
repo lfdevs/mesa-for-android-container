@@ -174,10 +174,10 @@ struct PACKED bcolor_entry {
 
    uint16_t
       srgb[4]; /* appears to duplicate fp16[], but clamped, used for srgb */
-   uint8_t __pad1[24];
+   uint8_t __pad1[56];
 };
 
-#define FD5_BORDER_COLOR_SIZE 0x60
+#define FD5_BORDER_COLOR_SIZE 0x80
 #define FD5_BORDER_COLOR_UPLOAD_SIZE                                           \
    (2 * PIPE_MAX_SAMPLERS * FD5_BORDER_COLOR_SIZE)
 
@@ -419,6 +419,9 @@ emit_ssbos(struct fd_context *ctx, struct fd_ringbuffer *ring,
 {
    unsigned count = util_last_bit(so->enabled_mask);
 
+   if (count == 0)
+      return;
+
    OUT_PKT7(ring, CP_LOAD_STATE4, 3 + 2 * count);
    OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
                      CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
@@ -483,7 +486,7 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
          OUT_PKT4(ring, REG_A5XX_VFD_FETCH(j), 4);
          OUT_RELOC(ring, rsc->bo, off, 0, 0);
          OUT_RING(ring, size);       /* VFD_FETCH[j].SIZE */
-         OUT_RING(ring, vb->stride); /* VFD_FETCH[j].STRIDE */
+         OUT_RING(ring, elem->src_stride); /* VFD_FETCH[j].STRIDE */
 
          OUT_PKT4(ring, REG_A5XX_VFD_DECODE(j), 2);
          OUT_RING(

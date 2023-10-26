@@ -79,11 +79,8 @@ enum {
    lp_build_struct_get2(_variant->gallivm, _variant->context_type, _ptr, DRAW_VS_JIT_CTX_VIEWPORT, "viewports")
 
 
-#define draw_jit_vbuffer_stride(_gallivm, _type, _ptr)         \
-   lp_build_struct_get2(_gallivm, _type, _ptr, 0, "stride")
-
 #define draw_jit_vbuffer_offset(_gallivm, _type, _ptr)         \
-   lp_build_struct_get2(_gallivm, _type, _ptr, 2, "buffer_offset")
+   lp_build_struct_get2(_gallivm, _type, _ptr, 1, "buffer_offset")
 
 enum {
    DRAW_JIT_DVBUFFER_MAP = 0,

@@ -147,7 +147,7 @@ Intel
 ^^^^^
 
 The Intel PPS driver needs root access to read system-wide
-`RenderBasic <https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/gpu-metrics-reference.html>`__
+`RenderBasic <https://www.intel.com/content/www/us/en/docs/vtune-profiler/user-guide/2023-0/gpu-metrics-reference.html>`__
 performance counters, so you can simply run it with sudo:
 
 .. code-block:: console

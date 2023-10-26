@@ -46,7 +46,7 @@ radv_is_cache_disabled(struct radv_device *device)
 }
 
 void
-radv_hash_shaders(unsigned char *hash, const struct radv_pipeline_stage *stages, uint32_t stage_count,
+radv_hash_shaders(unsigned char *hash, const struct radv_shader_stage *stages, uint32_t stage_count,
                   const struct radv_pipeline_layout *layout, const struct radv_pipeline_key *key, uint32_t flags)
 {
    struct mesa_sha1 ctx;
@@ -111,13 +111,13 @@ radv_hash_rt_shaders(unsigned char *hash, const VkRayTracingPipelineCreateInfoKH
       }
    }
 
-   const uint32_t pipeline_flags =
-      pCreateInfo->flags &
-      (VK_PIPELINE_CREATE_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR | VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR |
-       VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_MISS_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_INTERSECTION_SHADERS_BIT_KHR | VK_PIPELINE_CREATE_LIBRARY_BIT_KHR);
+   const uint64_t pipeline_flags =
+      radv_get_pipeline_create_flags(pCreateInfo) &
+      (VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR | VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_AABBS_BIT_KHR |
+       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR |
+       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR |
+       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_MISS_SHADERS_BIT_KHR |
+       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_INTERSECTION_SHADERS_BIT_KHR | VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR);
    _mesa_sha1_update(&ctx, &pipeline_flags, 4);
 
    _mesa_sha1_update(&ctx, &flags, 4);
@@ -473,7 +473,7 @@ radv_ray_tracing_pipeline_cache_search(struct radv_device *device, struct vk_pip
 
    struct radv_pipeline_cache_object *pipeline_obj = container_of(object, struct radv_pipeline_cache_object, base);
 
-   bool is_library = pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+   bool is_library = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR;
    bool complete = true;
    unsigned idx = 0;
 
@@ -481,11 +481,12 @@ radv_ray_tracing_pipeline_cache_search(struct radv_device *device, struct vk_pip
       pipeline->base.base.shaders[MESA_SHADER_INTERSECTION] = radv_shader_ref(pipeline_obj->shaders[idx++]);
 
    for (unsigned i = 0; i < pCreateInfo->stageCount; i++) {
-      if (radv_ray_tracing_stage_is_compiled(&pipeline->stages[i])) {
+      if (radv_ray_tracing_stage_is_compiled(&pipeline->stages[i]))
          pipeline->stages[i].shader = &radv_shader_ref(pipeline_obj->shaders[idx++])->base;
-      } else if (is_library) {
-         pipeline->stages[i].shader = radv_pipeline_cache_search_nir(device, cache, pipeline->stages[i].sha1);
-         complete &= pipeline->stages[i].shader != NULL;
+
+      if (is_library) {
+         pipeline->stages[i].nir = radv_pipeline_cache_search_nir(device, cache, pipeline->stages[i].sha1);
+         complete &= pipeline->stages[i].nir != NULL;
       }
    }
 

@@ -41,7 +41,7 @@
 
 static void
 svga_set_vertex_buffers(struct pipe_context *pipe,
-                        unsigned start_slot, unsigned count,
+                        unsigned count,
                         unsigned unbind_num_trailing_slots,
                         bool take_ownership,
                         const struct pipe_vertex_buffer *buffers)
@@ -50,7 +50,7 @@ svga_set_vertex_buffers(struct pipe_context *pipe,
 
    util_set_vertex_buffers_count(svga->curr.vb,
                                  &svga->curr.num_vertex_buffers,
-                                 buffers, start_slot, count,
+                                 buffers, count,
                                  unbind_num_trailing_slots,
                                  take_ownership);
 
@@ -261,6 +261,8 @@ svga_create_vertex_elements_state(struct pipe_context *pipe,
       else {
          translate_vertex_decls(svga, velems);
       }
+      for (unsigned i = 0; i < count; i++)
+         velems->strides[attribs[i].vertex_buffer_index] = attribs[i].src_stride;
    }
 
    svga->hud.num_vertexelement_objects++;

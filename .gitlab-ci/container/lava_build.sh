@@ -35,20 +35,20 @@ if [[ "$DEBIAN_ARCH" = "arm64" ]]; then
     KERNEL_ARCH="arm64"
     SKQP_ARCH="arm64"
     DEFCONFIG="arch/arm64/configs/defconfig"
-    DEVICE_TREES="arch/arm64/boot/dts/rockchip/rk3399-gru-kevin.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-g12b-a311d-khadas-vim3.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxl-s805x-libretech-ac.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxm-khadas-vim2.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/allwinner/sun50i-h6-pine-h64.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/freescale/imx8mq-nitrogen.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8192-asurada-spherion-r0.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-juniper-sku16.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/nvidia/tegra210-p3450-0000.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8016-sbc.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8096-db820c.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-kingoftown-r1.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sm8350-hdk.dtb"
+    DEVICE_TREES="rk3399-gru-kevin.dtb"
+    DEVICE_TREES+=" meson-g12b-a311d-khadas-vim3.dtb"
+    DEVICE_TREES+=" meson-gxl-s805x-libretech-ac.dtb"
+    DEVICE_TREES+=" meson-gxm-khadas-vim2.dtb"
+    DEVICE_TREES+=" sun50i-h6-pine-h64.dtb"
+    DEVICE_TREES+=" imx8mq-nitrogen.dtb"
+    DEVICE_TREES+=" mt8192-asurada-spherion-r0.dtb"
+    DEVICE_TREES+=" mt8183-kukui-jacuzzi-juniper-sku16.dtb"
+    DEVICE_TREES+=" tegra210-p3450-0000.dtb"
+    DEVICE_TREES+=" apq8016-sbc.dtb"
+    DEVICE_TREES+=" apq8096-db820c.dtb"
+    DEVICE_TREES+=" sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
+    DEVICE_TREES+=" sc7180-trogdor-kingoftown.dtb"
+    DEVICE_TREES+=" sm8350-hdk.dtb"
     KERNEL_IMAGE_NAME="Image"
 
 elif [[ "$DEBIAN_ARCH" = "armhf" ]]; then
@@ -56,10 +56,10 @@ elif [[ "$DEBIAN_ARCH" = "armhf" ]]; then
     KERNEL_ARCH="arm"
     SKQP_ARCH="arm"
     DEFCONFIG="arch/arm/configs/multi_v7_defconfig"
-    DEVICE_TREES="arch/arm/boot/dts/rk3288-veyron-jaq.dtb"
-    DEVICE_TREES+=" arch/arm/boot/dts/sun8i-h3-libretech-all-h3-cc.dtb"
-    DEVICE_TREES+=" arch/arm/boot/dts/imx6q-cubox-i.dtb"
-    DEVICE_TREES+=" arch/arm/boot/dts/tegra124-jetson-tk1.dtb"
+    DEVICE_TREES="rk3288-veyron-jaq.dtb"
+    DEVICE_TREES+=" sun8i-h3-libretech-all-h3-cc.dtb"
+    DEVICE_TREES+=" imx6q-cubox-i.dtb"
+    DEVICE_TREES+=" tegra124-jetson-tk1.dtb"
     KERNEL_IMAGE_NAME="zImage"
     . .gitlab-ci/container/create-cross-file.sh armhf
 else
@@ -92,6 +92,7 @@ fi
 apt-get update
 apt-get install -y --no-remove \
 		   -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \
+                   ${EXTRA_LOCAL_PACKAGES} \
                    ${ARCH_PACKAGES} \
                    automake \
                    bc \
@@ -129,6 +130,7 @@ apt-get install -y --no-remove \
                    python3-mako \
                    python3-numpy \
                    python3-serial \
+                   python3-venv \
                    unzip \
                    zstd
 
@@ -212,6 +214,9 @@ mmdebstrap \
     "$ROOTFS/" \
     "http://deb.debian.org/debian"
 
+############### Install mold
+. .gitlab-ci/container/build-mold.sh
+
 ############### Setuping
 if [ "$DEBIAN_ARCH" = "amd64" ]; then
   . .gitlab-ci/container/setup-wine.sh "/dxvk-wine64"
@@ -290,6 +295,12 @@ if [[ ${DEBIAN_ARCH} = "amd64" ]]; then
     mv /usr/local/libexec/virgl* $ROOTFS/usr/local/libexec/
 fi
 
+############### Build ci-kdl
+section_start kdl "Prepare a venv for kdl"
+. .gitlab-ci/container/build-kdl.sh
+mv ci-kdl.venv $ROOTFS
+section_end kdl
+
 ############### Build local stuff for use by igt and kernel testing, which
 ############### will reuse most of our container build process from a specific
 ############### hash of the Mesa tree.
@@ -323,25 +334,16 @@ if [ "${DEBIAN_ARCH}" = "arm64" ]; then
     KERNEL_IMAGE_NAME+=" Image.gz"
 fi
 
+ROOTFSTAR="lava-rootfs.tar.zst"
 du -ah "$ROOTFS" | sort -h | tail -100
 pushd $ROOTFS
-  tar --zstd -cf /lava-files/lava-rootfs.tar.zst .
+  tar --zstd -cf /lava-files/${ROOTFSTAR} .
 popd
 
 . .gitlab-ci/container/container_post_build.sh
 
-############### Upload the files!
-FILES_TO_UPLOAD="lava-rootfs.tar.zst \
-                 $KERNEL_IMAGE_NAME"
-
-if [[ -n $DEVICE_TREES ]]; then
-    FILES_TO_UPLOAD="$FILES_TO_UPLOAD $(basename -a $DEVICE_TREES)"
-fi
-
-for f in $FILES_TO_UPLOAD; do
-    ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/$f \
-             https://${S3_PATH}/$f
-done
+ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/"${ROOTFSTAR}" \
+      https://${S3_PATH}/"${ROOTFSTAR}"
 
 touch /lava-files/done
 ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/done https://${S3_PATH}/done

@@ -139,13 +139,13 @@ batch_draw_tracking_for_dirty_bits(struct fd_batch *batch) assert_dt
          /* Mark constbuf as being read: */
          if (dirty_shader & FD_DIRTY_SHADER_CONST) {
             u_foreach_bit (i, ctx->constbuf[s].enabled_mask)
-                  resource_read(batch, ctx->constbuf[s].cb[i].buffer);
+               resource_read(batch, ctx->constbuf[s].cb[i].buffer);
          }
 
          /* Mark textures as being read */
          if (dirty_shader & FD_DIRTY_SHADER_TEX) {
             u_foreach_bit (i, ctx->tex[s].valid_textures)
-                  resource_read(batch, ctx->tex[s].textures[i]->texture);
+               resource_read(batch, ctx->tex[s].textures[i]->texture);
          }
 
          /* Mark SSBOs as being read or written: */
@@ -182,9 +182,15 @@ batch_draw_tracking_for_dirty_bits(struct fd_batch *batch) assert_dt
 
    /* Mark streamout buffers as being written.. */
    if (dirty & FD_DIRTY_STREAMOUT) {
-      for (unsigned i = 0; i < ctx->streamout.num_targets; i++)
-         if (ctx->streamout.targets[i])
-            resource_written(batch, ctx->streamout.targets[i]->buffer);
+      for (unsigned i = 0; i < ctx->streamout.num_targets; i++) {
+         struct fd_stream_output_target *target =
+            fd_stream_output_target(ctx->streamout.targets[i]);
+
+         if (target) {
+            resource_written(batch, target->base.buffer);
+            resource_written(batch, target->offset_buf);
+         }
+      }
    }
 
    if (dirty & FD_DIRTY_QUERY) {
@@ -215,6 +221,9 @@ needs_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
    if (indirect) {
       if (indirect->buffer && !batch_references_resource(batch, indirect->buffer))
          return true;
+      if (indirect->indirect_draw_count &&
+          !batch_references_resource(batch, indirect->indirect_draw_count))
+         return true;
       if (indirect->count_from_stream_output)
          return true;
    }
@@ -228,13 +237,8 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
 {
    struct fd_context *ctx = batch->ctx;
 
-   /* NOTE: needs to be before resource_written(batch->query_buf), otherwise
-    * query_buf may not be created yet.
-    */
-   fd_batch_update_queries(batch);
-
    if (!needs_draw_tracking(batch, info, indirect))
-      return;
+      goto out;
 
    /*
     * Figure out the buffers/features we need:
@@ -251,8 +255,8 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
 
    /* Mark indirect draw buffer as being read */
    if (indirect) {
-      if (indirect->buffer)
-         resource_read(batch, indirect->buffer);
+      resource_read(batch, indirect->buffer);
+      resource_read(batch, indirect->indirect_draw_count);
       if (indirect->count_from_stream_output)
          resource_read(
             batch, fd_stream_output_target(indirect->count_from_stream_output)
@@ -262,6 +266,9 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
    resource_written(batch, batch->query_buf);
 
    fd_screen_unlock(ctx->screen);
+
+out:
+   fd_batch_update_queries(batch);
 }
 
 static void
@@ -579,11 +586,6 @@ fd_launch_grid(struct pipe_context *pctx,
    fd_batch_reference(&save_batch, ctx->batch);
    fd_batch_reference(&ctx->batch, batch);
 
-   /* NOTE: needs to be before resource_written(batch->query_buf), otherwise
-    * query_buf may not be created yet.
-    */
-   fd_batch_update_queries(batch);
-
    fd_screen_lock(ctx->screen);
 
    /* Mark SSBOs */
@@ -629,6 +631,8 @@ fd_launch_grid(struct pipe_context *pctx,
       fd_batch_reference_locked(&save_batch, NULL);
 
    fd_screen_unlock(ctx->screen);
+
+   fd_batch_update_queries(batch);
 
    DBG("%p: work_dim=%u, block=%ux%ux%u, grid=%ux%ux%u",
        batch, info->work_dim,

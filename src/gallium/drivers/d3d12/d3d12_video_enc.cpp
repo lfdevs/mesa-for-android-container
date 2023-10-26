@@ -32,7 +32,7 @@
 #include "d3d12_video_enc.h"
 #include "d3d12_video_enc_h264.h"
 #include "d3d12_video_enc_hevc.h"
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
 #include "d3d12_video_enc_av1.h"
 #endif
 #include "d3d12_video_buffer.h"
@@ -40,7 +40,7 @@
 #include "d3d12_video_array_of_textures_dpb_manager.h"
 #include "d3d12_video_encoder_references_manager_h264.h"
 #include "d3d12_video_encoder_references_manager_hevc.h"
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
 #include "d3d12_video_encoder_references_manager_av1.h"
 #endif
 #include "d3d12_residency.h"
@@ -271,7 +271,7 @@ d3d12_video_encoder_update_picparams_tracking(struct d3d12_video_encoder *pD3D12
       {
          d3d12_video_encoder_update_current_frame_pic_params_info_hevc(pD3D12Enc, srcTexture, picture, currentPicParams, bUsedAsReference);
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          d3d12_video_encoder_update_current_frame_pic_params_info_av1(pD3D12Enc, srcTexture, picture, currentPicParams, bUsedAsReference);
@@ -531,7 +531,7 @@ d3d12_video_encoder_create_reference_picture_manager(struct d3d12_video_encoder 
 
          pD3D12Enc->m_upBitstreamBuilder = std::make_unique<d3d12_video_bitstream_builder_hevc>();
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          bool hasInterFrames =
@@ -584,7 +584,7 @@ d3d12_video_encoder_get_current_slice_param_settings(struct d3d12_video_encoder 
          }
          return subregionData;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA subregionData = {};
@@ -624,7 +624,7 @@ d3d12_video_encoder_get_current_picture_param_settings(struct d3d12_video_encode
          curPicParamsData.DataSize     = sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderPicParamsDesc.m_HEVCPicData);
          return curPicParamsData;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curPicParamsData = {};
@@ -648,56 +648,91 @@ d3d12_video_encoder_get_current_rate_control_settings(struct d3d12_video_encoder
    curRateControlDesc.Flags           = pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags;
    curRateControlDesc.TargetFrameRate = pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_FrameRate;
 
-   switch (pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Mode) {
-      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_ABSOLUTE_QP_MAP:
-      {
-         curRateControlDesc.ConfigParams.pConfiguration_CQP = nullptr;
-         curRateControlDesc.ConfigParams.DataSize           = 0;
-      } break;
-      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP:
-      {
-         curRateControlDesc.ConfigParams.pConfiguration_CQP =
-            &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP;
-         curRateControlDesc.ConfigParams.DataSize =
-            sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP);
-      } break;
-      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CBR:
-      {
-         curRateControlDesc.ConfigParams.pConfiguration_CBR =
-            &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR;
-         curRateControlDesc.ConfigParams.DataSize =
-            sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR);
-      } break;
-      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_VBR:
-      {
-         curRateControlDesc.ConfigParams.pConfiguration_VBR =
-            &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR;
-         curRateControlDesc.ConfigParams.DataSize =
-            sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR);
-      } break;
-      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
-      {
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-         if ((curRateControlDesc.Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT) != 0)
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+   if ((curRateControlDesc.Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT) != 0)
+   {
+      switch (pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Mode) {
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_ABSOLUTE_QP_MAP:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CQP1 = nullptr;
+            curRateControlDesc.ConfigParams.DataSize           = 0;
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CQP1 =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP1;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP1);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CBR:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CBR1 =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR1;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR1);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_VBR:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_VBR1 =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR1;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR1);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
          {
             curRateControlDesc.ConfigParams.pConfiguration_QVBR1 =
                &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1;
             curRateControlDesc.ConfigParams.DataSize =
                sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1);
-         }
-         else
+         } break;
+         default:
+         {
+            unreachable("Unsupported D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE");
+         } break;
+      }
+   }
+   else 
 #endif
+   {
+      switch (pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Mode) {
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_ABSOLUTE_QP_MAP:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CQP = nullptr;
+            curRateControlDesc.ConfigParams.DataSize           = 0;
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CQP =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CQP);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CBR:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_CBR =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_VBR:
+         {
+            curRateControlDesc.ConfigParams.pConfiguration_VBR =
+               &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR;
+            curRateControlDesc.ConfigParams.DataSize =
+               sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR);
+         } break;
+         case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
          {
             curRateControlDesc.ConfigParams.pConfiguration_QVBR =
                &pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR;
             curRateControlDesc.ConfigParams.DataSize =
                sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR);
-         }
-      } break;
-      default:
-      {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE");
-      } break;
+         } break;
+         default:
+         {
+            unreachable("Unsupported D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE");
+         } break;
+      }
    }
 
    return curRateControlDesc;
@@ -723,7 +758,7 @@ d3d12_video_encoder_get_current_level_desc(struct d3d12_video_encoder *pD3D12Enc
          curLevelDesc.DataSize = sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderLevelDesc.m_HEVCLevelSetting);
          return curLevelDesc;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711      
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_LEVEL_SETTING curLevelDesc = {};
@@ -795,7 +830,7 @@ d3d12_video_encoder_get_current_gop_desc(struct d3d12_video_encoder *pD3D12Enc)
          return curGOPDesc;
       } break;
 
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_SEQUENCE_GOP_STRUCTURE curGOPDesc = {};
@@ -835,7 +870,7 @@ d3d12_video_encoder_get_current_codec_config_desc(struct d3d12_video_encoder *pD
          return codecConfigDesc;
       } break;
 
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION codecConfigDesc = {};
@@ -865,7 +900,7 @@ d3d12_video_encoder_get_current_codec(struct d3d12_video_encoder *pD3D12Enc)
       {
          return D3D12_VIDEO_ENCODER_CODEC_HEVC;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          return D3D12_VIDEO_ENCODER_CODEC_AV1;
@@ -893,14 +928,11 @@ d3d12_video_encoder_disable_rc_vbv_sizes(struct D3D12EncodeRateControlState & rc
          rcState.m_Config.m_Configuration_VBR.VBVCapacity = 0;
          rcState.m_Config.m_Configuration_VBR.InitialVBVFullness = 0;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
       {
-         if ((rcState.m_Flags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_EXTENDED_QVBR1_SUPPORT) != 0)
-         {
-            rcState.m_Config.m_Configuration_QVBR1.VBVCapacity = 0;
-            rcState.m_Config.m_Configuration_QVBR1.InitialVBVFullness = 0;
-         } // No VBV Sizes in legacy QVBR
+         rcState.m_Config.m_Configuration_QVBR1.VBVCapacity = 0;
+         rcState.m_Config.m_Configuration_QVBR1.InitialVBVFullness = 0;
       } break;
 #endif
       default:
@@ -925,15 +957,7 @@ d3d12_video_encoder_disable_rc_maxframesize(struct D3D12EncodeRateControlState &
       } break;
       case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
       {
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-         if ((rcState.m_Flags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_EXTENDED_QVBR1_SUPPORT) != 0)
-         {
-            rcState.m_Config.m_Configuration_QVBR1.MaxFrameBitSize = 0;
-         } else
-#endif
-         {
-            rcState.m_Config.m_Configuration_QVBR.MaxFrameBitSize = 0;
-         }
+         rcState.m_Config.m_Configuration_QVBR.MaxFrameBitSize = 0;
       } break;
       default:
       {
@@ -941,6 +965,59 @@ d3d12_video_encoder_disable_rc_maxframesize(struct D3D12EncodeRateControlState &
       } break;
    }
 }
+
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+static bool
+d3d12_video_encoder_is_qualitylevel_in_range(struct D3D12EncodeRateControlState & rcState, UINT MaxQualityVsSpeed)
+{
+   switch (rcState.m_Mode) {
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP:
+      {
+         return rcState.m_Config.m_Configuration_CQP1.QualityVsSpeed <= MaxQualityVsSpeed;
+      } break;
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CBR:
+      {
+         return rcState.m_Config.m_Configuration_CBR1.QualityVsSpeed <= MaxQualityVsSpeed;
+      } break;
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_VBR:
+      {
+         return rcState.m_Config.m_Configuration_VBR1.QualityVsSpeed <= MaxQualityVsSpeed;
+      } break;
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
+      {
+         return rcState.m_Config.m_Configuration_QVBR1.QualityVsSpeed <= MaxQualityVsSpeed;
+      } break;
+      default:
+      {
+         unreachable("Unsupported D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE");
+      } break;
+   }
+}
+
+static void
+d3d12_video_encoder_disable_rc_qualitylevels(struct D3D12EncodeRateControlState & rcState)
+{
+   rcState.m_Flags &= ~D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+   switch (rcState.m_Mode) {
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CBR:
+      {
+         rcState.m_Config.m_Configuration_CBR1.QualityVsSpeed = 0;
+      } break;
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_VBR:
+      {
+         rcState.m_Config.m_Configuration_VBR1.QualityVsSpeed = 0;
+      } break;
+      case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
+      {
+         rcState.m_Config.m_Configuration_QVBR1.QualityVsSpeed = 0;
+      } break;
+      default:
+      {
+         unreachable("Unsupported D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE");
+      } break;
+   }
+}
+#endif
 
 static void
 d3d12_video_encoder_disable_rc_minmaxqp(struct D3D12EncodeRateControlState & rcState)
@@ -959,17 +1036,8 @@ d3d12_video_encoder_disable_rc_minmaxqp(struct D3D12EncodeRateControlState & rcS
       } break;
       case D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR:
       {
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-         if ((rcState.m_Flags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_EXTENDED_QVBR1_SUPPORT) != 0)
-         {
-            rcState.m_Config.m_Configuration_QVBR1.MinQP = 0;
-            rcState.m_Config.m_Configuration_QVBR1.MaxQP = 0;
-         } else 
-#endif
-         {
-            rcState.m_Config.m_Configuration_QVBR.MinQP = 0;
-            rcState.m_Config.m_Configuration_QVBR.MaxQP = 0;
-         }
+         rcState.m_Config.m_Configuration_QVBR.MinQP = 0;
+         rcState.m_Config.m_Configuration_QVBR.MaxQP = 0;
       } break;
       default:
       {
@@ -978,21 +1046,15 @@ d3d12_video_encoder_disable_rc_minmaxqp(struct D3D12EncodeRateControlState & rcS
    }
 }
 
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
 static void
-d3d12_video_encoder_disable_rc_qvbr1_extended_to_qvbr_legacy(struct D3D12EncodeRateControlState & rcState)
+d3d12_video_encoder_disable_rc_extended1_to_legacy(struct D3D12EncodeRateControlState & rcState)
 {
-   rcState.m_Flags &= ~D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT;
-   // rcState.m_Configuration_QVBR and m_Configuration_QVBR1 are unions, need tmp storage memory
-   D3D12_VIDEO_ENCODER_RATE_CONTROL_QVBR legacyConf = {};
-   legacyConf.InitialQP = rcState.m_Config.m_Configuration_QVBR1.InitialQP;
-   legacyConf.MinQP = rcState.m_Config.m_Configuration_QVBR1.MinQP;
-   legacyConf.MaxQP = rcState.m_Config.m_Configuration_QVBR1.MaxQP;
-   legacyConf.MaxFrameBitSize = rcState.m_Config.m_Configuration_QVBR1.MaxFrameBitSize;
-   legacyConf.TargetAvgBitRate = rcState.m_Config.m_Configuration_QVBR1.TargetAvgBitRate;
-   legacyConf.PeakBitRate = rcState.m_Config.m_Configuration_QVBR1.PeakBitRate;
-   legacyConf.ConstantQualityTarget = rcState.m_Config.m_Configuration_QVBR1.ConstantQualityTarget;
-   rcState.m_Config.m_Configuration_QVBR = legacyConf;
+   rcState.m_Flags &= ~D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT;
+   // Also remove features that require extension1 enabled (eg. quality levels)
+   rcState.m_Flags &= ~D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED;
+   // rcState.m_Configuration_XXX and m_Configuration_XXX1 are unions, can be aliased
+   // as the m_Configuration_XXX1 extensions are binary backcompat with m_Configuration_XXX
 }
 #endif
 
@@ -1014,11 +1076,11 @@ bool d3d12_video_encoder_negotiate_requested_features_and_d3d12_driver_caps(stru
                         && (capEncoderSupportData1.ValidationFlags == D3D12_VIDEO_ENCODER_VALIDATION_FLAG_NONE));
 
    ///
-   /// If rate control config is not supported, try falling back and check for caps again
+   /// If D3D12_FEATURE_VIDEO_ENCODER_SUPPORT is not supported, try falling back to unsetting optional features and check for caps again
    ///   
 
-   if ((capEncoderSupportData1.ValidationFlags & (D3D12_VIDEO_ENCODER_VALIDATION_FLAG_RATE_CONTROL_CONFIGURATION_NOT_SUPPORTED | D3D12_VIDEO_ENCODER_VALIDATION_FLAG_RATE_CONTROL_MODE_NOT_SUPPORTED)) != 0) {
-      debug_printf("[d3d12_video_encoder] WARNING: Requested rate control is not supported, trying fallback to unsetting optional features\n");
+   if (!configSupported) {
+      debug_printf("[d3d12_video_encoder] WARNING: D3D12_FEATURE_VIDEO_ENCODER_SUPPORT is not supported, trying fallback to unsetting optional features\n");
 
       bool isRequestingVBVSizesSupported = ((capEncoderSupportData1.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_VBV_SIZE_CONFIG_AVAILABLE) != 0);
       bool isClientRequestingVBVSizes = ((pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES) != 0);
@@ -1044,13 +1106,31 @@ bool d3d12_video_encoder_negotiate_requested_features_and_d3d12_driver_caps(stru
          d3d12_video_encoder_disable_rc_minmaxqp(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc);
       }
 
-#if D3D12_PREVIEW_SDK_VERSION >= 711
-      bool isRequestingExtendedQVBRSupported = ((capEncoderSupportData1.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_EXTENDED_QVBR1_SUPPORT) != 0);
-      bool isClientRequestingExtendedQVBR = ((pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT) != 0);
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+      bool isRequestingExtended1RCSupported = ((capEncoderSupportData1.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_EXTENSION1_SUPPORT) != 0);
+      bool isClientRequestingExtended1RC = ((pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT) != 0);
 
-      if(isClientRequestingExtendedQVBR && !isRequestingExtendedQVBRSupported) {
-         debug_printf("[d3d12_video_encoder] WARNING: Requested D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT but the feature is not supported, will continue encoding unsetting this feature as fallback.\n");
-         d3d12_video_encoder_disable_rc_qvbr1_extended_to_qvbr_legacy(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc);
+      if(isClientRequestingExtended1RC && !isRequestingExtended1RCSupported) {
+         debug_printf("[d3d12_video_encoder] WARNING: Requested D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT but the feature is not supported, will continue encoding unsetting this feature and dependent features as fallback.\n");
+         d3d12_video_encoder_disable_rc_extended1_to_legacy(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc);
+      }
+
+      /* d3d12_video_encoder_disable_rc_extended1_to_legacy may change m_Flags */
+      if ((pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT) != 0)
+      { // Quality levels also requires D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENSION1_SUPPORT
+         bool isRequestingQualityLevelsSupported = ((capEncoderSupportData1.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_QUALITY_VS_SPEED_AVAILABLE) != 0);
+         bool isClientRequestingQualityLevels = ((pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags & D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED) != 0);
+
+         if (isClientRequestingQualityLevels)
+         {
+            if (!isRequestingQualityLevelsSupported) {
+               debug_printf("[d3d12_video_encoder] WARNING: Requested D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED but the feature is not supported, will continue encoding unsetting this feature as fallback.\n");
+               d3d12_video_encoder_disable_rc_qualitylevels(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc);
+            } else if (!d3d12_video_encoder_is_qualitylevel_in_range(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc, capEncoderSupportData1.MaxQualityVsSpeed)) {
+               debug_printf("[d3d12_video_encoder] WARNING: Requested D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QUALITY_VS_SPEED but the value is out of supported range, will continue encoding unsetting this feature as fallback.\n");
+               d3d12_video_encoder_disable_rc_qualitylevels(pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc);
+            }
+         }
       }
 #endif
 
@@ -1147,7 +1227,7 @@ bool d3d12_video_encoder_query_d3d12_driver_caps(struct d3d12_video_encoder *pD3
             sizeof(pD3D12Enc->m_currentEncodeCapabilities.m_encoderLevelSuggestedDesc.m_HEVCLevelSetting);
       } break;
 
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          capEncoderSupportData1.SuggestedProfile.pAV1Profile =
@@ -1170,7 +1250,7 @@ bool d3d12_video_encoder_query_d3d12_driver_caps(struct d3d12_video_encoder *pD3
    capEncoderSupportData1.pResolutionDependentSupport =
       &pD3D12Enc->m_currentEncodeCapabilities.m_currentResolutionSupportCaps;
    
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
    capEncoderSupportData1.SubregionFrameEncodingData = d3d12_video_encoder_get_current_slice_param_settings(pD3D12Enc);
 #endif
    HRESULT hr = pD3D12Enc->m_spD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_SUPPORT1,
@@ -1234,7 +1314,7 @@ d3d12_video_encoder_get_current_profile_desc(struct d3d12_video_encoder *pD3D12E
          curProfDesc.DataSize     = sizeof(pD3D12Enc->m_currentEncodeConfig.m_encoderProfileDesc.m_HEVCProfile);
          return curProfDesc;
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          D3D12_VIDEO_ENCODER_PROFILE_DESC curProfDesc = {};
@@ -1272,7 +1352,7 @@ d3d12_video_encoder_update_current_encoder_config_state(struct d3d12_video_encod
       {
          return d3d12_video_encoder_update_current_encoder_config_state_hevc(pD3D12Enc, srcTexture, picture);
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          return d3d12_video_encoder_update_current_encoder_config_state_av1(pD3D12Enc, srcTexture, picture);
@@ -1388,6 +1468,11 @@ d3d12_video_encoder_create_encoder(struct pipe_context *context, const struct pi
                       "d3d12_video_encoder_create_command_objects\n");
       goto failed;
    }
+
+   // Cache quality levels cap
+   pD3D12Enc->max_quality_levels = context->screen->get_video_param(context->screen, codec->profile,
+                                    codec->entrypoint,
+                                    PIPE_VIDEO_CAP_ENC_QUALITY_LEVEL);
 
    return &pD3D12Enc->base;
 
@@ -1566,7 +1651,7 @@ d3d12_video_encoder_calculate_metadata_resolved_buffer_size(enum pipe_video_form
       case PIPE_VIDEO_FORMAT_MPEG4_AVC:
       case PIPE_VIDEO_FORMAT_HEVC:
          break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          size_t extra_av1_size = d3d12_video_encoder_calculate_metadata_resolved_buffer_size_av1(maxSliceNumber);
@@ -2111,7 +2196,7 @@ d3d12_video_encoder_build_post_encode_codec_bitstream(struct d3d12_video_encoder
       {
          return 0;
       } break; // Do not need post encode values in headers
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          return d3d12_video_encoder_build_post_encode_codec_bitstream_av1(
@@ -2240,7 +2325,7 @@ d3d12_video_encoder_store_current_picture_references(d3d12_video_encoder *pD3D12
       {
          // Not needed (not post encode headers)
       } break;
-#if D3D12_PREVIEW_SDK_VERSION >= 711
+#if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
       case PIPE_VIDEO_FORMAT_AV1:
       {
          d3d12_video_encoder_store_current_picture_references_av1(pD3D12Enc, current_metadata_slot);

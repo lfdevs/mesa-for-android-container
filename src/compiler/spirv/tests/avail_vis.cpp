@@ -79,7 +79,7 @@ TEST_F(AvailabilityVisibility, opload_vis)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
+   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_barrier, 0);
    ASSERT_NE(intrinsic, nullptr);
 
    EXPECT_EQ(nir_intrinsic_memory_semantics(intrinsic), NIR_MEMORY_MAKE_VISIBLE | NIR_MEMORY_ACQUIRE);
@@ -143,7 +143,7 @@ TEST_F(AvailabilityVisibility, opstore_avail)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
+   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_barrier, 0);
    ASSERT_NE(intrinsic, nullptr);
 
    EXPECT_EQ(nir_intrinsic_memory_semantics(intrinsic), NIR_MEMORY_MAKE_AVAILABLE | NIR_MEMORY_RELEASE);
@@ -207,8 +207,8 @@ TEST_F(AvailabilityVisibility, opcopymemory_visavail_both_combined)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *first = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
-   nir_intrinsic_instr *second = find_intrinsic(nir_intrinsic_scoped_barrier, 1);
+   nir_intrinsic_instr *first = find_intrinsic(nir_intrinsic_barrier, 0);
+   nir_intrinsic_instr *second = find_intrinsic(nir_intrinsic_barrier, 1);
    ASSERT_NE(first, nullptr);
    ASSERT_NE(second, nullptr);
 
@@ -279,8 +279,8 @@ TEST_F(AvailabilityVisibility, opcopymemory_visavail_both_separate)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *first = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
-   nir_intrinsic_instr *second = find_intrinsic(nir_intrinsic_scoped_barrier, 1);
+   nir_intrinsic_instr *first = find_intrinsic(nir_intrinsic_barrier, 0);
+   nir_intrinsic_instr *second = find_intrinsic(nir_intrinsic_barrier, 1);
    ASSERT_NE(first, nullptr);
    ASSERT_NE(second, nullptr);
 
@@ -349,7 +349,7 @@ TEST_F(AvailabilityVisibility, opcopymemory_avail)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
+   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_barrier, 0);
    ASSERT_NE(intrinsic, nullptr);
 
    EXPECT_EQ(nir_intrinsic_memory_semantics(intrinsic), NIR_MEMORY_MAKE_AVAILABLE | NIR_MEMORY_RELEASE);
@@ -412,7 +412,7 @@ TEST_F(AvailabilityVisibility, opcopymemory_vis)
 
    get_nir(sizeof(words) / sizeof(words[0]), words);
 
-   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_scoped_barrier, 0);
+   nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_barrier, 0);
    ASSERT_NE(intrinsic, nullptr);
 
    EXPECT_EQ(nir_intrinsic_memory_semantics(intrinsic), NIR_MEMORY_MAKE_VISIBLE | NIR_MEMORY_ACQUIRE);

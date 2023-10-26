@@ -17,6 +17,9 @@ dEQP-VK.spirv_assembly.instruction.compute.vector_shuffle.vector_shuffle
 # Seems to timeout occasionally
 dEQP-VK.api.object_management.max_concurrent.query_pool
 
+# not implemented
+dEQP-VK.api.copy_and_blit.core.resolve_image.*
+
 # Causes a GPU timeout
 spec@!opengl 1.1@longprim
 
@@ -46,31 +49,6 @@ spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow
 spec@arb_texture_view@sampling-2d-array-as-cubemap-array
 spec@arb_texture_view@sampling-2d-array-as-cubemap
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-invalid_attributes
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-invalid_hints
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-missing_attributes
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-unsupported_format
 spec@ext_transform_feedback@immediate-reuse-index-buffer
 spec@ext_transform_feedback@immediate-reuse-uniform-buffer
 spec@glsl-1.30@execution@tex-miplevel-selection texture() 2drect

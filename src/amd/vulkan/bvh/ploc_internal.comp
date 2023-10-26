@@ -105,7 +105,7 @@ prefix_scan(uvec4 ballot, REF(ploc_prefix_scan_partition) partitions, uint32_t t
 #define BVH_LEVEL_COST 0.2
 
 uint32_t
-push_node(uint32_t children[2])
+push_node(uint32_t children[2], radv_aabb bounds[2])
 {
    uint32_t internal_node_index = atomicAdd(DEREF(args.header).ir_internal_node_count, 1);
    uint32_t dst_offset = args.internal_node_offset + internal_node_index * SIZEOF(radv_ir_box_node);
@@ -119,16 +119,13 @@ push_node(uint32_t children[2])
    float cost = 0.0;
 
    for (uint i = 0; i < 2; ++i) {
-      if (children[i] != RADV_BVH_INVALID_NODE) {
-         VOID_REF node = OFFSET(args.bvh, ir_id_to_offset(children[i]));
-         REF(radv_ir_node) child = REF(radv_ir_node)(node);
-         radv_aabb bounds = DEREF(child).aabb;
+      VOID_REF node = OFFSET(args.bvh, ir_id_to_offset(children[i]));
+      REF(radv_ir_node) child = REF(radv_ir_node)(node);
 
-         total_bounds.min = min(total_bounds.min, bounds.min);
-         total_bounds.max = max(total_bounds.max, bounds.max);
+      total_bounds.min = min(total_bounds.min, bounds[i].min);
+      total_bounds.max = max(total_bounds.max, bounds[i].max);
 
-         cost += DEREF(child).cost;
-      }
+      cost += DEREF(child).cost;
 
       DEREF(dst_node).children[i] = children[i];
    }
@@ -244,10 +241,31 @@ main(void)
     * but sometimes all leaves might be inactive */
    if (DEREF(args.header).active_leaf_count <= 2) {
       if (gl_GlobalInvocationID.x == 0) {
-         uint32_t children[2] = {RADV_BVH_INVALID_NODE, RADV_BVH_INVALID_NODE};
-         for (uint32_t i = 0; i < DEREF(args.header).active_leaf_count; ++i)
-            children[i] = DEREF(REF(key_id_pair)(INDEX(key_id_pair, src_ids, i))).id;
-         push_node(children);
+         uint32_t internal_node_index = atomicAdd(DEREF(args.header).ir_internal_node_count, 1);
+         uint32_t dst_offset = args.internal_node_offset + internal_node_index * SIZEOF(radv_ir_box_node);
+         REF(radv_ir_box_node) dst_node = REF(radv_ir_box_node)(OFFSET(args.bvh, dst_offset));
+
+         radv_aabb total_bounds;
+         total_bounds.min = vec3(INFINITY);
+         total_bounds.max = vec3(-INFINITY);
+
+         for (uint32_t i = 0; i < DEREF(args.header).active_leaf_count; i++) {
+            uint32_t child_id = DEREF(INDEX(key_id_pair, src_ids, i)).id;
+
+            if (child_id != RADV_BVH_INVALID_NODE) {
+               VOID_REF node = OFFSET(args.bvh, ir_id_to_offset(child_id));
+               REF(radv_ir_node) child = REF(radv_ir_node)(node);
+               radv_aabb bounds = DEREF(child).aabb;
+
+               total_bounds.min = min(total_bounds.min, bounds.min);
+               total_bounds.max = max(total_bounds.max, bounds.max);
+            }
+
+            DEREF(dst_node).children[i] = child_id;
+         }
+
+         DEREF(dst_node).base.aabb = total_bounds;
+         DEREF(dst_node).bvh_offset = RADV_UNKNOWN_BVH_OFFSET;
       }
       return;
    }
@@ -357,8 +375,9 @@ main(void)
                if (task_index < neighbour_index) {
                   uint32_t neighbour_id = load_id(src_ids, iter, neighbour_index);
                   uint32_t children[2] = {id, neighbour_id};
+                  radv_aabb bounds[2] = {shared_bounds[task_index - lds_base], shared_bounds[neighbour_index - lds_base]};
 
-                  DEREF(REF(uint32_t)(INDEX(uint32_t, dst_ids, task_index))) = push_node(children);
+                  DEREF(REF(uint32_t)(INDEX(uint32_t, dst_ids, task_index))) = push_node(children, bounds);
                   DEREF(REF(uint32_t)(INDEX(uint32_t, dst_ids, neighbour_index))) =
                      RADV_BVH_INVALID_NODE;
                } else {

@@ -53,10 +53,13 @@ dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertcheckuv2
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertcheckuv2.store.single.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertuvec2.nostore.multi.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertuvec2.nostore.single.std140.vert
+dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertuvec2.store.multi.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertuvec2.store.single.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.load.nostore.multi.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.load.nostore.single.std140.vert
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.load.store.multi.std140.vert
+dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.load.store.single.std140.vert
+dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.load.store.single.std140.vert_offset_nonzero
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.baseubo.convertcheckuv2.nostore.multi.std140.comp
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.baseubo.convertcheckuv2.nostore.multi.std140.frag
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.baseubo.convertcheckuv2.nostore.multi.std140.vert
@@ -89,11 +92,14 @@ dEQP-VK.ssbo.layout.3_level_array.std140.row_major_mat4
 dEQP-VK.ssbo.layout.3_level_array.std140.row_major_mat4_comp_access
 dEQP-VK.ssbo.layout.3_level_array.std430.mat4
 dEQP-VK.ssbo.layout.3_level_array.std430.row_major_mat4
+dEQP-VK.ssbo.layout.3_level_unsized_array.std140.column_major_mat4_comp_access
 dEQP-VK.ssbo.layout.3_level_unsized_array.std140.mat4
 dEQP-VK.ssbo.layout.3_level_unsized_array.std140.row_major_mat4
 dEQP-VK.ssbo.layout.3_level_unsized_array.std140.row_major_mat4_comp_access
 dEQP-VK.ssbo.layout.3_level_unsized_array.std140.row_major_mat4_comp_access_store_cols
 dEQP-VK.ssbo.layout.3_level_unsized_array.std140.row_major_mat4_store_cols
+dEQP-VK.ssbo.layout.3_level_unsized_array.std430.column_major_mat4_comp_access
+dEQP-VK.ssbo.layout.3_level_unsized_array.std430.column_major_mat4_store_cols
 dEQP-VK.ssbo.layout.3_level_unsized_array.std430.mat4
 dEQP-VK.ssbo.layout.3_level_unsized_array.std430.row_major_mat4
 dEQP-VK.ssbo.layout.random.16bit.all_per_block_buffers.47
@@ -101,6 +107,7 @@ dEQP-VK.ssbo.layout.random.16bit.all_per_block_buffers.5
 dEQP-VK.ssbo.layout.random.16bit.all_shared_buffer.40
 dEQP-VK.ssbo.layout.random.8bit.all_per_block_buffers.5
 dEQP-VK.ssbo.layout.random.8bit.all_per_block_buffers.6
+dEQP-VK.ssbo.layout.random.8bit.nested_structs_arrays_instance_arrays.15
 dEQP-VK.ssbo.layout.random.8bit.nested_structs_arrays_instance_arrays.9
 dEQP-VK.ssbo.layout.random.all_shared_buffer.3
 dEQP-VK.ssbo.layout.random.all_shared_buffer.5

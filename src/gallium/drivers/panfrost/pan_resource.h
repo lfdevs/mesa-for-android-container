@@ -143,6 +143,9 @@ void panfrost_resource_set_damage_region(struct pipe_screen *screen,
                                          unsigned int nrects,
                                          const struct pipe_box *rects);
 
+void panfrost_set_image_view_planes(struct pan_image_view *iview,
+                                    struct pipe_resource *texture);
+
 static inline enum mali_texture_dimension
 panfrost_translate_texture_dimension(enum pipe_texture_target t)
 {
@@ -169,12 +172,29 @@ panfrost_translate_texture_dimension(enum pipe_texture_target t)
    }
 }
 
+struct pipe_resource *
+panfrost_resource_create_with_modifier(struct pipe_screen *screen,
+                                       const struct pipe_resource *template,
+                                       uint64_t modifier);
+
+struct panfrost_bo *panfrost_get_afbc_superblock_sizes(
+   struct panfrost_context *ctx, struct panfrost_resource *rsrc,
+   unsigned first_level, unsigned last_level, unsigned *out_offsets);
+
+bool panfrost_should_pack_afbc(struct panfrost_device *dev,
+                               const struct panfrost_resource *rsrc);
+
+void panfrost_pack_afbc(struct panfrost_context *ctx,
+                        struct panfrost_resource *prsrc);
+
 void pan_resource_modifier_convert(struct panfrost_context *ctx,
                                    struct panfrost_resource *rsrc,
                                    uint64_t modifier, const char *reason);
 
 void pan_legalize_afbc_format(struct panfrost_context *ctx,
                               struct panfrost_resource *rsrc,
-                              enum pipe_format format);
+                              enum pipe_format format, bool write);
+void pan_dump_resource(struct panfrost_context *ctx,
+                       struct panfrost_resource *rsc);
 
 #endif /* PAN_RESOURCE_H */

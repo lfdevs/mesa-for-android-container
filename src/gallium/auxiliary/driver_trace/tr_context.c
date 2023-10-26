@@ -41,6 +41,7 @@
 #include "tr_texture.h"
 #include "tr_context.h"
 #include "tr_util.h"
+#include "tr_video.h"
 
 
 struct trace_query
@@ -510,7 +511,7 @@ trace_context_bind_sampler_states(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "bind_sampler_states");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg_enum(shader, tr_util_pipe_shader_type_name(shader));
+   trace_dump_arg_enum(pipe_shader_type, shader);
    trace_dump_arg(uint, start);
    trace_dump_arg(uint, num_states);
    trace_dump_arg_array(ptr, states, num_states);
@@ -956,7 +957,7 @@ trace_context_set_constant_buffer(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "set_constant_buffer");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg_enum(shader, tr_util_pipe_shader_type_name(shader));
+   trace_dump_arg_enum(pipe_shader_type, shader);
    trace_dump_arg(uint, index);
    trace_dump_arg(bool, take_ownership);
    trace_dump_arg(constant_buffer, constant_buffer);
@@ -999,7 +1000,7 @@ trace_context_set_inlinable_constants(struct pipe_context *_pipe, enum pipe_shad
    trace_dump_call_begin("pipe_context", "set_inlinable_constants");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg_enum(shader, tr_util_pipe_shader_type_name(shader));
+   trace_dump_arg_enum(pipe_shader_type, shader);
    trace_dump_arg(uint, num_values);
    trace_dump_arg_array(uint, values, num_values);
 
@@ -1096,7 +1097,6 @@ trace_context_create_sampler_view(struct pipe_context *_pipe,
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
    struct pipe_sampler_view *result;
-   struct trace_sampler_view *tr_view;
 
    trace_dump_call_begin("pipe_context", "create_sampler_view");
 
@@ -1113,19 +1113,7 @@ trace_context_create_sampler_view(struct pipe_context *_pipe,
 
    trace_dump_call_end();
 
-   /*
-    * Wrap pipe_sampler_view
-    */
-   tr_view = CALLOC_STRUCT(trace_sampler_view);
-   tr_view->base = *templ;
-   tr_view->base.reference.count = 1;
-   tr_view->base.texture = NULL;
-   pipe_resource_reference(&tr_view->base.texture, resource);
-   tr_view->base.context = _pipe;
-   tr_view->sampler_view = result;
-   result->reference.count += 100000000;
-   tr_view->refcount = 100000000;
-   result = &tr_view->base;
+   result = trace_sampler_view_create(tr_ctx, resource, result);
 
    return result;
 }
@@ -1145,13 +1133,9 @@ trace_context_sampler_view_destroy(struct pipe_context *_pipe,
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(ptr, view);
 
-   p_atomic_add(&tr_view->sampler_view->reference.count, -tr_view->refcount);
-   pipe_sampler_view_reference(&tr_view->sampler_view, NULL);
+   trace_sampler_view_destroy(tr_view);
 
    trace_dump_call_end();
-
-   pipe_resource_reference(&_view->texture, NULL);
-   FREE(_view);
 }
 
 /********************************************************************
@@ -1230,21 +1214,14 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
 
    for (i = 0; i < num; ++i) {
       tr_view = trace_sampler_view(views[i]);
-      if (tr_view) {
-         tr_view->refcount--;
-         if (!tr_view->refcount) {
-            tr_view->refcount = 100000000;
-            p_atomic_add(&tr_view->sampler_view->reference.count, tr_view->refcount);
-         }
-      }
-      unwrapped_views[i] = tr_view ? tr_view->sampler_view : NULL;
+      unwrapped_views[i] = trace_sampler_view_unwrap(tr_view);
    }
    views = unwrapped_views;
 
    trace_dump_call_begin("pipe_context", "set_sampler_views");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg_enum(shader, tr_util_pipe_shader_type_name(shader));
+   trace_dump_arg_enum(pipe_shader_type, shader);
    trace_dump_arg(uint, start);
    trace_dump_arg(uint, num);
    trace_dump_arg(uint, unbind_num_trailing_slots);
@@ -1260,7 +1237,7 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
 
 static void
 trace_context_set_vertex_buffers(struct pipe_context *_pipe,
-                                 unsigned start_slot, unsigned num_buffers,
+                                 unsigned num_buffers,
                                  unsigned unbind_num_trailing_slots,
                                  bool take_ownership,
                                  const struct pipe_vertex_buffer *buffers)
@@ -1271,7 +1248,6 @@ trace_context_set_vertex_buffers(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "set_vertex_buffers");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, start_slot);
    trace_dump_arg(uint, num_buffers);
    trace_dump_arg(uint, unbind_num_trailing_slots);
    trace_dump_arg(bool, take_ownership);
@@ -1280,7 +1256,7 @@ trace_context_set_vertex_buffers(struct pipe_context *_pipe,
    trace_dump_struct_array(vertex_buffer, buffers, num_buffers);
    trace_dump_arg_end();
 
-   pipe->set_vertex_buffers(pipe, start_slot, num_buffers,
+   pipe->set_vertex_buffers(pipe, num_buffers,
                             unbind_num_trailing_slots, take_ownership,
                             buffers);
 
@@ -1626,7 +1602,7 @@ trace_context_create_fence_fd(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "create_fence_fd");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg_enum(fd, tr_util_pipe_fd_type_name(fd));
+   trace_dump_arg_enum(pipe_fd_type, fd);
    trace_dump_arg(uint, type);
 
    pipe->create_fence_fd(pipe, fence, fd, type);
@@ -1754,7 +1730,7 @@ trace_context_transfer_map(struct pipe_context *_context,
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(ptr, resource);
    trace_dump_arg(uint, level);
-   trace_dump_arg(uint, usage);
+   trace_dump_arg_enum(pipe_map_flags, usage);
    trace_dump_arg(box, box);
 
    trace_dump_arg(ptr, xfer);
@@ -1828,7 +1804,7 @@ trace_context_transfer_unmap(struct pipe_context *_context,
 
          trace_dump_arg(ptr, context);
          trace_dump_arg(ptr, resource);
-         trace_dump_arg(uint, usage);
+         trace_dump_arg_enum(pipe_map_flags, usage);
          trace_dump_arg(uint, offset);
          trace_dump_arg(uint, size);
 
@@ -1852,7 +1828,7 @@ trace_context_transfer_unmap(struct pipe_context *_context,
          trace_dump_arg(ptr, context);
          trace_dump_arg(ptr, resource);
          trace_dump_arg(uint, level);
-         trace_dump_arg(uint, usage);
+         trace_dump_arg_enum(pipe_map_flags, usage);
          trace_dump_arg(box, box);
 
          trace_dump_arg_begin("data");
@@ -1894,7 +1870,7 @@ trace_context_buffer_subdata(struct pipe_context *_context,
 
    trace_dump_arg(ptr, context);
    trace_dump_arg(ptr, resource);
-   trace_dump_arg(uint, usage);
+   trace_dump_arg_enum(pipe_map_flags, usage);
    trace_dump_arg(uint, offset);
    trace_dump_arg(uint, size);
 
@@ -1927,7 +1903,7 @@ trace_context_texture_subdata(struct pipe_context *_context,
    trace_dump_arg(ptr, context);
    trace_dump_arg(ptr, resource);
    trace_dump_arg(uint, level);
-   trace_dump_arg(uint, usage);
+   trace_dump_arg_enum(pipe_map_flags, usage);
    trace_dump_arg(box, box);
 
    trace_dump_arg_begin("data");
@@ -2095,6 +2071,79 @@ trace_context_resource_commit(struct pipe_context *_context,
    return context->resource_commit(context, resource, level, box, commit);
 }
 
+static struct pipe_video_codec *
+trace_context_create_video_codec(struct pipe_context *_context,
+                                 const struct pipe_video_codec *templat)
+{
+   struct trace_context *tr_context = trace_context(_context);
+   struct pipe_context *context = tr_context->pipe;
+   struct pipe_video_codec *result;
+
+   trace_dump_call_begin("pipe_context", "create_video_codec");
+
+   trace_dump_arg(ptr, context);
+   trace_dump_arg(video_codec_template, templat);
+
+   result = context->create_video_codec(context, templat);
+
+   trace_dump_ret(ptr, result);
+   trace_dump_call_end();
+
+   result = trace_video_codec_create(tr_context, result);
+
+   return result;
+}
+
+static struct pipe_video_buffer *
+trace_context_create_video_buffer_with_modifiers(struct pipe_context *_context,
+                                                 const struct pipe_video_buffer *templat,
+                                                 const uint64_t *modifiers,
+                                                 unsigned int modifiers_count)
+{
+   struct trace_context *tr_context = trace_context(_context);
+   struct pipe_context *context = tr_context->pipe;
+   struct pipe_video_buffer *result;
+
+   trace_dump_call_begin("pipe_screen", "create_video_buffer_with_modifiers");
+
+   trace_dump_arg(ptr, context);
+   trace_dump_arg(video_buffer_template, templat);
+   trace_dump_arg_array(uint, modifiers, modifiers_count);
+   trace_dump_arg(uint, modifiers_count);
+
+   result = context->create_video_buffer_with_modifiers(context, templat, modifiers, modifiers_count);
+
+   trace_dump_ret(ptr, result);
+   trace_dump_call_end();
+
+   result = trace_video_buffer_create(tr_context, result);
+
+   return result;
+}
+
+static struct pipe_video_buffer *
+trace_context_create_video_buffer(struct pipe_context *_context,
+                                  const struct pipe_video_buffer *templat)
+{
+   struct trace_context *tr_context = trace_context(_context);
+   struct pipe_context *context = tr_context->pipe;
+   struct pipe_video_buffer *result;
+
+   trace_dump_call_begin("pipe_screen", "create_video_buffer");
+
+   trace_dump_arg(ptr, context);
+   trace_dump_arg(video_buffer_template, templat);
+
+   result = context->create_video_buffer(context, templat);
+
+   trace_dump_ret(ptr, result);
+   trace_dump_call_end();
+
+   result = trace_video_buffer_create(tr_context, result);
+
+   return result;
+}
+
 static void
 trace_context_set_tess_state(struct pipe_context *_context,
                              const float default_outer_level[4],
@@ -2206,7 +2255,9 @@ static uint64_t trace_context_create_texture_handle(struct pipe_context *_pipe,
 
    handle = pipe->create_texture_handle(pipe, view, state);
 
-   trace_dump_ret(uint, handle);
+   uintptr_t *texture_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, texture_handle);
+
    trace_dump_call_end();
 
    return handle;
@@ -2220,7 +2271,8 @@ static void trace_context_delete_texture_handle(struct pipe_context *_pipe,
 
    trace_dump_call_begin("pipe_context", "delete_texture_handle");
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, handle);
+   uintptr_t *texture_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, texture_handle);
    trace_dump_call_end();
 
    pipe->delete_texture_handle(pipe, handle);
@@ -2235,7 +2287,8 @@ static void trace_context_make_texture_handle_resident(struct pipe_context *_pip
 
    trace_dump_call_begin("pipe_context", "make_texture_handle_resident");
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, handle);
+   uintptr_t *texture_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, texture_handle);
    trace_dump_arg(bool, resident);
    trace_dump_call_end();
 
@@ -2257,7 +2310,8 @@ static uint64_t trace_context_create_image_handle(struct pipe_context *_pipe,
 
    handle = pipe->create_image_handle(pipe, image);
 
-   trace_dump_ret(uint, handle);
+   uintptr_t *image_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, image_handle);
    trace_dump_call_end();
 
    return handle;
@@ -2271,7 +2325,8 @@ static void trace_context_delete_image_handle(struct pipe_context *_pipe,
 
    trace_dump_call_begin("pipe_context", "delete_image_handle");
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, handle);
+   uintptr_t *image_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, image_handle);
    trace_dump_call_end();
 
    pipe->delete_image_handle(pipe, handle);
@@ -2287,7 +2342,8 @@ static void trace_context_make_image_handle_resident(struct pipe_context *_pipe,
 
    trace_dump_call_begin("pipe_context", "make_image_handle_resident");
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, handle);
+   uintptr_t *image_handle = (uintptr_t*)(uintptr_t)handle;
+   trace_dump_ret(ptr, image_handle);
    trace_dump_arg(uint, access);
    trace_dump_arg(bool, resident);
    trace_dump_call_end();
@@ -2461,6 +2517,9 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(texture_barrier);
    TR_CTX_INIT(memory_barrier);
    TR_CTX_INIT(resource_commit);
+   TR_CTX_INIT(create_video_codec);
+   TR_CTX_INIT(create_video_buffer_with_modifiers);
+   TR_CTX_INIT(create_video_buffer);
    TR_CTX_INIT(set_tess_state);
    TR_CTX_INIT(set_patch_vertices);
    TR_CTX_INIT(set_shader_buffers);

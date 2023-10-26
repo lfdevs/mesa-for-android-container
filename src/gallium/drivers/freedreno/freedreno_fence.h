@@ -44,13 +44,13 @@ struct pipe_fence_handle {
     */
    struct pipe_fence_handle *last_fence;
 
-   /* fence holds a weak reference to the batch until the batch is flushed, to
+   /* fence holds a reference to the batch until the batch is flushed, to
     * accommodate PIPE_FLUSH_DEFERRED.  When the batch is actually flushed, it
     * is cleared (before the batch reference is dropped).  If we need to wait
     * on a fence, and the batch is not NULL, we need to flush it.
     *
     * Note that with u_threaded_context async flushes, if a fence is requested
-    * by the frontend, the fence is initially created without a weak reference
+    * by the frontend, the fence is initially created without a reference
     * to the batch, which is filled in later when fd_context_flush() is called
     * from the driver thread.  In this case tc_token will be non-null, in
     * which case threaded_context_flush() should be called in fd_fence_finish()

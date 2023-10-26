@@ -404,15 +404,15 @@ draw_set_viewport_states(struct draw_context *draw,
 
 void
 draw_set_vertex_buffers(struct draw_context *draw,
-                        unsigned start_slot, unsigned count,
+                        unsigned count,
                         unsigned unbind_num_trailing_slots,
                         const struct pipe_vertex_buffer *buffers)
 {
-   assert(start_slot + count <= PIPE_MAX_ATTRIBS);
+   assert(count <= PIPE_MAX_ATTRIBS);
 
    util_set_vertex_buffers_count(draw->pt.vertex_buffer,
                                  &draw->pt.nr_vertex_buffers,
-                                 buffers, start_slot, count,
+                                 buffers, count,
                                  unbind_num_trailing_slots, false);
 }
 
@@ -430,6 +430,8 @@ draw_set_vertex_elements(struct draw_context *draw,
 
    memcpy(draw->pt.vertex_element, elements, count * sizeof(elements[0]));
    draw->pt.nr_vertex_elements = count;
+   for (unsigned i = 0; i < count; i++)
+      draw->pt.vertex_strides[elements[i].vertex_buffer_index] = elements[i].src_stride;
 }
 
 

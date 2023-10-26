@@ -148,9 +148,7 @@ to_clrx_device_name(amd_gfx_level gfx_level, radeon_family family)
       case CHIP_NAVI12: return "gfx1011";
       default: return nullptr;
       }
-   case GFX10_3:
-   case GFX11: return nullptr;
-   default: unreachable("Invalid chip class!"); return nullptr;
+   default: return nullptr;
    }
 }
 
@@ -347,7 +345,7 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
    unsigned prev_size = 0;
    unsigned prev_pos = 0;
    unsigned repeat_count = 0;
-   while (pos < exec_size) {
+   while (pos <= exec_size) {
       bool new_block =
          next_block < program->blocks.size() && pos == program->blocks[next_block].offset;
       if (pos + prev_size <= exec_size && prev_pos != pos && !new_block &&
@@ -362,6 +360,10 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
       }
 
       print_block_markers(output, program, referenced_blocks, &next_block, pos);
+
+      /* For empty last block, only print block marker. */
+      if (pos == exec_size)
+         break;
 
       char outline[1024];
       std::pair<bool, size_t> res = disasm_instr(program->gfx_level, disasm, binary.data(),

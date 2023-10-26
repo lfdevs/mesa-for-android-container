@@ -37,13 +37,13 @@ build_dcc_retile_compute_shader(struct radv_device *dev, struct radeon_surf *sur
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
 
-   nir_ssa_def *src_dcc_size = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
-   nir_ssa_def *src_dcc_pitch = nir_channels(&b, src_dcc_size, 1);
-   nir_ssa_def *src_dcc_height = nir_channels(&b, src_dcc_size, 2);
+   nir_def *src_dcc_size = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
+   nir_def *src_dcc_pitch = nir_channels(&b, src_dcc_size, 1);
+   nir_def *src_dcc_height = nir_channels(&b, src_dcc_size, 2);
 
-   nir_ssa_def *dst_dcc_size = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 8), .range = 8);
-   nir_ssa_def *dst_dcc_pitch = nir_channels(&b, dst_dcc_size, 1);
-   nir_ssa_def *dst_dcc_height = nir_channels(&b, dst_dcc_size, 2);
+   nir_def *dst_dcc_size = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 8), .range = 8);
+   nir_def *dst_dcc_pitch = nir_channels(&b, dst_dcc_size, 1);
+   nir_def *dst_dcc_height = nir_channels(&b, dst_dcc_size, 2);
    nir_variable *input_dcc = nir_variable_create(b.shader, nir_var_uniform, buf_type, "dcc_in");
    input_dcc->data.descriptor_set = 0;
    input_dcc->data.binding = 0;
@@ -51,25 +51,25 @@ build_dcc_retile_compute_shader(struct radv_device *dev, struct radeon_surf *sur
    output_dcc->data.descriptor_set = 0;
    output_dcc->data.binding = 1;
 
-   nir_ssa_def *input_dcc_ref = &nir_build_deref_var(&b, input_dcc)->dest.ssa;
-   nir_ssa_def *output_dcc_ref = &nir_build_deref_var(&b, output_dcc)->dest.ssa;
+   nir_def *input_dcc_ref = &nir_build_deref_var(&b, input_dcc)->def;
+   nir_def *output_dcc_ref = &nir_build_deref_var(&b, output_dcc)->def;
 
-   nir_ssa_def *coord = get_global_ids(&b, 2);
-   nir_ssa_def *zero = nir_imm_int(&b, 0);
+   nir_def *coord = get_global_ids(&b, 2);
+   nir_def *zero = nir_imm_int(&b, 0);
    coord =
       nir_imul(&b, coord, nir_imm_ivec2(&b, surf->u.gfx9.color.dcc_block_width, surf->u.gfx9.color.dcc_block_height));
 
-   nir_ssa_def *src = ac_nir_dcc_addr_from_coord(
-      &b, &dev->physical_device->rad_info, surf->bpe, &surf->u.gfx9.color.dcc_equation, src_dcc_pitch, src_dcc_height,
-      zero, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero, zero);
-   nir_ssa_def *dst = ac_nir_dcc_addr_from_coord(
+   nir_def *src = ac_nir_dcc_addr_from_coord(&b, &dev->physical_device->rad_info, surf->bpe,
+                                             &surf->u.gfx9.color.dcc_equation, src_dcc_pitch, src_dcc_height, zero,
+                                             nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero, zero);
+   nir_def *dst = ac_nir_dcc_addr_from_coord(
       &b, &dev->physical_device->rad_info, surf->bpe, &surf->u.gfx9.color.display_dcc_equation, dst_dcc_pitch,
       dst_dcc_height, zero, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero, zero);
 
-   nir_ssa_def *dcc_val = nir_image_deref_load(&b, 1, 32, input_dcc_ref, nir_vec4(&b, src, src, src, src),
-                                               nir_ssa_undef(&b, 1, 32), nir_imm_int(&b, 0), .image_dim = dim);
+   nir_def *dcc_val = nir_image_deref_load(&b, 1, 32, input_dcc_ref, nir_vec4(&b, src, src, src, src),
+                                           nir_undef(&b, 1, 32), nir_imm_int(&b, 0), .image_dim = dim);
 
-   nir_image_deref_store(&b, output_dcc_ref, nir_vec4(&b, dst, dst, dst, dst), nir_ssa_undef(&b, 1, 32), dcc_val,
+   nir_image_deref_store(&b, output_dcc_ref, nir_vec4(&b, dst, dst, dst, dst), nir_undef(&b, 1, 32), dcc_val,
                          nir_imm_int(&b, 0), .image_dim = dim);
 
    return b.shader;

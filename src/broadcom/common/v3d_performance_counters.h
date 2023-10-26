@@ -28,6 +28,110 @@
 #define V3D_PERFCNT_NAME 1
 #define V3D_PERFCNT_DESCRIPTION 2
 
+#ifndef V3D_VERSION
+#  error "The V3D_VERSION macro must be defined"
+#endif
+
+#if (V3D_VERSION >= 71)
+
+static const char *v3d_performance_counters[][3] = {
+   {"CORE", "cycle-count", "[CORE] Cycle counter"},
+   {"CORE", "core-active", "[CORE] Bin/Render/Compute active cycles"},
+   {"CLE", "CLE-bin-thread-active-cycles", "[CLE] Bin thread active cycles"},
+   {"CLE", "CLE-render-thread-active-cycles", "[CLE] Render thread active cycles"},
+   {"CORE", "compute-active-cycles", "[CORE] Compute active cycles"},
+   {"FEP", "FEP-valid-primitives-no-rendered-pixels", "[FEP] Valid primitives that result in no rendered pixels, for all rendered tiles"},
+   {"FEP", "FEP-valid-primitives-rendered-pixels", "[FEP] Valid primitives for all rendered tiles (primitives may be counted in more than one tile)"},
+   {"FEP", "FEP-clipped-quads", "[FEP] Early-Z/Near/Far clipped quads"},
+   {"FEP", "FEP-valid-quads", "[FEP] Valid quads"},
+   {"TLB", "TLB-quads-not-passing-stencil-test", "[TLB] Quads with no pixels passing the stencil test"},
+   {"TLB", "TLB-quads-not-passing-z-and-stencil-test", "[TLB] Quads with no pixels passing the Z and stencil tests"},
+   {"TLB", "TLB-quads-passing-z-and-stencil-test", "[TLB] Quads with any pixels passing the Z and stencil tests"},
+   {"TLB", "TLB-quads-written-to-color-buffer", "[TLB] Quads with valid pixels written to colour buffer"},
+   {"TLB", "TLB-partial-quads-written-to-color-buffer", "[TLB] Partial quads written to the colour buffer"},
+   {"PTB", "PTB-primitives-need-clipping", "[PTB] Primitives that need clipping"},
+   {"PTB", "PTB-primitives-discarded-outside-viewport", "[PTB] Primitives discarded by being outside the viewport"},
+   {"PTB", "PTB-primitives-binned", "[PTB] Total primitives binned"},
+   {"PTB", "PTB-primitives-discarded-reversed", "[PTB] Primitives that are discarded because they are reversed"},
+   {"QPU", "QPU-total-instr-cache-hit", "[QPU] Total instruction cache hits for all slices"},
+   {"QPU", "QPU-total-instr-cache-miss", "[QPU] Total instruction cache misses for all slices"},
+   {"QPU", "QPU-total-uniform-cache-hit", "[QPU] Total uniforms cache hits for all slices"},
+   {"QPU", "QPU-total-uniform-cache-miss", "[QPU] Total uniforms cache misses for all slices"},
+   {"TMU", "TMU-active-cycles", "[TMU] Active cycles"},
+   {"TMU", "TMU-stalled-cycles", "[TMU] Stalled cycles"},
+   {"TMU", "TMU-total-text-quads-access", "[TMU] Total texture cache accesses"},
+   {"TMU", "TMU-cache-x4-active-cycles", "[TMU] Cache active cycles for x4 access"},
+   {"TMU", "TMU-cache-x4-stalled-cycles", "[TMU] Cache stalled cycles for x4 access"},
+   {"TMU", "TMU-total-text-quads-x4-access", "[TMU] Total texture cache x4 access"},
+   {"L2T", "L2T-total-cache-hit", "[L2T] Total Level 2 cache hits"},
+   {"L2T", "L2T-total-cache-miss", "[L2T] Total Level 2 cache misses"},
+   {"L2T", "L2T-local", "[L2T] Local mode access"},
+   {"L2T", "L2T-writeback", "[L2T] Writeback"},
+   {"L2T", "L2T-zero", "[L2T] Zero"},
+   {"L2T", "L2T-merge", "[L2T] Merge"},
+   {"L2T", "L2T-fill", "[L2T] Fill"},
+   {"L2T", "L2T-stalls-no-wid", "[L2T] Stalls because no WID available"},
+   {"L2T", "L2T-stalls-no-rid", "[L2T] Stalls because no RID available"},
+   {"L2T", "L2T-stalls-queue-full", "[L2T] Stalls because internal queue full"},
+   {"L2T", "L2T-stalls-wrightback", "[L2T] Stalls because writeback in flight"},
+   {"L2T", "L2T-stalls-mem", "[L2T] Stalls because AXI blocks read"},
+   {"L2T", "L2T-stalls-fill", "[L2T] Stalls because fill pending for victim cache-line"},
+   {"L2T", "L2T-hitq", "[L2T] Sent request via hit queue"},
+   {"L2T", "L2T-hitq-full", "[L2T] Sent request via main queue because hit queue is full"},
+   {"L2T", "L2T-stalls-read-data", "[L2T] Stalls because waiting for data from SDRAM"},
+   {"L2T", "L2T-TMU-read-hits", "[L2T] TMU read hits"},
+   {"L2T", "L2T-TMU-read-miss", "[L2T] TMU read misses"},
+   {"L2T", "L2T-VCD-read-hits", "[L2T] VCD read hits"},
+   {"L2T", "L2T-VCD-read-miss", "[L2T] VCD read misses"},
+   {"L2T", "L2T-SLC-read-hits", "[L2T] SLC read hits (all slices)"},
+   {"L2T", "L2T-SLC-read-miss", "[L2T] SLC read misses (all slices)"},
+   {"AXI", "AXI-writes-seen-watch-0", "[AXI] Writes seen by watch 0"},
+   {"AXI", "AXI-reads-seen-watch-0", "[AXI] Reads seen by watch 0"},
+   {"AXI", "AXI-writes-stalled-seen-watch-0", "[AXI] Write stalls seen by watch 0"},
+   {"AXI", "AXI-reads-stalled-seen-watch-0", "[AXI] Read stalls seen by watch 0"},
+   {"AXI", "AXI-write-bytes-seen-watch-0", "[AXI] Total bytes written seen by watch 0"},
+   {"AXI", "AXI-read-bytes-seen-watch-0", "[AXI] Total bytes read seen by watch 0"},
+   {"AXI", "AXI-writes-seen-watch-1", "[AXI] Writes seen by watch 1"},
+   {"AXI", "AXI-reads-seen-watch-1", "[AXI] Reads seen by watch 1"},
+   {"AXI", "AXI-writes-stalled-seen-watch-1", "[AXI] Write stalls seen by watch 1"},
+   {"AXI", "AXI-reads-stalled-seen-watch-1", "[AXI] Read stalls seen by watch 1"},
+   {"AXI", "AXI-write-bytes-seen-watch-1", "[AXI] Total bytes written seen by watch 1"},
+   {"AXI", "AXI-read-bytes-seen-watch-1", "[AXI] Total bytes read seen by watch 1"},
+   {"CORE", "core-memory-writes", "[CORE] Total memory writes"},
+   {"L2T", "L2T-memory-writes", "[L2T] Total memory writes"},
+   {"PTB", "PTB-memory-writes", "[PTB] Total memory writes"},
+   {"TLB", "TLB-memory-writes", "[TLB] Total memory writes"},
+   {"CORE", "core-memory-reads", "[CORE] Total memory reads"},
+   {"L2T", "L2T-memory-reads", "[L2T] Total memory reads"},
+   {"PTB", "PTB-memory-reads", "[PTB] Total memory reads"},
+   {"PSE", "PSE-memory-reads", "[PSE] Total memory reads"},
+   {"TLB", "TLB-memory-reads", "[TLB] Total memory reads"},
+   {"PTB", "PTB-memory-words-writes", "[PTB] Total memory words written"},
+   {"TLB", "TLB-memory-words-writes", "[TLB] Total memory words written"},
+   {"PSE", "PSE-memory-words-reads", "[PSE] Total memory words read"},
+   {"TLB", "TLB-memory-words-reads", "[TLB] Total memory words read"},
+   {"AXI", "AXI-read-trans", "[AXI] Read transaction count"},
+   {"AXI", "AXI-write-trans", "[AXI] Write transaction count"},
+   {"AXI", "AXI-read-wait-cycles", "[AXI] Read total wait cycles"},
+   {"AXI", "AXI-write-wait-cycles", "[AXI] Write total wait cycles"},
+   {"AXI", "AXI-max-outstanding-reads", "[AXI] Maximium outstanding read transactions"},
+   {"AXI", "AXI-max-outstanding-writes", "[AXI] Maximum outstanding write transactions"},
+   {"QPU", "QPU-wait-bubble", "[QPU] Pipeline bubble in qcycles due all threads waiting"},
+   {"QPU", "QPU-ic-miss-bubble", "[QPU] Pipeline bubble in qcycles due instruction-cache miss"},
+   {"QPU", "QPU-active", "[QPU] Executed shader instruction"},
+   {"QPU", "QPU-total-active-clk-cycles-fragment-shading", "[QPU] Total active clock cycles for all QPUs doing fragment shading (counts only when QPU is not stalled)"},
+   {"QPU", "QPU-stalls", "[QPU] Stalled qcycles executing shader instruction"},
+   {"QPU", "QPU-total-clk-cycles-waiting-fragment-shading", "[QPU] Total stalled clock cycles for all QPUs doing fragment shading"},
+   {"QPU", "QPU-stalls-TMU", "[QPU] Stalled qcycles waiting for TMU"},
+   {"QPU", "QPU-stalls-TLB", "[QPU] Stalled qcycles waiting for TLB"},
+   {"QPU", "QPU-stalls-VPM", "[QPU] Stalled qcycles waiting for VPM"},
+   {"QPU", "QPU-stalls-uniforms", "[QPU] Stalled qcycles waiting for uniforms"},
+   {"QPU", "QPU-stalls-SFU", "[QPU] Stalled qcycles waiting for SFU"},
+   {"QPU", "QPU-stalls-other", "[QPU] Stalled qcycles waiting for any other reason (vary/W/Z)"},
+};
+
+#elif (V3D_VERSION >= 41)
+
 static const char *v3d_performance_counters[][3] = {
    {"FEP", "FEP-valid-primitives-no-rendered-pixels", "[FEP] Valid primitives that result in no rendered pixels, for all rendered tiles"},
    {"FEP", "FEP-valid-primitives-rendered-pixels", "[FEP] Valid primitives for all rendered tiles (primitives may be counted in more than one tile)"},
@@ -117,5 +221,9 @@ static const char *v3d_performance_counters[][3] = {
    {"TMU", "TMU-MRU-hits", "[TMU] Total MRU hits"},
    {"CORE", "compute-active-cycles", "[CORE] Compute active cycles"},
 };
+
+#else
+static const char *v3d_performance_counters[][3] = { };
+#endif
 
 #endif

@@ -60,12 +60,6 @@ struct mali_sample_positions {
 #define SAMPLE8(x, y) SAMPLE16((x)*2, (y)*2)
 #define SAMPLE4(x, y) SAMPLE16((x)*4, (y)*4)
 
-static float
-decode_position(int16_t raw)
-{
-   return ((float)raw) / 256.0;
-}
-
 /* clang-format off */
 const struct mali_sample_positions sample_position_lut[] = {
    [MALI_SAMPLE_PATTERN_SINGLE_SAMPLED] = {

@@ -393,7 +393,7 @@ TEST_F(TestInstrFromString, test_tex_sample_basic)
    add_dest_vec4_from_string("R2000.xyzw");
    auto init = std::string("TEX SAMPLE R1000.xyzw : R2000.xyzw RID:10 SID:1 NNNN");
    TexInstr expect(
-      TexInstr::sample, RegisterVec4(1000), {0, 1, 2, 3}, RegisterVec4(2000), 1, 10);
+      TexInstr::sample, RegisterVec4(1000), {0, 1, 2, 3}, RegisterVec4(2000), 10, nullptr, 1);
    check(init, expect);
 }
 
@@ -402,7 +402,7 @@ TEST_F(TestInstrFromString, test_tex_ld_basic)
    add_dest_vec4_from_string("R2002.xyzw");
    auto init = std::string("TEX LD R1001.xyzw : R2002.xyzw RID:27 SID:7 NNNN");
    TexInstr expect(
-      TexInstr::ld, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 7, 27);
+      TexInstr::ld, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 27, nullptr, 7);
    check(init, expect);
 }
 
@@ -413,7 +413,7 @@ TEST_F(TestInstrFromString, test_tex_sample_with_offset)
       std::string("TEX SAMPLE R1001.xyzw : R2002.xyzw RID:27 SID:2 OX:1 OY:-2 OZ:5 NNNN");
 
    TexInstr expect(
-      TexInstr::sample, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 2, 27);
+      TexInstr::sample, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 27, nullptr, 2);
    expect.set_offset(0, 1);
    expect.set_offset(1, -2);
    expect.set_offset(2, 5);
@@ -427,7 +427,7 @@ TEST_F(TestInstrFromString, test_tex_gather4_x)
    auto init =
       std::string("TEX GATHER4 R1001.xyzw : R2002.xyzw RID:7 SID:27 MODE:0 NNNN");
    TexInstr expect(
-      TexInstr::gather4, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 27, 7);
+      TexInstr::gather4, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 7, nullptr, 27);
    check(init, expect);
 }
 
@@ -437,7 +437,7 @@ TEST_F(TestInstrFromString, test_tex_gather4_y)
    auto init =
       std::string("TEX GATHER4 R1001.xyzw : R2002.xyzw RID:7 SID:27 MODE:1 NNNN");
    TexInstr expect(
-      TexInstr::gather4, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 27, 7);
+      TexInstr::gather4, RegisterVec4(1001), {0, 1, 2, 3}, RegisterVec4(2002), 7, nullptr, 27);
    expect.set_gather_comp(1);
    check(init, expect);
 }
@@ -451,8 +451,9 @@ TEST_F(TestInstrFromString, test_tex_sampler_with_offset)
                    RegisterVec4(1001),
                    {0, 1, 2, 3},
                    RegisterVec4(2002),
-                   27,
                    7,
+                   nullptr,
+                   27,
                    new Register(200, 2, pin_none));
    check(init, expect);
 }

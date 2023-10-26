@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-files_mesa_format = [
+files_mesa_format = files(
   'u_format.c',
   'u_format_bptc.c',
   'u_format_etc.c',
@@ -31,14 +31,7 @@ files_mesa_format = [
   'u_format_unpack_neon.c',
   'u_format_yuv.c',
   'u_format_zs.c',
-]
-
-# TODO: remove the quirk when GCC get test and fix inside release
-# See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108163
-arm_neon_workaround = []
-if cc.get_id() == 'gcc' and host_machine.cpu_family().contains('arm')
-  arm_neon_workaround = gcc_lto_quirk
-endif
+)
 
 u_format_pack_h = custom_target(
   'u_format_pack.h',
@@ -58,14 +51,4 @@ u_format_table_c = custom_target(
   capture : true,
 )
 
-libmesa_format = static_library(
-  'mesa_format',
-  [files_mesa_format, u_format_table_c, u_format_pack_h],
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-  # NOTE dep_valgrind used here instead of idep_mesautil due to chicken/egg
-  # dependencies between util and util/format
-  dependencies : [dep_m, dep_valgrind],
-  c_args : [c_msvc_compat_args, arm_neon_workaround],
-  gnu_symbol_visibility : 'hidden',
-  build_by_default : false
-)
+files_mesa_format += [u_format_pack_h, u_format_table_c]

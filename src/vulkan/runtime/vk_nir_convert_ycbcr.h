@@ -32,11 +32,11 @@
 extern "C" {
 #endif
 
-nir_ssa_def *
+nir_def *
 nir_convert_ycbcr_to_rgb(nir_builder *b,
                          VkSamplerYcbcrModelConversion model,
                          VkSamplerYcbcrRange range,
-                         nir_ssa_def *raw_channels,
+                         nir_def *raw_channels,
                          uint32_t *bpcs);
 
 struct vk_ycbcr_conversion;

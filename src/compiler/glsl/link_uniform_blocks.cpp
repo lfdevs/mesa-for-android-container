@@ -306,7 +306,7 @@ process_block_array_leaf(const char *name,
        parcel->buffer_size > consts->MaxShaderStorageBlockSize) {
       linker_error(prog, "shader storage block `%s' has size %d, "
                    "which is larger than the maximum allowed (%d)",
-                   b->type->name,
+                   glsl_get_type_name(b->type),
                    parcel->buffer_size,
                    consts->MaxShaderStorageBlockSize);
    }
@@ -378,7 +378,7 @@ create_buffer_blocks(void *mem_ctx, const struct gl_constants *consts,
 
          if (b->array != NULL) {
             char *name = ralloc_strdup(NULL,
-                                       block_type->without_array()->name);
+                                       glsl_get_type_name(block_type->without_array()));
             size_t name_length = strlen(name);
 
             assert(b->has_instance_name);
@@ -387,7 +387,7 @@ create_buffer_blocks(void *mem_ctx, const struct gl_constants *consts,
                                 i);
             ralloc_free(name);
          } else {
-            process_block_array_leaf(block_type->name, blocks, &parcel,
+            process_block_array_leaf(glsl_get_type_name(block_type), blocks, &parcel,
                                      variables, b, &i, 0,
                                      0, consts, prog);
          }

@@ -242,16 +242,16 @@ nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info_out *info
 
    for (i = 0; i < info->numSysVals; ++i) {
       switch (info->sv[i].sn) {
-      case TGSI_SEMANTIC_PRIMID:
+      case SYSTEM_VALUE_PRIMITIVE_ID:
          vp->hdr[5] |= 1 << 24;
          break;
-      case TGSI_SEMANTIC_INSTANCEID:
+      case SYSTEM_VALUE_INSTANCE_ID:
          vp->hdr[10] |= 1 << 30;
          break;
-      case TGSI_SEMANTIC_VERTEXID:
+      case SYSTEM_VALUE_VERTEX_ID:
          vp->hdr[10] |= 1 << 31;
          break;
-      case TGSI_SEMANTIC_TESSCOORD:
+      case SYSTEM_VALUE_TESS_COORD:
          /* We don't have the mask, nor the slots populated. While this could
           * be achieved, the vast majority of the time if either of the coords
           * are read, then both will be read.
@@ -590,27 +590,15 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    info->type = prog->type;
    info->target = chipset;
 
-   info->bin.sourceRep = prog->pipe.type;
-   switch (prog->pipe.type) {
-   case PIPE_SHADER_IR_TGSI:
-      info->bin.source = (void *)prog->pipe.tokens;
-      break;
-   case PIPE_SHADER_IR_NIR:
-      info->bin.source = (void *)nir_shader_clone(NULL, prog->pipe.ir.nir);
-      break;
-   default:
-      assert(!"unsupported IR!");
-      free(info);
-      return false;
-   }
+   info->bin.nir = nir_shader_clone(NULL, prog->nir);
 
 #ifndef NDEBUG
    info->target = debug_get_num_option("NV50_PROG_CHIPSET", chipset);
-   info->optLevel = debug_get_num_option("NV50_PROG_OPTIMIZE", 3);
+   info->optLevel = debug_get_num_option("NV50_PROG_OPTIMIZE", 4);
    info->dbgFlags = debug_get_num_option("NV50_PROG_DEBUG", 0);
    info->omitLineNum = debug_get_num_option("NV50_PROG_DEBUG_OMIT_LINENUM", 0);
 #else
-   info->optLevel = 3;
+   info->optLevel = 4;
 #endif
 
    info->bin.smemSize = prog->cp.smem_size;
@@ -686,9 +674,9 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    prog->relocs = info_out.bin.relocData;
    prog->fixups = info_out.bin.fixupData;
    if (info_out.target >= NVISA_GV100_CHIPSET)
-      prog->num_gprs = MIN2(info_out.bin.maxGPR + 5, 255); //XXX: why?
+      prog->num_gprs = MAX2(4, info_out.bin.maxGPR + 3);
    else
-      prog->num_gprs = MAX2(4, (info_out.bin.maxGPR + 1));
+      prog->num_gprs = MAX2(4, info_out.bin.maxGPR + 1);
    prog->cp.smem_size = info_out.bin.smemSize;
    prog->num_barriers = info_out.numBarriers;
 
@@ -747,9 +735,9 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    if (info_out.io.fp64)
       prog->hdr[0] |= 1 << 27;
 
-   if (prog->pipe.stream_output.num_outputs)
+   if (prog->stream_output.num_outputs)
       prog->tfb = nvc0_program_create_tfb_state(&info_out,
-                                                &prog->pipe.stream_output);
+                                                &prog->stream_output);
 
    util_debug_message(debug, SHADER_INFO,
                       "type: %d, local: %d, shared: %d, gpr: %d, inst: %d, bytes: %d, cached: %zd",
@@ -763,8 +751,7 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
 #endif
 
 out:
-   if (info->bin.sourceRep == PIPE_SHADER_IR_NIR)
-      ralloc_free((void *)info->bin.source);
+   ralloc_free((void *)info->bin.nir);
    FREE(info);
    return !ret;
 }
@@ -988,7 +975,7 @@ nvc0_program_library_upload(struct nvc0_context *nvc0)
 void
 nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 {
-   const struct pipe_shader_state pipe = prog->pipe;
+   struct nir_shader *nir = prog->nir;
    const uint8_t type = prog->type;
 
    if (prog->mem) {
@@ -1007,7 +994,7 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    memset(prog, 0, sizeof(*prog));
 
-   prog->pipe = pipe;
+   prog->nir = nir;
    prog->type = type;
 }
 

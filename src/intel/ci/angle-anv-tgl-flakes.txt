@@ -3,6 +3,7 @@ dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines_
 
 # The last quad that was supposed to be overwritten by red has a green triangle showing.
 dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_alpha_to_coverage
+dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_alpha_to_coverage
 
 dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both_inverted
 

@@ -56,6 +56,18 @@ typedef uint64_t (*isa_expr_t)(struct decode_scope *scope);
  */
 uint64_t isa_decode_field(struct decode_scope *scope, const char *field_name);
 
+void isa_decode_bitset(void *out, const struct isa_bitset **bitsets, struct decode_scope *scope, bitmask_t val);
+
+/**
+ * Used by generated decode functions
+ */
+uint32_t isa_get_gpu_id(struct decode_scope *scope);
+
+/**
+ * Allows to use gpu_id in expr functions
+ */
+#define ISA_GPU_ID() isa_get_gpu_id(scope)
+
 /**
  * For bitset fields, there are some cases where we want to "remap" field
  * names, essentially allowing one to parameterize a nested bitset when
@@ -69,6 +81,8 @@ struct isa_field_params {
 	} params[];
 };
 
+struct decode_scope;
+
 /**
  * Description of a single field within a bitset case.
  */
@@ -79,7 +93,8 @@ struct isa_field {
 	unsigned high;
 	enum {
 		/* Basic types: */
-		TYPE_BRANCH,   /* branch target, like INT but optional labeling*/
+		TYPE_BRANCH,   /* relative branch target, like INT but optional labeling*/
+		TYPE_ABSBRANCH,   /* absolute branch target */
 		TYPE_INT,
 		TYPE_UINT,
 		TYPE_HEX,
@@ -88,6 +103,9 @@ struct isa_field {
 		TYPE_FLOAT,
 		TYPE_BOOL,
 		TYPE_ENUM,
+
+		/* For fields that must be printed via a user-provided callback */
+		TYPE_CUSTOM,
 
 		/* To assert a certain value in a given range of bits.. not
 		 * used for pattern matching, but allows an override to specify
@@ -103,6 +121,7 @@ struct isa_field {
 		bitmask_t val;                      /* if type==ASSERT */
 		const struct isa_enum *enums;       /* if type==ENUM */
 		const char *display;                /* if type==BOOL */
+		bool call;                          /* if type==(BRANCH|ABSBRANCH) */
 	};
 
 	/**
@@ -127,6 +146,11 @@ struct isa_case {
 	struct isa_field fields[];
 };
 
+struct isa_field_decode {
+	const char *name;
+	void (*decode)(void *out, struct decode_scope *scope, uint64_t val);
+};
+
 /**
  * An individual bitset, the leaves of a bitset inheritance hiearchy will
  * have the match and mask to match a single instruction (or arbitrary
@@ -142,6 +166,9 @@ struct isa_bitset {
 	bitmask_t match;
 	bitmask_t dontcare;
 	bitmask_t mask;
+	void (*decode)(void *out, struct decode_scope *scope);
+	unsigned num_decode_fields;
+	const struct isa_field_decode *decode_fields;
 	unsigned num_cases;
 	const struct isa_case *cases[];
 };

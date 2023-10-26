@@ -51,6 +51,7 @@
 #include "util/libdrm.h"
 #include "util/os_file.h"
 #include "util/os_misc.h"
+#include "util/u_debug.h"
 #include "git_sha1.h"
 
 #define MAX_DRM_DEVICES 64
@@ -102,7 +103,8 @@ loader_open_device(const char *device_name)
    return fd;
 }
 
-static char *loader_get_kernel_driver_name(int fd)
+char *
+loader_get_kernel_driver_name(int fd)
 {
    char *driver;
    drmVersionPtr version = drmGetVersion(fd);
@@ -131,11 +133,19 @@ iris_predicate(int fd)
    return ret;
 }
 
+/**
+ * Goes through all the platform devices whose driver is on the given list and
+ * try to open their render node. It returns the fd of the first device that
+ * it can open.
+ */
 int
-loader_open_render_node(const char *name)
+loader_open_render_node_platform_device(const char * const drivers[],
+                                        unsigned int n_drivers)
 {
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
-   int i, num_devices, fd = -1;
+   int num_devices, fd = -1;
+   int i, j;
+   bool found = false;
 
    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
    if (num_devices <= 0)
@@ -158,7 +168,13 @@ loader_open_render_node(const char *name)
             continue;
          }
 
-         if (strcmp(version->name, name) != 0) {
+         for (j = 0; j < n_drivers; j++) {
+            if (strcmp(version->name, drivers[j]) == 0) {
+               found = true;
+               break;
+            }
+         }
+         if (!found) {
             drmFreeVersion(version);
             close(fd);
             continue;
@@ -174,6 +190,22 @@ loader_open_render_node(const char *name)
       return -ENOENT;
 
    return fd;
+}
+
+bool
+loader_is_device_render_capable(int fd)
+{
+   drmDevicePtr dev_ptr;
+   bool ret;
+
+   if (drmGetDevice2(fd, 0, &dev_ptr) != 0)
+      return false;
+
+   ret = (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER));
+
+   drmFreeDevice(&dev_ptr);
+
+   return ret;
 }
 
 char *
@@ -323,23 +355,54 @@ static char *drm_get_id_path_tag_for_fd(int fd)
 bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
 {
    const char *dri_prime = getenv("DRI_PRIME");
-   char *default_tag, *prime = NULL;
+   bool debug = debug_get_bool_option("DRI_PRIME_DEBUG", false);
+   char *default_tag = NULL;
    drmDevicePtr devices[MAX_DRM_DEVICES];
    int i, num_devices, fd = -1;
-   bool prime_is_vid_did;
-   uint16_t vendor_id, device_id;
+   struct {
+      enum {
+         PRIME_IS_INTEGER,
+         PRIME_IS_VID_DID,
+         PRIME_IS_PCI_TAG
+      } semantics;
+      union {
+         int as_integer;
+         struct {
+            uint16_t v, d;
+         } as_vendor_device_ids;
+      } v;
+      char *str;
+   } prime = {};
+   prime.str = NULL;
 
    if (dri_prime)
-      prime = strdup(dri_prime);
+      prime.str = strdup(dri_prime);
 #ifdef USE_DRICONF
    else
-      prime = loader_get_dri_config_device_id();
+      prime.str = loader_get_dri_config_device_id();
 #endif
 
-   if (prime == NULL)
+   if (prime.str == NULL) {
       goto no_prime_gpu_offloading;
-   else
-      prime_is_vid_did = sscanf(prime, "%hx:%hx", &vendor_id, &device_id) == 2;
+   } else {
+      uint16_t vendor_id, device_id;
+      if (sscanf(prime.str, "%hx:%hx", &vendor_id, &device_id) == 2) {
+         prime.semantics = PRIME_IS_VID_DID;
+         prime.v.as_vendor_device_ids.v = vendor_id;
+         prime.v.as_vendor_device_ids.d = device_id;
+      } else {
+         int i = atoi(prime.str);
+         if (i < 0 || strcmp(prime.str, "0") == 0) {
+            printf("Invalid value (%d) for DRI_PRIME. Should be > 0\n", i);
+            goto err;
+         } else if (i == 0) {
+            prime.semantics = PRIME_IS_PCI_TAG;
+         } else {
+            prime.semantics = PRIME_IS_INTEGER;
+            prime.v.as_integer = i;
+         }
+      }
+   }
 
    default_tag = drm_get_id_path_tag_for_fd(*fd_render_gpu);
    if (default_tag == NULL)
@@ -349,33 +412,103 @@ bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
    if (num_devices <= 0)
       goto err;
 
+   if (debug) {
+      log_(_LOADER_WARNING, "DRI_PRIME: %d devices\n", num_devices);
+      for (i = 0; i < num_devices; i++) {
+         log_(_LOADER_WARNING, "  %d:", i);
+         if (!(devices[i]->available_nodes & 1 << DRM_NODE_RENDER)) {
+            log_(_LOADER_WARNING, "not a render node -> not usable\n");
+            continue;
+         }
+         char *tag = drm_construct_id_path_tag(devices[i]);
+         if (tag) {
+            log_(_LOADER_WARNING, " %s", tag);
+            free(tag);
+         }
+         if (devices[i]->bustype == DRM_BUS_PCI) {
+            log_(_LOADER_WARNING, " %4x:%4x",
+               devices[i]->deviceinfo.pci->vendor_id,
+               devices[i]->deviceinfo.pci->device_id);
+         }
+         log_(_LOADER_WARNING, " %s", devices[i]->nodes[DRM_NODE_RENDER]);
+
+         if (drm_device_matches_tag(devices[i], default_tag)) {
+            log_(_LOADER_WARNING, " [default]");
+         }
+         log_(_LOADER_WARNING, "\n");
+      }
+   }
+
+   if (prime.semantics == PRIME_IS_INTEGER &&
+       prime.v.as_integer >= num_devices) {
+      printf("Inconsistent value (%d) for DRI_PRIME. Should be < %d "
+             "(GPU devices count). Using: %d\n",
+             prime.v.as_integer, num_devices, num_devices - 1);
+      prime.v.as_integer = num_devices - 1;
+   }
+
    for (i = 0; i < num_devices; i++) {
       if (!(devices[i]->available_nodes & 1 << DRM_NODE_RENDER))
          continue;
 
+      log_(debug ? _LOADER_WARNING : _LOADER_INFO, "DRI_PRIME: device %d ", i);
+
       /* three formats of DRI_PRIME are supported:
-       * "1": choose any other card than the card used by default.
+       * "N": a >= 1 integer value. Select the Nth GPU, skipping the
+       *      default one.
        * id_path_tag: (for example "pci-0000_02_00_0") choose the card
        * with this id_path_tag.
        * vendor_id:device_id
        */
-      if (!strcmp(prime,"1")) {
-         if (drm_device_matches_tag(devices[i], default_tag))
-            continue;
-      } else {
-         if (prime_is_vid_did && devices[i]->bustype == DRM_BUS_PCI &&
-             devices[i]->deviceinfo.pci->vendor_id == vendor_id &&
-             devices[i]->deviceinfo.pci->device_id == device_id) {
-            /* Update prime for the "different_device"
-             * determination below. */
-            free(prime);
-            prime = drm_construct_id_path_tag(devices[i]);
-         } else {
-            if (!drm_device_matches_tag(devices[i], prime))
+      switch (prime.semantics) {
+         case PRIME_IS_INTEGER: {
+            /* Skip the default device */
+            if (drm_device_matches_tag(devices[i], default_tag)) {
+               log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+                    "skipped (default device)\n");
                continue;
+            }
+            prime.v.as_integer--;
+
+            /* Skip more GPUs? */
+            if (prime.v.as_integer) {
+               log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+                    "skipped (%d more to skip)\n", prime.v.as_integer - 1);
+               continue;
+            }
+            log_(debug ? _LOADER_WARNING : _LOADER_INFO, " -> ");
+            break;
+         }
+         case PRIME_IS_VID_DID: {
+            if (devices[i]->bustype == DRM_BUS_PCI &&
+                devices[i]->deviceinfo.pci->vendor_id == prime.v.as_vendor_device_ids.v &&
+                devices[i]->deviceinfo.pci->device_id == prime.v.as_vendor_device_ids.d) {
+               /* Update prime for the "different_device"
+                * determination below. */
+               free(prime.str);
+               prime.str = drm_construct_id_path_tag(devices[i]);
+               log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+                    " - vid:did match -> ");
+               break;
+            } else {
+               log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+                    "skipped (vid:did didn't match)\n");
+            }
+            continue;
+         }
+         case PRIME_IS_PCI_TAG: {
+            if (!drm_device_matches_tag(devices[i], prime.str)) {
+               log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+                    "skipped (pci id tag didn't match)\n");
+               continue;
+            }
+            log_(debug ? _LOADER_WARNING : _LOADER_INFO, " - pci tag match -> ");
+            break;
          }
       }
 
+      log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+           "selected (%s)\n", devices[i]->nodes[DRM_NODE_RENDER]);
       fd = loader_open_device(devices[i]->nodes[DRM_NODE_RENDER]);
       break;
    }
@@ -384,10 +517,15 @@ bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
    if (i == num_devices)
       goto err;
 
-   if (fd < 0)
-      goto err;
+   if (fd < 0) {
+      log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+           "DRI_PRIME: failed to open '%s'\n",
+           devices[i]->nodes[DRM_NODE_RENDER]);
 
-   bool is_render_and_display_gpu_diff = !!strcmp(default_tag, prime);
+      goto err;
+   }
+
+   bool is_render_and_display_gpu_diff = !!strcmp(default_tag, prime.str);
    if (original_fd) {
       if (is_render_and_display_gpu_diff) {
          *original_fd = *fd_render_gpu;
@@ -402,11 +540,13 @@ bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
    }
 
    free(default_tag);
-   free(prime);
+   free(prime.str);
    return is_render_and_display_gpu_diff;
  err:
+   log_(debug ? _LOADER_WARNING : _LOADER_INFO,
+        "DRI_PRIME: error. Using the default GPU\n");
    free(default_tag);
-   free(prime);
+   free(prime.str);
  no_prime_gpu_offloading:
    if (original_fd)
       *original_fd = *fd_render_gpu;
@@ -727,8 +867,6 @@ loader_open_driver(const char *driver_name,
       free(get_extensions_name);
    }
 
-   if (!extensions)
-      extensions = dlsym(driver, __DRI_DRIVER_EXTENSIONS);
    if (extensions == NULL) {
       log_(_LOADER_WARNING,
            "MESA-LOADER: driver exports no extensions (%s)\n", dlerror());

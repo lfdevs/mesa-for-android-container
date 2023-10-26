@@ -42,11 +42,11 @@ struct lower_multiview_state {
 
    uint32_t view_mask;
 
-   nir_ssa_def *instance_id;
-   nir_ssa_def *view_index;
+   nir_def *instance_id;
+   nir_def *view_index;
 };
 
-static nir_ssa_def *
+static nir_def *
 build_instance_id(struct lower_multiview_state *state)
 {
    assert(state->builder.shader->info.stage == MESA_SHADER_VERTEX);
@@ -54,7 +54,7 @@ build_instance_id(struct lower_multiview_state *state)
    if (state->instance_id == NULL) {
       nir_builder *b = &state->builder;
 
-      b->cursor = nir_before_block(nir_start_block(b->impl));
+      b->cursor = nir_before_impl(b->impl);
 
       /* We use instancing for implementing multiview.  The actual instance id
        * is given by dividing instance_id by the number of views in this
@@ -68,7 +68,7 @@ build_instance_id(struct lower_multiview_state *state)
    return state->instance_id;
 }
 
-static nir_ssa_def *
+static nir_def *
 build_view_index(struct lower_multiview_state *state)
 {
    assert(state->builder.shader->info.stage != MESA_SHADER_FRAGMENT);
@@ -76,7 +76,7 @@ build_view_index(struct lower_multiview_state *state)
    if (state->view_index == NULL) {
       nir_builder *b = &state->builder;
 
-      b->cursor = nir_before_block(nir_start_block(b->impl));
+      b->cursor = nir_before_impl(b->impl);
 
       assert(state->view_mask != 0);
       if (util_bitcount(state->view_mask) == 1) {
@@ -90,7 +90,7 @@ build_view_index(struct lower_multiview_state *state)
           * id is given by instance_id % view_count.  We then have to convert
           * that to an actual view id.
           */
-         nir_ssa_def *compacted =
+         nir_def *compacted =
             nir_umod_imm(b, nir_load_instance_id(b),
                             util_bitcount(state->view_mask));
 
@@ -109,18 +109,18 @@ build_view_index(struct lower_multiview_state *state)
                remap |= (uint64_t)bit << (i++ * 4);
             }
 
-            nir_ssa_def *shift = nir_imul_imm(b, compacted, 4);
+            nir_def *shift = nir_imul_imm(b, compacted, 4);
 
             /* One of these days, when we have int64 everywhere, this will be
              * easier.
              */
-            nir_ssa_def *shifted;
+            nir_def *shifted;
             if (remap <= UINT32_MAX) {
                shifted = nir_ushr(b, nir_imm_int(b, remap), shift);
             } else {
-               nir_ssa_def *shifted_low =
+               nir_def *shifted_low =
                   nir_ushr(b, nir_imm_int(b, remap), shift);
-               nir_ssa_def *shifted_high =
+               nir_def *shifted_high =
                   nir_ushr(b, nir_imm_int(b, remap >> 32),
                               nir_iadd_imm(b, shift, -32));
                shifted = nir_bcsel(b, nir_ilt_imm(b, shift, 32),
@@ -159,7 +159,7 @@ is_load_view_index(const nir_instr *instr, const void *data)
           nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_view_index;
 }
 
-static nir_ssa_def *
+static nir_def *
 replace_load_view_index_with_zero(struct nir_builder *b,
                                   nir_instr *instr, void *data)
 {
@@ -167,7 +167,7 @@ replace_load_view_index_with_zero(struct nir_builder *b,
    return nir_imm_zero(b, 1, 32);
 }
 
-static nir_ssa_def *
+static nir_def *
 replace_load_view_index_with_layer_id(struct nir_builder *b,
                                       nir_instr *instr, void *data)
 {
@@ -211,9 +211,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
              load->intrinsic != nir_intrinsic_load_view_index)
             continue;
 
-         assert(load->dest.is_ssa);
-
-         nir_ssa_def *value;
+         nir_def *value;
          if (load->intrinsic == nir_intrinsic_load_instance_id) {
             value = build_instance_id(&state);
          } else {
@@ -221,7 +219,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
             value = build_view_index(&state);
          }
 
-         nir_ssa_def_rewrite_uses(&load->dest.ssa, value);
+         nir_def_rewrite_uses(&load->def, value);
 
          nir_instr_remove(&load->instr);
       }
@@ -231,7 +229,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
     * available in the VS.  If it's not a fragment shader, we need to pass
     * the view index on to the next stage.
     */
-   nir_ssa_def *view_index = build_view_index(&state);
+   nir_def *view_index = build_view_index(&state);
 
    nir_builder *b = &state.builder;
 

@@ -679,10 +679,8 @@ struct __DRIuseInvalidateExtensionRec {
 };
 
 /**
- * The remaining extensions describe driver extensions, immediately
- * available interfaces provided by the driver.  To start using the
- * driver, dlsym() for the __DRI_DRIVER_EXTENSIONS symbol and look for
- * the extension you need in the array.
+ * Dead, do not use; kept only to allow old Xserver to compile since
+ * this file is a public API.
  */
 #define __DRI_DRIVER_EXTENSIONS "__driDriverExtensions"
 
@@ -744,7 +742,7 @@ struct __DRIuseInvalidateExtensionRec {
 #define __DRI_ATTRIB_OPTIMAL_PBUFFER_WIDTH	37
 #define __DRI_ATTRIB_OPTIMAL_PBUFFER_HEIGHT	38
 #define __DRI_ATTRIB_VISUAL_SELECT_GROUP	39
-#define __DRI_ATTRIB_SWAP_METHOD		40
+#define __DRI_ATTRIB_SWAP_METHOD		40 // Parsed by the X server when our visuals return it as an attrib.
 #define __DRI_ATTRIB_MAX_SWAP_INTERVAL		41
 #define __DRI_ATTRIB_MIN_SWAP_INTERVAL		42
 #define __DRI_ATTRIB_BIND_TO_TEXTURE_RGB	43
@@ -784,8 +782,8 @@ struct __DRIuseInvalidateExtensionRec {
 /* Note that with the exception of __DRI_ATTRIB_SWAP_NONE, we need to define
  * the same tokens as GLX. This is because old and current X servers will
  * transmit the driconf value grabbed from the AIGLX driver untranslated as
- * the GLX fbconfig value. __DRI_ATTRIB_SWAP_NONE is only used by dri drivers
- * to signal to the dri core that the driconfig is single-buffer.
+ * the GLX fbconfig value. These defines are kept for X Server suorce compatibility,
+ * since Mesa no longer exposes GLX_OML_swap_method.
  */
 #define __DRI_ATTRIB_SWAP_NONE                  0x0000
 #define __DRI_ATTRIB_SWAP_EXCHANGE              0x8061
@@ -1275,6 +1273,13 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_SXRGB8       0x1016
 #define __DRI_IMAGE_FORMAT_ABGR16161616 0x1017
 #define __DRI_IMAGE_FORMAT_XBGR16161616 0x1018
+#define __DRI_IMAGE_FORMAT_ARGB4444	0x1019
+#define __DRI_IMAGE_FORMAT_XRGB4444	0x101a
+#define __DRI_IMAGE_FORMAT_ABGR4444	0x101b
+#define __DRI_IMAGE_FORMAT_XBGR4444	0x101c
+#define __DRI_IMAGE_FORMAT_XRGB1555	0x101d
+#define __DRI_IMAGE_FORMAT_ABGR1555	0x101e
+#define __DRI_IMAGE_FORMAT_XBGR1555	0x101f
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002

@@ -105,7 +105,7 @@ visit_instr(nir_instr *instr, uint32_t *cur_modes, unsigned vis_avail_sem)
       return false;
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
-   if (intrin->intrinsic == nir_intrinsic_scoped_barrier &&
+   if (intrin->intrinsic == nir_intrinsic_barrier &&
        (nir_intrinsic_memory_semantics(intrin) & vis_avail_sem)) {
       *cur_modes |= nir_intrinsic_memory_modes(intrin);
 

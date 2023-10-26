@@ -24,18 +24,15 @@
 static void
 vn_queue_fini(struct vn_queue *queue)
 {
-   VkDevice dev_handle = vn_device_to_handle(queue->device);
+   VkDevice dev_handle = vk_device_to_handle(queue->base.base.base.device);
 
    if (queue->wait_fence != VK_NULL_HANDLE) {
       vn_DestroyFence(dev_handle, queue->wait_fence, NULL);
    }
-   if (queue->sync_fence != VK_NULL_HANDLE) {
-      vn_DestroyFence(dev_handle, queue->sync_fence, NULL);
-   }
    if (queue->sparse_semaphore != VK_NULL_HANDLE) {
       vn_DestroySemaphore(dev_handle, queue->sparse_semaphore, NULL);
    }
-   vn_object_base_fini(&queue->base);
+   vn_queue_base_fini(&queue->base);
 }
 
 static VkResult
@@ -44,7 +41,10 @@ vn_queue_init(struct vn_device *dev,
               const VkDeviceQueueCreateInfo *queue_info,
               uint32_t queue_index)
 {
-   vn_object_base_init(&queue->base, VK_OBJECT_TYPE_QUEUE, &dev->base);
+   VkResult result =
+      vn_queue_base_init(&queue->base, &dev->base, queue_info, queue_index);
+   if (result != VK_SUCCESS)
+      return result;
 
    VkDeviceQueueTimelineInfoMESA timeline_info;
    const struct vn_renderer_info *renderer_info =
@@ -75,11 +75,6 @@ vn_queue_init(struct vn_device *dev,
    VkQueue queue_handle = vn_queue_to_handle(queue);
    vn_async_vkGetDeviceQueue2(dev->instance, vn_device_to_handle(dev),
                               &device_queue_info, &queue_handle);
-
-   queue->device = dev;
-   queue->family = queue_info->queueFamilyIndex;
-   queue->index = queue_index;
-   queue->flags = queue_info->flags;
 
    return VK_SUCCESS;
 }
@@ -648,22 +643,6 @@ vn_GetDeviceGroupPeerMemoryFeatures(
    vn_call_vkGetDeviceGroupPeerMemoryFeatures(
       dev->instance, device, heapIndex, localDeviceIndex, remoteDeviceIndex,
       pPeerMemoryFeatures);
-}
-
-VkResult
-vn_DeviceWaitIdle(VkDevice device)
-{
-   VN_TRACE_FUNC();
-   struct vn_device *dev = vn_device_from_handle(device);
-
-   for (uint32_t i = 0; i < dev->queue_count; i++) {
-      struct vn_queue *queue = &dev->queues[i];
-      VkResult result = vn_QueueWaitIdle(vn_queue_to_handle(queue));
-      if (result != VK_SUCCESS)
-         return vn_error(dev->instance, result);
-   }
-
-   return VK_SUCCESS;
 }
 
 VkResult

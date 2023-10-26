@@ -40,8 +40,10 @@ bool ir3_nir_lower_imul(nir_shader *shader);
 bool ir3_nir_lower_io_offsets(nir_shader *shader);
 bool ir3_nir_lower_load_barycentric_at_sample(nir_shader *shader);
 bool ir3_nir_lower_load_barycentric_at_offset(nir_shader *shader);
+bool ir3_nir_lower_push_consts_to_preamble(nir_shader *nir,
+                                           struct ir3_shader_variant *v);
 bool ir3_nir_move_varying_inputs(nir_shader *shader);
-int ir3_nir_coord_offset(nir_ssa_def *ssa);
+int ir3_nir_coord_offset(nir_def *ssa);
 bool ir3_nir_lower_tex_prefetch(nir_shader *shader);
 bool ir3_nir_lower_wide_load_store(nir_shader *shader);
 bool ir3_nir_lower_layer_id(nir_shader *shader);
@@ -79,16 +81,13 @@ bool ir3_nir_fixup_load_uniform(nir_shader *nir);
 bool ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v);
 
-nir_ssa_def *ir3_nir_try_propagate_bit_shift(nir_builder *b,
-                                             nir_ssa_def *offset,
+nir_def *ir3_nir_try_propagate_bit_shift(nir_builder *b,
+                                             nir_def *offset,
                                              int32_t shift);
 
 static inline nir_intrinsic_instr *
 ir3_bindless_resource(nir_src src)
 {
-   if (!src.is_ssa)
-      return NULL;
-
    if (src.ssa->parent_instr->type != nir_instr_type_intrinsic)
       return NULL;
 

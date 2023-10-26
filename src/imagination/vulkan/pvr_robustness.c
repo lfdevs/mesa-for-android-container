@@ -96,10 +96,12 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
    robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_SFLOAT16] = offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, sizeof(uint16_t) * 4);
 
-   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_UINT] = offset;
+   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_UINT] =
+      offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 4);
 
-   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_SINT] = offset;
+   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_SINT] =
+      offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 4);
 
    robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A2R10G10B10_UINT] =
@@ -110,13 +112,16 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
       offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 4);
 
-   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R4G4B4A4_UNORM] = offset;
+   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R4G4B4A4_UNORM] =
+      offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 2);
 
-   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R5G5B5A1_UNORM] = offset;
+   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R5G5B5A1_UNORM] =
+      offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 2);
 
-   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A1R5G5B5_UNORM] = offset;
+   robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A1R5G5B5_UNORM] =
+      offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, 2);
 
 #undef ROBUSTNESS_BUFFER_OFFSET_ALIGN16
@@ -299,12 +304,14 @@ uint16_t pvr_get_robustness_buffer_format_offset(VkFormat format)
    case VK_FORMAT_A8B8G8R8_USCALED_PACK32:
    case VK_FORMAT_A8B8G8R8_UINT_PACK32:
    case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_UINT];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_UINT];
 
    case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
    case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:
    case VK_FORMAT_A8B8G8R8_SINT_PACK32:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_SINT];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_SINT];
 
    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
    case VK_FORMAT_A2R10G10B10_USCALED_PACK32:
@@ -312,7 +319,8 @@ uint16_t pvr_get_robustness_buffer_format_offset(VkFormat format)
    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
    case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
    case VK_FORMAT_A2B10G10R10_UINT_PACK32:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A2R10G10B10_UINT];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_A2R10G10B10_UINT];
 
    case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
    case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
@@ -320,18 +328,22 @@ uint16_t pvr_get_robustness_buffer_format_offset(VkFormat format)
    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
    case VK_FORMAT_A2B10G10R10_SINT_PACK32:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A2R10G10B10_SINT];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_A2R10G10B10_SINT];
 
    case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
    case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R4G4B4A4_UNORM];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_R4G4B4A4_UNORM];
 
    case VK_FORMAT_R5G5B5A1_UNORM_PACK16:
    case VK_FORMAT_B5G5R5A1_UNORM_PACK16:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_R5G5B5A1_UNORM];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_R5G5B5A1_UNORM];
 
    case VK_FORMAT_A1R5G5B5_UNORM_PACK16:
-      return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_A1R5G5B5_UNORM];
+      return robustness_buffer_offsets
+         [PVR_ROBUSTNESS_BUFFER_FORMAT_A1R5G5B5_UNORM];
 
    default:
       return robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_UINT64];

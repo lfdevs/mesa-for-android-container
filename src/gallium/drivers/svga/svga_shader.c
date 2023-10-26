@@ -289,6 +289,9 @@ svga_init_shader_key_common(const struct svga_context *svga,
    key->num_textures = MAX2(svga->curr.num_sampler_views[shader_type],
                             svga->curr.num_samplers[shader_type]);
 
+   if (!shader->info.uses_samplers)
+      key->num_textures = 0;
+
    key->num_samplers = 0;
 
    /* Set sampler_state_mapping only if GL43 is supported and
@@ -470,6 +473,19 @@ svga_init_shader_key_common(const struct svga_context *svga,
    }
 
    if (svga_have_gl43(svga)) {
+
+      /* Save info about which constant buffers are to be viewed
+       * as srv raw buffers in the shader key.
+       */
+      if (shader->info.const_buffers_declared &
+          svga->state.raw_constbufs[shader_type]) {
+         key->raw_constbufs = svga->state.raw_constbufs[shader_type] &
+                              shader->info.const_buffers_declared;
+      }
+
+      /* beginning index for srv for raw constant buffers */
+      key->srv_raw_constbuf_index = PIPE_MAX_SAMPLERS;
+
       if (shader->info.uses_images || shader->info.uses_hw_atomic ||
           shader->info.uses_shader_buffers) {
 
@@ -520,10 +536,21 @@ svga_init_shader_key_common(const struct svga_context *svga,
          const struct svga_shader_buffer *cur_sbuf =
             &svga->curr.shader_buffers[shader_type][0];
 
+         /* Save info about which shader buffers are to be viewed
+          * as srv raw buffers in the shader key.
+          */
+         if (shader->info.shader_buffers_declared &
+             svga->state.raw_shaderbufs[shader_type]) {
+            key->raw_shaderbufs = svga->state.raw_shaderbufs[shader_type] &
+                                  shader->info.shader_buffers_declared;
+            key->srv_raw_shaderbuf_index = key->srv_raw_constbuf_index +
+		                           SVGA_MAX_CONST_BUFS;
+         }
+
          for (unsigned i = 0; i < ARRAY_SIZE(svga->curr.shader_buffers[shader_type]);
               i++, cur_sbuf++) {
 
-            if (cur_sbuf->resource)
+            if (cur_sbuf->resource && (!(key->raw_shaderbufs & (1 << i))))
                key->shader_buf_uav_index[i] = cur_sbuf->uav_index + uav_splice_index;
             else
                key->shader_buf_uav_index[i] = SVGA3D_INVALID_ID;
@@ -543,16 +570,6 @@ svga_init_shader_key_common(const struct svga_context *svga,
          key->image_size_used = shader->info.uses_image_size;
       }
 
-      /* Save info about which constant buffers are to be viewed
-       * as raw buffers in the shader key.
-       */
-      if (shader->info.const_buffers_declared &
-          svga->state.raw_constbufs[shader_type]) {
-         key->raw_buffers = svga->state.raw_constbufs[shader_type];
-
-         /* beginning index for srv for raw buffers */
-         key->srv_raw_buf_index = PIPE_MAX_SAMPLERS;
-      }
    }
 
    key->clamp_vertex_color = svga->curr.rast ?

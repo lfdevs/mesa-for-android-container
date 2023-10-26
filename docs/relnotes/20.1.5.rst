@@ -35,7 +35,7 @@ Bug fixes
 - VRAM leak with vuilkan external memory + opengl memory objects
 - Possible array out of bounds in brw_vec4_nir.cpp
 - [tgl][bisected][regression][iris] failure on dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_default
-- Multiply defined symbols compiling with gcc@10.1.0
+- Multiply defined symbols compiling with gcc\@10.1.0
 - shrinking descriptor pool on intel+vulkan
 - dEQP-VK.renderpass2.dedicated_allocation.attachment.1.12 fails on NAVI14
 

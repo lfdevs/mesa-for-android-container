@@ -54,6 +54,8 @@
 
 #include "pan_context.h"
 
+#define DEFAULT_MAX_AFBC_PACKING_RATIO 90
+
 /* clang-format off */
 static const struct debug_named_value panfrost_debug_options[] = {
    {"perf",       PAN_DBG_PERF,     "Enable performance warnings"},
@@ -71,6 +73,8 @@ static const struct debug_named_value panfrost_debug_options[] = {
 #ifdef PAN_DBG_OVERFLOW
    {"overflow",   PAN_DBG_OVERFLOW, "Check for buffer overflows in pool uploads"},
 #endif
+   {"yuv",        PAN_DBG_YUV,      "Tint YUV textures with blue for 1-plane and green for 2-plane"},
+   {"forcepack",  PAN_DBG_FORCE_PACK,  "Force packing of AFBC textures on upload"},
    DEBUG_NAMED_VALUE_END
 };
 /* clang-format on */
@@ -122,6 +126,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
+   case PIPE_CAP_HAS_CONST_BW:
       return 1;
 
    case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -457,7 +462,6 @@ panfrost_get_shader_param(struct pipe_screen *screen,
       return false;
 
    case PIPE_SHADER_CAP_INT64_ATOMICS:
-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 0;
 
@@ -838,6 +842,8 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
    /* Debug must be set first for pandecode to work correctly */
    dev->debug =
       debug_get_flags_option("PAN_MESA_DEBUG", panfrost_debug_options, 0);
+   screen->max_afbc_packing_ratio = debug_get_num_option(
+      "PAN_MAX_AFBC_PACKING_RATIO", DEFAULT_MAX_AFBC_PACKING_RATIO);
    panfrost_open_device(screen, fd, dev);
 
    if (dev->debug & PAN_DBG_NO_AFBC)

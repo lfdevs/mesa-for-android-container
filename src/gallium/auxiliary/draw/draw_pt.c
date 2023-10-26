@@ -304,7 +304,7 @@ draw_print_arrays(struct draw_context *draw, enum mesa_prim prim,
          }
 
          ptr += draw->pt.vertex_buffer[buf].buffer_offset;
-         ptr += draw->pt.vertex_buffer[buf].stride * ii;
+         ptr += draw->pt.vertex_element[j].src_stride * ii;
          ptr += draw->pt.vertex_element[j].src_offset;
 
          debug_printf("  Attr %u: ", j);
@@ -444,7 +444,8 @@ resolve_draw_info(const struct pipe_draw_info *raw_info,
                   const struct pipe_draw_start_count_bias *raw_draw,
                   struct pipe_draw_info *info,
                   struct pipe_draw_start_count_bias *draw,
-                  struct pipe_vertex_buffer *vertex_buffer)
+                  struct pipe_vertex_buffer *vertex_buffer,
+                  struct pipe_vertex_element *vertex_element)
 {
    *info = *raw_info;
    *draw = *raw_draw;
@@ -452,8 +453,8 @@ resolve_draw_info(const struct pipe_draw_info *raw_info,
    struct draw_so_target *target =
       (struct draw_so_target *)indirect->count_from_stream_output;
    assert(vertex_buffer != NULL);
-   draw->count = vertex_buffer->stride == 0 ? 0 :
-                    target->internal_offset / vertex_buffer->stride;
+   draw->count = vertex_element->src_stride == 0 ? 0 :
+                    target->internal_offset / vertex_element->src_stride;
 
    /* Stream output draw can not be indexed */
    assert(!info->index_size);
@@ -527,7 +528,8 @@ draw_vbo(struct draw_context *draw,
 
    if (indirect && indirect->count_from_stream_output) {
       resolve_draw_info(info, indirect, &draws[0], &resolved_info,
-                        &resolved_draw, &(draw->pt.vertex_buffer[0]));
+                        &resolved_draw, &(draw->pt.vertex_buffer[0]),
+                        &(draw->pt.vertex_element[0]));
       use_info = &resolved_info;
       use_draws = &resolved_draw;
       num_draws = 1;
@@ -562,18 +564,18 @@ draw_vbo(struct draw_context *draw,
    if (0) {
       debug_printf("Elements:\n");
       for (unsigned i = 0; i < draw->pt.nr_vertex_elements; i++) {
-         debug_printf("  %u: src_offset=%u  inst_div=%u   vbuf=%u  format=%s\n",
+         debug_printf("  %u: src_offset=%u src_stride=%u inst_div=%u   vbuf=%u  format=%s\n",
                       i,
                       draw->pt.vertex_element[i].src_offset,
+                      draw->pt.vertex_element[i].src_stride,
                       draw->pt.vertex_element[i].instance_divisor,
                       draw->pt.vertex_element[i].vertex_buffer_index,
                       util_format_name(draw->pt.vertex_element[i].src_format));
       }
       debug_printf("Buffers:\n");
       for (unsigned i = 0; i < draw->pt.nr_vertex_buffers; i++) {
-         debug_printf("  %u: stride=%u offset=%u size=%d ptr=%p\n",
+         debug_printf("  %u: offset=%u size=%d ptr=%p\n",
                       i,
-                      draw->pt.vertex_buffer[i].stride,
                       draw->pt.vertex_buffer[i].buffer_offset,
                       (int) draw->pt.user.vbuffer[i].size,
                       draw->pt.user.vbuffer[i].map);
@@ -640,6 +642,12 @@ draw_mesh(struct draw_context *draw,
           struct draw_prim_info *prim_info)
 {
    struct draw_pt_middle_end *middle = draw->pt.middle.mesh;
+
+   draw->pt.user.eltSize = 0;
+   draw->pt.user.viewid = 0;
+   draw->pt.user.drawid = 0;
+   draw->pt.user.increment_draw_id = false;
+   draw->pt.vertices_per_patch = 0;
 
    middle->prepare(middle, 0, 0, NULL);
 

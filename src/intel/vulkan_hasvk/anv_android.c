@@ -392,12 +392,6 @@ anv_image_init_from_gralloc(struct anv_device *device,
       .isl_extra_usage_flags = ISL_SURF_USAGE_DISABLE_AUX_BIT,
    };
 
-   if (gralloc_info->handle->numFds != 1) {
-      return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                       "VkNativeBufferANDROID::handle::numFds is %d, "
-                       "expected 1", gralloc_info->handle->numFds);
-   }
-
    /* Do not close the gralloc handle's dma_buf. The lifetime of the dma_buf
     * must exceed that of the gralloc handle, and we do not own the gralloc
     * handle.

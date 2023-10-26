@@ -296,60 +296,6 @@ handle_copy_query_results_cpu_job(struct v3dv_job *job)
 }
 
 static VkResult
-handle_copy_buffer_to_image_cpu_job(struct v3dv_queue *queue,
-                                    struct v3dv_job *job,
-                                    struct v3dv_submit_sync_info *sync_info)
-{
-   assert(job->type == V3DV_JOB_TYPE_CPU_COPY_BUFFER_TO_IMAGE);
-   struct v3dv_copy_buffer_to_image_cpu_job_info *info =
-      &job->cpu.copy_buffer_to_image;
-
-   /* Wait for all GPU work to finish first, since we may be accessing
-    * the BOs involved in the operation.
-    */
-   VkResult result = queue_wait_idle(queue, sync_info);
-   if (result != VK_SUCCESS)
-      return result;
-
-   /* Map BOs */
-   struct v3dv_bo *dst_bo = info->image->planes[info->plane].mem->bo;
-   assert(!dst_bo->map || dst_bo->map_size == dst_bo->size);
-   if (!dst_bo->map && !v3dv_bo_map(job->device, dst_bo, dst_bo->size))
-      return vk_error(job->device, VK_ERROR_OUT_OF_HOST_MEMORY);
-   void *dst_ptr = dst_bo->map;
-
-   struct v3dv_bo *src_bo = info->buffer->mem->bo;
-   assert(!src_bo->map || src_bo->map_size == src_bo->size);
-   if (!src_bo->map && !v3dv_bo_map(job->device, src_bo, src_bo->size))
-      return vk_error(job->device, VK_ERROR_OUT_OF_HOST_MEMORY);
-   void *src_ptr = src_bo->map;
-
-   const struct v3d_resource_slice *slice =
-      &info->image->planes[info->plane].slices[info->mip_level];
-
-   const struct pipe_box box = {
-      info->image_offset.x, info->image_offset.y, info->base_layer,
-      info->image_extent.width, info->image_extent.height, info->layer_count,
-   };
-
-   /* Copy each layer */
-   for (uint32_t i = 0; i < info->layer_count; i++) {
-      const uint32_t dst_offset =
-         v3dv_layer_offset(info->image, info->mip_level,
-                           info->base_layer + i, info->plane);
-      const uint32_t src_offset =
-         info->buffer->mem_offset + info->buffer_offset +
-         info->buffer_layer_stride * i;
-      v3d_store_tiled_image(
-         dst_ptr + dst_offset, slice->stride,
-         src_ptr + src_offset, info->buffer_stride,
-         slice->tiling, info->image->planes[info->plane].cpp, slice->padded_height, &box);
-   }
-
-   return VK_SUCCESS;
-}
-
-static VkResult
 handle_timestamp_query_cpu_job(struct v3dv_queue *queue, struct v3dv_job *job,
                                struct v3dv_submit_sync_info *sync_info)
 {
@@ -408,7 +354,7 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
 
    if (memcmp(group_counts, info->csd_job->csd.wg_count,
               sizeof(info->csd_job->csd.wg_count)) != 0) {
-      v3dv_cmd_buffer_rewrite_indirect_csd_job(info, group_counts);
+      v3dv_cmd_buffer_rewrite_indirect_csd_job(queue->device, info, group_counts);
    }
 
    return VK_SUCCESS;
@@ -1014,8 +960,6 @@ queue_handle_job(struct v3dv_queue *queue,
       return handle_end_query_cpu_job(job, counter_pass_idx);
    case V3DV_JOB_TYPE_CPU_COPY_QUERY_RESULTS:
       return handle_copy_query_results_cpu_job(job);
-   case V3DV_JOB_TYPE_CPU_COPY_BUFFER_TO_IMAGE:
-      return handle_copy_buffer_to_image_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_CSD_INDIRECT:
       return handle_csd_indirect_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_TIMESTAMP_QUERY:

@@ -837,8 +837,8 @@ lima_update_gp_attribute_info(struct lima_context *ctx, const struct pipe_draw_i
 
       unsigned start = info->index_size ? (ctx->min_index + draw->index_bias) : draw->start;
       attribute[n++] = res->bo->va + pvb->buffer_offset + pve->src_offset
-         + start * pvb->stride;
-      attribute[n++] = (pvb->stride << 11) |
+         + start * pve->src_stride;
+      attribute[n++] = (pve->src_stride << 11) |
          (lima_pipe_format_to_attrib_type(pve->src_format) << 2) |
          (util_format_get_nr_components(pve->src_format) - 1);
    }

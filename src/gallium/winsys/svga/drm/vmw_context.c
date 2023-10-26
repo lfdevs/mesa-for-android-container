@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -218,7 +218,7 @@ vmw_swc_flush(struct svga_winsys_context *swc,
          struct vmw_buffer_relocation *reloc = &vswc->region.relocs[i];
          struct SVGAGuestPtr ptr;
 
-         if(!vmw_gmr_bufmgr_region_ptr(reloc->buffer, &ptr))
+         if(!vmw_dma_bufmgr_region_ptr(reloc->buffer, &ptr))
             assert(0);
 
          ptr.offset += reloc->offset;

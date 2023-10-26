@@ -2137,7 +2137,7 @@ Gert Wollny (95):
 - r600/sfn: lower uniforms to UBOs
 - r600/sfn: remove load_uniform handling
 - etnaviv: Create MSAA surfaces with PE compatible tiling
-- nir/algeraic_opt: use double options too for lowering ftrunc@64
+- nir/algeraic_opt: use double options too for lowering ftrunc\@64
 - r600/sfn: Fix source modifiers for ffract64
 - r600/sfn: Fix f2u32 and remove backend lowring of f2u64 and f2i64
 - r600/sfn: Honor shader key w.r.t. atomic counter layout
@@ -3438,7 +3438,7 @@ Marek Olšák (135):
 - Revert "mesa: implement a display list / glBitmap texture atlas"
 - mesa: create glBitmap textures while creating display lists
 - st/mesa: fix potential use-after-free in draw_bitmap_quad
-- ci: update pass/fail results for spec@!opengl 1.0@gl-1.0-dlist-bitmap
+- ci: update pass/fail results for spec\@!opengl 1.0\@gl-1.0-dlist-bitmap
 - winsys/amdgpu: use cached GTT for command buffers and don't set the 32BIT flag
 - ci: disable the freedreno farm.
 - radeonsi/ci: add skips of tests not built on Linux
@@ -3467,7 +3467,7 @@ Marek Olšák (135):
 - frontend/dri: sync glthread when calling from the app side
 - radeonsi: simplify radeonsi_zerovram implementation
 - driconf: disable glthread for DeusEx:MD and F1 2015 due to a perf drop
-- radeonsi/ci: add glx@glx-swap-event_async to CI failures for glthread
+- radeonsi/ci: add glx\@glx-swap-event_async to CI failures for glthread
 - radeonsi: don't flush asynchronously for fence_server_signal
 - glthread: execute glSignalSemaphoreEXT synchronously
 - radeonsi: enable glthread by default

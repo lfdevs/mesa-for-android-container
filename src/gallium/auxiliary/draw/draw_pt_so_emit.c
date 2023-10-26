@@ -210,7 +210,7 @@ so_emit_prim(struct pt_so_emit *so,
          {
             debug_printf("VERT[%d], stream = %d, offset = %d, slot[%d] sc = %d, num_c = %d, idx = %d = [",
                          i, stream,
-                         draw->so.targets[ob]->internal_offset,
+                         draw->so.targets[ob]->internal_offset + (4 * state->output[slot].dst_offset),
                          slot, start_comp, num_comps, idx);
             for (unsigned j = 0; j < num_comps; ++j) {
                unsigned *ubuffer = (unsigned*)buffer;

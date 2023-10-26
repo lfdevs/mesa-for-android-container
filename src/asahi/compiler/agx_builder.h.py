@@ -131,7 +131,7 @@ agx_fmov_to(agx_builder *b, agx_index dst0, agx_index src0)
 static inline agx_instr *
 agx_push_exec(agx_builder *b, unsigned n)
 {
-   return agx_if_fcmp(b, agx_zero(), agx_zero(), n, AGX_FCOND_EQ, false);
+   return agx_if_fcmp(b, agx_zero(), agx_zero(), n, AGX_FCOND_EQ, false, NULL);
 }
 
 static inline agx_instr *

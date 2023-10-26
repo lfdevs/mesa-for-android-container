@@ -43,13 +43,11 @@ extern "C" {
 
 const unsigned *
 brw_vec4_generate_assembly(const struct brw_compiler *compiler,
-                           void *log_data,
-                           void *mem_ctx,
+                           const struct brw_compile_params *params,
                            const nir_shader *nir,
                            struct brw_vue_prog_data *prog_data,
                            const struct cfg_t *cfg,
                            const brw::performance &perf,
-                           struct brw_compile_stats *stats,
                            bool debug_enabled);
 
 #ifdef __cplusplus
@@ -66,11 +64,10 @@ class vec4_visitor : public backend_shader
 {
 public:
    vec4_visitor(const struct brw_compiler *compiler,
-                void *log_data,
+                const struct brw_compile_params *params,
                 const struct brw_sampler_prog_key_data *key,
                 struct brw_vue_prog_data *prog_data,
                 const nir_shader *shader,
-		void *mem_ctx,
                 bool no_spills,
                 bool debug_enabled);
 
@@ -309,12 +306,12 @@ public:
    virtual void nir_emit_alu(nir_alu_instr *instr);
    virtual void nir_emit_jump(nir_jump_instr *instr);
    virtual void nir_emit_texture(nir_tex_instr *instr);
-   virtual void nir_emit_undef(nir_ssa_undef_instr *instr);
+   virtual void nir_emit_undef(nir_undef_instr *instr);
    virtual void nir_emit_ssbo_atomic(int op, nir_intrinsic_instr *instr);
 
-   dst_reg get_nir_dest(const nir_dest &dest, enum brw_reg_type type);
-   dst_reg get_nir_dest(const nir_dest &dest, nir_alu_type type);
-   dst_reg get_nir_dest(const nir_dest &dest);
+   dst_reg get_nir_def(const nir_def &def, enum brw_reg_type type);
+   dst_reg get_nir_def(const nir_def &def, nir_alu_type type);
+   dst_reg get_nir_def(const nir_def &def);
    src_reg get_nir_src(const nir_src &src, enum brw_reg_type type,
                        unsigned num_components = 4);
    src_reg get_nir_src(const nir_src &src, nir_alu_type type,
@@ -324,7 +321,6 @@ public:
    src_reg get_nir_src_imm(const nir_src &src);
    src_reg get_indirect_offset(nir_intrinsic_instr *instr);
 
-   dst_reg *nir_locals;
    dst_reg *nir_ssa_values;
 
 protected:

@@ -28,6 +28,9 @@
 #ifndef PIPE_DEFINES_H
 #define PIPE_DEFINES_H
 
+/* For pipe_blend* and pipe_logicop enums */
+#include "util/blend.h"
+
 #include "util/compiler.h"
 
 #include "compiler/shader_enums.h"
@@ -53,68 +56,6 @@ enum pipe_error
    PIPE_ERROR_RETRY = -4
    /* TODO */
 };
-
-enum pipe_blendfactor {
-   PIPE_BLENDFACTOR_ONE = 1,
-   PIPE_BLENDFACTOR_SRC_COLOR,
-   PIPE_BLENDFACTOR_SRC_ALPHA,
-   PIPE_BLENDFACTOR_DST_ALPHA,
-   PIPE_BLENDFACTOR_DST_COLOR,
-   PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE,
-   PIPE_BLENDFACTOR_CONST_COLOR,
-   PIPE_BLENDFACTOR_CONST_ALPHA,
-   PIPE_BLENDFACTOR_SRC1_COLOR,
-   PIPE_BLENDFACTOR_SRC1_ALPHA,
-
-   PIPE_BLENDFACTOR_ZERO = 0x11,
-   PIPE_BLENDFACTOR_INV_SRC_COLOR,
-   PIPE_BLENDFACTOR_INV_SRC_ALPHA,
-   PIPE_BLENDFACTOR_INV_DST_ALPHA,
-   PIPE_BLENDFACTOR_INV_DST_COLOR,
-
-   PIPE_BLENDFACTOR_INV_CONST_COLOR = 0x17,
-   PIPE_BLENDFACTOR_INV_CONST_ALPHA,
-   PIPE_BLENDFACTOR_INV_SRC1_COLOR,
-   PIPE_BLENDFACTOR_INV_SRC1_ALPHA,
-};
-
-enum pipe_blend_func {
-   PIPE_BLEND_ADD,
-   PIPE_BLEND_SUBTRACT,
-   PIPE_BLEND_REVERSE_SUBTRACT,
-   PIPE_BLEND_MIN,
-   PIPE_BLEND_MAX,
-};
-
-enum pipe_logicop {
-   PIPE_LOGICOP_CLEAR,
-   PIPE_LOGICOP_NOR,
-   PIPE_LOGICOP_AND_INVERTED,
-   PIPE_LOGICOP_COPY_INVERTED,
-   PIPE_LOGICOP_AND_REVERSE,
-   PIPE_LOGICOP_INVERT,
-   PIPE_LOGICOP_XOR,
-   PIPE_LOGICOP_NAND,
-   PIPE_LOGICOP_AND,
-   PIPE_LOGICOP_EQUIV,
-   PIPE_LOGICOP_NOOP,
-   PIPE_LOGICOP_OR_INVERTED,
-   PIPE_LOGICOP_COPY,
-   PIPE_LOGICOP_OR_REVERSE,
-   PIPE_LOGICOP_OR,
-   PIPE_LOGICOP_SET,
-};
-
-#define PIPE_MASK_R  0x1
-#define PIPE_MASK_G  0x2
-#define PIPE_MASK_B  0x4
-#define PIPE_MASK_A  0x8
-#define PIPE_MASK_RGBA 0xf
-#define PIPE_MASK_Z  0x10
-#define PIPE_MASK_S  0x20
-#define PIPE_MASK_ZS 0x30
-#define PIPE_MASK_RGBAZS (PIPE_MASK_RGBA|PIPE_MASK_ZS)
-
 
 /**
  * Inequality functions.  Used for depth test, stencil compare, alpha
@@ -245,6 +186,7 @@ enum pipe_tex_reduction_mode {
  */
 enum pipe_map_flags
 {
+   PIPE_MAP_NONE = 0,
    /**
     * Resource contents read back (or accessed directly) at transfer
     * create time.
@@ -453,6 +395,15 @@ enum pipe_flush_flags
 #define PIPE_CONTEXT_PROTECTED         (1 << 7)
 
 /**
+ * Create a context that does not use sampler LOD bias. If this is set, the
+ * frontend MUST set pipe_sampler_state::lod_bias to 0.0f for all samplers used
+ * with the context. Drivers MAY ignore lod_bias for such contexts.
+ *
+ * This may allow driver fast paths for GLES, which lacks sampler LOD bias.
+ */
+#define PIPE_CONTEXT_NO_LOD_BIAS (1 << 8)
+
+/**
  * Flags for pipe_context::memory_barrier.
  */
 #define PIPE_BARRIER_MAPPED_BUFFER     (1 << 0)
@@ -530,7 +481,7 @@ enum pipe_flush_flags
 /* Resource is the DRI_PRIME blit destination. Only set on on the render GPU. */
 #define PIPE_BIND_PRIME_BLIT_DST (1 << 24)
 #define PIPE_BIND_USE_FRONT_RENDERING (1 << 25) /* Resource may be used for frontbuffer rendering */
-
+#define PIPE_BIND_CONST_BW    (1 << 26) /* Avoid using a data dependent layout (AFBC, UBWC, etc) */
 
 /**
  * Flags for the driver about resource behaviour:
@@ -626,20 +577,6 @@ enum pipe_render_cond_flag {
 enum pipe_sprite_coord_mode {
    PIPE_SPRITE_COORD_UPPER_LEFT,
    PIPE_SPRITE_COORD_LOWER_LEFT,
-};
-
-/**
- * Texture & format swizzles
- */
-enum pipe_swizzle {
-   PIPE_SWIZZLE_X,
-   PIPE_SWIZZLE_Y,
-   PIPE_SWIZZLE_Z,
-   PIPE_SWIZZLE_W,
-   PIPE_SWIZZLE_0,
-   PIPE_SWIZZLE_1,
-   PIPE_SWIZZLE_NONE,
-   PIPE_SWIZZLE_MAX, /**< Number of enums counter (must be last) */
 };
 
 /**
@@ -872,7 +809,6 @@ enum pipe_cap
    PIPE_CAP_LEGACY_MATH_RULES,
    PIPE_CAP_DOUBLES,
    PIPE_CAP_INT64,
-   PIPE_CAP_INT64_DIVMOD,
    PIPE_CAP_TGSI_TEX_TXF_LZ,
    PIPE_CAP_SHADER_CLOCK,
    PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE,
@@ -998,6 +934,7 @@ enum pipe_cap
    PIPE_CAP_ASTC_VOID_EXTENTS_NEED_DENORM_FLUSH,
 
    PIPE_CAP_VALIDATE_ALL_DIRTY_STATES,
+   PIPE_CAP_HAS_CONST_BW,
    PIPE_CAP_LAST,
    /* XXX do not add caps after PIPE_CAP_LAST! */
 };
@@ -1090,7 +1027,6 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS,
    PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED,
    PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS,
-   PIPE_SHADER_CAP_DROUND_SUPPORTED, /* all rounding modes */
    PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE,
    PIPE_SHADER_CAP_MAX_SHADER_BUFFERS,
    PIPE_SHADER_CAP_SUPPORTED_IRS,
@@ -1285,13 +1221,6 @@ enum pipe_query_flags
 {
    PIPE_QUERY_WAIT = (1 << 0),
    PIPE_QUERY_PARTIAL = (1 << 1),
-};
-
-union pipe_color_union
-{
-   float f[4];
-   int i[4];
-   unsigned int ui[4];
 };
 
 enum pipe_driver_query_type

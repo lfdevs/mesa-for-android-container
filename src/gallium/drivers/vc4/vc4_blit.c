@@ -285,24 +285,24 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
    nir_variable *pos_in = nir_variable_create(b.shader, nir_var_shader_in,
                                               vec4, "pos");
    pos_in->data.location = VARYING_SLOT_POS;
-   nir_ssa_def *pos = nir_load_var(&b, pos_in);
+   nir_def *pos = nir_load_var(&b, pos_in);
 
-   nir_ssa_def *one = nir_imm_int(&b, 1);
-   nir_ssa_def *two = nir_imm_int(&b, 2);
+   nir_def *one = nir_imm_int(&b, 1);
+   nir_def *two = nir_imm_int(&b, 2);
 
-   nir_ssa_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
-   nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
+   nir_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
+   nir_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
 
    nir_variable *stride_in = nir_variable_create(b.shader, nir_var_uniform,
                                                  glsl_int, "stride");
-   nir_ssa_def *stride = nir_load_var(&b, stride_in);
+   nir_def *stride = nir_load_var(&b, stride_in);
 
-   nir_ssa_def *x_offset;
-   nir_ssa_def *y_offset;
+   nir_def *x_offset;
+   nir_def *y_offset;
    if (cpp == 1) {
-           nir_ssa_def *intra_utile_x_offset =
+           nir_def *intra_utile_x_offset =
                    nir_ishl(&b, nir_iand(&b, x, one), two);
-           nir_ssa_def *inter_utile_x_offset =
+           nir_def *inter_utile_x_offset =
                    nir_ishl(&b, nir_iand(&b, x, nir_imm_int(&b, ~3)), one);
 
            x_offset = nir_iadd(&b,
@@ -318,7 +318,7 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
            y_offset = nir_imul(&b, y, stride);
    }
 
-   nir_ssa_def *load =
+   nir_def *load =
       nir_load_ubo(&b, 1, 32, one, nir_iadd(&b, x_offset, y_offset),
                    .align_mul = 4,
                    .align_offset = 0,
@@ -347,7 +347,7 @@ vc4_yuv_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         struct vc4_resource *dst = vc4_resource(info->dst.resource);
         bool ok;
 
-        if (info->mask & PIPE_MASK_RGBA)
+        if (!(info->mask & PIPE_MASK_RGBA))
                 return;
 
         if (src->tiled)

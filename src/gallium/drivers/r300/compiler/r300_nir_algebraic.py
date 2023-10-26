@@ -63,6 +63,37 @@ r300_nir_fuse_fround_d3d9 = [
          ('fround_even', 'a'))
 ]
 
+# Here are some specific optimizations for code reordering such that the backend
+# has easier task of recognizing output modifiers and presubtract patterns.
+r300_nir_prepare_presubtract = [
+        # Backend can only recognize 1 - x pattern.
+        (('fadd', ('fneg', a), 1.0), ('fadd', 1.0, ('fneg', a))),
+        (('fadd', a, -1.0), ('fneg', ('fadd', 1.0, ('fneg', a)))),
+        (('fadd', -1.0, a), ('fneg', ('fadd', 1.0, ('fneg', a)))),
+        # Bias presubtract 1 - 2 * x expects MAD -a 2.0 1.0 form.
+        (('ffma', 2.0, ('fneg', a), 1.0), ('ffma', ('fneg', a), 2.0, 1.0)),
+        (('ffma', a, -2.0, 1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
+        (('ffma', -2.0, a, 1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
+        (('ffma', 2.0, a, -1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
+        (('ffma', a, 2.0, -1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
+        # x * 2 can be usually folded into output modifier for the previous
+        # instruction, but that only works if x is a temporary. If it is input or
+        # constant just convert it to add instead.
+        (('fmul', 'a(is_ubo_or_input)', 2.0), ('fadd', a, a)),
+]
+
+for multiplier in [2.0, 4.0, 8.0, 16.0, 0.5, 0.25, 0.125, 0.0625]:
+    r300_nir_prepare_presubtract.extend([
+        (('fmul', a, ('fmul(is_used_once)', 'b(is_ubo_or_input)', multiplier)), ('fmul', multiplier, ('fmul', a, b))),
+])
+
+# Previous prepare_presubtract pass can sometimes produce double fneg patterns.
+# The backend copy propagate could handle it, but the nir to tgsi translation
+# does not and blows up. Just run a simple pass to clean it up.
+r300_nir_clean_double_fneg = [
+        (('fneg', ('fneg', a)), a)
+]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--import-path', required=True)
@@ -102,6 +133,12 @@ def main():
 
         f.write(nir_algebraic.AlgebraicPass("r300_nir_lower_bool_to_float",
                                             r300_nir_lower_bool_to_float).render())
+
+        f.write(nir_algebraic.AlgebraicPass("r300_nir_prepare_presubtract",
+                                            r300_nir_prepare_presubtract).render())
+
+        f.write(nir_algebraic.AlgebraicPass("r300_nir_clean_double_fneg",
+                                            r300_nir_clean_double_fneg).render())
 
 if __name__ == '__main__':
     main()

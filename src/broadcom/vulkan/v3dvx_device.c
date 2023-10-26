@@ -49,8 +49,8 @@ vk_to_v3d_compare_func[] = {
    [VK_COMPARE_OP_ALWAYS]                       = V3D_COMPARE_FUNC_ALWAYS,
 };
 
-
 static union pipe_color_union encode_border_color(
+   const struct v3dv_device *device,
    const VkSamplerCustomBorderColorCreateInfoEXT *bc_info)
 {
    const struct util_format_description *desc =
@@ -77,12 +77,28 @@ static union pipe_color_union encode_border_color(
     * colors so we need to fix up the swizzle manually for this case.
     */
    uint8_t swizzle[4];
-   if (v3dv_format_swizzle_needs_reverse(format->planes[0].swizzle) &&
+   const bool v3d_has_reverse_swap_rb_bits =
+      v3dv_texture_shader_state_has_rb_swap_reverse_bits(device);
+   if (!v3d_has_reverse_swap_rb_bits &&
+       v3dv_format_swizzle_needs_reverse(format->planes[0].swizzle) &&
        v3dv_format_swizzle_needs_rb_swap(format->planes[0].swizzle)) {
       swizzle[0] = PIPE_SWIZZLE_W;
       swizzle[1] = PIPE_SWIZZLE_X;
       swizzle[2] = PIPE_SWIZZLE_Y;
       swizzle[3] = PIPE_SWIZZLE_Z;
+   }
+   /* In v3d 7.x we no longer have a reverse flag for the border color. Instead
+    * we have to use the new reverse and swap_r/b flags in the texture shader
+    * state which will apply the format swizzle automatically when sampling
+    * the border color too and we should not apply it manually here.
+    */
+   else if (v3d_has_reverse_swap_rb_bits &&
+            (v3dv_format_swizzle_needs_rb_swap(format->planes[0].swizzle) ||
+             v3dv_format_swizzle_needs_reverse(format->planes[0].swizzle))) {
+      swizzle[0] = PIPE_SWIZZLE_X;
+      swizzle[1] = PIPE_SWIZZLE_Y;
+      swizzle[2] = PIPE_SWIZZLE_Z;
+      swizzle[3] = PIPE_SWIZZLE_W;
    } else {
       memcpy(swizzle, format->planes[0].swizzle, sizeof (swizzle));
    }
@@ -118,7 +134,11 @@ static union pipe_color_union encode_border_color(
                              (1 << (desc->channel[i].size - 1)) - 1);
    }
 
-   /* convert from float to expected format */
+#if V3D_VERSION <= 42
+   /* The TMU in V3D 7.x always takes 32-bit floats and handles conversions
+    * for us. In V3D 4.x we need to manually convert floating point color
+    * values to the expected format.
+    */
    if (vk_format_is_srgb(bc_info->format) ||
        vk_format_is_compressed(bc_info->format)) {
       for (int i = 0; i < 4; i++)
@@ -170,12 +190,14 @@ static union pipe_color_union encode_border_color(
          }
       }
    }
+#endif
 
    return border;
 }
 
 void
-v3dX(pack_sampler_state)(struct v3dv_sampler *sampler,
+v3dX(pack_sampler_state)(const struct v3dv_device *device,
+                         struct v3dv_sampler *sampler,
                          const VkSamplerCreateInfo *pCreateInfo,
                          const VkSamplerCustomBorderColorCreateInfoEXT *bc_info)
 {
@@ -217,7 +239,7 @@ v3dX(pack_sampler_state)(struct v3dv_sampler *sampler,
       s.border_color_mode = border_color_mode;
 
       if (s.border_color_mode == V3D_BORDER_COLOR_FOLLOWS) {
-         union pipe_color_union border = encode_border_color(bc_info);
+         union pipe_color_union border = encode_border_color(device, bc_info);
 
          s.border_color_word_0 = border.ui[0];
          s.border_color_word_1 = border.ui[1];
@@ -253,11 +275,13 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
    const struct v3dv_framebuffer *framebuffer,
    const struct v3dv_cmd_buffer_attachment_state *attachments,
    const struct v3dv_subpass *subpass,
-   uint8_t *max_bpp,
+   uint8_t *max_internal_bpp,
+   uint8_t *total_color_bpp,
    bool *msaa)
 {
    STATIC_ASSERT(V3D_INTERNAL_BPP_32 == 0);
-   *max_bpp = V3D_INTERNAL_BPP_32;
+   *max_internal_bpp = V3D_INTERNAL_BPP_32;
+   *total_color_bpp = 0;
    *msaa = false;
 
    if (subpass) {
@@ -270,8 +294,11 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
          assert(att);
          assert(att->plane_count == 1);
 
-         if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-            *max_bpp = MAX2(*max_bpp, att->planes[0].internal_bpp);
+         if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT) {
+            const uint32_t internal_bpp = att->planes[0].internal_bpp;
+            *max_internal_bpp = MAX2(*max_internal_bpp, internal_bpp);
+            *total_color_bpp += 4 * v3d_internal_bpp_words(internal_bpp);
+         }
 
          if (att->vk.image->samples > VK_SAMPLE_COUNT_1_BIT)
             *msaa = true;
@@ -285,7 +312,6 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
          if (att->vk.image->samples > VK_SAMPLE_COUNT_1_BIT)
             *msaa = true;
       }
-
       return;
    }
 
@@ -295,8 +321,11 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
       assert(att);
       assert(att->plane_count == 1);
 
-      if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-         *max_bpp = MAX2(*max_bpp, att->planes[0].internal_bpp);
+      if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT) {
+         const uint32_t internal_bpp = att->planes[0].internal_bpp;
+         *max_internal_bpp = MAX2(*max_internal_bpp, internal_bpp);
+         *total_color_bpp += 4 * v3d_internal_bpp_words(internal_bpp);
+      }
 
       if (att->vk.image->samples > VK_SAMPLE_COUNT_1_BIT)
          *msaa = true;

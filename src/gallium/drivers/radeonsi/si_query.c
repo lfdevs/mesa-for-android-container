@@ -115,9 +115,6 @@ static bool si_query_sw_begin(struct si_context *sctx, struct si_query *squery)
    case SI_QUERY_DECOMPRESS_CALLS:
       query->begin_result = sctx->num_decompress_calls;
       break;
-   case SI_QUERY_PRIM_RESTART_CALLS:
-      query->begin_result = sctx->num_prim_restart_calls;
-      break;
    case SI_QUERY_COMPUTE_CALLS:
       query->begin_result = sctx->num_compute_calls;
       break;
@@ -273,9 +270,6 @@ static bool si_query_sw_end(struct si_context *sctx, struct si_query *squery)
       break;
    case SI_QUERY_DECOMPRESS_CALLS:
       query->end_result = sctx->num_decompress_calls;
-      break;
-   case SI_QUERY_PRIM_RESTART_CALLS:
-      query->end_result = sctx->num_prim_restart_calls;
       break;
    case SI_QUERY_COMPUTE_CALLS:
       query->end_result = sctx->num_compute_calls;
@@ -713,23 +707,45 @@ static void si_update_occlusion_query_state(struct si_context *sctx, unsigned ty
 {
    if (type == PIPE_QUERY_OCCLUSION_COUNTER || type == PIPE_QUERY_OCCLUSION_PREDICATE ||
        type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
-      bool old_enable = sctx->num_occlusion_queries != 0;
-      bool old_perfect_enable = sctx->num_perfect_occlusion_queries != 0;
-      bool enable, perfect_enable;
-
-      sctx->num_occlusion_queries += diff;
-      assert(sctx->num_occlusion_queries >= 0);
-
-      if (type != PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
-         sctx->num_perfect_occlusion_queries += diff;
-         assert(sctx->num_perfect_occlusion_queries >= 0);
+      switch (type) {
+      case PIPE_QUERY_OCCLUSION_COUNTER:
+         sctx->num_integer_occlusion_queries += diff;
+         break;
+      case PIPE_QUERY_OCCLUSION_PREDICATE:
+         sctx->num_boolean_occlusion_queries += diff;
+         break;
+      case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
+         sctx->num_conservative_occlusion_queries += diff;
+         break;
       }
 
-      enable = sctx->num_occlusion_queries != 0;
-      perfect_enable = sctx->num_perfect_occlusion_queries != 0;
+      assert(sctx->num_integer_occlusion_queries >= 0);
+      assert(sctx->num_boolean_occlusion_queries >= 0);
+      assert(sctx->num_conservative_occlusion_queries >= 0);
 
-      if (enable != old_enable || perfect_enable != old_perfect_enable) {
-         si_set_occlusion_query_state(sctx, old_perfect_enable);
+      enum si_occlusion_query_mode new_mode =
+         sctx->num_integer_occlusion_queries ? SI_OCCLUSION_QUERY_MODE_PRECISE_INTEGER :
+         sctx->num_boolean_occlusion_queries ? SI_OCCLUSION_QUERY_MODE_PRECISE_BOOLEAN :
+         sctx->num_conservative_occlusion_queries ? SI_OCCLUSION_QUERY_MODE_CONSERVATIVE_BOOLEAN :
+         SI_OCCLUSION_QUERY_MODE_DISABLE;
+
+      /* Conservative queries are only available on gfx10+. On gfx11+, they perform worse
+       * with late Z, but not early Z. Instead of trying to detect late Z, never enable
+       * conservative queries to keep it simple. This is the recommended programming.
+       */
+      if (new_mode == SI_OCCLUSION_QUERY_MODE_CONSERVATIVE_BOOLEAN &&
+          (sctx->gfx_level < GFX10 || sctx ->gfx_level >= GFX11))
+         new_mode = SI_OCCLUSION_QUERY_MODE_PRECISE_BOOLEAN;
+
+      if (sctx->occlusion_query_mode != new_mode) {
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.db_render_state);
+
+         if (sctx->screen->info.has_out_of_order_rast &&
+             (sctx->occlusion_query_mode == SI_OCCLUSION_QUERY_MODE_PRECISE_INTEGER) !=
+             (new_mode == SI_OCCLUSION_QUERY_MODE_PRECISE_INTEGER))
+            si_mark_atom_dirty(sctx, &sctx->atoms.s.msaa_config);
+
+         sctx->occlusion_query_mode = new_mode;
       }
    }
 }
@@ -865,9 +881,11 @@ static void si_update_hw_pipeline_stats(struct si_context *sctx, unsigned type, 
       if (diff == 1 && sctx->num_hw_pipestat_streamout_queries == 1) {
          sctx->flags &= ~SI_CONTEXT_STOP_PIPELINE_STATS;
          sctx->flags |= SI_CONTEXT_START_PIPELINE_STATS;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
       } else if (diff == -1 && sctx->num_hw_pipestat_streamout_queries == 0) {
          sctx->flags &= ~SI_CONTEXT_START_PIPELINE_STATS;
          sctx->flags |= SI_CONTEXT_STOP_PIPELINE_STATS;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
       }
    }
 }
@@ -1033,7 +1051,7 @@ static void emit_set_predicate(struct si_context *ctx, struct si_resource *buf, 
    radeon_add_to_buffer_list(ctx, &ctx->gfx_cs, buf, RADEON_USAGE_READ | RADEON_PRIO_QUERY);
 }
 
-static void si_emit_query_predication(struct si_context *ctx)
+static void si_emit_query_predication(struct si_context *ctx, unsigned index)
 {
    uint32_t op;
    bool flag_wait, invert;
@@ -1575,6 +1593,7 @@ static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_q
    }
 
    sctx->flags |= sctx->screen->barrier_flags.cp_to_L2;
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
 
    for (qbuf = &query->buffer; qbuf; qbuf = qbuf_prev) {
       if (query->b.type != PIPE_QUERY_TIMESTAMP) {
@@ -1669,7 +1688,8 @@ static void si_render_condition(struct pipe_context *ctx, struct pipe_query *que
 
          /* Settings this in the render cond atom is too late,
           * so set it here. */
-         sctx->flags |= sctx->screen->barrier_flags.L2_to_cp | SI_CONTEXT_FLUSH_FOR_RENDER_COND;
+         sctx->flags |= sctx->screen->barrier_flags.L2_to_cp;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
 
          sctx->render_cond_enabled = old_render_cond_enabled;
       }
@@ -1719,7 +1739,6 @@ static struct pipe_driver_query_info si_driver_query_list[] = {
    X("num-shaders-created", NUM_SHADERS_CREATED, UINT64, CUMULATIVE),
    X("draw-calls", DRAW_CALLS, UINT64, AVERAGE),
    X("decompress-calls", DECOMPRESS_CALLS, UINT64, AVERAGE),
-   X("prim-restart-calls", PRIM_RESTART_CALLS, UINT64, AVERAGE),
    X("compute-calls", COMPUTE_CALLS, UINT64, AVERAGE),
    X("cp-dma-calls", CP_DMA_CALLS, UINT64, AVERAGE),
    X("num-vs-flushes", NUM_VS_FLUSHES, UINT64, AVERAGE),

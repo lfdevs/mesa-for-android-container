@@ -33,7 +33,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
    switch (instr->intrinsic) {
    case nir_intrinsic_load_per_vertex_input: {
-      assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(instr->def.bit_size == 32);
       /* The EmitNoIndirectInput flag guarantees our vertex index will
        * be constant.  We should handle indirects someday.
        */
@@ -50,7 +50,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
                     type);
       src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
 
-      dest = get_nir_dest(instr->dest, src.type);
+      dest = get_nir_def(instr->def, src.type);
       dest.writemask = brw_writemask_for_size(instr->num_components);
       emit(MOV(dest, src));
       break;
@@ -78,12 +78,12 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
    case nir_intrinsic_load_primitive_id:
       assert(gs_prog_data->include_primitive_id);
-      dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
+      dest = get_nir_def(instr->def, BRW_REGISTER_TYPE_D);
       emit(MOV(dest, retype(brw_vec4_grf(1, 0), BRW_REGISTER_TYPE_D)));
       break;
 
    case nir_intrinsic_load_invocation_id: {
-      dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
+      dest = get_nir_def(instr->def, BRW_REGISTER_TYPE_D);
       if (gs_prog_data->invocations > 1)
          emit(GS_OPCODE_GET_INSTANCE_ID, dest);
       else

@@ -48,4 +48,6 @@ typedef uint64_t mali_ptr;
  */
 #define MAX_MIP_LEVELS (14)
 
+#define MAX_IMAGE_PLANES (3)
+
 #endif /* __PANFROST_JOB_H__ */

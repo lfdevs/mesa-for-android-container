@@ -34,27 +34,27 @@ struct lower_intrinsics_state {
 static void
 compute_local_index_id(nir_builder *b,
                        nir_shader *nir,
-                       nir_ssa_def **local_index,
-                       nir_ssa_def **local_id)
+                       nir_def **local_index,
+                       nir_def **local_id)
 {
-   nir_ssa_def *subgroup_id = nir_load_subgroup_id(b);
+   nir_def *subgroup_id = nir_load_subgroup_id(b);
 
-   nir_ssa_def *thread_local_id =
+   nir_def *thread_local_id =
       nir_imul(b, subgroup_id, nir_load_simd_width_intel(b));
-   nir_ssa_def *channel = nir_load_subgroup_invocation(b);
-   nir_ssa_def *linear = nir_iadd(b, channel, thread_local_id);
+   nir_def *channel = nir_load_subgroup_invocation(b);
+   nir_def *linear = nir_iadd(b, channel, thread_local_id);
 
-   nir_ssa_def *size_x;
-   nir_ssa_def *size_y;
+   nir_def *size_x;
+   nir_def *size_y;
    if (nir->info.workgroup_size_variable) {
-      nir_ssa_def *size_xyz = nir_load_workgroup_size(b);
+      nir_def *size_xyz = nir_load_workgroup_size(b);
       size_x = nir_channel(b, size_xyz, 0);
       size_y = nir_channel(b, size_xyz, 1);
    } else {
       size_x = nir_imm_int(b, nir->info.workgroup_size[0]);
       size_y = nir_imm_int(b, nir->info.workgroup_size[1]);
    }
-   nir_ssa_def *size_xy = nir_imul(b, size_x, size_y);
+   nir_def *size_xy = nir_imul(b, size_x, size_y);
 
    /* The local invocation index and ID must respect the following
     *
@@ -73,7 +73,7 @@ compute_local_index_id(nir_builder *b,
     * large so it can safely be omitted.
     */
 
-   nir_ssa_def *id_x, *id_y, *id_z;
+   nir_def *id_x, *id_y, *id_z;
    switch (nir->info.cs.derivative_group) {
    case DERIVATIVE_GROUP_NONE:
       if (nir->info.num_images == 0 &&
@@ -96,7 +96,7 @@ compute_local_index_id(nir_builder *b,
           * (1,2) (1,3) (2,0) ... (size_x-1,3) (0,4) (0,5) (0,6) (0,7) (1,4) ...
           */
          const unsigned height = 4;
-         nir_ssa_def *block = nir_udiv_imm(b, linear, height);
+         nir_def *block = nir_udiv_imm(b, linear, height);
          id_x = nir_umod(b, block, size_x);
          id_y = nir_umod(b,
                          nir_iadd(b,
@@ -139,19 +139,19 @@ compute_local_index_id(nir_builder *b,
        * invocation index.  Skipping Z simplify index calculation.
        */
 
-      nir_ssa_def *one = nir_imm_int(b, 1);
-      nir_ssa_def *double_size_x = nir_ishl(b, size_x, one);
+      nir_def *one = nir_imm_int(b, 1);
+      nir_def *double_size_x = nir_ishl(b, size_x, one);
 
       /* ID within a pair of rows, where each group of 4 is 2x2 quad. */
-      nir_ssa_def *row_pair_id = nir_umod(b, linear, double_size_x);
-      nir_ssa_def *y_row_pairs = nir_udiv(b, linear, double_size_x);
+      nir_def *row_pair_id = nir_umod(b, linear, double_size_x);
+      nir_def *y_row_pairs = nir_udiv(b, linear, double_size_x);
 
-      nir_ssa_def *x =
+      nir_def *x =
          nir_ior(b,
                  nir_iand(b, row_pair_id, one),
                  nir_iand(b, nir_ishr(b, row_pair_id, one),
                           nir_imm_int(b, 0xfffffffe)));
-      nir_ssa_def *y =
+      nir_def *y =
          nir_ior(b,
                  nir_ishl(b, y_row_pairs, one),
                  nir_iand(b, nir_ishr(b, row_pair_id, one), one));
@@ -176,8 +176,8 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
    nir_shader *nir = state->nir;
 
    /* Reuse calculated values inside the block. */
-   nir_ssa_def *local_index = NULL;
-   nir_ssa_def *local_id = NULL;
+   nir_def *local_index = NULL;
+   nir_def *local_id = NULL;
 
    nir_foreach_instr_safe(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -187,27 +187,14 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
 
       b->cursor = nir_after_instr(&intrinsic->instr);
 
-      nir_ssa_def *sysval;
+      nir_def *sysval;
       switch (intrinsic->intrinsic) {
-      case nir_intrinsic_load_workgroup_size:
-      case nir_intrinsic_load_workgroup_id:
-      case nir_intrinsic_load_num_workgroups:
-         /* Convert this to 32-bit if it's not */
-         if (intrinsic->dest.ssa.bit_size == 64) {
-            intrinsic->dest.ssa.bit_size = 32;
-            sysval = nir_u2u64(b, &intrinsic->dest.ssa);
-            nir_ssa_def_rewrite_uses_after(&intrinsic->dest.ssa,
-                                           sysval,
-                                           sysval->parent_instr);
-         }
-         continue;
-
       case nir_intrinsic_load_local_invocation_index:
       case nir_intrinsic_load_local_invocation_id: {
          if (!local_index && !nir->info.workgroup_size_variable) {
             const uint16_t *ws = nir->info.workgroup_size;
             if (ws[0] * ws[1] * ws[2] == 1) {
-               nir_ssa_def *zero = nir_imm_int(b, 0);
+               nir_def *zero = nir_imm_int(b, 0);
                local_index = zero;
                local_id = nir_replicate(b, zero, 3);
             }
@@ -237,12 +224,12 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
       }
 
       case nir_intrinsic_load_num_subgroups: {
-         nir_ssa_def *size;
+         nir_def *size;
          if (state->nir->info.workgroup_size_variable) {
-            nir_ssa_def *size_xyz = nir_load_workgroup_size(b);
-            nir_ssa_def *size_x = nir_channel(b, size_xyz, 0);
-            nir_ssa_def *size_y = nir_channel(b, size_xyz, 1);
-            nir_ssa_def *size_z = nir_channel(b, size_xyz, 2);
+            nir_def *size_xyz = nir_load_workgroup_size(b);
+            nir_def *size_x = nir_channel(b, size_xyz, 0);
+            nir_def *size_y = nir_channel(b, size_xyz, 1);
+            nir_def *size_z = nir_channel(b, size_xyz, 2);
             size = nir_imul(b, nir_imul(b, size_x, size_y), size_z);
          } else {
             size = nir_imm_int(b, nir->info.workgroup_size[0] *
@@ -251,7 +238,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          }
 
          /* Calculate the equivalent of DIV_ROUND_UP. */
-         nir_ssa_def *simd_width = nir_load_simd_width_intel(b);
+         nir_def *simd_width = nir_load_simd_width_intel(b);
          sysval =
             nir_udiv(b, nir_iadd_imm(b, nir_iadd(b, size, simd_width), -1),
                         simd_width);
@@ -262,10 +249,10 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          continue;
       }
 
-      if (intrinsic->dest.ssa.bit_size == 64)
+      if (intrinsic->def.bit_size == 64)
          sysval = nir_u2u64(b, sysval);
 
-      nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, sysval);
+      nir_def_rewrite_uses(&intrinsic->def, sysval);
       nir_instr_remove(&intrinsic->instr);
 
       state->progress = true;

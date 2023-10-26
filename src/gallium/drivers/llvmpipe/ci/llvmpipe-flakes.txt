@@ -23,6 +23,3 @@ glx@glx-multi-context-single-window
 
 # unreliable, probably from scheduling.
 spec@arb_timer_query@timestamp-get
-
-# flakes very often
-wayland-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb

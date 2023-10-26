@@ -38,7 +38,7 @@ lower_xfb_output(nir_builder *b, nir_intrinsic_instr *intr,
 
    uint16_t offset = offset_words * 4;
 
-   nir_ssa_def *index = nir_iadd(
+   nir_def *index = nir_iadd(
       b, nir_imul(b, nir_load_instance_id(b), nir_load_num_vertices(b)),
       nir_load_vertex_id_zero_base(b));
 
@@ -46,36 +46,30 @@ lower_xfb_output(nir_builder *b, nir_intrinsic_instr *intr,
               SYSTEM_VALUE_VERTEX_ID_ZERO_BASE);
    BITSET_SET(b->shader->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
 
-   nir_ssa_def *buf = nir_load_xfb_address(b, 64, .base = buffer);
-   nir_ssa_def *addr = nir_iadd(
+   nir_def *buf = nir_load_xfb_address(b, 64, .base = buffer);
+   nir_def *addr = nir_iadd(
       b, buf,
       nir_u2u64(b, nir_iadd_imm(b, nir_imul_imm(b, index, stride), offset)));
 
-   assert(intr->src[0].is_ssa && "must lower XFB before lowering SSA");
-   nir_ssa_def *src = intr->src[0].ssa;
-   nir_ssa_def *value =
+   nir_def *src = intr->src[0].ssa;
+   nir_def *value =
       nir_channels(b, src, BITFIELD_MASK(num_components) << start_component);
    nir_store_global(b, addr, 4, value, BITFIELD_MASK(num_components));
 }
 
 static bool
-lower_xfb(nir_builder *b, nir_instr *instr, UNUSED void *data)
+lower_xfb(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
    /* In transform feedback programs, vertex ID becomes zero-based, so apply
     * that lowering even on Valhall.
     */
    if (intr->intrinsic == nir_intrinsic_load_vertex_id) {
-      b->cursor = nir_instr_remove(instr);
+      b->cursor = nir_instr_remove(&intr->instr);
 
-      nir_ssa_def *repl =
+      nir_def *repl =
          nir_iadd(b, nir_load_vertex_id_zero_base(b), nir_load_first_vertex(b));
 
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
+      nir_def_rewrite_uses(&intr->def, repl);
       return true;
    }
 
@@ -99,13 +93,13 @@ lower_xfb(nir_builder *b, nir_instr *instr, UNUSED void *data)
       }
    }
 
-   nir_instr_remove(instr);
+   nir_instr_remove(&intr->instr);
    return progress;
 }
 
 bool
 pan_lower_xfb(nir_shader *nir)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       nir, lower_xfb, nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

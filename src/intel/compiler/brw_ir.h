@@ -30,7 +30,12 @@
 #include "compiler/glsl/list.h"
 
 #define MAX_SAMPLER_MESSAGE_SIZE 11
-#define MAX_VGRF_SIZE 16
+
+/* The sampler can return a vec5 when sampling with sparse residency. In
+ * SIMD32, each component takes up 4 GRFs, so we need to allow up to size-20
+ * VGRFs to hold the result.
+ */
+#define MAX_VGRF_SIZE(devinfo) ((devinfo)->ver >= 20 ? 40 : 20)
 
 #ifdef __cplusplus
 struct backend_reg : private brw_reg

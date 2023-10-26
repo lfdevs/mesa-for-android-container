@@ -419,7 +419,9 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
    info->uses_images = tgsi_info->images_declared != 0;
    info->uses_image_size = tgsi_info->opcode_count[TGSI_OPCODE_RESQ] ? 1 : 0;
    info->uses_shader_buffers = tgsi_info->shader_buffers_declared != 0;
+   info->uses_samplers = tgsi_info->samplers_declared != 0;
    info->const_buffers_declared = tgsi_info->const_buffers_declared;
+   info->shader_buffers_declared = tgsi_info->shader_buffers_declared;
 
    info->generic_inputs_mask = svga_get_generic_inputs_mask(tgsi_info);
    info->generic_outputs_mask = svga_get_generic_outputs_mask(tgsi_info);
@@ -497,7 +499,6 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
    case PIPE_SHADER_TESS_EVAL:
       info->tes.prim_mode =
          tgsi_info->properties[TGSI_PROPERTY_TES_PRIM_MODE];
-      info->tes.reads_tess_factor = tgsi_info->reads_tess_factors;
 
       for (unsigned i = 0; i < info->num_inputs; i++) {
          switch (tgsi_info->input_semantic_name[i]) {

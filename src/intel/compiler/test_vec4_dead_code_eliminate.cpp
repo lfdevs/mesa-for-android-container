@@ -23,7 +23,6 @@
 
 #include <gtest/gtest.h>
 #include "brw_vec4.h"
-#include "program/program.h"
 
 using namespace brw;
 
@@ -33,6 +32,7 @@ class dead_code_eliminate_vec4_test : public ::testing::Test {
 
 public:
    struct brw_compiler *compiler;
+   struct brw_compile_params params;
    struct intel_device_info *devinfo;
    void *ctx;
    struct gl_shader_program *shader_prog;
@@ -44,10 +44,10 @@ class dead_code_eliminate_vec4_visitor : public vec4_visitor
 {
 public:
    dead_code_eliminate_vec4_visitor(struct brw_compiler *compiler,
-                                 void *mem_ctx,
+                                    struct brw_compile_params *params,
                                  nir_shader *shader,
                                  struct brw_vue_prog_data *prog_data)
-      : vec4_visitor(compiler, NULL, NULL, prog_data, shader, mem_ctx,
+      : vec4_visitor(compiler, params, NULL, prog_data, shader,
                      false /* no_spills */, false)
    {
       prog_data->dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
@@ -93,11 +93,14 @@ void dead_code_eliminate_vec4_test::SetUp()
    devinfo = rzalloc(ctx, struct intel_device_info);
    compiler->devinfo = devinfo;
 
+   params = {};
+   params.mem_ctx = ctx;
+
    prog_data = ralloc(ctx, struct brw_vue_prog_data);
    nir_shader *shader =
       nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL, NULL);
 
-  v = new dead_code_eliminate_vec4_visitor(compiler, ctx, shader, prog_data);
+  v = new dead_code_eliminate_vec4_visitor(compiler, &params, shader, prog_data);
 
    devinfo->ver = 4;
    devinfo->verx10 = devinfo->ver * 10;

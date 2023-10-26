@@ -7,6 +7,10 @@ pub struct PipeResource {
     pub is_user: bool,
 }
 
+// SAFETY: pipe_resource is considered a thread safe type
+unsafe impl Send for PipeResource {}
+unsafe impl Sync for PipeResource {}
+
 // Image dimensions provide by application to be used in both
 // image and sampler views when image is created from buffer
 #[derive(PartialEq, Eq)]
@@ -27,7 +31,7 @@ impl AppImgInfo {
 }
 
 impl PipeResource {
-    pub fn new(res: *mut pipe_resource, is_user: bool) -> Option<Self> {
+    pub(super) fn new(res: *mut pipe_resource, is_user: bool) -> Option<Self> {
         if res.is_null() {
             return None;
         }

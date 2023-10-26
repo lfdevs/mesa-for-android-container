@@ -187,6 +187,8 @@ private:
    bool schedule_exports(Shader::ShaderBlocks& out_blocks,
                          std::list<ExportInstr *>& ready_list);
 
+   void maybe_split_alu_block(Shader::ShaderBlocks& out_blocks);
+
    template <typename I> bool schedule(std::list<I *>& ready_list);
 
    template <typename I> bool schedule_block(std::list<I *>& ready_list);
@@ -235,6 +237,8 @@ private:
 
    bool m_nop_after_rel_dest{false};
    bool m_nop_befor_rel_src{false};
+   uint32_t m_next_block_id{1};
+
 
    ArrayCheckSet m_last_indirect_array_write;
    ArrayCheckSet m_last_direct_array_write;
@@ -325,7 +329,7 @@ BlockScheduler::schedule_block(Block& in_block,
 
    bool have_instr = collect_ready(cir);
 
-   m_current_block = new Block(in_block.nesting_depth(), in_block.id());
+   m_current_block = new Block(in_block.nesting_depth(), m_next_block_id++);
    m_current_block->set_instr_flag(Instr::force_cf);
    assert(m_current_block->id() >= 0);
 
@@ -447,7 +451,11 @@ BlockScheduler::schedule_block(Block& in_block,
    if (!cir.alu_vec.empty()) {
       std::cerr << "Unscheduled ALU vec ops:\n";
       for (auto& a : cir.alu_vec) {
-         std::cerr << "   " << *a << "\n";
+         std::cerr << "   [" << a->block_id() << ":"
+                   << a->index() <<"]:" << *a << "\n";
+         for (auto& d : a->required_instr())
+            std::cerr << "      R["<< d->block_id() << ":" << d->index() <<"]:"
+                      << *d << "\n";
       }
       fail = true;
    }
@@ -455,7 +463,10 @@ BlockScheduler::schedule_block(Block& in_block,
    if (!cir.alu_trans.empty()) {
       std::cerr << "Unscheduled ALU trans ops:\n";
       for (auto& a : cir.alu_trans) {
-         std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << "   [" << a->block_id() << ":"
+                   << a->index() <<"]:" << *a << "\n";
+         for (auto& d : a->required_instr())
+            std::cerr << "      R:" << *d << "\n";
       }
       fail = true;
    }
@@ -507,11 +518,17 @@ BlockScheduler::schedule_block(Block& in_block,
 
    if (cir.m_cf_instr) {
       // Assert that if condition is ready
+      if (m_current_block->type() != Block::alu) {
+         start_new_block(out_blocks, Block::alu);
+      }
       m_current_block->push_back(cir.m_cf_instr);
       cir.m_cf_instr->set_scheduled();
    }
 
-   out_blocks.push_back(m_current_block);
+   if (m_current_block->type() == Block::alu)
+      maybe_split_alu_block(out_blocks);
+   else
+      out_blocks.push_back(m_current_block);
 }
 
 void
@@ -540,6 +557,9 @@ BlockScheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
    bool has_lds_ready =
       !alu_vec_ready.empty() && (*alu_vec_ready.begin())->has_lds_access();
 
+   bool has_ar_read_ready = !alu_vec_ready.empty() &&
+                            std::get<0>((*alu_vec_ready.begin())->indirect_addr());
+
    /* If we have ready ALU instructions we have to start a new ALU block */
    if (has_alu_ready || !alu_groups_ready.empty()) {
       if (m_current_block->type() != Block::alu) {
@@ -551,7 +571,7 @@ BlockScheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
    /* Schedule groups first. unless we have a pending LDS instruction
     * We don't want the LDS instructions to be too far apart because the
     * fetch + read from queue has to be in the same ALU CF block */
-   if (!alu_groups_ready.empty() && !has_lds_ready) {
+   if (!alu_groups_ready.empty() && !has_lds_ready && !has_ar_read_ready) {
       group = *alu_groups_ready.begin();
 
       if (!check_array_reads(*group)) {
@@ -671,6 +691,12 @@ BlockScheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
    m_idx1_pending |= m_idx1_loading;
    m_idx1_loading = false;
 
+   if (!m_current_block->lds_group_active() &&
+       m_current_block->expected_ar_uses() == 0 &&
+       (!addr || is_index)) {
+      group->set_instr_flag(Instr::no_lds_or_addr_group);
+   }
+
    if (group->has_lds_group_start())
       m_current_block->lds_group_start(*group->begin());
 
@@ -698,7 +724,7 @@ BlockScheduler::schedule_tex(Shader::ShaderBlocks& out_blocks)
       auto ii = tex_ready.begin();
       sfn_log << SfnLog::schedule << "Schedule: " << **ii << "\n";
 
-      if (m_current_block->remaining_slots() < 1 + (*ii)->prepare_instr().size())
+      if ((unsigned)m_current_block->remaining_slots() < 1 + (*ii)->prepare_instr().size())
          start_new_block(out_blocks, Block::tex);
 
       for (auto prep : (*ii)->prepare_instr()) {
@@ -743,13 +769,79 @@ BlockScheduler::start_new_block(Shader::ShaderBlocks& out_blocks, Block::Type ty
    if (!m_current_block->empty()) {
       sfn_log << SfnLog::schedule << "Start new block\n";
       assert(!m_current_block->lds_group_active());
-      out_blocks.push_back(m_current_block);
-      m_current_block =
-         new Block(m_current_block->nesting_depth(), m_current_block->id());
+
+      if (m_current_block->type() != Block::alu)
+         out_blocks.push_back(m_current_block);
+      else
+         maybe_split_alu_block(out_blocks);
+      m_current_block = new Block(m_current_block->nesting_depth(), m_next_block_id++);
       m_current_block->set_instr_flag(Instr::force_cf);
       m_idx0_pending = m_idx1_pending = false;
+
    }
-   m_current_block->set_type(type);
+   m_current_block->set_type(type, m_chip_class);
+}
+
+void BlockScheduler::maybe_split_alu_block(Shader::ShaderBlocks& out_blocks)
+{
+   // TODO: needs fixing
+   if (m_current_block->remaining_slots() > 0) {
+      out_blocks.push_back(m_current_block);
+      return;
+   }
+
+   int used_slots = 0;
+   int pending_slots = 0;
+
+   Instr *next_block_start = nullptr;
+   for (auto cur_group : *m_current_block) {
+      /* This limit is a bit fishy, it should be 128 */
+      if (used_slots + pending_slots + cur_group->slots() < 128) {
+         if (cur_group->can_start_alu_block()) {
+            next_block_start = cur_group;
+            used_slots += pending_slots;
+            pending_slots = cur_group->slots();
+         } else {
+            pending_slots += cur_group->slots();
+         }
+      } else {
+         assert(next_block_start);
+         next_block_start->set_instr_flag(Instr::force_cf);
+         used_slots = pending_slots;
+         pending_slots = cur_group->slots();
+      }
+   }
+
+   Block *sub_block = new Block(m_current_block->nesting_depth(),
+                                m_next_block_id++);
+   sub_block->set_type(Block::alu, m_chip_class);
+   sub_block->set_instr_flag(Instr::force_cf);
+
+   for (auto instr : *m_current_block) {
+      auto group = instr->as_alu_group();
+      if (!group) {
+            sub_block->push_back(instr);
+            continue;
+      }
+
+      if (group->group_force_alu_cf()) {
+         assert(!sub_block->lds_group_active());
+         out_blocks.push_back(sub_block);
+         sub_block = new Block(m_current_block->nesting_depth(),
+                                         m_next_block_id++);
+         sub_block->set_type(Block::alu, m_chip_class);
+         sub_block->set_instr_flag(Instr::force_cf);
+      }
+      sub_block->push_back(group);
+      if (group->has_lds_group_start())
+         sub_block->lds_group_start(*group->begin());
+
+      if (group->has_lds_group_end())
+         sub_block->lds_group_end();
+
+   }
+   if (!sub_block->empty())
+      out_blocks.push_back(sub_block);
 }
 
 template <typename I>
@@ -1004,6 +1096,8 @@ BlockScheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready,
 
          if ((*i)->has_lds_access()) {
             priority = 100000;
+            if ((*i)->has_alu_flag(alu_is_lds))
+               priority += 100000;
          } else if (addr) {
             priority = 10000;
          } else if (AluGroup::has_t()) {

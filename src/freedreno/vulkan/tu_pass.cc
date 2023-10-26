@@ -10,62 +10,11 @@
 #include "tu_pass.h"
 
 #include "vk_util.h"
+#include "vk_render_pass.h"
 
 #include "tu_cmd_buffer.h"
 #include "tu_device.h"
 #include "tu_image.h"
-
-/* Return true if we have to fallback to sysmem rendering because the
- * dependency can't be satisfied with tiled rendering.
- */
-
-static bool
-dep_invalid_for_gmem(const VkSubpassDependency2 *dep,
-                     VkPipelineStageFlags2 src_stage_mask,
-                     VkPipelineStageFlags2 dst_stage_mask)
-{
-   /* External dependencies don't matter here. */
-   if (dep->srcSubpass == VK_SUBPASS_EXTERNAL ||
-       dep->dstSubpass == VK_SUBPASS_EXTERNAL)
-      return false;
-
-   /* We can conceptually break down the process of rewriting a sysmem
-    * renderpass into a gmem one into two parts:
-    *
-    * 1. Split each draw and multisample resolve into N copies, one for each
-    * bin. (If hardware binning, add one more copy where the FS is disabled
-    * for the binning pass). This is always allowed because the vertex stage
-    * is allowed to run an arbitrary number of times and there are no extra
-    * ordering constraints within a draw.
-    * 2. Take the last copy of the second-to-last draw and slide it down to
-    * before the last copy of the last draw. Repeat for each earlier draw
-    * until the draw pass for the last bin is complete, then repeat for each
-    * earlier bin until we finish with the first bin.
-    *
-    * During this rearranging process, we can't slide draws past each other in
-    * a way that breaks the subpass dependencies. For each draw, we must slide
-    * it past (copies of) the rest of the draws in the renderpass. We can
-    * slide a draw past another if there isn't a dependency between them, or
-    * if the dependenc(ies) are dependencies between framebuffer-space stages
-    * only with the BY_REGION bit set. Note that this includes
-    * self-dependencies, since these may result in pipeline barriers that also
-    * break the rearranging process.
-    */
-
-   /* This is straight from the Vulkan 1.2 spec, section 6.1.4 "Framebuffer
-    * Region Dependencies":
-    */
-   const VkPipelineStageFlags2 framebuffer_space_stages =
-      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
-      VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-      VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
-      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-   return
-      (src_stage_mask & ~(framebuffer_space_stages | VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT)) ||
-      (dst_stage_mask & ~(framebuffer_space_stages | VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)) ||
-      !(dep->dependencyFlags & VK_DEPENDENCY_BY_REGION_BIT);
-}
 
 static void
 tu_render_pass_add_subpass_dep(struct tu_render_pass *pass,
@@ -97,7 +46,30 @@ tu_render_pass_add_subpass_dep(struct tu_render_pass *pass,
    VkPipelineStageFlags2 dst_stage_mask = barrier ? barrier->dstStageMask : dep->dstStageMask;
    VkAccessFlags2 dst_access_mask = barrier ? barrier->dstAccessMask : dep->dstAccessMask;
 
-   if (dep_invalid_for_gmem(dep, src_stage_mask, dst_stage_mask)) {
+   /* We can conceptually break down the process of rewriting a sysmem
+    * renderpass into a gmem one into two parts:
+    *
+    * 1. Split each draw and multisample resolve into N copies, one for each
+    * bin. (If hardware binning, add one more copy where the FS is disabled
+    * for the binning pass). This is always allowed because the vertex stage
+    * is allowed to run an arbitrary number of times and there are no extra
+    * ordering constraints within a draw.
+    * 2. Take the last copy of the second-to-last draw and slide it down to
+    * before the last copy of the last draw. Repeat for each earlier draw
+    * until the draw pass for the last bin is complete, then repeat for each
+    * earlier bin until we finish with the first bin.
+    *
+    * During this rearranging process, we can't slide draws past each other in
+    * a way that breaks the subpass dependencies. For each draw, we must slide
+    * it past (copies of) the rest of the draws in the renderpass. We can
+    * slide a draw past another if there isn't a dependency between them, or
+    * if the dependenc(ies) are dependencies between framebuffer-space stages
+    * only with the BY_REGION bit set. Note that this includes
+    * self-dependencies, since these may result in pipeline barriers that also
+    * break the rearranging process.
+    */
+
+   if (!vk_subpass_dependency_is_fb_local(dep, src_stage_mask, dst_stage_mask)) {
       perf_debug((struct tu_device *)pass->base.device, "Disabling gmem rendering due to invalid subpass dependency");
       for (int i = 0; i < ARRAY_SIZE(pass->gmem_pixels); i++)
          pass->gmem_pixels[i] = 0;
@@ -790,10 +762,35 @@ static void
 tu_subpass_use_attachment(struct tu_render_pass *pass, int i, uint32_t a, const VkRenderPassCreateInfo2 *pCreateInfo)
 {
    struct tu_subpass *subpass = &pass->subpasses[i];
+   struct tu_render_pass_attachment *att = &pass->attachments[a];
 
-   pass->attachments[a].gmem = true;
+   att->gmem = true;
    update_samples(subpass, pCreateInfo->pAttachments[a].samples);
-   pass->attachments[a].clear_views |= subpass->multiview_mask;
+   att->clear_views |= subpass->multiview_mask;
+
+   /* Loads and clears are emitted at the start of the subpass that needs them. */
+   att->first_subpass_idx = MIN2(i, att->first_subpass_idx);
+
+   /* Stores are emitted at vkEndRenderPass() time. */
+   if (att->store || att->store_stencil)
+      att->last_subpass_idx = pass->subpass_count - 1;
+   else
+      att->last_subpass_idx = MAX2(i, att->last_subpass_idx);
+}
+
+static void
+tu_subpass_resolve_attachment(struct tu_render_pass *pass, int i, uint32_t dst_a, uint32_t src_a)
+{
+   if (src_a != VK_ATTACHMENT_UNUSED && dst_a != VK_ATTACHMENT_UNUSED) {
+      struct tu_render_pass_attachment *src_att = &pass->attachments[src_a];
+      struct tu_render_pass_attachment *dst_att = &pass->attachments[dst_a];
+      src_att->will_be_resolved = true;
+
+      src_att->first_subpass_idx = MIN2(i, src_att->first_subpass_idx);
+      src_att->last_subpass_idx = MAX2(i, src_att->last_subpass_idx);
+      dst_att->first_subpass_idx = MIN2(i, dst_att->first_subpass_idx);
+      dst_att->last_subpass_idx = MAX2(i, dst_att->last_subpass_idx);
+   }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -851,6 +848,9 @@ tu_CreateRenderPass2(VkDevice _device,
       attachment_set_ops(device, att, loadOp, stencilLoadOp,
                          pCreateInfo->pAttachments[i].storeOp,
                          pCreateInfo->pAttachments[i].stencilStoreOp);
+
+      att->first_subpass_idx = VK_SUBPASS_EXTERNAL;
+      att->last_subpass_idx = 0;
    }
    uint32_t subpass_attachment_count = 0;
    struct tu_subpass_attachment *p;
@@ -921,10 +921,15 @@ tu_CreateRenderPass2(VkDevice _device,
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
             uint32_t a = desc->pInputAttachments[j].attachment;
             subpass->input_attachments[j].attachment = a;
-            /* Note: attachments only used as input attachments will be read
-             * directly instead of through gmem, so we don't mark input
-             * attachments as needing gmem.
-             */
+            if (a != VK_ATTACHMENT_UNUSED) {
+               struct tu_render_pass_attachment *att = &pass->attachments[a];
+               /* Note: attachments only used as input attachments will be read
+                * directly instead of through gmem, so we don't mark input
+                * attachments as needing gmem.
+                */
+               att->first_subpass_idx = MIN2(i, att->first_subpass_idx);
+               att->last_subpass_idx = MAX2(i, att->last_subpass_idx);
+            }
          }
       }
 
@@ -950,14 +955,11 @@ tu_CreateRenderPass2(VkDevice _device,
          p += desc->colorAttachmentCount;
          subpass->resolve_count += desc->colorAttachmentCount;
          for (uint32_t j = 0; j < desc->colorAttachmentCount; j++) {
-            subpass->resolve_attachments[j].attachment =
-                  desc->pResolveAttachments[j].attachment;
-
+            uint32_t a = desc->pResolveAttachments[j].attachment;
             uint32_t src_a = desc->pColorAttachments[j].attachment;
-            if (src_a != VK_ATTACHMENT_UNUSED) {
-               pass->attachments[src_a].will_be_resolved =
-                  desc->pResolveAttachments[j].attachment != VK_ATTACHMENT_UNUSED;
-            }
+            subpass->resolve_attachments[j].attachment = a;
+
+            tu_subpass_resolve_attachment(pass, i, a, src_a);
          }
       }
 
@@ -965,12 +967,10 @@ tu_CreateRenderPass2(VkDevice _device,
          p++;
          subpass->resolve_count++;
          uint32_t a = ds_resolve->pDepthStencilResolveAttachment->attachment;
+         uint32_t src_a = desc->pDepthStencilAttachment->attachment;
          subpass->resolve_attachments[subpass->resolve_count - 1].attachment = a;
 
-         uint32_t src_a = desc->pDepthStencilAttachment->attachment;
-         if (src_a != VK_ATTACHMENT_UNUSED) {
-            pass->attachments[src_a].will_be_resolved = a != VK_ATTACHMENT_UNUSED;
-         }
+         tu_subpass_resolve_attachment(pass, i, a, src_a);
       }
 
       uint32_t a = desc->pDepthStencilAttachment ?
@@ -1035,6 +1035,7 @@ static void
 tu_setup_dynamic_attachment(struct tu_render_pass_attachment *att,
                             struct tu_image_view *view)
 {
+   *att = {};
    att->format = view->vk.format;
    att->samples = (VkSampleCountFlagBits) view->image->layout->nr_samples;
 
@@ -1055,19 +1056,15 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
    struct tu_render_pass *pass = &cmd_buffer->dynamic_pass;
    struct tu_subpass *subpass = &cmd_buffer->dynamic_subpass;
 
+   *pass = {};
+   *subpass = {};
+
    pass->subpass_count = 1;
    pass->attachments = cmd_buffer->dynamic_rp_attachments;
 
    subpass->color_count = subpass->resolve_count = info->colorAttachmentCount;
-   subpass->resolve_depth_stencil = false;
    subpass->color_attachments = cmd_buffer->dynamic_color_attachments;
    subpass->resolve_attachments = cmd_buffer->dynamic_resolve_attachments;
-   subpass->feedback_invalidate = false;
-   subpass->feedback_loop_ds = subpass->feedback_loop_color = false;
-   subpass->input_count = 0;
-   subpass->samples = (VkSampleCountFlagBits) 0;
-   subpass->srgb_cntl = 0;
-   subpass->raster_order_attachment_access = false;
    subpass->multiview_mask = info->viewMask;
 
    uint32_t a = 0;
@@ -1266,6 +1263,16 @@ VKAPI_ATTR void VKAPI_CALL
 tu_GetRenderAreaGranularity(VkDevice _device,
                             VkRenderPass renderPass,
                             VkExtent2D *pGranularity)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+   pGranularity->width = device->physical_device->info->gmem_align_w;
+   pGranularity->height = device->physical_device->info->gmem_align_h;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_GetRenderingAreaGranularityKHR(VkDevice _device,
+                                  const VkRenderingAreaInfoKHR *pRenderingAreaInfo,
+                                  VkExtent2D *pGranularity)
 {
    TU_FROM_HANDLE(tu_device, device, _device);
    pGranularity->width = device->physical_device->info->gmem_align_w;

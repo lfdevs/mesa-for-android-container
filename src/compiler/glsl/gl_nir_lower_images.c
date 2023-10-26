@@ -86,7 +86,7 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
 
    b->cursor = nir_before_instr(instr);
 
-   nir_ssa_def *src;
+   nir_def *src;
    int range_base = 0;
    if (bindless) {
       src = nir_load_deref(b, deref);

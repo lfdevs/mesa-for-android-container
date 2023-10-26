@@ -97,10 +97,10 @@ util_draw_max_index(
 
       buffer_size -= format_size;
 
-      if (buffer->stride != 0) {
+      if (element->src_stride != 0) {
          unsigned buffer_max_index;
 
-         buffer_max_index = buffer_size / buffer->stride;
+         buffer_max_index = buffer_size / element->src_stride;
 
          if (element->instance_divisor == 0) {
             /* Per-vertex data */

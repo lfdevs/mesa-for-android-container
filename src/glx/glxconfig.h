@@ -85,9 +85,6 @@ struct glx_config {
     /* SGIX_visual_select_group */
     GLint visualSelectGroup;
 
-    /* OML_swap_method */
-    GLint swapMethod;
-
     GLint screen;
 
     /* EXT_texture_from_pixmap */

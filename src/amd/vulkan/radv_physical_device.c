@@ -380,6 +380,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .KHR_8bit_storage = true,
       .KHR_16bit_storage = true,
       .KHR_acceleration_structure = radv_enable_rt(device, false),
+      .KHR_cooperative_matrix = device->rad_info.gfx_level >= GFX11 && !device->use_llvm,
       .KHR_bind_memory2 = true,
       .KHR_buffer_device_address = true,
       .KHR_copy_commands2 = true,
@@ -412,6 +413,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .KHR_maintenance2 = true,
       .KHR_maintenance3 = true,
       .KHR_maintenance4 = true,
+      .KHR_maintenance5 = true,
       .KHR_map_memory2 = true,
       .KHR_multiview = true,
       .KHR_performance_query = radv_perf_query_supported(device),
@@ -487,6 +489,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,
       .EXT_extended_dynamic_state3 = true,
+      .EXT_external_memory_acquire_unmodified = true,
       .EXT_external_memory_dma_buf = true,
       .EXT_external_memory_host = device->rad_info.has_userptr,
       .EXT_fragment_shader_interlock = radv_has_pops(device),
@@ -575,6 +578,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .INTEL_shader_integer_functions2 = true,
       .NV_compute_shader_derivatives = true,
       .NV_device_generated_commands = radv_NV_device_generated_commands_enabled(device),
+      .NV_device_generated_commands_compute = radv_NV_device_generated_commands_enabled(device),
       /* Undocumented extension purely for vkd3d-proton. This check is to prevent anyone else from
        * using it.
        */
@@ -616,7 +620,7 @@ radv_physical_device_get_features(const struct radv_physical_device *pdevice, st
       .multiViewport = true,
       .samplerAnisotropy = true,
       .textureCompressionETC2 = radv_device_supports_etc(pdevice) || pdevice->emulate_etc2,
-      .textureCompressionASTC_LDR = false,
+      .textureCompressionASTC_LDR = pdevice->emulate_astc,
       .textureCompressionBC = true,
       .occlusionQueryPrecise = true,
       .pipelineStatisticsQuery = true,
@@ -959,18 +963,18 @@ radv_physical_device_get_features(const struct radv_physical_device *pdevice, st
       .extendedDynamicState3TessellationDomainOrigin = true,
       .extendedDynamicState3PolygonMode = true,
       .extendedDynamicState3SampleMask = true,
-      .extendedDynamicState3AlphaToCoverageEnable = pdevice->rad_info.gfx_level < GFX11,
+      .extendedDynamicState3AlphaToCoverageEnable = pdevice->rad_info.gfx_level < GFX11 && !pdevice->use_llvm,
       .extendedDynamicState3LogicOpEnable = true,
       .extendedDynamicState3LineStippleEnable = true,
-      .extendedDynamicState3ColorBlendEnable = true,
+      .extendedDynamicState3ColorBlendEnable = !pdevice->use_llvm,
       .extendedDynamicState3DepthClipEnable = true,
       .extendedDynamicState3ConservativeRasterizationMode = pdevice->rad_info.gfx_level >= GFX9,
       .extendedDynamicState3DepthClipNegativeOneToOne = true,
       .extendedDynamicState3ProvokingVertexMode = true,
       .extendedDynamicState3DepthClampEnable = true,
-      .extendedDynamicState3ColorWriteMask = true,
+      .extendedDynamicState3ColorWriteMask = !pdevice->use_llvm,
       .extendedDynamicState3RasterizationSamples = true,
-      .extendedDynamicState3ColorBlendEquation = true,
+      .extendedDynamicState3ColorBlendEquation = !pdevice->use_llvm,
       .extendedDynamicState3SampleLocationsEnable = pdevice->rad_info.gfx_level < GFX10,
       .extendedDynamicState3LineRasterizationMode = true,
       .extendedDynamicState3ExtraPrimitiveOverestimationSize = false,
@@ -1027,6 +1031,18 @@ radv_physical_device_get_features(const struct radv_physical_device *pdevice, st
 
       /* VK_EXT_pipeline_robustness */
       .pipelineRobustness = true,
+
+      /* VK_KHR_maintenance5 */
+      .maintenance5 = true,
+
+      /* VK_NV_device_generated_commands_compute */
+      .deviceGeneratedCompute = true,
+      .deviceGeneratedComputePipelines = false,
+      .deviceGeneratedComputeCaptureReplay = false,
+
+      /* VK_KHR_cooperative_matrix */
+      .cooperativeMatrix = pdevice->rad_info.gfx_level >= GFX11 && !pdevice->use_llvm,
+      .cooperativeMatrixRobustBufferAccess = pdevice->rad_info.gfx_level >= GFX11 && !pdevice->use_llvm,
    };
 }
 
@@ -1062,15 +1078,48 @@ radv_uniform_buffer_offset_alignment(const struct radv_physical_device *pdevice)
    return MAX2(uniform_offset_alignment, 4);
 }
 
-VKAPI_ATTR void VKAPI_CALL
-radv_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties *pProperties)
+static const char *
+radv_get_compiler_string(struct radv_physical_device *pdevice)
 {
-   RADV_FROM_HANDLE(radv_physical_device, pdevice, physicalDevice);
+   if (!pdevice->use_llvm) {
+      /* Some games like SotTR apply shader workarounds if the LLVM
+       * version is too old or if the LLVM version string is
+       * missing. This gives 2-5% performance with SotTR and ACO.
+       */
+      if (driQueryOptionb(&pdevice->instance->dri_options, "radv_report_llvm9_version_string")) {
+         return " (LLVM 9.0.1)";
+      }
+
+      return "";
+   }
+
+#ifdef LLVM_AVAILABLE
+   return " (LLVM " MESA_LLVM_VERSION_STRING ")";
+#else
+   unreachable("LLVM is not available");
+#endif
+}
+
+static void
+radv_get_physical_device_properties(struct radv_physical_device *pdevice)
+{
    VkSampleCountFlags sample_counts = 0xf;
 
    size_t max_descriptor_set_size = radv_max_descriptor_set_size();
 
-   VkPhysicalDeviceLimits limits = {
+   VkPhysicalDeviceType device_type;
+   if (pdevice->rad_info.has_dedicated_vram) {
+      device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+   } else {
+      device_type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+   }
+
+   pdevice->vk.properties = (struct vk_properties){
+      .apiVersion = RADV_API_VERSION,
+      .driverVersion = vk_get_driver_version(),
+      .vendorID = ATI_VENDOR_ID,
+      .deviceID = pdevice->rad_info.pci_id,
+      .deviceType = device_type,
       .maxImageDimension1D = (1 << 14),
       .maxImageDimension2D = (1 << 14),
       .maxImageDimension3D = (1 << 11),
@@ -1177,39 +1226,16 @@ radv_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDevi
       .optimalBufferCopyOffsetAlignment = 1,
       .optimalBufferCopyRowPitchAlignment = 1,
       .nonCoherentAtomSize = 64,
+      .sparseResidencyNonResidentStrict = pdevice->rad_info.family >= CHIP_POLARIS10,
+      .sparseResidencyStandard2DBlockShape = pdevice->rad_info.family >= CHIP_POLARIS10,
+      .sparseResidencyStandard3DBlockShape = pdevice->rad_info.gfx_level >= GFX9,
    };
 
-   VkPhysicalDeviceType device_type;
+   struct vk_properties *p = &pdevice->vk.properties;
 
-   if (pdevice->rad_info.has_dedicated_vram) {
-      device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-   } else {
-      device_type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
-   }
-
-   *pProperties = (VkPhysicalDeviceProperties){
-      .apiVersion = RADV_API_VERSION,
-      .driverVersion = vk_get_driver_version(),
-      .vendorID = ATI_VENDOR_ID,
-      .deviceID = pdevice->rad_info.pci_id,
-      .deviceType = device_type,
-      .limits = limits,
-      .sparseProperties =
-         {
-            .residencyNonResidentStrict = pdevice->rad_info.family >= CHIP_POLARIS10,
-            .residencyStandard2DBlockShape = pdevice->rad_info.family >= CHIP_POLARIS10,
-            .residencyStandard3DBlockShape = pdevice->rad_info.gfx_level >= GFX9,
-         },
-   };
-
-   strcpy(pProperties->deviceName, pdevice->marketing_name);
-   memcpy(pProperties->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
-}
-
-static void
-radv_get_physical_device_properties_1_1(struct radv_physical_device *pdevice, VkPhysicalDeviceVulkan11Properties *p)
-{
-   assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES);
+   /* Vulkan 1.1 */
+   strcpy(p->deviceName, pdevice->marketing_name);
+   memcpy(p->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
 
    memcpy(p->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
    memcpy(p->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
@@ -1237,35 +1263,8 @@ radv_get_physical_device_properties_1_1(struct radv_physical_device *pdevice, Vk
    p->protectedNoFault = false;
    p->maxPerSetDescriptors = RADV_MAX_PER_SET_DESCRIPTORS;
    p->maxMemoryAllocationSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-}
 
-static const char *
-radv_get_compiler_string(struct radv_physical_device *pdevice)
-{
-   if (!pdevice->use_llvm) {
-      /* Some games like SotTR apply shader workarounds if the LLVM
-       * version is too old or if the LLVM version string is
-       * missing. This gives 2-5% performance with SotTR and ACO.
-       */
-      if (driQueryOptionb(&pdevice->instance->dri_options, "radv_report_llvm9_version_string")) {
-         return " (LLVM 9.0.1)";
-      }
-
-      return "";
-   }
-
-#ifdef LLVM_AVAILABLE
-   return " (LLVM " MESA_LLVM_VERSION_STRING ")";
-#else
-   unreachable("LLVM is not available");
-#endif
-}
-
-static void
-radv_get_physical_device_properties_1_2(struct radv_physical_device *pdevice, VkPhysicalDeviceVulkan12Properties *p)
-{
-   assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES);
-
+   /* Vulkan 1.2 */
    p->driverID = VK_DRIVER_ID_MESA_RADV;
    snprintf(p->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
    snprintf(p->driverInfo, VK_MAX_DRIVER_INFO_SIZE, "Mesa " PACKAGE_VERSION MESA_GIT_SHA1 "%s",
@@ -1341,8 +1340,6 @@ radv_get_physical_device_properties_1_2(struct radv_physical_device *pdevice, Vk
    p->robustBufferAccessUpdateAfterBind = true;
    p->quadDivergentImplicitLod = false;
 
-   size_t max_descriptor_set_size = radv_max_descriptor_set_size();
-
    p->maxPerStageDescriptorUpdateAfterBindSamplers = max_descriptor_set_size;
    p->maxPerStageDescriptorUpdateAfterBindUniformBuffers = max_descriptor_set_size;
    p->maxPerStageDescriptorUpdateAfterBindStorageBuffers = max_descriptor_set_size;
@@ -1377,13 +1374,8 @@ radv_get_physical_device_properties_1_2(struct radv_physical_device *pdevice, Vk
    p->maxTimelineSemaphoreValueDifference = UINT64_MAX;
 
    p->framebufferIntegerColorSampleCounts = VK_SAMPLE_COUNT_1_BIT;
-}
 
-static void
-radv_get_physical_device_properties_1_3(struct radv_physical_device *pdevice, VkPhysicalDeviceVulkan13Properties *p)
-{
-   assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES);
-
+   /* Vulkan 1.3 */
    p->minSubgroupSize = 64;
    p->maxSubgroupSize = 64;
    p->maxComputeWorkgroupSubgroups = UINT32_MAX;
@@ -1405,16 +1397,16 @@ radv_get_physical_device_properties_1_3(struct radv_physical_device *pdevice, Vk
    p->maxDescriptorSetUpdateAfterBindInlineUniformBlocks = MAX_INLINE_UNIFORM_BLOCK_COUNT;
    p->maxInlineUniformTotalSize = UINT16_MAX;
 
-   bool accel = pdevice->rad_info.has_accelerated_dot_product;
+   bool accel_dot = pdevice->rad_info.has_accelerated_dot_product;
    bool gfx11plus = pdevice->rad_info.gfx_level >= GFX11;
-   p->integerDotProduct8BitUnsignedAccelerated = accel;
-   p->integerDotProduct8BitSignedAccelerated = accel;
-   p->integerDotProduct8BitMixedSignednessAccelerated = accel && gfx11plus;
-   p->integerDotProduct4x8BitPackedUnsignedAccelerated = accel;
-   p->integerDotProduct4x8BitPackedSignedAccelerated = accel;
-   p->integerDotProduct4x8BitPackedMixedSignednessAccelerated = accel && gfx11plus;
-   p->integerDotProduct16BitUnsignedAccelerated = accel && !gfx11plus;
-   p->integerDotProduct16BitSignedAccelerated = accel && !gfx11plus;
+   p->integerDotProduct8BitUnsignedAccelerated = accel_dot;
+   p->integerDotProduct8BitSignedAccelerated = accel_dot;
+   p->integerDotProduct8BitMixedSignednessAccelerated = accel_dot && gfx11plus;
+   p->integerDotProduct4x8BitPackedUnsignedAccelerated = accel_dot;
+   p->integerDotProduct4x8BitPackedSignedAccelerated = accel_dot;
+   p->integerDotProduct4x8BitPackedMixedSignednessAccelerated = accel_dot && gfx11plus;
+   p->integerDotProduct16BitUnsignedAccelerated = accel_dot && !gfx11plus;
+   p->integerDotProduct16BitSignedAccelerated = accel_dot && !gfx11plus;
    p->integerDotProduct16BitMixedSignednessAccelerated = false;
    p->integerDotProduct32BitUnsignedAccelerated = false;
    p->integerDotProduct32BitSignedAccelerated = false;
@@ -1422,14 +1414,14 @@ radv_get_physical_device_properties_1_3(struct radv_physical_device *pdevice, Vk
    p->integerDotProduct64BitUnsignedAccelerated = false;
    p->integerDotProduct64BitSignedAccelerated = false;
    p->integerDotProduct64BitMixedSignednessAccelerated = false;
-   p->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated = accel;
-   p->integerDotProductAccumulatingSaturating8BitSignedAccelerated = accel;
-   p->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = accel && gfx11plus;
-   p->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated = accel;
-   p->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated = accel;
-   p->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = accel && gfx11plus;
-   p->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated = accel && !gfx11plus;
-   p->integerDotProductAccumulatingSaturating16BitSignedAccelerated = accel && !gfx11plus;
+   p->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated = accel_dot;
+   p->integerDotProductAccumulatingSaturating8BitSignedAccelerated = accel_dot;
+   p->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = accel_dot && gfx11plus;
+   p->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated = accel_dot;
+   p->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated = accel_dot;
+   p->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = accel_dot && gfx11plus;
+   p->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated = accel_dot && !gfx11plus;
+   p->integerDotProductAccumulatingSaturating16BitSignedAccelerated = accel_dot && !gfx11plus;
    p->integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated = false;
    p->integerDotProductAccumulatingSaturating32BitUnsignedAccelerated = false;
    p->integerDotProductAccumulatingSaturating32BitSignedAccelerated = false;
@@ -1444,402 +1436,288 @@ radv_get_physical_device_properties_1_3(struct radv_physical_device *pdevice, Vk
    p->uniformTexelBufferOffsetSingleTexelAlignment = true;
 
    p->maxBufferSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-}
 
-VKAPI_ATTR void VKAPI_CALL
-radv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2 *pProperties)
-{
-   RADV_FROM_HANDLE(radv_physical_device, pdevice, physicalDevice);
-   radv_GetPhysicalDeviceProperties(physicalDevice, &pProperties->properties);
+   /* VK_KHR_push_descriptor */
+   p->maxPushDescriptors = MAX_PUSH_DESCRIPTORS;
 
-   VkPhysicalDeviceVulkan11Properties core_1_1 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
-   };
-   radv_get_physical_device_properties_1_1(pdevice, &core_1_1);
+   /* VK_EXT_discard_rectangles */
+   p->maxDiscardRectangles = MAX_DISCARD_RECTANGLES;
 
-   VkPhysicalDeviceVulkan12Properties core_1_2 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
-   };
-   radv_get_physical_device_properties_1_2(pdevice, &core_1_2);
+   /* VK_EXT_external_memory_host */
+   p->minImportedHostPointerAlignment = 4096;
 
-   VkPhysicalDeviceVulkan13Properties core_1_3 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
-   };
-   radv_get_physical_device_properties_1_3(pdevice, &core_1_3);
+   /* VK_AMD_shader_core_properties */
+   /* Shader engines. */
+   p->shaderEngineCount = pdevice->rad_info.max_se;
+   p->shaderArraysPerEngineCount = pdevice->rad_info.max_sa_per_se;
+   p->computeUnitsPerShaderArray = pdevice->rad_info.min_good_cu_per_sa;
+   p->simdPerComputeUnit = pdevice->rad_info.num_simd_per_compute_unit;
+   p->wavefrontsPerSimd = pdevice->rad_info.max_wave64_per_simd;
+   p->wavefrontSize = 64;
 
-   vk_foreach_struct (ext, pProperties->pNext) {
-      if (vk_get_physical_device_core_1_1_property_ext(ext, &core_1_1))
-         continue;
-      if (vk_get_physical_device_core_1_2_property_ext(ext, &core_1_2))
-         continue;
-      if (vk_get_physical_device_core_1_3_property_ext(ext, &core_1_3))
-         continue;
+   /* SGPR. */
+   p->sgprsPerSimd = pdevice->rad_info.num_physical_sgprs_per_simd;
+   p->minSgprAllocation = pdevice->rad_info.min_sgpr_alloc;
+   p->maxSgprAllocation = pdevice->rad_info.max_sgpr_alloc;
+   p->sgprAllocationGranularity = pdevice->rad_info.sgpr_alloc_granularity;
 
-      switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR: {
-         VkPhysicalDevicePushDescriptorPropertiesKHR *properties = (VkPhysicalDevicePushDescriptorPropertiesKHR *)ext;
-         properties->maxPushDescriptors = MAX_PUSH_DESCRIPTORS;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT: {
-         VkPhysicalDeviceDiscardRectanglePropertiesEXT *properties =
-            (VkPhysicalDeviceDiscardRectanglePropertiesEXT *)ext;
-         properties->maxDiscardRectangles = MAX_DISCARD_RECTANGLES;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT: {
-         VkPhysicalDeviceExternalMemoryHostPropertiesEXT *properties =
-            (VkPhysicalDeviceExternalMemoryHostPropertiesEXT *)ext;
-         properties->minImportedHostPointerAlignment = 4096;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD: {
-         VkPhysicalDeviceShaderCorePropertiesAMD *properties = (VkPhysicalDeviceShaderCorePropertiesAMD *)ext;
+   /* VGPR. */
+   p->vgprsPerSimd = pdevice->rad_info.num_physical_wave64_vgprs_per_simd;
+   p->minVgprAllocation = pdevice->rad_info.min_wave64_vgpr_alloc;
+   p->maxVgprAllocation = pdevice->rad_info.max_vgpr_alloc;
+   p->vgprAllocationGranularity = pdevice->rad_info.wave64_vgpr_alloc_granularity;
 
-         /* Shader engines. */
-         properties->shaderEngineCount = pdevice->rad_info.max_se;
-         properties->shaderArraysPerEngineCount = pdevice->rad_info.max_sa_per_se;
-         properties->computeUnitsPerShaderArray = pdevice->rad_info.min_good_cu_per_sa;
-         properties->simdPerComputeUnit = pdevice->rad_info.num_simd_per_compute_unit;
-         properties->wavefrontsPerSimd = pdevice->rad_info.max_wave64_per_simd;
-         properties->wavefrontSize = 64;
+   /* VK_AMD_shader_core_properties2 */
+   p->shaderCoreFeatures = 0;
+   p->activeComputeUnitCount = pdevice->rad_info.num_cu;
 
-         /* SGPR. */
-         properties->sgprsPerSimd = pdevice->rad_info.num_physical_sgprs_per_simd;
-         properties->minSgprAllocation = pdevice->rad_info.min_sgpr_alloc;
-         properties->maxSgprAllocation = pdevice->rad_info.max_sgpr_alloc;
-         properties->sgprAllocationGranularity = pdevice->rad_info.sgpr_alloc_granularity;
+   /* VK_EXT_vertex_attribute_divisor */
+   p->maxVertexAttribDivisor = UINT32_MAX;
 
-         /* VGPR. */
-         properties->vgprsPerSimd = pdevice->rad_info.num_physical_wave64_vgprs_per_simd;
-         properties->minVgprAllocation = pdevice->rad_info.min_wave64_vgpr_alloc;
-         properties->maxVgprAllocation = pdevice->rad_info.max_vgpr_alloc;
-         properties->vgprAllocationGranularity = pdevice->rad_info.wave64_vgpr_alloc_granularity;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD: {
-         VkPhysicalDeviceShaderCoreProperties2AMD *properties = (VkPhysicalDeviceShaderCoreProperties2AMD *)ext;
+   /* VK_EXT_conservative_rasterization */
+   p->primitiveOverestimationSize = 0;
+   p->maxExtraPrimitiveOverestimationSize = 0;
+   p->extraPrimitiveOverestimationSizeGranularity = 0;
+   p->primitiveUnderestimation = true;
+   p->conservativePointAndLineRasterization = false;
+   p->degenerateTrianglesRasterized = true;
+   p->degenerateLinesRasterized = false;
+   p->fullyCoveredFragmentShaderInputVariable = true;
+   p->conservativeRasterizationPostDepthCoverage = false;
 
-         properties->shaderCoreFeatures = 0;
-         properties->activeComputeUnitCount = pdevice->rad_info.num_cu;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT: {
-         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *properties =
-            (VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)ext;
-         properties->maxVertexAttribDivisor = UINT32_MAX;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT: {
-         VkPhysicalDeviceConservativeRasterizationPropertiesEXT *properties =
-            (VkPhysicalDeviceConservativeRasterizationPropertiesEXT *)ext;
-         properties->primitiveOverestimationSize = 0;
-         properties->maxExtraPrimitiveOverestimationSize = 0;
-         properties->extraPrimitiveOverestimationSizeGranularity = 0;
-         properties->primitiveUnderestimation = true;
-         properties->conservativePointAndLineRasterization = false;
-         properties->degenerateTrianglesRasterized = true;
-         properties->degenerateLinesRasterized = false;
-         properties->fullyCoveredFragmentShaderInputVariable = true;
-         properties->conservativeRasterizationPostDepthCoverage = false;
-         break;
-      }
+   /* VK_EXT_pci_bus_info */
 #ifndef _WIN32
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT: {
-         VkPhysicalDevicePCIBusInfoPropertiesEXT *properties = (VkPhysicalDevicePCIBusInfoPropertiesEXT *)ext;
-         properties->pciDomain = pdevice->bus_info.domain;
-         properties->pciBus = pdevice->bus_info.bus;
-         properties->pciDevice = pdevice->bus_info.dev;
-         properties->pciFunction = pdevice->bus_info.func;
-         break;
-      }
+   p->pciDomain = pdevice->bus_info.domain;
+   p->pciBus = pdevice->bus_info.bus;
+   p->pciDevice = pdevice->bus_info.dev;
+   p->pciFunction = pdevice->bus_info.func;
 #endif
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT: {
-         VkPhysicalDeviceTransformFeedbackPropertiesEXT *properties =
-            (VkPhysicalDeviceTransformFeedbackPropertiesEXT *)ext;
-         properties->maxTransformFeedbackStreams = MAX_SO_STREAMS;
-         properties->maxTransformFeedbackBuffers = MAX_SO_BUFFERS;
-         properties->maxTransformFeedbackBufferSize = UINT32_MAX;
-         properties->maxTransformFeedbackStreamDataSize = 512;
-         properties->maxTransformFeedbackBufferDataSize = 512;
-         properties->maxTransformFeedbackBufferDataStride = 512;
-         properties->transformFeedbackQueries = true;
-         properties->transformFeedbackStreamsLinesTriangles = true;
-         properties->transformFeedbackRasterizationStreamSelect = false;
-         properties->transformFeedbackDraw = true;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT: {
-         VkPhysicalDeviceSampleLocationsPropertiesEXT *properties = (VkPhysicalDeviceSampleLocationsPropertiesEXT *)ext;
-         properties->sampleLocationSampleCounts = VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT | VK_SAMPLE_COUNT_8_BIT;
-         properties->maxSampleLocationGridSize = (VkExtent2D){2, 2};
-         properties->sampleLocationCoordinateRange[0] = 0.0f;
-         properties->sampleLocationCoordinateRange[1] = 0.9375f;
-         properties->sampleLocationSubPixelBits = 4;
-         properties->variableSampleLocations = false;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT: {
-         VkPhysicalDeviceLineRasterizationPropertiesEXT *props = (VkPhysicalDeviceLineRasterizationPropertiesEXT *)ext;
-         props->lineSubPixelPrecisionBits = 4;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT: {
-         VkPhysicalDeviceRobustness2PropertiesEXT *properties = (VkPhysicalDeviceRobustness2PropertiesEXT *)ext;
-         properties->robustStorageBufferAccessSizeAlignment = 4;
-         properties->robustUniformBufferAccessSizeAlignment = 4;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT: {
-         VkPhysicalDeviceCustomBorderColorPropertiesEXT *props = (VkPhysicalDeviceCustomBorderColorPropertiesEXT *)ext;
-         props->maxCustomBorderColorSamplers = RADV_BORDER_COLOR_COUNT;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR: {
-         VkPhysicalDeviceFragmentShadingRatePropertiesKHR *props =
-            (VkPhysicalDeviceFragmentShadingRatePropertiesKHR *)ext;
-         if (radv_vrs_attachment_enabled(pdevice)) {
-            props->minFragmentShadingRateAttachmentTexelSize = (VkExtent2D){8, 8};
-            props->maxFragmentShadingRateAttachmentTexelSize = (VkExtent2D){8, 8};
-         } else {
-            props->minFragmentShadingRateAttachmentTexelSize = (VkExtent2D){0, 0};
-            props->maxFragmentShadingRateAttachmentTexelSize = (VkExtent2D){0, 0};
-         }
-         props->maxFragmentShadingRateAttachmentTexelSizeAspectRatio = 1;
-         props->primitiveFragmentShadingRateWithMultipleViewports = true;
-         props->layeredShadingRateAttachments = false; /* TODO */
-         props->fragmentShadingRateNonTrivialCombinerOps = true;
-         props->maxFragmentSize = (VkExtent2D){2, 2};
-         props->maxFragmentSizeAspectRatio = 2;
-         props->maxFragmentShadingRateCoverageSamples = 32;
-         props->maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
-         props->fragmentShadingRateWithShaderDepthStencilWrites = !pdevice->rad_info.has_vrs_ds_export_bug;
-         props->fragmentShadingRateWithSampleMask = true;
-         props->fragmentShadingRateWithShaderSampleMask = false;
-         props->fragmentShadingRateWithConservativeRasterization = true;
-         props->fragmentShadingRateWithFragmentShaderInterlock =
-            pdevice->rad_info.gfx_level >= GFX11 && radv_has_pops(pdevice);
-         props->fragmentShadingRateWithCustomSampleLocations = false;
-         props->fragmentShadingRateStrictMultiplyCombiner = true;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT: {
-         VkPhysicalDeviceProvokingVertexPropertiesEXT *props = (VkPhysicalDeviceProvokingVertexPropertiesEXT *)ext;
-         props->provokingVertexModePerPipeline = true;
-         props->transformFeedbackPreservesTriangleFanProvokingVertex = true;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR: {
-         VkPhysicalDeviceAccelerationStructurePropertiesKHR *props =
-            (VkPhysicalDeviceAccelerationStructurePropertiesKHR *)ext;
-         props->maxGeometryCount = (1 << 24) - 1;
-         props->maxInstanceCount = (1 << 24) - 1;
-         props->maxPrimitiveCount = (1 << 29) - 1;
-         props->maxPerStageDescriptorAccelerationStructures =
-            pProperties->properties.limits.maxPerStageDescriptorStorageBuffers;
-         props->maxPerStageDescriptorUpdateAfterBindAccelerationStructures =
-            pProperties->properties.limits.maxPerStageDescriptorStorageBuffers;
-         props->maxDescriptorSetAccelerationStructures = pProperties->properties.limits.maxDescriptorSetStorageBuffers;
-         props->maxDescriptorSetUpdateAfterBindAccelerationStructures =
-            pProperties->properties.limits.maxDescriptorSetStorageBuffers;
-         props->minAccelerationStructureScratchOffsetAlignment = 128;
-         break;
-      }
-#ifndef _WIN32
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT: {
-         VkPhysicalDeviceDrmPropertiesEXT *props = (VkPhysicalDeviceDrmPropertiesEXT *)ext;
-         if (pdevice->available_nodes & (1 << DRM_NODE_PRIMARY)) {
-            props->hasPrimary = true;
-            props->primaryMajor = (int64_t)major(pdevice->primary_devid);
-            props->primaryMinor = (int64_t)minor(pdevice->primary_devid);
-         } else {
-            props->hasPrimary = false;
-         }
-         if (pdevice->available_nodes & (1 << DRM_NODE_RENDER)) {
-            props->hasRender = true;
-            props->renderMajor = (int64_t)major(pdevice->render_devid);
-            props->renderMinor = (int64_t)minor(pdevice->render_devid);
-         } else {
-            props->hasRender = false;
-         }
-         break;
-      }
-#endif
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT: {
-         VkPhysicalDeviceMultiDrawPropertiesEXT *props = (VkPhysicalDeviceMultiDrawPropertiesEXT *)ext;
-         props->maxMultiDrawCount = 2048;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR: {
-         VkPhysicalDeviceRayTracingPipelinePropertiesKHR *props =
-            (VkPhysicalDeviceRayTracingPipelinePropertiesKHR *)ext;
-         props->shaderGroupHandleSize = RADV_RT_HANDLE_SIZE;
-         props->maxRayRecursionDepth = 31;    /* Minimum allowed for DXR. */
-         props->maxShaderGroupStride = 16384; /* dummy */
-         /* This isn't strictly necessary, but Doom Eternal breaks if the
-          * alignment is any lower. */
-         props->shaderGroupBaseAlignment = RADV_RT_HANDLE_SIZE;
-         props->shaderGroupHandleCaptureReplaySize = sizeof(struct radv_rt_capture_replay_handle);
-         props->maxRayDispatchInvocationCount = 1024 * 1024 * 64;
-         props->shaderGroupHandleAlignment = 16;
-         props->maxRayHitAttributeSize = RADV_MAX_HIT_ATTRIB_SIZE;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES: {
-         VkPhysicalDeviceMaintenance4Properties *properties = (VkPhysicalDeviceMaintenance4Properties *)ext;
-         properties->maxBufferSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT: {
-         VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT *properties =
-            (VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT *)ext;
-         STATIC_ASSERT(sizeof(vk_shaderModuleIdentifierAlgorithmUUID) ==
-                       sizeof(properties->shaderModuleIdentifierAlgorithmUUID));
-         memcpy(properties->shaderModuleIdentifierAlgorithmUUID, vk_shaderModuleIdentifierAlgorithmUUID,
-                sizeof(properties->shaderModuleIdentifierAlgorithmUUID));
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR: {
-         VkPhysicalDevicePerformanceQueryPropertiesKHR *properties =
-            (VkPhysicalDevicePerformanceQueryPropertiesKHR *)ext;
-         properties->allowCommandBufferQueryCopies = false;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV: {
-         VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV *properties =
-            (VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV *)ext;
-         properties->maxIndirectCommandsStreamCount = 1;
-         properties->maxIndirectCommandsStreamStride = UINT32_MAX;
-         properties->maxIndirectCommandsTokenCount = UINT32_MAX;
-         properties->maxIndirectCommandsTokenOffset = UINT16_MAX;
-         properties->minIndirectCommandsBufferOffsetAlignment = 4;
-         properties->minSequencesCountBufferOffsetAlignment = 4;
-         properties->minSequencesIndexBufferOffsetAlignment = 4;
 
-         /* Don't support even a shader group count = 1 until we support shader
-          * overrides during pipeline creation. */
-         properties->maxGraphicsShaderGroupCount = 0;
+   /* VK_EXT_transform_feedback */
+   p->maxTransformFeedbackStreams = MAX_SO_STREAMS;
+   p->maxTransformFeedbackBuffers = MAX_SO_BUFFERS;
+   p->maxTransformFeedbackBufferSize = UINT32_MAX;
+   p->maxTransformFeedbackStreamDataSize = 512;
+   p->maxTransformFeedbackBufferDataSize = 512;
+   p->maxTransformFeedbackBufferDataStride = 512;
+   p->transformFeedbackQueries = true;
+   p->transformFeedbackStreamsLinesTriangles = true;
+   p->transformFeedbackRasterizationStreamSelect = false;
+   p->transformFeedbackDraw = true;
 
-         /* MSB reserved for signalling indirect count enablement. */
-         properties->maxIndirectSequenceCount = UINT32_MAX >> 1;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT: {
-         VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT *props =
-            (VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT *)ext;
-         props->graphicsPipelineLibraryFastLinking = true;
-         props->graphicsPipelineLibraryIndependentInterpolationDecoration = true;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT: {
-         VkPhysicalDeviceMeshShaderPropertiesEXT *properties = (VkPhysicalDeviceMeshShaderPropertiesEXT *)ext;
+   /* VK_EXT_sample_locations */
+   p->sampleLocationSampleCounts = VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT | VK_SAMPLE_COUNT_8_BIT;
+   p->maxSampleLocationGridSize = (VkExtent2D){2, 2};
+   p->sampleLocationCoordinateRange[0] = 0.0f;
+   p->sampleLocationCoordinateRange[1] = 0.9375f;
+   p->sampleLocationSubPixelBits = 4;
+   p->variableSampleLocations = false;
 
-         properties->maxTaskWorkGroupTotalCount = 4194304; /* 2^22 min required */
-         properties->maxTaskWorkGroupCount[0] = 65535;
-         properties->maxTaskWorkGroupCount[1] = 65535;
-         properties->maxTaskWorkGroupCount[2] = 65535;
-         properties->maxTaskWorkGroupInvocations = 1024;
-         properties->maxTaskWorkGroupSize[0] = 1024;
-         properties->maxTaskWorkGroupSize[1] = 1024;
-         properties->maxTaskWorkGroupSize[2] = 1024;
-         properties->maxTaskPayloadSize = 16384; /* 16K min required */
-         properties->maxTaskSharedMemorySize = 65536;
-         properties->maxTaskPayloadAndSharedMemorySize = 65536;
+   /* VK_EXT_line_rasterization */
+   p->lineSubPixelPrecisionBits = 4;
 
-         properties->maxMeshWorkGroupTotalCount = 4194304; /* 2^22 min required */
-         properties->maxMeshWorkGroupCount[0] = 65535;
-         properties->maxMeshWorkGroupCount[1] = 65535;
-         properties->maxMeshWorkGroupCount[2] = 65535;
-         properties->maxMeshWorkGroupInvocations = 256; /* Max NGG HW limit */
-         properties->maxMeshWorkGroupSize[0] = 256;
-         properties->maxMeshWorkGroupSize[1] = 256;
-         properties->maxMeshWorkGroupSize[2] = 256;
-         properties->maxMeshOutputMemorySize = 32 * 1024; /* 32K min required */
-         properties->maxMeshSharedMemorySize = 28672;     /* 28K min required */
-         properties->maxMeshPayloadAndSharedMemorySize =
-            properties->maxTaskPayloadSize + properties->maxMeshSharedMemorySize; /* 28K min required */
-         properties->maxMeshPayloadAndOutputMemorySize =
-            properties->maxTaskPayloadSize + properties->maxMeshOutputMemorySize; /* 47K min required */
-         properties->maxMeshOutputComponents = 128;                               /* 32x vec4 min required */
-         properties->maxMeshOutputVertices = 256;
-         properties->maxMeshOutputPrimitives = 256;
-         properties->maxMeshOutputLayers = 8;
-         properties->maxMeshMultiviewViewCount = MAX_VIEWS;
-         properties->meshOutputPerVertexGranularity = 1;
-         properties->meshOutputPerPrimitiveGranularity = 1;
+   /* VK_EXT_robustness2 */
+   p->robustStorageBufferAccessSizeAlignment = 4;
+   p->robustUniformBufferAccessSizeAlignment = 4;
 
-         properties->maxPreferredTaskWorkGroupInvocations = 64;
-         properties->maxPreferredMeshWorkGroupInvocations = 128;
-         properties->prefersLocalInvocationVertexOutput = true;
-         properties->prefersLocalInvocationPrimitiveOutput = true;
-         properties->prefersCompactVertexOutput = true;
-         properties->prefersCompactPrimitiveOutput = false;
+   /* VK_EXT_custom_border_color */
+   p->maxCustomBorderColorSamplers = RADV_BORDER_COLOR_COUNT;
 
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT: {
-         VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *properties =
-            (VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *)ext;
-         properties->dynamicPrimitiveTopologyUnrestricted = false;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT: {
-         VkPhysicalDeviceDescriptorBufferPropertiesEXT *properties =
-            (VkPhysicalDeviceDescriptorBufferPropertiesEXT *)ext;
-         properties->combinedImageSamplerDescriptorSingleArray = true;
-         properties->bufferlessPushDescriptors = true;
-         properties->allowSamplerImageViewPostSubmitCreation = false;
-         properties->descriptorBufferOffsetAlignment = 4;
-         properties->maxDescriptorBufferBindings = MAX_SETS;
-         properties->maxResourceDescriptorBufferBindings = MAX_SETS;
-         properties->maxSamplerDescriptorBufferBindings = MAX_SETS;
-         properties->maxEmbeddedImmutableSamplerBindings = MAX_SETS;
-         properties->maxEmbeddedImmutableSamplers = radv_max_descriptor_set_size();
-         properties->bufferCaptureReplayDescriptorDataSize = 0;
-         properties->imageCaptureReplayDescriptorDataSize = 0;
-         properties->imageViewCaptureReplayDescriptorDataSize = 0;
-         properties->samplerCaptureReplayDescriptorDataSize = 0;
-         properties->accelerationStructureCaptureReplayDescriptorDataSize = 0;
-         properties->samplerDescriptorSize = 16;
-         properties->combinedImageSamplerDescriptorSize = 96;
-         properties->sampledImageDescriptorSize = 64;
-         properties->storageImageDescriptorSize = 32;
-         properties->uniformTexelBufferDescriptorSize = 16;
-         properties->robustUniformTexelBufferDescriptorSize = 16;
-         properties->storageTexelBufferDescriptorSize = 16;
-         properties->robustStorageTexelBufferDescriptorSize = 16;
-         properties->uniformBufferDescriptorSize = 16;
-         properties->robustUniformBufferDescriptorSize = 16;
-         properties->storageBufferDescriptorSize = 16;
-         properties->robustStorageBufferDescriptorSize = 16;
-         properties->inputAttachmentDescriptorSize = 64;
-         properties->accelerationStructureDescriptorSize = 16;
-         properties->maxSamplerDescriptorBufferRange = UINT32_MAX;
-         properties->maxResourceDescriptorBufferRange = UINT32_MAX;
-         properties->samplerDescriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-         properties->resourceDescriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-         properties->descriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR: {
-         VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR *properties =
-            (VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR *)ext;
-         properties->triStripVertexOrderIndependentOfProvokingVertex = false;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES_EXT: {
-         VkPhysicalDevicePipelineRobustnessPropertiesEXT *properties =
-            (VkPhysicalDevicePipelineRobustnessPropertiesEXT *)ext;
-         properties->defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
-         properties->defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
-         properties->defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
-         properties->defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT;
-         break;
-      }
-      default:
-         break;
-      }
+   /* VK_KHR_fragment_shading_rate */
+   if (radv_vrs_attachment_enabled(pdevice)) {
+      p->minFragmentShadingRateAttachmentTexelSize = (VkExtent2D){8, 8};
+      p->maxFragmentShadingRateAttachmentTexelSize = (VkExtent2D){8, 8};
+   } else {
+      p->minFragmentShadingRateAttachmentTexelSize = (VkExtent2D){0, 0};
+      p->maxFragmentShadingRateAttachmentTexelSize = (VkExtent2D){0, 0};
    }
+   p->maxFragmentShadingRateAttachmentTexelSizeAspectRatio = 1;
+   p->primitiveFragmentShadingRateWithMultipleViewports = true;
+   p->layeredShadingRateAttachments = false; /* TODO */
+   p->fragmentShadingRateNonTrivialCombinerOps = true;
+   p->maxFragmentSize = (VkExtent2D){2, 2};
+   p->maxFragmentSizeAspectRatio = 2;
+   p->maxFragmentShadingRateCoverageSamples = 32;
+   p->maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+   p->fragmentShadingRateWithShaderDepthStencilWrites = !pdevice->rad_info.has_vrs_ds_export_bug;
+   p->fragmentShadingRateWithSampleMask = true;
+   p->fragmentShadingRateWithShaderSampleMask = false;
+   p->fragmentShadingRateWithConservativeRasterization = true;
+   p->fragmentShadingRateWithFragmentShaderInterlock = pdevice->rad_info.gfx_level >= GFX11 && radv_has_pops(pdevice);
+   p->fragmentShadingRateWithCustomSampleLocations = false;
+   p->fragmentShadingRateStrictMultiplyCombiner = true;
+
+   /* VK_EXT_provoking_vertex */
+   p->provokingVertexModePerPipeline = true;
+   p->transformFeedbackPreservesTriangleFanProvokingVertex = true;
+
+   /* VK_KHR_acceleration_structure */
+   p->maxGeometryCount = (1 << 24) - 1;
+   p->maxInstanceCount = (1 << 24) - 1;
+   p->maxPrimitiveCount = (1 << 29) - 1;
+   p->maxPerStageDescriptorAccelerationStructures = p->maxPerStageDescriptorStorageBuffers;
+   p->maxPerStageDescriptorUpdateAfterBindAccelerationStructures = p->maxPerStageDescriptorStorageBuffers;
+   p->maxDescriptorSetAccelerationStructures = p->maxDescriptorSetStorageBuffers;
+   p->maxDescriptorSetUpdateAfterBindAccelerationStructures = p->maxDescriptorSetStorageBuffers;
+   p->minAccelerationStructureScratchOffsetAlignment = 128;
+
+   /* VK_EXT_physical_device_drm */
+#ifndef _WIN32
+   if (pdevice->available_nodes & (1 << DRM_NODE_PRIMARY)) {
+      p->drmHasPrimary = true;
+      p->drmPrimaryMajor = (int64_t)major(pdevice->primary_devid);
+      p->drmPrimaryMinor = (int64_t)minor(pdevice->primary_devid);
+   } else {
+      p->drmHasPrimary = false;
+   }
+   if (pdevice->available_nodes & (1 << DRM_NODE_RENDER)) {
+      p->drmHasRender = true;
+      p->drmRenderMajor = (int64_t)major(pdevice->render_devid);
+      p->drmRenderMinor = (int64_t)minor(pdevice->render_devid);
+   } else {
+      p->drmHasRender = false;
+   }
+#endif
+
+   /* VK_EXT_multi_draw */
+   p->maxMultiDrawCount = 2048;
+
+   /* VK_KHR_ray_tracing_pipeline */
+
+   p->shaderGroupHandleSize = RADV_RT_HANDLE_SIZE;
+   p->maxRayRecursionDepth = 31;    /* Minimum allowed for DXR. */
+   p->maxShaderGroupStride = 16384; /* dummy */
+   /* This isn't strictly necessary, but Doom Eternal breaks if the
+    * alignment is any lower. */
+   p->shaderGroupBaseAlignment = RADV_RT_HANDLE_SIZE;
+   p->shaderGroupHandleCaptureReplaySize = sizeof(struct radv_rt_capture_replay_handle);
+   p->maxRayDispatchInvocationCount = 1024 * 1024 * 64;
+   p->shaderGroupHandleAlignment = 16;
+   p->maxRayHitAttributeSize = RADV_MAX_HIT_ATTRIB_SIZE;
+
+   /* VK_EXT_shader_module_identifier */
+   STATIC_ASSERT(sizeof(vk_shaderModuleIdentifierAlgorithmUUID) == sizeof(p->shaderModuleIdentifierAlgorithmUUID));
+   memcpy(p->shaderModuleIdentifierAlgorithmUUID, vk_shaderModuleIdentifierAlgorithmUUID,
+          sizeof(p->shaderModuleIdentifierAlgorithmUUID));
+
+   /* VK_KHR_performance_query */
+   p->allowCommandBufferQueryCopies = false;
+
+   /* VK_NV_device_generated_commands */
+   p->maxIndirectCommandsStreamCount = 1;
+   p->maxIndirectCommandsStreamStride = UINT32_MAX;
+   p->maxIndirectCommandsTokenCount = UINT32_MAX;
+   p->maxIndirectCommandsTokenOffset = UINT16_MAX;
+   p->minIndirectCommandsBufferOffsetAlignment = 4;
+   p->minSequencesCountBufferOffsetAlignment = 4;
+   p->minSequencesIndexBufferOffsetAlignment = 4;
+   /* Don't support even a shader group count = 1 until we support shader
+    * overrides during pipeline creation. */
+   p->maxGraphicsShaderGroupCount = 0;
+   /* MSB reserved for signalling indirect count enablement. */
+   p->maxIndirectSequenceCount = UINT32_MAX >> 1;
+
+   /* VK_EXT_graphics_pipeline_library */
+   p->graphicsPipelineLibraryFastLinking = true;
+   p->graphicsPipelineLibraryIndependentInterpolationDecoration = true;
+
+   /* VK_EXT_mesh_shader */
+   p->maxTaskWorkGroupTotalCount = 4194304; /* 2^22 min required */
+   p->maxTaskWorkGroupCount[0] = 65535;
+   p->maxTaskWorkGroupCount[1] = 65535;
+   p->maxTaskWorkGroupCount[2] = 65535;
+   p->maxTaskWorkGroupInvocations = 1024;
+   p->maxTaskWorkGroupSize[0] = 1024;
+   p->maxTaskWorkGroupSize[1] = 1024;
+   p->maxTaskWorkGroupSize[2] = 1024;
+   p->maxTaskPayloadSize = 16384; /* 16K min required */
+   p->maxTaskSharedMemorySize = 65536;
+   p->maxTaskPayloadAndSharedMemorySize = 65536;
+
+   p->maxMeshWorkGroupTotalCount = 4194304; /* 2^22 min required */
+   p->maxMeshWorkGroupCount[0] = 65535;
+   p->maxMeshWorkGroupCount[1] = 65535;
+   p->maxMeshWorkGroupCount[2] = 65535;
+   p->maxMeshWorkGroupInvocations = 256; /* Max NGG HW limit */
+   p->maxMeshWorkGroupSize[0] = 256;
+   p->maxMeshWorkGroupSize[1] = 256;
+   p->maxMeshWorkGroupSize[2] = 256;
+   p->maxMeshOutputMemorySize = 32 * 1024;                                                    /* 32K min required */
+   p->maxMeshSharedMemorySize = 28672;                                                        /* 28K min required */
+   p->maxMeshPayloadAndSharedMemorySize = p->maxTaskPayloadSize + p->maxMeshSharedMemorySize; /* 28K min required */
+   p->maxMeshPayloadAndOutputMemorySize = p->maxTaskPayloadSize + p->maxMeshOutputMemorySize; /* 47K min required */
+   p->maxMeshOutputComponents = 128; /* 32x vec4 min required */
+   p->maxMeshOutputVertices = 256;
+   p->maxMeshOutputPrimitives = 256;
+   p->maxMeshOutputLayers = 8;
+   p->maxMeshMultiviewViewCount = MAX_VIEWS;
+   p->meshOutputPerVertexGranularity = 1;
+   p->meshOutputPerPrimitiveGranularity = 1;
+
+   p->maxPreferredTaskWorkGroupInvocations = 64;
+   p->maxPreferredMeshWorkGroupInvocations = 128;
+   p->prefersLocalInvocationVertexOutput = true;
+   p->prefersLocalInvocationPrimitiveOutput = true;
+   p->prefersCompactVertexOutput = true;
+   p->prefersCompactPrimitiveOutput = false;
+
+   /* VK_EXT_extended_dynamic_state3 */
+   p->dynamicPrimitiveTopologyUnrestricted = false;
+
+   /* VK_EXT_descriptor_buffer */
+   p->combinedImageSamplerDescriptorSingleArray = true;
+   p->bufferlessPushDescriptors = true;
+   p->allowSamplerImageViewPostSubmitCreation = false;
+   p->descriptorBufferOffsetAlignment = 4;
+   p->maxDescriptorBufferBindings = MAX_SETS;
+   p->maxResourceDescriptorBufferBindings = MAX_SETS;
+   p->maxSamplerDescriptorBufferBindings = MAX_SETS;
+   p->maxEmbeddedImmutableSamplerBindings = MAX_SETS;
+   p->maxEmbeddedImmutableSamplers = radv_max_descriptor_set_size();
+   p->bufferCaptureReplayDescriptorDataSize = 0;
+   p->imageCaptureReplayDescriptorDataSize = 0;
+   p->imageViewCaptureReplayDescriptorDataSize = 0;
+   p->samplerCaptureReplayDescriptorDataSize = 0;
+   p->accelerationStructureCaptureReplayDescriptorDataSize = 0;
+   p->samplerDescriptorSize = 16;
+   p->combinedImageSamplerDescriptorSize = 96;
+   p->sampledImageDescriptorSize = 64;
+   p->storageImageDescriptorSize = 32;
+   p->uniformTexelBufferDescriptorSize = 16;
+   p->robustUniformTexelBufferDescriptorSize = 16;
+   p->storageTexelBufferDescriptorSize = 16;
+   p->robustStorageTexelBufferDescriptorSize = 16;
+   p->uniformBufferDescriptorSize = 16;
+   p->robustUniformBufferDescriptorSize = 16;
+   p->storageBufferDescriptorSize = 16;
+   p->robustStorageBufferDescriptorSize = 16;
+   p->inputAttachmentDescriptorSize = 64;
+   p->accelerationStructureDescriptorSize = 16;
+   p->maxSamplerDescriptorBufferRange = UINT32_MAX;
+   p->maxResourceDescriptorBufferRange = UINT32_MAX;
+   p->samplerDescriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+   p->resourceDescriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+   p->descriptorBufferAddressSpaceSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+
+   /* VK_KHR_fragment_shader_barycentric */
+   p->triStripVertexOrderIndependentOfProvokingVertex = false;
+
+   /* VK_EXT_pipeline_robustness */
+   p->defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+   p->defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+   p->defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+   p->defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT;
+
+   /* VK_KHR_maintenance5 */
+   p->earlyFragmentMultisampleCoverageAfterSampleCounting = false;
+   p->earlyFragmentSampleMaskTestBeforeSampleCounting = false;
+   p->depthStencilSwizzleOneSupport = false;
+   p->polygonModePointSize = true;
+   p->nonStrictSinglePixelWideLinesUseParallelogram = false;
+   p->nonStrictWideLinesUseParallelogram = false;
+
+   /* VK_KHR_cooperative_matrix */
+   p->cooperativeMatrixSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT;
 }
 
 static VkResult
@@ -1895,7 +1773,7 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    vk_physical_device_dispatch_table_from_entrypoints(&dispatch_table, &radv_physical_device_entrypoints, true);
    vk_physical_device_dispatch_table_from_entrypoints(&dispatch_table, &wsi_physical_device_entrypoints, false);
 
-   result = vk_physical_device_init(&device->vk, &instance->vk, NULL, NULL, &dispatch_table);
+   result = vk_physical_device_init(&device->vk, &instance->vk, NULL, NULL, NULL, &dispatch_table);
    if (result != VK_SUCCESS) {
       goto fail_alloc;
    }
@@ -1954,9 +1832,11 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 
 #ifdef ANDROID
    device->emulate_etc2 = !radv_device_supports_etc(device);
+   device->emulate_astc = true;
 #else
    device->emulate_etc2 =
-      !radv_device_supports_etc(device) && driQueryOptionb(&device->instance->dri_options, "radv_require_etc2");
+      !radv_device_supports_etc(device) && driQueryOptionb(&device->instance->dri_options, "vk_require_etc2");
+   device->emulate_astc = driQueryOptionb(&device->instance->dri_options, "vk_require_astc");
 #endif
 
    snprintf(device->name, sizeof(device->name), "AMD RADV %s%s", device->rad_info.name,
@@ -2063,6 +1943,8 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
       device->render_devid = render_stat.st_rdev;
    }
 #endif
+
+   radv_get_physical_device_properties(device);
 
    if ((device->instance->debug_flags & RADV_DEBUG_INFO))
       ac_print_gpu_info(&device->rad_info, stdout);
@@ -2558,6 +2440,68 @@ radv_GetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t *
          .purposes = VK_TOOL_PURPOSE_PROFILING_BIT | VK_TOOL_PURPOSE_TRACING_BIT,
       };
       vk_outarray_append_typed(VkPhysicalDeviceToolProperties, &out, t) *t = tool;
+   }
+
+   return vk_outarray_status(&out);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+radv_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount,
+                                                     VkCooperativeMatrixPropertiesKHR *pProperties)
+{
+   VK_OUTARRAY_MAKE_TYPED(VkCooperativeMatrixPropertiesKHR, out, pProperties, pPropertyCount);
+
+   vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
+   {
+      *p = (struct VkCooperativeMatrixPropertiesKHR){.sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
+                                                     .MSize = 16,
+                                                     .NSize = 16,
+                                                     .KSize = 16,
+                                                     .AType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .BType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .CType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .ResultType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .saturatingAccumulation = false,
+                                                     .scope = VK_SCOPE_SUBGROUP_KHR};
+   }
+
+   vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
+   {
+      *p = (struct VkCooperativeMatrixPropertiesKHR){.sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
+                                                     .MSize = 16,
+                                                     .NSize = 16,
+                                                     .KSize = 16,
+                                                     .AType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .BType = VK_COMPONENT_TYPE_FLOAT16_KHR,
+                                                     .CType = VK_COMPONENT_TYPE_FLOAT32_KHR,
+                                                     .ResultType = VK_COMPONENT_TYPE_FLOAT32_KHR,
+                                                     .saturatingAccumulation = false,
+                                                     .scope = VK_SCOPE_SUBGROUP_KHR};
+   }
+
+   for (unsigned asigned = 0; asigned < 2; asigned++) {
+      for (unsigned bsigned = 0; bsigned < 2; bsigned++) {
+         for (unsigned csigned = 0; csigned < 2; csigned++) {
+            for (unsigned saturate = 0; saturate < 2; saturate++) {
+               if (!csigned && saturate)
+                  continue; /* The HW only supports signed acc. */
+               vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
+               {
+                  *p = (struct VkCooperativeMatrixPropertiesKHR){
+                     .sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
+                     .MSize = 16,
+                     .NSize = 16,
+                     .KSize = 16,
+                     .AType = asigned ? VK_COMPONENT_TYPE_SINT8_KHR : VK_COMPONENT_TYPE_UINT8_KHR,
+                     .BType = bsigned ? VK_COMPONENT_TYPE_SINT8_KHR : VK_COMPONENT_TYPE_UINT8_KHR,
+                     .CType = csigned ? VK_COMPONENT_TYPE_SINT32_KHR : VK_COMPONENT_TYPE_UINT32_KHR,
+                     .ResultType = csigned ? VK_COMPONENT_TYPE_SINT32_KHR : VK_COMPONENT_TYPE_UINT32_KHR,
+                     .saturatingAccumulation = saturate,
+                     .scope = VK_SCOPE_SUBGROUP_KHR};
+               }
+            }
+         }
+      }
    }
 
    return vk_outarray_status(&out);

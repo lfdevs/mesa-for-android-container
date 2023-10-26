@@ -523,12 +523,15 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       st->util_velems.velems[0].src_offset = 0;
       st->util_velems.velems[0].vertex_buffer_index = 0;
       st->util_velems.velems[0].src_format = PIPE_FORMAT_R32G32B32_FLOAT;
+      st->util_velems.velems[0].src_stride = sizeof(struct st_util_vertex);
       st->util_velems.velems[1].src_offset = 3 * sizeof(float);
       st->util_velems.velems[1].vertex_buffer_index = 0;
       st->util_velems.velems[1].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      st->util_velems.velems[1].src_stride = sizeof(struct st_util_vertex);
       st->util_velems.velems[2].src_offset = 7 * sizeof(float);
       st->util_velems.velems[2].vertex_buffer_index = 0;
       st->util_velems.velems[2].src_format = PIPE_FORMAT_R32G32_FLOAT;
+      st->util_velems.velems[2].src_stride = sizeof(struct st_util_vertex);
    }
 
    ctx->Const.PackedDriverUniformStorage =

@@ -93,6 +93,10 @@ VkResult vk_video_session_parameters_update(struct vk_video_session_parameters *
 void vk_video_session_parameters_finish(struct vk_device *device,
                                         struct vk_video_session_parameters *params);
 
+void vk_video_derive_h264_scaling_list(const StdVideoH264SequenceParameterSet *sps,
+                                       const StdVideoH264PictureParameterSet *pps,
+                                       StdVideoH264ScalingLists *list);
+
 const StdVideoH264SequenceParameterSet *
 vk_video_find_h264_dec_std_sps(const struct vk_video_session_parameters *params,
                                uint32_t id);

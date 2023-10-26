@@ -7,7 +7,6 @@
 
 #include "si_pipe.h"
 #include "si_build_pm4.h"
-#include "si_compute.h"
 
 #include "ac_rgp.h"
 #include "ac_sqtt.h"
@@ -526,7 +525,7 @@ static void si_sqtt_init_cs(struct si_context *sctx) {
   /* Thread trace start CS (only handles AMD_IP_GFX). */
   sctx->sqtt->start_cs[AMD_IP_GFX] = CALLOC_STRUCT(radeon_cmdbuf);
   if (!ws->cs_create(sctx->sqtt->start_cs[AMD_IP_GFX], sctx->ctx, AMD_IP_GFX,
-                     NULL, NULL, 0)) {
+                     NULL, NULL)) {
     free(sctx->sqtt->start_cs[AMD_IP_GFX]);
     sctx->sqtt->start_cs[AMD_IP_GFX] = NULL;
     return;
@@ -537,7 +536,7 @@ static void si_sqtt_init_cs(struct si_context *sctx) {
   /* Thread trace stop CS. */
   sctx->sqtt->stop_cs[AMD_IP_GFX] = CALLOC_STRUCT(radeon_cmdbuf);
   if (!ws->cs_create(sctx->sqtt->stop_cs[AMD_IP_GFX], sctx->ctx, AMD_IP_GFX,
-                     NULL, NULL, 0)) {
+                     NULL, NULL)) {
     free(sctx->sqtt->start_cs[AMD_IP_GFX]);
     sctx->sqtt->start_cs[AMD_IP_GFX] = NULL;
     free(sctx->sqtt->stop_cs[AMD_IP_GFX]);
@@ -1095,7 +1094,7 @@ si_sqtt_register_pipeline(struct si_context* sctx, struct si_sqtt_fake_pipeline 
 {
    assert(!si_sqtt_pipeline_is_registered(sctx->sqtt, pipeline->code_hash));
 
-   bool result = ac_sqtt_add_pso_correlation(sctx->sqtt, pipeline->code_hash);
+   bool result = ac_sqtt_add_pso_correlation(sctx->sqtt, pipeline->code_hash, pipeline->code_hash);
    if (!result)
       return false;
 

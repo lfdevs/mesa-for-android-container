@@ -99,7 +99,7 @@
     <value name="STORE_IID" value="6" />
     <value name="STORE_PID" value="7" />
   </enum>
-  <enum name="Texture_Coordinate_Mode" prefix="TCM">
+  <enum name="Texture Coordinate Mode" prefix="TCM">
     <value name="WRAP" value="0" />
     <value name="MIRROR" value="1" />
     <value name="CLAMP" value="2" />
@@ -340,9 +340,9 @@
     <field name="Base Mip Level" start="22" end="26" type="u4.1" />
     <field name="LOD PreClamp Enable" start="28" end="28" type="bool" />
     <field name="Sampler Disable" start="31" end="31" type="bool" />
-    <field name="TCZ Address Control Mode" start="32" end="34" type="Texture_Coordinate_Mode" />
-    <field name="TCY Address Control Mode" start="35" end="37" type="Texture_Coordinate_Mode" />
-    <field name="TCX Address Control Mode" start="38" end="40" type="Texture_Coordinate_Mode" />
+    <field name="TCZ Address Control Mode" start="32" end="34" type="Texture Coordinate Mode" />
+    <field name="TCY Address Control Mode" start="35" end="37" type="Texture Coordinate Mode" />
+    <field name="TCX Address Control Mode" start="38" end="40" type="Texture Coordinate Mode" />
     <field name="Cube Surface Control Mode" start="41" end="41" type="uint">
       <value name="CUBECTRLMODE_PROGRAMMED" value="0" />
       <value name="CUBECTRLMODE_OVERRIDE" value="1" />

@@ -145,12 +145,16 @@ d3d12_video_decoder_destroy(struct pipe_video_codec *codec)
       return;
    }
 
-   // Flush pending work before destroying.
    struct d3d12_video_decoder *pD3D12Dec = (struct d3d12_video_decoder *) codec;
-   uint64_t curBatchFence = pD3D12Dec->m_fenceValue;
-   if (pD3D12Dec->m_needsGPUFlush) {
-      d3d12_video_decoder_flush(codec);
-      d3d12_video_decoder_sync_completion(codec, pD3D12Dec->m_spFence.Get(), curBatchFence, OS_TIMEOUT_INFINITE);
+   // Flush and wait for completion of any in-flight GPU work before destroying objects
+   d3d12_video_decoder_flush(codec);
+   if (pD3D12Dec->m_fenceValue > 1 /* Check we submitted at least one frame */) {
+      auto decode_queue_completion_fence = pD3D12Dec->m_inflightResourcesPool[(pD3D12Dec->m_fenceValue - 1u) % D3D12_VIDEO_DEC_ASYNC_DEPTH].m_FenceData;
+      d3d12_video_decoder_sync_completion(codec, decode_queue_completion_fence.cmdqueue_fence, decode_queue_completion_fence.value, OS_TIMEOUT_INFINITE);
+      struct pipe_fence_handle *context_queue_completion_fence = NULL;
+      pD3D12Dec->base.context->flush(pD3D12Dec->base.context, &context_queue_completion_fence, PIPE_FLUSH_ASYNC | PIPE_FLUSH_HINT_FINISH);
+      pD3D12Dec->m_pD3D12Screen->base.fence_finish(&pD3D12Dec->m_pD3D12Screen->base, NULL, context_queue_completion_fence, OS_TIMEOUT_INFINITE);
+      pD3D12Dec->m_pD3D12Screen->base.fence_reference(&pD3D12Dec->m_pD3D12Screen->base, &context_queue_completion_fence, NULL);
    }
 
    //
@@ -329,6 +333,11 @@ d3d12_video_decoder_decode_bitstream(struct pipe_video_codec *codec,
 
       debug_printf("[d3d12_video_decoder] d3d12_video_decoder_decode_bitstream finalized for fenceValue: %d\n",
                    pD3D12Dec->m_fenceValue);
+   }
+
+   if (pD3D12Dec->m_d3d12DecProfileType == d3d12_video_decode_profile_type_h264) {
+      struct pipe_h264_picture_desc *h264 = (pipe_h264_picture_desc*) picture;
+      target->interlaced = !h264->pps->sps->frame_mbs_only_flag && (h264->field_pic_flag || /* PAFF */ h264->pps->sps->mb_adaptive_frame_field_flag); /* MBAFF */
    }
 }
 
@@ -1107,7 +1116,7 @@ d3d12_video_decoder_reconfigure_dpb(struct d3d12_video_decoder *pD3D12Dec,
    ID3D12Resource *pPipeD3D12DstResource = d3d12_resource_resource(pD3D12VideoBuffer->texture);
    D3D12_RESOURCE_DESC outputResourceDesc = GetDesc(pPipeD3D12DstResource);
 
-   pD3D12VideoBuffer->base.interlaced = isInterlaced;
+   assert(pD3D12VideoBuffer->base.interlaced == isInterlaced);
    D3D12_VIDEO_FRAME_CODED_INTERLACE_TYPE interlaceTypeRequested =
       isInterlaced ? D3D12_VIDEO_FRAME_CODED_INTERLACE_TYPE_FIELD_BASED : D3D12_VIDEO_FRAME_CODED_INTERLACE_TYPE_NONE;
    if ((pD3D12Dec->m_decodeFormat != outputResourceDesc.Format) ||

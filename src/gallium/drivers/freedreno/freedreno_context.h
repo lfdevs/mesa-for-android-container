@@ -88,6 +88,7 @@ struct fd_vertexbuf_stateobj {
 
 struct fd_vertex_stateobj {
    struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
+   unsigned strides[PIPE_MAX_ATTRIBS];
    unsigned num_elements;
 };
 
@@ -165,9 +166,10 @@ enum fd_dirty_3d_state {
    FD_DIRTY_IMAGE = BIT(18),
    FD_DIRTY_SSBO = BIT(19),
    FD_DIRTY_QUERY = BIT(20),
+   FD_DIRTY_SAMPLE_LOCATIONS = BIT(21),
 
    /* only used by a2xx.. possibly can be removed.. */
-   FD_DIRTY_TEXSTATE = BIT(21),
+   FD_DIRTY_TEXSTATE = BIT(22),
 
    /* fine grained state changes, for cases where state is not orthogonal
     * from hw perspective:
@@ -445,6 +447,14 @@ struct fd_context {
    /* Per vsc pipe bo's (a2xx-a5xx): */
    struct fd_bo *vsc_pipe_bo[32] dt;
 
+   /* Table of bo's attached to all batches up-front (because they
+    * are commonly used, and that is easier than attaching on-use).
+    * In particular, these are driver internal buffers which do not
+    * participate in batch resource tracking.
+    */
+   struct fd_bo *private_bos[3];
+   unsigned num_private_bos;
+
    /* Maps generic gallium oriented fd_dirty_3d_state bits to generation
     * specific bitmask of state "groups".
     */
@@ -486,6 +496,10 @@ struct fd_context {
    unsigned sample_mask dt;
    unsigned min_samples dt;
 
+   /* 1x1 grid, max 4x MSAA: */
+   uint8_t sample_locations[4] dt;
+   bool sample_locations_enabled dt;
+
    /* local context fb state, for when ctx->batch is null: */
    struct pipe_framebuffer_state framebuffer dt;
    uint32_t all_mrt_channel_mask dt;
@@ -526,6 +540,7 @@ struct fd_context {
    struct {
       struct fd_bo *bo;
       uint32_t per_fiber_size;
+      uint32_t per_sp_size;
    } pvtmem[2] dt;
 
    /* maps per-shader-stage state plus variant key to hw
@@ -663,6 +678,8 @@ fd_stream_output_target(struct pipe_stream_output_target *target)
 {
    return (struct fd_stream_output_target *)target;
 }
+
+void fd_context_add_private_bo(struct fd_context *ctx, struct fd_bo *bo);
 
 /* Mark specified non-shader-stage related state as dirty: */
 static inline void

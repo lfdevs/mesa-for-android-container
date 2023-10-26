@@ -35,10 +35,22 @@
 
 struct nir_shader;
 
+/*
+ * 2 reserved functions args for each function call,
+ * exec mask and context.
+ */
+#define LP_RESV_FUNC_ARGS 2
+
 void lp_build_nir_soa(struct gallivm_state *gallivm,
                       struct nir_shader *shader,
                       const struct lp_build_tgsi_params *params,
                       LLVMValueRef (*outputs)[4]);
+
+void lp_build_nir_soa_func(struct gallivm_state *gallivm,
+                           struct nir_shader *shader,
+                           nir_function_impl *impl,
+                           const struct lp_build_tgsi_params *params,
+                           LLVMValueRef (*outputs)[4]);
 
 void lp_build_nir_aos(struct gallivm_state *gallivm,
                       struct nir_shader *shader,
@@ -47,8 +59,12 @@ void lp_build_nir_aos(struct gallivm_state *gallivm,
                       LLVMValueRef consts_ptr,
                       const LLVMValueRef *inputs,
                       LLVMValueRef *outputs,
-                      const struct lp_build_sampler_aos *sampler,
-                      const struct tgsi_shader_info *info);
+                      const struct lp_build_sampler_aos *sampler);
+
+struct lp_build_fn {
+   LLVMTypeRef fn_type;
+   LLVMValueRef fn;
+};
 
 struct lp_build_nir_context
 {
@@ -67,12 +83,14 @@ struct lp_build_nir_context
    LLVMValueRef *ssa_defs;
    struct hash_table *regs;
    struct hash_table *vars;
+   struct hash_table *fns;
 
    /** Value range analysis hash table used in code generation. */
    struct hash_table *range_ht;
 
    LLVMValueRef aniso_filter_table;
 
+   LLVMValueRef func;
    nir_shader *shader;
 
    void (*load_ubo)(struct lp_build_nir_context *bld_base,
@@ -238,6 +256,11 @@ struct lp_build_nir_context
                                                LLVMValueRef prim_count);
    void (*launch_mesh_workgroups)(struct lp_build_nir_context *bld_base,
                                   LLVMValueRef launch_grid);
+
+   void (*call)(struct lp_build_nir_context *bld_base,
+                struct lp_build_fn *fn,
+                int num_args,
+                LLVMValueRef *args);
 //   LLVMValueRef main_function
 };
 
@@ -294,12 +317,18 @@ struct lp_build_nir_soa_context
 
    LLVMValueRef kernel_args_ptr;
    unsigned gs_vertex_streams;
+
+   LLVMTypeRef call_context_type;
+   LLVMValueRef call_context_ptr;
 };
 
+void
+lp_build_nir_prepasses(struct nir_shader *nir);
 
 bool
 lp_build_nir_llvm(struct lp_build_nir_context *bld_base,
-                  struct nir_shader *nir);
+                  struct nir_shader *nir,
+                  nir_function_impl *impl);
 
 void
 lp_build_opt_nir(struct nir_shader *nir);
@@ -380,6 +409,32 @@ lp_build_nir_sample_key(gl_shader_stage stage, nir_tex_instr *instr);
 
 
 void lp_img_op_from_intrinsic(struct lp_img_params *params, nir_intrinsic_instr *instr);
+
+enum lp_nir_call_context_args {
+   LP_NIR_CALL_CONTEXT_CONTEXT,
+   LP_NIR_CALL_CONTEXT_RESOURCES,
+   LP_NIR_CALL_CONTEXT_SHARED,
+   LP_NIR_CALL_CONTEXT_SCRATCH,
+   LP_NIR_CALL_CONTEXT_WORK_DIM,
+   LP_NIR_CALL_CONTEXT_THREAD_ID_0,
+   LP_NIR_CALL_CONTEXT_THREAD_ID_1,
+   LP_NIR_CALL_CONTEXT_THREAD_ID_2,
+   LP_NIR_CALL_CONTEXT_BLOCK_ID_0,
+   LP_NIR_CALL_CONTEXT_BLOCK_ID_1,
+   LP_NIR_CALL_CONTEXT_BLOCK_ID_2,
+   LP_NIR_CALL_CONTEXT_GRID_SIZE_0,
+   LP_NIR_CALL_CONTEXT_GRID_SIZE_1,
+   LP_NIR_CALL_CONTEXT_GRID_SIZE_2,
+   LP_NIR_CALL_CONTEXT_BLOCK_SIZE_0,
+   LP_NIR_CALL_CONTEXT_BLOCK_SIZE_1,
+   LP_NIR_CALL_CONTEXT_BLOCK_SIZE_2,
+   LP_NIR_CALL_CONTEXT_MAX_ARGS,
+};
+
+LLVMTypeRef
+lp_build_cs_func_call_context(struct gallivm_state *gallivm, int length,
+                              LLVMTypeRef context_type, LLVMTypeRef resources_type);
+
 
 
 #endif

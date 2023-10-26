@@ -553,12 +553,14 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
    pipeline.pds_temps_used = query_prog->primary_num_temps;
 
    pipeline.coeff_regs_count = shader_factory_info->coeff_regs;
+   pipeline.unified_store_regs_count = shader_factory_info->input_regs;
    pipeline.const_shared_regs_count = shader_factory_info->const_shared_regs;
 
-   const_buffer = vk_alloc(&cmd_buffer->vk.pool->alloc,
-                           shader_factory_info->const_shared_regs << 2,
-                           8,
-                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   const_buffer =
+      vk_alloc(&cmd_buffer->vk.pool->alloc,
+               PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
+               8,
+               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    if (!const_buffer) {
       return vk_command_buffer_set_error(&cmd_buffer->vk,
                                          VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -813,11 +815,11 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
       const_buffer[load->dst_idx] = load->value;
    }
 
-   result =
-      pvr_cmd_buffer_upload_general(cmd_buffer,
-                                    const_buffer,
-                                    shader_factory_info->const_shared_regs << 2,
-                                    &pvr_bo);
+   result = pvr_cmd_buffer_upload_general(
+      cmd_buffer,
+      const_buffer,
+      PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
+      &pvr_bo);
    if (result != VK_SUCCESS) {
       vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
 

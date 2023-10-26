@@ -481,7 +481,7 @@ static int is_presub_candidate(
 	unsigned int i;
 	unsigned int is_constant[2] = {0, 0};
 
-	assert(inst->U.I.Opcode == RC_OPCODE_ADD);
+	assert(inst->U.I.Opcode == RC_OPCODE_ADD || inst->U.I.Opcode == RC_OPCODE_MAD);
 
 	if (inst->U.I.PreSub.Opcode != RC_PRESUB_NONE
 			|| inst->U.I.SaturateMode
@@ -490,7 +490,7 @@ static int is_presub_candidate(
 		return 0;
 	}
 
-	/* If both sources use a constant swizzle, then we can't convert it to
+	/* If first two sources use a constant swizzle, then we can't convert it to
 	 * a presubtract operation.  In fact for the ADD and SUB presubtract
 	 * operations neither source can contain a constant swizzle.  This
 	 * specific case is checked in peephole_add_presub_add() when
@@ -573,6 +573,23 @@ static void presub_replace_inv(
 	inst_reader->U.I.SrcReg[src_index].Index = RC_PRESUB_INV;
 }
 
+static void presub_replace_bias(
+	struct rc_instruction * inst_mad,
+	struct rc_instruction * inst_reader,
+	unsigned int src_index)
+{
+	/* We must be careful not to modify inst_mad, since it
+	 * is possible it will remain part of the program.*/
+	inst_reader->U.I.PreSub.SrcReg[0] = inst_mad->U.I.SrcReg[0];
+	inst_reader->U.I.PreSub.SrcReg[0].Negate = 0;
+	inst_reader->U.I.PreSub.Opcode = RC_PRESUB_BIAS;
+	inst_reader->U.I.SrcReg[src_index] = chain_srcregs(inst_reader->U.I.SrcReg[src_index],
+						inst_reader->U.I.PreSub.SrcReg[0]);
+
+	inst_reader->U.I.SrcReg[src_index].File = RC_FILE_PRESUB;
+	inst_reader->U.I.SrcReg[src_index].Index = RC_PRESUB_BIAS;
+}
+
 /**
  * PRESUB_INV: ADD TEMP[0], none.1, -TEMP[1]
  * Use the presubtract 1 - src0 for all readers of TEMP[0].  The first source
@@ -608,8 +625,6 @@ static int peephole_add_presub_inv(
 	if ((inst_add->U.I.SrcReg[1].Negate & inst_add->U.I.DstReg.WriteMask) !=
 						inst_add->U.I.DstReg.WriteMask
 		|| inst_add->U.I.SrcReg[1].Abs
-		|| (inst_add->U.I.SrcReg[1].File != RC_FILE_TEMPORARY
-			&& inst_add->U.I.SrcReg[1].File != RC_FILE_CONSTANT)
 		|| src_has_const_swz(inst_add->U.I.SrcReg[1])) {
 
 		return 0;
@@ -617,6 +632,66 @@ static int peephole_add_presub_inv(
 
 	if (presub_helper(c, inst_add, RC_PRESUB_INV, presub_replace_inv)) {
 		rc_remove_instruction(inst_add);
+		return 1;
+	}
+	return 0;
+}
+
+/**
+ * PRESUB_BIAD: MAD -TEMP[0], 2.0, 1.0
+ * Use the presubtract 1 - 2*src0 for all readers of TEMP[0].  The first source
+ * of the add instruction must have the constant 1 swizzle.  This function
+ * does not check const registers to see if their value is 1.0, so it should
+ * be called after the constant_folding optimization.
+ * @return
+ * 	0 if the MAD instruction is still part of the program.
+ * 	1 if the MAD instruction is no longer part of the program.
+ */
+static int peephole_mad_presub_bias(
+	struct radeon_compiler * c,
+	struct rc_instruction * inst_mad)
+{
+	unsigned int i, swz;
+
+	if (!is_presub_candidate(c, inst_mad))
+		return 0;
+
+	/* Check if src2 is 1. */
+	for(i = 0; i < 4; i++ ) {
+		if (!(inst_mad->U.I.DstReg.WriteMask & (1 << i)))
+			continue;
+
+		swz = GET_SWZ(inst_mad->U.I.SrcReg[2].Swizzle, i);
+		if (swz != RC_SWIZZLE_ONE || inst_mad->U.I.SrcReg[2].Negate & (1 << i))
+			return 0;
+	}
+
+	/* Check if src1 is 2. */
+	struct rc_src_register src1_reg = inst_mad->U.I.SrcReg[1];
+	if ((src1_reg.Negate & inst_mad->U.I.DstReg.WriteMask) != 0 || src1_reg.Abs)
+		return 0;
+        struct rc_constant *constant = &c->Program.Constants.Constants[src1_reg.Index];
+	if (constant->Type != RC_CONSTANT_IMMEDIATE)
+		return 0;
+        for (i = 0; i < 4; i++) {
+		if (!(inst_mad->U.I.DstReg.WriteMask & (1 << i)))
+			continue;
+		swz = GET_SWZ(src1_reg.Swizzle, i);
+		if (swz >= RC_SWIZZLE_ZERO || constant->u.Immediate[swz] != 2.0)
+			return 0;
+	}
+
+	/* Check src0. */
+	if ((inst_mad->U.I.SrcReg[0].Negate & inst_mad->U.I.DstReg.WriteMask) !=
+						inst_mad->U.I.DstReg.WriteMask
+		|| inst_mad->U.I.SrcReg[0].Abs
+		|| src_has_const_swz(inst_mad->U.I.SrcReg[0])) {
+
+		return 0;
+	}
+
+	if (presub_helper(c, inst_mad, RC_PRESUB_BIAS, presub_replace_bias)) {
+		rc_remove_instruction(inst_mad);
 		return 1;
 	}
 	return 0;
@@ -809,15 +884,24 @@ static int peephole_mul_omod(
  */
 static int peephole(struct radeon_compiler * c, struct rc_instruction * inst)
 {
-	switch(inst->U.I.Opcode){
+	if (!c->has_presub)
+		return 0;
+
+	switch(inst->U.I.Opcode) {
 	case RC_OPCODE_ADD:
-		if (c->has_presub) {
-			if(peephole_add_presub_inv(c, inst))
-				return 1;
-			if(peephole_add_presub_add(c, inst))
-				return 1;
-		}
+	{
+		if (peephole_add_presub_inv(c, inst))
+			return 1;
+		if (peephole_add_presub_add(c, inst))
+			return 1;
 		break;
+	}
+	case RC_OPCODE_MAD:
+	{
+		if (peephole_mad_presub_bias(c, inst))
+			return 1;
+		break;
+	}
 	default:
 		break;
 	}

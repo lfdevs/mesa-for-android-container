@@ -32,6 +32,8 @@
 #include "anv_private.h"
 #include "common/intel_gem.h"
 
+#include "i915/anv_gem.h"
+
 void *
 anv_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
              uint64_t size, VkMemoryPropertyFlags property_flags)
@@ -55,113 +57,51 @@ anv_gem_munmap(struct anv_device *device, void *p, uint64_t size)
    munmap(p, size);
 }
 
-uint32_t
-anv_gem_userptr(struct anv_device *device, void *mem, size_t size)
-{
-   struct drm_i915_gem_userptr userptr = {
-      .user_ptr = (__u64)((unsigned long) mem),
-      .user_size = size,
-      .flags = 0,
-   };
-
-   if (device->physical->info.has_userptr_probe)
-      userptr.flags |= I915_USERPTR_PROBE;
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_USERPTR, &userptr);
-   if (ret == -1)
-      return 0;
-
-   return userptr.handle;
-}
-
-int
-anv_gem_set_caching(struct anv_device *device,
-                    uint32_t gem_handle, uint32_t caching)
-{
-   /* Guard by has_caching_uapi */
-   if (unlikely(device->info->kmd_type != INTEL_KMD_TYPE_I915)) {
-      assert(!"Missing implementation of anv_gem_set_caching\n");
-      return -1;
-   }
-
-   struct drm_i915_gem_caching gem_caching = {
-      .handle = gem_handle,
-      .caching = caching,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_CACHING, &gem_caching);
-}
-
 /**
  * On error, \a timeout_ns holds the remaining time.
  */
 int
 anv_gem_wait(struct anv_device *device, uint32_t gem_handle, int64_t *timeout_ns)
 {
-   /* Only called from i915 code path and from anv_bo_sync that is not
-    * supported in Xe
-    */
-   if (unlikely(device->info->kmd_type != INTEL_KMD_TYPE_I915)) {
-      assert(!"Missing implementation of anv_gem_wait\n");
+   switch (device->info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return anv_i915_gem_wait(device, gem_handle, timeout_ns);
+   case INTEL_KMD_TYPE_XE:
+      return -1;
+   default:
+      unreachable("missing");
       return -1;
    }
-
-   struct drm_i915_gem_wait wait = {
-      .bo_handle = gem_handle,
-      .timeout_ns = *timeout_ns,
-      .flags = 0,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_WAIT, &wait);
-   *timeout_ns = wait.timeout_ns;
-
-   return ret;
 }
 
 /** Return -1 on error. */
 int
 anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
 {
-   if (!device->info->has_tiling_uapi)
+   switch (device->info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return anv_i915_gem_get_tiling(device, gem_handle);
+   case INTEL_KMD_TYPE_XE:
       return -1;
-
-   struct drm_i915_gem_get_tiling get_tiling = {
-      .handle = gem_handle,
-   };
-
-   /* FIXME: On discrete platforms we don't have DRM_IOCTL_I915_GEM_GET_TILING
-    * anymore, so we will need another way to get the tiling. Apparently this
-    * is only used in Android code, so we may need some other way to
-    * communicate the tiling mode.
-    */
-   if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling)) {
-      assert(!"Failed to get BO tiling");
+   default:
+      unreachable("missing");
       return -1;
    }
-
-   return get_tiling.tiling_mode;
 }
 
 int
 anv_gem_set_tiling(struct anv_device *device,
                    uint32_t gem_handle, uint32_t stride, uint32_t tiling)
 {
-   /* On discrete platforms we don't have DRM_IOCTL_I915_GEM_SET_TILING. So
-    * nothing needs to be done.
-    */
-   if (!device->info->has_tiling_uapi)
+   switch (device->info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return anv_i915_gem_set_tiling(device, gem_handle, stride, tiling);
+   case INTEL_KMD_TYPE_XE:
       return 0;
-
-   /* set_tiling overwrites the input on the error path, so we have to open
-    * code intel_ioctl.
-    */
-   struct drm_i915_gem_set_tiling set_tiling = {
-      .handle = gem_handle,
-      .tiling_mode = tiling,
-      .stride = stride,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
+   default:
+      unreachable("missing");
+      return -1;
+   }
 }
 
 int
@@ -191,6 +131,26 @@ anv_gem_fd_to_handle(struct anv_device *device, int fd)
       return 0;
 
    return args.handle;
+}
+
+VkResult
+anv_gem_import_bo_alloc_flags_to_bo_flags(struct anv_device *device,
+                                          struct anv_bo *bo,
+                                          enum anv_bo_alloc_flags alloc_flags,
+                                          uint32_t *bo_flags)
+{
+   switch (device->info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return anv_i915_gem_import_bo_alloc_flags_to_bo_flags(device, bo,
+                                                            alloc_flags,
+                                                            bo_flags);
+   case INTEL_KMD_TYPE_XE:
+      *bo_flags = device->kmd_backend->bo_alloc_flags_to_bo_flags(device, alloc_flags);
+      return VK_SUCCESS;
+   default:
+      unreachable("missing");
+      return VK_ERROR_UNKNOWN;
+   }
 }
 
 const struct anv_kmd_backend *anv_stub_kmd_backend_get(void)

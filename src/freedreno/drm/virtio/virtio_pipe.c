@@ -47,30 +47,26 @@ query_param(struct fd_pipe *pipe, uint32_t param, uint64_t *value)
 }
 
 static int
-query_queue_param(struct fd_pipe *pipe, uint32_t param, uint64_t *value)
+query_faults(struct fd_pipe *pipe, uint64_t *value)
 {
-   MESA_TRACE_FUNC();
-   struct msm_ccmd_submitqueue_query_req req = {
-         .hdr = MSM_CCMD(SUBMITQUEUE_QUERY, sizeof(req)),
-         .queue_id = to_virtio_pipe(pipe)->queue_id,
-         .param = param,
-         .len = sizeof(*value),
-   };
-   struct msm_ccmd_submitqueue_query_rsp *rsp;
-   unsigned rsp_len = sizeof(*rsp) + req.len;
+   struct virtio_device *virtio_dev = to_virtio_device(pipe->dev);
+   uint32_t async_error = 0;
+   uint64_t global_faults;
 
-   rsp = virtio_alloc_rsp(pipe->dev, &req.hdr, rsp_len);
+   if (msm_shmem_has_field(virtio_dev->shmem, async_error))
+      async_error = virtio_dev->shmem->async_error;
 
-   int ret = virtio_execbuf(pipe->dev, &req.hdr, true);
-   if (ret)
-      goto out;
+   if (msm_shmem_has_field(virtio_dev->shmem, global_faults)) {
+      global_faults = virtio_dev->shmem->global_faults;
+   } else {
+      int ret = query_param(pipe, MSM_PARAM_FAULTS, &global_faults);
+      if (ret)
+         return ret;
+   }
 
-   memcpy(value, rsp->payload, req.len);
+   *value = global_faults + async_error;
 
-   ret = rsp->ret;
-
-out:
-   return ret;
+   return 0;
 }
 
 static int
@@ -103,9 +99,8 @@ virtio_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
       *value = virtio_dev->caps.u.msm.priorities;
       return 0;
    case FD_CTX_FAULTS:
-      return query_queue_param(pipe, MSM_SUBMITQUEUE_PARAM_FAULTS, value);
    case FD_GLOBAL_FAULTS:
-      return query_param(pipe, MSM_PARAM_FAULTS, value);
+      return query_faults(pipe, value);
    case FD_SUSPEND_COUNT:
       return query_param(pipe, MSM_PARAM_SUSPENDS, value);
    case FD_VA_SIZE:

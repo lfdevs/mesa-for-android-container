@@ -502,16 +502,10 @@ VertexShader::load_input(nir_intrinsic_instr *intr)
 
    AluInstr *ir = nullptr;
    if (location < VERT_ATTRIB_MAX) {
-      for (unsigned i = 0; i < nir_dest_num_components(intr->dest); ++i) {
+      for (unsigned i = 0; i < intr->def.num_components; ++i) {
          auto src = vf.allocate_pinned_register(driver_location + 1, i);
          src->set_flag(Register::ssa);
-         if (intr->dest.is_ssa)
-            vf.inject_value(intr->dest, i, src);
-         else {
-            ir =
-               new AluInstr(op1_mov, vf.dest(intr->dest, i, pin_none), src, {alu_write});
-            emit_instruction(ir);
-         }
+         vf.inject_value(intr->def, i, src);
       }
       if (ir)
          ir->set_alu_flag(alu_last_instr);
@@ -559,13 +553,13 @@ VertexShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
 {
    switch (intr->intrinsic) {
    case nir_intrinsic_load_vertex_id:
-      return emit_simple_mov(intr->dest, 0, m_vertex_id);
+      return emit_simple_mov(intr->def, 0, m_vertex_id);
    case nir_intrinsic_load_instance_id:
-      return emit_simple_mov(intr->dest, 0, m_instance_id);
+      return emit_simple_mov(intr->def, 0, m_instance_id);
    case nir_intrinsic_load_primitive_id:
-      return emit_simple_mov(intr->dest, 0, primitive_id());
+      return emit_simple_mov(intr->def, 0, primitive_id());
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
-      return emit_simple_mov(intr->dest, 0, m_rel_vertex_id);
+      return emit_simple_mov(intr->def, 0, m_rel_vertex_id);
    default:
       return false;
    }

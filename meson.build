@@ -180,13 +180,6 @@ foreach gallium_driver : gallium_drivers
   pre_args += '-DHAVE_@0@'.format(gallium_driver.to_upper())
 endforeach
 
-freedreno_kmds = get_option('freedreno-kmds')
-# If building only vulkan with only kgsl kmd support, there is no libdrm
-# dependency:
-if freedreno_kmds.length() == 1 and freedreno_kmds.contains('kgsl') and not with_gallium_freedreno
-  system_has_kms_drm = false
-endif
-
 with_gallium = gallium_drivers.length() != 0
 with_gallium_kmsro = system_has_kms_drm and [
   with_gallium_asahi,
@@ -197,15 +190,6 @@ with_gallium_kmsro = system_has_kms_drm and [
   with_gallium_v3d,
   with_gallium_vc4,
 ].contains(true)
-
-with_dri = false
-if with_gallium and system_has_kms_drm
-  _glx = get_option('glx')
-  _egl = get_option('egl')
-  if _glx == 'dri' or _egl.enabled() or (_glx == 'disabled' and _egl.allowed())
-    with_dri = true
-  endif
-endif
 
 _vulkan_drivers = get_option('vulkan-drivers')
 if _vulkan_drivers.contains('auto')
@@ -242,7 +226,32 @@ with_broadcom_vk = _vulkan_drivers.contains('broadcom')
 with_imagination_vk = _vulkan_drivers.contains('imagination-experimental')
 with_imagination_srv = get_option('imagination-srv')
 with_microsoft_vk = _vulkan_drivers.contains('microsoft-experimental')
+with_nouveau_vk = _vulkan_drivers.contains('nouveau-experimental')
 with_any_vk = _vulkan_drivers.length() != 0
+
+freedreno_kmds = get_option('freedreno-kmds')
+if freedreno_kmds.length() != 0 and freedreno_kmds != [ 'msm' ] and with_freedreno_vk
+  if freedreno_kmds.contains('msm')
+      warning('Turnip with the DRM KMD will require libdrm to always be present at runtime which may not always be the case on platforms such as Android.')
+  elif with_gallium_kmsro
+      warning('As a side-effect, Turnip is forced to link with libdrm when built alongside Gallium DRM drivers which platforms such as Android may not have available at runtime.')
+  elif _vulkan_drivers != [ 'freedreno' ]
+      warning('Turnip is forced to link with libdrm when built alongside other Vulkan drivers which platforms such as Android may not have available at runtime.')
+  else
+    # If DRM support isn't needed, we can get rid of it since linking
+    # to libdrm can be a potential compatibility hazard.
+    system_has_kms_drm = false
+  endif
+endif
+
+with_dri = false
+if with_gallium and system_has_kms_drm
+  _glx = get_option('glx')
+  _egl = get_option('egl')
+  if _glx == 'dri' or _egl.enabled() or (_glx == 'disabled' and _egl.allowed())
+    with_dri = true
+  endif
+endif
 
 with_any_broadcom = [
   with_gallium_vc4,
@@ -267,6 +276,7 @@ with_any_intel = [
   with_intel_tools,
   with_intel_vk,
 ].contains(true)
+with_any_nouveau = with_gallium_nouveau or with_nouveau_vk
 
 if with_swrast_vk and not with_gallium_softpipe
   error('swrast vulkan requires gallium swrast')
@@ -554,8 +564,8 @@ if vdpau_drivers_path == ''
   vdpau_drivers_path = join_paths(get_option('libdir'), 'vdpau')
 endif
 
-if with_vulkan_overlay_layer or with_aco_tests or with_amd_vk or with_intel_vk
-  prog_glslang = find_program('glslangValidator', native : true)
+prog_glslang = find_program('glslangValidator', native : true, required : with_vulkan_overlay_layer or with_aco_tests or with_amd_vk or with_intel_vk)
+if prog_glslang.found()
   if run_command(prog_glslang, [ '--quiet', '--version' ], check : false).returncode() == 0
     glslang_quiet = ['--quiet']
   else
@@ -766,8 +776,8 @@ if with_gallium_rusticl
     error('rusticl requires at least one gallium driver.')
   endif
 
-  if meson.version().version_compare('< 1.0.0')
-    error('rusticl requires meson 1.0.0 or newer')
+  if meson.version().version_compare('< 1.2')
+    error('rusticl requires meson 1.2.0 or newer')
   endif
 
   add_languages('rust', required: true)
@@ -1159,6 +1169,16 @@ if host_machine.cpu_family().startswith('x86')
       endif
     endif
   endif
+endif
+
+# Detect __builtin_ia32_clflushopt support
+if cc.has_function('__builtin_ia32_clflushopt', args : '-mclflushopt')
+  pre_args += '-DHAVE___BUILTIN_IA32_CLFLUSHOPT'
+  clflushopt_args = ['-mclflushopt']
+  with_clflushopt = true
+else
+  clflushopt_args = []
+  with_clflushopt = false
 endif
 
 # Check for GCC style atomics
@@ -1577,7 +1597,7 @@ _libdrm_checks = [
   ['intel', with_gallium_i915],
   ['amdgpu', (with_amd_vk and not with_platform_windows) or with_gallium_radeonsi],
   ['radeon', (with_gallium_radeonsi or with_gallium_r300 or with_gallium_r600)],
-  ['nouveau', with_gallium_nouveau],
+  ['nouveau', with_any_nouveau],
 ]
 
 # Loop over the enables versions and get the highest libdrm requirement for all
@@ -1681,6 +1701,7 @@ with_llvm = false
 if _llvm.allowed()
   dep_llvm = dependency(
     'llvm',
+    method : host_machine.system() == 'windows' ? 'auto' : 'config-tool',
     version : _llvm_version,
     modules : llvm_modules,
     optional_modules : llvm_optional_modules,
@@ -1924,7 +1945,7 @@ if with_platform_wayland
   else
     wl_scanner_arg = 'code'
   endif
-  dep_wl_protocols = dependency('wayland-protocols', version : '>= 1.24')
+  dep_wl_protocols = dependency('wayland-protocols', version : '>= 1.30')
   dep_wayland_client = dependency('wayland-client', version : '>=1.18')
   dep_wayland_server = dependency('wayland-server', version : '>=1.18')
   if with_egl
@@ -2073,6 +2094,11 @@ if with_perfetto
   pre_args += '-DHAVE_PERFETTO'
 endif
 
+with_gpuvis = get_option('gpuvis')
+if with_gpuvis
+  pre_args += '-DHAVE_GPUVIS'
+endif
+
 add_project_arguments(pre_args, language : ['c', 'cpp'])
 add_project_arguments(c_cpp_args, language : ['c', 'cpp'])
 
@@ -2167,6 +2193,7 @@ summary(
     'ES1': with_gles1,
     'ES2': with_gles2,
     'Shared glapi': with_shared_glapi,
+    'GLVND': with_glvnd,
   },
   section: 'OpenGL', bool_yn: true
 )
@@ -2217,10 +2244,29 @@ if with_any_vk
   if with_any_vulkan_layers
     vulkan_summary += {'Layers': get_option('vulkan-layers')}
   endif
-  vulkan_summary += {'Video codecs': _codecs.length() != 0 ? _codecs : false}
   vulkan_summary += {'Intel Ray tracing': with_intel_vk_rt}
 endif
 summary(vulkan_summary, section: 'Vulkan', bool_yn: true, list_sep: ' ')
+
+video_summary = {'Codecs': _codecs.length() != 0 ? _codecs : false}
+video_apis = []
+if with_gallium_vdpau
+  video_apis += 'vdpau'
+endif
+if with_gallium_va
+  video_apis += 'va'
+endif
+if with_any_vk
+  video_apis += 'vulkan'
+endif
+if with_gallium_xa
+  video_apis += 'xa'
+endif
+if with_gallium_omx != 'disabled'
+  video_apis += 'omx'
+endif
+video_summary += {'APIs': video_apis.length() != 0 ? video_apis : false}
+summary(video_summary, section: 'Video', bool_yn: true, list_sep: ' ')
 
 llvm_summary = {'Enabled': with_llvm}
 if with_llvm

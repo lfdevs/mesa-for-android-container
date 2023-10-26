@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-#define ACO_MAX_SO_OUTPUTS     64
+#define ACO_MAX_SO_OUTPUTS     128
 #define ACO_MAX_SO_BUFFERS     4
 #define ACO_MAX_VERTEX_ATTRIBS 32
 #define ACO_MAX_VBS            32
@@ -65,8 +65,7 @@ struct aco_vs_prolog_info {
 };
 
 struct aco_ps_epilog_info {
-   struct ac_arg inputs[8];
-   struct ac_arg pc;
+   struct ac_arg colors[MAX_DRAW_BUFFERS];
 
    uint32_t spi_shader_col_format;
 
@@ -75,6 +74,68 @@ struct aco_ps_epilog_info {
    uint8_t color_is_int10;
 
    bool mrt0_is_dual_src;
+
+   /* OpenGL only */
+   uint16_t color_types;
+   bool clamp_color;
+   bool alpha_to_one;
+   bool alpha_to_coverage_via_mrtz;
+   bool skip_null_export;
+   unsigned broadcast_last_cbuf;
+   enum compare_func alpha_func;
+   struct ac_arg alpha_reference;
+   struct ac_arg depth;
+   struct ac_arg stencil;
+   struct ac_arg samplemask;
+};
+
+struct aco_tcs_epilog_info {
+   bool pass_tessfactors_by_reg;
+   bool tcs_out_patch_fits_subgroup;
+   enum tess_primitive_mode primitive_mode;
+   unsigned tess_offchip_ring_size;
+   bool tes_reads_tessfactors;
+
+   struct ac_arg invocation_id;
+   struct ac_arg rel_patch_id;
+   struct ac_arg tcs_out_current_patch_data_offset;
+   struct ac_arg patch_base;
+   struct ac_arg tess_lvl_in[2];
+   struct ac_arg tess_lvl_out[4];
+   struct ac_arg tcs_out_lds_layout;
+   struct ac_arg tcs_offchip_layout;
+};
+
+struct aco_gl_vs_prolog_info {
+   uint16_t instance_divisor_is_one;
+   uint16_t instance_divisor_is_fetched;
+   unsigned instance_diviser_buf_offset;
+   unsigned num_inputs;
+   bool as_ls;
+
+   struct ac_arg internal_bindings;
+};
+
+struct aco_ps_prolog_info {
+   bool poly_stipple;
+   unsigned poly_stipple_buf_offset;
+
+   bool bc_optimize_for_persp;
+   bool bc_optimize_for_linear;
+   bool force_persp_sample_interp;
+   bool force_linear_sample_interp;
+   bool force_persp_center_interp;
+   bool force_linear_center_interp;
+
+   unsigned samplemask_log_ps_iter;
+   unsigned num_interp_inputs;
+   unsigned colors_read;
+   int color_interp_vgpr_index[2];
+   int color_attr_index[2];
+   bool color_two_side;
+   bool needs_wqm;
+
+   struct ac_arg internal_bindings;
 };
 
 struct aco_shader_info {
@@ -84,20 +145,40 @@ struct aco_shader_info {
    bool has_ngg_early_prim_export;
    bool image_2d_view_of_3d;
    unsigned workgroup_size;
+   bool has_epilog;                        /* Only for TCS or PS. */
+   bool merged_shader_compiled_separately; /* GFX9+ */
+   struct ac_arg next_stage_pc;
    struct {
       bool tcs_in_out_eq;
       uint64_t tcs_temp_only_input_mask;
       bool has_prolog;
    } vs;
    struct {
+      struct ac_arg tcs_offchip_layout;
+
+      /* Vulkan only */
       uint32_t num_lds_blocks;
-      unsigned tess_input_vertices;
+      struct ac_arg epilog_pc;
+      uint32_t num_linked_outputs;
+      uint32_t num_linked_patch_outputs;
+      uint32_t tcs_vertices_out;
+
+      /* OpenGL only */
+      bool pass_tessfactors_by_reg;
+      unsigned patch_stride;
+      struct ac_arg tes_offchip_addr;
+      struct ac_arg vs_state_bits;
    } tcs;
    struct {
-      bool has_epilog;
-      struct ac_arg epilog_pc;
       uint32_t num_interp;
-      unsigned spi_ps_input;
+      unsigned spi_ps_input_ena;
+      unsigned spi_ps_input_addr;
+
+      /* Vulkan only */
+      struct ac_arg epilog_pc;
+
+      /* OpenGL only */
+      struct ac_arg alpha_reference;
    } ps;
    struct {
       uint8_t subgroup_size;
@@ -154,6 +235,7 @@ enum aco_symbol_id {
    aco_symbol_scratch_addr_hi,
    aco_symbol_lds_ngg_scratch_base,
    aco_symbol_lds_ngg_gs_out_vertex_base,
+   aco_symbol_const_data_addr,
 };
 
 struct aco_symbol {

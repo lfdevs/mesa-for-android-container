@@ -261,6 +261,8 @@ enum rgp_sqtt_marker_general_api_type
    ApiCmdDrawMeshTasksEXT = 47,
    ApiCmdDrawMeshTasksIndirectCountEXT = 48,
    ApiCmdDrawMeshTasksIndirectEXT = 49,
+
+   ApiRayTracingSeparateCompiled = 0x800000,
    ApiInvalid = 0xffffffff
 };
 
@@ -534,7 +536,7 @@ struct rgp_sqtt_marker_pipeline_bind {
 static_assert(sizeof(struct rgp_sqtt_marker_pipeline_bind) == 12,
               "rgp_sqtt_marker_pipeline_bind doesn't match RGP spec");
 
-bool ac_sqtt_add_pso_correlation(struct ac_sqtt *sqtt, uint64_t pipeline_hash);
+bool ac_sqtt_add_pso_correlation(struct ac_sqtt *sqtt, uint64_t pipeline_hash, uint64_t api_hash);
 
 bool ac_sqtt_add_code_object_loader_event(struct ac_sqtt *sqtt, uint64_t pipeline_hash,
                                           uint64_t base_address);
@@ -551,5 +553,9 @@ bool ac_sqtt_se_is_disabled(const struct radeon_info *info, unsigned se);
 
 bool ac_sqtt_get_trace(struct ac_sqtt *sqtt, const struct radeon_info *info,
                        struct ac_sqtt_trace *sqtt_trace);
+
+uint32_t ac_sqtt_get_shader_mask(const struct radeon_info *info);
+
+uint32_t ac_sqtt_get_active_cu(const struct radeon_info *info, unsigned se);
 
 #endif

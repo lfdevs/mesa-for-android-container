@@ -77,61 +77,6 @@ void pvr_pbe_get_src_format_and_gamma(VkFormat vk_format,
    }
 }
 
-static void pvr_pbe_get_src_pos(const struct pvr_device_info *dev_info,
-                                enum pvr_pbe_source_start_pos source_start,
-                                uint32_t *const src_pos_out,
-                                bool *const src_pos_offset_128_out)
-{
-   *src_pos_offset_128_out = false;
-
-   switch (source_start) {
-   case PVR_PBE_STARTPOS_BIT32:
-      *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT32);
-      break;
-
-   case PVR_PBE_STARTPOS_BIT64:
-      *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT64);
-      break;
-
-   case PVR_PBE_STARTPOS_BIT96:
-      *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT96);
-      break;
-
-   case PVR_PBE_STARTPOS_BIT0:
-   default:
-      if (PVR_HAS_FEATURE(dev_info, eight_output_registers)) {
-         switch (source_start) {
-         case PVR_PBE_STARTPOS_BIT128:
-            *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT0);
-            *src_pos_offset_128_out = true;
-            break;
-
-         case PVR_PBE_STARTPOS_BIT160:
-            *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT32);
-            *src_pos_offset_128_out = true;
-            break;
-
-         case PVR_PBE_STARTPOS_BIT192:
-            *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT64);
-            *src_pos_offset_128_out = true;
-            break;
-
-         case PVR_PBE_STARTPOS_BIT224:
-            *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT96);
-            *src_pos_offset_128_out = true;
-            break;
-
-         default:
-            *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT0);
-            break;
-         }
-      } else {
-         *src_pos_out = PVRX(PBESTATE_SOURCE_POS_START_BIT0);
-      }
-      break;
-   }
-}
-
 void pvr_pbe_pack_state(
    const struct pvr_device_info *dev_info,
    const struct pvr_pbe_surf_params *surface_params,

@@ -148,7 +148,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
                                                  cfg ? cfg->fbconfigID : 0,
                                                  screen,
                                                  share_xid,
-                                                 gc ? gc->isDirect : direct,
+                                                 gc->isDirect,
                                                  num_attribs,
                                                  (const uint32_t *)
                                                  attrib_list);

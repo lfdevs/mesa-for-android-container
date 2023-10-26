@@ -23,7 +23,6 @@ test(
   executable(
     'vma_random_test',
     'vma_random_test.cpp',
-    include_directories : [inc_include, inc_util],
     dependencies : idep_mesautil,
   ),
   suite : ['util'],

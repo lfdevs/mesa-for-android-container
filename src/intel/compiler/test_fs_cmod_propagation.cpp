@@ -24,7 +24,6 @@
 #include <gtest/gtest.h>
 #include "brw_fs.h"
 #include "brw_cfg.h"
-#include "program/program.h"
 
 using namespace brw;
 
@@ -34,6 +33,7 @@ class cmod_propagation_test : public ::testing::Test {
 
 public:
    struct brw_compiler *compiler;
+   struct brw_compile_params params;
    struct intel_device_info *devinfo;
    void *ctx;
    struct brw_wm_prog_data *prog_data;
@@ -56,10 +56,10 @@ class cmod_propagation_fs_visitor : public fs_visitor
 {
 public:
    cmod_propagation_fs_visitor(struct brw_compiler *compiler,
-                               void *mem_ctx,
+                               struct brw_compile_params *params,
                                struct brw_wm_prog_data *prog_data,
                                nir_shader *shader)
-      : fs_visitor(compiler, NULL, mem_ctx, NULL,
+      : fs_visitor(compiler, params, NULL,
                    &prog_data->base, shader, 8, false, false) {}
 };
 
@@ -71,11 +71,14 @@ void cmod_propagation_test::SetUp()
    devinfo = rzalloc(ctx, struct intel_device_info);
    compiler->devinfo = devinfo;
 
+   params = {};
+   params.mem_ctx = ctx;
+
    prog_data = ralloc(ctx, struct brw_wm_prog_data);
    nir_shader *shader =
       nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
 
-   v = new cmod_propagation_fs_visitor(compiler, ctx, prog_data, shader);
+   v = new cmod_propagation_fs_visitor(compiler, &params, prog_data, shader);
 
    devinfo->ver = 7;
    devinfo->verx10 = devinfo->ver * 10;

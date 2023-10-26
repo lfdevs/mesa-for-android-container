@@ -52,6 +52,7 @@ i915_gem_create_context_engines(int fd,
                                 enum intel_gem_create_context_flags flags,
                                 const struct intel_query_engine_info *info,
                                 int num_engines, enum intel_engine_class *engine_classes,
+                                uint32_t vm_id,
                                 uint32_t *context_id)
 {
    assert(info != NULL);
@@ -137,18 +138,30 @@ i915_gem_create_context_engines(int fd,
    struct drm_i915_gem_context_create_ext create = {
       .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
    };
+   struct drm_i915_gem_context_create_ext_setparam vm_param = {
+      .param = {
+         .param = I915_CONTEXT_PARAM_VM,
+         .value = vm_id,
+      },
+   };
 
-   intel_gem_add_ext(&create.extensions,
-                     I915_CONTEXT_CREATE_EXT_SETPARAM,
-                     &set_engines.base);
-   intel_gem_add_ext(&create.extensions,
-                     I915_CONTEXT_CREATE_EXT_SETPARAM,
-                     &recoverable_param.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &set_engines.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &recoverable_param.base);
+
+   if (vm_id != 0) {
+      intel_i915_gem_add_ext(&create.extensions,
+                             I915_CONTEXT_CREATE_EXT_SETPARAM,
+                             &vm_param.base);
+   }
 
    if (flags & INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG) {
-      intel_gem_add_ext(&create.extensions,
-                        I915_CONTEXT_CREATE_EXT_SETPARAM,
-                        &protected_param.base);
+      intel_i915_gem_add_ext(&create.extensions,
+                             I915_CONTEXT_CREATE_EXT_SETPARAM,
+                             &protected_param.base);
    }
 
    if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create) == -1)
@@ -218,12 +231,12 @@ i915_gem_create_context_ext(int fd,
       .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
    };
 
-   intel_gem_add_ext(&create.extensions,
-                     I915_CONTEXT_CREATE_EXT_SETPARAM,
-                     &recoverable_param.base);
-   intel_gem_add_ext(&create.extensions,
-                     I915_CONTEXT_CREATE_EXT_SETPARAM,
-                     &protected_param.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &recoverable_param.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &protected_param.base);
 
    if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create))
       return false;

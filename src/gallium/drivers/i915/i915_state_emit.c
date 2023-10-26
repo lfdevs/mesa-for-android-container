@@ -506,7 +506,7 @@ i915_emit_hardware_state(struct i915_context *i915)
    EMIT_ATOM(draw_rect, I915_HW_STATIC);
 #undef EMIT_ATOM
 
-   I915_DBG(DBG_EMIT, "%s: used %d dwords, %d dwords reserved\n", __func__,
+   I915_DBG(DBG_EMIT, "%s: used %lu dwords, %d dwords reserved\n", __func__,
             ((uintptr_t)i915->batch->ptr - save_ptr) / 4, batch_space);
    assert(((uintptr_t)i915->batch->ptr - save_ptr) / 4 == batch_space);
 

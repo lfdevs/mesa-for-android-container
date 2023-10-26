@@ -44,7 +44,7 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
 
 void
 etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
-                       struct pipe_resource *src, int level,
+                       struct pipe_resource *src, int dst_level, int src_level,
                        struct pipe_box *box);
 
 void

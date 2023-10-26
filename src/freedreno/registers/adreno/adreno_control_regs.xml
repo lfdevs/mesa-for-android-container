@@ -9,6 +9,9 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 -->
 
 <domain name="A5XX_CONTROL_REG" width="32">
+	<reg32 name="REG_WRITE_ADDR" offset="0x010"/>
+	<reg32 name="REG_WRITE" offset="0x011"/>
+
 	<reg64 name="IB1_BASE" offset="0x0b0"/>
 	<reg32 name="IB1_DWORDS" offset="0x0b2"/>
 	<reg64 name="IB2_BASE" offset="0x0b4"/>
@@ -236,6 +239,15 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 </domain>
 
 <domain name="A7XX_CONTROL_REG" width="32">
+	<reg32 name="RB_RPTR" offset="0x001"/>
+	<reg32 name="PREEMPT_INSTR" offset="0x004"/>
+
+	<reg64 name="IB1_BASE" offset="0x010"/>
+	<reg32 name="IB1_DWORDS" offset="0x012"/>
+	<reg64 name="IB2_BASE" offset="0x014"/>
+	<reg32 name="IB2_DWORDS" offset="0x016"/>
+	<reg64 name="IB3_BASE" offset="0x018"/>
+	<reg32 name="IB3_DWORDS" offset="0x01a"/>
 
 	<reg64 name="MEM_READ_ADDR" offset="0x01c"/>
 	<reg32 name="MEM_READ_DWORDS" offset="0x01e"/>
@@ -247,10 +259,46 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 name="REG_READ_DWORDS" offset="0x038"/>
 	<reg32 name="REG_READ_ADDR" offset="0x039"/>
 
+	<doc> Controls whether RB, IB1, IB2, IB3, or SDS is executed </doc>
+	<reg32 name="IB_LEVEL" offset="0x054"/>
+
+	<doc> Controls high 32 bits used by load and store afuc instructions </doc>
+	<reg32 name="LOAD_STORE_HI" offset="0x058"/>
+
 	<doc> Used to initialize the jump table for handling packets at bootup </doc>
 	<reg32 name="PACKET_TABLE_WRITE_ADDR" offset="0x060"/>
 	<reg32 name="PACKET_TABLE_WRITE" offset="0x061"/>
 
+	<reg64 name="BV_INSTR_BASE" offset="0x0d6"/>
+	<reg32 name="BV_CNTL" offset="0x0d8"/>
+
+	<reg64 name="LPAC_INSTR_BASE" offset="0x0d9"/>
+	<reg32 name="LPAC_CNTL" offset="0x0db"/>
+
+	<reg32 name="GLOBAL_TIMESTAMP" offset="0x0e2"/>
+	<reg32 name="LOCAL_TIMESTAMP" offset="0x0e3"/>
+
+	<reg32 name="PREEMPT_ENABLE" offset="0x071"/>
+
+	<doc>
+		Register used to create critical sections when reading/writing
+		shared memory (0x200-0x2ff). Each bit contains a lock. Writing 1
+		to the bit initiates a lock, reads return 1 once the lock is
+		taken. Writing 0 unlocks.
+	</doc>
+	<reg32 name="COPROCESSOR_LOCK" offset="0x0b1"/>
+
+	<!-- 0x100-0x1ff - thread-private scratch space as before -->
+	<!-- 0x200-0x2ff - global register space for cross-thread communication -->
+
+	<doc>
+		The low 3 bits are used as a semaphore to let SQE wait for other
+		coprocessors to start. SQE sets it to 0x7 before starting the
+		coprocessors, then each coprocessor atomically clears a bit.
+		Other bits are used for CP_THREAD_CONTROL::SYNC_THREADS and
+		other internal syncing.
+	</doc>
+	<reg32 name="THREAD_SYNC" offset="0x23f"/>
 </domain>
 
 </database>

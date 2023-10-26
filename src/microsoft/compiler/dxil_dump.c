@@ -218,7 +218,7 @@ static void dump_type_name(struct dxil_dumper *d, const struct dxil_type *type)
       break;
    case TYPE_ARRAY:
       dump_type_name(d, type->array_or_vector_def.elem_type);
-      _mesa_string_buffer_printf(d->buf, "[%d]", type->array_or_vector_def.num_elems);
+      _mesa_string_buffer_printf(d->buf, "[%zu]", type->array_or_vector_def.num_elems);
       break;
    case TYPE_FUNCTION:
       _mesa_string_buffer_append(d->buf, "(");
@@ -234,7 +234,7 @@ static void dump_type_name(struct dxil_dumper *d, const struct dxil_type *type)
    case TYPE_VECTOR:
       _mesa_string_buffer_append(d->buf, "vector<");
       dump_type_name(d, type->array_or_vector_def.elem_type);
-      _mesa_string_buffer_printf(d->buf, ", %d>", type->array_or_vector_def.num_elems);
+      _mesa_string_buffer_printf(d->buf, ", %zu>", type->array_or_vector_def.num_elems);
       break;
    default:
       _mesa_string_buffer_printf(d->buf, "unknown type %d", type->type);
@@ -370,7 +370,7 @@ dump_constants(struct dxil_dumper *d, struct list_head *list)
             _mesa_string_buffer_printf(d->buf, " %10.5f\n", cnst->float_value);
             break;
          case TYPE_INTEGER:
-            _mesa_string_buffer_printf(d->buf, " %d\n", cnst->int_value);
+            _mesa_string_buffer_printf(d->buf, " %" PRIdMAX "\n", cnst->int_value);
             break;
          case TYPE_ARRAY:
             _mesa_string_buffer_append(d->buf, "{");

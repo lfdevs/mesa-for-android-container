@@ -32,6 +32,7 @@
 #include "common/intel_gem.h"
 #include "dev/intel_device_info.h"
 #include "intel_gem.h"
+#include "isl/isl.h"
 #include "drm-uapi/i915_drm.h"
 #include "genxml/gen_macros.h"
 #include "util/macros.h"
@@ -311,7 +312,11 @@ mi_builder_test::SetUp()
    memset(data_map, 139, DATA_BO_SIZE);
    memset(&canary, 139, sizeof(canary));
 
+   struct isl_device isl_dev;
+   isl_device_init(&isl_dev, &devinfo);
    mi_builder_init(&b, &devinfo, this);
+   const uint32_t mocs = isl_mocs(&isl_dev, 0, false);
+   mi_builder_set_mocs(&b, mocs);
 }
 
 void *

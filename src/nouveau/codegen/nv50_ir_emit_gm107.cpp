@@ -3323,26 +3323,30 @@ void
 CodeEmitterGM107::emitSULDx()
 {
    const TexInstruction *insn = this->insn->asTex();
-   int type = 0;
 
    emitInsn(0xeb000000);
-   if (insn->op == OP_SULDB)
-      emitField(0x34, 1, 1);
-   emitSUTarget();
 
-   switch (insn->dType) {
-   case TYPE_S8:   type = 1; break;
-   case TYPE_U16:  type = 2; break;
-   case TYPE_S16:  type = 3; break;
-   case TYPE_U32:  type = 4; break;
-   case TYPE_U64:  type = 5; break;
-   case TYPE_B128: type = 6; break;
-   default:
-      assert(insn->dType == TYPE_U8);
-      break;
+   if (insn->op == OP_SULDB) {
+      int type = 0;
+      emitField(0x34, 1, 1);
+      switch (insn->dType) {
+      case TYPE_S8:   type = 1; break;
+      case TYPE_U16:  type = 2; break;
+      case TYPE_S16:  type = 3; break;
+      case TYPE_U32:  type = 4; break;
+      case TYPE_U64:  type = 5; break;
+      case TYPE_B128: type = 6; break;
+      default:
+         assert(insn->dType == TYPE_U8);
+         break;
+      }
+      emitField(0x14, 3, type);
+   } else {
+      emitField(0x14, 4, 0xf); // rgba
    }
+
+   emitSUTarget();
    emitLDSTc(0x18);
-   emitField(0x14, 3, type);
    emitGPR  (0x00, insn->def(0));
    emitGPR  (0x08, insn->src(0));
 

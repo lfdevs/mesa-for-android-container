@@ -24,7 +24,9 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-int main(void)
+void state_pool_padding_test(void);
+
+void state_pool_padding_test(void)
 {
    struct anv_physical_device physical_device = {};
    struct anv_device device = {};

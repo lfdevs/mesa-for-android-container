@@ -1026,6 +1026,7 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
    memset(packed, 0, sizeof(LLVMValueRef) * 4);
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_PLAIN &&
        format_desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB &&
+       !util_format_is_alpha(format) &&
        format_desc->block.width == 1 &&
        format_desc->block.height == 1 &&
        format_desc->block.bits <= type.width &&
@@ -1083,6 +1084,12 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
       /* we can transpose and store at the same time */
    } else if (format == PIPE_FORMAT_R11G11B10_FLOAT) {
       packed[0] = lp_build_float_to_r11g11b10(gallivm, rgba_in);
+      num_stores = 1;
+   } else if (util_format_is_alpha(format)) {
+      assert(format_desc->format == PIPE_FORMAT_A8_UNORM);
+      struct lp_build_context bld;
+      lp_build_context_init(&bld, gallivm, type);
+      lp_build_insert_soa_chan(&bld, type.width, format_desc->channel[0], &packed[0], rgba_in[3]);
       num_stores = 1;
    } else
       assert(0);

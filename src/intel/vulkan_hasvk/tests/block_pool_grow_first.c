@@ -24,7 +24,9 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-int main(void)
+void block_pool_grow_first_test(void);
+
+void block_pool_grow_first_test(void)
 {
    struct anv_physical_device physical_device = {
       .use_softpin = true,

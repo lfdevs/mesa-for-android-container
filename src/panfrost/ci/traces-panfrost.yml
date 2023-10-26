@@ -14,13 +14,17 @@ traces:
       checksum: bcc73608b6e2b5d92bf926d1c21889c7
   pathfinder/demo-v2.trace:
     gl-panfrost-t860:
+      label: [crash]
       checksum: c4f5e6bfe0cba230b1aef631c2fa4584
     gl-panfrost-t760:
+      label: [crash]
       checksum: c4f5e6bfe0cba230b1aef631c2fa4584
   pathfinder/canvas_moire-v2.trace:
     gl-panfrost-t860:
+      label: [crash]
       checksum: 2fb2c8e83719526cb6c02b6c2e069d61
     gl-panfrost-t760:
+      label: [crash]
       checksum: 2fb2c8e83719526cb6c02b6c2e069d61
   pathfinder/canvas_text_v2-v2.trace:
     gl-panfrost-t860:
@@ -98,8 +102,10 @@ traces:
       label: [crash]
   nheko/nheko-colors.trace:
     gl-panfrost-t760:
-      checksum: 03251159007917a90247d2aa2cf5f68b
+      label: [skip, flakes]
+      checksum: bfc0f5e19e858c36f6f66dbdb2040944
     gl-panfrost-t860:
+      label: [skip, flakes]
       checksum: 03251159007917a90247d2aa2cf5f68b
   warzone2100/warzone2100-default.trace:
     gl-panfrost-t760:

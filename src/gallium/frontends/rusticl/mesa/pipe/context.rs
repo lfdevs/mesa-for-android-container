@@ -360,13 +360,14 @@ impl PipeContext {
     }
 
     pub fn clear_sampler_states(&self, count: u32) {
+        let mut samplers = vec![ptr::null_mut(); count as usize];
         unsafe {
             self.pipe.as_ref().bind_sampler_states.unwrap()(
                 self.pipe.as_ptr(),
                 pipe_shader_type::PIPE_SHADER_COMPUTE,
                 0,
                 count,
-                ptr::null_mut(),
+                samplers.as_mut_ptr(),
             )
         }
     }
@@ -388,7 +389,7 @@ impl PipeContext {
                 pipe_shader_type::PIPE_SHADER_COMPUTE,
                 idx,
                 false,
-                &cb,
+                if data.is_empty() { ptr::null() } else { &cb },
             )
         }
     }
@@ -419,7 +420,7 @@ impl PipeContext {
         unsafe { self.pipe.as_ref().launch_grid.unwrap()(self.pipe.as_ptr(), &info) }
     }
 
-    pub fn set_global_binding(&self, res: &[Arc<PipeResource>], out: &mut [*mut u32]) {
+    pub fn set_global_binding(&self, res: &[&Arc<PipeResource>], out: &mut [*mut u32]) {
         let mut res: Vec<_> = res.iter().map(|r| r.pipe()).collect();
         unsafe {
             self.pipe.as_ref().set_global_binding.unwrap()(
@@ -478,6 +479,7 @@ impl PipeContext {
     }
 
     pub fn clear_sampler_views(&self, count: u32) {
+        let mut samplers = vec![ptr::null_mut(); count as usize];
         unsafe {
             self.pipe.as_ref().set_sampler_views.unwrap()(
                 self.pipe.as_ptr(),
@@ -486,7 +488,7 @@ impl PipeContext {
                 count,
                 0,
                 false,
-                ptr::null_mut(),
+                samplers.as_mut_ptr(),
             )
         }
     }
@@ -521,6 +523,36 @@ impl PipeContext {
         }
     }
 
+    pub(crate) fn create_query(&self, query_type: c_uint, index: c_uint) -> *mut pipe_query {
+        unsafe { self.pipe.as_ref().create_query.unwrap()(self.pipe.as_ptr(), query_type, index) }
+    }
+
+    /// # Safety
+    ///
+    /// usual rules on raw mut pointers apply, specifically no concurrent access
+    pub(crate) unsafe fn end_query(&self, pq: *mut pipe_query) -> bool {
+        unsafe { self.pipe.as_ref().end_query.unwrap()(self.pipe.as_ptr(), pq) }
+    }
+
+    /// # Safety
+    ///
+    /// usual rules on raw mut pointers apply, specifically no concurrent access
+    pub(crate) unsafe fn get_query_result(
+        &self,
+        pq: *mut pipe_query,
+        wait: bool,
+        pqr: *mut pipe_query_result,
+    ) -> bool {
+        unsafe { self.pipe.as_ref().get_query_result.unwrap()(self.pipe.as_ptr(), pq, wait, pqr) }
+    }
+
+    /// # Safety
+    ///
+    /// usual rules on raw mut pointers apply, specifically no concurrent access
+    pub(crate) unsafe fn destroy_query(&self, pq: *mut pipe_query) {
+        unsafe { self.pipe.as_ref().destroy_query.unwrap()(self.pipe.as_ptr(), pq) }
+    }
+
     pub fn memory_barrier(&self, barriers: u32) {
         unsafe { self.pipe.as_ref().memory_barrier.unwrap()(self.pipe.as_ptr(), barriers) }
     }
@@ -551,8 +583,6 @@ impl PipeContext {
                     to_device,
                     content_undefined,
                 );
-            } else {
-                panic!("svm_migrate not implemented but called!");
             }
         }
     }
@@ -577,8 +607,11 @@ fn has_required_cbs(context: &pipe_context) -> bool {
         & has_required_feature!(context, buffer_unmap)
         & has_required_feature!(context, clear_buffer)
         & has_required_feature!(context, create_compute_state)
+        & has_required_feature!(context, create_query)
         & has_required_feature!(context, delete_compute_state)
         & has_required_feature!(context, delete_sampler_state)
+        & has_required_feature!(context, destroy_query)
+        & has_required_feature!(context, end_query)
         & has_required_feature!(context, flush)
         & has_required_feature!(context, get_compute_state_info)
         & has_required_feature!(context, launch_grid)

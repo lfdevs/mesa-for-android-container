@@ -369,11 +369,10 @@ out_unlock:
       return ret;
 
    if (sync) {
-      MESA_TRACE_BEGIN("virtio_execbuf sync");
+      MESA_TRACE_SCOPE("virtio_execbuf sync");
       sync_wait(fence_fd, -1);
       close(fence_fd);
       virtio_host_sync(dev, req);
-      MESA_TRACE_END();
    }
 
    return 0;

@@ -38,10 +38,6 @@
 #include "util/format/u_format_s3tc.h"
 #include "util/u_math.h"
 
-#include "pipe/p_defines.h"
-#include "pipe/p_screen.h"
-
-
 /**
  * Copy 2D rect from one place to another.
  * Position and sizes are in pixels.
@@ -303,6 +299,39 @@ util_format_is_luminance_alpha(enum pipe_format format)
    return false;
 }
 
+bool
+util_format_is_red_alpha(enum pipe_format format)
+{
+   const struct util_format_description *desc =
+      util_format_description(format);
+
+   if ((desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB ||
+        desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) &&
+       desc->swizzle[0] == PIPE_SWIZZLE_X &&
+       desc->swizzle[1] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[2] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[3] == PIPE_SWIZZLE_Y) {
+      return true;
+   }
+   return false;
+}
+
+bool
+util_format_is_red_green(enum pipe_format format)
+{
+   const struct util_format_description *desc =
+      util_format_description(format);
+
+   if ((desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB ||
+        desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) &&
+       desc->swizzle[0] == PIPE_SWIZZLE_X &&
+       desc->swizzle[1] == PIPE_SWIZZLE_Y &&
+       desc->swizzle[2] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[3] == PIPE_SWIZZLE_1) {
+      return true;
+   }
+   return false;
+}
 
 bool
 util_format_is_intensity(enum pipe_format format)

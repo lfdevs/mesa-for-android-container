@@ -34,7 +34,7 @@ namespace r600 {
 
 class Shader;
 
-class GDSInstr : public InstrWithResource {
+class GDSInstr : public Instr, public Resource {
 public:
    GDSInstr(
       ESDOp op, Register *dest, const RegisterVec4& src, int uav_base, PRegister uav_id);
@@ -59,6 +59,8 @@ public:
    uint32_t slots() const override { return 1; };
    uint8_t allowed_src_chan_mask() const override;
 
+   void update_indirect_addr(PRegister old_reg, PRegister addr) override;
+
 private:
    static bool emit_atomic_read(nir_intrinsic_instr *intr, Shader& shader);
    static bool emit_atomic_op2(nir_intrinsic_instr *intr, Shader& shader);
@@ -75,7 +77,7 @@ private:
    std::bitset<8> m_tex_flags;
 };
 
-class RatInstr : public InstrWithResource {
+class RatInstr : public Instr, public Resource {
 
 public:
    enum ERatOp {
@@ -165,6 +167,8 @@ public:
    bool is_equal_to(const RatInstr& lhs) const;
 
    static bool emit(nir_intrinsic_instr *intr, Shader& shader);
+
+   void update_indirect_addr(PRegister old_reg, PRegister addr) override;
 
 private:
    static bool emit_global_store(nir_intrinsic_instr *intr, Shader& shader);

@@ -144,9 +144,15 @@ static void transform_srcreg(
     struct tgsi_full_src_register * src)
 {
     dst->File = translate_register_file(src->Register.File);
-    dst->Index = translate_register_index(ttr, src->Register.File, src->Register.Index);
+    int index = translate_register_index(ttr, src->Register.File, src->Register.Index);
     /* Negative offsets to relative addressing should have been lowered in NIR */
-    assert(dst->Index >= 0);
+    assert(index >= 0);
+    /* Also check for overflow */
+    if (index >= RC_REGISTER_MAX_INDEX) {
+        ttr->error = true;
+        fprintf(stderr, "r300: Register index too high.\n");
+    }
+    dst->Index = index;
     dst->RelAddr = src->Register.Indirect;
     dst->Swizzle = tgsi_util_get_full_src_register_swizzle(src, 0);
     dst->Swizzle |= tgsi_util_get_full_src_register_swizzle(src, 1) << 3;

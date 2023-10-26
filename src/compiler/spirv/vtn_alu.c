@@ -102,7 +102,7 @@ matrix_multiply(struct vtn_builder *b,
        */
 
       for (unsigned i = 0; i < src1_columns; i++) {
-         nir_ssa_def *vec_src[4];
+         nir_def *vec_src[4];
          for (unsigned j = 0; j < src0_rows; j++) {
             vec_src[j] = nir_fdot(&b->nb, src0_transpose->elems[j]->def,
                                           src1->elems[i]->def);
@@ -140,7 +140,7 @@ matrix_multiply(struct vtn_builder *b,
 static struct vtn_ssa_value *
 mat_times_scalar(struct vtn_builder *b,
                  struct vtn_ssa_value *mat,
-                 nir_ssa_def *scalar)
+                 nir_def *scalar)
 {
    struct vtn_ssa_value *dest = vtn_create_ssa_value(b, mat->type);
    for (unsigned i = 0; i < glsl_get_matrix_columns(mat->type); i++) {
@@ -153,8 +153,8 @@ mat_times_scalar(struct vtn_builder *b,
    return dest;
 }
 
-nir_ssa_def *
-vtn_mediump_downconvert(struct vtn_builder *b, enum glsl_base_type base_type, nir_ssa_def *def)
+nir_def *
+vtn_mediump_downconvert(struct vtn_builder *b, enum glsl_base_type base_type, nir_def *def)
 {
    if (def->bit_size == 16)
       return def;
@@ -559,8 +559,8 @@ vtn_alu_op_mediump_16bit(struct vtn_builder *b, SpvOp opcode, struct vtn_value *
    }
 }
 
-static nir_ssa_def *
-vtn_mediump_upconvert(struct vtn_builder *b, enum glsl_base_type base_type, nir_ssa_def *def)
+static nir_def *
+vtn_mediump_upconvert(struct vtn_builder *b, enum glsl_base_type base_type, nir_def *def)
 {
    if (def->bit_size != 16)
       return def;
@@ -597,6 +597,11 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    struct vtn_value *dest_val = vtn_untyped_value(b, w[2]);
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
 
+   if (glsl_type_is_cmat(dest_type)) {
+      vtn_handle_cooperative_alu(b, dest_val, dest_type, opcode, w, count);
+      return;
+   }
+
    vtn_handle_no_contraction(b, dest_val);
    bool mediump_16bit = vtn_alu_op_mediump_16bit(b, opcode, dest_val);
 
@@ -622,7 +627,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    }
 
    struct vtn_ssa_value *dest = vtn_create_ssa_value(b, dest_type);
-   nir_ssa_def *src[4] = { NULL, };
+   nir_def *src[4] = { NULL, };
    for (unsigned i = 0; i < num_inputs; i++) {
       vtn_assert(glsl_type_is_vector_or_scalar(vtn_src[i]->type));
       src[i] = vtn_src[i]->def;
@@ -664,7 +669,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpUMulExtended: {
       vtn_assert(glsl_type_is_struct_or_ifc(dest_type));
       if (src[0]->bit_size == 32) {
-         nir_ssa_def *umul = nir_umul_2x32_64(&b->nb, src[0], src[1]);
+         nir_def *umul = nir_umul_2x32_64(&b->nb, src[0], src[1]);
          dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
          dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
       } else {
@@ -677,7 +682,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpSMulExtended: {
       vtn_assert(glsl_type_is_struct_or_ifc(dest_type));
       if (src[0]->bit_size == 32) {
-         nir_ssa_def *umul = nir_imul_2x32_64(&b->nb, src[0], src[1]);
+         nir_def *umul = nir_imul_2x32_64(&b->nb, src[0], src[1]);
          dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
          dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
       } else {
@@ -738,7 +743,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpIsInf: {
-      nir_ssa_def *inf = nir_imm_floatN_t(&b->nb, INFINITY, src[0]->bit_size);
+      nir_def *inf = nir_imm_floatN_t(&b->nb, INFINITY, src[0]->bit_size);
       dest->def = nir_ieq(&b->nb, nir_fabs(&b->nb, src[0]), inf);
       break;
    }
@@ -779,7 +784,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
                                                   src_bit_size, dst_bit_size);
 
       if (swap) {
-         nir_ssa_def *tmp = src[0];
+         nir_def *tmp = src[0];
          src[0] = src[1];
          src[1] = tmp;
       }
@@ -949,7 +954,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
                                                   src_bit_size, dst_bit_size);
 
       if (swap) {
-         nir_ssa_def *tmp = src[0];
+         nir_def *tmp = src[0];
          src[0] = src[1];
          src[1] = tmp;
       }
@@ -1021,7 +1026,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
    vtn_assert(count >= num_inputs + 3);
 
    struct vtn_ssa_value *vtn_src[3] = { NULL, };
-   nir_ssa_def *src[3] = { NULL, };
+   nir_def *src[3] = { NULL, };
 
    for (unsigned i = 0; i < num_inputs; i++) {
       vtn_src[i] = vtn_ssa_value(b, w[i + 3]);
@@ -1099,11 +1104,11 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
       vtn_fail_with_opcode("Invalid source types.", opcode);
    }
 
-   nir_ssa_def *dest = NULL;
+   nir_def *dest = NULL;
 
    if (src[0]->num_components > 1) {
-      nir_ssa_def *(*src0_conversion)(nir_builder *, nir_ssa_def *, unsigned);
-      nir_ssa_def *(*src1_conversion)(nir_builder *, nir_ssa_def *, unsigned);
+      nir_def *(*src0_conversion)(nir_builder *, nir_def *, unsigned);
+      nir_def *(*src1_conversion)(nir_builder *, nir_def *, unsigned);
 
       switch (opcode) {
       case SpvOpSDotKHR:
@@ -1142,13 +1147,13 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
          glsl_get_vector_elements(vtn_src[0]->type);
 
       for (unsigned i = 0; i < vector_components; i++) {
-         nir_ssa_def *const src0 =
+         nir_def *const src0 =
             src0_conversion(&b->nb, nir_channel(&b->nb, src[0], i), dest_size);
 
-         nir_ssa_def *const src1 =
+         nir_def *const src1 =
             src1_conversion(&b->nb, nir_channel(&b->nb, src[1], i), dest_size);
 
-         nir_ssa_def *const mul_result = nir_imul(&b->nb, src0, src1);
+         nir_def *const mul_result = nir_imul(&b->nb, src0, src1);
 
          dest = (i == 0) ? mul_result : nir_iadd(&b->nb, dest, mul_result);
       }
@@ -1178,7 +1183,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
       assert(src[0]->num_components == 1 && src[1]->num_components == 1);
       assert(src[0]->bit_size == 32 && src[1]->bit_size == 32);
 
-      nir_ssa_def *const zero = nir_imm_zero(&b->nb, 1, 32);
+      nir_def *const zero = nir_imm_zero(&b->nb, 1, 32);
       bool is_signed = opcode == SpvOpSDotKHR || opcode == SpvOpSUDotKHR ||
                        opcode == SpvOpSDotAccSatKHR || opcode == SpvOpSUDotAccSatKHR;
 
@@ -1297,13 +1302,18 @@ vtn_handle_bitcast(struct vtn_builder *b, const uint32_t *w, unsigned count)
     */
 
    struct vtn_type *type = vtn_get_type(b, w[1]);
-   struct nir_ssa_def *src = vtn_get_nir_ssa(b, w[3]);
+   if (type->base_type == vtn_base_type_cooperative_matrix) {
+      vtn_handle_cooperative_instruction(b, SpvOpBitcast, w, count);
+      return;
+   }
+
+   struct nir_def *src = vtn_get_nir_ssa(b, w[3]);
 
    vtn_fail_if(src->num_components * src->bit_size !=
                glsl_get_vector_elements(type->type) * glsl_get_bit_size(type->type),
                "Source (%%%u) and destination (%%%u) of OpBitcast must have the same "
                "total number of bits", w[3], w[2]);
-   nir_ssa_def *val =
+   nir_def *val =
       nir_bitcast_vector(&b->nb, src, glsl_get_bit_size(type->type));
    vtn_push_nir_ssa(b, w[2], val);
 }

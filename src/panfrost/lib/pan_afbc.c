@@ -187,6 +187,20 @@ panfrost_afbc_can_ytr(enum pipe_format format)
    return desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB;
 }
 
+/* Only support packing for RGB formats for now. */
+
+bool
+panfrost_afbc_can_pack(enum pipe_format format)
+{
+   const struct util_format_description *desc = util_format_description(format);
+
+   if (desc->nr_channels != 1 && desc->nr_channels != 3 &&
+       desc->nr_channels != 4)
+      return false;
+
+   return desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB;
+}
+
 /*
  * Check if the device supports AFBC with tiled headers (and hence also solid
  * colour blocks).

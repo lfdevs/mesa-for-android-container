@@ -110,7 +110,7 @@ fill_so_declaration(const struct pipe_stream_output_info *info,
                     D3D12_SO_DECLARATION_ENTRY *entries, UINT *num_entries,
                     UINT *strides, UINT *num_strides)
 {
-   int next_offset[MAX_VERTEX_STREAMS] = { 0 };
+   int next_offset[PIPE_MAX_VERTEX_STREAMS] = { 0 };
 
    *num_entries = 0;
 
@@ -150,9 +150,9 @@ fill_so_declaration(const struct pipe_stream_output_info *info,
       (*num_entries)++;
    }
 
-   for (unsigned i = 0; i < MAX_VERTEX_STREAMS; i++)
+   for (unsigned i = 0; i < PIPE_MAX_VERTEX_STREAMS; i++)
       strides[i] = info->stride[i] * 4;
-   *num_strides = MAX_VERTEX_STREAMS;
+   *num_strides = PIPE_MAX_VERTEX_STREAMS;
 }
 
 static bool

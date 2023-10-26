@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2086 # we want word splitting
 
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# DEBIAN_BASE_TAG
+
 set -e
 set -o xtrace
 
@@ -35,6 +39,7 @@ STABLE_EPHEMERAL=" \
       libepoxy-dev \
       libgbm-dev \
       libpciaccess-dev \
+      libssl-dev
       libvulkan-dev \
       libwayland-dev \
       libx11-xcb-dev \
@@ -122,6 +127,8 @@ pip3 install --break-system-packages git+http://gitlab.freedesktop.org/freedeskt
 
 # Needed for manipulation with traces yaml files.
 pip3 install --break-system-packages yq
+
+. .gitlab-ci/container/build-mold.sh
 
 ############### Build LLVM-SPIRV translator
 

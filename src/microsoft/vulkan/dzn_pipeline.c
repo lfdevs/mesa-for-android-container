@@ -275,14 +275,10 @@ dzn_pipeline_get_nir_shader(struct dzn_device *device,
 }
 
 static bool
-adjust_resource_index_binding(struct nir_builder *builder, nir_instr *instr,
+adjust_resource_index_binding(struct nir_builder *builder,
+                              nir_intrinsic_instr *intrin,
                               void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
    if (intrin->intrinsic != nir_intrinsic_vulkan_resource_index)
       return false;
 
@@ -379,7 +375,7 @@ adjust_var_bindings(nir_shader *shader,
       }
       return ret;
    } else {
-      return nir_shader_instructions_pass(shader, adjust_resource_index_binding,
+      return nir_shader_intrinsics_pass(shader, adjust_resource_index_binding,
                                           nir_metadata_all, (void *)layout);
    }
 }

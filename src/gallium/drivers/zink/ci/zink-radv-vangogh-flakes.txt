@@ -4,6 +4,7 @@ spec@arb_texture_rectangle@copyteximage rect
 spec@arb_timer_query@timestamp-get
 spec@arb_shader_image_load_store@coherency
 spec@!opengl 1.0@rasterpos
+spec@glsl-1.50@execution@geometry@point-size-out
 
 # need to handle non-fbfetch feedback loops
 spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader.*
@@ -68,3 +69,13 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
 # contradicts the resolution of GL_ARB_fragment_shader_interlock issue 1.
 # https://gitlab.freedesktop.org/mesa/piglit/-/issues/93
 spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store
+
+# noticed in a stress test
+spec@!opengl 1.1@streaming-texture-leak
+spec@!opengl 1.1@teximage-colors gl_luminance4
+spec@arb_gpu_shader5@texturegather@vs-rg-0-unorm-2d
+spec@arb_uniform_buffer_object@maxuniformblocksize@fs
+spec@arb_texture_gather@texturegather@fs-rg-red-unorm-2d
+spec@ext_texture_array@copyteximage 1d_array samples=2
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_12x10_khr.renderbuffer_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x8_khr_rgba32ui.cubemap_to_texture2d

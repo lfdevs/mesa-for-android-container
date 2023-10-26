@@ -1,9 +1,16 @@
+# Keep the tags below under 25-30 chars each, as they end up combined into
+# docker image tags, and docker has a length limit of 128 chars total in tags.
+#
+# If you update a tag and you get an error like this:
+#     cannot parse input: "$image:$tag": invalid reference format
+# check the length of $tag; if it's > 128 chars you need to shorten your tag.
+
 variables:
    DEBIAN_X86_64_BUILD_BASE_IMAGE: "debian/x86_64_build-base"
-   DEBIAN_BASE_TAG: "2023-08-30-bindgen-cli"
+   DEBIAN_BASE_TAG: "2023-10-13-rust-1.66"
 
    DEBIAN_X86_64_BUILD_IMAGE_PATH: "debian/x86_64_build"
-   DEBIAN_BUILD_TAG: "2023-06-24-agility-711"
+   DEBIAN_BUILD_TAG: "2023-09-30-shader-db"
 
    DEBIAN_X86_64_BUILD_MINGW_IMAGE_PATH: "debian/x86_64_build-mingw"
    DEBIAN_BUILD_MINGW_TAG: "2023-05-25-bookworm"
@@ -14,14 +21,15 @@ variables:
    DEBIAN_X86_64_TEST_IMAGE_VK_PATH: "debian/x86_64_test-vk"
    DEBIAN_X86_64_TEST_ANDROID_IMAGE_PATH: "debian/x86_64_test-android"
 
-   DEBIAN_X86_64_TEST_ANDROID_TAG: "2023-06-07-deqp"
-   DEBIAN_X86_64_TEST_GL_TAG: "2023-07-02-apitrace-lto"
-   DEBIAN_X86_64_TEST_VK_TAG: "2023-07-08-weston-0"
+   DEBIAN_X86_64_TEST_ANDROID_TAG: "2023-10-15-deqp"
+   DEBIAN_X86_64_TEST_GL_TAG: "2023-10-15-deqp"
+   DEBIAN_X86_64_TEST_VK_TAG: "2023-10-15-deqp"
 
-   ALPINE_X86_64_BUILD_TAG: "2023-05-01-3.18-bump-1"
+   ALPINE_X86_64_BUILD_TAG: "2023-10-04-ephemeral"
    ALPINE_X86_64_LAVA_SSH_TAG: "2023-06-26-first-version"
-   FEDORA_X86_64_BUILD_TAG: "2023-05-05-ccache-on"
-   KERNEL_ROOTFS_TAG: "2023-07-10-virglrenderer"
+   FEDORA_X86_64_BUILD_TAG: "2023-08-04-shader-db"
+   KERNEL_ROOTFS_TAG: "2023-10-13-deqp"
+   KERNEL_TAG: "v6.4.12-for-mesa-ci-f6b4ad45f48d"
 
    WINDOWS_X64_VS_PATH: "windows/x64_vs"
    WINDOWS_X64_VS_TAG: "2022-10-20-upgrade-zlib"

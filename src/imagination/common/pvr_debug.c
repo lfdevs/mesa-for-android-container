@@ -34,10 +34,10 @@ static const struct debug_named_value debug_control[] = {
      "Dump the contents of the control stream buffer on every job submit." },
    { "bo_track", PVR_DEBUG_TRACK_BOS,
      "Track all buffer objects with at least one reference." },
-   { "bo_zero", PVR_DEBUG_ZERO_BOS,
-     "Zero all buffer objects at allocation to make them deterministic." },
    { "vk_desc", PVR_DEBUG_VK_DUMP_DESCRIPTOR_SET_LAYOUT,
      "Dump descriptor set and pipeline layouts." },
+   { "info", PVR_DEBUG_INFO,
+     "Display information about the driver and device." },
    DEBUG_NAMED_VALUE_END
 };
 /* clang-format on */
@@ -54,8 +54,6 @@ void pvr_process_debug_variable(void)
     * implies another it should be set here.
     */
 
-   if (PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM)) {
+   if (PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM))
       PVR_DEBUG_SET(TRACK_BOS);
-      PVR_DEBUG_SET(ZERO_BOS);
-   }
 }

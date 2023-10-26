@@ -48,17 +48,17 @@ build_fmask_expand_compute_shader(struct radv_device *device, int samples)
    output_img->data.access = ACCESS_NON_READABLE;
 
    nir_deref_instr *input_img_deref = nir_build_deref_var(&b, input_img);
-   nir_ssa_def *output_img_deref = &nir_build_deref_var(&b, output_img)->dest.ssa;
+   nir_def *output_img_deref = &nir_build_deref_var(&b, output_img)->def;
 
-   nir_ssa_def *tex_coord = get_global_ids(&b, 3);
+   nir_def *tex_coord = get_global_ids(&b, 3);
 
-   nir_ssa_def *tex_vals[8];
+   nir_def *tex_vals[8];
    for (uint32_t i = 0; i < samples; i++) {
       tex_vals[i] = nir_txf_ms_deref(&b, input_img_deref, tex_coord, nir_imm_int(&b, i));
    }
 
-   nir_ssa_def *img_coord = nir_vec4(&b, nir_channel(&b, tex_coord, 0), nir_channel(&b, tex_coord, 1),
-                                     nir_channel(&b, tex_coord, 2), nir_ssa_undef(&b, 1, 32));
+   nir_def *img_coord = nir_vec4(&b, nir_channel(&b, tex_coord, 0), nir_channel(&b, tex_coord, 1),
+                                 nir_channel(&b, tex_coord, 2), nir_undef(&b, 1, 32));
 
    for (uint32_t i = 0; i < samples; i++) {
       nir_image_deref_store(&b, output_img_deref, img_coord, nir_imm_int(&b, i), tex_vals[i], nir_imm_int(&b, 0),

@@ -8,12 +8,10 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-#define ALL_SAMPLES (0xFF)
-
 static bool
 lower_wrapped(nir_builder *b, nir_instr *instr, void *data)
 {
-   nir_ssa_def *sample_id = data;
+   nir_def *sample_id = data;
    if (instr->type != nir_instr_type_intrinsic)
       return false;
 
@@ -22,8 +20,8 @@ lower_wrapped(nir_builder *b, nir_instr *instr, void *data)
 
    switch (intr->intrinsic) {
    case nir_intrinsic_load_sample_id: {
-      unsigned size = nir_dest_bit_size(intr->dest);
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_u2uN(b, sample_id, size));
+      unsigned size = intr->def.bit_size;
+      nir_def_rewrite_uses(&intr->def, nir_u2uN(b, sample_id, size));
       nir_instr_remove(instr);
       return true;
    }
@@ -36,10 +34,10 @@ lower_wrapped(nir_builder *b, nir_instr *instr, void *data)
       unsigned mask_index =
          (intr->intrinsic == nir_intrinsic_store_local_pixel_agx) ? 1 : 0;
 
-      nir_ssa_def *mask = intr->src[mask_index].ssa;
-      nir_ssa_def *id_mask = nir_ishl(b, nir_imm_intN_t(b, 1, mask->bit_size),
-                                      nir_u2u32(b, sample_id));
-      nir_src_rewrite_ssa(&intr->src[mask_index], nir_iand(b, mask, id_mask));
+      nir_def *mask = intr->src[mask_index].ssa;
+      nir_def *id_mask = nir_ishl(b, nir_imm_intN_t(b, 1, mask->bit_size),
+                                  nir_u2u32(b, sample_id));
+      nir_src_rewrite(&intr->src[mask_index], nir_iand(b, mask, id_mask));
       return true;
    }
 
@@ -63,8 +61,7 @@ agx_nir_wrap_per_sample_loop(nir_shader *shader, uint8_t nr_samples)
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
    nir_cf_list list;
-   nir_cf_extract(&list, nir_before_block(nir_start_block(impl)),
-                  nir_after_block(nir_impl_last_block(impl)));
+   nir_cf_extract(&list, nir_before_impl(impl), nir_after_impl(impl));
 
    /* Create a builder for the wrapped function */
    nir_builder b = nir_builder_at(nir_after_block(nir_start_block(impl)));
@@ -72,7 +69,7 @@ agx_nir_wrap_per_sample_loop(nir_shader *shader, uint8_t nr_samples)
    nir_variable *i =
       nir_local_variable_create(impl, glsl_uintN_t_type(16), NULL);
    nir_store_var(&b, i, nir_imm_intN_t(&b, 0, 16), ~0);
-   nir_ssa_def *index = NULL;
+   nir_def *index = NULL;
 
    /* Create a loop in the wrapped function */
    nir_loop *loop = nir_push_loop(&b);
@@ -131,6 +128,7 @@ lower_sample_mask_write(nir_builder *b, nir_instr *instr, void *data)
     * and then lowering sample shading after (splitting up discard targets).
     */
    nir_discard_agx(b, nir_inot(b, nir_u2u16(b, intr->src[0].ssa)));
+   b->shader->info.fs.uses_discard = true;
    nir_instr_remove(instr);
    return true;
 }
@@ -141,22 +139,19 @@ lower_sample_mask_write(nir_builder *b, nir_instr *instr, void *data)
  *    sample_mask_in --> sample_mask_in & api_sample_mask
  */
 static bool
-lower_sample_mask_read(nir_builder *b, nir_instr *instr, UNUSED void *_)
+lower_sample_mask_read(nir_builder *b, nir_intrinsic_instr *intr,
+                       UNUSED void *_)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   b->cursor = nir_after_instr(instr);
+   b->cursor = nir_after_instr(&intr->instr);
 
    if (intr->intrinsic != nir_intrinsic_load_sample_mask_in)
       return false;
 
-   nir_ssa_def *old = &intr->dest.ssa;
-   nir_ssa_def *lowered = nir_iand(
+   nir_def *old = &intr->def;
+   nir_def *lowered = nir_iand(
       b, old, nir_u2uN(b, nir_load_api_sample_mask_agx(b), old->bit_size));
 
-   nir_ssa_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
+   nir_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
    return true;
 }
 
@@ -166,7 +161,7 @@ insert_sample_mask_write(nir_shader *s)
 {
    nir_builder b;
    nir_function_impl *impl = nir_shader_get_entrypoint(s);
-   b = nir_builder_at(nir_before_block(nir_start_block(impl)));
+   b = nir_builder_at(nir_before_impl(impl));
 
    /* Kill samples that are NOT covered by the mask */
    nir_discard_agx(&b, nir_inot(&b, nir_load_api_sample_mask_agx(&b)));
@@ -197,9 +192,9 @@ agx_nir_lower_monolithic_msaa(nir_shader *shader, struct agx_msaa_state *state)
       insert_sample_mask_write(shader);
 
    /* Additional, sample_mask_in needs to account for the API-level mask */
-   nir_shader_instructions_pass(
-      shader, lower_sample_mask_read,
-      nir_metadata_block_index | nir_metadata_dominance, &state->nr_samples);
+   nir_shader_intrinsics_pass(shader, lower_sample_mask_read,
+                              nir_metadata_block_index | nir_metadata_dominance,
+                              &state->nr_samples);
 
    /* In single sampled programs, interpolateAtSample needs to return the
     * center pixel. TODO: Generalize for dynamic sample count.

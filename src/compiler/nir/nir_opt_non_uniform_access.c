@@ -101,7 +101,7 @@ nir_has_non_uniform_access_impl(nir_function_impl *impl, enum nir_lower_non_unif
          case nir_instr_type_tex: {
             nir_tex_instr *tex = nir_instr_as_tex(instr);
             if ((types & nir_lower_non_uniform_texture_access) &&
-                 has_non_uniform_tex_access(tex))
+                has_non_uniform_tex_access(tex))
                return true;
             break;
          }
@@ -110,15 +110,15 @@ nir_has_non_uniform_access_impl(nir_function_impl *impl, enum nir_lower_non_unif
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
             if (is_ubo_intrinsic(intrin)) {
                if ((types & nir_lower_non_uniform_ubo_access) &&
-                    has_non_uniform_access_intrin(intrin))
+                   has_non_uniform_access_intrin(intrin))
                   return true;
             } else if (is_ssbo_intrinsic(intrin)) {
                if ((types & nir_lower_non_uniform_ssbo_access) &&
-                    has_non_uniform_access_intrin(intrin))
+                   has_non_uniform_access_intrin(intrin))
                   return true;
             } else if (is_image_intrinsic(intrin)) {
                if ((types & nir_lower_non_uniform_image_access) &&
-                    has_non_uniform_access_intrin(intrin))
+                   has_non_uniform_access_intrin(intrin))
                   return true;
             } else if (intrin->intrinsic == nir_intrinsic_get_ssbo_size) {
                if ((types & nir_lower_non_uniform_get_ssbo_size) &&

@@ -60,16 +60,16 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
 {
    assert(num_streams);
 
-   int vtxcnt_arr[4] = {-1, -1, -1, -1};
-   int prmcnt_arr[4] = {-1, -1, -1, -1};
-   bool cnt_found[4] = {false, false, false, false};
+   int vtxcnt_arr[4] = { -1, -1, -1, -1 };
+   int prmcnt_arr[4] = { -1, -1, -1, -1 };
+   bool cnt_found[4] = { false, false, false, false };
 
    nir_foreach_function_impl(impl, shader) {
       /* set_vertex_and_primitive_count intrinsics only appear in predecessors of the
        * end block.  So we don't need to walk all of them.
        */
       set_foreach(impl->end_block->predecessors, entry) {
-         nir_block *block = (nir_block *) entry->key;
+         nir_block *block = (nir_block *)entry->key;
 
          nir_foreach_instr_reverse(instr, block) {
             nir_intrinsic_instr *intrin = as_set_vertex_and_primitive_count(instr);

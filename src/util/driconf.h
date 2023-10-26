@@ -168,6 +168,13 @@
    DRI_CONF_OPT_B(disable_uniform_array_resize, def, \
                   "Disable the glsl optimisation that resizes uniform arrays")
 
+#define DRI_CONF_ALIAS_SHADER_EXTENSION() \
+   DRI_CONF_OPT_S_NODEF(alias_shader_extension, "Allow  alias for shader extensions")
+
+#define DRI_CONF_ALLOW_VERTEX_TEXTURE_BIAS(def) \
+   DRI_CONF_OPT_B(allow_vertex_texture_bias, def, \
+                  "Allow GL2 vertex shaders to have access to texture2D/textureCube with bias variants")
+
 #define DRI_CONF_FORCE_GLSL_VERSION(def) \
    DRI_CONF_OPT_I(force_glsl_version, def, 0, 999, \
                   "Force a default GLSL version for shaders that lack an explicit #version line")
@@ -313,6 +320,22 @@
 #define DRI_CONF_FORCE_VK_VENDOR(def) \
    DRI_CONF_OPT_I(force_vk_vendor, 0, -1, 2147483647, "Override GPU vendor id")
 
+#define DRI_CONF_FAKE_SPARSE(def) \
+   DRI_CONF_OPT_B(fake_sparse, def, \
+                  "Advertise support for sparse binding of textures regardless of real support")
+
+#define DRI_CONF_INTEL_ENABLE_WA_14018912822(def) \
+   DRI_CONF_OPT_B(intel_enable_wa_14018912822, def, \
+                  "Intel workaround for using zero blend constants")
+
+#define DRI_CONF_VK_REQUIRE_ETC2(def) \
+  DRI_CONF_OPT_B(vk_require_etc2, def, \
+                 "Implement emulated ETC2 on HW that does not support it")
+
+#define DRI_CONF_VK_REQUIRE_ASTC(def) \
+   DRI_CONF_OPT_B(vk_require_astc, def, \
+                  "Implement emulated ASTC on HW that does not support it")
+
 /**
  * \brief Image quality-related options
  */
@@ -415,7 +438,9 @@
    DRI_CONF_OPT_B(mesa_no_error, def, \
                   "Disable GL driver error checking")
 
-
+#define DRI_CONF_SHADER_SPILLING_RATE(def) \
+   DRI_CONF_OPT_I(shader_spilling_rate, def, 0, 100, \
+                  "Speed up shader compilation by increasing number of spilled registers after ra_allocate failure")
 /**
  * \brief Miscellaneous configuration options
  */
@@ -455,6 +480,10 @@
 #define DRI_CONF_ALLOW_MULTISAMPLED_COPYTEXIMAGE(def) \
    DRI_CONF_OPT_B(allow_multisampled_copyteximage, def, \
                   "Allow CopyTexSubImage and other to copy sampled framebuffer")
+
+#define DRI_CONF_NO_FP16(def) \
+   DRI_CONF_OPT_B(no_fp16, def, \
+                  "Disable 16-bit float support")
 
 /**
  * \brief Initialization configuration options
@@ -554,6 +583,14 @@
                   "Disable conservative LRZ")
 
 /**
+ * \brief Turnip specific configuration options
+ */
+
+#define DRI_CONF_TU_DONT_RESERVE_DESCRIPTOR_SET(def) \
+   DRI_CONF_OPT_B(tu_dont_reserve_descriptor_set, def, \
+                  "Don't internally reserve one of the HW descriptor sets for descriptor set dynamic offset support, this frees up an extra descriptor set at the cost of that feature")
+
+/**
  * \brief venus specific configuration options
  */
 #define DRI_CONF_VENUS_IMPLICIT_FENCING(def) \
@@ -579,10 +616,6 @@
 #define DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(def) \
    DRI_CONF_OPT_B(radv_disable_shrink_image_store, def, \
                   "Disabling shrinking of image stores based on the format")
-
-#define DRI_CONF_RADV_ABSOLUTE_DEPTH_BIAS(def) \
-   DRI_CONF_OPT_B(radv_absolute_depth_bias, def, \
-                  "Consider depthBiasConstantFactor an absolute depth bias (like D3D9)")
 
 #define DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(def) \
    DRI_CONF_OPT_I(radv_override_uniform_offset_alignment, def, 0, 128, \
@@ -611,10 +644,6 @@
 #define DRI_CONF_RADV_DISABLE_DCC(def) \
    DRI_CONF_OPT_B(radv_disable_dcc, def, \
                   "Disable DCC for color images")
-
-#define DRI_CONF_RADV_REQUIRE_ETC2(def)                                        \
-  DRI_CONF_OPT_B(radv_require_etc2, def,                                       \
-                 "Implement emulated ETC2 on HW that does not support it")
 
 #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
@@ -679,6 +708,10 @@
 #define DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(def) \
    DRI_CONF_OPT_I(generated_indirect_threshold, def, 0, INT32_MAX, \
                   "Indirect threshold count above which we start generating commands")
+
+#define DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(def) \
+   DRI_CONF_OPT_I(generated_indirect_ring_threshold, def, 0, INT32_MAX, \
+                  "Indirect threshold count above which we start generating commands in a ring buffer")
 
 #define DRI_CONF_ANV_QUERY_CLEAR_WITH_BLORP_THRESHOLD(def) \
    DRI_CONF_OPT_I(query_clear_with_blorp_threshold, def, 0, INT32_MAX, \

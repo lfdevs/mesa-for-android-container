@@ -29,6 +29,7 @@
 
 #include "brw_vec4_gs_visitor.h"
 #include "gfx6_gs_visitor.h"
+#include "brw_eu.h"
 #include "brw_cfg.h"
 #include "brw_fs.h"
 #include "brw_nir.h"
@@ -39,15 +40,14 @@
 namespace brw {
 
 vec4_gs_visitor::vec4_gs_visitor(const struct brw_compiler *compiler,
-                                 void *log_data,
+                                 const struct brw_compile_params *params,
                                  struct brw_gs_compile *c,
                                  struct brw_gs_prog_data *prog_data,
                                  const nir_shader *shader,
-                                 void *mem_ctx,
                                  bool no_spills,
                                  bool debug_enabled)
-   : vec4_visitor(compiler, log_data, &c->key.base.tex,
-                  &prog_data->base, shader,  mem_ctx,
+   : vec4_visitor(compiler, params, &c->key.base.tex,
+                  &prog_data->base, shader,
                   no_spills, debug_enabled),
      c(c),
      gs_prog_data(prog_data)
@@ -391,7 +391,7 @@ vec4_gs_visitor::set_stream_control_data_bits(unsigned stream_id)
    assert(c->control_data_bits_per_vertex == 2);
 
    /* Must be a valid stream */
-   assert(stream_id < MAX_VERTEX_STREAMS);
+   assert(stream_id < 4); /* MAX_VERTEX_STREAMS */
 
    /* Control data bits are initialized to 0 so we don't have to set any
     * bits when sending vertices to stream 0.
@@ -583,10 +583,9 @@ static const GLuint gl_prim_to_hw_prim[MESA_PRIM_TRIANGLE_STRIP_ADJACENCY+1] = {
 
 extern "C" const unsigned *
 brw_compile_gs(const struct brw_compiler *compiler,
-               void *mem_ctx,
                struct brw_compile_gs_params *params)
 {
-   nir_shader *nir = params->nir;
+   nir_shader *nir = params->base.nir;
    const struct brw_gs_prog_key *key = params->key;
    struct brw_gs_prog_data *prog_data = params->prog_data;
 
@@ -618,7 +617,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
    brw_nir_lower_vue_inputs(nir, &c.input_vue_map);
    brw_nir_lower_vue_outputs(nir);
    brw_postprocess_nir(nir, compiler, debug_enabled,
-                       key->base.robust_buffer_access);
+                       key->base.robust_flags);
 
    prog_data->base.clip_distance_mask =
       ((1 << nir->info.clip_distance_array_size) - 1);
@@ -820,28 +819,32 @@ brw_compile_gs(const struct brw_compiler *compiler,
    }
 
    if (is_scalar) {
-      fs_visitor v(compiler, params->log_data, mem_ctx, &c, prog_data, nir,
-                   params->stats != NULL, debug_enabled);
+      fs_visitor v(compiler, &params->base, &c, prog_data, nir,
+                   params->base.stats != NULL, debug_enabled);
       if (v.run_gs()) {
          prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
-         prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs;
 
-         fs_generator g(compiler, params->log_data, mem_ctx,
+         assert(v.payload().num_regs % reg_unit(compiler->devinfo) == 0);
+         prog_data->base.base.dispatch_grf_start_reg =
+            v.payload().num_regs / reg_unit(compiler->devinfo);
+
+         fs_generator g(compiler, &params->base,
                         &prog_data->base.base, false, MESA_SHADER_GEOMETRY);
          if (unlikely(debug_enabled)) {
             const char *label =
                nir->info.label ? nir->info.label : "unnamed";
-            char *name = ralloc_asprintf(mem_ctx, "%s geometry shader %s",
+            char *name = ralloc_asprintf(params->base.mem_ctx,
+                                         "%s geometry shader %s",
                                          label, nir->info.name);
             g.enable_debug(name);
          }
          g.generate_code(v.cfg, 8, v.shader_stats,
-                         v.performance_analysis.require(), params->stats);
+                         v.performance_analysis.require(), params->base.stats);
          g.add_const_data(nir->constant_data, nir->constant_data_size);
          return g.get_assembly();
       }
 
-      params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+      params->base.error_str = ralloc_strdup(params->base.mem_ctx, v.fail_msg);
 
       return NULL;
    }
@@ -855,8 +858,8 @@ brw_compile_gs(const struct brw_compiler *compiler,
           !INTEL_DEBUG(DEBUG_NO_DUAL_OBJECT_GS)) {
          prog_data->base.dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
 
-         brw::vec4_gs_visitor v(compiler, params->log_data, &c, prog_data, nir,
-                                mem_ctx, true /* no_spills */,
+         brw::vec4_gs_visitor v(compiler, &params->base, &c, prog_data, nir,
+                                true /* no_spills */,
                                 debug_enabled);
 
          /* Backup 'nr_params' and 'param' as they can be modified by the
@@ -872,11 +875,11 @@ brw_compile_gs(const struct brw_compiler *compiler,
          if (v.run()) {
             /* Success! Backup is not needed */
             ralloc_free(param);
-            return brw_vec4_generate_assembly(compiler, params->log_data, mem_ctx,
+            return brw_vec4_generate_assembly(compiler, &params->base,
                                               nir, &prog_data->base,
                                               v.cfg,
                                               v.performance_analysis.require(),
-                                              params->stats, debug_enabled);
+                                              debug_enabled);
          } else {
             /* These variables could be modified by the execution of the GS
              * visitor if it packed the uniforms in the push constant buffer.
@@ -925,21 +928,22 @@ brw_compile_gs(const struct brw_compiler *compiler,
    const unsigned *ret = NULL;
 
    if (compiler->devinfo->ver >= 7)
-      gs = new brw::vec4_gs_visitor(compiler, params->log_data, &c, prog_data,
-                                    nir, mem_ctx, false /* no_spills */,
+      gs = new brw::vec4_gs_visitor(compiler, &params->base, &c, prog_data,
+                                    nir, false /* no_spills */,
                                     debug_enabled);
    else
-      gs = new brw::gfx6_gs_visitor(compiler, params->log_data, &c, prog_data,
-                                    nir, mem_ctx, false /* no_spills */,
+      gs = new brw::gfx6_gs_visitor(compiler, &params->base, &c, prog_data,
+                                    nir, false /* no_spills */,
                                     debug_enabled);
 
    if (!gs->run()) {
-      params->error_str = ralloc_strdup(mem_ctx, gs->fail_msg);
+      params->base.error_str =
+         ralloc_strdup(params->base.mem_ctx, gs->fail_msg);
    } else {
-      ret = brw_vec4_generate_assembly(compiler, params->log_data, mem_ctx, nir,
+      ret = brw_vec4_generate_assembly(compiler, &params->base, nir,
                                        &prog_data->base, gs->cfg,
                                        gs->performance_analysis.require(),
-                                       params->stats, debug_enabled);
+                                       debug_enabled);
    }
 
    delete gs;

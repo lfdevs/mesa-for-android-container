@@ -103,12 +103,8 @@ lp_fs_linear_run(const struct lp_rast_state *state,
 
    /* XXX: Per statechange:
     */
-   int nr_consts; // in floats, not float[4]
-   if (variant->shader->base.type == PIPE_SHADER_IR_TGSI) {
-      nr_consts = (info->base.file_max[TGSI_FILE_CONSTANT] + 1) * 4;
-   } else {
-      nr_consts = state->jit_resources.constants[0].num_elements;
-   }
+   int nr_consts = state->jit_resources.constants[0].num_elements;
+
    for (int i = 0; i < nr_consts; i++){
       float val = state->jit_resources.constants[0].f[i];
       if (val < 0.0f || val > 1.0f) {

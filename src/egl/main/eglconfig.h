@@ -200,14 +200,6 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
                    const _EGLConfig *criteria, EGLBoolean compare_id);
 
 extern EGLBoolean
-_eglFilterConfigArray(_EGLArray *array, EGLConfig *configs, EGLint config_size,
-                      EGLint *num_configs,
-                      EGLBoolean (*match)(const _EGLConfig *, void *),
-                      EGLint (*compare)(const _EGLConfig *, const _EGLConfig *,
-                                        void *),
-                      void *filter_data);
-
-extern EGLBoolean
 _eglChooseConfig(_EGLDisplay *disp, const EGLint *attrib_list,
                  EGLConfig *configs, EGLint config_size, EGLint *num_config);
 

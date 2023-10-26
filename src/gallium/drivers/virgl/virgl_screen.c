@@ -92,11 +92,13 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return vscreen->caps.caps.v1.max_dual_source_render_targets;
    case PIPE_CAP_OCCLUSION_QUERY:
       return vscreen->caps.caps.v1.bset.occlusion_query;
+   case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
+      if (vscreen->caps.caps.v2.host_feature_check_version >= 20)
+         return vscreen->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_MIRROR_CLAMP_TO_EDGE;
+      FALLTHROUGH;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return vscreen->caps.caps.v1.bset.mirror_clamp &&
-      vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES ? 0 : 1;
-   case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
-      return vscreen->caps.caps.v1.bset.mirror_clamp;
+             !(vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES);
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
@@ -500,6 +502,13 @@ virgl_get_video_param(struct pipe_screen *screen,
        drv_supported = (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
                         entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE);
        break;
+   case PIPE_VIDEO_FORMAT_MPEG12:
+   case PIPE_VIDEO_FORMAT_VC1:
+   case PIPE_VIDEO_FORMAT_JPEG:
+   case PIPE_VIDEO_FORMAT_VP9:
+   case PIPE_VIDEO_FORMAT_AV1:
+      drv_supported = (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM);
+      break;
    default:
        drv_supported = false;
        break;

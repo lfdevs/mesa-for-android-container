@@ -180,6 +180,7 @@ else
     input : 'main/50_mesa.json',
     output: '50_@0@.json'.format(glvnd_vendor_name),
     install : true,
+    install_tag : 'runtime',
     install_dir : join_paths(get_option('datadir'), 'glvnd', 'egl_vendor.d')
   )
 endif

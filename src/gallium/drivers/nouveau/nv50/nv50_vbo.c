@@ -54,7 +54,7 @@ nv50_vertex_state_create(struct pipe_context *pipe,
     struct translate_key transkey;
     unsigned i;
 
-    so = MALLOC(sizeof(*so) +
+    so = CALLOC(1, sizeof(*so) +
                 num_elements * sizeof(struct nv50_vertex_element));
     if (!so)
         return NULL;
@@ -98,6 +98,9 @@ nv50_vertex_state_create(struct pipe_context *pipe,
                                i, util_format_name(ve->src_format));
         }
         so->element[i].state |= i;
+        so->strides[vbi] = ve->src_stride;
+        if (!ve->src_stride)
+            so->vbo_constant |= 1 << vbi;
 
         size = util_format_get_blocksize(fmt);
         if (so->vb_access_size[vbi] < (ve->src_offset + size))
@@ -191,14 +194,14 @@ nv50_user_vbuf_range(struct nv50_context *nv50, unsigned vbi,
    assert(vbi < PIPE_MAX_ATTRIBS);
    if (unlikely(nv50->vertex->instance_bufs & (1 << vbi))) {
       const uint32_t div = nv50->vertex->min_instance_div[vbi];
-      *base = nv50->instance_off * nv50->vtxbuf[vbi].stride;
-      *size = (nv50->instance_max / div) * nv50->vtxbuf[vbi].stride +
+      *base = nv50->instance_off * nv50->vertex->strides[vbi];
+      *size = (nv50->instance_max / div) * nv50->vertex->strides[vbi] +
          nv50->vertex->vb_access_size[vbi];
    } else {
       /* NOTE: if there are user buffers, we *must* have index bounds */
       assert(nv50->vb_elt_limit != ~0);
-      *base = nv50->vb_elt_first * nv50->vtxbuf[vbi].stride;
-      *size = nv50->vb_elt_limit * nv50->vtxbuf[vbi].stride +
+      *base = nv50->vb_elt_first * nv50->vertex->strides[vbi];
+      *size = nv50->vb_elt_limit * nv50->vertex->strides[vbi] +
          nv50->vertex->vb_access_size[vbi];
    }
 }
@@ -215,7 +218,7 @@ nv50_upload_user_buffers(struct nv50_context *nv50,
       const struct pipe_vertex_buffer *vb = &nv50->vtxbuf[b];
       uint32_t base, size;
 
-      if (!(nv50->vbo_user & (1 << b)) || !vb->stride)
+      if (!(nv50->vbo_user & (1 << b)) || !nv50->vertex->strides[b])
          continue;
       nv50_user_vbuf_range(nv50, b, &base, &size);
 
@@ -249,7 +252,7 @@ nv50_update_user_vbufs(struct nv50_context *nv50)
       if (!(nv50->vbo_user & (1 << b)))
          continue;
 
-      if (!vb->stride) {
+      if (!ve->src_stride) {
          nv50_emit_vtxattr(nv50, vb, ve, i);
          continue;
       }
@@ -291,7 +294,6 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
    uint32_t limits[PIPE_MAX_ATTRIBS];
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_vertex_stateobj *vertex = nv50->vertex;
-   struct pipe_vertex_buffer *vb;
    struct nv50_vertex_element *ve;
    uint32_t mask;
    uint32_t refd = 0;
@@ -338,9 +340,8 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
 
       assert(b < PIPE_MAX_ATTRIBS);
       ve = &vertex->element[i];
-      vb = &nv50->vtxbuf[b];
 
-      if (likely(vb->stride) || !(nv50->vbo_user & (1 << b)))
+      if (likely(vertex->strides[b]) || !(nv50->vbo_user & (1 << b)))
          PUSH_DATA(push, ve->state);
       else
          PUSH_DATA(push, ve->state | NV50_3D_VERTEX_ARRAY_ATTRIB_CONST);
@@ -365,6 +366,7 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
    for (i = 0; i < vertex->num_elements; ++i) {
       uint64_t address, limit;
       const unsigned b = vertex->element[i].pipe.vertex_buffer_index;
+      struct pipe_vertex_buffer *vb;
 
       assert(b < PIPE_MAX_ATTRIBS);
       ve = &vertex->element[i];
@@ -396,13 +398,13 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
 
       if (unlikely(ve->pipe.instance_divisor)) {
          BEGIN_NV04(push, NV50_3D(VERTEX_ARRAY_FETCH(i)), 4);
-         PUSH_DATA (push, NV50_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+         PUSH_DATA (push, NV50_3D_VERTEX_ARRAY_FETCH_ENABLE | vertex->strides[b]);
          PUSH_DATAh(push, address);
          PUSH_DATA (push, address);
          PUSH_DATA (push, ve->pipe.instance_divisor);
       } else {
          BEGIN_NV04(push, NV50_3D(VERTEX_ARRAY_FETCH(i)), 3);
-         PUSH_DATA (push, NV50_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
+         PUSH_DATA (push, NV50_3D_VERTEX_ARRAY_FETCH_ENABLE | vertex->strides[b]);
          PUSH_DATAh(push, address);
          PUSH_DATA (push, address);
       }
@@ -800,6 +802,8 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    nv50->vbo_push_hint = /* the 64 is heuristic */
       !(info->index_size && ((nv50->vb_elt_limit + 64) < draws[0].count));
 
+   if (nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))
+      nv50->vbo_constant = nv50->vertex->vbo_constant & nv50->vbo_user;
    if (nv50->vbo_user && !(nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))) {
       if (!!nv50->vbo_fifo != nv50->vbo_push_hint)
          nv50->dirty_3d |= NV50_NEW_3D_ARRAYS;
@@ -855,11 +859,11 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
     * means counting vertices in a vertex shader when it has so outputs.
     */
    if (nv50->screen->base.class_3d < NVA0_3D_CLASS &&
-       nv50->vertprog->pipe.stream_output.num_outputs) {
+       nv50->vertprog->stream_output.num_outputs) {
       for (int i = 0; i < nv50->num_so_targets; i++) {
          nv50->so_used[i] += info->instance_count *
             u_stream_outputs_for_vertices(info->mode, draws[0].count) *
-            nv50->vertprog->pipe.stream_output.stride[i] * 4;
+            nv50->vertprog->stream_output.stride[i] * 4;
       }
    }
 

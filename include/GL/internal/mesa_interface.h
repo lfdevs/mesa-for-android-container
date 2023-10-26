@@ -61,6 +61,8 @@ struct __DRImesaCoreExtensionRec {
 
    /* driver function for finishing initialization inside createNewScreen(). */
    const __DRIconfig **(*initScreen)(struct dri_screen *screen);
+
+   int (*queryCompatibleRenderOnlyDeviceFd)(int kms_only_fd);
 };
 
 #endif /* MESA_INTERFACE_H */

@@ -257,7 +257,6 @@ pipe_vertex_buffer_reference(struct pipe_vertex_buffer *dst,
 {
    if (dst->buffer.resource == src->buffer.resource) {
       /* Just copy the fields, don't touch reference counts. */
-      dst->stride = src->stride;
       dst->is_user_buffer = src->is_user_buffer;
       dst->buffer_offset = src->buffer_offset;
       return;
@@ -267,7 +266,6 @@ pipe_vertex_buffer_reference(struct pipe_vertex_buffer *dst,
    /* Don't use memcpy because there is a hole between variables.
     * dst can be used as a hash key.
     */
-   dst->stride = src->stride;
    dst->is_user_buffer = src->is_user_buffer;
    dst->buffer_offset = src->buffer_offset;
 

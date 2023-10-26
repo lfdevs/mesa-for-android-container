@@ -91,6 +91,20 @@ tex_filter(unsigned filter, bool aniso)
    }
 }
 
+static enum a6xx_reduction_mode
+reduction_mode(unsigned reduction_mode)
+{
+   switch (reduction_mode) {
+   default:
+   case PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE:
+      return A6XX_REDUCTION_MODE_AVERAGE;
+   case PIPE_TEX_REDUCTION_MIN:
+      return A6XX_REDUCTION_MODE_MIN;
+   case PIPE_TEX_REDUCTION_MAX:
+      return A6XX_REDUCTION_MODE_MAX;
+   }
+}
+
 static void
 setup_border_color(struct fd_screen *screen,
                    const struct pipe_sampler_state *sampler,
@@ -303,6 +317,9 @@ fd6_sampler_state_create(struct pipe_context *pctx,
        cso->min_img_filter == PIPE_TEX_FILTER_LINEAR)
       so->texsamp2 |= A6XX_TEX_SAMP_2_CHROMA_LINEAR;
 
+   so->texsamp2 |=
+      A6XX_TEX_SAMP_2_REDUCTION_MODE(reduction_mode(cso->reduction_mode));
+
    return so;
 }
 
@@ -419,6 +436,8 @@ fd6_sampler_view_update(struct fd_context *ctx,
       fdl6_buffer_view_init(so->descriptor, cso->format, swiz, iova, size);
    } else {
       struct fdl_view_args args = {
+         .chip = A6XX,
+
          /* Using relocs for addresses still */
          .iova = 0,
 
@@ -862,6 +881,8 @@ fd6_texture_init(struct pipe_context *pctx) disable_thread_safety_analysis
    fd6_ctx->bcolor_mem = fd_bo_new(ctx->screen->dev,
                                    FD6_MAX_BORDER_COLORS * FD6_BORDER_COLOR_SIZE,
                                    0, "bcolor");
+
+   fd_context_add_private_bo(ctx, fd6_ctx->bcolor_mem);
 
    fd6_ctx->tex_cache = _mesa_hash_table_create(NULL, tex_key_hash, tex_key_equals);
    util_idalloc_init(&fd6_ctx->tex_ids, 256);

@@ -23,7 +23,7 @@
 #include "nir_builder.h"
 #include "amdgfxregs.h"
 
-static nir_ssa_def *get_field(nir_builder *b, nir_ssa_def *desc, unsigned index, unsigned mask)
+static nir_def *get_field(nir_builder *b, nir_def *desc, unsigned index, unsigned mask)
 {
    return nir_ubfe_imm(b, nir_channel(b, desc, index), ffs(mask) - 1, util_bitcount(mask));
 }
@@ -46,17 +46,17 @@ static unsigned get_coord_components(enum glsl_sampler_dim dim, bool is_array)
 /* Lower image coordinates to a buffer element index. Return UINT_MAX if the image coordinates
  * are out of bounds.
  */
-static nir_ssa_def *lower_image_coords(nir_builder *b, nir_ssa_def *desc, nir_ssa_def *coord,
+static nir_def *lower_image_coords(nir_builder *b, nir_def *desc, nir_def *coord,
                                        enum glsl_sampler_dim dim, bool is_array,
                                        bool handle_out_of_bounds)
 {
    unsigned num_coord_components = get_coord_components(dim, is_array);
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *zero = nir_imm_int(b, 0);
 
    /* Get coordinates. */
-   nir_ssa_def *x = nir_channel(b, coord, 0);
-   nir_ssa_def *y = num_coord_components >= 2 ? nir_channel(b, coord, 1) : NULL;
-   nir_ssa_def *z = num_coord_components >= 3 ? nir_channel(b, coord, 2) : NULL;
+   nir_def *x = nir_channel(b, coord, 0);
+   nir_def *y = num_coord_components >= 2 ? nir_channel(b, coord, 1) : NULL;
+   nir_def *z = num_coord_components >= 3 ? nir_channel(b, coord, 2) : NULL;
 
    if (dim == GLSL_SAMPLER_DIM_1D && is_array) {
       z = y;
@@ -64,35 +64,35 @@ static nir_ssa_def *lower_image_coords(nir_builder *b, nir_ssa_def *desc, nir_ss
    }
 
    if (is_array) {
-      nir_ssa_def *first_layer = get_field(b, desc, 5, 0xffff0000);
+      nir_def *first_layer = get_field(b, desc, 5, 0xffff0000);
       z = nir_iadd(b, z, first_layer);
    }
 
    /* Compute the buffer element index. */
-   nir_ssa_def *index = x;
+   nir_def *index = x;
    if (y) {
-      nir_ssa_def *pitch = nir_channel(b, desc, 6);
+      nir_def *pitch = nir_channel(b, desc, 6);
       index = nir_iadd(b, index, nir_imul(b, pitch, y));
    }
    if (z) {
-      nir_ssa_def *slice_elements = nir_channel(b, desc, 7);
+      nir_def *slice_elements = nir_channel(b, desc, 7);
       index = nir_iadd(b, index, nir_imul(b, slice_elements, z));
    }
 
    /* Determine whether the coordinates are out of bounds. */
-   nir_ssa_def *out_of_bounds = NULL;
+   nir_def *out_of_bounds = NULL;
 
    if (handle_out_of_bounds) {
-      nir_ssa_def *width = get_field(b, desc, 4, 0xffff);
+      nir_def *width = get_field(b, desc, 4, 0xffff);
       out_of_bounds = nir_ior(b, nir_ilt(b, x, zero), nir_ige(b, x, width));
 
       if (y) {
-         nir_ssa_def *height = get_field(b, desc, 4, 0xffff0000);
+         nir_def *height = get_field(b, desc, 4, 0xffff0000);
          out_of_bounds = nir_ior(b, out_of_bounds,
                                  nir_ior(b, nir_ilt(b, y, zero), nir_ige(b, y, height)));
       }
       if (z) {
-         nir_ssa_def *depth = get_field(b, desc, 5, 0xffff);
+         nir_def *depth = get_field(b, desc, 5, 0xffff);
          out_of_bounds = nir_ior(b, out_of_bounds,
                                  nir_ior(b, nir_ilt(b, z, zero), nir_ige(b, z, depth)));
       }
@@ -104,12 +104,12 @@ static nir_ssa_def *lower_image_coords(nir_builder *b, nir_ssa_def *desc, nir_ss
    return index;
 }
 
-static nir_ssa_def *emulated_image_load(nir_builder *b, unsigned num_components, unsigned bit_size,
-                                        nir_ssa_def *desc, nir_ssa_def *coord,
+static nir_def *emulated_image_load(nir_builder *b, unsigned num_components, unsigned bit_size,
+                                        nir_def *desc, nir_def *coord,
                                         enum gl_access_qualifier access, enum glsl_sampler_dim dim,
                                         bool is_array, bool handle_out_of_bounds)
 {
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *zero = nir_imm_int(b, 0);
 
    return nir_load_buffer_amd(b, num_components, bit_size, nir_channels(b, desc, 0xf),
                               zero, zero,
@@ -120,11 +120,11 @@ static nir_ssa_def *emulated_image_load(nir_builder *b, unsigned num_components,
                               .access = access | ACCESS_USES_FORMAT_AMD);
 }
 
-static void emulated_image_store(nir_builder *b, nir_ssa_def *desc, nir_ssa_def *coord,
-                                 nir_ssa_def *data, enum gl_access_qualifier access,
+static void emulated_image_store(nir_builder *b, nir_def *desc, nir_def *coord,
+                                 nir_def *data, enum gl_access_qualifier access,
                                  enum glsl_sampler_dim dim, bool is_array)
 {
-   nir_ssa_def *zero = nir_imm_int(b, 0);
+   nir_def *zero = nir_imm_int(b, 0);
 
    nir_store_buffer_amd(b, data, nir_channels(b, desc, 0xf), zero, zero,
                         lower_image_coords(b, desc, coord, dim, is_array, true),
@@ -134,7 +134,7 @@ static void emulated_image_store(nir_builder *b, nir_ssa_def *desc, nir_ssa_def 
 }
 
 /* Return the width, height, or depth for dim=0,1,2. */
-static nir_ssa_def *get_dim(nir_builder *b, nir_ssa_def *desc, unsigned dim)
+static nir_def *get_dim(nir_builder *b, nir_def *desc, unsigned dim)
 {
    return get_field(b, desc, 4 + dim / 2, 0xffff << (16 * (dim % 2)));
 }
@@ -142,9 +142,9 @@ static nir_ssa_def *get_dim(nir_builder *b, nir_ssa_def *desc, unsigned dim)
 /* Lower txl with lod=0 to typed buffer loads. This is based on the equations in the GL spec.
  * This basically converts the tex opcode into 1 or more image_load opcodes.
  */
-static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_components,
-                                            unsigned bit_size, nir_ssa_def *desc,
-                                            nir_ssa_def *sampler_desc, nir_ssa_def *coord_vec,
+static nir_def *emulated_tex_level_zero(nir_builder *b, unsigned num_components,
+                                            unsigned bit_size, nir_def *desc,
+                                            nir_def *sampler_desc, nir_def *coord_vec,
                                             enum glsl_sampler_dim sampler_dim, bool is_array)
 {
    const enum gl_access_qualifier access =
@@ -153,9 +153,9 @@ static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_compone
    const unsigned num_dim_coords = num_coord_components - is_array;
    const unsigned array_comp = num_coord_components - 1;
 
-   nir_ssa_def *zero = nir_imm_int(b, 0);
-   nir_ssa_def *fp_one = nir_imm_floatN_t(b, 1, bit_size);
-   nir_ssa_def *coord[3] = {0};
+   nir_def *zero = nir_imm_int(b, 0);
+   nir_def *fp_one = nir_imm_floatN_t(b, 1, bit_size);
+   nir_def *coord[3] = {0};
 
    assert(num_coord_components <= 3);
    for (unsigned i = 0; i < num_coord_components; i++)
@@ -179,14 +179,14 @@ static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_compone
     *
     * We assume that XY_MIN_FILTER and Z_FILTER are identical.
     */
-   nir_ssa_def *is_nearest =
+   nir_def *is_nearest =
       nir_ieq_imm(b, nir_iand_imm(b, nir_channel(b, sampler_desc, 2), 1 << 20), 0);
-   nir_ssa_def *result_nearest, *result_linear;
+   nir_def *result_nearest, *result_linear;
 
    nir_if *if_nearest = nir_push_if(b, is_nearest);
    {
       /* Nearest filter. */
-      nir_ssa_def *coord0[3] = {0};
+      nir_def *coord0[3] = {0};
       memcpy(coord0, coord, sizeof(coord));
 
       for (unsigned dim = 0; dim < num_dim_coords; dim++) {
@@ -205,9 +205,9 @@ static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_compone
    nir_push_else(b, if_nearest);
    {
       /* Linear filter. */
-      nir_ssa_def *coord0[3] = {0};
-      nir_ssa_def *coord1[3] = {0};
-      nir_ssa_def *weight[3] = {0};
+      nir_def *coord0[3] = {0};
+      nir_def *coord1[3] = {0};
+      nir_def *weight[3] = {0};
 
       memcpy(coord0, coord, sizeof(coord));
 
@@ -231,10 +231,10 @@ static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_compone
       /* Load all texels for the linear filter.
        * This is 2 texels for 1D, 4 texels for 2D, and 8 texels for 3D.
        */
-      nir_ssa_def *texel[8];
+      nir_def *texel[8];
 
       for (unsigned i = 0; i < (1 << num_dim_coords); i++) {
-         nir_ssa_def *texel_coord[3];
+         nir_def *texel_coord[3];
 
          /* Determine whether the current texel should use channels from coord0
           * or coord1. The i-th bit of the texel index determines that.
@@ -247,7 +247,7 @@ static nir_ssa_def *emulated_tex_level_zero(nir_builder *b, unsigned num_compone
             texel_coord[array_comp] = coord0[array_comp];
 
          /* Compute how much the texel contributes to the final result. */
-         nir_ssa_def *texel_weight = fp_one;
+         nir_def *texel_weight = fp_one;
          for (unsigned dim = 0; dim < num_dim_coords; dim++) {
             /* Let's see what "i" represents:
              *    Texel i=0 = 000
@@ -296,10 +296,10 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
       enum gl_access_qualifier access;
       enum glsl_sampler_dim dim;
       bool is_array;
-      nir_ssa_def *desc = NULL, *result = NULL;
+      nir_def *desc = NULL, *result = NULL;
       ASSERTED const char *intr_name;
 
-      nir_ssa_def *dst = &intr->dest.ssa;
+      nir_def *dst = &intr->def;
       b->cursor = nir_before_instr(instr);
 
       switch (intr->intrinsic) {
@@ -357,9 +357,9 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
       case nir_intrinsic_image_load:
       case nir_intrinsic_image_deref_load:
       case nir_intrinsic_bindless_image_load:
-         result = emulated_image_load(b, intr->dest.ssa.num_components, intr->dest.ssa.bit_size,
+         result = emulated_image_load(b, intr->def.num_components, intr->def.bit_size,
                                       desc, intr->src[1].ssa, access, dim, is_array, true);
-         nir_ssa_def_rewrite_uses_after(dst, result, instr);
+         nir_def_rewrite_uses_after(dst, result, instr);
          nir_instr_remove(instr);
          return true;
 
@@ -376,9 +376,9 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
       nir_tex_instr *new_tex;
-      nir_ssa_def *coord = NULL, *desc = NULL, *sampler_desc = NULL, *result = NULL;
+      nir_def *coord = NULL, *desc = NULL, *sampler_desc = NULL, *result = NULL;
 
-      nir_ssa_def *dst = &tex->dest.ssa;
+      nir_def *dst = &tex->def;
       b->cursor = nir_before_instr(instr);
 
       switch (tex->op) {
@@ -398,12 +398,12 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
                new_tex->texture_index = tex->texture_index;
                new_tex->sampler_index = tex->sampler_index;
                new_tex->dest_type = nir_type_int32;
-               nir_src_copy(&new_tex->src[0].src, &tex->src[i].src, &new_tex->instr);
+               new_tex->src[0].src = nir_src_for_ssa(tex->src[i].src.ssa);
                new_tex->src[0].src_type = tex->src[i].src_type;
-               nir_ssa_dest_init(&new_tex->instr, &new_tex->dest,
-                                 nir_tex_instr_dest_size(new_tex), 32);
+               nir_def_init(&new_tex->instr, &new_tex->def,
+                            nir_tex_instr_dest_size(new_tex), 32);
                nir_builder_instr_insert(b, &new_tex->instr);
-               desc = &new_tex->dest.ssa;
+               desc = &new_tex->def;
                break;
 
             case nir_tex_src_sampler_deref:
@@ -417,12 +417,12 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
                new_tex->texture_index = tex->texture_index;
                new_tex->sampler_index = tex->sampler_index;
                new_tex->dest_type = nir_type_int32;
-               nir_src_copy(&new_tex->src[0].src, &tex->src[i].src, &new_tex->instr);
+               new_tex->src[0].src = nir_src_for_ssa(tex->src[i].src.ssa);
                new_tex->src[0].src_type = tex->src[i].src_type;
-               nir_ssa_dest_init(&new_tex->instr, &new_tex->dest,
-                                 nir_tex_instr_dest_size(new_tex), 32);
+               nir_def_init(&new_tex->instr, &new_tex->def,
+                            nir_tex_instr_dest_size(new_tex), 32);
                nir_builder_instr_insert(b, &new_tex->instr);
-               sampler_desc = &new_tex->dest.ssa;
+               sampler_desc = &new_tex->def;
                break;
 
             case nir_tex_src_coord:
@@ -443,19 +443,19 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
 
          switch (tex->op) {
          case nir_texop_txf:
-            result = emulated_image_load(b, tex->dest.ssa.num_components, tex->dest.ssa.bit_size,
+            result = emulated_image_load(b, tex->def.num_components, tex->def.bit_size,
                                          desc, coord,
                                          ACCESS_RESTRICT | ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER,
                                          tex->sampler_dim, tex->is_array, true);
-            nir_ssa_def_rewrite_uses_after(dst, result, instr);
+            nir_def_rewrite_uses_after(dst, result, instr);
             nir_instr_remove(instr);
             return true;
 
          case nir_texop_tex:
          case nir_texop_txl:
-            result = emulated_tex_level_zero(b, tex->dest.ssa.num_components, tex->dest.ssa.bit_size,
+            result = emulated_tex_level_zero(b, tex->def.num_components, tex->def.bit_size,
                                   desc, sampler_desc, coord, tex->sampler_dim, tex->is_array);
-            nir_ssa_def_rewrite_uses_after(dst, result, instr);
+            nir_def_rewrite_uses_after(dst, result, instr);
             nir_instr_remove(instr);
             return true;
 

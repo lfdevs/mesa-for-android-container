@@ -49,6 +49,7 @@ SOFTWARE.
 		<map name="COMP2">src->cat0.comp2</map>
 		<map name="INV1">src->cat0.inv1</map>
 		<map name="INV2">src->cat0.inv2</map>
+		<map name="EQ">!!(src->flags &amp; IR3_INSTR_EQ)</map>
 	</encode>
 </bitset>
 

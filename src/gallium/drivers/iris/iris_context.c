@@ -99,9 +99,6 @@ iris_get_device_reset_status(struct pipe_context *ctx)
     * worst status (if one was guilty, proclaim guilt).
     */
    iris_foreach_batch(ice, batch) {
-      /* This will also recreate the hardware contexts as necessary, so any
-       * future queries will show no resets.  We only want to report once.
-       */
       enum pipe_reset_status batch_reset =
          iris_batch_check_for_reset(batch);
 
@@ -259,6 +256,9 @@ iris_destroy_context(struct pipe_context *ctx)
 
 #define genX_call(devinfo, func, ...)             \
    switch ((devinfo)->verx10) {                   \
+   case 200:                                      \
+      gfx20_##func(__VA_ARGS__);                  \
+      break;                                      \
    case 125:                                      \
       gfx125_##func(__VA_ARGS__);                 \
       break;                                      \
@@ -386,6 +386,8 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    return threaded_context_create(ctx, &screen->transfer_pool,
                                   iris_replace_buffer_storage,
-                                  NULL, /* TODO: asynchronous flushes? */
+                                  &(struct threaded_context_options){
+                                    .unsynchronized_get_device_reset_status = true,
+                                  },
                                   &ice->thrctx);
 }

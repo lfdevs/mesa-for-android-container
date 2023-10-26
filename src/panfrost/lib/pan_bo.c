@@ -405,9 +405,11 @@ panfrost_bo_create(struct panfrost_device *dev, size_t size, uint32_t flags,
 
    if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC)) {
       if (flags & PAN_BO_INVISIBLE)
-         pandecode_inject_mmap(bo->ptr.gpu, NULL, bo->size, NULL);
+         pandecode_inject_mmap(dev->decode_ctx, bo->ptr.gpu, NULL, bo->size,
+                               NULL);
       else if (!(flags & PAN_BO_DELAY_MMAP))
-         pandecode_inject_mmap(bo->ptr.gpu, bo->ptr.cpu, bo->size, NULL);
+         pandecode_inject_mmap(dev->decode_ctx, bo->ptr.gpu, bo->ptr.cpu,
+                               bo->size, NULL);
    }
 
    return bo;
@@ -444,7 +446,7 @@ panfrost_bo_unreference(struct panfrost_bo *bo)
       panfrost_bo_munmap(bo);
 
       if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC))
-         pandecode_inject_free(bo->ptr.gpu, bo->size);
+         pandecode_inject_free(dev->decode_ctx, bo->ptr.gpu, bo->size);
 
       /* Rather than freeing the BO now, we'll cache the BO for later
        * allocations if we're allowed to.

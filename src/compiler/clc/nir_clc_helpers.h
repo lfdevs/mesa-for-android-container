@@ -24,8 +24,6 @@ nir_load_libclc_shader(unsigned ptr_bit_size,
                        const nir_shader_compiler_options *nir_options,
                        bool optimize);
 
-bool nir_lower_libclc(nir_shader *shader, const nir_shader *clc_shader);
-
 #ifdef __cplusplus
 }
 #endif

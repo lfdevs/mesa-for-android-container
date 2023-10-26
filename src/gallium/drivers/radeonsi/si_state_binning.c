@@ -386,6 +386,8 @@ static void gfx10_get_bin_sizes(struct si_context *sctx, unsigned cb_target_enab
 
 static void si_emit_dpbb_disable(struct si_context *sctx)
 {
+   unsigned optimal_bin_selection = !sctx->queued.named.rasterizer->bottom_edge_rule;
+
    radeon_begin(&sctx->gfx_cs);
 
    if (sctx->gfx_level >= GFX10) {
@@ -409,7 +411,7 @@ static void si_emit_dpbb_disable(struct si_context *sctx)
                                  S_028C44_BIN_SIZE_Y_EXTEND(bin_size_extend.y) |
                                  S_028C44_DISABLE_START_OF_PRIM(1) |
                                  S_028C44_FPOVS_PER_BATCH(63) |
-                                 S_028C44_OPTIMAL_BIN_SELECTION(1) |
+                                 S_028C44_OPTIMAL_BIN_SELECTION(optimal_bin_selection) |
                                  S_028C44_FLUSH_ON_BINNING_TRANSITION(1));
    } else {
       radeon_opt_set_context_reg(sctx, R_028C44_PA_SC_BINNER_CNTL_0,
@@ -423,12 +425,13 @@ static void si_emit_dpbb_disable(struct si_context *sctx)
    radeon_end_update_context_roll(sctx);
 }
 
-void si_emit_dpbb_state(struct si_context *sctx)
+void si_emit_dpbb_state(struct si_context *sctx, unsigned index)
 {
    struct si_screen *sscreen = sctx->screen;
    struct si_state_blend *blend = sctx->queued.named.blend;
    struct si_state_dsa *dsa = sctx->queued.named.dsa;
    unsigned db_shader_control = sctx->ps_db_shader_control;
+   unsigned optimal_bin_selection = !sctx->queued.named.rasterizer->bottom_edge_rule;
 
    assert(sctx->gfx_level >= GFX9);
 
@@ -501,7 +504,7 @@ void si_emit_dpbb_state(struct si_context *sctx)
                               S_028C44_PERSISTENT_STATES_PER_BIN(sscreen->pbb_persistent_states_per_bin - 1) |
                               S_028C44_DISABLE_START_OF_PRIM(1) |
                               S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) |
-                              S_028C44_OPTIMAL_BIN_SELECTION(1) |
+                              S_028C44_OPTIMAL_BIN_SELECTION(optimal_bin_selection) |
                               S_028C44_FLUSH_ON_BINNING_TRANSITION(sctx->family == CHIP_VEGA12 ||
                                                                    sctx->family == CHIP_VEGA20 ||
                                                                    sctx->family >= CHIP_RAVEN2));

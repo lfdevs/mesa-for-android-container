@@ -39,6 +39,7 @@
 
 typedef struct __DRIkopperExtensionRec          __DRIkopperExtension;
 typedef struct __DRIkopperLoaderExtensionRec    __DRIkopperLoaderExtension;
+typedef struct __DRIkopperDrawableInfoRec    __DRIkopperDrawableInfo;
 
 /**
  * This extension defines the core GL-atop-VK functionality. This is used by the
@@ -47,6 +48,11 @@ typedef struct __DRIkopperLoaderExtensionRec    __DRIkopperLoaderExtension;
  */
 #define __DRI_KOPPER "DRI_Kopper"
 #define __DRI_KOPPER_VERSION 1
+
+struct __DRIkopperDrawableInfoRec {
+   bool multiplanes_available;
+   int is_pixmap;
+};
 
 struct __DRIkopperExtensionRec {
     __DRIextension base;
@@ -60,7 +66,7 @@ struct __DRIkopperExtensionRec {
     __DRIdrawable *(*createNewDrawable)(__DRIscreen *screen,
                                         const __DRIconfig *config,
                                         void *loaderPrivate,
-                                        int pixmap);
+                                        __DRIkopperDrawableInfo *info);
     /* flags is a set of __DRI2_FLUSH_* flags */
     int64_t (*swapBuffers)(__DRIdrawable *draw, uint32_t flush_flags);
     void (*setSwapInterval)(__DRIdrawable *drawable, int interval);

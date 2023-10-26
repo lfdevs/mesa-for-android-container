@@ -289,10 +289,10 @@ fd_pipe_fence_set_batch(struct pipe_fence_handle *fence, struct fd_batch *batch)
 {
    if (batch) {
       assert(!fence->batch);
-      fence->batch = batch;
+      fd_batch_reference(&fence->batch, batch);
       fd_batch_needs_flush(batch);
    } else {
-      fence->batch = NULL;
+      fd_batch_reference(&fence->batch, NULL);
 
       /* When the batch is dis-associated with the fence, we can signal TC
        * that the fence is flushed

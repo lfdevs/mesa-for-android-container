@@ -34,13 +34,8 @@
  * Midgard and Bifrost is slot-based, writing out an entire vec4 slot at a time.
  */
 static bool
-lower_store_component(nir_builder *b, nir_instr *instr, void *data)
+lower_store_component(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 
@@ -52,16 +47,16 @@ lower_store_component(nir_builder *b, nir_instr *instr, void *data)
    nir_intrinsic_instr *prev = _mesa_hash_table_u64_search(slots, slot);
    unsigned mask = (prev ? nir_intrinsic_write_mask(prev) : 0);
 
-   nir_ssa_def *value = intr->src[0].ssa;
+   nir_def *value = intr->src[0].ssa;
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_ssa_def *undef = nir_ssa_undef(b, 1, value->bit_size);
-   nir_ssa_def *channels[4] = {undef, undef, undef, undef};
+   nir_def *undef = nir_undef(b, 1, value->bit_size);
+   nir_def *channels[4] = {undef, undef, undef, undef};
 
    /* Copy old */
    u_foreach_bit(i, mask) {
       assert(prev != NULL);
-      nir_ssa_def *prev_ssa = prev->src[0].ssa;
+      nir_def *prev_ssa = prev->src[0].ssa;
       channels[i] = nir_channel(b, prev_ssa, i);
    }
 
@@ -75,8 +70,7 @@ lower_store_component(nir_builder *b, nir_instr *instr, void *data)
    }
 
    intr->num_components = util_last_bit(mask);
-   nir_instr_rewrite_src_ssa(instr, &intr->src[0],
-                             nir_vec(b, channels, intr->num_components));
+   nir_src_rewrite(&intr->src[0], nir_vec(b, channels, intr->num_components));
 
    nir_intrinsic_set_component(intr, 0);
    nir_intrinsic_set_write_mask(intr, mask);
@@ -96,7 +90,7 @@ pan_nir_lower_store_component(nir_shader *s)
    assert(s->info.stage == MESA_SHADER_VERTEX);
 
    struct hash_table_u64 *stores = _mesa_hash_table_u64_create(NULL);
-   bool progress = nir_shader_instructions_pass(
+   bool progress = nir_shader_intrinsics_pass(
       s, lower_store_component,
       nir_metadata_block_index | nir_metadata_dominance, stores);
    _mesa_hash_table_u64_destroy(stores);

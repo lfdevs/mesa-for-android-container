@@ -558,13 +558,408 @@ struct virgl_mpeg4_picture_desc
    uint32_t ref[2];
 };
 
+struct virgl_mpeg12_picture_desc
+{
+    struct virgl_base_picture_desc base;
+
+    unsigned picture_coding_type;
+    unsigned picture_structure;
+    unsigned frame_pred_frame_dct;
+    unsigned q_scale_type;
+    unsigned alternate_scan;
+    unsigned intra_vlc_format;
+    unsigned concealment_motion_vectors;
+    unsigned intra_dc_precision;
+    unsigned f_code[2][2];
+    unsigned top_field_first;
+    unsigned full_pel_forward_vector;
+    unsigned full_pel_backward_vector;
+    unsigned num_slices;
+
+    uint8_t intra_matrix[64];
+    uint8_t non_intra_matrix[64];
+
+    uint32_t ref[2];
+};
+
+struct virgl_vc1_picture_desc
+{
+   struct virgl_base_picture_desc base;
+
+   uint32_t slice_count;
+   uint8_t picture_type;
+   uint8_t frame_coding_mode;
+   uint8_t postprocflag;
+   uint8_t pulldown;
+   uint8_t interlace;
+   uint8_t tfcntrflag;
+   uint8_t finterpflag;
+   uint8_t psf;
+   uint8_t dquant;
+   uint8_t panscan_flag;
+   uint8_t refdist_flag;
+   uint8_t quantizer;
+   uint8_t extended_mv;
+   uint8_t extended_dmv;
+   uint8_t overlap;
+   uint8_t vstransform;
+   uint8_t loopfilter;
+   uint8_t fastuvmc;
+   uint8_t range_mapy_flag;
+   uint8_t range_mapy;
+   uint8_t range_mapuv_flag;
+   uint8_t range_mapuv;
+   uint8_t multires;
+   uint8_t syncmarker;
+   uint8_t rangered;
+   uint8_t maxbframes;
+   uint8_t deblockEnable;
+   uint8_t pquant;
+
+   uint32_t ref[2];
+};
+
+struct virgl_mjpeg_picture_desc
+{
+   struct virgl_base_picture_desc base;
+
+    struct
+    {
+        uint16_t picture_width;
+        uint16_t picture_height;
+
+        struct {
+            uint8_t component_id;
+            uint8_t h_sampling_factor;
+            uint8_t v_sampling_factor;
+            uint8_t quantiser_table_selector;
+        } components[255];
+
+        uint8_t num_components;
+        uint16_t crop_x;
+        uint16_t crop_y;
+        uint16_t crop_width;
+        uint16_t crop_height;
+    } picture_parameter;
+
+    struct
+    {
+        uint8_t load_quantiser_table[4];
+        uint8_t quantiser_table[4][64];
+    } quantization_table;
+
+    struct
+    {
+        uint8_t load_huffman_table[2];
+
+        struct {
+            uint8_t   num_dc_codes[16];
+            uint8_t   dc_values[12];
+            uint8_t   num_ac_codes[16];
+            uint8_t   ac_values[162];
+            uint8_t   pad[2];
+        } table[2];
+    } huffman_table;
+
+    struct
+    {
+        unsigned slice_data_size;
+        unsigned slice_data_offset;
+        unsigned slice_data_flag;
+        unsigned slice_horizontal_position;
+        unsigned slice_vertical_position;
+
+        struct {
+            uint8_t component_selector;
+            uint8_t dc_table_selector;
+            uint8_t ac_table_selector;
+        } components[4];
+
+        uint8_t num_components;
+
+        uint16_t restart_interval;
+        unsigned num_mcus;
+    } slice_parameter;
+};
+
+struct virgl_vp9_segment_parameter
+{
+    struct {
+        uint16_t segment_reference_enabled:1;
+        uint16_t segment_reference:2;
+        uint16_t segment_reference_skipped:1;
+    } segment_flags;
+
+    uint8_t filter_level[4][2];
+    int16_t luma_ac_quant_scale;
+    int16_t luma_dc_quant_scale;
+    int16_t chroma_ac_quant_scale;
+    int16_t chroma_dc_quant_scale;
+};
+
+struct virgl_vp9_picture_desc
+{
+    struct virgl_base_picture_desc base;
+
+    uint32_t ref[16];
+
+    struct {
+        uint16_t frame_width;
+        uint16_t frame_height;
+
+        struct {
+            uint32_t  subsampling_x:1;
+            uint32_t  subsampling_y:1;
+            uint32_t  frame_type:1;
+            uint32_t  show_frame:1;
+            uint32_t  error_resilient_mode:1;
+            uint32_t  intra_only:1;
+            uint32_t  allow_high_precision_mv:1;
+            uint32_t  mcomp_filter_type:3;
+            uint32_t  frame_parallel_decoding_mode:1;
+            uint32_t  reset_frame_context:2;
+            uint32_t  refresh_frame_context:1;
+            uint32_t  frame_context_idx:2;
+            uint32_t  segmentation_enabled:1;
+            uint32_t  segmentation_temporal_update:1;
+            uint32_t  segmentation_update_map:1;
+            uint32_t  last_ref_frame:3;
+            uint32_t  last_ref_frame_sign_bias:1;
+            uint32_t  golden_ref_frame:3;
+            uint32_t  golden_ref_frame_sign_bias:1;
+            uint32_t  alt_ref_frame:3;
+            uint32_t  alt_ref_frame_sign_bias:1;
+            uint32_t  lossless_flag:1;
+        } pic_fields;
+
+        uint8_t filter_level;
+        uint8_t sharpness_level;
+        uint8_t log2_tile_rows;
+        uint8_t log2_tile_columns;
+        uint8_t frame_header_length_in_bytes;
+        uint16_t first_partition_size;
+        uint8_t mb_segment_tree_probs[7];
+        uint8_t segment_pred_probs[3];
+        uint8_t profile;
+        uint8_t bit_depth;
+
+        bool mode_ref_delta_enabled;
+        bool mode_ref_delta_update;
+
+        uint8_t base_qindex;
+        int8_t y_dc_delta_q;
+        int8_t uv_ac_delta_q;
+        int8_t uv_dc_delta_q;
+        uint8_t abs_delta;
+        uint8_t ref_deltas[4];
+        uint8_t mode_deltas[2];
+    } picture_parameter;
+
+    struct {
+        uint32_t slice_data_size;
+        uint32_t slice_data_offset;
+        uint32_t slice_data_flag;
+        struct virgl_vp9_segment_parameter seg_param[8];
+    } slice_parameter;
+};
+
+struct virgl_av1_picture_desc
+{
+   struct virgl_base_picture_desc base;
+
+   uint32_t ref[16];
+   uint32_t film_grain_target;
+   struct {
+      uint8_t profile;
+      uint8_t order_hint_bits_minus_1;
+      uint8_t bit_depth_idx;
+
+      struct {
+         uint32_t use_128x128_superblock:1;
+         uint32_t enable_filter_intra:1;
+         uint32_t enable_intra_edge_filter:1;
+         uint32_t enable_interintra_compound:1;
+         uint32_t enable_masked_compound:1;
+         uint32_t enable_dual_filter:1;
+         uint32_t enable_order_hint:1;
+         uint32_t enable_jnt_comp:1;
+         uint32_t enable_cdef:1;
+         uint32_t mono_chrome:1;
+         uint32_t ref_frame_mvs:1;
+         uint32_t film_grain_params_present:1;
+      } seq_info_fields;
+
+      uint32_t current_frame_id;
+
+      uint16_t frame_width;
+      uint16_t frame_height;
+      uint16_t max_width;
+      uint16_t max_height;
+
+      uint8_t ref_frame_idx[7];
+      uint8_t primary_ref_frame;
+      uint8_t order_hint;
+
+      struct {
+         struct {
+            uint32_t enabled:1;
+            uint32_t update_map:1;
+            uint32_t update_data:1;
+            uint32_t temporal_update:1;
+         } segment_info_fields;
+
+         int16_t feature_data[8][8];
+         uint8_t feature_mask[8];
+      } seg_info;
+
+      struct {
+         struct {
+            uint32_t apply_grain:1;
+            uint32_t chroma_scaling_from_luma:1;
+            uint32_t grain_scaling_minus_8:2;
+            uint32_t ar_coeff_lag:2;
+            uint32_t ar_coeff_shift_minus_6:2;
+            uint32_t grain_scale_shift:2;
+            uint32_t overlap_flag:1;
+            uint32_t clip_to_restricted_range:1;
+         } film_grain_info_fields;
+
+         uint16_t grain_seed;
+         uint8_t num_y_points;
+         uint8_t point_y_value[14];
+         uint8_t point_y_scaling[14];
+         uint8_t num_cb_points;
+         uint8_t point_cb_value[10];
+         uint8_t point_cb_scaling[10];
+         uint8_t num_cr_points;
+         uint8_t point_cr_value[10];
+         uint8_t point_cr_scaling[10];
+         int8_t ar_coeffs_y[24];
+         int8_t ar_coeffs_cb[25];
+         int8_t ar_coeffs_cr[25];
+         uint8_t cb_mult;
+         uint8_t cb_luma_mult;
+         uint16_t cb_offset;
+         uint8_t cr_mult;
+         uint8_t cr_luma_mult;
+         uint16_t cr_offset;
+      } film_grain_info;
+
+      uint8_t tile_cols;
+      uint8_t tile_rows;
+      uint32_t tile_col_start_sb[65];
+      uint32_t tile_row_start_sb[65];
+      uint16_t width_in_sbs[64];
+      uint16_t height_in_sbs[64];
+      uint16_t context_update_tile_id;
+
+      struct {
+         uint32_t frame_type:2;
+         uint32_t show_frame:1;
+         uint32_t showable_frame:1;
+         uint32_t error_resilient_mode:1;
+         uint32_t disable_cdf_update:1;
+         uint32_t allow_screen_content_tools:1;
+         uint32_t force_integer_mv:1;
+         uint32_t allow_intrabc:1;
+         uint32_t use_superres:1;
+         uint32_t allow_high_precision_mv:1;
+         uint32_t is_motion_mode_switchable:1;
+         uint32_t use_ref_frame_mvs:1;
+         uint32_t disable_frame_end_update_cdf:1;
+         uint32_t uniform_tile_spacing_flag:1;
+         uint32_t allow_warped_motion:1;
+         uint32_t large_scale_tile:1;
+      } pic_info_fields;
+
+      uint8_t superres_scale_denominator;
+
+      uint8_t interp_filter;
+      uint8_t filter_level[2];
+      uint8_t filter_level_u;
+      uint8_t filter_level_v;
+      struct {
+         uint8_t sharpness_level:3;
+         uint8_t mode_ref_delta_enabled:1;
+         uint8_t mode_ref_delta_update:1;
+      } loop_filter_info_fields;
+
+      int8_t ref_deltas[8];
+      int8_t mode_deltas[2];
+
+      uint8_t base_qindex;
+      int8_t y_dc_delta_q;
+      int8_t u_dc_delta_q;
+      int8_t u_ac_delta_q;
+      int8_t v_dc_delta_q;
+      int8_t v_ac_delta_q;
+
+      struct {
+         uint16_t using_qmatrix:1;
+         uint16_t qm_y:4;
+         uint16_t qm_u:4;
+         uint16_t qm_v:4;
+      } qmatrix_fields;
+
+      struct {
+         uint32_t delta_q_present_flag:1;
+         uint32_t log2_delta_q_res:2;
+         uint32_t delta_lf_present_flag:1;
+         uint32_t log2_delta_lf_res:2;
+         uint32_t delta_lf_multi:1;
+         uint32_t tx_mode:2;
+         uint32_t reference_select:1;
+         uint32_t reduced_tx_set_used:1;
+         uint32_t skip_mode_present:1;
+      } mode_control_fields;
+
+      uint8_t cdef_damping_minus_3;
+      uint8_t cdef_bits;
+      uint8_t cdef_y_strengths[8];
+      uint8_t cdef_uv_strengths[8];
+
+      struct {
+         uint16_t yframe_restoration_type:2;
+         uint16_t cbframe_restoration_type:2;
+         uint16_t crframe_restoration_type:2;
+         uint16_t lr_unit_shift:2;
+         uint16_t lr_uv_shift:1;
+      } loop_restoration_fields;
+
+      uint16_t lr_unit_size[3];
+
+      struct {
+         uint32_t wmtype;
+         uint8_t invalid;
+         int32_t wmmat[8];
+      } wm[7];
+
+      uint32_t refresh_frame_flags;
+      uint8_t matrix_coefficients;
+   } picture_parameter;
+
+   struct {
+      uint32_t slice_data_size[256];
+      uint32_t slice_data_offset[256];
+      uint16_t slice_data_row[256];
+      uint16_t slice_data_col[256];
+      uint8_t slice_data_anchor_frame_idx[256];
+      uint16_t slice_count;
+   } slice_parameter;
+};
+
 union virgl_picture_desc {
     struct virgl_base_picture_desc base;
     struct virgl_h264_picture_desc h264;
     struct virgl_h265_picture_desc h265;
     struct virgl_mpeg4_picture_desc mpeg4;
+    struct virgl_mpeg12_picture_desc mpeg12;
+    struct virgl_vc1_picture_desc vc1;
+    struct virgl_mjpeg_picture_desc mjpeg;
+    struct virgl_av1_picture_desc av1;
     struct virgl_h264_enc_picture_desc h264_enc;
     struct virgl_h265_enc_picture_desc h265_enc;
+    struct virgl_vp9_picture_desc vp9;
 };
 
 enum virgl_video_encode_stat {

@@ -11,11 +11,11 @@ set -ex
 mkdir -p "$HOME"/.cargo
 ln -s /usr/local/bin "$HOME"/.cargo/bin
 
-# Rusticl requires at least Rust 1.60.0
+# Rusticl requires at least Rust 1.66.0
 #
 # Also, pick a specific snapshot from rustup so the compiler doesn't drift on
 # us.
-RUST_VERSION=1.60.0-2022-04-07
+RUST_VERSION=1.66.1-2023-01-10
 
 # For rust in Mesa, we use rustup to install.  This lets us pick an arbitrary
 # version of the compiler, rather than whatever the container's Debian comes

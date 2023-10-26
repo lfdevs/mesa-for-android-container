@@ -240,6 +240,7 @@ enum zink_debug {
    ZINK_DEBUG_NOBGC = (1<<16),
    ZINK_DEBUG_DGC = (1<<17),
    ZINK_DEBUG_MEM = (1<<18),
+   ZINK_DEBUG_QUIET = (1<<19),
 };
 
 enum zink_pv_emulation_primitive {
@@ -301,6 +302,7 @@ struct zink_vertex_elements_hw_state {
       struct {
          VkVertexInputBindingDivisorDescriptionEXT divisors[PIPE_MAX_ATTRIBS];
          VkVertexInputBindingDescription bindings[PIPE_MAX_ATTRIBS]; // combination of element_state and stride
+         VkDeviceSize strides[PIPE_MAX_ATTRIBS];
          uint8_t divisors_present;
       } b;
       VkVertexInputBindingDescription2EXT dynbindings[PIPE_MAX_ATTRIBS];
@@ -598,8 +600,12 @@ struct zink_batch_state {
    VkCommandBuffer cmdbuf;
    VkCommandBuffer barrier_cmdbuf;
    VkSemaphore signal_semaphore; //external signal semaphore
+   struct util_dynarray signal_semaphores; //external signal semaphores
    struct util_dynarray wait_semaphores; //external wait semaphores
    struct util_dynarray wait_semaphore_stages; //external wait semaphores
+   struct util_dynarray fd_wait_semaphores; //dmabuf wait semaphores
+   struct util_dynarray fd_wait_semaphore_stages; //dmabuf wait semaphores
+   struct util_dynarray fences; //zink_tc_fence refs
 
    VkSemaphore present;
    struct zink_resource *swapchain;
@@ -617,6 +623,7 @@ struct zink_batch_state {
    struct util_queue_fence flush_completed;
 
    struct set programs;
+   struct set dmabuf_exports;
 
 #define BUFFER_HASHLIST_SIZE 32768
    /* buffer_indices_hashlist[hash(bo)] returns -1 if the bo
@@ -755,14 +762,11 @@ struct zink_framebuffer_clear {
 
 /** compiler types */
 struct zink_shader_info {
-   struct pipe_stream_output_info so_info;
-   unsigned so_info_slots[PIPE_MAX_SO_OUTPUTS];
-   uint32_t so_propagate; //left shifted by 32
+   uint16_t stride[PIPE_MAX_SO_BUFFERS];
    uint32_t sampler_mask;
-   bool last_vertex;
-   bool have_xfb;
    bool have_sparse;
    bool have_vulkan_memory_model;
+   bool have_workgroup_memory_explicit_layout;
    unsigned bindless_set_idx;
 };
 
@@ -810,7 +814,6 @@ struct zink_shader {
    struct {
       struct util_queue_fence fence;
       struct zink_shader_object obj;
-      struct zink_shader_object no_psiz_obj; //avoid a crippling bug in nir_assign_io_var_locations()
       VkDescriptorSetLayout dsl;
       VkPipelineLayout layout;
       VkPipeline gpl;
@@ -934,6 +937,7 @@ struct zink_compute_pipeline_state {
    uint32_t final_hash;
    bool dirty;
    uint32_t local_size[3];
+   uint32_t variable_shared_mem;
 
    uint32_t module_hash;
    VkShaderModule module;
@@ -1128,6 +1132,9 @@ struct zink_compute_program {
    struct zink_program base;
 
    bool use_local_size;
+   bool has_variable_shared_mem;
+
+   unsigned scratch_size;
 
    unsigned num_inlinable_uniforms;
    nir_shader *nir; //only until precompile finishes
@@ -1365,6 +1372,12 @@ struct zink_modifier_prop {
     VkDrmFormatModifierPropertiesEXT*    pDrmFormatModifierProperties;
 };
 
+struct zink_format_props {
+   VkFormatFeatureFlags2 linearTilingFeatures;
+   VkFormatFeatureFlags2 optimalTilingFeatures;
+   VkFormatFeatureFlags2 bufferFeatures;
+};
+
 struct zink_screen {
    struct pipe_screen base;
 
@@ -1387,6 +1400,7 @@ struct zink_screen {
 
    simple_mtx_t semaphores_lock;
    struct util_dynarray semaphores;
+   struct util_dynarray fd_semaphores;
 
    unsigned buffer_rebind_counter;
    unsigned image_rebind_counter;
@@ -1458,6 +1472,7 @@ struct zink_screen {
    bool need_2D_zs;
    bool need_2D_sparse;
    bool faked_e5sparse; //drivers may not expose R9G9B9E5 but cts requires it
+   bool can_hic_shader_read;
 
    uint32_t gfx_queue;
    uint32_t sparse_queue;
@@ -1498,7 +1513,7 @@ struct zink_screen {
       bool zink_shader_object_enable;
    } driconf;
 
-   VkFormatProperties format_props[PIPE_FORMAT_COUNT];
+   struct zink_format_props format_props[PIPE_FORMAT_COUNT];
    struct zink_modifier_prop modifier_props[PIPE_FORMAT_COUNT];
 
    VkExtent2D maxSampleLocationGridSize[5];
@@ -1510,6 +1525,7 @@ struct zink_screen {
        * HI TURNIP
        */
       bool broken_cache_semantics;
+      bool missing_a8_unorm;
       bool implicit_sync;
       bool disable_optimized_compile;
       bool always_feedback_loop;
@@ -1521,6 +1537,7 @@ struct zink_screen {
       bool no_hw_gl_point;
       bool lower_robustImageAccess2;
       bool needs_zs_shader_swizzle;
+      bool can_do_invalid_linear_modifier;
       unsigned z16_unscaled_bias;
       unsigned z24_unscaled_bias;
    } driver_workarounds;
@@ -1872,13 +1889,18 @@ struct zink_context {
    };
 
    struct zink_vk_query *curr_xfb_queries[PIPE_MAX_VERTEX_STREAMS];
+   struct zink_shader *null_fs;
+   struct zink_shader *saved_fs;
 
    struct list_head query_pools;
    struct list_head suspended_queries;
    struct list_head primitives_generated_queries;
    struct zink_query *vertices_query;
+   bool disable_fs;
    bool disable_color_writes;
    bool was_line_loop;
+   bool fs_query_active;
+   bool occlusion_query_active;
    bool primitives_generated_active;
    bool primitives_generated_suspended;
    bool queries_disabled, render_condition_active;
@@ -1916,6 +1938,7 @@ struct zink_context {
       uint8_t num_ubos[MESA_SHADER_STAGES];
 
       uint8_t num_ssbos[MESA_SHADER_STAGES];
+      struct util_dynarray global_bindings;
 
       VkDescriptorImageInfo textures[MESA_SHADER_STAGES][PIPE_MAX_SAMPLERS];
       uint32_t emulate_nonseamless[MESA_SHADER_STAGES];
@@ -1981,7 +2004,7 @@ struct zink_context {
    uint32_t ds3_states;
 
    uint32_t num_so_targets;
-   struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_OUTPUTS];
+   struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_BUFFERS];
    bool dirty_so_targets;
 
    bool gfx_dirty;

@@ -105,6 +105,17 @@ panfrost_afbc_is_wide(uint64_t modifier)
 }
 
 /*
+ * Given an AFBC modifier, return the subblock size (subdivision of a
+ * superblock). This is always 4x4 for now as we only support one AFBC
+ * superblock layout.
+ */
+struct pan_block_size
+panfrost_afbc_subblock_size(uint64_t modifier)
+{
+   return (struct pan_block_size){4, 4};
+}
+
+/*
  * Given a format, determine the tile size used for u-interleaving. For formats
  * that are already block compressed, this is 4x4. For all other formats, this
  * is 16x16, hence the modifier name.
@@ -148,7 +159,7 @@ pan_afbc_tile_size(uint64_t modifier)
  * Determine the number of bytes between header rows for an AFBC image. For an
  * image with linear headers, this is simply the number of header blocks
  * (=superblocks) per row times the numbers of bytes per header block. For an
- * image with linear headers, this is multipled by the number of rows of
+ * image with tiled headers, this is multipled by the number of rows of
  * header blocks are in a tile together.
  */
 uint32_t
@@ -174,14 +185,45 @@ pan_afbc_stride_blocks(uint64_t modifier, uint32_t row_stride_bytes)
 }
 
 /*
+ * Determine the required alignment for the slice offset of an image. For
+ * now, this is always aligned on 64-byte boundaries. */
+uint32_t
+pan_slice_align(uint64_t modifier)
+{
+   return 64;
+}
+
+/*
  * Determine the required alignment for the body offset of an AFBC image. For
  * now, this depends only on whether tiling is in use. These minimum alignments
  * are required on all current GPUs.
  */
-static inline uint32_t
+uint32_t
 pan_afbc_body_align(uint64_t modifier)
 {
    return (modifier & AFBC_FORMAT_MOD_TILED) ? 4096 : 64;
+}
+
+static inline unsigned
+format_minimum_alignment(const struct panfrost_device *dev,
+                         enum pipe_format format, bool afbc)
+{
+   if (afbc)
+      return 16;
+
+   if (dev->arch < 7)
+      return 63;
+
+   switch (format) {
+   /* For v7+, NV12/NV21/I420 have a looser alignment requirement of 16 bytes */
+   case PIPE_FORMAT_R8_G8B8_420_UNORM:
+   case PIPE_FORMAT_G8_B8R8_420_UNORM:
+   case PIPE_FORMAT_R8_G8_B8_420_UNORM:
+   case PIPE_FORMAT_R8_B8_G8_420_UNORM:
+      return 16;
+   default:
+      return 64;
+   }
 }
 
 /* Computes sizes for checksumming, which is 8 bytes per 16x16 tile.
@@ -262,7 +304,8 @@ panfrost_texture_offset(const struct pan_image_layout *layout, unsigned level,
 }
 
 bool
-pan_image_layout_init(struct pan_image_layout *layout,
+pan_image_layout_init(const struct panfrost_device *dev,
+                      struct pan_image_layout *layout,
                       const struct pan_image_explicit_layout *explicit_layout)
 {
    /* Explicit stride only work with non-mipmap, non-array, single-sample
@@ -274,9 +317,29 @@ pan_image_layout_init(struct pan_image_layout *layout,
         layout->crc))
       return false;
 
-   /* Mandate 64 byte alignement */
-   if (explicit_layout && (explicit_layout->offset & 63))
-      return false;
+   bool afbc = drm_is_afbc(layout->modifier);
+   int align_req = format_minimum_alignment(dev, layout->format, afbc);
+
+   /* Mandate alignment */
+   if (explicit_layout) {
+      bool rejected = false;
+
+      int align_mask = align_req - 1;
+
+      if (dev->arch >= 7) {
+         rejected = ((explicit_layout->offset & align_mask) ||
+                     (explicit_layout->row_stride & align_mask));
+      } else {
+         rejected = (explicit_layout->offset & align_mask);
+      }
+
+      if (rejected) {
+         mesa_loge(
+            "panfrost: rejecting image due to unsupported offset or stride "
+            "alignment.\n");
+         return false;
+      }
+   }
 
    unsigned fmt_blocksize = util_format_get_blocksize(layout->format);
 
@@ -285,7 +348,6 @@ pan_image_layout_init(struct pan_image_layout *layout,
 
    assert(layout->depth == 1 || layout->nr_samples == 1);
 
-   bool afbc = drm_is_afbc(layout->modifier);
    bool linear = layout->modifier == DRM_FORMAT_MOD_LINEAR;
    bool is_3d = layout->dim == MALI_TEXTURE_DIMENSION_3D;
 
@@ -317,16 +379,23 @@ pan_image_layout_init(struct pan_image_layout *layout,
       /* Align levels to cache-line as a performance improvement for
        * linear/tiled and as a requirement for AFBC */
 
-      offset = ALIGN_POT(offset, 64);
+      offset = ALIGN_POT(offset, pan_slice_align(layout->modifier));
 
       slice->offset = offset;
 
       unsigned row_stride = fmt_blocksize * effective_width * block_size.height;
 
+      /* On v7+ row_stride and offset alignment requirement are equal */
+      if (dev->arch >= 7) {
+         row_stride = ALIGN_POT(row_stride, align_req);
+      }
+
       if (explicit_layout && !afbc) {
          /* Make sure the explicit stride is valid */
-         if (explicit_layout->row_stride < row_stride)
+         if (explicit_layout->row_stride < row_stride) {
+            mesa_loge("panfrost: rejecting image due to invalid row stride.\n");
             return false;
+         }
 
          row_stride = explicit_layout->row_stride;
       } else if (linear) {
@@ -341,12 +410,18 @@ pan_image_layout_init(struct pan_image_layout *layout,
       if (afbc) {
          slice->row_stride =
             pan_afbc_row_stride(layout->modifier, effective_width);
+         slice->afbc.stride = effective_width / block_size.width;
+         slice->afbc.nr_blocks =
+            slice->afbc.stride * (effective_height / block_size.height);
          slice->afbc.header_size =
             ALIGN_POT(slice->row_stride * (effective_height / align_h),
                       pan_afbc_body_align(layout->modifier));
 
-         if (explicit_layout && explicit_layout->row_stride < slice->row_stride)
+         if (explicit_layout &&
+             explicit_layout->row_stride < slice->row_stride) {
+            mesa_loge("panfrost: rejecting image due to invalid row stride.\n");
             return false;
+         }
 
          /* AFBC body size */
          slice->afbc.body_size = slice_one_size;
@@ -406,37 +481,38 @@ void
 pan_iview_get_surface(const struct pan_image_view *iview, unsigned level,
                       unsigned layer, unsigned sample, struct pan_surface *surf)
 {
+   const struct pan_image *image = pan_image_view_get_plane(iview, 0);
+
    level += iview->first_level;
-   assert(level < iview->image->layout.nr_slices);
+   assert(level < image->layout.nr_slices);
 
    layer += iview->first_layer;
 
-   bool is_3d = iview->image->layout.dim == MALI_TEXTURE_DIMENSION_3D;
-   const struct pan_image_slice_layout *slice =
-      &iview->image->layout.slices[level];
-   mali_ptr base = iview->image->data.bo->ptr.gpu + iview->image->data.offset;
+   bool is_3d = image->layout.dim == MALI_TEXTURE_DIMENSION_3D;
+   const struct pan_image_slice_layout *slice = &image->layout.slices[level];
+   mali_ptr base = image->data.bo->ptr.gpu + image->data.offset;
 
-   if (drm_is_afbc(iview->image->layout.modifier)) {
+   if (drm_is_afbc(image->layout.modifier)) {
       assert(!sample);
 
       if (is_3d) {
-         ASSERTED unsigned depth = u_minify(iview->image->layout.depth, level);
+         ASSERTED unsigned depth = u_minify(image->layout.depth, level);
          assert(layer < depth);
          surf->afbc.header =
             base + slice->offset + (layer * slice->afbc.surface_stride);
          surf->afbc.body = base + slice->offset + slice->afbc.header_size +
                            (slice->surface_stride * layer);
       } else {
-         assert(layer < iview->image->layout.array_size);
-         surf->afbc.header = base + panfrost_texture_offset(
-                                       &iview->image->layout, level, layer, 0);
+         assert(layer < image->layout.array_size);
+         surf->afbc.header =
+            base + panfrost_texture_offset(&image->layout, level, layer, 0);
          surf->afbc.body = surf->afbc.header + slice->afbc.header_size;
       }
    } else {
       unsigned array_idx = is_3d ? 0 : layer;
       unsigned surface_idx = is_3d ? layer : sample;
 
-      surf->data = base + panfrost_texture_offset(&iview->image->layout, level,
+      surf->data = base + panfrost_texture_offset(&image->layout, level,
                                                   array_idx, surface_idx);
    }
 }

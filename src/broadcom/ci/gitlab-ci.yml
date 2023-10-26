@@ -1,9 +1,73 @@
+.broadcom-common-rules:
+  rules:
+    - changes: &broadcom_file_list
+      - src/broadcom/meson.build
+      - src/broadcom/ci/**/*
+      - src/broadcom/cle/**/*
+      - src/broadcom/clif/**/*
+      - src/broadcom/common/**/*
+      - src/broadcom/compiler/**/*
+      - src/broadcom/drm-shim/**/*
+      - src/broadcom/qpu/**/*
+      - src/broadcom/simulator/**/*
+      when: on_success
+
+.vc4-rules:
+  stage: broadcom
+  rules:
+    - !reference [.igalia-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - !reference [.broadcom-common-rules, rules]
+    - changes:
+      - src/gallium/drivers/vc4/**/*
+      - src/gallium/winsys/vc4/**/*
+      - src/gallium/auxiliary/renderonly/**/*
+      - src/gallium/winsys/kmsro/**/*
+      when: on_success
+
+.v3d-rules:
+  stage: broadcom
+  rules:
+    - !reference [.igalia-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - !reference [.broadcom-common-rules, rules]
+    - changes: &v3d_file_list
+      - src/gallium/drivers/v3d/**/*
+      - src/gallium/winsys/v3d/**/*
+      - src/gallium/auxiliary/renderonly/**/*
+      - src/gallium/winsys/kmsro/**/*
+      when: on_success
+
+.v3d-manual-rules:
+  stage: broadcom
+  retry: !reference [.scheduled_pipeline-rules, retry]
+  rules:
+    - !reference [.igalia-farm-manual-rules, rules]
+    - !reference [.gl-manual-rules, rules]
+    - changes:
+        *broadcom_file_list
+      when: manual
+    - changes:
+        *v3d_file_list
+      when: manual
+
+.v3dv-rules:
+  stage: broadcom
+  rules:
+    - !reference [.igalia-farm-rules, rules]
+    - !reference [.vulkan-rules, rules]
+    - changes:
+      - src/broadcom/**/*
+      when: on_success
+
+
 .broadcom-test:
   script:
     - ./install/bare-metal/poe-powered.sh
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     FLAKES_CHANNEL: "#videocore-ci"
+  timeout: 20m
 
 .broadcom-test:arm64:
   extends:
@@ -54,9 +118,7 @@ v3d-rpi4-traces:arm64:
   variables:
     GPU_VERSION: broadcom-rpi4
     HWCI_KERNEL_MODULES: v3d,vc4
-    HWCI_START_XORG: 1
     HWCI_TEST_SCRIPT: "/install/piglit/piglit-traces.sh"
-    PIGLIT_PLATFORM: mixed_glx_egl
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-broadcom.yml"
     PIGLIT_REPLAY_DEVICE_NAME: "broadcom-rpi4"
     PIGLIT_RESULTS: "broadcom-rpi4-replay"

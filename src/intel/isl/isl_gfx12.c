@@ -48,8 +48,20 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
              ISL_TILING_4_BIT |
              ISL_TILING_64_BIT;
 
-   if (isl_surf_usage_is_depth_or_stencil(info->usage))
+   if (isl_surf_usage_is_depth_or_stencil(info->usage)) {
       *flags &= ISL_TILING_4_BIT | ISL_TILING_64_BIT;
+
+      /* We choose to avoid Tile64 for 3D depth/stencil buffers. The swizzle
+       * for Tile64 is dependent on the image dimension. So, reads and writes
+       * should specify the same dimension to consistently interpret the data.
+       * This is not possible for 3D depth/stencil buffers however. Such
+       * buffers can be sampled from with a 3D view, but rendering is only
+       * possible with a 2D view due to the limitations of
+       * 3DSTATE_(DEPTH|STENCIL)_BUFFER.
+       */
+      if (info->dim == ISL_SURF_DIM_3D)
+         *flags &= ~ISL_TILING_64_BIT;
+   }
 
    if (info->usage & ISL_SURF_USAGE_DISPLAY_BIT)
       *flags &= ~ISL_TILING_64_BIT;
@@ -70,15 +82,31 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    if (info->dim != ISL_SURF_DIM_2D)
       *flags &= ~ISL_TILING_X_BIT;
 
-   /* ISL only implements Tile64 support for 1D and 2D surfaces. */
-   if (info->dim == ISL_SURF_DIM_3D)
-      *flags &= ~ISL_TILING_64_BIT;
+   /* From ATS-M PRMs, Volume 2d: Command Reference: Structures,
+    * RENDER_SURFACE_STATE:TileMode :
+    *
+    *    "If Surface Type is SURFTYPE_1D this field must be TILEMODE_LINEAR,
+    *     unless Sampler Legacy 1D Map Layout Disable is set to 0, in which
+    *     case TILEMODE_YMAJOR is also allowed. Horizontal Alignment must be
+    *     programmed for the required alignment between MIPs. MIP tails are
+    *     not supported."
+    *
+    * Tile4 is the replacement for TileY0 on ACM.
+    */
+   if (info->dim == ISL_SURF_DIM_1D)
+      *flags &= ISL_TILING_LINEAR_BIT | ISL_TILING_4_BIT;
 
    /* TILE64 does not work with YCRCB formats, according to bspec 58767:
     * "Packed YUV surface formats such as YCRCB_NORMAL, YCRCB_SWAPUVY etc.
     * will not support as Tile64"
     */
    if (isl_format_is_yuv(info->format))
+      *flags &= ~ISL_TILING_64_BIT;
+
+   /* Tile64 tilings for 3D have a different swizzling than a 2D surface. So
+    * filter them out if the usage wants 2D/3D compatibility.
+    */
+   if (info->usage & ISL_SURF_USAGE_2D_3D_COMPATIBLE_BIT)
       *flags &= ~ISL_TILING_64_BIT;
 
    /* From RENDER_SURFACE_STATE::NumberofMultisamples,
@@ -220,7 +248,29 @@ isl_gfx12_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   if (isl_surf_usage_is_depth(info->usage)) {
+   if (isl_tiling_is_std_y(tiling)) {
+      /* From RENDER_SURFACE_STATE::SurfaceHorizontalAlignment,
+       *
+       *   This field is ignored for Tile64 surface formats because horizontal
+       *   alignment is always to the start of the next tile in that case.
+       *
+       * From RENDER_SURFACE_STATE::SurfaceQPitch,
+       *
+       *   Because MSAA is only supported for Tile64, QPitch must also be
+       *   programmed to an aligned tile boundary for MSAA surfaces.
+       *
+       * Images in this surface must be tile-aligned.  The table on the Bspec
+       * page, "2D/CUBE Alignment Requirement", shows that the vertical
+       * alignment is also a tile height for non-MSAA as well.
+       */
+      struct isl_tile_info tile_info;
+      isl_tiling_get_info(tiling, info->dim, msaa_layout, fmtl->bpb,
+                          info->samples, &tile_info);
+
+      *image_align_el = isl_extent3d(tile_info.logical_extent_el.w,
+                                     tile_info.logical_extent_el.h,
+                                     1);
+   } else if (isl_surf_usage_is_depth(info->usage)) {
       /* The alignment parameters for depth buffers are summarized in the
        * following table:
        *

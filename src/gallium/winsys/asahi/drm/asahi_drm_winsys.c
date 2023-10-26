@@ -23,13 +23,13 @@ static struct pipe_screen *
 asahi_screen_create(int fd, const struct pipe_screen_config *config,
                     struct renderonly *ro)
 {
-   return agx_screen_create(fd, ro);
+   return agx_screen_create(fd, ro, config);
 }
 
 struct pipe_screen *
-asahi_drm_screen_create(int fd)
+asahi_drm_screen_create(int fd, const struct pipe_screen_config *config)
 {
-   return u_pipe_screen_lookup_or_create(os_dupfd_cloexec(fd), NULL, NULL,
+   return u_pipe_screen_lookup_or_create(os_dupfd_cloexec(fd), config, NULL,
                                          asahi_screen_create);
 }
 

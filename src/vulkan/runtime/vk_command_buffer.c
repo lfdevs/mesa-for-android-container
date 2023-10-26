@@ -44,6 +44,7 @@ vk_command_buffer_init(struct vk_command_pool *pool,
    command_buffer->state = MESA_VK_COMMAND_BUFFER_STATE_INITIAL;
    command_buffer->record_result = VK_SUCCESS;
    vk_cmd_queue_init(&command_buffer->cmd_queue, &pool->alloc);
+   vk_meta_object_list_init(&command_buffer->meta_objects);
    util_dynarray_init(&command_buffer->labels, NULL);
    command_buffer->region_begin = true;
 
@@ -60,6 +61,8 @@ vk_command_buffer_reset(struct vk_command_buffer *command_buffer)
    command_buffer->record_result = VK_SUCCESS;
    vk_command_buffer_reset_render_pass(command_buffer);
    vk_cmd_queue_reset(&command_buffer->cmd_queue);
+   vk_meta_object_list_reset(command_buffer->base.device,
+                             &command_buffer->meta_objects);
    util_dynarray_clear(&command_buffer->labels);
    command_buffer->region_begin = true;
 }
@@ -95,6 +98,8 @@ vk_command_buffer_finish(struct vk_command_buffer *command_buffer)
    vk_command_buffer_reset_render_pass(command_buffer);
    vk_cmd_queue_finish(&command_buffer->cmd_queue);
    util_dynarray_fini(&command_buffer->labels);
+   vk_meta_object_list_finish(command_buffer->base.device,
+                              &command_buffer->meta_objects);
    vk_object_base_finish(&command_buffer->base);
 }
 
@@ -153,6 +158,21 @@ vk_common_CmdBindVertexBuffers(VkCommandBuffer commandBuffer,
 
    disp->CmdBindVertexBuffers2(commandBuffer, firstBinding, bindingCount,
                                pBuffers, pOffsets, NULL, NULL);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdBindIndexBuffer(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkIndexType                                 indexType)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+   const struct vk_device_dispatch_table *disp =
+      &cmd_buffer->base.device->dispatch_table;
+
+   disp->CmdBindIndexBuffer2KHR(commandBuffer, buffer, offset,
+                                VK_WHOLE_SIZE, indexType);
 }
 
 VKAPI_ATTR void VKAPI_CALL

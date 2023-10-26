@@ -869,10 +869,11 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
       emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_row_sr(8), 0xf, 0xf, false,
                   identity);
       if (ctx->program->gfx_level >= GFX10) {
-         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand::c32(16u),
-                  Operand::c32(16u));
          if (ctx->program->wave_size == 64) {
-            bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand::c32(16u),
+            bld.sop1(aco_opcode::s_bitreplicate_b64_b32, Definition(exec, s2),
+                     Operand::c32(0xff00ff00u));
+         } else {
+            bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand::c32(16u),
                      Operand::c32(16u));
          }
          for (unsigned i = 0; i < src.size(); i++) {
@@ -931,7 +932,20 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
 }
 
 void
-emit_gfx11_wave64_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
+adjust_bpermute_dst(Builder& bld, Definition dst, Operand input_data)
+{
+   /* RA assumes that the result is always in the low part of the register, so we have to shift,
+    * if it's not there already.
+    */
+   if (input_data.physReg().byte()) {
+      unsigned right_shift = input_data.physReg().byte() * 8;
+      bld.vop2(aco_opcode::v_lshrrev_b32, dst, Operand::c32(right_shift),
+               Operand(dst.physReg(), dst.regClass()));
+   }
+}
+
+void
+emit_bpermute_permlane(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
 {
    /* Emulates proper bpermute on GFX11 in wave64 mode.
     *
@@ -981,18 +995,11 @@ emit_gfx11_wave64_bpermute(Program* program, aco_ptr<Instruction>& instr, Builde
    bld.vop2_e64(aco_opcode::v_cndmask_b32, dst, tmp_op, Operand(dst.physReg(), dst.regClass()),
                 same_half);
 
-   /* RA assumes that the result is always in the low part of the register, so we have to shift,
-    * if it's not there already.
-    */
-   if (input_data.physReg().byte()) {
-      unsigned right_shift = input_data.physReg().byte() * 8;
-      bld.vop2(aco_opcode::v_lshrrev_b32, dst, Operand::c32(right_shift),
-               Operand(dst.physReg(), dst.regClass()));
-   }
+   adjust_bpermute_dst(bld, dst, input_data);
 }
 
 void
-emit_gfx10_wave64_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
+emit_bpermute_shared_vgpr(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
 {
    /* Emulates proper bpermute on GFX10 in wave64 mode.
     *
@@ -1060,18 +1067,11 @@ emit_gfx10_wave64_bpermute(Program* program, aco_ptr<Instruction>& instr, Builde
    /* Restore saved EXEC */
    bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(tmp_exec.physReg(), s2));
 
-   /* RA assumes that the result is always in the low part of the register, so we have to shift,
-    * if it's not there already.
-    */
-   if (input_data.physReg().byte()) {
-      unsigned right_shift = input_data.physReg().byte() * 8;
-      bld.vop2(aco_opcode::v_lshrrev_b32, dst, Operand::c32(right_shift),
-               Operand(dst.physReg(), v1));
-   }
+   adjust_bpermute_dst(bld, dst, input_data);
 }
 
 void
-emit_gfx6_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
+emit_bpermute_readlane(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
 {
    /* Emulates bpermute using readlane instructions */
 
@@ -1092,7 +1092,7 @@ emit_gfx6_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
    assert(input.physReg() != dst.physReg());
 
    /* Save original EXEC */
-   bld.sop1(aco_opcode::s_mov_b64, temp_exec, Operand(exec, s2));
+   bld.sop1(Builder::s_mov, temp_exec, Operand(exec, bld.lm));
 
    /* An "unrolled loop" that is executed per each lane.
     * This takes only a few instructions per lane, as opposed to a "real" loop
@@ -1107,17 +1107,10 @@ emit_gfx6_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
       /* On the active lane, move the data we read from lane N to the destination VGPR */
       bld.vop1(aco_opcode::v_mov_b32, dst, Operand(vcc, s1));
       /* Restore original EXEC */
-      bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(temp_exec.physReg(), s2));
+      bld.sop1(Builder::s_mov, Definition(exec, bld.lm), Operand(temp_exec.physReg(), bld.lm));
    }
 
-   /* RA assumes that the result is always in the low part of the register, so we have to shift,
-    * if it's not there already.
-    */
-   if (input.physReg().byte()) {
-      unsigned right_shift = input.physReg().byte() * 8;
-      bld.vop2(aco_opcode::v_lshrrev_b32, dst, Operand::c32(right_shift),
-               Operand(dst.physReg(), v1));
-   }
+   adjust_bpermute_dst(bld, dst, input);
 }
 
 struct copy_operation {
@@ -2310,6 +2303,8 @@ lower_to_hw_instr(Program* program)
    Block* discard_exit_block = NULL;
    Block* discard_pops_done_and_exit_block = NULL;
 
+   int end_with_regs_block_index = -1;
+
    bool should_dealloc_vgprs = dealloc_vgprs(program);
 
    for (int block_idx = program->blocks.size() - 1; block_idx >= 0; block_idx--) {
@@ -2402,8 +2397,7 @@ lower_to_hw_instr(Program* program)
                handle_operands(copy_operations, &ctx, program->gfx_level, pi);
                break;
             }
-            case aco_opcode::p_parallelcopy:
-            case aco_opcode::p_wqm: {
+            case aco_opcode::p_parallelcopy: {
                std::map<PhysReg, copy_operation> copy_operations;
                for (unsigned j = 0; j < instr->operands.size(); j++) {
                   assert(instr->definitions[j].bytes() == instr->operands[j].bytes());
@@ -2554,16 +2548,16 @@ lower_to_hw_instr(Program* program)
                         Operand(pops_exiting_wave_id, s1), instr->operands[0]);
                break;
             }
-            case aco_opcode::p_bpermute_gfx6: {
-               emit_gfx6_bpermute(program, instr, bld);
+            case aco_opcode::p_bpermute_readlane: {
+               emit_bpermute_readlane(program, instr, bld);
                break;
             }
-            case aco_opcode::p_bpermute_gfx10w64: {
-               emit_gfx10_wave64_bpermute(program, instr, bld);
+            case aco_opcode::p_bpermute_shared_vgpr: {
+               emit_bpermute_shared_vgpr(program, instr, bld);
                break;
             }
-            case aco_opcode::p_bpermute_gfx11w64: {
-               emit_gfx11_wave64_bpermute(program, instr, bld);
+            case aco_opcode::p_bpermute_permlane: {
+               emit_bpermute_permlane(program, instr, bld);
                break;
             }
             case aco_opcode::p_constaddr: {
@@ -2623,7 +2617,7 @@ lower_to_hw_instr(Program* program)
                      bld.sop2(signext ? aco_opcode::s_bfe_i32 : aco_opcode::s_bfe_u32, dst,
                               bld.def(s1, scc), op, Operand::c32((bits << 16) | offset));
                   }
-               } else if ((dst.regClass() == v1 && op.regClass() == v1) ||
+               } else if ((dst.regClass() == v1 && op.physReg().byte() == 0) ||
                           ctx.program->gfx_level <= GFX7) {
                   assert(op.physReg().byte() == 0 && dst.physReg().byte() == 0);
                   if (offset == (32 - bits) && op.regClass() != s1) {
@@ -2805,13 +2799,13 @@ lower_to_hw_instr(Program* program)
             case aco_opcode::p_dual_src_export_gfx11: {
                PhysReg dst0 = instr->definitions[0].physReg();
                PhysReg dst1 = instr->definitions[1].physReg();
-               Definition tmp = instr->definitions[2];
-               Definition exec_tmp = instr->definitions[3];
+               Definition exec_tmp = instr->definitions[2];
+               Definition not_vcc_tmp = instr->definitions[3];
                Definition clobber_vcc = instr->definitions[4];
                Definition clobber_scc = instr->definitions[5];
 
-               assert(tmp.regClass() == v1);
                assert(exec_tmp.regClass() == bld.lm);
+               assert(not_vcc_tmp.regClass() == bld.lm);
                assert(clobber_vcc.regClass() == bld.lm && clobber_vcc.physReg() == vcc);
                assert(clobber_scc.isFixed() && clobber_scc.physReg() == scc);
 
@@ -2829,6 +2823,12 @@ lower_to_hw_instr(Program* program)
                   bld.sop1(aco_opcode::s_mov_b32, Definition(clobber_vcc.physReg().advance(4), s1),
                            Operand::c32(0x55555555));
 
+               Operand src_even = Operand(clobber_vcc.physReg(), bld.lm);
+
+               bld.sop1(Builder::s_not, not_vcc_tmp, clobber_scc, src_even);
+
+               Operand src_odd = Operand(not_vcc_tmp.physReg(), bld.lm);
+
                for (unsigned i = 0; i < 4; i++) {
                   if (instr->operands[i].isUndefined() && instr->operands[i + 4].isUndefined()) {
                      mrt0[i] = instr->operands[i];
@@ -2839,25 +2839,14 @@ lower_to_hw_instr(Program* program)
                   Operand src0 = instr->operands[i];
                   Operand src1 = instr->operands[i + 4];
 
-                  /* Swap odd, even lanes of mrt0. */
-                  Builder::Result ret =
-                     bld.vop1_dpp8(aco_opcode::v_mov_b32, Definition(dst0, v1), src0);
-                  for (unsigned j = 0; j < 8; j++) {
-                     ret->dpp8().lane_sel[j] = j ^ 1;
-                  }
-
-                  /* Swap even lanes between mrt0 and mrt1. */
-                  bld.vop2(aco_opcode::v_cndmask_b32, tmp, Operand(dst0, v1), src1,
-                           Operand(clobber_vcc.physReg(), bld.lm));
-                  bld.vop2(aco_opcode::v_cndmask_b32, Definition(dst1, v1), src1, Operand(dst0, v1),
-                           Operand(clobber_vcc.physReg(), bld.lm));
-
-                  /* Swap odd, even lanes of mrt0 again. */
-                  ret = bld.vop1_dpp8(aco_opcode::v_mov_b32, Definition(dst0, v1),
-                                      Operand(tmp.physReg(), v1));
-                  for (unsigned j = 0; j < 8; j++) {
-                     ret->dpp8().lane_sel[j] = j ^ 1;
-                  }
+                  /*      | even lanes | odd lanes
+                   * mrt0 | src0 even  | src1 even
+                   * mrt1 | src0 odd   | src1 odd
+                   */
+                  bld.vop2_dpp(aco_opcode::v_cndmask_b32, Definition(dst0, v1), src1, src0,
+                               src_even, dpp_row_xmask(1));
+                  bld.vop2_e64_dpp(aco_opcode::v_cndmask_b32, Definition(dst1, v1), src0, src1,
+                                   src_odd, dpp_row_xmask(1));
 
                   mrt0[i] = Operand(dst0, v1);
                   mrt1[i] = Operand(dst1, v1);
@@ -2879,6 +2868,10 @@ lower_to_hw_instr(Program* program)
                        V_008DFC_SQ_EXP_MRT + 21, false);
                bld.exp(aco_opcode::exp, mrt1[0], mrt1[1], mrt1[2], mrt1[3], enabled_channels,
                        V_008DFC_SQ_EXP_MRT + 22, false);
+               break;
+            }
+            case aco_opcode::p_end_with_regs: {
+               end_with_regs_block_index = block->index;
                break;
             }
             default: break;
@@ -3058,6 +3051,26 @@ lower_to_hw_instr(Program* program)
       }
 
       block->instructions = std::move(ctx.instructions);
+   }
+
+   /* If block with p_end_with_regs is not the last block (i.e. p_exit_early_if may append exit
+    * block at last), create an exit block for it to branch to.
+    */
+   int last_block_index = program->blocks.size() - 1;
+   if (end_with_regs_block_index >= 0 && end_with_regs_block_index != last_block_index) {
+      Block* exit_block = program->create_and_insert_block();
+      Block* end_with_regs_block = &program->blocks[end_with_regs_block_index];
+      exit_block->linear_preds.push_back(end_with_regs_block->index);
+      end_with_regs_block->linear_succs.push_back(exit_block->index);
+
+      Builder bld(program, end_with_regs_block);
+      bld.sopp(aco_opcode::s_branch, exit_block->index);
+
+      /* For insert waitcnt pass to add waitcnt in exit block, otherwise waitcnt will be added
+       * after the s_branch which won't be executed.
+       */
+      end_with_regs_block->kind &= ~block_kind_end_with_regs;
+      exit_block->kind |= block_kind_end_with_regs;
    }
 }
 

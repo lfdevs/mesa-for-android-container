@@ -79,6 +79,12 @@ def get_args() -> 'Arguments':
                         action='append',
                         help="Include directory")
 
+    parser.add_argument("-D",
+                        dest="defines",
+                        default=[],
+                        action='append',
+                        help="Defines")
+
     args = parser.parse_args()
     return args
 
@@ -166,6 +172,9 @@ def process_file(args: 'Arguments') -> None:
 
     for f in args.includes:
         cmd_list.append('-I' + f)
+
+    for d in args.defines:
+        cmd_list.append('-D' + d)
 
     cmd_list.extend([
         '-V',

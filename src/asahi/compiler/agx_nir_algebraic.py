@@ -27,6 +27,13 @@ lower_pack = [
     (('pack_half_2x16_split', a, b),
      ('pack_32_2x16_split', ('f2f16', a), ('f2f16', b))),
 
+    # We don't have 8-bit ALU, so we need to lower this. But if we lower it like
+    # this, we can at least coalesce the pack_32_2x16_split and only pay the
+    # cost of the iors and ishl. (u2u16 of 8-bit is assumed free.)
+    (('pack_32_4x8_split', a, b, c, d),
+     ('pack_32_2x16_split', ('ior', ('u2u16', a), ('ishl', ('u2u16', b), 8)),
+                            ('ior', ('u2u16', c), ('ishl', ('u2u16', d), 8)))),
+
     (('unpack_half_2x16_split_x', a), ('f2f32', ('unpack_32_2x16_split_x', a))),
     (('unpack_half_2x16_split_y', a), ('f2f32', ('unpack_32_2x16_split_y', a))),
 
@@ -38,6 +45,15 @@ lower_pack = [
     # For optimizing extract->convert sequences for unpack/pack norm
     (('u2f32', ('u2u32', a)), ('u2f32', a)),
     (('i2f32', ('i2i32', a)), ('i2f32', a)),
+
+    # Chew through some 8-bit before the backend has to deal with it
+    (('f2u8', a), ('u2u8', ('f2u16', a))),
+    (('f2i8', a), ('i2i8', ('f2i16', a))),
+
+    # Based on the VIR lowering
+    (('f2f16_rtz', 'a@32'),
+     ('bcsel', ('flt', ('fabs', a), ('fabs', ('f2f32', ('f2f16_rtne', a)))),
+      ('isub', ('f2f16_rtne', a), 1), ('f2f16_rtne', a))),
 
     # These are based on the lowerings from nir_opt_algebraic, but conditioned
     # on the number of bits not being constant. If the bit count is constant

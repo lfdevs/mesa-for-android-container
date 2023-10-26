@@ -47,22 +47,22 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
    b.shader->info.workgroup_size[1] = 8;
 
    /* Get coordinates. */
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
+   nir_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
 
    /* Multiply the coordinates by the HTILE block size. */
-   nir_ssa_def *coord = nir_iadd(&b, nir_imul_imm(&b, global_id, 8), offset);
+   nir_def *coord = nir_iadd(&b, nir_imul_imm(&b, global_id, 8), offset);
 
    /* Load constants. */
-   nir_ssa_def *constants = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 8), .range = 20);
-   nir_ssa_def *htile_pitch = nir_channel(&b, constants, 0);
-   nir_ssa_def *htile_slice_size = nir_channel(&b, constants, 1);
-   nir_ssa_def *read_htile_value = nir_channel(&b, constants, 2);
+   nir_def *constants = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 8), .range = 20);
+   nir_def *htile_pitch = nir_channel(&b, constants, 0);
+   nir_def *htile_slice_size = nir_channel(&b, constants, 1);
+   nir_def *read_htile_value = nir_channel(&b, constants, 2);
 
    /* Get the HTILE addr from coordinates. */
-   nir_ssa_def *zero = nir_imm_int(&b, 0);
-   nir_ssa_def *htile_addr =
+   nir_def *zero = nir_imm_int(&b, 0);
+   nir_def *htile_addr =
       ac_nir_htile_addr_from_coord(&b, &device->physical_device->rad_info, &surf->u.gfx9.zs.htile_equation, htile_pitch,
                                    htile_slice_size, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero);
 
@@ -73,7 +73,7 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
    input_vrs_img->data.binding = 0;
 
    /* Load the VRS rates from the 2D image. */
-   nir_ssa_def *value = nir_txf_deref(&b, nir_build_deref_var(&b, input_vrs_img), global_id, NULL);
+   nir_def *value = nir_txf_deref(&b, nir_build_deref_var(&b, input_vrs_img), global_id, NULL);
 
    /* Extract the X/Y rates and clamp them because the maximum supported VRS rate is 2x2 (1x1 in
     * hardware).
@@ -81,17 +81,17 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
     * VRS rate X = min(value >> 2, 1)
     * VRS rate Y = min(value & 3, 1)
     */
-   nir_ssa_def *x_rate = nir_ushr_imm(&b, nir_channel(&b, value, 0), 2);
+   nir_def *x_rate = nir_ushr_imm(&b, nir_channel(&b, value, 0), 2);
    x_rate = nir_umin(&b, x_rate, nir_imm_int(&b, 1));
 
-   nir_ssa_def *y_rate = nir_iand_imm(&b, nir_channel(&b, value, 0), 3);
+   nir_def *y_rate = nir_iand_imm(&b, nir_channel(&b, value, 0), 3);
    y_rate = nir_umin(&b, y_rate, nir_imm_int(&b, 1));
 
    /* Compute the final VRS rate. */
-   nir_ssa_def *vrs_rates = nir_ior(&b, nir_ishl_imm(&b, y_rate, 10), nir_ishl_imm(&b, x_rate, 6));
+   nir_def *vrs_rates = nir_ior(&b, nir_ishl_imm(&b, y_rate, 10), nir_ishl_imm(&b, x_rate, 6));
 
    /* Load the HTILE buffer descriptor. */
-   nir_ssa_def *htile_buf = radv_meta_load_descriptor(&b, 0, 1);
+   nir_def *htile_buf = radv_meta_load_descriptor(&b, 0, 1);
 
    /* Load the HTILE value if requested, otherwise use the default value. */
    nir_variable *htile_value = nir_local_variable_create(b.impl, glsl_int_type(), "htile_value");
@@ -99,7 +99,7 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
    nir_push_if(&b, nir_ieq_imm(&b, read_htile_value, 1));
    {
       /* Load the existing HTILE 32-bit value for this 8x8 pixels area. */
-      nir_ssa_def *input_value = nir_load_ssbo(&b, 1, 32, htile_buf, htile_addr);
+      nir_def *input_value = nir_load_ssbo(&b, 1, 32, htile_buf, htile_addr);
 
       /* Clear the 4-bit VRS rates. */
       nir_store_var(&b, htile_value, nir_iand_imm(&b, input_value, 0xfffff33f), 0x1);
@@ -111,7 +111,7 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
    nir_pop_if(&b, NULL);
 
    /* Set the VRS rates loaded from the image. */
-   nir_ssa_def *output_value = nir_ior(&b, nir_load_var(&b, htile_value), vrs_rates);
+   nir_def *output_value = nir_ior(&b, nir_load_var(&b, htile_value), vrs_rates);
 
    /* Store the updated HTILE 32-bit which contains the VRS rates. */
    nir_store_ssbo(&b, output_value, htile_buf, htile_addr, .access = ACCESS_NON_READABLE);

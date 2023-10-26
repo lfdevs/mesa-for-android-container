@@ -156,52 +156,6 @@ fs_live_variables::compute_live_variables()
 {
    bool cont = true;
 
-   while (cont) {
-      cont = false;
-
-      foreach_block_reverse (block, cfg) {
-         struct block_data *bd = &block_data[block->num];
-
-         /* Update liveout */
-         foreach_list_typed(bblock_link, child_link, link, &block->children) {
-            struct block_data *child_bd = &block_data[child_link->block->num];
-
-            for (int i = 0; i < bitset_words; i++) {
-               BITSET_WORD new_liveout = (child_bd->livein[i] &
-                                          ~bd->liveout[i]);
-               if (new_liveout) {
-                  bd->liveout[i] |= new_liveout;
-                  cont = true;
-               }
-            }
-            BITSET_WORD new_liveout = (child_bd->flag_livein[0] &
-                                       ~bd->flag_liveout[0]);
-            if (new_liveout) {
-               bd->flag_liveout[0] |= new_liveout;
-               cont = true;
-            }
-         }
-
-         /* Update livein */
-         for (int i = 0; i < bitset_words; i++) {
-            BITSET_WORD new_livein = (bd->use[i] |
-                                      (bd->liveout[i] &
-                                       ~bd->def[i]));
-            if (new_livein & ~bd->livein[i]) {
-               bd->livein[i] |= new_livein;
-               cont = true;
-            }
-         }
-         BITSET_WORD new_livein = (bd->flag_use[0] |
-                                   (bd->flag_liveout[0] &
-                                    ~bd->flag_def[0]));
-         if (new_livein & ~bd->flag_livein[0]) {
-            bd->flag_livein[0] |= new_livein;
-            cont = true;
-         }
-      }
-   }
-
    /* Propagate defin and defout down the CFG to calculate the union of live
     * variables potentially defined along any possible control flow path.
     */
@@ -223,6 +177,50 @@ fs_live_variables::compute_live_variables()
          }
       }
    } while (cont);
+
+   do {
+      cont = false;
+
+      foreach_block_reverse (block, cfg) {
+         struct block_data *bd = &block_data[block->num];
+
+         /* Update liveout */
+         foreach_list_typed(bblock_link, child_link, link, &block->children) {
+            struct block_data *child_bd = &block_data[child_link->block->num];
+
+            for (int i = 0; i < bitset_words; i++) {
+               BITSET_WORD new_liveout = (child_bd->livein[i] &
+                                          ~bd->liveout[i]);
+               new_liveout &= bd->defout[i]; /* Screen off uses with no reaching def */
+               if (new_liveout)
+                  bd->liveout[i] |= new_liveout;
+            }
+            BITSET_WORD new_liveout = (child_bd->flag_livein[0] &
+                                       ~bd->flag_liveout[0]);
+            if (new_liveout)
+               bd->flag_liveout[0] |= new_liveout;
+         }
+
+         /* Update livein */
+         for (int i = 0; i < bitset_words; i++) {
+            BITSET_WORD new_livein = (bd->use[i] |
+                                      (bd->liveout[i] &
+                                       ~bd->def[i]));
+            new_livein &= bd->defin[i]; /* Screen off uses with no reaching def */
+            if (new_livein & ~bd->livein[i]) {
+               bd->livein[i] |= new_livein;
+               cont = true;
+            }
+         }
+         BITSET_WORD new_livein = (bd->flag_use[0] |
+                                   (bd->flag_liveout[0] &
+                                    ~bd->flag_def[0]));
+         if (new_livein & ~bd->flag_livein[0]) {
+            bd->flag_livein[0] |= new_livein;
+            cont = true;
+         }
+      }
+   } while (cont);
 }
 
 /**
@@ -234,23 +232,16 @@ fs_live_variables::compute_start_end()
 {
    foreach_block (block, cfg) {
       struct block_data *bd = &block_data[block->num];
+      unsigned i;
 
-      for (int w = 0; w < bitset_words; w++) {
-         BITSET_WORD livedefin = bd->livein[w] & bd->defin[w];
-         BITSET_WORD livedefout = bd->liveout[w] & bd->defout[w];
-         BITSET_WORD livedefinout = livedefin | livedefout;
-         while (livedefinout) {
-            unsigned b = u_bit_scan(&livedefinout);
-            unsigned i = w * BITSET_WORDBITS + b;
-            if (livedefin & (1u << b)) {
-               start[i] = MIN2(start[i], block->start_ip);
-               end[i] = MAX2(end[i], block->start_ip);
-            }
-            if (livedefout & (1u << b)) {
-               start[i] = MIN2(start[i], block->end_ip);
-               end[i] = MAX2(end[i], block->end_ip);
-            }
-         }
+      BITSET_FOREACH_SET(i, bd->livein, (unsigned)num_vars) {
+         start[i] = MIN2(start[i], block->start_ip);
+         end[i] = MAX2(end[i], block->start_ip);
+      }
+
+      BITSET_FOREACH_SET(i, bd->liveout, (unsigned)num_vars) {
+         start[i] = MIN2(start[i], block->end_ip);
+         end[i] = MAX2(end[i], block->end_ip);
       }
    }
 }

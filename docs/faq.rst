@@ -24,8 +24,8 @@ DRI drivers for X.org.
 
 -  See the `DRI website <https://dri.freedesktop.org/>`__ for more
    information.
--  See `01.org <https://01.org/linuxgraphics>`__ for more information
-   about Intel drivers.
+-  See `01.org <https://www.intel.com/content/www/us/en/developer/topic-technology/open/overview.html>`__
+   for more information about Intel drivers.
 -  See `nouveau.freedesktop.org <https://nouveau.freedesktop.org>`__ for
    more information about Nouveau drivers.
 -  See

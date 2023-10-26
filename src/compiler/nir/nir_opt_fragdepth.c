@@ -32,9 +32,9 @@
  */
 
 static bool
-ssa_def_is_source_depth(nir_ssa_def *def)
+ssa_def_is_source_depth(nir_def *def)
 {
-   nir_ssa_scalar scalar = nir_ssa_scalar_resolved(def, 0);
+   nir_scalar scalar = nir_scalar_resolved(def, 0);
    nir_instr *instr = scalar.def->parent_instr;
    if (instr->type != nir_instr_type_intrinsic)
       return false;
@@ -112,9 +112,9 @@ nir_opt_fragdepth(nir_shader *shader)
       nir_instr_remove(&store_intrin->instr);
 
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance |
-                                  nir_metadata_loop_analysis |
-                                  nir_metadata_instr_index);
+                                     nir_metadata_dominance |
+                                     nir_metadata_loop_analysis |
+                                     nir_metadata_instr_index);
       progress = true;
    }
 

@@ -26,15 +26,15 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-#define NUM_THREADS 8
-#define STATES_PER_THREAD_LOG2 10
-#define STATES_PER_THREAD (1 << STATES_PER_THREAD_LOG2)
-#define NUM_RUNS 64
-
 #include "state_pool_test_helper.h"
 
-int main(void)
+void state_pool_test(void);
+
+void state_pool_test(void)
 {
+   const unsigned num_threads = 8;
+   const unsigned states_per_thread = 1 << 10;
+
    struct anv_physical_device physical_device = { };
    struct anv_device device = {};
    struct anv_state_pool state_pool;
@@ -45,13 +45,14 @@ int main(void)
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache, &device);
 
-   for (unsigned i = 0; i < NUM_RUNS; i++) {
+   const unsigned num_runs = 64;
+   for (unsigned i = 0; i < num_runs; i++) {
       anv_state_pool_init(&state_pool, &device, "test", 4096, 0, 256);
 
       /* Grab one so a zero offset is impossible */
       anv_state_pool_alloc(&state_pool, 16, 16);
 
-      run_state_pool_test(&state_pool);
+      run_state_pool_test(&state_pool, num_threads, states_per_thread);
 
       anv_state_pool_finish(&state_pool);
    }

@@ -42,6 +42,12 @@ struct cs_viewport {
    int translate_y;
    float sampler0_w;
    float sampler0_h;
+   float clamp_x;
+   float clamp_y;
+   float chroma_clamp_x;
+   float chroma_clamp_y;
+   float chroma_offset_x;
+   float chroma_offset_y;
 };
 
 const char *compute_shader_video_buffer =
@@ -53,7 +59,7 @@ const char *compute_shader_video_buffer =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..6]\n"
+      "DCL CONST[0..8]\n"
       "DCL SVIEW[0..2], RECT, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -61,7 +67,7 @@ const char *compute_shader_video_buffer =
       "DCL TEMP[0..7]\n"
 
       "IMM[0] UINT32 { 8, 8, 1, 0}\n"
-      "IMM[1] FLT32 { 1.0, 0.0, 0.0, 0.0}\n"
+      "IMM[1] FLT32 { 1.0, 0.5, 0.0, 0.0}\n"
 
       "UMAD TEMP[0].xy, SV[1].xyyy, IMM[0].xyyy, SV[0].xyyy\n"
 
@@ -76,11 +82,21 @@ const char *compute_shader_video_buffer =
          /* Translate */
          "UADD TEMP[2].xy, TEMP[0].xyyy, -CONST[5].xyxy\n"
          "U2F TEMP[2].xy, TEMP[2].xyyy\n"
-         "MUL TEMP[3].xy, TEMP[2].xyyy, CONST[6].xyyy\n"
+
+         /* Texture offset */
+         "ADD TEMP[2].xy, TEMP[2].xyxy, IMM[1].yyyy\n"
+
+         /* Chroma offset + subsampling */
+         "ADD TEMP[3].xy, TEMP[2].xyyy, CONST[8].xyxy\n"
+         "MUL TEMP[3].xy, TEMP[3].xyyy, CONST[6].xyxy\n"
 
          /* Scale */
          "DIV TEMP[2].xy, TEMP[2].xyyy, CONST[3].zwww\n"
          "DIV TEMP[3].xy, TEMP[3].xyyy, CONST[3].zwww\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[3].xy, TEMP[3].xyyy, CONST[7].zwzw\n"
 
          /* Fetch texels */
          "TEX_LZ TEMP[4].x, TEMP[2].xyyy, SAMP[0], RECT\n"
@@ -114,7 +130,7 @@ const char *compute_shader_weave =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..5]\n"
+      "DCL CONST[0..8]\n"
       "DCL SVIEW[0..2], 2D_ARRAY, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -124,7 +140,7 @@ const char *compute_shader_weave =
       "IMM[0] UINT32 { 8, 8, 1, 0}\n"
       "IMM[1] FLT32 { 1.0, 2.0, 0.0, 0.0}\n"
       "IMM[2] UINT32 { 1, 2, 4, 0}\n"
-      "IMM[3] FLT32 { 0.25, 0.5, 0.125, 0.125}\n"
+      "IMM[3] FLT32 { 0.25, 0.5, 0.0, 0.0}\n"
 
       "UMAD TEMP[0].xy, SV[1].xyyy, IMM[0].xyyy, SV[0].xyyy\n"
 
@@ -141,27 +157,24 @@ const char *compute_shader_weave =
          "UADD TEMP[2].xy, TEMP[2].xyyy, -CONST[5].xyxy\n"
 
          /* Top Y */
-         "U2F TEMP[2].xy, TEMP[2].xyyy\n"
-         "DIV TEMP[2].y, TEMP[2].yyyy, IMM[1].yyyy\n"
+         "U2F TEMP[2], TEMP[2]\n"
          /* Down Y */
-         "MOV TEMP[12].xy, TEMP[2].xyyy\n"
+         "MOV TEMP[12], TEMP[2]\n"
 
          /* Top UV */
-         "MOV TEMP[3].xy, TEMP[2].xyyy\n"
-         "DIV TEMP[3].xy, TEMP[3], IMM[1].yyyy\n"
+         "MOV TEMP[3], TEMP[2]\n"
+         /* Chroma offset */
+         "ADD TEMP[3].xy, TEMP[3].xyyy, CONST[8].xyxy\n"
+         "DIV TEMP[3].xy, TEMP[3].xyyy, IMM[1].yyyy\n"
          /* Down UV */
-         "MOV TEMP[13].xy, TEMP[3].xyyy\n"
+         "MOV TEMP[13], TEMP[3]\n"
 
          /* Texture offset */
-         "ADD TEMP[2].x, TEMP[2].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[3].xxxx\n"
-         "ADD TEMP[12].x, TEMP[12].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[12].y, TEMP[12].yyyy, IMM[3].xxxx\n"
+         "ADD TEMP[2].xy, TEMP[2].xyyy, IMM[3].yyyy\n"
+         "ADD TEMP[12].xy, TEMP[12].xyyy, IMM[3].yyyy\n"
 
-         "ADD TEMP[3].x, TEMP[3].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[3].y, TEMP[3].yyyy, IMM[3].wwww\n"
-         "ADD TEMP[13].x, TEMP[13].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[13].y, TEMP[13].yyyy, IMM[3].wwww\n"
+         "ADD TEMP[3].xy, TEMP[3].xyyy, IMM[3].xxxx\n"
+         "ADD TEMP[13].xy, TEMP[13].xyyy, IMM[3].xxxx\n"
 
          /* Scale */
          "DIV TEMP[2].xy, TEMP[2].xyyy, CONST[3].zwzw\n"
@@ -182,6 +195,12 @@ const char *compute_shader_weave =
          "ADD TEMP[14].xyz, TEMP[14].xyzz, -TEMP[15].xyzz\n"
          "MOV TEMP[14].xyz, |TEMP[14].xyzz|\n"
          "MUL TEMP[14].xyz, TEMP[14].xyzz, IMM[1].yyyy\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[12].xy, TEMP[12].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[3].xy, TEMP[3].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[13].xy, TEMP[13].xyyy, CONST[7].zwzw\n"
 
          /* Normalize */
          "DIV TEMP[2].xy, TEMP[2].xyyy, CONST[5].zwzw\n"
@@ -275,7 +294,7 @@ static const char *compute_shader_yuv_weave_y =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..5]\n"
+      "DCL CONST[0..7]\n"
       "DCL SVIEW[0..2], 2D_ARRAY, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -303,7 +322,6 @@ static const char *compute_shader_yuv_weave_y =
 
          /* Top Y */
          "U2F TEMP[2], TEMP[2]\n"
-         "DIV TEMP[2].y, TEMP[2].yyyy, IMM[1].yyyy\n"
          /* Down Y */
          "MOV TEMP[12], TEMP[2]\n"
 
@@ -314,15 +332,11 @@ static const char *compute_shader_yuv_weave_y =
          "MOV TEMP[13], TEMP[3]\n"
 
          /* Texture offset */
-         "ADD TEMP[2].x, TEMP[2].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[3].xxxx\n"
-         "ADD TEMP[12].x, TEMP[12].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[12].y, TEMP[12].yyyy, IMM[3].xxxx\n"
+         "ADD TEMP[2].xy, TEMP[2].xyyy, IMM[3].yyyy\n"
+         "ADD TEMP[12].xy, TEMP[12].xyyy, IMM[3].yyyy\n"
 
-         "ADD TEMP[3].x, TEMP[3].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[3].y, TEMP[3].yyyy, IMM[3].wwww\n"
-         "ADD TEMP[13].x, TEMP[13].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[13].y, TEMP[13].yyyy, IMM[3].wwww\n"
+         "ADD TEMP[3].xy, TEMP[3].xyyy, IMM[3].xxxx\n"
+         "ADD TEMP[13].xy, TEMP[13].xyyy, IMM[3].xxxx\n"
 
          /* Scale */
          "DIV TEMP[2].xy, TEMP[2], CONST[3].zwzw\n"
@@ -343,6 +357,12 @@ static const char *compute_shader_yuv_weave_y =
          "ADD TEMP[14], TEMP[14], -TEMP[15]\n"
          "MOV TEMP[14], |TEMP[14]|\n"
          "MUL TEMP[14], TEMP[14], IMM[1].yyyy\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[12].xy, TEMP[12].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[3].xy, TEMP[3].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[13].xy, TEMP[13].xyyy, CONST[7].zwzw\n"
 
          /* Normalize */
          "DIV TEMP[2].xy, TEMP[2], CONST[5].zwzw\n"
@@ -381,7 +401,7 @@ static const char *compute_shader_yuv_weave_uv =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..5]\n"
+      "DCL CONST[0..7]\n"
       "DCL SVIEW[0..2], 2D_ARRAY, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -409,7 +429,6 @@ static const char *compute_shader_yuv_weave_uv =
 
          /* Top Y */
          "U2F TEMP[2], TEMP[2]\n"
-         "DIV TEMP[2].y, TEMP[2].yyyy, IMM[1].yyyy\n"
          /* Down Y */
          "MOV TEMP[12], TEMP[2]\n"
 
@@ -420,15 +439,11 @@ static const char *compute_shader_yuv_weave_uv =
          "MOV TEMP[13], TEMP[3]\n"
 
          /* Texture offset */
-         "ADD TEMP[2].x, TEMP[2].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[3].xxxx\n"
-         "ADD TEMP[12].x, TEMP[12].xxxx, IMM[3].yyyy\n"
-         "ADD TEMP[12].y, TEMP[12].yyyy, IMM[3].xxxx\n"
+         "ADD TEMP[2].xy, TEMP[2].xyyy, IMM[3].yyyy\n"
+         "ADD TEMP[12].xy, TEMP[12].xyyy, IMM[3].yyyy\n"
 
-         "ADD TEMP[3].x, TEMP[3].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[3].y, TEMP[3].yyyy, IMM[3].wwww\n"
-         "ADD TEMP[13].x, TEMP[13].xxxx, IMM[3].xxxx\n"
-         "ADD TEMP[13].y, TEMP[13].yyyy, IMM[3].wwww\n"
+         "ADD TEMP[3].xy, TEMP[3].xyyy, IMM[3].xxxx\n"
+         "ADD TEMP[13].xy, TEMP[13].xyyy, IMM[3].xxxx\n"
 
          /* Scale */
          "DIV TEMP[2].xy, TEMP[2], CONST[3].zwzw\n"
@@ -449,6 +464,12 @@ static const char *compute_shader_yuv_weave_uv =
          "ADD TEMP[14], TEMP[14], -TEMP[15]\n"
          "MOV TEMP[14], |TEMP[14]|\n"
          "MUL TEMP[14], TEMP[14], IMM[1].yyyy\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[12].xy, TEMP[12].xyyy, CONST[7].xyxy\n"
+         "MIN TEMP[3].xy, TEMP[3].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[13].xy, TEMP[13].xyyy, CONST[7].zwzw\n"
 
          /* Normalize */
          "DIV TEMP[2].xy, TEMP[2], CONST[5].zwzw\n"
@@ -480,112 +501,6 @@ static const char *compute_shader_yuv_weave_uv =
 
       "END\n";
 
-static const char *compute_shader_yuv_bob_y =
-      "COMP\n"
-      "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
-      "PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
-      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-
-      "DCL SV[0], THREAD_ID\n"
-      "DCL SV[1], BLOCK_ID\n"
-
-      "DCL CONST[0..5]\n"
-      "DCL SVIEW[0..2], RECT, FLOAT\n"
-      "DCL SAMP[0..2]\n"
-
-      "DCL IMAGE[0], 2D, WR\n"
-      "DCL TEMP[0..4]\n"
-
-      "IMM[0] UINT32 { 8, 8, 1, 0}\n"
-      "IMM[1] FLT32 { 1.0, 2.0, 0.0, 0.0}\n"
-
-      "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
-
-      /* Drawn area check */
-      "USGE TEMP[1].xy, TEMP[0].xyxy, CONST[4].xyxy\n"
-      "USLT TEMP[1].zw, TEMP[0].xyxy, CONST[4].zwzw\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].yyyy\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].zzzz\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].wwww\n"
-
-      "UIF TEMP[1]\n"
-         /* Translate */
-         "UADD TEMP[2].xy, TEMP[0], -CONST[5].xyxy\n"
-         "U2F TEMP[2], TEMP[2]\n"
-         "DIV TEMP[3], TEMP[2], IMM[1].yyyy\n"
-
-         /* Scale */
-         "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
-         "DIV TEMP[2], TEMP[2], IMM[1].xyxy\n"
-         "DIV TEMP[3], TEMP[3], CONST[3].zwzw\n"
-         "DIV TEMP[3], TEMP[3], IMM[1].xyxy\n"
-
-         /* Fetch texels */
-         "TEX_LZ TEMP[4].x, TEMP[2], SAMP[0], RECT\n"
-         "TEX_LZ TEMP[4].y, TEMP[3], SAMP[1], RECT\n"
-         "TEX_LZ TEMP[4].z, TEMP[3], SAMP[2], RECT\n"
-
-         "MOV TEMP[4].w, IMM[1].xxxx\n"
-
-         "STORE IMAGE[0], TEMP[0], TEMP[4], 2D\n"
-      "ENDIF\n"
-
-      "END\n";
-
-static const char *compute_shader_yuv_bob_uv =
-      "COMP\n"
-      "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
-      "PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
-      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-
-      "DCL SV[0], THREAD_ID\n"
-      "DCL SV[1], BLOCK_ID\n"
-
-      "DCL CONST[0..5]\n"
-      "DCL SVIEW[0..2], RECT, FLOAT\n"
-      "DCL SAMP[0..2]\n"
-
-      "DCL IMAGE[0], 2D, WR\n"
-      "DCL TEMP[0..5]\n"
-
-      "IMM[0] UINT32 { 8, 8, 1, 0}\n"
-      "IMM[1] FLT32 { 1.0, 2.0, 0.0, 0.0}\n"
-
-      "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
-
-      /* Drawn area check */
-      "USGE TEMP[1].xy, TEMP[0].xyxy, CONST[4].xyxy\n"
-      "USLT TEMP[1].zw, TEMP[0].xyxy, CONST[4].zwzw\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].yyyy\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].zzzz\n"
-      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].wwww\n"
-
-      "UIF TEMP[1]\n"
-         /* Translate */
-         "UADD TEMP[2].xy, TEMP[0], -CONST[5].xyxy\n"
-         "U2F TEMP[2], TEMP[2]\n"
-         "DIV TEMP[3], TEMP[2], IMM[1].yyyy\n"
-
-         /* Scale */
-         "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
-         "DIV TEMP[2], TEMP[2], IMM[1].xyxy\n"
-         "DIV TEMP[3], TEMP[3], CONST[3].zwzw\n"
-         "DIV TEMP[3], TEMP[3], IMM[1].xyxy\n"
-
-         /* Fetch texels */
-         "TEX_LZ TEMP[4].x, TEMP[2], SAMP[0], RECT\n"
-         "TEX_LZ TEMP[4].y, TEMP[3], SAMP[1], RECT\n"
-         "TEX_LZ TEMP[4].z, TEMP[3], SAMP[2], RECT\n"
-
-         "MOV TEMP[4].w, IMM[1].xxxx\n"
-
-         "MOV TEMP[5].xy, TEMP[4].yzww\n"
-
-         "STORE IMAGE[0], TEMP[0], TEMP[5], 2D\n"
-      "ENDIF\n"
-
-      "END\n";
-
 static const char *compute_shader_yuv_y =
       "COMP\n"
       "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
@@ -595,7 +510,7 @@ static const char *compute_shader_yuv_y =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..6]\n"
+      "DCL CONST[0..7]\n"
       "DCL SVIEW[0..2], RECT, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -603,7 +518,7 @@ static const char *compute_shader_yuv_y =
       "DCL TEMP[0..4]\n"
 
       "IMM[0] UINT32 { 8, 8, 1, 0}\n"
-      "IMM[1] FLT32 { 1.0, 2.0, 0.0, 0.0}\n"
+      "IMM[1] FLT32 { 1.0, 2.0, 0.5, 0.0}\n"
 
       "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
 
@@ -621,6 +536,10 @@ static const char *compute_shader_yuv_y =
          "UADD TEMP[2].xy, TEMP[2], -CONST[5].xyxy\n"
          "U2F TEMP[2], TEMP[2]\n"
 
+         /* Texture offset */
+         "ADD TEMP[2].x, TEMP[2].xxxx, IMM[1].zzzz\n"
+         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].zzzz\n"
+
          /* Scale */
          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
 
@@ -628,7 +547,9 @@ static const char *compute_shader_yuv_y =
          "MOV TEMP[4].xy, CONST[6].zwww\n"
          "I2F TEMP[4], TEMP[4]\n"
          "ADD TEMP[2], TEMP[2], TEMP[4]\n"
-         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].xxxx\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
 
          /* Fetch texels */
          "TEX_LZ TEMP[4].x, TEMP[2], SAMP[0], RECT\n"
@@ -649,7 +570,7 @@ static const char *compute_shader_yuv_uv =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..6]\n"
+      "DCL CONST[0..7]\n"
       "DCL SVIEW[0..2], RECT, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -657,7 +578,7 @@ static const char *compute_shader_yuv_uv =
       "DCL TEMP[0..5]\n"
 
       "IMM[0] UINT32 { 8, 8, 1, 0}\n"
-      "IMM[1] FLT32 { 1.0, 2.0, 0.0, 0.0}\n"
+      "IMM[1] FLT32 { 1.0, 2.0, 0.5, 0.0}\n"
 
       "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
 
@@ -675,6 +596,12 @@ static const char *compute_shader_yuv_uv =
          "UADD TEMP[2].xy, TEMP[2], -CONST[5].xyxy\n"
          "U2F TEMP[2], TEMP[2]\n"
 
+         /* Texture offset */
+         "ADD TEMP[2].x, TEMP[2].xxxx, IMM[1].zzzz\n"
+         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].zzzz\n"
+
+         "MUL TEMP[2].xy, TEMP[2].xyyy, CONST[6].xyyy\n"
+
          /* Scale */
          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
 
@@ -682,7 +609,9 @@ static const char *compute_shader_yuv_uv =
          "MOV TEMP[4].xy, CONST[6].zwww\n"
          "I2F TEMP[4], TEMP[4]\n"
          "ADD TEMP[2], TEMP[2], TEMP[4]\n"
-         "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].xxxx\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].zwzw\n"
 
          /* Fetch texels */
          "TEX_LZ TEMP[4].y, TEMP[2], SAMP[1], RECT\n"
@@ -691,6 +620,157 @@ static const char *compute_shader_yuv_uv =
          "MOV TEMP[4].w, IMM[1].xxxx\n"
 
          "MOV TEMP[5].xy, TEMP[4].yzww\n"
+
+         "STORE IMAGE[0], TEMP[0], TEMP[5], 2D\n"
+      "ENDIF\n"
+
+      "END\n";
+
+static const char *compute_shader_rgb_yuv_y =
+      "COMP\n"
+      "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
+      "PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
+      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+
+      "DCL SV[0], THREAD_ID\n"
+      "DCL SV[1], BLOCK_ID\n"
+
+      "DCL CONST[0..7]\n"
+      "DCL SVIEW[0], RECT, FLOAT\n"
+      "DCL SAMP[0]\n"
+
+      "DCL IMAGE[0], 2D, WR\n"
+      "DCL TEMP[0..4]\n"
+
+      "IMM[0] UINT32 { 8, 8, 1, 0}\n"
+      "IMM[1] FLT32 { 1.0, 2.0, 0.5, 0.0}\n"
+
+      "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
+
+      /* Drawn area check */
+      "USGE TEMP[1].xy, TEMP[0].xyxy, CONST[4].xyxy\n"
+      "USLT TEMP[1].zw, TEMP[0].xyxy, CONST[4].zwzw\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].yyyy\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].zzzz\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].wwww\n"
+
+      "UIF TEMP[1]\n"
+         /* Translate */
+         "UADD TEMP[2].xy, TEMP[0], -CONST[5].xyxy\n"
+         "U2F TEMP[2], TEMP[2]\n"
+
+         /* Texture offset */
+         "ADD TEMP[2].xy, TEMP[2].xyxx, IMM[1].zzzz\n"
+
+         /* Scale */
+         "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
+
+         /* Crop */
+         "MOV TEMP[4].xy, CONST[6].zwww\n"
+         "I2F TEMP[4], TEMP[4]\n"
+         "ADD TEMP[2], TEMP[2], TEMP[4]\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].xyxy\n"
+
+         /* Fetch texels */
+         "TEX_LZ TEMP[4].xyz, TEMP[2], SAMP[0], RECT\n"
+
+         "MOV TEMP[4].w, IMM[1].xxxx\n"
+
+         /* Color Space Conversion */
+         "DP4 TEMP[4].x, CONST[0], TEMP[4]\n"
+
+         "MOV TEMP[4].yzw, IMM[1].xxxx\n"
+
+         "STORE IMAGE[0], TEMP[0], TEMP[4], 2D\n"
+      "ENDIF\n"
+
+      "END\n";
+
+static const char *compute_shader_rgb_yuv_uv =
+      "COMP\n"
+      "PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
+      "PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
+      "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+
+      "DCL SV[0], THREAD_ID\n"
+      "DCL SV[1], BLOCK_ID\n"
+
+      "DCL CONST[0..8]\n"
+      "DCL SVIEW[0], RECT, FLOAT\n"
+      "DCL SAMP[0]\n"
+
+      "DCL IMAGE[0], 2D, WR\n"
+      "DCL TEMP[0..9]\n"
+
+      "IMM[0] UINT32 { 8, 8, 1, 0}\n"
+      "IMM[1] FLT32 { 1.0, 0.25, 0.5, -0.25}\n"
+
+      "UMAD TEMP[0], SV[1], IMM[0], SV[0]\n"
+
+      /* Drawn area check */
+      "USGE TEMP[1].xy, TEMP[0].xyxy, CONST[4].xyxy\n"
+      "USLT TEMP[1].zw, TEMP[0].xyxy, CONST[4].zwzw\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].yyyy\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].zzzz\n"
+      "AND TEMP[1].x, TEMP[1].xxxx, TEMP[1].wwww\n"
+
+      "UIF TEMP[1]\n"
+         /* Translate */
+         "UADD TEMP[2].xy, TEMP[0], -CONST[5].xyxy\n"
+         "U2F TEMP[2], TEMP[2]\n"
+
+         /* Texture offset */
+         "ADD TEMP[2].xy, TEMP[2].xyyy, IMM[1].zzzz\n"
+
+         /* Chroma offset */
+         "MAD TEMP[2].xy, CONST[8].xyxy, -IMM[1].zzzz, TEMP[2].xyxy\n"
+
+         /* Sample offset */
+         "ADD TEMP[3].xy, TEMP[2].xyyy, IMM[1].yyyy\n"
+         "ADD TEMP[6].xy, TEMP[2].xyyy, IMM[1].wwww\n"
+         "ADD TEMP[7].xy, TEMP[2].xyyy, IMM[1].wyyy\n"
+         "ADD TEMP[2].xy, TEMP[2].xyyy, IMM[1].ywww\n"
+
+         /* Scale */
+         "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
+         "DIV TEMP[3], TEMP[3], CONST[3].zwzw\n"
+         "DIV TEMP[6], TEMP[6], CONST[3].zwzw\n"
+         "DIV TEMP[7], TEMP[7], CONST[3].zwzw\n"
+
+         /* Crop */
+         "MOV TEMP[4].xy, CONST[6].zwww\n"
+         "I2F TEMP[4], TEMP[4]\n"
+         "ADD TEMP[2], TEMP[2], TEMP[4]\n"
+         "ADD TEMP[3], TEMP[3], TEMP[4]\n"
+         "ADD TEMP[6], TEMP[6], TEMP[4]\n"
+         "ADD TEMP[7], TEMP[7], TEMP[4]\n"
+
+         /* Clamp coords */
+         "MIN TEMP[2].xy, TEMP[2].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[3].xy, TEMP[3].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[6].xy, TEMP[6].xyyy, CONST[7].zwzw\n"
+         "MIN TEMP[7].xy, TEMP[7].xyyy, CONST[7].zwzw\n"
+
+         /* Fetch texels */
+         "TEX_LZ TEMP[4].xyz, TEMP[2], SAMP[0], RECT\n"
+         "TEX_LZ TEMP[5].xyz, TEMP[3], SAMP[0], RECT\n"
+         "TEX_LZ TEMP[8].xyz, TEMP[6], SAMP[0], RECT\n"
+         "TEX_LZ TEMP[9].xyz, TEMP[7], SAMP[0], RECT\n"
+
+         "ADD TEMP[4].xyz, TEMP[4].xyzz, TEMP[5].xyzz\n"
+         "ADD TEMP[4].xyz, TEMP[4].xyzz, TEMP[8].xyzz\n"
+         "ADD TEMP[4].xyz, TEMP[4].xyzz, TEMP[9].xyzz\n"
+         "MUL TEMP[4].xyz, TEMP[4].xyzz, IMM[1].yyyy\n"
+
+         "MOV TEMP[4].w, IMM[1].xxxx\n"
+
+         /* Color Space Conversion */
+         "DP4 TEMP[5].x, CONST[1], TEMP[4]\n"
+         "DP4 TEMP[5].y, CONST[2], TEMP[4]\n"
+
+         "MOV TEMP[5].zw, IMM[1].xxxx\n"
 
          "STORE IMAGE[0], TEMP[0], TEMP[5], 2D\n"
       "ENDIF\n"
@@ -757,6 +837,26 @@ calc_drawn_area(struct vl_compositor_state *s,
    return result;
 }
 
+static inline float
+chroma_offset_x(unsigned location)
+{
+   if (location & VL_COMPOSITOR_LOCATION_HORIZONTAL_LEFT)
+      return 0.5f;
+   else
+      return 0.0f;
+}
+
+static inline float
+chroma_offset_y(unsigned location)
+{
+   if (location & VL_COMPOSITOR_LOCATION_VERTICAL_TOP)
+      return 0.5f;
+   else if (location & VL_COMPOSITOR_LOCATION_VERTICAL_BOTTOM)
+      return -0.5f;
+   else
+      return 0.0f;
+}
+
 static bool
 set_viewport(struct vl_compositor_state *s,
              struct cs_viewport         *drawn,
@@ -767,14 +867,18 @@ set_viewport(struct vl_compositor_state *s,
    assert(s && drawn);
 
    void *ptr = pipe_buffer_map(s->pipe, s->shader_params,
-                               PIPE_MAP_READ | PIPE_MAP_WRITE,
+                               PIPE_MAP_WRITE | PIPE_MAP_DISCARD_WHOLE_RESOURCE,
                                &buf_transfer);
 
    if (!ptr)
      return false;
 
+   memcpy(ptr, &s->csc_matrix, sizeof(vl_csc_matrix));
+
    float *ptr_float = (float *)ptr;
-   ptr_float += sizeof(vl_csc_matrix)/sizeof(float) + 2;
+   ptr_float += sizeof(vl_csc_matrix) / sizeof(float);
+   *ptr_float++ = s->luma_min;
+   *ptr_float++ = s->luma_max;
    *ptr_float++ = drawn->scale_x;
    *ptr_float++ = drawn->scale_y;
 
@@ -809,6 +913,14 @@ set_viewport(struct vl_compositor_state *s,
    *ptr_int++ = drawn->crop_x;
    *ptr_int++ = drawn->crop_y;
 
+   ptr_float = (float *)ptr_int;
+   *ptr_float++ = drawn->clamp_x;
+   *ptr_float++ = drawn->clamp_y;
+   *ptr_float++ = drawn->chroma_clamp_x;
+   *ptr_float++ = drawn->chroma_clamp_y;
+   *ptr_float++ = drawn->chroma_offset_x;
+   *ptr_float++ = drawn->chroma_offset_y;
+
    pipe_buffer_unmap(s->pipe, buf_transfer);
 
    return true;
@@ -828,6 +940,7 @@ draw_layers(struct vl_compositor       *c,
          struct vl_compositor_layer *layer = &s->layers[i];
          struct pipe_sampler_view **samplers = &layer->sampler_views[0];
          unsigned num_sampler_views = !samplers[1] ? 1 : !samplers[2] ? 2 : 3;
+         struct pipe_sampler_view *sampler1 = samplers[1] ? samplers[1] : samplers[0];
          struct cs_viewport drawn;
 
          drawn.area = calc_drawn_area(s, layer);
@@ -836,7 +949,6 @@ draw_layers(struct vl_compositor       *c,
              (layer->src.br.x - layer->src.tl.x));
          drawn.scale_y  = layer->viewport.scale[1] /
             ((float)layer->sampler_views[0]->texture->height0 *
-             (s->interlaced ? 2.0 : 1.0) *
              (layer->src.br.y - layer->src.tl.y));
          drawn.crop_x = (int)(layer->src.tl.x * layer->sampler_views[0]->texture->width0);
          drawn.translate_x = layer->viewport.translate[0];
@@ -844,6 +956,16 @@ draw_layers(struct vl_compositor       *c,
          drawn.translate_y = layer->viewport.translate[1];
          drawn.sampler0_w = (float)layer->sampler_views[0]->texture->width0;
          drawn.sampler0_h = (float)layer->sampler_views[0]->texture->height0;
+         drawn.clamp_x = (float)samplers[0]->texture->width0 *
+            (layer->src.br.x - layer->src.tl.x) - 0.5;
+         drawn.clamp_y = (float)samplers[0]->texture->height0 *
+            (layer->src.br.y - layer->src.tl.y) - 0.5;
+         drawn.chroma_clamp_x = (float)sampler1->texture->width0 *
+            (layer->src.br.x - layer->src.tl.x) - 0.5;
+         drawn.chroma_clamp_y = (float)sampler1->texture->height0 *
+            (layer->src.br.y - layer->src.tl.y) - 0.5;
+         drawn.chroma_offset_x = chroma_offset_x(s->chroma_location);
+         drawn.chroma_offset_y = chroma_offset_y(s->chroma_location);
          set_viewport(s, &drawn, samplers);
 
          c->pipe->bind_sampler_states(c->pipe, PIPE_SHADER_COMPUTE, 0,
@@ -946,17 +1068,21 @@ bool vl_compositor_cs_init_shaders(struct vl_compositor *c)
 
         c->cs_yuv.weave.y = vl_compositor_cs_create_shader(c, compute_shader_yuv_weave_y);
         c->cs_yuv.weave.uv = vl_compositor_cs_create_shader(c, compute_shader_yuv_weave_uv);
-        c->cs_yuv.bob.y = vl_compositor_cs_create_shader(c, compute_shader_yuv_bob_y);
-        c->cs_yuv.bob.uv = vl_compositor_cs_create_shader(c, compute_shader_yuv_bob_uv);
         c->cs_yuv.progressive.y = vl_compositor_cs_create_shader(c, compute_shader_yuv_y);
         c->cs_yuv.progressive.uv = vl_compositor_cs_create_shader(c, compute_shader_yuv_uv);
-        if (!c->cs_yuv.weave.y || !c->cs_yuv.weave.uv ||
-            !c->cs_yuv.bob.y || !c->cs_yuv.bob.uv) {
+        if (!c->cs_yuv.weave.y || !c->cs_yuv.weave.uv) {
                 debug_printf("Unable to create YCbCr i-to-YCbCr p deint compute shader.\n");
                 return false;
         }
         if (!c->cs_yuv.progressive.y || !c->cs_yuv.progressive.uv) {
                 debug_printf("Unable to create YCbCr p-to-NV12 compute shader.\n");
+                return false;
+        }
+
+        c->cs_rgb_yuv.y = vl_compositor_cs_create_shader(c, compute_shader_rgb_yuv_y);
+        c->cs_rgb_yuv.uv = vl_compositor_cs_create_shader(c, compute_shader_rgb_yuv_uv);
+        if (!c->cs_rgb_yuv.y || !c->cs_rgb_yuv.uv) {
+                debug_printf("Unable to create RGB-to-NV12 compute shader.\n");
                 return false;
         }
 
@@ -975,12 +1101,12 @@ void vl_compositor_cs_cleanup_shaders(struct vl_compositor *c)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.weave.y);
         if (c->cs_yuv.weave.uv)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.weave.uv);
-        if (c->cs_yuv.bob.y)
-                c->pipe->delete_compute_state(c->pipe, c->cs_yuv.bob.y);
-        if (c->cs_yuv.bob.uv)
-                c->pipe->delete_compute_state(c->pipe, c->cs_yuv.bob.uv);
         if (c->cs_yuv.progressive.y)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.progressive.y);
         if (c->cs_yuv.progressive.uv)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.progressive.uv);
+        if (c->cs_rgb_yuv.y)
+                c->pipe->delete_compute_state(c->pipe, c->cs_rgb_yuv.y);
+        if (c->cs_rgb_yuv.uv)
+                c->pipe->delete_compute_state(c->pipe, c->cs_rgb_yuv.uv);
 }

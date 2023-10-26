@@ -44,7 +44,6 @@ add_var_xfb_varying(nir_xfb_info *xfb,
    xfb->buffers[buffer].varying_count++;
 }
 
-
 static nir_xfb_info *
 nir_xfb_info_create(void *mem_ctx, uint16_t output_count)
 {
@@ -231,8 +230,8 @@ nir_gather_xfb_info_with_varyings(nir_shader *shader,
        * that contains an array.
        */
       bool is_array_block = var->interface_type != NULL &&
-         glsl_type_is_array(var->type) &&
-         glsl_without_array(var->type) == var->interface_type;
+                            glsl_type_is_array(var->type) &&
+                            glsl_without_array(var->type) == var->interface_type;
 
       if (var->data.explicit_offset && !is_array_block) {
          unsigned offset = var->data.offset;
@@ -275,7 +274,7 @@ nir_gather_xfb_info_with_varyings(nir_shader *shader,
 
 #ifndef NDEBUG
    /* Finally, do a sanity check */
-   unsigned max_offset[NIR_MAX_XFB_BUFFERS] = {0};
+   unsigned max_offset[NIR_MAX_XFB_BUFFERS] = { 0 };
    for (unsigned i = 0; i < xfb->output_count; i++) {
       assert(xfb->outputs[i].offset >= max_offset[xfb->outputs[i].buffer]);
       assert(xfb->outputs[i].component_mask != 0);
@@ -318,12 +317,12 @@ void
 nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   uint8_t buffer_to_stream[MAX_XFB_BUFFERS] = {0};
+   uint8_t buffer_to_stream[MAX_XFB_BUFFERS] = { 0 };
    uint8_t buffer_mask = 0;
    uint8_t stream_mask = 0;
 
    /* Gather xfb outputs. */
-   struct util_dynarray array = {0};
+   struct util_dynarray array = { 0 };
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr(instr, block) {
@@ -338,8 +337,7 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
          while (wr_mask) {
             unsigned i = u_bit_scan(&wr_mask);
             unsigned index = nir_intrinsic_component(intr) + i;
-            nir_io_xfb xfb = index < 2 ? nir_intrinsic_io_xfb(intr) :
-                                         nir_intrinsic_io_xfb2(intr);
+            nir_io_xfb xfb = index < 2 ? nir_intrinsic_io_xfb(intr) : nir_intrinsic_io_xfb2(intr);
 
             if (xfb.out[index % 2].num_components) {
                nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
@@ -388,10 +386,11 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
               j < count &&
               cur->buffer == outputs[j].buffer &&
               cur->location == outputs[j].location &&
-              cur->high_16bits == outputs[j].high_16bits; j++) {
+              cur->high_16bits == outputs[j].high_16bits;
+              j++) {
             if (outputs[j].component_mask &&
                 outputs[j].offset - outputs[j].component_offset * 4 ==
-                cur->offset - cur->component_offset * 4) {
+                   cur->offset - cur->component_offset * 4) {
                unsigned merged_offset = MIN2(cur->component_offset,
                                              outputs[j].component_offset);
                /* component_mask is relative to 0, not component_offset */

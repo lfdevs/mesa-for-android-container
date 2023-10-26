@@ -101,7 +101,8 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
                       VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
                       VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                       VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT |
-                      VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+                      VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                      VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT);
       }
       out_properties->linearTilingFeatures = features;
       out_properties->optimalTilingFeatures = features;
@@ -136,6 +137,26 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
          features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
       if (lvp_is_filter_minmax_format_supported(format))
          features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
+      const struct vk_format_ycbcr_info *ycbcr_info =
+         vk_format_get_ycbcr_info(format);
+      if (ycbcr_info) {
+         if (ycbcr_info->n_planes > 1)
+            features |= VK_FORMAT_FEATURE_DISJOINT_BIT;
+         else
+            features |= VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
+
+         for (uint8_t plane = 0; plane < ycbcr_info->n_planes; plane++) {
+            const struct vk_format_ycbcr_plane *plane_info = &ycbcr_info->planes[plane];
+            if (plane_info->denominator_scales[0] > 1 ||
+                plane_info->denominator_scales[1] > 1)
+               features |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT;
+         }
+
+         /* The subsampled formats have no support for linear filters. */
+         const struct util_format_description *desc = util_format_description(pformat);
+         if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED)
+            features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+      }
    }
 
    if (pscreen->is_format_supported(pscreen, pformat, PIPE_TEXTURE_2D, 0, 0,
@@ -174,6 +195,7 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
    }
    if ((pformat != PIPE_FORMAT_R9G9B9E5_FLOAT) &&
        util_format_get_nr_components(pformat) != 3 &&
+       !util_format_is_subsampled_422(pformat) &&
        !util_format_is_yuv(pformat) &&
        pformat != PIPE_FORMAT_R10G10B10A2_SNORM &&
        pformat != PIPE_FORMAT_B10G10R10A2_SNORM &&
@@ -185,6 +207,10 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
    out_properties->linearTilingFeatures = features;
    out_properties->optimalTilingFeatures = features;
    out_properties->bufferFeatures = buffer_features;
+   if (out_properties->linearTilingFeatures)
+      out_properties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT;
+   if (out_properties->optimalTilingFeatures)
+      out_properties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT;
 }
 
 
@@ -212,6 +238,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceFormatProperties2(
    if (perf)
       perf->optimal = VK_FALSE;
 }
+
 static VkResult lvp_get_image_format_properties(struct lvp_physical_device *physical_device,
                                                  const VkPhysicalDeviceImageFormatInfo2 *info,
                                                  VkImageFormatProperties *pImageFormatProperties)
@@ -352,6 +379,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetPhysicalDeviceImageFormatProperties2(
    const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
    VkExternalImageFormatProperties *external_props = NULL;
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
+   VkHostImageCopyDevicePerformanceQueryEXT *hic;
    VkResult result;
    result = lvp_get_image_format_properties(physical_device, base_info,
                                              &base_props->imageFormatProperties);
@@ -376,6 +404,11 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetPhysicalDeviceImageFormatProperties2(
          break;
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
          ycbcr_props = (void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT:
+         hic = (void*)s;
+         hic->optimalDeviceAccess = VK_TRUE;
+         hic->identicalMemoryLayout = VK_TRUE;
          break;
       default:
          break;
@@ -409,7 +442,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetPhysicalDeviceImageFormatProperties2(
       };
    }
    if (ycbcr_props)
-      ycbcr_props->combinedImageSamplerDescriptorCount = 0;
+      ycbcr_props->combinedImageSamplerDescriptorCount = vk_format_get_plane_count(base_info->format);
    return VK_SUCCESS;
 }
 

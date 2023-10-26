@@ -423,7 +423,7 @@ get_visual( Display *dpy, int scr, unsigned int depth, int xclass )
          return vis;
       }
       else {
-         free((void *) vis);
+         XFree((void *) vis);
          return NULL;
       }
    }

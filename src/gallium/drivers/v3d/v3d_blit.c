@@ -210,140 +210,6 @@ v3d_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         info->mask &= ~PIPE_MASK_S;
 }
 
-static bool
-v3d_tfu(struct pipe_context *pctx,
-        struct pipe_resource *pdst,
-        struct pipe_resource *psrc,
-        unsigned int src_level,
-        unsigned int base_level,
-        unsigned int last_level,
-        unsigned int src_layer,
-        unsigned int dst_layer,
-        bool for_mipmap)
-{
-        struct v3d_context *v3d = v3d_context(pctx);
-        struct v3d_screen *screen = v3d->screen;
-        struct v3d_resource *src = v3d_resource(psrc);
-        struct v3d_resource *dst = v3d_resource(pdst);
-        struct v3d_resource_slice *src_base_slice = &src->slices[src_level];
-        struct v3d_resource_slice *dst_base_slice = &dst->slices[base_level];
-        int msaa_scale = pdst->nr_samples > 1 ? 2 : 1;
-        int width = u_minify(pdst->width0, base_level) * msaa_scale;
-        int height = u_minify(pdst->height0, base_level) * msaa_scale;
-        enum pipe_format pformat;
-
-        if (psrc->format != pdst->format)
-                return false;
-        if (psrc->nr_samples != pdst->nr_samples)
-                return false;
-
-        /* Can't write to raster. */
-        if (dst_base_slice->tiling == V3D_TILING_RASTER)
-                return false;
-
-        /* When using TFU for blit, we are doing exact copies (both input and
-         * output format must be the same, no scaling, etc), so there is no
-         * pixel format conversions. Thus we can rewrite the format to use one
-         * that is TFU compatible based on its texel size.
-         */
-        if (for_mipmap) {
-                pformat = pdst->format;
-        } else {
-                switch (dst->cpp) {
-                case 16: pformat = PIPE_FORMAT_R32G32B32A32_FLOAT;   break;
-                case 8:  pformat = PIPE_FORMAT_R16G16B16A16_FLOAT;   break;
-                case 4:  pformat = PIPE_FORMAT_R32_FLOAT;            break;
-                case 2:  pformat = PIPE_FORMAT_R16_FLOAT;            break;
-                case 1:  pformat = PIPE_FORMAT_R8_UNORM;             break;
-                default: unreachable("unsupported format bit-size"); break;
-                };
-        }
-
-        uint32_t tex_format = v3d_get_tex_format(&screen->devinfo, pformat);
-        struct v3d_device_info *devinfo = &screen->devinfo;
-
-        if (!v3d_X(devinfo, tfu_supports_tex_format)(tex_format, for_mipmap)) {
-                assert(for_mipmap);
-                return false;
-        }
-
-        v3d_flush_jobs_writing_resource(v3d, psrc, V3D_FLUSH_DEFAULT, false);
-        v3d_flush_jobs_reading_resource(v3d, pdst, V3D_FLUSH_DEFAULT, false);
-
-        struct drm_v3d_submit_tfu tfu = {
-                .ios = (height << 16) | width,
-                .bo_handles = {
-                        dst->bo->handle,
-                        src != dst ? src->bo->handle : 0
-                },
-                .in_sync = v3d->out_sync,
-                .out_sync = v3d->out_sync,
-        };
-        uint32_t src_offset = (src->bo->offset +
-                               v3d_layer_offset(psrc, src_level, src_layer));
-        tfu.iia |= src_offset;
-        if (src_base_slice->tiling == V3D_TILING_RASTER) {
-                tfu.icfg |= (V3D33_TFU_ICFG_FORMAT_RASTER <<
-                             V3D33_TFU_ICFG_FORMAT_SHIFT);
-        } else {
-                tfu.icfg |= ((V3D33_TFU_ICFG_FORMAT_LINEARTILE +
-                              (src_base_slice->tiling - V3D_TILING_LINEARTILE)) <<
-                             V3D33_TFU_ICFG_FORMAT_SHIFT);
-        }
-
-        uint32_t dst_offset = (dst->bo->offset +
-                               v3d_layer_offset(pdst, base_level, dst_layer));
-        tfu.ioa |= dst_offset;
-        if (last_level != base_level)
-                tfu.ioa |= V3D33_TFU_IOA_DIMTW;
-        tfu.ioa |= ((V3D33_TFU_IOA_FORMAT_LINEARTILE +
-                     (dst_base_slice->tiling - V3D_TILING_LINEARTILE)) <<
-                    V3D33_TFU_IOA_FORMAT_SHIFT);
-
-        tfu.icfg |= tex_format << V3D33_TFU_ICFG_TTYPE_SHIFT;
-        tfu.icfg |= (last_level - base_level) << V3D33_TFU_ICFG_NUMMM_SHIFT;
-
-        switch (src_base_slice->tiling) {
-        case V3D_TILING_UIF_NO_XOR:
-        case V3D_TILING_UIF_XOR:
-                tfu.iis |= (src_base_slice->padded_height /
-                            (2 * v3d_utile_height(src->cpp)));
-                break;
-        case V3D_TILING_RASTER:
-                tfu.iis |= src_base_slice->stride / src->cpp;
-                break;
-        case V3D_TILING_LINEARTILE:
-        case V3D_TILING_UBLINEAR_1_COLUMN:
-        case V3D_TILING_UBLINEAR_2_COLUMN:
-                break;
-       }
-
-        /* If we're writing level 0 (!IOA_DIMTW), then we need to supply the
-         * OPAD field for the destination (how many extra UIF blocks beyond
-         * those necessary to cover the height).  When filling mipmaps, the
-         * miplevel 1+ tiling state is inferred.
-         */
-        if (dst_base_slice->tiling == V3D_TILING_UIF_NO_XOR ||
-            dst_base_slice->tiling == V3D_TILING_UIF_XOR) {
-                int uif_block_h = 2 * v3d_utile_height(dst->cpp);
-                int implicit_padded_height = align(height, uif_block_h);
-
-                tfu.icfg |= (((dst_base_slice->padded_height -
-                               implicit_padded_height) / uif_block_h) <<
-                             V3D33_TFU_ICFG_OPAD_SHIFT);
-        }
-
-        int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_SUBMIT_TFU, &tfu);
-        if (ret != 0) {
-                fprintf(stderr, "Failed to submit TFU job: %d\n", ret);
-                return false;
-        }
-
-        dst->writes++;
-
-        return true;
-}
-
 bool
 v3d_generate_mipmap(struct pipe_context *pctx,
                     struct pipe_resource *prsc,
@@ -362,12 +228,16 @@ v3d_generate_mipmap(struct pipe_context *pctx,
         if (first_layer != last_layer)
                 return false;
 
-        return v3d_tfu(pctx,
-                       prsc, prsc,
-                       base_level,
-                       base_level, last_level,
-                       first_layer, first_layer,
-                       true);
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct v3d_screen *screen = v3d->screen;
+        struct v3d_device_info *devinfo = &screen->devinfo;
+
+        return v3d_X(devinfo, tfu)(pctx,
+                                   prsc, prsc,
+                                   base_level,
+                                   base_level, last_level,
+                                   first_layer, first_layer,
+                                   true);
 }
 
 static void
@@ -396,11 +266,15 @@ v3d_tfu_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         if (info->dst.format != info->src.format)
                 return;
 
-        if (v3d_tfu(pctx, info->dst.resource, info->src.resource,
-                    info->src.level,
-                    info->dst.level, info->dst.level,
-                    info->src.box.z, info->dst.box.z,
-                    false)) {
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct v3d_screen *screen = v3d->screen;
+        struct v3d_device_info *devinfo = &screen->devinfo;
+
+        if (v3d_X(devinfo, tfu)(pctx, info->dst.resource, info->src.resource,
+                                info->src.level,
+                                info->dst.level, info->dst.level,
+                                info->src.box.z, info->dst.box.z,
+                                false)) {
                 info->mask &= ~PIPE_MASK_RGBA;
         }
 }
@@ -495,7 +369,7 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         bool double_buffer = V3D_DBG(DOUBLE_BUFFER) && !msaa;
 
         uint32_t tile_width, tile_height, max_bpp;
-        v3d_get_tile_buffer_size(msaa, double_buffer,
+        v3d_get_tile_buffer_size(devinfo, msaa, double_buffer,
                                  is_color_blit ? 1 : 0, surfaces, src_surf,
                                  &tile_width, &tile_height, &max_bpp);
 
@@ -660,29 +534,29 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
         nir_variable *pos_in =
                 nir_variable_create(b.shader, nir_var_shader_in, vec4, "pos");
         pos_in->data.location = VARYING_SLOT_POS;
-        nir_ssa_def *pos = nir_load_var(&b, pos_in);
+        nir_def *pos = nir_load_var(&b, pos_in);
 
-        nir_ssa_def *zero = nir_imm_int(&b, 0);
-        nir_ssa_def *one = nir_imm_int(&b, 1);
-        nir_ssa_def *two = nir_imm_int(&b, 2);
-        nir_ssa_def *six = nir_imm_int(&b, 6);
-        nir_ssa_def *seven = nir_imm_int(&b, 7);
-        nir_ssa_def *eight = nir_imm_int(&b, 8);
+        nir_def *zero = nir_imm_int(&b, 0);
+        nir_def *one = nir_imm_int(&b, 1);
+        nir_def *two = nir_imm_int(&b, 2);
+        nir_def *six = nir_imm_int(&b, 6);
+        nir_def *seven = nir_imm_int(&b, 7);
+        nir_def *eight = nir_imm_int(&b, 8);
 
-        nir_ssa_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
-        nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
+        nir_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
+        nir_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
 
         nir_variable *stride_in =
                 nir_variable_create(b.shader, nir_var_uniform, glsl_uint,
                                     "sand8_stride");
-        nir_ssa_def *stride =
+        nir_def *stride =
                 nir_load_uniform(&b, 1, 32, zero,
                                  .base = stride_in->data.driver_location,
                                  .range = 4,
                                  .dest_type = nir_type_uint32);
 
-        nir_ssa_def *x_offset;
-        nir_ssa_def *y_offset;
+        nir_def *x_offset;
+        nir_def *y_offset;
 
         /* UIF tiled format is composed by UIF blocks, Each block has
          * four 64 byte microtiles. Inside each microtile pixels are stored
@@ -709,11 +583,11 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
          * between microtiles to deal with this issue for luma planes.
          */
         if (cpp == 1) {
-                nir_ssa_def *intra_utile_x_offset =
+                nir_def *intra_utile_x_offset =
                         nir_ishl(&b, nir_iand_imm(&b, x, 1), two);
-                nir_ssa_def *inter_utile_x_offset =
+                nir_def *inter_utile_x_offset =
                         nir_ishl(&b, nir_iand_imm(&b, x, 60), one);
-                nir_ssa_def *stripe_offset=
+                nir_def *stripe_offset=
                         nir_ishl(&b,nir_imul(&b,nir_ishr_imm(&b, x, 6),
                                              stride),
                                  seven);
@@ -725,7 +599,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
                                     nir_ishl(&b, nir_iand_imm(&b, x, 2), six),
                                     nir_ishl(&b, y, eight));
         } else  {
-                nir_ssa_def *stripe_offset=
+                nir_def *stripe_offset=
                         nir_ishl(&b,nir_imul(&b,nir_ishr_imm(&b, x, 5),
                                                 stride),
                                  seven);
@@ -733,15 +607,15 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
                                nir_ishl(&b, nir_iand_imm(&b, x, 31), two));
                 y_offset = nir_ishl(&b, y, seven);
         }
-        nir_ssa_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
-        nir_ssa_def *load =
+        nir_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
+        nir_def *load =
         nir_load_ubo(&b, 1, 32, zero, ubo_offset,
                     .align_mul = 4,
                     .align_offset = 0,
                     .range_base = 0,
                     .range = ~0);
 
-        nir_ssa_def *output = nir_unpack_unorm_4x8(&b, load);
+        nir_def *output = nir_unpack_unorm_4x8(&b, load);
 
         nir_store_var(&b, color_out,
                       output,
@@ -911,30 +785,30 @@ v3d_get_sand30_vs(struct pipe_context *pctx)
  * in an uvec4. The start parameter defines where the sequence of 4 values
  * begins.
  */
-static nir_ssa_def *
+static nir_def *
 extract_unorm_2xrgb10a2_component_to_4xunorm16(nir_builder *b,
-                                               nir_ssa_def *value,
-                                               nir_ssa_def *start)
+                                               nir_def *value,
+                                               nir_def *start)
 {
         const unsigned mask = BITFIELD_MASK(10);
 
-        nir_ssa_def *shiftw0 = nir_imul_imm(b, start, 10);
-        nir_ssa_def *word0 = nir_iand_imm(b, nir_channel(b, value, 0),
+        nir_def *shiftw0 = nir_imul_imm(b, start, 10);
+        nir_def *word0 = nir_iand_imm(b, nir_channel(b, value, 0),
                                           BITFIELD_MASK(30));
-        nir_ssa_def *finalword0 = nir_ushr(b, word0, shiftw0);
-        nir_ssa_def *word1 = nir_channel(b, value, 1);
-        nir_ssa_def *shiftw0tow1 = nir_isub_imm(b, 30, shiftw0);
-        nir_ssa_def *word1toword0 =  nir_ishl(b, word1, shiftw0tow1);
+        nir_def *finalword0 = nir_ushr(b, word0, shiftw0);
+        nir_def *word1 = nir_channel(b, value, 1);
+        nir_def *shiftw0tow1 = nir_isub_imm(b, 30, shiftw0);
+        nir_def *word1toword0 =  nir_ishl(b, word1, shiftw0tow1);
         finalword0 = nir_ior(b, finalword0, word1toword0);
-        nir_ssa_def *finalword1 = nir_ushr(b, word1, shiftw0);
+        nir_def *finalword1 = nir_ushr(b, word1, shiftw0);
 
-        nir_ssa_def *val0 = nir_ishl_imm(b, nir_iand_imm(b, finalword0,
+        nir_def *val0 = nir_ishl_imm(b, nir_iand_imm(b, finalword0,
                                                          mask), 6);
-        nir_ssa_def *val1 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
+        nir_def *val1 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
                                                          mask << 10), 4);
-        nir_ssa_def *val2 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
+        nir_def *val2 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
                                                          mask << 20), 14);
-        nir_ssa_def *val3 = nir_ishl_imm(b, nir_iand_imm(b, finalword1,
+        nir_def *val3 = nir_ishl_imm(b, nir_iand_imm(b, finalword1,
                                                          mask), 6);
 
         return nir_vec4(b, val0, val1, val2, val3);
@@ -984,10 +858,10 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
         nir_variable *pos_in =
                 nir_variable_create(b.shader, nir_var_shader_in, vec4, "pos");
         pos_in->data.location = VARYING_SLOT_POS;
-        nir_ssa_def *pos = nir_load_var(&b, pos_in);
+        nir_def *pos = nir_load_var(&b, pos_in);
 
-        nir_ssa_def *zero = nir_imm_int(&b, 0);
-        nir_ssa_def *three = nir_imm_int(&b, 3);
+        nir_def *zero = nir_imm_int(&b, 0);
+        nir_def *three = nir_imm_int(&b, 3);
 
         /* With a SAND128 stripe, in 128-bytes with rgb10a2 format we have 96
          * 10-bit values. So, it represents 96 pixels for Y plane and 48 pixels
@@ -996,8 +870,8 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
          */
         uint32_t pixels_stripe = 24;
 
-        nir_ssa_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
-        nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
+        nir_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
+        nir_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
 
         /* UIF tiled format is composed by UIF blocks. Each block has four 64
          * byte microtiles. Inside each microtile pixels are stored in raster
@@ -1032,43 +906,43 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
         nir_variable *stride_in =
                 nir_variable_create(b.shader, nir_var_uniform,
                                     glsl_uint, "sand30_stride");
-        nir_ssa_def *stride =
+        nir_def *stride =
                 nir_load_uniform(&b, 1, 32, zero,
                                  .base = stride_in->data.driver_location,
                                  .range = 4,
                                  .dest_type = nir_type_uint32);
 
-        nir_ssa_def *real_x = nir_ior(&b, nir_iand_imm(&b, x, 1),
+        nir_def *real_x = nir_ior(&b, nir_iand_imm(&b, x, 1),
                                       nir_ishl_imm(&b,nir_ushr_imm(&b, x, 2),
                                       1));
-        nir_ssa_def *x_pos_in_stripe = nir_umod_imm(&b, real_x, pixels_stripe);
-        nir_ssa_def *component = nir_umod(&b, real_x, three);
-        nir_ssa_def *intra_utile_x_offset = nir_ishl_imm(&b, component, 2);
+        nir_def *x_pos_in_stripe = nir_umod_imm(&b, real_x, pixels_stripe);
+        nir_def *component = nir_umod(&b, real_x, three);
+        nir_def *intra_utile_x_offset = nir_ishl_imm(&b, component, 2);
 
-        nir_ssa_def *inter_utile_x_offset =
+        nir_def *inter_utile_x_offset =
                 nir_ishl_imm(&b, nir_udiv_imm(&b, x_pos_in_stripe, 3), 4);
 
-        nir_ssa_def *stripe_offset=
+        nir_def *stripe_offset=
                 nir_ishl_imm(&b,
                              nir_imul(&b,
                                       nir_udiv_imm(&b, real_x, pixels_stripe),
                                       stride),
                              7);
 
-        nir_ssa_def *x_offset = nir_iadd(&b, stripe_offset,
+        nir_def *x_offset = nir_iadd(&b, stripe_offset,
                                          nir_iadd(&b, intra_utile_x_offset,
                                                   inter_utile_x_offset));
-        nir_ssa_def *y_offset =
+        nir_def *y_offset =
                 nir_iadd(&b, nir_ishl_imm(&b, nir_iand_imm(&b, x, 2), 6),
                          nir_ishl_imm(&b, y, 8));
-        nir_ssa_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
+        nir_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
 
-        nir_ssa_def *load = nir_load_ubo(&b, 2, 32, zero, ubo_offset,
+        nir_def *load = nir_load_ubo(&b, 2, 32, zero, ubo_offset,
                                          .align_mul = 8,
                                          .align_offset = 0,
                                          .range_base = 0,
                                          .range = ~0);
-        nir_ssa_def *output =
+        nir_def *output =
                 extract_unorm_2xrgb10a2_component_to_4xunorm16(&b, load,
                                                                component);
         nir_store_var(&b, color_out,

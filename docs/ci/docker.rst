@@ -3,7 +3,7 @@ Docker CI
 
 For LLVMpipe and Softpipe CI, we run tests in a container containing
 VK-GL-CTS, on the shared GitLab runners provided by `freedesktop
-<https://freedesktop.org>`__
+<https://www.freedesktop.org>`__
 
 Software architecture
 ---------------------
@@ -34,7 +34,7 @@ at the job's log for which specific tests failed).
 DUT requirements
 ----------------
 
-In addition to the general :ref:`CI-farm-expectations`, using
+In addition to the general :ref:`CI-job-user-expectations`, using
 Docker requires:
 
 * DUTs must have a stable kernel and GPU reset (if applicable).

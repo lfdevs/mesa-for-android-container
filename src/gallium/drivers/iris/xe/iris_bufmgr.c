@@ -58,12 +58,16 @@ enum iris_mmap_mode
 iris_xe_bo_flags_to_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap,
                               unsigned flags)
 {
+   const struct intel_device_info *devinfo = iris_bufmgr_get_device_info(bufmgr);
+
    /* TODO: might be different for MTL/platforms without LLC */
    switch (heap) {
    case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
       /* TODO: Can vary on current placement?! */
       return IRIS_MMAP_WC;
    case IRIS_HEAP_DEVICE_LOCAL:
+      if (!intel_vram_all_mappable(devinfo))
+         return IRIS_MMAP_NONE;
       return IRIS_MMAP_WC;
    case IRIS_HEAP_SYSTEM_MEMORY:
       if (flags & BO_ALLOC_SCANOUT)

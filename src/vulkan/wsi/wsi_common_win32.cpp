@@ -270,6 +270,10 @@ wsi_win32_surface_get_capabilities2(VkIcdSurfaceBase *surface,
                compat->presentModeCount = 1;
             }
          } else {
+            if (!present_mode)
+               wsi_common_vk_warn_once("Use of VkSurfacePresentModeCompatibilityEXT "
+                                       "without a VkSurfacePresentModeEXT set. This is an "
+                                       "application bug.\n");
             compat->presentModeCount = 1;
          }
          break;

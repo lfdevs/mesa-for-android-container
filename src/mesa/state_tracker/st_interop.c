@@ -287,8 +287,9 @@ st_interop_export_object(struct st_context *st,
                                                                    &need_export_dmabuf);
    }
 
+   memset(&whandle, 0, sizeof(whandle));
+   
    if (need_export_dmabuf) {
-      memset(&whandle, 0, sizeof(whandle));
       whandle.type = WINSYS_HANDLE_TYPE_FD;
 
       success = screen->resource_get_handle(screen, st->pipe, res, &whandle,

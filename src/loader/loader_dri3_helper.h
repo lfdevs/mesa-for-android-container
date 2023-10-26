@@ -182,7 +182,6 @@ struct loader_dri3_drawable {
    struct loader_dri3_extensions *ext;
    const struct loader_dri3_vtable *vtable;
 
-   unsigned int swap_method;
    unsigned int back_format;
    xcb_present_complete_mode_t last_present_mode;
 

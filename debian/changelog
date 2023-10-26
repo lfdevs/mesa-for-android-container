@@ -1,3 +1,13 @@
+mesa (23.3.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * fix-clover-build-without-spirv.diff: Dropped, upstream.
+  * mesa-common-dev.docs: Updated.
+  * libglx-mesa0.symbols: Updated.
+  * control: Drop python3-minimal from -vulkan-drivers Depends.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 26 Oct 2023 14:28:22 +0300
+
 mesa (23.2.1-1) unstable; urgency=medium
 
   * New upstream release.

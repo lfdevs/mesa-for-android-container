@@ -2084,21 +2084,6 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    }
 }
 
-
-const char *
-interpolation_string(unsigned interpolation)
-{
-   switch (interpolation) {
-   case INTERP_MODE_NONE:          return "no";
-   case INTERP_MODE_SMOOTH:        return "smooth";
-   case INTERP_MODE_FLAT:          return "flat";
-   case INTERP_MODE_NOPERSPECTIVE: return "noperspective";
-   }
-
-   assert(!"Should not get here.");
-   return "";
-}
-
 const char *const ir_variable::warn_extension_table[] = {
    "",
    "GL_ARB_shader_stencil_export",

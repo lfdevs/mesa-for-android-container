@@ -51,7 +51,8 @@ static void radeon_fence_reference(struct pipe_fence_handle **dst,
                                    struct pipe_fence_handle *src);
 
 static struct radeon_winsys_ctx *radeon_drm_ctx_create(struct radeon_winsys *ws,
-                                                       enum radeon_ctx_priority priority)
+                                                       enum radeon_ctx_priority priority,
+                                                       bool allow_context_lost)
 {
    struct radeon_ctx *ctx = CALLOC_STRUCT(radeon_ctx);
    if (!ctx)
@@ -65,6 +66,18 @@ static struct radeon_winsys_ctx *radeon_drm_ctx_create(struct radeon_winsys *ws,
 static void radeon_drm_ctx_destroy(struct radeon_winsys_ctx *ctx)
 {
    FREE(ctx);
+}
+
+static void
+radeon_drm_ctx_set_sw_reset_status(struct radeon_winsys_ctx *rwctx, enum pipe_reset_status status,
+                                   const char *format, ...)
+{
+   /* TODO: we should do something better here */
+   va_list args;
+
+   va_start(args, format);
+   vfprintf(stderr, format, args);
+   va_end(args);
 }
 
 static enum pipe_reset_status
@@ -160,8 +173,7 @@ radeon_drm_cs_create(struct radeon_cmdbuf *rcs,
                      enum amd_ip_type ip_type,
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
-                     void *flush_ctx,
-                     bool allow_context_lost)
+                     void *flush_ctx)
 {
    struct radeon_drm_winsys *ws = ((struct radeon_ctx*)ctx)->ws;
    struct radeon_drm_cs *cs;
@@ -843,6 +855,7 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
 {
    ws->base.ctx_create = radeon_drm_ctx_create;
    ws->base.ctx_destroy = radeon_drm_ctx_destroy;
+   ws->base.ctx_set_sw_reset_status = radeon_drm_ctx_set_sw_reset_status;
    ws->base.ctx_query_reset_status = radeon_drm_ctx_query_reset_status;
    ws->base.cs_create = radeon_drm_cs_create;
    ws->base.cs_destroy = radeon_drm_cs_destroy;

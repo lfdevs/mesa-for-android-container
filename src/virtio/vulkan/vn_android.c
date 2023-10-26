@@ -18,6 +18,7 @@
 
 #include "drm-uapi/drm_fourcc.h"
 #include "util/os_file.h"
+#include "vk_android.h"
 
 #include "vn_buffer.h"
 #include "vn_device.h"
@@ -714,161 +715,6 @@ fail:
    return vn_error(dev->instance, result);
 }
 
-VkResult
-vn_AcquireImageANDROID(VkDevice device,
-                       UNUSED VkImage image,
-                       int nativeFenceFd,
-                       VkSemaphore semaphore,
-                       VkFence fence)
-{
-   VN_TRACE_FUNC();
-   struct vn_device *dev = vn_device_from_handle(device);
-   VkResult result = VK_SUCCESS;
-
-   int semaphore_fd = -1;
-   int fence_fd = -1;
-   if (nativeFenceFd >= 0) {
-      if (semaphore != VK_NULL_HANDLE && fence != VK_NULL_HANDLE) {
-         semaphore_fd = nativeFenceFd;
-         fence_fd = os_dupfd_cloexec(nativeFenceFd);
-         if (fence_fd < 0) {
-            result = (errno == EMFILE) ? VK_ERROR_TOO_MANY_OBJECTS
-                                       : VK_ERROR_OUT_OF_HOST_MEMORY;
-            close(nativeFenceFd);
-            return vn_error(dev->instance, result);
-         }
-      } else if (semaphore != VK_NULL_HANDLE) {
-         semaphore_fd = nativeFenceFd;
-      } else if (fence != VK_NULL_HANDLE) {
-         fence_fd = nativeFenceFd;
-      } else {
-         close(nativeFenceFd);
-      }
-   }
-
-   if (semaphore != VK_NULL_HANDLE) {
-      const VkImportSemaphoreFdInfoKHR info = {
-         .sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR,
-         .pNext = NULL,
-         .semaphore = semaphore,
-         .flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT,
-         .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
-         .fd = semaphore_fd,
-      };
-      result = vn_ImportSemaphoreFdKHR(device, &info);
-      if (result == VK_SUCCESS)
-         semaphore_fd = -1;
-   }
-
-   if (result == VK_SUCCESS && fence != VK_NULL_HANDLE) {
-      const VkImportFenceFdInfoKHR info = {
-         .sType = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR,
-         .pNext = NULL,
-         .fence = fence,
-         .flags = VK_FENCE_IMPORT_TEMPORARY_BIT,
-         .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
-         .fd = fence_fd,
-      };
-      result = vn_ImportFenceFdKHR(device, &info);
-      if (result == VK_SUCCESS)
-         fence_fd = -1;
-   }
-
-   if (semaphore_fd >= 0)
-      close(semaphore_fd);
-   if (fence_fd >= 0)
-      close(fence_fd);
-
-   return vn_result(dev->instance, result);
-}
-
-static inline VkResult
-vn_android_sync_fence_create(struct vn_queue *queue)
-{
-   struct vn_device *dev = queue->device;
-
-   const VkExportFenceCreateInfo export_info = {
-      .sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO,
-      .handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
-   };
-   const VkFenceCreateInfo create_info = {
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .pNext = &export_info,
-      .flags = 0,
-   };
-   return vn_CreateFence(vn_device_to_handle(dev), &create_info, NULL,
-                         &queue->sync_fence);
-}
-
-VkResult
-vn_QueueSignalReleaseImageANDROID(VkQueue _queue,
-                                  uint32_t waitSemaphoreCount,
-                                  const VkSemaphore *pWaitSemaphores,
-                                  VkImage image,
-                                  int *pNativeFenceFd)
-{
-   VN_TRACE_FUNC();
-   struct vn_queue *queue = vn_queue_from_handle(_queue);
-   struct vn_device *dev = queue->device;
-   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
-   VkDevice device = vn_device_to_handle(dev);
-   VkPipelineStageFlags local_stage_masks[8];
-   VkPipelineStageFlags *stage_masks = local_stage_masks;
-   VkResult result = VK_SUCCESS;
-   int fd = -1;
-
-   if (waitSemaphoreCount == 0) {
-      *pNativeFenceFd = -1;
-      return VK_SUCCESS;
-   }
-
-   /* lazily create sync fence for Android wsi */
-   if (queue->sync_fence == VK_NULL_HANDLE) {
-      result = vn_android_sync_fence_create(queue);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-
-   if (waitSemaphoreCount > ARRAY_SIZE(local_stage_masks)) {
-      stage_masks =
-         vk_alloc(alloc, sizeof(*stage_masks) * waitSemaphoreCount,
-                  VN_DEFAULT_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-      if (!stage_masks)
-         return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-   }
-
-   for (uint32_t i = 0; i < waitSemaphoreCount; i++)
-      stage_masks[i] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-   const VkSubmitInfo submit_info = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .waitSemaphoreCount = waitSemaphoreCount,
-      .pWaitSemaphores = pWaitSemaphores,
-      .pWaitDstStageMask = stage_masks,
-   };
-   result = vn_QueueSubmit(_queue, 1, &submit_info, queue->sync_fence);
-
-   if (stage_masks != local_stage_masks)
-      vk_free(alloc, stage_masks);
-
-   if (result != VK_SUCCESS)
-      return vn_error(dev->instance, result);
-
-   const VkFenceGetFdInfoKHR fd_info = {
-      .sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR,
-      .fence = queue->sync_fence,
-      .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
-   };
-   result = vn_GetFenceFdKHR(device, &fd_info, &fd);
-
-   if (result != VK_SUCCESS)
-      return vn_error(dev->instance, result);
-
-   *pNativeFenceFd = fd;
-
-   return VK_SUCCESS;
-}
-
 static VkResult
 vn_android_get_ahb_format_properties(
    struct vn_device *dev,
@@ -1270,7 +1116,7 @@ vn_android_device_allocate_ahb(struct vn_device *dev,
       usage = vn_android_get_ahb_usage(image_info->usage, image_info->flags);
    } else {
       const VkPhysicalDeviceMemoryProperties *mem_props =
-         &dev->physical_device->memory_properties.memoryProperties;
+         &dev->physical_device->memory_properties;
 
       assert(alloc_info->memoryTypeIndex < mem_props->memoryTypeCount);
 

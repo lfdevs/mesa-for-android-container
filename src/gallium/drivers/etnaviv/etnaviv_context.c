@@ -419,9 +419,9 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
       pctx->flush(pctx, NULL, 0);
 
    if (ctx->framebuffer_s.cbufs[0])
-      etna_resource(ctx->framebuffer_s.cbufs[0]->texture)->seqno++;
+      etna_resource_level_mark_changed(etna_surface(ctx->framebuffer_s.cbufs[0])->level);
    if (ctx->framebuffer_s.zsbuf)
-      etna_resource(ctx->framebuffer_s.zsbuf->texture)->seqno++;
+      etna_resource_level_mark_changed(etna_surface(ctx->framebuffer_s.zsbuf)->level);
    if (info->index_size && indexbuf != info->index.resource)
       pipe_resource_reference(&indexbuf, NULL);
 }
@@ -468,6 +468,9 @@ etna_reset_gpu_state(struct etna_context *ctx)
       etna_set_state(stream, VIVS_GL_UNK03854, 0x00000000);
    }
 
+   if (VIV_FEATURE(screen, chipMinorFeatures4, BUG_FIXES18))
+      etna_set_state(stream, VIVS_GL_BUG_FIXES, 0x6);
+
    if (!screen->specs.use_blt) {
       /* Enable SINGLE_BUFFER for resolve, if supported */
       etna_set_state(stream, VIVS_RS_SINGLE_BUFFER, COND(screen->specs.single_buffer, VIVS_RS_SINGLE_BUFFER_ENABLE));
@@ -504,6 +507,8 @@ etna_reset_gpu_state(struct etna_context *ctx)
       etna_set_state_multi(stream, VIVS_FE_VERTEX_ELEMENT_CONFIG(0),
                            screen->specs.halti >= 0 ? 16 : 12, dummy_attribs);
    }
+
+   etna_cmd_stream_mark_end_of_context_init(stream);
 
    ctx->dirty = ~0L;
    ctx->dirty_sampler_views = ~0L;

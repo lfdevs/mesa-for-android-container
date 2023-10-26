@@ -70,6 +70,7 @@ panvk_image_create(VkDevice _device, const VkImageCreateInfo *pCreateInfo,
                    uint64_t modifier, const VkSubresourceLayout *plane_layouts)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
+   const struct panfrost_device *pdev = &device->physical_device->pdev;
    struct panvk_image *image = NULL;
 
    image = vk_image_create(&device->vk, pCreateInfo, alloc, sizeof(*image));
@@ -88,7 +89,7 @@ panvk_image_create(VkDevice _device, const VkImageCreateInfo *pCreateInfo,
       .nr_slices = image->vk.mip_levels,
    };
 
-   pan_image_layout_init(&image->pimage.layout, NULL);
+   pan_image_layout_init(pdev, &image->pimage.layout, NULL);
 
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;

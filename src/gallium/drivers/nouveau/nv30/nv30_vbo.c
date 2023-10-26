@@ -85,9 +85,9 @@ nv30_vbuf_range(struct nv30_context *nv30, int vbi,
                 uint32_t *base, uint32_t *size)
 {
    assert(nv30->vbo_max_index != ~0);
-   *base = nv30->vbo_min_index * nv30->vtxbuf[vbi].stride;
+   *base = nv30->vbo_min_index * nv30->vertex->strides[vbi];
    *size = (nv30->vbo_max_index -
-            nv30->vbo_min_index + 1) * nv30->vtxbuf[vbi].stride;
+            nv30->vbo_min_index + 1) * nv30->vertex->strides[vbi];
 }
 
 static void
@@ -102,7 +102,7 @@ nv30_prevalidate_vbufs(struct nv30_context *nv30)
 
    for (i = 0; i < nv30->num_vtxbufs; i++) {
       vb = &nv30->vtxbuf[i];
-      if (!vb->stride || !vb->buffer.resource) /* NOTE: user_buffer not implemented */
+      if (!nv30->vertex->strides[i] || !vb->buffer.resource) /* NOTE: user_buffer not implemented */
          continue;
       buf = nv04_resource(vb->buffer.resource);
 
@@ -114,7 +114,7 @@ nv30_prevalidate_vbufs(struct nv30_context *nv30)
          } else {
             if (buf->status & NOUVEAU_BUFFER_STATUS_USER_MEMORY) {
                nv30->vbo_user |= 1 << i;
-               assert(vb->stride > vb->buffer_offset);
+               assert(nv30->vertex->strides[i] > vb->buffer_offset);
                nv30_vbuf_range(nv30, i, &base, &size);
                nouveau_user_buffer_upload(&nv30->base, buf, base, size);
             } else {
@@ -143,7 +143,7 @@ nv30_update_user_vbufs(struct nv30_context *nv30)
       if (!(nv30->vbo_user & (1 << b)))
          continue;
 
-      if (!vb->stride) {
+      if (!nv30->vertex->strides[i]) {
          nv30_emit_vtxattr(nv30, vb, ve, i);
          continue;
       }
@@ -216,8 +216,8 @@ nv30_vbo_validate(struct nv30_context *nv30)
       ve = &vertex->pipe[i];
       vb = &nv30->vtxbuf[ve->vertex_buffer_index];
 
-      if (likely(vb->stride) || nv30->vbo_fifo)
-         PUSH_DATA (push, (vb->stride << 8) | vertex->element[i].state);
+      if (likely(vertex->strides[ve->vertex_buffer_index]) || nv30->vbo_fifo)
+         PUSH_DATA (push, (vertex->strides[ve->vertex_buffer_index] << 8) | vertex->element[i].state);
       else
          PUSH_DATA (push, NV30_3D_VTXFMT_TYPE_V32_FLOAT);
    }
@@ -237,7 +237,7 @@ nv30_vbo_validate(struct nv30_context *nv30)
 
       res = nv04_resource(vb->buffer.resource);
 
-      if (nv30->vbo_fifo || unlikely(vb->stride == 0)) {
+      if (nv30->vbo_fifo || unlikely(ve->src_stride == 0)) {
          if (!nv30->vbo_fifo)
             nv30_emit_vtxattr(nv30, vb, ve, i);
          continue;
@@ -262,7 +262,7 @@ nv30_vertex_state_create(struct pipe_context *pipe, unsigned num_elements,
     struct translate_key transkey;
     unsigned i;
 
-    so = MALLOC(sizeof(*so) + sizeof(*so->element) * num_elements);
+    so = CALLOC(1, sizeof(*so) + sizeof(*so->element) * num_elements);
     if (!so)
         return NULL;
     memcpy(so->pipe, elements, sizeof(*elements) * num_elements);
@@ -306,6 +306,7 @@ nv30_vertex_state_create(struct pipe_context *pipe, unsigned num_elements,
             transkey.element[j].output_offset = transkey.output_stride;
             transkey.output_stride += (util_format_get_stride(fmt, 1) + 3) & ~3;
         }
+        so->strides[vbi] = ve->src_stride;
     }
 
     so->translate = translate_create(&transkey);

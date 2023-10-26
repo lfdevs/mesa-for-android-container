@@ -49,7 +49,7 @@
 
 #include "errno.h"
 #include "common/intel_aux_map.h"
-#include "common/intel_clflush.h"
+#include "common/intel_mem.h"
 #include "c99_alloca.h"
 #include "dev/intel_debug.h"
 #include "common/intel_gem.h"
@@ -1073,19 +1073,6 @@ alloc_bo_from_cache(struct iris_bufmgr *bufmgr,
    return bo;
 }
 
-static int
-i915_gem_set_domain(struct iris_bufmgr *bufmgr, uint32_t handle,
-                    uint32_t read_domains, uint32_t write_domains)
-{
-   struct drm_i915_gem_set_domain sd = {
-      .handle = handle,
-      .read_domains = read_domains,
-      .write_domain = write_domains,
-   };
-   return intel_ioctl(iris_bufmgr_get_fd(bufmgr),
-                      DRM_IOCTL_I915_GEM_SET_DOMAIN, &sd);
-}
-
 static struct iris_bo *
 alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
 {
@@ -1128,13 +1115,6 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
    bo->bufmgr = bufmgr;
    bo->size = bo_size;
    bo->idle = true;
-
-   if (bufmgr->vram.size == 0)
-      /* Calling set_domain() will allocate pages for the BO outside of the
-       * struct mutex lock in the kernel, which is more efficient than waiting
-       * to create them during the first execbuf that uses the BO.
-       */
-      i915_gem_set_domain(bufmgr, bo->gem_handle, I915_GEM_DOMAIN_CPU, 0);
 
    return bo;
 }
@@ -1268,7 +1248,9 @@ iris_bo_alloc(struct iris_bufmgr *bufmgr,
    return bo;
 
 err_vm_alloc:
+   simple_mtx_lock(&bufmgr->lock);
    vma_free(bufmgr, bo->address, bo->size);
+   simple_mtx_unlock(&bufmgr->lock);
 err_free:
    simple_mtx_lock(&bufmgr->lock);
    bo_free(bo);
@@ -1283,12 +1265,6 @@ iris_bo_close(int fd, uint32_t gem_handle)
       .handle = gem_handle,
    };
    return intel_ioctl(fd, DRM_IOCTL_GEM_CLOSE, &close);
-}
-
-static int
-iris_bufmgr_bo_close(struct iris_bufmgr *bufmgr, uint32_t gem_handle)
-{
-   return iris_bo_close(bufmgr->fd, gem_handle);
 }
 
 static enum iris_mmap_mode
@@ -1315,24 +1291,14 @@ iris_bo_create_userptr(struct iris_bufmgr *bufmgr, const char *name,
    if (!bo)
       return NULL;
 
-   struct drm_i915_gem_userptr arg = {
-      .user_ptr = (uintptr_t)ptr,
-      .user_size = size,
-      .flags = bufmgr->devinfo.has_userptr_probe ? I915_USERPTR_PROBE : 0,
-   };
-   if (intel_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_USERPTR, &arg))
+   bo->gem_handle = bufmgr->kmd_backend->gem_create_userptr(bufmgr, ptr, size);
+   if (bo->gem_handle == 0)
       goto err_free;
-   bo->gem_handle = arg.handle;
-
-   if (!bufmgr->devinfo.has_userptr_probe) {
-      /* Check the buffer for validity before we try and use it in a batch */
-      if (i915_gem_set_domain(bufmgr, bo->gem_handle, I915_GEM_DOMAIN_CPU, 0))
-         goto err_close;
-   }
 
    bo->name = name;
    bo->size = size;
    bo->real.map = ptr;
+   bo->real.userptr = true;
 
    bo->bufmgr = bufmgr;
    bo->real.kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
@@ -1348,17 +1314,23 @@ iris_bo_create_userptr(struct iris_bufmgr *bufmgr, const char *name,
       goto err_close;
 
    p_atomic_set(&bo->refcount, 1);
-   bo->real.userptr = true;
    bo->index = -1;
    bo->idle = true;
    bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY;
    bo->real.mmap_mode = iris_bo_create_userptr_get_mmap_mode(bufmgr);
    bo->real.prime_fd = -1;
 
+   if (!bufmgr->kmd_backend->gem_vm_bind(bo))
+      goto err_vma_free;
+
    return bo;
 
+err_vma_free:
+   simple_mtx_lock(&bufmgr->lock);
+   vma_free(bufmgr, bo->address, bo->size);
+   simple_mtx_unlock(&bufmgr->lock);
 err_close:
-   iris_bufmgr_bo_close(bufmgr, bo->gem_handle);
+   bufmgr->kmd_backend->gem_close(bufmgr, bo);
 err_free:
    free(bo);
    return NULL;
@@ -1428,7 +1400,10 @@ iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
 
    bo = bo_calloc();
    if (!bo) {
-      iris_bufmgr_bo_close(bufmgr, open_arg.handle);
+      struct iris_bo close_bo = {
+            .gem_handle = open_arg.handle,
+      };
+      bufmgr->kmd_backend->gem_close(bufmgr, &close_bo);
       goto out;
    }
 
@@ -1513,7 +1488,7 @@ bo_close(struct iris_bo *bo)
       close(bo->real.prime_fd);
 
    /* Close this object */
-   if (iris_bufmgr_bo_close(bufmgr, bo->gem_handle) != 0) {
+   if (bufmgr->kmd_backend->gem_close(bufmgr, bo) != 0) {
       DBG("DRM_IOCTL_GEM_CLOSE %d failed (%s): %s\n",
           bo->gem_handle, bo->name, strerror(errno));
    }

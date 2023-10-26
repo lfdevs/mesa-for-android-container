@@ -46,6 +46,7 @@ STABLE_EPHEMERAL=" \
 apt-get update
 
 apt-get install -y --no-remove \
+      $EXTRA_LOCAL_PACKAGES \
       $STABLE_EPHEMERAL \
       clinfo \
       iptables \

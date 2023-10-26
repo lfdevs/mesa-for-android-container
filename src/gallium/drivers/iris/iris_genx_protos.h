@@ -43,6 +43,17 @@ void genX(update_pma_fix)(struct iris_context *ice,
 
 void genX(invalidate_aux_map_state)(struct iris_batch *batch);
 
+void genX(emit_breakpoint)(struct iris_batch *batch, bool emit_before_draw);
+
+static inline void
+genX(maybe_emit_breakpoint)(struct iris_batch *batch,
+                            bool emit_before_draw)
+{
+   if (INTEL_DEBUG(DEBUG_DRAW_BKP))
+      genX(emit_breakpoint)(batch, emit_before_draw);
+}
+
+
 /* iris_blorp.c */
 void genX(init_blorp)(struct iris_context *ice);
 

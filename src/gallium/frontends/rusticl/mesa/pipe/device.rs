@@ -24,6 +24,10 @@ impl PipeLoaderDevice {
         let s = unsafe { pipe_loader_create_screen(self.ldev) };
         PipeScreen::new(self, s)
     }
+
+    pub fn driver_name(&self) -> String {
+        c_string_to_string(unsafe { *self.ldev }.driver_name)
+    }
 }
 
 impl Drop for PipeLoaderDevice {
@@ -35,10 +39,10 @@ impl Drop for PipeLoaderDevice {
 }
 
 fn load_devs() -> Vec<PipeLoaderDevice> {
-    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0) };
+    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0, true) };
     let mut devices: Vec<*mut pipe_loader_device> = vec![ptr::null_mut(); n as usize];
     unsafe {
-        pipe_loader_probe(devices.as_mut_ptr(), n);
+        pipe_loader_probe(devices.as_mut_ptr(), n, true);
     }
 
     devices

@@ -1,6 +1,3 @@
-# These take so long that cause caselist batches to timeout
-dEQP-VK.pipeline.monolithic.*
-
 # These are taking too much memory (7.6GB and 6.2GB respectively) and can cause EOM issues
 dEQP-VK.api.object_management.max_concurrent.graphics_pipeline
 dEQP-VK.api.object_management.max_concurrent.compute_pipeline
@@ -8,13 +5,4 @@ dEQP-VK.api.object_management.max_concurrent.compute_pipeline
 # Can timeout
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_nearest_repeat
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_nearest_mipmap_linear_repeat
-
-# Unknown lvp issues not seen on hw drivers since CTS 1.3.5.0
-dEQP-VK.binding_model.buffer_device_address.*
-dEQP-VK.binding_model.shader_access.*
-dEQP-VK.spirv_assembly.instruction.*
-
-
-# unknown lvp issues since !22600
-dEQP-VK.subgroups.*.compute.*
-dEQP-VK.subgroups.builtin_var.graphics.subgroupsize
+dEQP-VK.texture.explicit_lod.2d.sizes.128x128_nearest_linear_mipmap_linear_repeat

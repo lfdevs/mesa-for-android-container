@@ -35,15 +35,15 @@ blorp_nir_init_shader(nir_builder *b,
       b->shader->info.fs.origin_upper_left = true;
 }
 
-static inline nir_ssa_def *
-blorp_nir_txf_ms_mcs(nir_builder *b, nir_ssa_def *xy_pos, nir_ssa_def *layer)
+static inline nir_def *
+blorp_nir_txf_ms_mcs(nir_builder *b, nir_def *xy_pos, nir_def *layer)
 {
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, 1);
    tex->op = nir_texop_txf_ms_mcs_intel;
    tex->sampler_dim = GLSL_SAMPLER_DIM_MS;
    tex->dest_type = nir_type_int32;
 
-   nir_ssa_def *coord;
+   nir_def *coord;
    if (layer) {
       tex->is_array = true;
       tex->coord_components = 3;
@@ -61,15 +61,15 @@ blorp_nir_txf_ms_mcs(nir_builder *b, nir_ssa_def *xy_pos, nir_ssa_def *layer)
    tex->texture_index = 0;
    tex->sampler_index = 0;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
 
-   return &tex->dest.ssa;
+   return &tex->def;
 }
 
-static inline nir_ssa_def *
+static inline nir_def *
 blorp_nir_mcs_is_clear_color(nir_builder *b,
-                             nir_ssa_def *mcs,
+                             nir_def *mcs,
                              uint32_t samples)
 {
    switch (samples) {
@@ -97,22 +97,22 @@ blorp_nir_mcs_is_clear_color(nir_builder *b,
    }
 }
 
-static inline nir_ssa_def *
+static inline nir_def *
 blorp_check_in_bounds(nir_builder *b,
-                      nir_ssa_def *bounds_rect,
-                      nir_ssa_def *pos)
+                      nir_def *bounds_rect,
+                      nir_def *pos)
 {
-   nir_ssa_def *x0 = nir_channel(b, bounds_rect, 0);
-   nir_ssa_def *x1 = nir_channel(b, bounds_rect, 1);
-   nir_ssa_def *y0 = nir_channel(b, bounds_rect, 2);
-   nir_ssa_def *y1 = nir_channel(b, bounds_rect, 3);
+   nir_def *x0 = nir_channel(b, bounds_rect, 0);
+   nir_def *x1 = nir_channel(b, bounds_rect, 1);
+   nir_def *y0 = nir_channel(b, bounds_rect, 2);
+   nir_def *y1 = nir_channel(b, bounds_rect, 3);
 
-   nir_ssa_def *c0 = nir_uge(b, nir_channel(b, pos, 0), x0);
-   nir_ssa_def *c1 = nir_ult(b, nir_channel(b, pos, 0), x1);
-   nir_ssa_def *c2 = nir_uge(b, nir_channel(b, pos, 1), y0);
-   nir_ssa_def *c3 = nir_ult(b, nir_channel(b, pos, 1), y1);
+   nir_def *c0 = nir_uge(b, nir_channel(b, pos, 0), x0);
+   nir_def *c1 = nir_ult(b, nir_channel(b, pos, 0), x1);
+   nir_def *c2 = nir_uge(b, nir_channel(b, pos, 1), y0);
+   nir_def *c3 = nir_ult(b, nir_channel(b, pos, 1), y1);
 
-   nir_ssa_def *in_bounds =
+   nir_def *in_bounds =
       nir_iand(b, nir_iand(b, c0, c1), nir_iand(b, c2, c3));
 
    return in_bounds;

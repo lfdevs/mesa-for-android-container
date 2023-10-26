@@ -251,13 +251,6 @@ transfer_map_msaa(struct pipe_context *pctx,
    return ss_map;
 }
 
-static void *
-u_transfer_helper_deinterleave_transfer_map(struct pipe_context *pctx,
-                                            struct pipe_resource *prsc,
-                                            unsigned level, unsigned usage,
-                                            const struct pipe_box *box,
-                                            struct pipe_transfer **pptrans);
-
 void *
 u_transfer_helper_transfer_map(struct pipe_context *pctx,
                                struct pipe_resource *prsc,

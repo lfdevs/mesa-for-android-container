@@ -12,7 +12,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "freedreno/decode/redump.h"
+#include "redump.h"
 
 #include "util/u_math.h"
 
@@ -53,6 +53,9 @@ struct replay_context {
    struct cmdstream *submit_cs;
    struct cmdstream *state_cs;
    struct cmdstream *shader_cs;
+
+   struct cmdstream *shader_log;
+   struct cmdstream *cp_log;
 
    struct list_head cs_list;
 
@@ -110,7 +113,7 @@ struct rd_section {
 static struct cmdstream *
 cs_alloc(struct replay_context *ctx, uint32_t size)
 {
-   struct cmdstream *cs = calloc(1, sizeof(struct cmdstream));
+   struct cmdstream *cs = (struct cmdstream *) calloc(1, sizeof(struct cmdstream));
    cs->mem = (uint32_t *)calloc(1, size);
    cs->total_size = size / sizeof(uint32_t);
    cs->cur = 0;
@@ -124,20 +127,27 @@ cs_alloc(struct replay_context *ctx, uint32_t size)
 }
 
 static void
+rd_write_gpu_addr_section(FILE *out, struct cmdstream *cs, enum rd_sect_type section)
+{
+   const uint32_t packet[] = {(uint32_t)cs->iova,
+                              (uint32_t)(cs->cur * sizeof(uint32_t)),
+                              (uint32_t)(cs->iova >> 32)};
+   struct rd_section section_address = {.type = section,
+                                        .size = sizeof(packet)};
+   fwrite(&section_address, sizeof(section_address), 1, out);
+   fwrite(packet, sizeof(packet), 1, out);
+}
+
+static void
 rd_write_cs_buffer(FILE *out, struct cmdstream *cs)
 {
    if (cs->cur == 0)
       return;
 
-   const uint32_t packet[] = {(uint32_t)cs->iova, cs->cur * sizeof(uint32_t),
-                              (uint32_t)(cs->iova >> 32)};
-   struct rd_section section_address = {.type = RD_GPUADDR,
-                                        .size = sizeof(packet)};
-   fwrite(&section_address, sizeof(section_address), 1, out);
-   fwrite(packet, sizeof(packet), 1, out);
+   rd_write_gpu_addr_section(out, cs, RD_GPUADDR);
 
    struct rd_section section_contents = {.type = RD_BUFFER_CONTENTS,
-                                         .size = cs->cur * sizeof(uint32_t)};
+                                         .size = uint32_t(cs->cur * sizeof(uint32_t))};
 
    fwrite(&section_contents, sizeof(section_contents), 1, out);
    fwrite(cs->mem, sizeof(uint32_t), cs->cur, out);
@@ -222,8 +232,19 @@ replay_context_init(struct replay_context *ctx, struct fd_dev_id *dev_id,
    ctx->state_cs = cs_alloc(ctx, 2 * 1024 * 1024);
    ctx->shader_cs = cs_alloc(ctx, 8 * 1024 * 1024);
 
+   ctx->shader_log = cs_alloc(ctx, 1024 * 1024);
+   ctx->shader_log->mem[0] = (ctx->shader_log->iova & 0xffffffff) + sizeof(uint64_t);
+   ctx->shader_log->mem[1] = ctx->shader_log->iova >> 32;
+   ctx->shader_log->cur = ctx->shader_log->total_size;
+
+   ctx->cp_log = cs_alloc(ctx, 8 * 1024 * 1024);
+   ((uint64_t *)ctx->cp_log->mem)[0] = ctx->cp_log->iova + 2 * sizeof(uint64_t);
+   ((uint64_t *)ctx->cp_log->mem)[1] = sizeof(uint64_t);
+   ctx->cp_log->cur = ctx->cp_log->total_size;
+
+   struct ir3_compiler_options options{};
    ctx->compiler =
-      ir3_compiler_create(NULL, dev_id, &(struct ir3_compiler_options){});
+      ir3_compiler_create(NULL, dev_id, &options);
    ctx->compiled_shaders = _mesa_hash_table_u64_create(ctx->mem_ctx);
 }
 
@@ -241,6 +262,9 @@ replay_context_finish(struct replay_context *ctx)
    fwrite(&section_gpu_id, sizeof(section_gpu_id), 1, out);
    fwrite(&gpu_id, sizeof(uint32_t), 1, out);
 
+   rd_write_gpu_addr_section(out, ctx->shader_log, RD_SHADER_LOG_BUFFER);
+   rd_write_gpu_addr_section(out, ctx->cp_log, RD_CP_LOG_BUFFER);
+
    list_for_each_entry (struct cmdstream, cs, &ctx->cs_list, link) {
       rd_write_cs_buffer(out, cs);
    }
@@ -254,7 +278,9 @@ upload_shader(struct replay_context *ctx, uint64_t id, const char *source)
 {
    FILE *in = fmemopen((void *)source, strlen(source), "r");
 
-   struct ir3_kernel_info info = {};
+   struct ir3_kernel_info info = {
+      .shader_print_buffer_iova = ctx->shader_log->iova,
+   };
    struct ir3_shader *shader = ir3_parse_asm(ctx->compiler, &info, in);
    assert(shader);
 
@@ -271,7 +297,7 @@ upload_shader(struct replay_context *ctx, uint64_t id, const char *source)
 static void
 emit_shader_iova(struct replay_context *ctx, struct cmdstream *cs, uint64_t id)
 {
-   uint64_t *shader_iova =
+   uint64_t *shader_iova = (uint64_t *)
       _mesa_hash_table_u64_search(ctx->compiled_shaders, id);
    pkt_qw(cs, *shader_iova);
 }
@@ -298,3 +324,58 @@ emit_shader_iova(struct replay_context *ctx, struct cmdstream *cs, uint64_t id)
    pkt7(prev_cs, CP_INDIRECT_BUFFER, 3);                                       \
    pkt_qw(prev_cs, cs->iova);                                                  \
    pkt(prev_cs, ibcs_size);
+
+static void
+gpu_print(struct replay_context *ctx, struct cmdstream *_cs, uint64_t iova,
+          uint32_t dwords)
+{
+   uint64_t header_iova, body_iova;
+   struct cmdstream *prev_cs = _cs;
+   struct cmdstream *cs = cs_alloc(ctx, 4096);
+   /* Commands that are being modified should be in a separate cmdstream,
+    * otherwise they would be prefetched and writes would not be visible.
+    */
+   {
+      /* Write size into entry's header */
+      pkt7(cs, CP_MEM_WRITE, 4);
+      header_iova = cs_get_cur_iova(cs);
+      pkt_qw(cs, 0xdeadbeef);
+      uint64_t size_iova = cs_get_cur_iova(cs);
+      pkt(cs, dwords * 4);
+      pkt(cs, 0);
+
+      /* Copy the data into entry's body */
+      pkt7(cs, CP_MEMCPY, 5);
+      pkt(cs, dwords);
+      pkt_qw(cs, iova);
+      body_iova = cs_get_cur_iova(cs);
+      pkt_qw(cs, 0xdeadbeef);
+
+      /* iova = iova + body_size + header_size */
+      pkt7(cs, CP_MEM_TO_MEM, 9);
+      pkt(cs, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_WAIT_FOR_MEM_WRITES);
+      pkt_qw(cs, ctx->cp_log->iova);
+      pkt_qw(cs, ctx->cp_log->iova);
+      pkt_qw(cs, size_iova);
+      pkt_qw(cs, ctx->cp_log->iova + sizeof(uint64_t));
+   }
+
+   {
+      struct cmdstream *cs = prev_cs;
+      pkt7(cs, CP_MEM_TO_MEM, 5);
+      pkt(cs, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_WAIT_FOR_MEM_WRITES);
+      pkt_qw(cs, header_iova);
+      pkt_qw(cs, ctx->cp_log->iova);
+
+      pkt7(cs, CP_MEM_TO_MEM, 7);
+      pkt(cs, CP_MEM_TO_MEM_0_DOUBLE);
+      pkt_qw(cs, body_iova);
+      pkt_qw(cs, ctx->cp_log->iova);
+      pkt_qw(cs, ctx->cp_log->iova + sizeof(uint64_t));
+
+      pkt7(cs, CP_WAIT_MEM_WRITES, 0);
+      pkt7(cs, CP_WAIT_FOR_ME, 0);
+   }
+
+   end_ib();
+}

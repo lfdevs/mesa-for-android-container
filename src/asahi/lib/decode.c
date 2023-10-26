@@ -20,6 +20,16 @@
 #include "agx_iokit.h"
 #endif
 
+/* Pending UAPI */
+struct drm_asahi_params_global {
+   int gpu_generation;
+   int gpu_variant;
+   int chip_id;
+   int num_clusters_total;
+};
+
+struct libagxdecode_config lib_config;
+
 UNUSED static const char *agx_alloc_types[AGX_NUM_ALLOC] = {"mem", "map",
                                                             "cmd"};
 
@@ -200,10 +210,14 @@ agxdecode_decode_segment_list(void *segment_list)
 
 #endif
 
-static inline void *
+static size_t
 __agxdecode_fetch_gpu_mem(const struct agx_bo *mem, uint64_t gpu_va,
-                          size_t size, int line, const char *filename)
+                          size_t size, void *buf, int line,
+                          const char *filename)
 {
+   if (lib_config.read_gpu_mem)
+      return lib_config.read_gpu_mem(gpu_va, size, buf);
+
    if (!mem)
       mem = agxdecode_find_mapped_gpu_mem_containing(gpu_va);
 
@@ -215,13 +229,27 @@ __agxdecode_fetch_gpu_mem(const struct agx_bo *mem, uint64_t gpu_va,
    }
 
    assert(mem);
-   assert(size + (gpu_va - mem->ptr.gpu) <= mem->size);
 
-   return mem->ptr.cpu + gpu_va - mem->ptr.gpu;
+   if (size + (gpu_va - mem->ptr.gpu) > mem->size) {
+      fprintf(stderr,
+              "Overflowing to unknown memory %" PRIx64
+              " of size %zu (max size %zu) in %s:%d\n",
+              gpu_va, size, (size_t)(mem->size - (gpu_va - mem->ptr.gpu)),
+              filename, line);
+      fflush(agxdecode_dump_stream);
+      assert(0);
+   }
+
+   memcpy(buf, mem->ptr.cpu + gpu_va - mem->ptr.gpu, size);
+
+   return size;
 }
 
-#define agxdecode_fetch_gpu_mem(gpu_va, size)                                  \
-   __agxdecode_fetch_gpu_mem(NULL, gpu_va, size, __LINE__, __FILE__)
+#define agxdecode_fetch_gpu_mem(gpu_va, size, buf)                             \
+   __agxdecode_fetch_gpu_mem(NULL, gpu_va, size, buf, __LINE__, __FILE__)
+
+#define agxdecode_fetch_gpu_array(gpu_va, buf)                                 \
+   agxdecode_fetch_gpu_mem(gpu_va, sizeof(buf), buf)
 
 static void
 agxdecode_map_read_write(void)
@@ -254,31 +282,51 @@ agxdecode_map_read_write(void)
 
 unsigned agxdecode_indent = 0;
 
+typedef struct drm_asahi_params_global decoder_params;
+
 /* Abstraction for command stream parsing */
 typedef unsigned (*decode_cmd)(const uint8_t *map, uint64_t *link, bool verbose,
-                               void *data);
+                               decoder_params *params, void *data);
 
 #define STATE_DONE (0xFFFFFFFFu)
 #define STATE_LINK (0xFFFFFFFEu)
+#define STATE_CALL (0xFFFFFFFDu)
+#define STATE_RET  (0xFFFFFFFCu)
 
 static void
 agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
-                   bool verbose, void *data)
+                   bool verbose, decoder_params *params, void *data)
 {
-   struct agx_bo *alloc = agxdecode_find_mapped_gpu_mem_containing(va);
-   assert(alloc != NULL && "nonexistent object");
-   fprintf(agxdecode_dump_stream, "%s (%" PRIx64 ", handle %u)\n", label, va,
-           alloc->handle);
+   uint64_t stack[16];
+   unsigned sp = 0;
+
+   uint8_t buf[1024];
+   if (!lib_config.read_gpu_mem) {
+      struct agx_bo *alloc = agxdecode_find_mapped_gpu_mem_containing(va);
+      assert(alloc != NULL && "nonexistent object");
+      fprintf(agxdecode_dump_stream, "%s (%" PRIx64 ", handle %u)\n", label, va,
+              alloc->handle);
+   } else {
+      fprintf(agxdecode_dump_stream, "%s (%" PRIx64 ")\n", label, va);
+   }
    fflush(agxdecode_dump_stream);
 
-   uint8_t *map = agxdecode_fetch_gpu_mem(va, 64);
-   uint8_t *end = (uint8_t *)alloc->ptr.cpu + alloc->size;
+   int len = agxdecode_fetch_gpu_array(va, buf);
+
+   int left = len;
+   uint8_t *map = buf;
    uint64_t link = 0;
 
    fflush(agxdecode_dump_stream);
 
-   while (map < end) {
-      unsigned count = decoder(map, &link, verbose, data);
+   while (left) {
+      if (len <= 0) {
+         fprintf(agxdecode_dump_stream, "!! Failed to read GPU memory\n");
+         fflush(agxdecode_dump_stream);
+         return;
+      }
+
+      unsigned count = decoder(map, &link, verbose, params, data);
 
       /* If we fail to decode, default to a hexdump (don't hang) */
       if (count == 0) {
@@ -286,25 +334,49 @@ agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
          count = 8;
       }
 
-      map += count;
       fflush(agxdecode_dump_stream);
-
       if (count == STATE_DONE) {
          break;
       } else if (count == STATE_LINK) {
-         alloc = agxdecode_find_mapped_gpu_mem_containing(link);
-         map = agxdecode_fetch_gpu_mem(link, 64);
-         end = (uint8_t *)alloc->ptr.cpu + alloc->size;
+         fprintf(agxdecode_dump_stream, "Linking to 0x%" PRIx64 "\n\n", link);
+         va = link;
+         left = len = agxdecode_fetch_gpu_array(va, buf);
+         map = buf;
+      } else if (count == STATE_CALL) {
+         fprintf(agxdecode_dump_stream,
+                 "Calling 0x%" PRIx64 " (return = 0x%" PRIx64 ")\n\n", link,
+                 va + 8);
+         assert(sp < ARRAY_SIZE(stack));
+         stack[sp++] = va + 8;
+         va = link;
+         left = len = agxdecode_fetch_gpu_array(va, buf);
+         map = buf;
+      } else if (count == STATE_RET) {
+         assert(sp > 0);
+         va = stack[--sp];
+         fprintf(agxdecode_dump_stream, "Returning to 0x%" PRIx64 "\n\n", va);
+         left = len = agxdecode_fetch_gpu_array(va, buf);
+         map = buf;
+      } else {
+         va += count;
+         map += count;
+         left -= count;
+
+         if (left < 512 && len == sizeof(buf)) {
+            left = len = agxdecode_fetch_gpu_array(va, buf);
+            map = buf;
+         }
       }
    }
 }
 
 static unsigned
 agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
-              UNUSED void *data)
+              decoder_params *params, UNUSED void *data)
 {
    enum agx_sampler_states *sampler_states = data;
    enum agx_usc_control type = map[0];
+   uint8_t buf[8192];
 
    bool extended_samplers =
       (sampler_states != NULL) &&
@@ -327,7 +399,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       agx_unpack(agxdecode_dump_stream, map, USC_PRESHADER, ctrl);
       DUMP_UNPACKED(USC_PRESHADER, ctrl, "Preshader\n");
 
-      agx_disassemble(agxdecode_fetch_gpu_mem(ctrl.code, 2048), 8192,
+      agx_disassemble(buf, agxdecode_fetch_gpu_array(ctrl.code, buf),
                       agxdecode_dump_stream);
 
       return STATE_DONE;
@@ -338,7 +410,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       DUMP_UNPACKED(USC_SHADER, ctrl, "Shader\n");
 
       agxdecode_log("\n");
-      agx_disassemble(agxdecode_fetch_gpu_mem(ctrl.code, 2048), 8192,
+      agx_disassemble(buf, agxdecode_fetch_gpu_array(ctrl.code, buf),
                       agxdecode_dump_stream);
       agxdecode_log("\n");
 
@@ -349,8 +421,10 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       agx_unpack(agxdecode_dump_stream, map, USC_SAMPLER, temp);
       DUMP_UNPACKED(USC_SAMPLER, temp, "Sampler state\n");
 
-      uint8_t *samp =
-         agxdecode_fetch_gpu_mem(temp.buffer, AGX_SAMPLER_LENGTH * temp.count);
+      uint8_t buf[AGX_SAMPLER_LENGTH * temp.count];
+      uint8_t *samp = buf;
+
+      agxdecode_fetch_gpu_array(temp.buffer, buf);
 
       for (unsigned i = 0; i < temp.count; ++i) {
          DUMP_CL(SAMPLER, samp, "Sampler");
@@ -369,8 +443,10 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       agx_unpack(agxdecode_dump_stream, map, USC_TEXTURE, temp);
       DUMP_UNPACKED(USC_TEXTURE, temp, "Texture state\n");
 
-      uint8_t *tex =
-         agxdecode_fetch_gpu_mem(temp.buffer, AGX_TEXTURE_LENGTH * temp.count);
+      uint8_t buf[AGX_TEXTURE_LENGTH * temp.count];
+      uint8_t *tex = buf;
+
+      agxdecode_fetch_gpu_array(temp.buffer, buf);
 
       /* Note: samplers only need 8 byte alignment? */
       for (unsigned i = 0; i < temp.count; ++i) {
@@ -388,8 +464,9 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       agx_unpack(agxdecode_dump_stream, map, USC_UNIFORM, temp);
       DUMP_UNPACKED(USC_UNIFORM, temp, "Uniform\n");
 
-      uint8_t *raw = agxdecode_fetch_gpu_mem(temp.buffer, 2 * temp.size_halfs);
-      u_hexdump(agxdecode_dump_stream, raw, 2 * temp.size_halfs, false);
+      uint8_t buf[2 * temp.size_halfs];
+      agxdecode_fetch_gpu_array(temp.buffer, buf);
+      u_hexdump(agxdecode_dump_stream, buf, 2 * temp.size_halfs, false);
 
       return AGX_USC_UNIFORM_LENGTH;
    }
@@ -410,17 +487,23 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
 
 #define PPP_PRINT(map, header_name, struct_name, human)                        \
    if (hdr.header_name) {                                                      \
-      assert(((map + AGX_##struct_name##_LENGTH) <= (base + size)) &&          \
-             "buffer overrun in PPP update");                                  \
+      if (((map + AGX_##struct_name##_LENGTH) > (base + size))) {              \
+         fprintf(agxdecode_dump_stream, "Buffer overrun in PPP update\n");     \
+         return;                                                               \
+      }                                                                        \
       DUMP_CL(struct_name, map, human);                                        \
       map += AGX_##struct_name##_LENGTH;                                       \
+      fflush(agxdecode_dump_stream);                                           \
    }
 
 static void
-agxdecode_record(uint64_t va, size_t size, bool verbose)
+agxdecode_record(uint64_t va, size_t size, bool verbose, decoder_params *params)
 {
-   uint8_t *base = agxdecode_fetch_gpu_mem(va, size);
+   uint8_t buf[size];
+   uint8_t *base = buf;
    uint8_t *map = base;
+
+   agxdecode_fetch_gpu_array(va, buf);
 
    agx_unpack(agxdecode_dump_stream, map, PPP_HEADER, hdr);
    map += AGX_PPP_HEADER_LENGTH;
@@ -446,10 +529,13 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
    if (hdr.fragment_shader) {
       agx_unpack(agxdecode_dump_stream, map, FRAGMENT_SHADER, frag);
       agxdecode_stateful(frag.pipeline, "Fragment pipeline", agxdecode_usc,
-                         verbose, &frag.sampler_state_register_count);
+                         verbose, params, &frag.sampler_state_register_count);
 
       if (frag.cf_bindings) {
-         uint8_t *cf = agxdecode_fetch_gpu_mem(frag.cf_bindings, 128);
+         uint8_t buf[128];
+         uint8_t *cf = buf;
+
+         agxdecode_fetch_gpu_array(frag.cf_bindings, buf);
          u_hexdump(agxdecode_dump_stream, cf, 128, false);
 
          DUMP_CL(CF_BINDING_HEADER, cf, "Coefficient binding header:");
@@ -478,7 +564,7 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
 
 static unsigned
 agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
-              UNUSED void *data)
+              decoder_params *params, UNUSED void *data)
 {
    /* Bits 29-31 contain the block type */
    enum agx_cdm_block_type block_type = (map[3] >> 5);
@@ -488,15 +574,21 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
       size_t length = AGX_CDM_HEADER_LENGTH;
 
 #define CDM_PRINT(STRUCT_NAME, human)                                          \
-   DUMP_CL(CDM_##STRUCT_NAME, map, human);                                     \
-   map += AGX_CDM_##STRUCT_NAME##_LENGTH;                                      \
-   length += AGX_CDM_##STRUCT_NAME##_LENGTH;
+   do {                                                                        \
+      DUMP_CL(CDM_##STRUCT_NAME, map, human);                                  \
+      map += AGX_CDM_##STRUCT_NAME##_LENGTH;                                   \
+      length += AGX_CDM_##STRUCT_NAME##_LENGTH;                                \
+   } while (0);
 
       agx_unpack(agxdecode_dump_stream, map, CDM_HEADER, hdr);
       agxdecode_stateful(hdr.pipeline, "Pipeline", agxdecode_usc, verbose,
-                         &hdr.sampler_state_register_count);
+                         params, &hdr.sampler_state_register_count);
       DUMP_UNPACKED(CDM_HEADER, hdr, "Compute\n");
       map += AGX_CDM_HEADER_LENGTH;
+
+      /* Added in G14X */
+      if (params->gpu_generation >= 14 && params->num_clusters_total > 1)
+         CDM_PRINT(UNK_G14X, "Unknown G14X");
 
       switch (hdr.mode) {
       case AGX_CDM_MODE_DIRECT:
@@ -545,28 +637,33 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
 
 static unsigned
 agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
-              UNUSED void *data)
+              decoder_params *params, UNUSED void *data)
 {
    /* Bits 29-31 contain the block type */
    enum agx_vdm_block_type block_type = (map[3] >> 5);
 
    switch (block_type) {
    case AGX_VDM_BLOCK_TYPE_BARRIER: {
-      DUMP_CL(VDM_BARRIER, map, "Barrier");
-      return AGX_VDM_BARRIER_LENGTH;
+      agx_unpack(agxdecode_dump_stream, map, VDM_BARRIER, hdr);
+      DUMP_UNPACKED(VDM_BARRIER, hdr, "Barrier\n");
+      return hdr.returns ? STATE_RET : AGX_VDM_BARRIER_LENGTH;
    }
 
    case AGX_VDM_BLOCK_TYPE_PPP_STATE_UPDATE: {
       agx_unpack(agxdecode_dump_stream, map, PPP_STATE, cmd);
 
       uint64_t address = (((uint64_t)cmd.pointer_hi) << 32) | cmd.pointer_lo;
-      struct agx_bo *mem = agxdecode_find_mapped_gpu_mem_containing(address);
 
-      if (mem)
-         agxdecode_record(address, cmd.size_words * 4, verbose);
-      else
-         DUMP_UNPACKED(PPP_STATE, cmd, "Non-existent record (XXX)\n");
+      if (!lib_config.read_gpu_mem) {
+         struct agx_bo *mem = agxdecode_find_mapped_gpu_mem_containing(address);
 
+         if (!mem) {
+            DUMP_UNPACKED(PPP_STATE, cmd, "Non-existent record (XXX)\n");
+            return AGX_PPP_STATE_LENGTH;
+         }
+      }
+
+      agxdecode_record(address, cmd.size_words * 4, verbose, params);
       return AGX_PPP_STATE_LENGTH;
    }
 
@@ -602,7 +699,7 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
          fprintf(agxdecode_dump_stream, "Pipeline %X\n",
                  (uint32_t)word_1.pipeline);
          agxdecode_stateful(word_1.pipeline, "Pipeline", agxdecode_usc, verbose,
-                            &sampler_states);
+                            params, &sampler_states);
       }
 
       VDM_PRINT(vertex_shader_word_1, VERTEX_SHADER_WORD_1,
@@ -642,7 +739,7 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
       agx_unpack(agxdecode_dump_stream, map, VDM_STREAM_LINK, hdr);
       DUMP_UNPACKED(VDM_STREAM_LINK, hdr, "Stream Link\n");
       *link = hdr.target_lo | (((uint64_t)hdr.target_hi) << 32);
-      return STATE_LINK;
+      return hdr.with_return ? STATE_CALL : STATE_LINK;
    }
 
    case AGX_VDM_BLOCK_TYPE_STREAM_TERMINATE: {
@@ -659,47 +756,91 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
 }
 
 static void
-agxdecode_cs(uint32_t *cmdbuf, uint64_t encoder, bool verbose)
+agxdecode_cs(uint32_t *cmdbuf, uint64_t encoder, bool verbose,
+             decoder_params *params)
 {
    agx_unpack(agxdecode_dump_stream, cmdbuf + 16, IOGPU_COMPUTE, cs);
    DUMP_UNPACKED(IOGPU_COMPUTE, cs, "Compute\n");
 
-   agxdecode_stateful(encoder, "Encoder", agxdecode_cdm, verbose, NULL);
+   agxdecode_stateful(encoder, "Encoder", agxdecode_cdm, verbose, params, NULL);
 
    fprintf(agxdecode_dump_stream, "Context switch program:\n");
-   agx_disassemble(agxdecode_fetch_gpu_mem(cs.context_switch_program, 1024),
-                   1024, agxdecode_dump_stream);
+   uint8_t buf[1024];
+   agx_disassemble(buf,
+                   agxdecode_fetch_gpu_array(cs.context_switch_program, buf),
+                   agxdecode_dump_stream);
 }
 
 static void
-agxdecode_gfx(uint32_t *cmdbuf, uint64_t encoder, bool verbose)
+agxdecode_gfx(uint32_t *cmdbuf, uint64_t encoder, bool verbose,
+              decoder_params *params)
 {
    agx_unpack(agxdecode_dump_stream, cmdbuf + 16, IOGPU_GRAPHICS, gfx);
    DUMP_UNPACKED(IOGPU_GRAPHICS, gfx, "Graphics\n");
 
-   agxdecode_stateful(encoder, "Encoder", agxdecode_vdm, verbose, NULL);
+   agxdecode_stateful(encoder, "Encoder", agxdecode_vdm, verbose, params, NULL);
 
    if (gfx.clear_pipeline_unk) {
       fprintf(agxdecode_dump_stream, "Unk: %X\n", gfx.clear_pipeline_unk);
       agxdecode_stateful(gfx.clear_pipeline, "Clear pipeline", agxdecode_usc,
-                         verbose, NULL);
+                         verbose, params, NULL);
    }
 
    if (gfx.store_pipeline_unk) {
       assert(gfx.store_pipeline_unk == 0x4);
       agxdecode_stateful(gfx.store_pipeline, "Store pipeline", agxdecode_usc,
-                         verbose, NULL);
+                         verbose, params, NULL);
    }
 
    assert((gfx.partial_reload_pipeline_unk & 0xF) == 0x4);
    if (gfx.partial_reload_pipeline) {
       agxdecode_stateful(gfx.partial_reload_pipeline, "Partial reload pipeline",
-                         agxdecode_usc, verbose, NULL);
+                         agxdecode_usc, verbose, params, NULL);
    }
 
    if (gfx.partial_store_pipeline) {
       agxdecode_stateful(gfx.partial_store_pipeline, "Partial store pipeline",
-                         agxdecode_usc, verbose, NULL);
+                         agxdecode_usc, verbose, params, NULL);
+   }
+}
+
+static void
+chip_id_to_params(decoder_params *params, uint32_t chip_id)
+{
+   switch (chip_id) {
+   case 0x6000 ... 0x6002:
+      *params = (decoder_params){
+         .gpu_generation = 13,
+         .gpu_variant = "SCD"[chip_id & 15],
+         .chip_id = chip_id,
+         .num_clusters_total = 2 << (chip_id & 15),
+      };
+      break;
+   case 0x6020 ... 0x6022:
+      *params = (decoder_params){
+         .gpu_generation = 14,
+         .gpu_variant = "SCD"[chip_id & 15],
+         .chip_id = chip_id,
+         .num_clusters_total = 2 << (chip_id & 15),
+      };
+      break;
+   case 0x8112:
+      *params = (decoder_params){
+         .gpu_generation = 14,
+         .gpu_variant = 'G',
+         .chip_id = chip_id,
+         .num_clusters_total = 1,
+      };
+      break;
+   case 0x8103:
+   default:
+      *params = (decoder_params){
+         .gpu_generation = 13,
+         .gpu_variant = 'G',
+         .chip_id = chip_id,
+         .num_clusters_total = 1,
+      };
+      break;
    }
 }
 
@@ -735,10 +876,14 @@ agxdecode_cmdstream(unsigned cmdbuf_handle, unsigned map_handle, bool verbose)
       DUMP_CL(IOGPU_ATTACHMENT, ptr, "Attachment");
    }
 
+   struct drm_asahi_params_global params;
+
+   chip_id_to_params(&params, 0x8103);
+
    if (cmd.unk_5 == 3)
-      agxdecode_cs((uint32_t *)cmdbuf->ptr.cpu, cmd.encoder, verbose);
+      agxdecode_cs((uint32_t *)cmdbuf->ptr.cpu, cmd.encoder, verbose, &params);
    else
-      agxdecode_gfx((uint32_t *)cmdbuf->ptr.cpu, cmd.encoder, verbose);
+      agxdecode_gfx((uint32_t *)cmdbuf->ptr.cpu, cmd.encoder, verbose, &params);
 
    agxdecode_map_read_write();
 }
@@ -793,7 +938,8 @@ agxdecode_track_free(struct agx_bo *bo)
 
    for (unsigned i = 0; i < mmap_count; ++i) {
       if (mmap_array[i].handle == bo->handle &&
-          mmap_array[i].type == bo->type) {
+          (mmap_array[i].type == AGX_ALLOC_REGULAR) ==
+             (bo->type == AGX_ALLOC_REGULAR)) {
          assert(!found && "mapped multiple times!");
          found = true;
 
@@ -851,6 +997,54 @@ agxdecode_next_frame(void)
 
 void
 agxdecode_close(void)
+{
+   agxdecode_dump_file_close();
+}
+
+static ssize_t
+libagxdecode_writer(void *cookie, const char *buffer, size_t size)
+{
+   return lib_config.stream_write(buffer, size);
+}
+
+#ifdef _GNU_SOURCE
+static cookie_io_functions_t funcs = {.write = libagxdecode_writer};
+#endif
+
+static decoder_params lib_params;
+
+void
+libagxdecode_init(struct libagxdecode_config *config)
+{
+#ifdef _GNU_SOURCE
+   lib_config = *config;
+   agxdecode_dump_stream = fopencookie(NULL, "w", funcs);
+
+   chip_id_to_params(&lib_params, config->chip_id);
+#else
+   /* fopencookie is a glibc extension */
+   unreachable("libagxdecode only available with glibc");
+#endif
+}
+
+void
+libagxdecode_vdm(uint64_t addr, const char *label, bool verbose)
+{
+   agxdecode_stateful(addr, label, agxdecode_vdm, verbose, &lib_params, NULL);
+}
+
+void
+libagxdecode_cdm(uint64_t addr, const char *label, bool verbose)
+{
+   agxdecode_stateful(addr, label, agxdecode_cdm, verbose, &lib_params, NULL);
+}
+void
+libagxdecode_usc(uint64_t addr, const char *label, bool verbose)
+{
+   agxdecode_stateful(addr, label, agxdecode_usc, verbose, &lib_params, NULL);
+}
+void
+libagxdecode_shutdown(void)
 {
    agxdecode_dump_file_close();
 }

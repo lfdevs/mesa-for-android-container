@@ -234,7 +234,7 @@ struct iris_bo {
     * Also align it to 64 bits. This will make atomic operations faster on 32
     * bit platforms.
     */
-   uint64_t last_seqnos[NUM_IRIS_DOMAINS] __attribute__ ((aligned (8)));
+   alignas(8) uint64_t last_seqnos[NUM_IRIS_DOMAINS];
 
    /** Up to one per screen, may need realloc. */
    struct iris_bo_screen_deps *deps;

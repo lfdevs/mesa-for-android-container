@@ -300,7 +300,7 @@ bool pvr_dump_buffer_hex(struct pvr_dump_buffer_ctx *ctx, uint64_t nr_bytes);
 static inline void __pvr_dump_buffer_advance(struct pvr_dump_buffer_ctx *ctx,
                                              const uint64_t nr_bytes)
 {
-   ctx->ptr += nr_bytes;
+   ctx->ptr = (uint8_t *)ctx->ptr + nr_bytes;
    ctx->remaining_size -= nr_bytes;
 }
 
@@ -321,7 +321,7 @@ static inline bool pvr_dump_buffer_advance(struct pvr_dump_buffer_ctx *ctx,
 static inline void __pvr_dump_buffer_rewind(struct pvr_dump_buffer_ctx *ctx,
                                             const uint32_t nr_bytes)
 {
-   ctx->ptr -= nr_bytes;
+   ctx->ptr = (uint8_t *)ctx->ptr - nr_bytes;
    ctx->remaining_size += nr_bytes;
 }
 
@@ -498,6 +498,21 @@ static inline void pvr_dump_field_x32(struct pvr_dump_ctx *const ctx,
                   value & BITFIELD_MASK(chars * 4));
 }
 
+static inline void pvr_dump_field_u64(struct pvr_dump_ctx *const ctx,
+                                      const char *const name,
+                                      const uint64_t value)
+{
+   pvr_dump_field(ctx, name, "%" PRIu64, value);
+}
+
+static inline void pvr_dump_field_u64_units(struct pvr_dump_ctx *const ctx,
+                                            const char *const name,
+                                            const uint64_t value,
+                                            const char *const units)
+{
+   pvr_dump_field(ctx, name, "%" PRIu64 " %s", value, units);
+}
+
 /*****************************************************************************
    Field printers: floating point
 *****************************************************************************/
@@ -631,6 +646,17 @@ static inline void pvr_dump_field_bool(struct pvr_dump_ctx *const ctx,
 }
 
 /*****************************************************************************
+   Field printers: string
+*****************************************************************************/
+
+static inline void pvr_dump_field_string(struct pvr_dump_ctx *const ctx,
+                                         const char *const name,
+                                         const char *const value)
+{
+   pvr_dump_field(ctx, name, "%s", value);
+}
+
+/*****************************************************************************
    Field printers: not present
 *****************************************************************************/
 
@@ -672,6 +698,12 @@ static inline void pvr_dump_field_not_present(struct pvr_dump_ctx *const ctx,
 #define pvr_dump_field_member_x32(ctx, compound, member, chars) \
    pvr_dump_field_x32(ctx, #member, (compound)->member, chars)
 
+#define pvr_dump_field_member_u64(ctx, compound, member) \
+   pvr_dump_field_u64(ctx, #member, (compound)->member)
+
+#define pvr_dump_field_member_u64_units(ctx, compound, member, units) \
+   pvr_dump_field_u64_units(ctx, #member, (compound)->member, units)
+
 #define pvr_dump_field_member_f32(ctx, compound, member) \
    pvr_dump_field_f32(ctx, #member, (compound)->member)
 
@@ -692,6 +724,9 @@ static inline void pvr_dump_field_not_present(struct pvr_dump_ctx *const ctx,
 
 #define pvr_dump_field_member_bool(ctx, compound, member) \
    pvr_dump_field_bool(ctx, #member, (compound)->member)
+
+#define pvr_dump_field_member_string(ctx, compound, member) \
+   pvr_dump_field_string(ctx, #member, (compound)->member)
 
 /* clang-format on */
 

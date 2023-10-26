@@ -1984,9 +1984,12 @@ instruction_scheduler::run(cfg_t *cfg)
 void
 fs_visitor::schedule_instructions(instruction_scheduler_mode mode)
 {
+   if (mode == SCHEDULE_NONE)
+      return;
+
    int grf_count;
    if (mode == SCHEDULE_POST)
-      grf_count = grf_used;
+      grf_count = reg_unit(devinfo) * grf_used;
    else
       grf_count = alloc.count;
 

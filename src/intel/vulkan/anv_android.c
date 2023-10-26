@@ -119,6 +119,8 @@ vk_format_from_android(unsigned android_format, unsigned android_usage)
    case AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420:
    case HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL:
       return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+   case AHARDWAREBUFFER_FORMAT_YV12:
+      return VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
    case AHARDWAREBUFFER_FORMAT_IMPLEMENTATION_DEFINED:
       if (android_usage & BUFFER_USAGE_CAMERA_MASK)
          return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
@@ -330,12 +332,6 @@ anv_image_init_from_gralloc(struct anv_device *device,
       .isl_extra_usage_flags = ISL_SURF_USAGE_DISABLE_AUX_BIT,
    };
 
-   if (gralloc_info->handle->numFds != 1) {
-      return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                       "VkNativeBufferANDROID::handle::numFds is %d, "
-                       "expected 1", gralloc_info->handle->numFds);
-   }
-
    /* Do not close the gralloc handle's dma_buf. The lifetime of the dma_buf
     * must exceed that of the gralloc handle, and we do not own the gralloc
     * handle.
@@ -369,13 +365,7 @@ anv_image_init_from_gralloc(struct anv_device *device,
    }
    anv_info.isl_tiling_flags = 1u << tiling;
 
-   enum isl_format format = anv_get_isl_format(device->info,
-                                               base_info->format,
-                                               VK_IMAGE_ASPECT_COLOR_BIT,
-                                               base_info->tiling);
-   assert(format != ISL_FORMAT_UNSUPPORTED);
-
-   anv_info.stride = gralloc_info->stride * (isl_format_get_layout(format)->bpb / 8);
+   anv_info.stride = gralloc_info->stride;
 
    result = anv_image_init(device, image, &anv_info);
    if (result != VK_SUCCESS)
@@ -580,7 +570,8 @@ VkResult anv_GetSwapchainGrallocUsage2ANDROID(
 
    *grallocConsumerUsage = 0;
    *grallocProducerUsage = 0;
-   mesa_logd("%s: format=%d, usage=0x%x", __func__, format, imageUsage);
+   mesa_logd("%s: format=%d, usage=0x%x, swapchainUsage=0x%x", __func__, format,
+             imageUsage, swapchainImageUsage);
 
    result = format_supported_with_usage(device_h, format, imageUsage);
    if (result != VK_SUCCESS)
@@ -607,6 +598,13 @@ VkResult anv_GetSwapchainGrallocUsage2ANDROID(
                        GRALLOC_USAGE_EXTERNAL_DISP)) {
       *grallocProducerUsage |= GRALLOC1_PRODUCER_USAGE_GPU_RENDER_TARGET;
       *grallocConsumerUsage |= GRALLOC1_CONSUMER_USAGE_HWCOMPOSER;
+   }
+
+   if ((swapchainImageUsage & VK_SWAPCHAIN_IMAGE_USAGE_SHARED_BIT_ANDROID) &&
+       device->u_gralloc != NULL) {
+      uint64_t front_rendering_usage = 0;
+      u_gralloc_get_front_rendering_usage(device->u_gralloc, &front_rendering_usage);
+      *grallocProducerUsage |= front_rendering_usage;
    }
 
    return VK_SUCCESS;

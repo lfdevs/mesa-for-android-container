@@ -425,7 +425,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    result =
       vk_physical_device_init(&device->vk, &instance->vk, &supported_extensions,
-                              &supported_features, &dispatch_table);
+                              &supported_features, NULL, &dispatch_table);
 
    if (result != VK_SUCCESS) {
       vk_error(instance, result);
@@ -449,7 +449,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    panfrost_open_device(NULL, fd, &device->pdev);
    fd = -1;
 
-   if (device->pdev.arch <= 5) {
+   if (device->pdev.arch <= 5 || device->pdev.arch >= 8) {
       result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                          "%s not supported", device->pdev.model->name);
       goto fail;
@@ -814,7 +814,7 @@ panvk_queue_init(struct panvk_device *device, struct panvk_queue *queue,
       queue->vk.driver_submit = panvk_v7_queue_submit;
       break;
    default:
-      unreachable("Invalid arch");
+      unreachable("Unsupported architecture");
    }
 
    queue->sync = create.handle;

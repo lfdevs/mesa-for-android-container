@@ -45,6 +45,9 @@ spec@ext_texture_array@fbo-depth-array stencil-draw
 spec@ext_transform_feedback@max-varyings
 spec@!opengl 1.0@gl-1.0-blend-func
 
+spec@ext_framebuffer_blit@fbo-blit-check-limits
+spec@egl 1.4@egl-copy-buffers
+
 # Skip over a bunch of extensions since we don't have extension fast skipping yet.
 spec@glsl-4.*
 spec@arb_gpu_shader5.*
@@ -67,3 +70,6 @@ spec@arb_buffer_storage@bufferstorage-persistent_gles3 read coherent client-stor
 # These are redundant with arb_copy_image, so skip them to cut down
 # on CI runtime:
 spec@nv_copy_image@nv_copy_image.*
+
+# Exclude this test which might fail when a new extension is implemented.
+dEQP-VK.info.device_extensions

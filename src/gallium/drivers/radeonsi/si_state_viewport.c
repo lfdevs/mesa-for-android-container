@@ -68,7 +68,7 @@ static void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small
    *out = info;
 }
 
-static void si_emit_cull_state(struct si_context *sctx)
+static void si_emit_cull_state(struct si_context *sctx, unsigned index)
 {
    assert(sctx->screen->use_ngg_culling);
 
@@ -248,7 +248,7 @@ static void si_emit_one_scissor(struct si_context *ctx, struct radeon_cmdbuf *cs
 
 #define MAX_PA_SU_HARDWARE_SCREEN_OFFSET 8176
 
-static void si_emit_guardband(struct si_context *ctx)
+static void si_emit_guardband(struct si_context *ctx, unsigned index)
 {
    const struct si_state_rasterizer *rs = ctx->queued.named.rasterizer;
    struct si_signed_scissor vp_as_scissor;
@@ -385,7 +385,7 @@ static void si_emit_guardband(struct si_context *ctx)
    radeon_end_update_context_roll(ctx);
 }
 
-static void si_emit_scissors(struct si_context *ctx)
+static void si_emit_scissors(struct si_context *ctx, unsigned index)
 {
    struct radeon_cmdbuf *cs = &ctx->gfx_cs;
    struct pipe_scissor_state *states = ctx->scissors;
@@ -565,7 +565,7 @@ static void si_emit_depth_ranges(struct si_context *ctx)
    radeon_end();
 }
 
-static void si_emit_viewport_states(struct si_context *ctx)
+static void si_emit_viewport_states(struct si_context *ctx, unsigned index)
 {
    si_emit_viewports(ctx);
    si_emit_depth_ranges(ctx);
@@ -616,7 +616,7 @@ void si_update_vs_viewport_state(struct si_context *ctx)
    }
 }
 
-static void si_emit_window_rectangles(struct si_context *sctx)
+static void si_emit_window_rectangles(struct si_context *sctx, unsigned index)
 {
    /* There are four clipping rectangles. Their corner coordinates are inclusive.
     * Every pixel is assigned a number from 0 and 15 by setting bits 0-3 depending

@@ -185,17 +185,17 @@ brw_reg_from_fs_reg(const struct intel_device_info *devinfo, fs_inst *inst,
    return brw_reg;
 }
 
-fs_generator::fs_generator(const struct brw_compiler *compiler, void *log_data,
-                           void *mem_ctx,
+fs_generator::fs_generator(const struct brw_compiler *compiler,
+                           const struct brw_compile_params *params,
                            struct brw_stage_prog_data *prog_data,
                            bool runtime_check_aads_emit,
                            gl_shader_stage stage)
 
-   : compiler(compiler), log_data(log_data),
+   : compiler(compiler), params(params),
      devinfo(compiler->devinfo),
      prog_data(prog_data), dispatch_width(0),
      runtime_check_aads_emit(runtime_check_aads_emit), debug_flag(false),
-     shader_name(NULL), stage(stage), mem_ctx(mem_ctx)
+     shader_name(NULL), stage(stage), mem_ctx(params->mem_ctx)
 {
    p = rzalloc(mem_ctx, struct brw_codegen);
    brw_init_codegen(&compiler->isa, p, mem_ctx);
@@ -1758,7 +1758,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       assert(inst->force_writemask_all || inst->exec_size >= 4);
       assert(inst->force_writemask_all || inst->group % inst->exec_size == 0);
       assert(inst->base_mrf + inst->mlen <= BRW_MAX_MRF(devinfo->ver));
-      assert(inst->mlen <= BRW_MAX_MSG_LENGTH);
+      assert(inst->mlen <= BRW_MAX_MSG_LENGTH * reg_unit(devinfo));
 
       switch (inst->opcode) {
       case BRW_OPCODE_SYNC:
@@ -2388,13 +2388,13 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
                          after_size, sha1);
       _mesa_sha1_format(sha1buf, sha1);
 
-      fprintf(stderr, "Native code for %s (sha1 %s)\n"
+      fprintf(stderr, "Native code for %s (src_hash 0x%08x) (sha1 %s)\n"
               "SIMD%d shader: %d instructions. %d loops. %u cycles. "
               "%d:%d spills:fills, %u sends, "
               "scheduled with mode %s. "
               "Promoted %u constants. "
               "Compacted %d to %d bytes (%.0f%%)\n",
-              shader_name, sha1buf,
+              shader_name, params->source_hash, sha1buf,
               dispatch_width, before_size / 16,
               loop_count, perf.latency,
               shader_stats.spill_count,
@@ -2422,7 +2422,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 #endif
    assert(validated);
 
-   brw_shader_debug_log(compiler, log_data,
+   brw_shader_debug_log(compiler, params->log_data,
                         "%s SIMD%d shader: %d inst, %d loops, %u cycles, "
                         "%d:%d spills:fills, %u sends, "
                         "scheduled with mode %s, "

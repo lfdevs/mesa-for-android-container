@@ -26,6 +26,9 @@
 #include "brw_vec4_builder.h"
 #include "brw_vec4_surface_builder.h"
 #include "brw_eu.h"
+#include "nir.h"
+#include "nir_intrinsics.h"
+#include "nir_intrinsics_indices.h"
 
 using namespace brw;
 using namespace brw::surface_access;
@@ -55,21 +58,6 @@ vec4_visitor::nir_setup_uniforms()
 void
 vec4_visitor::nir_emit_impl(nir_function_impl *impl)
 {
-   nir_locals = ralloc_array(mem_ctx, dst_reg, impl->reg_alloc);
-   for (unsigned i = 0; i < impl->reg_alloc; i++) {
-      nir_locals[i] = dst_reg();
-   }
-
-   foreach_list_typed(nir_register, reg, node, &impl->registers) {
-      unsigned array_elems =
-         reg->num_array_elems == 0 ? 1 : reg->num_array_elems;
-      const unsigned num_regs = array_elems * DIV_ROUND_UP(reg->bit_size, 32);
-      nir_locals[reg->index] = dst_reg(VGRF, alloc.allocate(num_regs));
-
-      if (reg->bit_size == 64)
-         nir_locals[reg->index].type = BRW_REGISTER_TYPE_DF;
-   }
-
    nir_ssa_values = ralloc_array(mem_ctx, dst_reg, impl->ssa_alloc);
 
    nir_emit_cf_list(&impl->body);
@@ -166,8 +154,8 @@ vec4_visitor::nir_emit_instr(nir_instr *instr)
       nir_emit_texture(nir_instr_as_tex(instr));
       break;
 
-   case nir_instr_type_ssa_undef:
-      nir_emit_undef(nir_instr_as_ssa_undef(instr));
+   case nir_instr_type_undef:
+      nir_emit_undef(nir_instr_as_undef(instr));
       break;
 
    default:
@@ -176,14 +164,14 @@ vec4_visitor::nir_emit_instr(nir_instr *instr)
 }
 
 static dst_reg
-dst_reg_for_nir_reg(vec4_visitor *v, nir_register *nir_reg,
+dst_reg_for_nir_reg(vec4_visitor *v, nir_def *handle,
                     unsigned base_offset, nir_src *indirect)
 {
-   dst_reg reg;
-
-   reg = v->nir_locals[nir_reg->index];
-   if (nir_reg->bit_size == 64)
+   nir_intrinsic_instr *decl = nir_reg_get_decl(handle);
+   dst_reg reg = v->nir_ssa_values[handle->index];
+   if (nir_intrinsic_bit_size(decl) == 64)
       reg.type = BRW_REGISTER_TYPE_DF;
+
    reg = offset(reg, 8, base_offset);
    if (indirect) {
       reg.reladdr =
@@ -195,46 +183,58 @@ dst_reg_for_nir_reg(vec4_visitor *v, nir_register *nir_reg,
 }
 
 dst_reg
-vec4_visitor::get_nir_dest(const nir_dest &dest)
+vec4_visitor::get_nir_def(const nir_def &def)
 {
-   if (dest.is_ssa) {
+   nir_intrinsic_instr *store_reg = nir_store_reg_for_def(&def);
+   if (!store_reg) {
       dst_reg dst =
-         dst_reg(VGRF, alloc.allocate(DIV_ROUND_UP(dest.ssa.bit_size, 32)));
-      if (dest.ssa.bit_size == 64)
+         dst_reg(VGRF, alloc.allocate(DIV_ROUND_UP(def.bit_size, 32)));
+      if (def.bit_size == 64)
          dst.type = BRW_REGISTER_TYPE_DF;
-      nir_ssa_values[dest.ssa.index] = dst;
+      nir_ssa_values[def.index] = dst;
       return dst;
    } else {
-      return dst_reg_for_nir_reg(this, dest.reg.reg, dest.reg.base_offset,
-                                 dest.reg.indirect);
+      nir_src *indirect =
+         (store_reg->intrinsic == nir_intrinsic_store_reg_indirect) ?
+         &store_reg->src[2] : NULL;
+
+      dst_reg dst = dst_reg_for_nir_reg(this, store_reg->src[1].ssa,
+                                        nir_intrinsic_base(store_reg),
+                                        indirect);
+      dst.writemask = nir_intrinsic_write_mask(store_reg);
+      return dst;
    }
 }
 
 dst_reg
-vec4_visitor::get_nir_dest(const nir_dest &dest, enum brw_reg_type type)
+vec4_visitor::get_nir_def(const nir_def &def, enum brw_reg_type type)
 {
-   return retype(get_nir_dest(dest), type);
+   return retype(get_nir_def(def), type);
 }
 
 dst_reg
-vec4_visitor::get_nir_dest(const nir_dest &dest, nir_alu_type type)
+vec4_visitor::get_nir_def(const nir_def &def, nir_alu_type type)
 {
-   return get_nir_dest(dest, brw_type_for_nir_type(devinfo, type));
+   return get_nir_def(def, brw_type_for_nir_type(devinfo, type));
 }
 
 src_reg
 vec4_visitor::get_nir_src(const nir_src &src, enum brw_reg_type type,
                           unsigned num_components)
 {
-   dst_reg reg;
+   nir_intrinsic_instr *load_reg = nir_load_reg_for_def(src.ssa);
 
-   if (src.is_ssa) {
-      assert(src.ssa != NULL);
+   dst_reg reg;
+   if (load_reg) {
+      nir_src *indirect =
+         (load_reg->intrinsic == nir_intrinsic_load_reg_indirect) ?
+         &load_reg->src[1] : NULL;
+
+      reg = dst_reg_for_nir_reg(this, load_reg->src[0].ssa,
+                                      nir_intrinsic_base(load_reg),
+                                      indirect);
+   } else {
       reg = nir_ssa_values[src.ssa->index];
-   }
-   else {
-      reg = dst_reg_for_nir_reg(this, src.reg.reg, src.reg.base_offset,
-                                src.reg.indirect);
    }
 
    reg = retype(reg, type);
@@ -400,14 +400,34 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    src_reg src;
 
    switch (instr->intrinsic) {
+   case nir_intrinsic_decl_reg: {
+      unsigned bit_size = nir_intrinsic_bit_size(instr);
+      unsigned array_elems = nir_intrinsic_num_array_elems(instr);
+      if (array_elems == 0)
+         array_elems = 1;
+
+      const unsigned num_regs = array_elems * DIV_ROUND_UP(bit_size, 32);
+      dst_reg reg(VGRF, alloc.allocate(num_regs));
+      if (bit_size == 64)
+         reg.type = BRW_REGISTER_TYPE_DF;
+
+      nir_ssa_values[instr->def.index] = reg;
+      break;
+   }
+
+   case nir_intrinsic_load_reg:
+   case nir_intrinsic_load_reg_indirect:
+   case nir_intrinsic_store_reg:
+   case nir_intrinsic_store_reg_indirect:
+      /* Nothing to do with these. */
+      break;
 
    case nir_intrinsic_load_input: {
-      assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(instr->def.bit_size == 32);
       /* We set EmitNoIndirectInput for VS */
       unsigned load_offset = nir_src_as_uint(instr->src[0]);
 
-      dest = get_nir_dest(instr->dest);
-      dest.writemask = brw_writemask_for_size(instr->num_components);
+      dest = get_nir_def(instr->def);
 
       src = src_reg(ATTR, nir_intrinsic_base(instr) + load_offset,
                     glsl_type::uvec4_type);
@@ -437,7 +457,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       unsigned ssbo_index = nir_src_is_const(instr->src[0]) ?
                             nir_src_as_uint(instr->src[0]) : 0;
 
-      dst_reg result_dst = get_nir_dest(instr->dest);
+      dst_reg result_dst = get_nir_def(instr->def);
       vec4_instruction *inst = new(mem_ctx)
          vec4_instruction(SHADER_OPCODE_GET_BUFFER_SIZE, result_dst);
 
@@ -521,7 +541,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       assert(devinfo->ver == 7);
 
       /* brw_nir_lower_mem_access_bit_sizes takes care of this */
-      assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(instr->def.bit_size == 32);
 
       src_reg surf_index = get_nir_ssbo_intrinsic_index(instr);
       src_reg offset_reg = retype(get_nir_src_imm(instr->src[1]),
@@ -534,7 +554,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg read_result = emit_untyped_read(bld, surf_index, offset_reg,
                                               1 /* dims */, 4 /* size*/,
                                               BRW_PREDICATE_NONE);
-      dst_reg dest = get_nir_dest(instr->dest);
+      dst_reg dest = get_nir_def(instr->def);
       read_result.type = dest.type;
       read_result.swizzle = brw_swizzle_for_size(instr->num_components);
       emit(MOV(dest, read_result));
@@ -561,7 +581,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       /* Offsets are in bytes but they should always be multiples of 4 */
       assert(nir_intrinsic_base(instr) % 4 == 0);
 
-      dest = get_nir_dest(instr->dest);
+      dest = get_nir_def(instr->def);
 
       src = src_reg(dst_reg(UNIFORM, nir_intrinsic_base(instr) / 16));
       src.type = dest.type;
@@ -612,7 +632,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_ubo: {
       src_reg surf_index;
 
-      dest = get_nir_dest(instr->dest);
+      dest = get_nir_def(instr->def);
 
       if (nir_src_is_const(instr->src[0])) {
          /* The block index is a constant, so just emit the binding table entry
@@ -665,7 +685,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg packed_consts;
       if (push_reg.file != BAD_FILE) {
          packed_consts = push_reg;
-      } else if (nir_dest_bit_size(instr->dest) == 32) {
+      } else if (instr->def.bit_size == 32) {
          packed_consts = src_reg(this, glsl_type::vec4_type);
          emit_pull_constant_load_reg(dst_reg(packed_consts),
                                      surf_index,
@@ -706,7 +726,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_scoped_barrier: {
+   case nir_intrinsic_barrier: {
       if (nir_intrinsic_memory_scope(instr) == SCOPE_NONE)
          break;
       const vec4_builder bld =
@@ -723,7 +743,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       const src_reg shader_clock = get_timestamp();
       const enum brw_reg_type type = brw_type_for_base_type(glsl_type::uvec2_type);
 
-      dest = get_nir_dest(instr->dest, type);
+      dest = get_nir_def(instr->def, type);
       emit(MOV(dest, shader_clock));
       break;
    }
@@ -738,7 +758,7 @@ vec4_visitor::nir_emit_ssbo_atomic(int op, nir_intrinsic_instr *instr)
 {
    dst_reg dest;
    if (nir_intrinsic_infos[instr->intrinsic].has_dest)
-      dest = get_nir_dest(instr->dest);
+      dest = get_nir_def(instr->def);
 
    src_reg surface = get_nir_ssbo_intrinsic_index(instr);
    src_reg offset = get_nir_src(instr->src[1], 1);
@@ -772,8 +792,7 @@ bool
 vec4_visitor::optimize_predicate(nir_alu_instr *instr,
                                  enum brw_predicate *predicate)
 {
-   if (!instr->src[0].src.is_ssa ||
-       instr->src[0].src.ssa->parent_instr->type != nir_instr_type_alu)
+   if (instr->src[0].src.ssa->parent_instr->type != nir_instr_type_alu)
       return false;
 
    nir_alu_instr *cmp_instr =
@@ -1063,18 +1082,12 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    vec4_instruction *inst;
 
    nir_alu_type dst_type = (nir_alu_type) (nir_op_infos[instr->op].output_type |
-                                           nir_dest_bit_size(instr->dest.dest));
-   dst_reg dst = get_nir_dest(instr->dest.dest, dst_type);
-   dst.writemask = instr->dest.write_mask;
-
-   assert(!instr->dest.saturate);
+                                           instr->def.bit_size);
+   dst_reg dst = get_nir_def(instr->def, dst_type);
+   dst.writemask &= nir_component_mask(instr->def.num_components);
 
    src_reg op[4];
    for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
-      /* We don't lower to source modifiers, so they shouldn't exist. */
-      assert(!instr->src[i].abs);
-      assert(!instr->src[i].negate);
-
       nir_alu_type src_type = (nir_alu_type)
          (nir_op_infos[instr->op].input_types[i] |
           nir_src_bit_size(instr->src[i].src));
@@ -1140,7 +1153,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_iadd:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_fadd:
       try_immediate_source(instr, op, true);
@@ -1148,7 +1161,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_uadd_sat:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       inst = emit(ADD(dst, op[0], op[1]));
       inst->saturate = true;
       break;
@@ -1159,7 +1172,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_imul: {
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
 
       /* For integer multiplication, the MUL uses the low 16 bits of one of
        * the operands (src0 through SNB, src1 on IVB and later). The MACH
@@ -1193,7 +1206,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_imul_high:
    case nir_op_umul_high: {
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       struct brw_reg acc = retype(brw_acc_reg(8), dst.type);
 
       emit(MUL(acc, op[0], op[1]));
@@ -1223,7 +1236,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_idiv:
    case nir_op_udiv:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_math(SHADER_OPCODE_INT_QUOTIENT, dst, op[0], op[1]);
       break;
 
@@ -1233,7 +1246,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
        * appears that our hardware just does the right thing for signed
        * remainder.
        */
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_math(SHADER_OPCODE_INT_REMAINDER, dst, op[0], op[1]);
       break;
 
@@ -1284,7 +1297,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_uadd_carry: {
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       struct brw_reg acc = retype(brw_acc_reg(8), BRW_REGISTER_TYPE_UD);
 
       emit(ADDC(dst_null_ud(), op[0], op[1]));
@@ -1293,7 +1306,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    }
 
    case nir_op_usub_borrow: {
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       struct brw_reg acc = retype(brw_acc_reg(8), BRW_REGISTER_TYPE_UD);
 
       emit(SUBB(dst_null_ud(), op[0], op[1]));
@@ -1313,10 +1326,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_fceil: {
       src_reg tmp = src_reg(this, glsl_type::float_type);
-      tmp.swizzle =
-         brw_swizzle_for_size(instr->src[0].src.is_ssa ?
-                              instr->src[0].src.ssa->num_components :
-                              instr->src[0].src.reg.reg->num_components);
+      tmp.swizzle = brw_swizzle_for_size(nir_src_num_components(instr->src[0].src));
 
       op[0].negate = !op[0].negate;
       emit(RNDD(dst_reg(tmp), op[0]));
@@ -1369,7 +1379,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_imin:
    case nir_op_umin:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_fmin:
       try_immediate_source(instr, op, true);
@@ -1378,7 +1388,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_imax:
    case nir_op_umax:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_fmax:
       try_immediate_source(instr, op, true);
@@ -1399,7 +1409,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_uge32:
    case nir_op_ieq32:
    case nir_op_ine32:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_flt32:
    case nir_op_fge32:
@@ -1434,7 +1444,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_b32all_iequal2:
    case nir_op_b32all_iequal3:
    case nir_op_b32all_iequal4:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_b32all_fequal2:
    case nir_op_b32all_fequal3:
@@ -1453,7 +1463,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_b32any_inequal2:
    case nir_op_b32any_inequal3:
    case nir_op_b32any_inequal4:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       FALLTHROUGH;
    case nir_op_b32any_fnequal2:
    case nir_op_b32any_fnequal3:
@@ -1471,24 +1481,24 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    }
 
    case nir_op_inot:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit(NOT(dst, op[0]));
       break;
 
    case nir_op_ixor:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, true);
       emit(XOR(dst, op[0], op[1]));
       break;
 
    case nir_op_ior:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, true);
       emit(OR(dst, op[0], op[1]));
       break;
 
    case nir_op_iand:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, true);
       emit(AND(dst, op[0], op[1]));
       break;
@@ -1496,7 +1506,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_b2i32:
    case nir_op_b2f32:
    case nir_op_b2f64:
-      if (nir_dest_bit_size(instr->dest.dest) > 32) {
+      if (instr->def.bit_size > 32) {
          assert(dst.type == BRW_REGISTER_TYPE_DF);
          emit_conversion_to_double(dst, negate(op[0]));
       } else {
@@ -1574,39 +1584,39 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_unpack_unorm_4x8:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_unpack_unorm_4x8(dst, op[0]);
       break;
 
    case nir_op_pack_unorm_4x8:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_pack_unorm_4x8(dst, op[0]);
       break;
 
    case nir_op_unpack_snorm_4x8:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_unpack_snorm_4x8(dst, op[0]);
       break;
 
    case nir_op_pack_snorm_4x8:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit_pack_snorm_4x8(dst, op[0]);
       break;
 
    case nir_op_bitfield_reverse:
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+      assert(instr->def.bit_size == 32);
       assert(nir_src_bit_size(instr->src[0].src) == 32);
       emit(BFREV(dst, op[0]));
       break;
 
    case nir_op_bit_count:
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+      assert(instr->def.bit_size == 32);
       assert(nir_src_bit_size(instr->src[0].src) < 64);
       emit(CBIT(dst, op[0]));
       break;
 
    case nir_op_ifind_msb: {
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+      assert(instr->def.bit_size == 32);
       assert(nir_src_bit_size(instr->src[0].src) == 32);
       assert(devinfo->ver >= 7);
 
@@ -1629,13 +1639,13 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    }
 
    case nir_op_uclz:
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+      assert(instr->def.bit_size == 32);
       assert(nir_src_bit_size(instr->src[0].src) == 32);
       emit(LZD(dst, op[0]));
       break;
 
    case nir_op_find_lsb:
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+      assert(instr->def.bit_size == 32);
       assert(nir_src_bit_size(instr->src[0].src) == 32);
       assert(devinfo->ver >= 7);
       emit(FBL(dst, op[0]));
@@ -1646,7 +1656,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       unreachable("should have been lowered");
    case nir_op_ubfe:
    case nir_op_ibfe:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       op[0] = fix_3src_operand(op[0]);
       op[1] = fix_3src_operand(op[1]);
       op[2] = fix_3src_operand(op[2]);
@@ -1655,12 +1665,12 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_bfm:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       emit(BFI1(dst, op[0], op[1]));
       break;
 
    case nir_op_bfi:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       op[0] = fix_3src_operand(op[0]);
       op[1] = fix_3src_operand(op[1]);
       op[2] = fix_3src_operand(op[2]);
@@ -1723,19 +1733,19 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_ishl:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, false);
       emit(SHL(dst, op[0], op[1]));
       break;
 
    case nir_op_ishr:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, false);
       emit(ASR(dst, op[0], op[1]));
       break;
 
    case nir_op_ushr:
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(instr->def.bit_size < 64);
       try_immediate_source(instr, op, false);
       emit(SHR(dst, op[0], op[1]));
       break;
@@ -1874,7 +1884,7 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
    src_reg sample_index;
    src_reg mcs;
 
-   dst_reg dest = get_nir_dest(instr->dest, instr->dest_type);
+   dst_reg dest = get_nir_def(instr->def, instr->dest_type);
 
    /* The hardware requires a LOD for buffer textures */
    if (instr->sampler_dim == GLSL_SAMPLER_DIM_BUF)
@@ -2124,8 +2134,8 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
          const brw_reg_type type = lod.type;
 
 	 if (devinfo->ver >= 5) {
-	    lod.swizzle = BRW_SWIZZLE4(SWIZZLE_X,SWIZZLE_X,SWIZZLE_Y,SWIZZLE_Y);
-	    lod2.swizzle = BRW_SWIZZLE4(SWIZZLE_X,SWIZZLE_X,SWIZZLE_Y,SWIZZLE_Y);
+	    lod.swizzle = BRW_SWIZZLE4(BRW_SWIZZLE_X,BRW_SWIZZLE_X,BRW_SWIZZLE_Y,BRW_SWIZZLE_Y);
+	    lod2.swizzle = BRW_SWIZZLE4(BRW_SWIZZLE_X,BRW_SWIZZLE_X,BRW_SWIZZLE_Y,BRW_SWIZZLE_Y);
 	    emit(MOV(dst_reg(MRF, param_base + 1, type, WRITEMASK_XZ), lod));
 	    emit(MOV(dst_reg(MRF, param_base + 1, type, WRITEMASK_YW), lod2));
 	    inst->mlen++;
@@ -2182,8 +2192,8 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
    if (instr->op == nir_texop_query_levels) {
       /* # levels is in .w */
       src_reg swizzled(dest);
-      swizzled.swizzle = BRW_SWIZZLE4(SWIZZLE_W, SWIZZLE_W,
-                                      SWIZZLE_W, SWIZZLE_W);
+      swizzled.swizzle = BRW_SWIZZLE4(BRW_SWIZZLE_W, BRW_SWIZZLE_W,
+                                      BRW_SWIZZLE_W, BRW_SWIZZLE_W);
       emit(MOV(dest, swizzled));
    }
 }
@@ -2217,7 +2227,7 @@ vec4_visitor::emit_mcs_fetch(const glsl_type *coordinate_type,
 }
 
 void
-vec4_visitor::nir_emit_undef(nir_ssa_undef_instr *instr)
+vec4_visitor::nir_emit_undef(nir_undef_instr *instr)
 {
    nir_ssa_values[instr->def.index] =
       dst_reg(VGRF, alloc.allocate(DIV_ROUND_UP(instr->def.bit_size, 32)));

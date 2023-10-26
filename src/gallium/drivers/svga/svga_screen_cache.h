@@ -1,6 +1,6 @@
 
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -70,10 +70,11 @@ struct svga_host_surface_cache_key
    uint32_t sampleCount:5;
    uint32_t scanout:1;
    uint32_t coherent:1;
+   uint32_t persistent:1;
 };
 
 
-struct svga_host_surface_cache_entry 
+struct svga_host_surface_cache_entry
 {
    /** 
     * Head for the LRU list, svga_host_surface_cache::unused, and

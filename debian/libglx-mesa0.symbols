@@ -1,5 +1,6 @@
 libGLX_mesa.so.0 libglx-mesa0
  (arch=!hurd-any)MesaGLInteropGLXExportObject@Base 12.0.4
+ MesaGLInteropGLXFlushObjects@Base 23.3.0~
  (arch=!hurd-any)MesaGLInteropGLXQueryDeviceInfo@Base 12.0.4
  __glx_Main@Base 17.0.0~
  glAccum@Base 0

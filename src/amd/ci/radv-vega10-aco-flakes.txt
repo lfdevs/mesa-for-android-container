@@ -1,12 +1,12 @@
 dEQP-VK.dynamic_rendering.basic.*
 dEQP-VK.dynamic_rendering.primary.*
-dEQP-VK.pipeline.fast_linked_library.multisample_interpolation.sample_interpolation_consistency.component_1.128_128_1.samples_8
 
-dEQP-VK.draw.renderpass.linear_interpolation.offset_max_2_samples
-dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.linear_interpolation.offset_min_2_samples
 dEQP-VK.multiview.renderpass2.multisample.8_1_1_8
 dEQP-VK.multiview.renderpass2.multisample.8
 dEQP-VK.multiview.renderpass2.multisample.15_15_15_15
+dEQP-VK.multiview.renderpass2.multisample.cmd_copy_query_pool_results.*
+dEQP-VK.multiview.dynamic_rendering.multisample.cmd_copy_query_pool_results.*
+dEQP-VK.multiview.dynamic_rendering.multisample.get_query_pool_results.*
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/8817
 dEQP-VK.*framebuffer_attachment.diff_attachments.*

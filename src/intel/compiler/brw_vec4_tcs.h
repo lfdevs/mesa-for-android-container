@@ -31,6 +31,7 @@
 #define BRW_VEC4_TCS_H
 
 #include "brw_compiler.h"
+#include "brw_eu.h"
 #include "brw_vec4.h"
 
 #ifdef __cplusplus
@@ -40,11 +41,10 @@ class vec4_tcs_visitor : public vec4_visitor
 {
 public:
    vec4_tcs_visitor(const struct brw_compiler *compiler,
-                    void *log_data,
+                    const struct brw_compile_params *params,
                     const struct brw_tcs_prog_key *key,
                     struct brw_tcs_prog_data *prog_data,
                     const nir_shader *nir,
-                    void *mem_ctx,
                     bool debug_enabled);
 
 protected:

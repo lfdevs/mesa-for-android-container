@@ -25,7 +25,6 @@
 #include <vulkan/vulkan.h>
 
 #include "hwdef/rogue_hw_defs.h"
-#include "pipe/p_defines.h"
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
 #include "pvr_formats.h"

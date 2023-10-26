@@ -43,6 +43,7 @@
 #include "wsi_common_private.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
+#include "tearing-control-v1-client-protocol.h"
 
 #include <util/compiler.h>
 #include <util/hash_table.h>
@@ -100,6 +101,7 @@ struct wsi_wl_display {
    struct wl_shm *wl_shm;
    struct zwp_linux_dmabuf_v1 *wl_dmabuf;
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
+   struct wp_tearing_control_manager_v1 *tearing_control_manager;
 
    struct dmabuf_feedback_format_table format_table;
 
@@ -156,6 +158,7 @@ struct wsi_wl_swapchain {
    struct wsi_swapchain base;
 
    struct wsi_wl_surface *wsi_wl_surface;
+   struct wp_tearing_control_v1 *tearing_control;
 
    struct wl_callback *frame;
 
@@ -795,6 +798,9 @@ registry_handle_global(void *data, struct wl_registry *registry,
    if (strcmp(interface, wp_presentation_interface.name) == 0) {
       display->wp_presentation_notwrapped =
          wl_registry_bind(registry, name, &wp_presentation_interface, 1);
+   } else if (strcmp(interface, wp_tearing_control_manager_v1_interface.name) == 0) {
+      display->tearing_control_manager =
+         wl_registry_bind(registry, name, &wp_tearing_control_manager_v1_interface, 1);
    }
 }
 
@@ -821,6 +827,8 @@ wsi_wl_display_finish(struct wsi_wl_display *display)
       zwp_linux_dmabuf_v1_destroy(display->wl_dmabuf);
    if (display->wp_presentation_notwrapped)
       wp_presentation_destroy(display->wp_presentation_notwrapped);
+   if (display->tearing_control_manager)
+      wp_tearing_control_manager_v1_destroy(display->tearing_control_manager);
    if (display->wl_display_wrapper)
       wl_proxy_wrapper_destroy(display->wl_display_wrapper);
    if (display->queue)
@@ -1008,11 +1016,6 @@ wsi_wl_surface_get_support(VkIcdSurfaceBase *surface,
    return VK_SUCCESS;
 }
 
-static const VkPresentModeKHR present_modes[] = {
-   VK_PRESENT_MODE_MAILBOX_KHR,
-   VK_PRESENT_MODE_FIFO_KHR,
-};
-
 static uint32_t
 wsi_wl_surface_get_min_image_count(const VkSurfacePresentModeEXT *present_mode)
 {
@@ -1139,15 +1142,37 @@ wsi_wl_surface_get_capabilities2(VkIcdSurfaceBase *surface,
             vk_outarray_append_typed(VkPresentModeKHR, &modes, mode) {
                *mode = present_mode->presentMode;
             }
-            for (unsigned i = 0; i < ARRAY_SIZE(present_modes); i++) {
-               if (present_modes[i] != present_mode->presentMode) {
-                  vk_outarray_append_typed(VkPresentModeKHR, &modes, mode) {
-                     *mode = present_modes[i];
-                  }
+            switch (present_mode->presentMode) {
+            case VK_PRESENT_MODE_MAILBOX_KHR:
+               vk_outarray_append_typed(VkPresentModeKHR, &modes, mode) {
+                  *mode = VK_PRESENT_MODE_FIFO_KHR;
                }
+               break;
+            case VK_PRESENT_MODE_FIFO_KHR:
+               vk_outarray_append_typed(VkPresentModeKHR, &modes, mode) {
+                  *mode = VK_PRESENT_MODE_MAILBOX_KHR;
+               }
+               break;
+            default:
+               break;
             }
          } else {
-            compat->presentModeCount = ARRAY_SIZE(present_modes);
+            if (!present_mode) {
+               wsi_common_vk_warn_once("Use of VkSurfacePresentModeCompatibilityEXT "
+                                       "without a VkSurfacePresentModeEXT set. This is an "
+                                       "application bug.\n");
+               compat->presentModeCount = 1;
+            } else {
+               switch (present_mode->presentMode) {
+               case VK_PRESENT_MODE_MAILBOX_KHR:
+               case VK_PRESENT_MODE_FIFO_KHR:
+                  compat->presentModeCount = 2;
+                  break;
+               default:
+                  compat->presentModeCount = 1;
+                  break;
+               }
+            }
          }
          break;
       }
@@ -1239,20 +1264,42 @@ wsi_wl_surface_get_formats2(VkIcdSurfaceBase *icd_surface,
 }
 
 static VkResult
-wsi_wl_surface_get_present_modes(VkIcdSurfaceBase *surface,
+wsi_wl_surface_get_present_modes(VkIcdSurfaceBase *icd_surface,
                                  struct wsi_device *wsi_device,
                                  uint32_t* pPresentModeCount,
                                  VkPresentModeKHR* pPresentModes)
 {
+   VkIcdSurfaceWayland *surface = (VkIcdSurfaceWayland *)icd_surface;
+   struct wsi_wayland *wsi =
+      (struct wsi_wayland *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_WAYLAND];
+
+   struct wsi_wl_display display;
+   if (wsi_wl_display_init(wsi, &display, surface->display, true,
+                           wsi_device->sw))
+      return VK_ERROR_SURFACE_LOST_KHR;
+
+   VkPresentModeKHR present_modes[3];
+   uint32_t present_modes_count = 0;
+
+   /* The following two modes are always supported */
+   present_modes[present_modes_count++] = VK_PRESENT_MODE_MAILBOX_KHR;
+   present_modes[present_modes_count++] = VK_PRESENT_MODE_FIFO_KHR;
+
+   if (display.tearing_control_manager)
+      present_modes[present_modes_count++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
+
+   assert(present_modes_count <= ARRAY_SIZE(present_modes));
+   wsi_wl_display_finish(&display);
+
    if (pPresentModes == NULL) {
-      *pPresentModeCount = ARRAY_SIZE(present_modes);
+      *pPresentModeCount = present_modes_count;
       return VK_SUCCESS;
    }
 
-   *pPresentModeCount = MIN2(*pPresentModeCount, ARRAY_SIZE(present_modes));
+   *pPresentModeCount = MIN2(*pPresentModeCount, present_modes_count);
    typed_memcpy(pPresentModes, present_modes, *pPresentModeCount);
 
-   if (*pPresentModeCount < ARRAY_SIZE(present_modes))
+   if (*pPresentModeCount < present_modes_count)
       return VK_INCOMPLETE;
    else
       return VK_SUCCESS;
@@ -2145,6 +2192,8 @@ wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
 {
    if (chain->frame)
       wl_callback_destroy(chain->frame);
+   if (chain->tearing_control)
+      wp_tearing_control_v1_destroy(chain->tearing_control);
    if (chain->wsi_wl_surface)
       chain->wsi_wl_surface->chain = NULL;
 
@@ -2216,6 +2265,10 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (pCreateInfo->oldSwapchain) {
       VK_FROM_HANDLE(wsi_wl_swapchain, old_chain, pCreateInfo->oldSwapchain);
       old_chain->wsi_wl_surface = NULL;
+      if (old_chain->tearing_control) {
+         wp_tearing_control_v1_destroy(old_chain->tearing_control);
+         old_chain->tearing_control = NULL;
+      }
    }
 
    /* Take ownership of the wsi_wl_surface */
@@ -2225,6 +2278,19 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    result = wsi_wl_surface_init(wsi_wl_surface, wsi_device);
    if (result != VK_SUCCESS)
       goto fail;
+
+   VkPresentModeKHR present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
+   if (present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+      chain->tearing_control =
+         wp_tearing_control_manager_v1_get_tearing_control(wsi_wl_surface->display->tearing_control_manager,
+                                                           wsi_wl_surface->surface);
+      if (!chain->tearing_control) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail;
+      }
+      wp_tearing_control_v1_set_presentation_hint(chain->tearing_control,
+                                                          WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC);
+   }
 
    enum wsi_wl_buffer_type buffer_type;
    struct wsi_base_image_params *image_params = NULL;
@@ -2293,7 +2359,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.release_images = wsi_wl_swapchain_release_images;
    chain->base.set_present_mode = wsi_wl_swapchain_set_present_mode;
    chain->base.wait_for_present = wsi_wl_swapchain_wait_for_present;
-   chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
+   chain->base.present_mode = present_mode;
    chain->base.image_count = num_images;
    chain->extent = pCreateInfo->imageExtent;
    chain->vk_format = pCreateInfo->imageFormat;

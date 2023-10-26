@@ -42,7 +42,8 @@
 
 #define V3D_MAX_SAMPLES 4
 
-#define V3D_MAX_DRAW_BUFFERS 4
+#define V3D_MAX_DRAW_BUFFERS 8
+#define V3D_MAX_RENDER_TARGETS(ver) (ver < 71 ? 4 : 8)
 
 #define V3D_MAX_POINT_SIZE 512.0f
 #define V3D_MAX_LINE_WIDTH 32

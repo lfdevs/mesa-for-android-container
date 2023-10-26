@@ -25,7 +25,7 @@
 #define VN_MIN_RENDERER_VERSION VK_API_VERSION_1_1
 
 /* max advertised version at both instance and device levels */
-#ifdef ANDROID
+#if defined(ANDROID) && ANDROID_API_LEVEL < 33
 #define VN_MAX_API_VERSION VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION)
 #else
 #define VN_MAX_API_VERSION VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)

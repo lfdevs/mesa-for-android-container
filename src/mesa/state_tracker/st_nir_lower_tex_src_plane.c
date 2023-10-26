@@ -145,14 +145,10 @@ lower_tex_src_plane_block(nir_builder *b, lower_tex_src_state *state, nir_block 
             assert(samp);
 
             nir_deref_instr *tex_deref_instr = nir_build_deref_var(b, samp);
-            nir_ssa_def *tex_deref = &tex_deref_instr->dest.ssa;
+            nir_def *tex_deref = &tex_deref_instr->def;
 
-            nir_instr_rewrite_src(&tex->instr,
-                                  &tex->src[tex_index].src,
-                                  nir_src_for_ssa(tex_deref));
-            nir_instr_rewrite_src(&tex->instr,
-                                  &tex->src[samp_index].src,
-                                  nir_src_for_ssa(tex_deref));
+            nir_src_rewrite(&tex->src[tex_index].src, tex_deref);
+            nir_src_rewrite(&tex->src[samp_index].src, tex_deref);
          } else {
             /* For others we need to update texture_index */
             assume(tex->texture_index == tex->sampler_index);

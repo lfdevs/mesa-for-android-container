@@ -39,6 +39,7 @@
 #include "fd6_emit.h"
 #include "fd6_gmem.h"
 #include "fd6_image.h"
+#include "fd6_pack.h"
 #include "fd6_program.h"
 #include "fd6_query.h"
 #include "fd6_rasterizer.h"
@@ -57,6 +58,9 @@ fd6_context_destroy(struct pipe_context *pctx) in_dt
 
    if (fd6_ctx->streamout_disable_stateobj)
       fd_ringbuffer_del(fd6_ctx->streamout_disable_stateobj);
+
+   if (fd6_ctx->sample_locations_disable_stateobj)
+      fd_ringbuffer_del(fd6_ctx->sample_locations_disable_stateobj);
 
    fd_context_destroy(pctx);
 
@@ -83,7 +87,7 @@ fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
    memcpy(state->base.pipe, elements, sizeof(*elements) * num_elements);
    state->base.num_elements = num_elements;
    state->stateobj =
-      fd_ringbuffer_new_object(ctx->pipe, 4 * (num_elements * 2 + 1));
+      fd_ringbuffer_new_object(ctx->pipe, 4 * (num_elements * 4 + 1));
    struct fd_ringbuffer *ring = state->stateobj;
 
    OUT_PKT4(ring, REG_A6XX_VFD_DECODE(0), 2 * num_elements);
@@ -104,6 +108,13 @@ fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                         COND(!isint, A6XX_VFD_DECODE_INSTR_FLOAT));
       OUT_RING(ring,
                MAX2(1, elem->instance_divisor)); /* VFD_DECODE[j].STEP_RATE */
+   }
+
+   for (int32_t i = 0; i < num_elements; i++) {
+      const struct pipe_vertex_element *elem = &elements[i];
+
+      OUT_PKT4(ring, REG_A6XX_VFD_FETCH_STRIDE(elem->vertex_buffer_index), 1);
+      OUT_RING(ring, elem->src_stride);
    }
 
    return state;
@@ -166,6 +177,7 @@ setup_state_map(struct fd_context *ctx)
                       BIT(FD6_GROUP_PROG_FB_RAST));
    fd_context_add_map(ctx, FD_DIRTY_BLEND | FD_DIRTY_SAMPLE_MASK,
                       BIT(FD6_GROUP_BLEND));
+   fd_context_add_map(ctx, FD_DIRTY_SAMPLE_LOCATIONS, BIT(FD6_GROUP_SAMPLE_LOCATIONS));
    fd_context_add_map(ctx, FD_DIRTY_BLEND_COLOR, BIT(FD6_GROUP_BLEND_COLOR));
    fd_context_add_map(ctx, FD_DIRTY_PROG | FD_DIRTY_CONST,
                       BIT(FD6_GROUP_CONST));
@@ -296,11 +308,22 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    fd6_ctx->control_mem =
       fd_bo_new(screen->dev, 0x1000, 0, "control");
 
+   fd_context_add_private_bo(&fd6_ctx->base, fd6_ctx->control_mem);
+
    memset(fd_bo_map(fd6_ctx->control_mem), 0, sizeof(struct fd6_control));
 
    fd_context_setup_common_vbos(&fd6_ctx->base);
 
    fd6_blitter_init<CHIP>(pctx);
+
+   struct fd_ringbuffer *ring =
+      fd_ringbuffer_new_object(fd6_ctx->base.pipe, 6 * 4);
+
+   OUT_REG(ring, A6XX_GRAS_SAMPLE_CONFIG());
+   OUT_REG(ring, A6XX_RB_SAMPLE_CONFIG());
+   OUT_REG(ring, A6XX_SP_TP_SAMPLE_CONFIG());
+
+   fd6_ctx->sample_locations_disable_stateobj = ring;
 
    return fd_context_init_tc(pctx, flags);
 }

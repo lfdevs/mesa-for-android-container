@@ -73,6 +73,7 @@ vl_video_buffer_plane_order(enum pipe_format format)
 {
    switch(format) {
    case PIPE_FORMAT_YV12:
+   case PIPE_FORMAT_IYUV:
       return const_resource_plane_order_YVU;
 
    case PIPE_FORMAT_NV12:

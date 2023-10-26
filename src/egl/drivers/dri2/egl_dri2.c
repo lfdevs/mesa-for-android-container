@@ -732,6 +732,7 @@ static const struct dri_extension_match swrast_driver_extensions[] = {
 
 static const struct dri_extension_match swrast_core_extensions[] = {
    {__DRI_TEX_BUFFER, 2, offsetof(struct dri2_egl_display, tex_buffer), false},
+   {__DRI_IMAGE, 6, offsetof(struct dri2_egl_display, image), true},
 };
 
 static const struct dri_extension_match optional_core_extensions[] = {
@@ -740,7 +741,6 @@ static const struct dri_extension_match optional_core_extensions[] = {
    {__DRI2_BUFFER_DAMAGE, 1, offsetof(struct dri2_egl_display, buffer_damage),
     true},
    {__DRI2_INTEROP, 1, offsetof(struct dri2_egl_display, interop), true},
-   {__DRI_IMAGE, 6, offsetof(struct dri2_egl_display, image), true},
    {__DRI2_FLUSH_CONTROL, 1, offsetof(struct dri2_egl_display, flush_control),
     true},
    {__DRI2_BLOB, 1, offsetof(struct dri2_egl_display, blob), true},
@@ -869,6 +869,10 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.KHR_create_context_no_error = EGL_TRUE;
    disp->Extensions.KHR_no_config_context = EGL_TRUE;
    disp->Extensions.KHR_surfaceless_context = EGL_TRUE;
+
+   if (dri2_dpy->interop) {
+      disp->Extensions.MESA_gl_interop = EGL_TRUE;
+   }
 
    if (dri2_dpy->configOptions) {
       disp->Extensions.MESA_query_driver = EGL_TRUE;
@@ -1058,6 +1062,13 @@ dri2_setup_extensions(_EGLDisplay *disp)
         dri2_dpy->present_minor_version >= 2)) &&
       (dri2_dpy->image && dri2_dpy->image->base.version >= 15);
 #endif
+   if (disp->Options.Zink && !disp->Options.ForceSoftware &&
+#ifdef HAVE_DRI3_MODIFIERS
+       dri2_dpy->dri3_major_version != -1 &&
+       !dri2_dpy->multibuffers_available &&
+#endif
+       !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
+      return EGL_FALSE;
 
    loader_bind_extensions(dri2_dpy, optional_core_extensions,
                           ARRAY_SIZE(optional_core_extensions), extensions);
@@ -1214,6 +1225,28 @@ dri2_display_destroy(_EGLDisplay *disp)
    }
    free(dri2_dpy);
    disp->DriverData = NULL;
+}
+
+struct dri2_egl_display *
+dri2_display_create(void)
+{
+   struct dri2_egl_display *dri2_dpy = calloc(1, sizeof *dri2_dpy);
+   if (!dri2_dpy) {
+      _eglError(EGL_BAD_ALLOC, "eglInitialize");
+      return NULL;
+   }
+
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
+
+#ifdef HAVE_DRI3_MODIFIERS
+   dri2_dpy->dri3_major_version = -1;
+   dri2_dpy->dri3_minor_version = -1;
+   dri2_dpy->present_major_version = -1;
+   dri2_dpy->present_minor_version = -1;
+#endif
+
+   return dri2_dpy;
 }
 
 __DRIbuffer *
@@ -1595,8 +1628,13 @@ dri2_create_drawable(struct dri2_egl_display *dri2_dpy,
    if (dri2_dpy->kopper) {
       dri2_surf->dri_drawable = dri2_dpy->kopper->createNewDrawable(
          dri2_dpy->dri_screen_render_gpu, config, loaderPrivate,
-         dri2_surf->base.Type == EGL_PBUFFER_BIT ||
-            dri2_surf->base.Type == EGL_PIXMAP_BIT);
+         &(__DRIkopperDrawableInfo){
+#ifdef HAVE_X11_PLATFORM
+            .multiplanes_available = dri2_dpy->multibuffers_available,
+#endif
+            .is_pixmap = dri2_surf->base.Type == EGL_PBUFFER_BIT ||
+                         dri2_surf->base.Type == EGL_PIXMAP_BIT,
+         });
    } else {
       __DRIcreateNewDrawableFunc createNewDrawable;
       if (dri2_dpy->image_driver)

@@ -28,6 +28,8 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+#include "util/format/u_formats.h"
+
 /* This is based on VkClearColorValue which is an array of RGBA, and on the
  * output register usage for the biggest 32 bit 4 component formats which use up
  * all 4 output registers.
@@ -35,6 +37,8 @@
  * packed according to the hardware (the accum format).
  */
 #define PVR_CLEAR_COLOR_ARRAY_SIZE 4
+
+#define PVR_TEX_FORMAT_COUNT (PVRX(TEXSTATE_IMAGE_WORD0_TEXFORMAT_MAX_SIZE) + 1)
 
 enum pvr_pbe_accum_format {
    PVR_PBE_ACCUM_FORMAT_INVALID = 0, /* Explicitly treat 0 as invalid. */
@@ -206,6 +210,32 @@ enum pvr_transfer_pbe_pixel_src {
     */
    PVR_TRANSFER_PBE_PIXEL_SRC_NUM = 54,
 };
+
+/* FIXME: Replace all instances of uint32_t with PVRX(TEXSTATE_FORMAT) or
+ * PVRX(TEXSTATE_FORMAT_COMPRESSED) after the pvr_common cleanup is complete.
+ */
+
+struct pvr_tex_format_description {
+   uint32_t tex_format;
+   enum pipe_format pipe_format_int;
+   enum pipe_format pipe_format_float;
+};
+
+struct pvr_tex_format_compressed_description {
+   uint32_t tex_format;
+   enum pipe_format pipe_format;
+   uint32_t tex_format_simple;
+};
+
+bool pvr_tex_format_is_supported(uint32_t tex_format);
+
+const struct pvr_tex_format_description *
+pvr_get_tex_format_description(uint32_t tex_format);
+
+bool pvr_tex_format_compressed_is_supported(uint32_t tex_format);
+
+const struct pvr_tex_format_compressed_description *
+pvr_get_tex_format_compressed_description(uint32_t tex_format);
 
 const uint8_t *pvr_get_format_swizzle(VkFormat vk_format);
 uint32_t pvr_get_tex_format(VkFormat vk_format);

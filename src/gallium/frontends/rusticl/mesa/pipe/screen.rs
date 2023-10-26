@@ -69,7 +69,7 @@ impl ComputeParam<Vec<u64>> for PipeScreen {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ResourceType {
     Normal,
     Staging,
@@ -103,7 +103,7 @@ impl PipeScreen {
                 (*self.screen).context_create.unwrap()(
                     self.screen,
                     ptr::null_mut(),
-                    0, //PIPE_CONTEXT_COMPUTE_ONLY,
+                    PIPE_CONTEXT_COMPUTE_ONLY | PIPE_CONTEXT_NO_LOD_BIAS,
                 )
             },
             self,
@@ -176,6 +176,7 @@ impl PipeScreen {
         target: pipe_texture_target,
         format: pipe_format,
         res_type: ResourceType,
+        support_image: bool,
     ) -> Option<PipeResource> {
         let mut tmpl = pipe_resource::default();
 
@@ -185,7 +186,11 @@ impl PipeScreen {
         tmpl.height0 = height;
         tmpl.depth0 = depth;
         tmpl.array_size = array_size;
-        tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE;
+        tmpl.bind = PIPE_BIND_SAMPLER_VIEW;
+
+        if support_image {
+            tmpl.bind |= PIPE_BIND_SHADER_IMAGE;
+        }
 
         res_type.apply(&mut tmpl);
 
@@ -201,6 +206,7 @@ impl PipeScreen {
         target: pipe_texture_target,
         format: pipe_format,
         mem: *mut c_void,
+        support_image: bool,
     ) -> Option<PipeResource> {
         let mut tmpl = pipe_resource::default();
 
@@ -210,7 +216,11 @@ impl PipeScreen {
         tmpl.height0 = height;
         tmpl.depth0 = depth;
         tmpl.array_size = array_size;
-        tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE;
+        tmpl.bind = PIPE_BIND_SAMPLER_VIEW;
+
+        if support_image {
+            tmpl.bind |= PIPE_BIND_SHADER_IMAGE;
+        }
 
         self.resource_create_from_user(&tmpl, mem)
     }
@@ -228,6 +238,10 @@ impl PipeScreen {
         unsafe {
             s.get_compute_param.unwrap()(self.screen, pipe_shader_ir::PIPE_SHADER_IR_NIR, cap, ptr)
         }
+    }
+
+    pub fn driver_name(&self) -> String {
+        self.ldev.driver_name()
     }
 
     pub fn name(&self) -> String {

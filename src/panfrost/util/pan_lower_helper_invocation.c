@@ -30,20 +30,17 @@
  * way to implement load_sample_id_no_per_sample. */
 
 static bool
-pan_lower_helper_invocation_instr(nir_builder *b, nir_instr *instr, void *data)
+pan_lower_helper_invocation_instr(nir_builder *b, nir_intrinsic_instr *intr,
+                                  void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_helper_invocation)
       return false;
 
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
-   nir_ssa_def *mask = nir_load_sample_mask_in(b);
-   nir_ssa_def *eq = nir_ieq_imm(b, mask, 0);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, eq);
+   nir_def *mask = nir_load_sample_mask_in(b);
+   nir_def *eq = nir_ieq_imm(b, mask, 0);
+   nir_def_rewrite_uses(&intr->def, eq);
 
    return true;
 }
@@ -51,7 +48,7 @@ pan_lower_helper_invocation_instr(nir_builder *b, nir_instr *instr, void *data)
 bool
 pan_lower_helper_invocation(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       shader, pan_lower_helper_invocation_instr,
       nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

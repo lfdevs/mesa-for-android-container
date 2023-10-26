@@ -36,12 +36,16 @@ extern "C" {
 
 struct zink_batch_usage;
 
+/* number of times a swapchain can be read without forcing readback mode */
+#define ZINK_READBACK_THRESHOLD 3
+
 struct kopper_swapchain_image {
    bool init;
    bool acquired;
    bool dt_has_data;
    int age;
    VkImage image;
+   struct pipe_resource *readback;
    VkSemaphore acquire;
    VkImageLayout layout;
 };
@@ -90,6 +94,7 @@ struct kopper_displaytarget
    enum kopper_type type;
    bool is_kill;
    VkPresentModeKHR present_mode;
+   unsigned readback_counter;
 };
 
 struct zink_context;
@@ -132,9 +137,11 @@ zink_kopper_present(struct zink_screen *screen, struct zink_resource *res);
 void
 zink_kopper_present_queue(struct zink_screen *screen, struct zink_resource *res);
 bool
-zink_kopper_acquire_readback(struct zink_context *ctx, struct zink_resource *res);
+zink_kopper_acquire_readback(struct zink_context *ctx, struct zink_resource *res, struct zink_resource **readback);
 bool
 zink_kopper_present_readback(struct zink_context *ctx, struct zink_resource *res);
+void
+zink_kopper_readback_update(struct zink_context *ctx, struct zink_resource *res);
 void
 zink_kopper_deinit_displaytarget(struct zink_screen *screen, struct kopper_displaytarget *cdt);
 bool

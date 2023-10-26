@@ -350,10 +350,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
 
    switch (bind_point) {
    case VK_PIPELINE_BIND_POINT_GRAPHICS:
-      stages &= VK_SHADER_STAGE_ALL_GRAPHICS |
-                (cmd_buffer->device->vk.enabled_extensions.NV_mesh_shader ?
-                      (VK_SHADER_STAGE_TASK_BIT_NV |
-                       VK_SHADER_STAGE_MESH_BIT_NV) : 0);
+      stages &= VK_SHADER_STAGE_ALL_GRAPHICS;
       pipe_state = &cmd_buffer->state.gfx.base;
       break;
 

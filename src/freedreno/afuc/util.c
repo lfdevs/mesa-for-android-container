@@ -252,17 +252,25 @@ afuc_printc(enum afuc_color c, const char *fmt, ...)
 
 int afuc_util_init(int gpuver, bool colors)
 {
-   char *name, *control_reg_name;
+   char *name, *control_reg_name, *variant;
    char *pipe_reg_name = NULL;
 
    switch (gpuver) {
+   case 7:
+      name = "A6XX";
+      variant = "A7XX";
+      control_reg_name = "A7XX_CONTROL_REG";
+      pipe_reg_name = "A7XX_PIPE_REG";
+      break;
    case 6:
       name = "A6XX";
+      variant = "A6XX";
       control_reg_name = "A6XX_CONTROL_REG";
       pipe_reg_name = "A6XX_PIPE_REG";
       break;
    case 5:
       name = "A5XX";
+      variant = "A5XX";
       control_reg_name = "A5XX_CONTROL_REG";
       pipe_reg_name = "A5XX_PIPE_REG";
       break;
@@ -286,7 +294,7 @@ int afuc_util_init(int gpuver, bool colors)
    control_regs = rnn_finddomain(db, control_reg_name);
    pipe_regs = rnn_finddomain(db, pipe_reg_name);
 
-   rnndec_varadd(ctx, "chip", name);
+   rnndec_varadd(ctx, "chip", variant);
 
    pm4_packets = rnn_findenum(ctx->db, "adreno_pm4_type3_packets");
 

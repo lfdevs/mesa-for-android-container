@@ -124,7 +124,7 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
    };
 
    int image_bindings[IMAGE_TYPE_COUNT] = {-1, -1, -1};
-   nir_ssa_def *format_deref_dest = NULL, *order_deref_dest = NULL;
+   nir_def *format_deref_dest = NULL, *order_deref_dest = NULL;
 
    nir_variable *in_var = nir_deref_instr_get_variable(context->deref);
 
@@ -145,11 +145,11 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
     *    arbitrary type for it.
     */
    for (int pass = 0; pass < 2; ++pass) {
-      nir_foreach_use_safe(src, &context->deref->dest.ssa) {
+      nir_foreach_use_safe(src, &context->deref->def) {
          enum image_type type;
 
-         if (src->parent_instr->type == nir_instr_type_intrinsic) {
-            nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(src->parent_instr);
+         if (nir_src_parent_instr(src)->type == nir_instr_type_intrinsic) {
+            nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(nir_src_parent_instr(src));
             nir_alu_type dest_type;
 
             b->cursor = nir_before_instr(&intrinsic->instr);
@@ -203,7 +203,7 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
 
             case nir_intrinsic_image_deref_format:
             case nir_intrinsic_image_deref_order: {
-               nir_ssa_def **cached_deref = intrinsic->intrinsic == nir_intrinsic_image_deref_format ?
+               nir_def **cached_deref = intrinsic->intrinsic == nir_intrinsic_image_deref_format ?
                   &format_deref_dest : &order_deref_dest;
                if (!*cached_deref) {
                   nir_variable *new_input = nir_variable_create(b->shader, nir_var_uniform, glsl_uint_type(), NULL);
@@ -218,7 +218,7 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
                }
 
                /* No actual intrinsic needed here, just reference the loaded variable */
-               nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, *cached_deref);
+               nir_def_rewrite_uses(&intrinsic->def, *cached_deref);
                nir_instr_remove(&intrinsic->instr);
                break;
             }
@@ -226,9 +226,9 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
             default:
                unreachable("Unsupported image intrinsic");
             }
-         } else if (src->parent_instr->type == nir_instr_type_tex) {
+         } else if (nir_src_parent_instr(src)->type == nir_instr_type_tex) {
             assert(in_var->data.access & ACCESS_NON_WRITEABLE);
-            nir_tex_instr *tex = nir_instr_as_tex(src->parent_instr);
+            nir_tex_instr *tex = nir_instr_as_tex(nir_src_parent_instr(src));
 
             switch (nir_alu_type_get_base_type(tex->dest_type)) {
             case nir_type_float: type = FLOAT4; break;
@@ -283,10 +283,10 @@ clc_lower_images(nir_shader *nir, struct clc_image_lower_context *context)
 static void
 clc_lower_64bit_semantics(nir_shader *nir)
 {
-   nir_foreach_function(func, nir) {
-      nir_builder b = nir_builder_create(func->impl);
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
 
-      nir_foreach_block(block, func->impl) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type == nir_instr_type_intrinsic) {
                nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
@@ -304,15 +304,15 @@ clc_lower_64bit_semantics(nir_shader *nir)
                   continue;
                }
 
-               if (nir_instr_ssa_def(instr)->bit_size != 64)
+               if (nir_instr_def(instr)->bit_size != 64)
                   continue;
 
-               intrinsic->dest.ssa.bit_size = 32;
+               intrinsic->def.bit_size = 32;
                b.cursor = nir_after_instr(instr);
 
-               nir_ssa_def *i64 = nir_u2u64(&b, &intrinsic->dest.ssa);
-               nir_ssa_def_rewrite_uses_after(
-                  &intrinsic->dest.ssa,
+               nir_def *i64 = nir_u2u64(&b, &intrinsic->def);
+               nir_def_rewrite_uses_after(
+                  &intrinsic->def,
                   i64,
                   i64->parent_instr);
             }
@@ -343,7 +343,7 @@ clc_lower_nonnormalized_samplers(nir_shader *nir,
                continue;
 
             nir_src *sampler_src = &tex->src[sampler_src_idx].src;
-            assert(sampler_src->is_ssa && sampler_src->ssa->parent_instr->type == nir_instr_type_deref);
+            assert(sampler_src->ssa->parent_instr->type == nir_instr_type_deref);
             nir_variable *sampler = nir_deref_instr_get_variable(
                nir_instr_as_deref(sampler_src->ssa->parent_instr));
 
@@ -359,14 +359,14 @@ clc_lower_nonnormalized_samplers(nir_shader *nir,
 
             int coords_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
             assert(coords_idx != -1);
-            nir_ssa_def *coords =
-               nir_ssa_for_src(&b, tex->src[coords_idx].src, tex->coord_components);
+            nir_def *coords =
+               tex->src[coords_idx].src.ssa;
 
-            nir_ssa_def *txs = nir_i2f32(&b, nir_get_texture_size(&b, tex));
+            nir_def *txs = nir_i2f32(&b, nir_get_texture_size(&b, tex));
 
             // Normalize coords for tex
-            nir_ssa_def *scale = nir_frcp(&b, txs);
-            nir_ssa_def *comps[4];
+            nir_def *scale = nir_frcp(&b, txs);
+            nir_def *comps[4];
             for (unsigned i = 0; i < coords->num_components; ++i) {
                comps[i] = nir_channel(&b, coords, i);
                if (tex->is_array && i == coords->num_components - 1) {
@@ -383,10 +383,8 @@ clc_lower_nonnormalized_samplers(nir_shader *nir,
                   comps[i] = nir_fadd_imm(&b, nir_ffloor(&b, comps[i]), 0.5f);
                comps[i] = nir_fmul(&b, comps[i], nir_channel(&b, scale, i));
             }
-            nir_ssa_def *normalized_coords = nir_vec(&b, comps, coords->num_components);
-            nir_instr_rewrite_src(&tex->instr,
-                                  &tex->src[coords_idx].src,
-                                  nir_src_for_ssa(normalized_coords));
+            nir_def *normalized_coords = nir_vec(&b, comps, coords->num_components);
+            nir_src_rewrite(&tex->src[coords_idx].src, normalized_coords);
          }
       }
    }
@@ -577,7 +575,7 @@ static bool shader_has_double(nir_shader *nir)
              const nir_op_info *info = &nir_op_infos[alu->op];
 
              if (info->output_type & nir_type_float &&
-                 nir_dest_bit_size(alu->dest.dest) == 64)
+                 alu->def.bit_size == 64)
                  return true;
          }
       }
@@ -702,7 +700,7 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
    // according to the comment on nir_inline_functions
    NIR_PASS_V(nir, nir_lower_variable_initializers, nir_var_function_temp);
    NIR_PASS_V(nir, nir_lower_returns);
-   NIR_PASS_V(nir, nir_lower_libclc, clc_libclc_get_clc_shader(lib));
+   NIR_PASS_V(nir, nir_link_shader_functions, clc_libclc_get_clc_shader(lib));
    NIR_PASS_V(nir, nir_inline_functions);
 
    // Pick off the single entrypoint that we want.

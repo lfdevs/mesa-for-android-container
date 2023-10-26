@@ -308,12 +308,22 @@ fetch_state(struct gl_context *ctx, const gl_state_index16 state[],
       else
          COPY_4V(value, ctx->Fog.ColorUnclamped);
       return;
-   case STATE_FOG_PARAMS:
+   case STATE_FOG_PARAMS: {
+      float scale = 1.0f / (ctx->Fog.End - ctx->Fog.Start);
+      /* Pass +-FLT_MAX/2 to the shader instead of +-Inf because Infs have
+       * undefined behavior without GLSL 4.10 or GL_ARB_shader_precision
+       * enabled. Infs also have undefined behavior with Shader Model 3.
+       *
+       * The division by 2 makes it less likely that ALU ops will generate
+       * Inf.
+       */
+      scale = CLAMP(scale, FLT_MIN / 2, FLT_MAX / 2);
       value[0] = ctx->Fog.Density;
       value[1] = ctx->Fog.Start;
       value[2] = ctx->Fog.End;
-      value[3] = 1.0f / (ctx->Fog.End - ctx->Fog.Start);
+      value[3] = scale;
       return;
+   }
    case STATE_CLIPPLANE:
       {
          const GLuint plane = (GLuint) state[1];

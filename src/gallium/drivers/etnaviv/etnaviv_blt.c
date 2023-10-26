@@ -262,15 +262,15 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       /* update clear color in SW meta area of the buffer if TS is exported */
       if (unlikely(new_clear_value != surf->level->clear_value &&
           etna_resource_ext_ts(etna_resource(dst->texture))))
-         etna_resource(dst->texture)->ts_meta->v0.clear_value = new_clear_value;
+         surf->level->ts_meta->v0.clear_value = new_clear_value;
 
-      surf->level->ts_valid = true;
+      etna_resource_level_ts_mark_valid(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
    surf->level->clear_value = new_clear_value;
    resource_written(ctx, surf->base.texture);
-   etna_resource(surf->base.texture)->seqno++;
+   etna_resource_level_mark_changed(surf->level);
 }
 
 static void
@@ -346,12 +346,12 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    /* This made the TS valid */
    if (surf->level->ts_size) {
       ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = surf->level->clear_value;
-      surf->level->ts_valid = true;
+      etna_resource_level_ts_mark_valid(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
    resource_written(ctx, surf->base.texture);
-   etna_resource(surf->base.texture)->seqno++;
+   etna_resource_level_mark_changed(surf->level);
 }
 
 static void
@@ -471,9 +471,14 @@ etna_try_blt_blit(struct pipe_context *pctx,
     */
    if (src == dst) {
       assert(!memcmp(&blit_info->src, &blit_info->dst, sizeof(blit_info->src)));
-      if (!src_lev->ts_size || !src_lev->ts_valid) /* No TS, no worries */
+      if (!etna_resource_level_ts_valid(src_lev)) /* No TS, no worries */
          return true;
    }
+
+   /* Flush destination, as the blit will invalidate any pending TS changes. */
+   if (dst != src && etna_resource_level_needs_flush(dst_lev))
+      etna_copy_resource(pctx, &dst->base, &dst->base,
+                         blit_info->dst.level, blit_info->dst.level);
 
    /* Kick off BLT here */
    if (src == dst && src_lev->ts_compress_fmt < 0) {
@@ -512,7 +517,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       for (unsigned x=0; x<4; ++x)
          op.src.swizzle[x] = x;
 
-      if (src_lev->ts_size && src_lev->ts_valid) {
+      if (etna_resource_level_ts_valid(src_lev)) {
          op.src.use_ts = 1;
          op.src.ts_addr.bo = src->ts_bo;
          op.src.ts_addr.offset = src_lev->ts_offset + blit_info->src.box.z * src_lev->ts_layer_stride;
@@ -573,8 +578,15 @@ etna_try_blt_blit(struct pipe_context *pctx,
    resource_read(ctx, &src->base);
    resource_written(ctx, &dst->base);
 
-   dst->seqno++;
-   dst_lev->ts_valid = false;
+   etna_resource_level_mark_changed(dst_lev);
+
+   /* We don't need to mark the TS as invalid if this was just a flush without
+    * compression, as in that case only clear tiles are filled and the tile
+    * status still matches the blit target buffer. For compressed formats the
+    * tiles are decompressed, so tile status doesn't match anymore.
+    */
+   if (src != dst || src_lev->ts_compress_fmt >= 0)
+      etna_resource_level_ts_mark_invalid(dst_lev);
 
    return true;
 }

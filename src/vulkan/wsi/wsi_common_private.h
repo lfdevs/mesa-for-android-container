@@ -96,7 +96,7 @@ struct wsi_image_info {
    uint32_t linear_stride;
 
    /* For buffer blit images, the size of the buffer in bytes */
-   uint32_t linear_size;
+   uint64_t linear_size;
 
    wsi_memory_type_select_cb select_image_memory_type;
    wsi_memory_type_select_cb select_blit_dst_memory_type;

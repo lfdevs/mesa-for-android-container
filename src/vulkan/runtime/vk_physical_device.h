@@ -27,6 +27,7 @@
 #include "vk_extensions.h"
 #include "vk_object.h"
 #include "vk_physical_device_features.h"
+#include "vk_physical_device_properties.h"
 
 #include "util/list.h"
 
@@ -73,6 +74,11 @@ struct vk_physical_device {
     * device setup work has already been done.
     */
    struct vk_features supported_features;
+
+   /** Table of all physical device properties which is initialized similarly
+    * to supported_features
+    */
+   struct vk_properties properties;
 
    /** Physical-device-level dispatch table */
    struct vk_physical_device_dispatch_table dispatch_table;
@@ -125,6 +131,7 @@ vk_physical_device_init(struct vk_physical_device *physical_device,
                         struct vk_instance *instance,
                         const struct vk_device_extension_table *supported_extensions,
                         const struct vk_features *supported_features,
+                        const struct vk_properties *properties,
                         const struct vk_physical_device_dispatch_table *dispatch_table);
 
 /** Tears down a vk_physical_device

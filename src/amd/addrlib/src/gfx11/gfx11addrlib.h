@@ -34,7 +34,7 @@ struct Gfx11ChipSettings
 {
     struct
     {
-        UINT_32 reserved0           :  1;
+        UINT_32 isGfx1150           :  1;
         UINT_32 isGfx1103           :  1;
         UINT_32 reserved1           : 30;
 

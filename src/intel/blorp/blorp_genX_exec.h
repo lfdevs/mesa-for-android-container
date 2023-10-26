@@ -123,6 +123,11 @@ static void
 blorp_emit_pipeline(struct blorp_batch *batch,
                     const struct blorp_params *params);
 
+static void
+blorp_emit_breakpoint_pre_draw(struct blorp_batch *batch);
+static void
+blorp_emit_breakpoint_post_draw(struct blorp_batch *batch);
+
 /***** BEGIN blorp_exec implementation ******/
 
 static uint64_t
@@ -1252,6 +1257,18 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
       return 0;
 
    GENX(3DSTATE_WM_DEPTH_STENCIL_pack)(NULL, dw, &ds);
+
+#if GFX_VERx10 >= 125
+   /* Check if need PSS Stall sync. */
+   if (intel_needs_workaround(batch->blorp->compiler->devinfo, 18019816803) &&
+       batch->flags & BLORP_BATCH_NEED_PSS_STALL_SYNC) {
+      blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
+            pc.PSSStallSyncEnable = true;
+      }
+      batch->flags &= ~BLORP_BATCH_NEED_PSS_STALL_SYNC;
+   }
+#endif
+
 #else
    uint32_t offset;
    void *state = blorp_alloc_dynamic_state(batch,
@@ -1284,16 +1301,8 @@ blorp_emit_3dstate_multisample(struct blorp_batch *batch,
 {
    blorp_emit(batch, GENX(3DSTATE_MULTISAMPLE), ms) {
       ms.NumberofMultisamples       = __builtin_ffs(params->num_samples) - 1;
-
-#if GFX_VER >= 8
-      /* The PRM says that this bit is valid only for DX9:
-       *
-       *    SW can choose to set this bit only for DX9 API. DX10/OGL API's
-       *    should not have any effect by setting or not setting this bit.
-       */
-      ms.PixelPositionOffsetEnable  = false;
-#elif GFX_VER >= 7
-
+      ms.PixelLocation              = CENTER;
+#if GFX_VER >= 7 && GFX_VER < 8
       switch (params->num_samples) {
       case 1:
          INTEL_SAMPLE_POS_1X(ms.Sample);
@@ -1310,10 +1319,9 @@ blorp_emit_3dstate_multisample(struct blorp_batch *batch,
       default:
          break;
       }
-#else
+#elif GFX_VER < 7
       INTEL_SAMPLE_POS_4X(ms.Sample);
 #endif
-      ms.PixelLocation              = CENTER;
    }
 }
 
@@ -1620,7 +1628,6 @@ blorp_setup_binding_table(struct blorp_batch *batch,
    uint32_t surface_offsets[2], bind_offset = 0;
    void *surface_maps[2];
 
-   UNUSED bool has_indirect_clear_color = false;
    if (params->use_pre_baked_binding_table) {
       bind_offset = params->pre_baked_binding_table_offset;
    } else {
@@ -1635,8 +1642,6 @@ blorp_setup_binding_table(struct blorp_batch *batch,
                                   surface_maps[BLORP_RENDERBUFFER_BT_INDEX],
                                   surface_offsets[BLORP_RENDERBUFFER_BT_INDEX],
                                   params->color_write_disable, true);
-         if (params->dst.clear_color_addr.buffer != NULL)
-            has_indirect_clear_color = true;
       } else {
          assert(params->depth.enabled || params->stencil.enabled);
          const struct brw_blorp_surface_info *surface =
@@ -1651,8 +1656,6 @@ blorp_setup_binding_table(struct blorp_batch *batch,
                                   surface_maps[BLORP_TEXTURE_BT_INDEX],
                                   surface_offsets[BLORP_TEXTURE_BT_INDEX],
                                   0, false);
-         if (params->src.clear_color_addr.buffer != NULL)
-            has_indirect_clear_color = true;
       }
    }
 
@@ -2044,6 +2047,7 @@ blorp_exec_3d(struct blorp_batch *batch, const struct blorp_params *params)
    if (!(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
       blorp_emit_depth_stencil_config(batch, params);
 
+   blorp_emit_breakpoint_pre_draw(batch);
    blorp_emit(batch, GENX(3DPRIMITIVE), prim) {
       prim.VertexAccessType = SEQUENTIAL;
       prim.PrimitiveTopologyType = _3DPRIM_RECTLIST;
@@ -2053,7 +2057,7 @@ blorp_exec_3d(struct blorp_batch *batch, const struct blorp_params *params)
       prim.VertexCountPerInstance = 3;
       prim.InstanceCount = params->num_layers;
    }
-
+   blorp_emit_breakpoint_post_draw(batch);
    blorp_measure_end(batch, params);
 }
 
@@ -2465,7 +2469,7 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
          params->dst.view.base_array_layer + params->dst.z_offset;
       blt.DestinationSurfaceQPitch = isl_get_qpitch(dst_surf) >> 2;
       blt.DestinationLOD = params->dst.view.base_level;
-      blt.DestinationMipTailStartLOD = 15;
+      blt.DestinationMipTailStartLOD = dst_surf->miptail_start_level;
       blt.DestinationHorizontalAlign = isl_encode_halign(dst_align.width);
       blt.DestinationVerticalAlign = isl_encode_valign(dst_align.height);
       blt.DestinationDepthStencilResource = false;
@@ -2500,7 +2504,7 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
          params->src.view.base_array_layer + params->src.z_offset;
       blt.SourceSurfaceQPitch = isl_get_qpitch(src_surf) >> 2;
       blt.SourceLOD = params->src.view.base_level;
-      blt.SourceMipTailStartLOD = 15;
+      blt.SourceMipTailStartLOD = src_surf->miptail_start_level;
       blt.SourceHorizontalAlign = isl_encode_halign(src_align.width);
       blt.SourceVerticalAlign = isl_encode_valign(src_align.height);
       blt.SourceDepthStencilResource = false;
@@ -2583,7 +2587,7 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
          params->dst.view.base_array_layer + params->dst.z_offset;
       blt.DestinationSurfaceQPitch = isl_get_qpitch(dst_surf) >> 2;
       blt.DestinationLOD = params->dst.view.base_level;
-      blt.DestinationMipTailStartLOD = 15;
+      blt.DestinationMipTailStartLOD = dst_surf->miptail_start_level;
       blt.DestinationHorizontalAlign = isl_encode_halign(dst_align.width);
       blt.DestinationVerticalAlign = isl_encode_valign(dst_align.height);
       blt.DestinationDepthStencilResource = false;

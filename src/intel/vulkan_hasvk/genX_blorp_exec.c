@@ -369,3 +369,15 @@ genX(blorp_exec)(struct blorp_batch *batch,
    else
       blorp_exec_on_render(batch, params);
 }
+
+static void
+blorp_emit_breakpoint_pre_draw(struct blorp_batch *batch)
+{
+   /* "Not implemented" */
+}
+
+static void
+blorp_emit_breakpoint_post_draw(struct blorp_batch *batch)
+{
+   /* "Not implemented" */
+}

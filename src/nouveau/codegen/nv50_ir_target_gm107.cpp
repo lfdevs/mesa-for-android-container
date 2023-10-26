@@ -56,7 +56,6 @@ TargetGM107::isOpSupported(operation op, DataType ty) const
 {
    switch (op) {
    case OP_SAD:
-   case OP_POW:
    case OP_DIV:
    case OP_MOD:
       return false;

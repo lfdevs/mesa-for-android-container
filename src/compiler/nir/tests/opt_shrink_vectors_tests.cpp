@@ -20,38 +20,24 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-#include <gtest/gtest.h>
-#include "nir.h"
-#include "nir_builder.h"
 
-class nir_opt_shrink_vectors_test : public ::testing::Test {
+#include "nir_test.h"
+
+class nir_opt_shrink_vectors_test : public nir_test {
 protected:
    nir_opt_shrink_vectors_test();
-   ~nir_opt_shrink_vectors_test();
 
-   nir_builder bld;
-
-   nir_ssa_def *in_def;
+   nir_def *in_def;
    nir_variable *out_var;
 };
 
 nir_opt_shrink_vectors_test::nir_opt_shrink_vectors_test()
+   : nir_test::nir_test("nir_opt_shrink_vectors_test")
 {
-   glsl_type_singleton_init_or_ref();
+   nir_variable *var = nir_variable_create(b->shader, nir_var_shader_in, glsl_vec_type(2), "in");
+   in_def = nir_load_var(b, var);
 
-   static const nir_shader_compiler_options options = { };
-   bld = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, &options, "opt shrink vectors test");
-
-   nir_variable *var = nir_variable_create(bld.shader, nir_var_shader_in, glsl_vec_type(2), "in");
-   in_def = nir_load_var(&bld, var);
-
-   out_var = nir_variable_create(bld.shader, nir_var_shader_out, glsl_vec_type(1), "out");
-}
-
-nir_opt_shrink_vectors_test::~nir_opt_shrink_vectors_test()
-{
-   ralloc_free(bld.shader);
-   glsl_type_singleton_decref();
+   out_var = nir_variable_create(b->shader, nir_var_shader_out, glsl_vec_type(1), "out");
 }
 
 static unsigned translate_swizzle(char swz)
@@ -98,25 +84,24 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_load_const_trailing_compo
     * vec1 32 ssa_2 = fmov ssa_1.x
     */
 
-   nir_ssa_def *imm_vec = nir_imm_vec4(&bld, 1.0, 2.0, 3.0, 4.0);
+   nir_def *imm_vec = nir_imm_vec4(b, 1.0, 2.0, 3.0, 4.0);
 
-   nir_ssa_def *alu_result = nir_build_alu1(&bld, nir_op_mov, imm_vec);
+   nir_def *alu_result = nir_build_alu1(b, nir_op_mov, imm_vec);
    nir_alu_instr *alu_instr = nir_instr_as_alu(alu_result->parent_instr);
    set_swizzle(&alu_instr->src[0], "x");
    alu_result->num_components = 1;
-   alu_instr->dest.write_mask = BITFIELD_MASK(1);
 
-   nir_store_var(&bld, out_var, alu_result, 1);
+   nir_store_var(b, out_var, alu_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
    ASSERT_TRUE(imm_vec->num_components == 1);
    nir_load_const_instr * imm_vec_instr = nir_instr_as_load_const(imm_vec->parent_instr);
    ASSERT_TRUE(nir_const_value_as_float(imm_vec_instr->value[0], 32) == 1.0);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_alu_trailing_component_only)
@@ -133,28 +118,26 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_alu_trailing_component_on
     * vec1 32 ssa_2 = fmov ssa_1.x
     */
 
-   nir_ssa_def *alu_result = nir_build_alu1(&bld, nir_op_mov, in_def);
+   nir_def *alu_result = nir_build_alu1(b, nir_op_mov, in_def);
    nir_alu_instr *alu_instr = nir_instr_as_alu(alu_result->parent_instr);
    alu_result->num_components = 4;
-   alu_instr->dest.write_mask = BITFIELD_MASK(4);
    set_swizzle(&alu_instr->src[0], "xyxx");
 
-   nir_ssa_def *alu2_result = nir_build_alu1(&bld, nir_op_mov, alu_result);
+   nir_def *alu2_result = nir_build_alu1(b, nir_op_mov, alu_result);
    nir_alu_instr *alu2_instr = nir_instr_as_alu(alu2_result->parent_instr);
    set_swizzle(&alu2_instr->src[0], "x");
    alu2_result->num_components = 1;
-   alu2_instr->dest.write_mask = BITFIELD_MASK(1);
 
-   nir_store_var(&bld, out_var, alu2_result, 1);
+   nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
    check_swizzle(&alu_instr->src[0], "x");
    ASSERT_TRUE(alu_result->num_components == 1);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
@@ -172,25 +155,24 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
     * vec1 32 ssa_4 = fdot3 ssa_3.xxy ssa_3.xxy
     */
 
-   nir_ssa_def *imm_vec = nir_imm_vec4(&bld, 3.0, 1.0, 2.0, 1.0);
+   nir_def *imm_vec = nir_imm_vec4(b, 3.0, 1.0, 2.0, 1.0);
 
-   nir_ssa_def *alu_result = nir_build_alu2(&bld, nir_op_fadd, in_def, imm_vec);
+   nir_def *alu_result = nir_build_alu2(b, nir_op_fadd, in_def, imm_vec);
    nir_alu_instr *alu_instr = nir_instr_as_alu(alu_result->parent_instr);
    alu_result->num_components = 4;
-   alu_instr->dest.write_mask = BITFIELD_MASK(4);
    set_swizzle(&alu_instr->src[0], "xxxy");
    set_swizzle(&alu_instr->src[1], "ywyz");
 
-   nir_ssa_def *alu2_result = nir_build_alu2(&bld, nir_op_fdot3, alu_result, alu_result);
+   nir_def *alu2_result = nir_build_alu2(b, nir_op_fdot3, alu_result, alu_result);
    nir_alu_instr *alu2_instr = nir_instr_as_alu(alu2_result->parent_instr);
    set_swizzle(&alu2_instr->src[0], "xzw");
    set_swizzle(&alu2_instr->src[1], "xzw");
 
-   nir_store_var(&bld, out_var, alu2_result, 1);
+   nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
    ASSERT_TRUE(imm_vec->num_components == 2);
    nir_load_const_instr * imm_vec_instr = nir_instr_as_load_const(imm_vec->parent_instr);
@@ -204,9 +186,9 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
    check_swizzle(&alu2_instr->src[0], "xxy");
    check_swizzle(&alu2_instr->src[1], "xxy");
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_vec8)
@@ -238,25 +220,24 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_vec8)
       nir_const_value_for_float(2.0, 32),
       nir_const_value_for_float(6.0, 32),
    };
-   nir_ssa_def *imm_vec = nir_build_imm(&bld, 8, 32, v);
+   nir_def *imm_vec = nir_build_imm(b, 8, 32, v);
 
-   nir_ssa_def *alu_result = nir_build_alu2(&bld, nir_op_fadd, in_def, imm_vec);
+   nir_def *alu_result = nir_build_alu2(b, nir_op_fadd, in_def, imm_vec);
    nir_alu_instr *alu_instr = nir_instr_as_alu(alu_result->parent_instr);
    alu_result->num_components = 8;
-   alu_instr->dest.write_mask = BITFIELD_MASK(8);
    set_swizzle(&alu_instr->src[0], "xxxxxxxy");
    set_swizzle(&alu_instr->src[1], "afhdefgh");
 
-   nir_ssa_def *alu2_result = nir_build_alu2(&bld, nir_op_fdot8, alu_result, alu_result);
+   nir_def *alu2_result = nir_build_alu2(b, nir_op_fdot8, alu_result, alu_result);
    nir_alu_instr *alu2_instr = nir_instr_as_alu(alu2_result->parent_instr);
    set_swizzle(&alu2_instr->src[0], "accdefgh");
    set_swizzle(&alu2_instr->src[1], "accdefgh");
 
-   nir_store_var(&bld, out_var, alu2_result, 1);
+   nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
    ASSERT_TRUE(imm_vec->num_components == 8);
    nir_load_const_instr * imm_vec_instr = nir_instr_as_load_const(imm_vec->parent_instr);
@@ -274,9 +255,9 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_vec8)
    check_swizzle(&alu2_instr->src[0], "abbcdefg");
    check_swizzle(&alu2_instr->src[1], "abbcdefg");
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_simple)
@@ -290,54 +271,49 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_simple)
     *
     * This mimics nir for loops that come out of nine+ttn.
     */
-   nir_ssa_def *v = nir_imm_vec4(&bld, 0.0, 0.0, 0.0, 0.0);
-   nir_ssa_def *increment = nir_imm_float(&bld, 1.0);
-   nir_ssa_def *loop_max = nir_imm_float(&bld, 3.0);
+   nir_def *v = nir_imm_vec4(b, 0.0, 0.0, 0.0, 0.0);
+   nir_def *increment = nir_imm_float(b, 1.0);
+   nir_def *loop_max = nir_imm_float(b, 3.0);
 
-   nir_phi_instr *const phi = nir_phi_instr_create(bld.shader);
-   nir_ssa_def *phi_def = &phi->dest.ssa;
+   nir_phi_instr *const phi = nir_phi_instr_create(b->shader);
+   nir_def *phi_def = &phi->def;
 
-   nir_loop *loop = nir_push_loop(&bld);
+   nir_loop *loop = nir_push_loop(b);
 
-   nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size);
+   nir_def_init(&phi->instr, &phi->def, v->num_components, v->bit_size);
 
-   nir_phi_instr_add_src(phi, v->parent_instr->block,
-                         nir_src_for_ssa(v));
+   nir_phi_instr_add_src(phi, v->parent_instr->block, v);
 
-   nir_ssa_def *fge = nir_fge(&bld, phi_def, loop_max);
+   nir_def *fge = nir_fge(b, phi_def, loop_max);
    nir_alu_instr *fge_alu_instr = nir_instr_as_alu(fge->parent_instr);
    fge->num_components = 1;
-   fge_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fge_alu_instr->src[0].swizzle[0] = 1;
 
-   nir_if *nif = nir_push_if(&bld, fge);
+   nir_if *nif = nir_push_if(b, fge);
    {
-      nir_jump_instr *jump = nir_jump_instr_create(bld.shader, nir_jump_break);
-      nir_builder_instr_insert(&bld, &jump->instr);
+      nir_jump_instr *jump = nir_jump_instr_create(b->shader, nir_jump_break);
+      nir_builder_instr_insert(b, &jump->instr);
    }
-   nir_pop_if(&bld, nif);
+   nir_pop_if(b, nif);
 
-   nir_ssa_def *fadd = nir_fadd(&bld, phi_def, increment);
+   nir_def *fadd = nir_fadd(b, phi_def, increment);
    nir_alu_instr *fadd_alu_instr = nir_instr_as_alu(fadd->parent_instr);
    fadd->num_components = 1;
-   fadd_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fadd_alu_instr->src[0].swizzle[0] = 1;
 
-   nir_ssa_scalar srcs[4] = {{0}};
+   nir_scalar srcs[4] = {{0}};
    for (unsigned i = 0; i < 4; i++) {
-      srcs[i] = nir_get_ssa_scalar(phi_def, i);
+      srcs[i] = nir_get_scalar(phi_def, i);
    }
-   srcs[1] = nir_get_ssa_scalar(fadd, 0);
-   nir_ssa_def *vec = nir_vec_scalars(&bld, srcs, 4);
+   srcs[1] = nir_get_scalar(fadd, 0);
+   nir_def *vec = nir_vec_scalars(b, srcs, 4);
 
-   nir_phi_instr_add_src(phi, vec->parent_instr->block,
-                         nir_src_for_ssa(vec));
+   nir_phi_instr_add_src(phi, vec->parent_instr->block, vec);
 
-   nir_pop_loop(&bld, loop);
+   nir_pop_loop(b, loop);
 
-   bld.cursor = nir_before_block(nir_loop_first_block(loop));
-   nir_builder_instr_insert(&bld, &phi->instr);
+   b->cursor = nir_before_block(nir_loop_first_block(loop));
+   nir_builder_instr_insert(b, &phi->instr);
 
    /* Generated nir:
     *
@@ -379,14 +355,14 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_simple)
     * }
     */
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
    ASSERT_TRUE(phi_def->num_components == 1);
    check_swizzle(&fge_alu_instr->src[0], "x");
    check_swizzle(&fadd_alu_instr->src[0], "x");
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_swizzle)
@@ -399,54 +375,49 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_swizzle)
     *       v = vec4(v.x, v.z + 1, v.y, v.w};
     *    }
     */
-   nir_ssa_def *v = nir_imm_vec4(&bld, 0.0, 0.0, 0.0, 0.0);
-   nir_ssa_def *increment = nir_imm_float(&bld, 1.0);
-   nir_ssa_def *loop_max = nir_imm_float(&bld, 3.0);
+   nir_def *v = nir_imm_vec4(b, 0.0, 0.0, 0.0, 0.0);
+   nir_def *increment = nir_imm_float(b, 1.0);
+   nir_def *loop_max = nir_imm_float(b, 3.0);
 
-   nir_phi_instr *const phi = nir_phi_instr_create(bld.shader);
-   nir_ssa_def *phi_def = &phi->dest.ssa;
+   nir_phi_instr *const phi = nir_phi_instr_create(b->shader);
+   nir_def *phi_def = &phi->def;
 
-   nir_loop *loop = nir_push_loop(&bld);
+   nir_loop *loop = nir_push_loop(b);
 
-   nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size);
+   nir_def_init(&phi->instr, &phi->def, v->num_components, v->bit_size);
 
-   nir_phi_instr_add_src(phi, v->parent_instr->block,
-                         nir_src_for_ssa(v));
+   nir_phi_instr_add_src(phi, v->parent_instr->block, v);
 
-   nir_ssa_def *fge = nir_fge(&bld, phi_def, loop_max);
+   nir_def *fge = nir_fge(b, phi_def, loop_max);
    nir_alu_instr *fge_alu_instr = nir_instr_as_alu(fge->parent_instr);
    fge->num_components = 1;
-   fge_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fge_alu_instr->src[0].swizzle[0] = 2;
 
-   nir_if *nif = nir_push_if(&bld, fge);
+   nir_if *nif = nir_push_if(b, fge);
 
-      nir_jump_instr *jump = nir_jump_instr_create(bld.shader, nir_jump_break);
-      nir_builder_instr_insert(&bld, &jump->instr);
+      nir_jump_instr *jump = nir_jump_instr_create(b->shader, nir_jump_break);
+      nir_builder_instr_insert(b, &jump->instr);
 
-   nir_pop_if(&bld, nif);
+   nir_pop_if(b, nif);
 
-   nir_ssa_def *fadd = nir_fadd(&bld, phi_def, increment);
+   nir_def *fadd = nir_fadd(b, phi_def, increment);
    nir_alu_instr *fadd_alu_instr = nir_instr_as_alu(fadd->parent_instr);
    fadd->num_components = 1;
-   fadd_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fadd_alu_instr->src[0].swizzle[0] = 2;
 
-   nir_ssa_scalar srcs[4] = {{0}};
-   srcs[0] = nir_get_ssa_scalar(phi_def, 0);
-   srcs[1] = nir_get_ssa_scalar(fadd, 0);
-   srcs[2] = nir_get_ssa_scalar(phi_def, 1);
-   srcs[3] = nir_get_ssa_scalar(phi_def, 3);
-   nir_ssa_def *vec = nir_vec_scalars(&bld, srcs, 4);
+   nir_scalar srcs[4] = {{0}};
+   srcs[0] = nir_get_scalar(phi_def, 0);
+   srcs[1] = nir_get_scalar(fadd, 0);
+   srcs[2] = nir_get_scalar(phi_def, 1);
+   srcs[3] = nir_get_scalar(phi_def, 3);
+   nir_def *vec = nir_vec_scalars(b, srcs, 4);
 
-   nir_phi_instr_add_src(phi, vec->parent_instr->block,
-                         nir_src_for_ssa(vec));
+   nir_phi_instr_add_src(phi, vec->parent_instr->block, vec);
 
-   nir_pop_loop(&bld, loop);
+   nir_pop_loop(b, loop);
 
-   bld.cursor = nir_before_block(nir_loop_first_block(loop));
-   nir_builder_instr_insert(&bld, &phi->instr);
+   b->cursor = nir_before_block(nir_loop_first_block(loop));
+   nir_builder_instr_insert(b, &phi->instr);
 
    /* Generated nir:
     *
@@ -488,15 +459,15 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_swizzle)
     * }
     */
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
    ASSERT_TRUE(phi_def->num_components == 2);
 
    check_swizzle(&fge_alu_instr->src[0], "y");
    check_swizzle(&fadd_alu_instr->src[0], "y");
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_phi_out)
@@ -509,60 +480,55 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_phi_out)
     *    }
     *    out = v;
     */
-   nir_ssa_def *v = nir_imm_vec4(&bld, 0.0, 0.0, 0.0, 0.0);
-   nir_ssa_def *increment = nir_imm_float(&bld, 1.0);
-   nir_ssa_def *loop_max = nir_imm_float(&bld, 3.0);
+   nir_def *v = nir_imm_vec4(b, 0.0, 0.0, 0.0, 0.0);
+   nir_def *increment = nir_imm_float(b, 1.0);
+   nir_def *loop_max = nir_imm_float(b, 3.0);
 
-   nir_phi_instr *const phi = nir_phi_instr_create(bld.shader);
-   nir_ssa_def *phi_def = &phi->dest.ssa;
+   nir_phi_instr *const phi = nir_phi_instr_create(b->shader);
+   nir_def *phi_def = &phi->def;
 
-   nir_loop *loop = nir_push_loop(&bld);
+   nir_loop *loop = nir_push_loop(b);
 
-   nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size);
+   nir_def_init(&phi->instr, &phi->def, v->num_components, v->bit_size);
 
-   nir_phi_instr_add_src(phi, v->parent_instr->block,
-                         nir_src_for_ssa(v));
+   nir_phi_instr_add_src(phi, v->parent_instr->block, v);
 
-   nir_ssa_def *fge = nir_fge(&bld, phi_def, loop_max);
+   nir_def *fge = nir_fge(b, phi_def, loop_max);
    nir_alu_instr *fge_alu_instr = nir_instr_as_alu(fge->parent_instr);
    fge->num_components = 1;
-   fge_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fge_alu_instr->src[0].swizzle[0] = 1;
 
-   nir_if *nif = nir_push_if(&bld, fge);
+   nir_if *nif = nir_push_if(b, fge);
    {
-      nir_jump_instr *jump = nir_jump_instr_create(bld.shader, nir_jump_break);
-      nir_builder_instr_insert(&bld, &jump->instr);
+      nir_jump_instr *jump = nir_jump_instr_create(b->shader, nir_jump_break);
+      nir_builder_instr_insert(b, &jump->instr);
    }
-   nir_pop_if(&bld, nif);
+   nir_pop_if(b, nif);
 
-   nir_ssa_def *fadd = nir_fadd(&bld, phi_def, increment);
+   nir_def *fadd = nir_fadd(b, phi_def, increment);
    nir_alu_instr *fadd_alu_instr = nir_instr_as_alu(fadd->parent_instr);
    fadd->num_components = 1;
-   fadd_alu_instr->dest.write_mask = BITFIELD_MASK(1);
    fadd_alu_instr->src[0].swizzle[0] = 1;
 
-   nir_ssa_scalar srcs[4] = {{0}};
+   nir_scalar srcs[4] = {{0}};
    for (unsigned i = 0; i < 4; i++) {
-      srcs[i] = nir_get_ssa_scalar(phi_def, i);
+      srcs[i] = nir_get_scalar(phi_def, i);
    }
-   srcs[1] = nir_get_ssa_scalar(fadd, 0);
-   nir_ssa_def *vec = nir_vec_scalars(&bld, srcs, 4);
+   srcs[1] = nir_get_scalar(fadd, 0);
+   nir_def *vec = nir_vec_scalars(b, srcs, 4);
 
-   nir_phi_instr_add_src(phi, vec->parent_instr->block,
-                         nir_src_for_ssa(vec));
+   nir_phi_instr_add_src(phi, vec->parent_instr->block, vec);
 
-   nir_pop_loop(&bld, loop);
+   nir_pop_loop(b, loop);
 
-   out_var = nir_variable_create(bld.shader,
+   out_var = nir_variable_create(b->shader,
                                  nir_var_shader_out,
                                  glsl_vec_type(4), "out4");
 
-   nir_store_var(&bld, out_var, phi_def, BITFIELD_MASK(4));
+   nir_store_var(b, out_var, phi_def, BITFIELD_MASK(4));
 
-   bld.cursor = nir_before_block(nir_loop_first_block(loop));
-   nir_builder_instr_insert(&bld, &phi->instr);
+   b->cursor = nir_before_block(nir_loop_first_block(loop));
+   nir_builder_instr_insert(b, &phi->instr);
 
    /* Generated nir:
     *
@@ -606,8 +572,8 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_phi_out)
     * }
     */
 
-   nir_validate_shader(bld.shader, NULL);
+   nir_validate_shader(b->shader, NULL);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(bld.shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
    ASSERT_TRUE(phi_def->num_components == 4);
 }

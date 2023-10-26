@@ -502,11 +502,15 @@ static void translate_vertex_program(struct radeon_compiler *c, void *user)
 					"Too many flow control instructions.");
 				return;
 			}
+			/* Maximum of R500_PVS_FC_LOOP_CNT_JMP_INST is 0xff, here
+			 * we reduce it to half to avoid occasional hangs on RV516
+			 * and downclocked RV530.
+			 */
 			if (compiler->Base.is_r500) {
 				compiler->code->fc_op_addrs.r500
 					[compiler->code->num_fc_ops].lw =
 					R500_PVS_FC_ACT_ADRS(act_addr)
-					| R500_PVS_FC_LOOP_CNT_JMP_INST(0x00ff)
+					| R500_PVS_FC_LOOP_CNT_JMP_INST(0x0080)
 					;
 				compiler->code->fc_op_addrs.r500
 					[compiler->code->num_fc_ops].uw =

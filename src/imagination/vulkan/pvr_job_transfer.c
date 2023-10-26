@@ -2711,19 +2711,19 @@ static VkResult pvr_3d_copy_blit_core(struct pvr_transfer_ctx *ctx,
       if (result != VK_SUCCESS)
          return result;
 
-      pvr_csb_pack (&regs->usc_clear_register0, CR_USC_CLEAR_REGISTER0, reg) {
+      pvr_csb_pack (&regs->usc_clear_register0, CR_USC_CLEAR_REGISTER, reg) {
          reg.val = packed_color[0U];
       }
 
-      pvr_csb_pack (&regs->usc_clear_register1, CR_USC_CLEAR_REGISTER1, reg) {
+      pvr_csb_pack (&regs->usc_clear_register1, CR_USC_CLEAR_REGISTER, reg) {
          reg.val = packed_color[1U];
       }
 
-      pvr_csb_pack (&regs->usc_clear_register2, CR_USC_CLEAR_REGISTER2, reg) {
+      pvr_csb_pack (&regs->usc_clear_register2, CR_USC_CLEAR_REGISTER, reg) {
          reg.val = packed_color[2U];
       }
 
-      pvr_csb_pack (&regs->usc_clear_register3, CR_USC_CLEAR_REGISTER3, reg) {
+      pvr_csb_pack (&regs->usc_clear_register3, CR_USC_CLEAR_REGISTER, reg) {
          reg.val = packed_color[3U];
       }
 
@@ -4043,25 +4043,25 @@ static VkResult pvr_isp_ctrl_stream(const struct pvr_device_info *dev_info,
             fill_mapping.dst_rect = transfer_cmd->scissor;
 
             pvr_csb_pack (&regs->usc_clear_register0,
-                          CR_USC_CLEAR_REGISTER0,
+                          CR_USC_CLEAR_REGISTER,
                           reg) {
                reg.val = packed_color[0U];
             }
 
             pvr_csb_pack (&regs->usc_clear_register1,
-                          CR_USC_CLEAR_REGISTER1,
+                          CR_USC_CLEAR_REGISTER,
                           reg) {
                reg.val = packed_color[1U];
             }
 
             pvr_csb_pack (&regs->usc_clear_register2,
-                          CR_USC_CLEAR_REGISTER2,
+                          CR_USC_CLEAR_REGISTER,
                           reg) {
                reg.val = packed_color[2U];
             }
 
             pvr_csb_pack (&regs->usc_clear_register3,
-                          CR_USC_CLEAR_REGISTER3,
+                          CR_USC_CLEAR_REGISTER,
                           reg) {
                reg.val = packed_color[3U];
             }
@@ -5694,16 +5694,16 @@ pvr_submit_info_stream_init(struct pvr_transfer_ctx *ctx,
    stream_ptr += pvr_cmd_length(CR_USC_PIXEL_OUTPUT_CTRL);
 
    *stream_ptr = regs->usc_clear_register0;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER0);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    *stream_ptr = regs->usc_clear_register1;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER1);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    *stream_ptr = regs->usc_clear_register2;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER2);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    *stream_ptr = regs->usc_clear_register3;
-   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER3);
+   stream_ptr += pvr_cmd_length(CR_USC_CLEAR_REGISTER);
 
    *stream_ptr = regs->isp_mtile_size;
    stream_ptr += pvr_cmd_length(CR_ISP_MTILE_SIZE);

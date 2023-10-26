@@ -21,10 +21,10 @@
  * IN THE SOFTWARE.
  */
 
-#include "nir.h"
-#include "nir_constant_expressions.h"
 #include "nir_loop_analyze.h"
 #include "util/bitset.h"
+#include "nir.h"
+#include "nir_constant_expressions.h"
 
 typedef enum {
    undefined,
@@ -40,7 +40,7 @@ typedef struct {
    bool in_loop;
 
    /* The ssa_def associated with this info */
-   nir_ssa_def *def;
+   nir_def *def;
 
    /* The type of this ssa_def */
    nir_loop_variable_type type;
@@ -63,7 +63,7 @@ typedef struct {
     * is the increment of the induction variable, this will point to the SSA
     * def being incremented.
     */
-   nir_ssa_def *basis;
+   nir_def *basis;
 } nir_loop_variable;
 
 typedef struct {
@@ -83,7 +83,7 @@ typedef struct {
 } loop_info_state;
 
 static nir_loop_variable *
-get_loop_var(nir_ssa_def *value, loop_info_state *state)
+get_loop_var(nir_def *value, loop_info_state *state)
 {
    nir_loop_variable *var = &(state->loop_vars[value->index]);
 
@@ -112,7 +112,7 @@ typedef struct {
 } init_loop_state;
 
 static bool
-init_loop_def(nir_ssa_def *def, void *void_init_loop_state)
+init_loop_def(nir_def *def, void *void_init_loop_state)
 {
    init_loop_state *loop_init_state = void_init_loop_state;
    nir_loop_variable *var = get_loop_var(def, loop_init_state->state);
@@ -158,14 +158,14 @@ instr_cost(loop_info_state *state, nir_instr *instr,
    unsigned cost = 1;
 
    if (nir_op_is_selection(alu->op)) {
-      nir_ssa_scalar cond_scalar = {alu->src[0].src.ssa, 0};
+      nir_scalar cond_scalar = { alu->src[0].src.ssa, 0 };
       if (nir_is_terminator_condition_with_two_inputs(cond_scalar)) {
          nir_instr *sel_cond = alu->src[0].src.ssa->parent_instr;
          nir_alu_instr *sel_alu = nir_instr_as_alu(sel_cond);
 
-         nir_ssa_scalar rhs, lhs;
-         lhs = nir_ssa_scalar_chase_alu_src(cond_scalar, 0);
-         rhs = nir_ssa_scalar_chase_alu_src(cond_scalar, 1);
+         nir_scalar rhs, lhs;
+         lhs = nir_scalar_chase_alu_src(cond_scalar, 0);
+         rhs = nir_scalar_chase_alu_src(cond_scalar, 1);
 
          /* If the selects condition is a comparision between a constant and
           * a basic induction variable we know that it will be eliminated once
@@ -174,12 +174,12 @@ instr_cost(loop_info_state *state, nir_instr *instr,
          if ((nir_src_is_const(sel_alu->src[0].src) &&
               get_loop_var(rhs.def, state)->type == basic_induction) ||
              (nir_src_is_const(sel_alu->src[1].src) &&
-              get_loop_var(lhs.def, state)->type == basic_induction) ) {
+              get_loop_var(lhs.def, state)->type == basic_induction)) {
             /* Also if the selects condition is only used by the select then
              * remove that alu instructons cost from the cost total also.
              */
-            if (!list_is_singular(&sel_alu->dest.dest.ssa.uses) ||
-                nir_ssa_def_used_by_if(&sel_alu->dest.dest.ssa))
+            if (!list_is_singular(&sel_alu->def.uses) ||
+                nir_def_used_by_if(&sel_alu->def))
                return 0;
             else
                return -1;
@@ -188,9 +188,9 @@ instr_cost(loop_info_state *state, nir_instr *instr,
    }
 
    if (alu->op == nir_op_flrp) {
-      if ((options->lower_flrp16 && nir_dest_bit_size(alu->dest.dest) == 16) ||
-          (options->lower_flrp32 && nir_dest_bit_size(alu->dest.dest) == 32) ||
-          (options->lower_flrp64 && nir_dest_bit_size(alu->dest.dest) == 64))
+      if ((options->lower_flrp16 && alu->def.bit_size == 16) ||
+          (options->lower_flrp32 && alu->def.bit_size == 32) ||
+          (options->lower_flrp64 && alu->def.bit_size == 64))
          cost *= 3;
    }
 
@@ -199,12 +199,12 @@ instr_cost(loop_info_state *state, nir_instr *instr,
     * There are no 64-bit ops that don't have a 64-bit thing as their
     * destination or first source.
     */
-   if (nir_dest_bit_size(alu->dest.dest) < 64 &&
+   if (alu->def.bit_size < 64 &&
        nir_src_bit_size(alu->src[0].src) < 64)
       return cost;
 
-   bool is_fp64 = nir_dest_bit_size(alu->dest.dest) == 64 &&
-      nir_alu_type_get_base_type(info->output_type) == nir_type_float;
+   bool is_fp64 = alu->def.bit_size == 64 &&
+                  nir_alu_type_get_base_type(info->output_type) == nir_type_float;
    for (unsigned i = 0; i < info->num_inputs; i++) {
       if (nir_src_bit_size(alu->src[i].src) == 64 &&
           nir_alu_type_get_base_type(info->input_types[i]) == nir_type_float)
@@ -245,12 +245,12 @@ static bool
 init_loop_block(nir_block *block, loop_info_state *state,
                 bool in_if_branch, bool in_nested_loop)
 {
-   init_loop_state init_state = {.in_if_branch = in_if_branch,
-                                 .in_nested_loop = in_nested_loop,
-                                 .state = state };
+   init_loop_state init_state = { .in_if_branch = in_if_branch,
+                                  .in_nested_loop = in_nested_loop,
+                                  .state = state };
 
    nir_foreach_instr(instr, block) {
-      nir_foreach_ssa_def(instr, init_loop_def, &init_state);
+      nir_foreach_def(instr, init_loop_def, &init_state);
    }
 
    return true;
@@ -269,7 +269,7 @@ is_var_phi(nir_loop_variable *var)
 }
 
 static inline bool
-mark_invariant(nir_ssa_def *def, loop_info_state *state)
+mark_invariant(nir_def *def, loop_info_state *state)
 {
    nir_loop_variable *var = get_loop_var(def, state);
 
@@ -336,7 +336,6 @@ phi_instr_as_alu(nir_phi_instr *phi)
 {
    nir_alu_instr *first = NULL;
    nir_foreach_phi_src(src, phi) {
-      assert(src->src.is_ssa);
       if (src->src.ssa->parent_instr->type != nir_instr_type_alu)
          return NULL;
 
@@ -356,8 +355,7 @@ static bool
 alu_src_has_identity_swizzle(nir_alu_instr *alu, unsigned src_idx)
 {
    assert(nir_op_infos[alu->op].input_sizes[src_idx] == 0);
-   assert(alu->dest.dest.is_ssa);
-   for (unsigned i = 0; i < alu->dest.dest.ssa.num_components; i++) {
+   for (unsigned i = 0; i < alu->def.num_components; i++) {
       if (alu->src[src_idx].swizzle[i] != i)
          return false;
    }
@@ -368,9 +366,6 @@ alu_src_has_identity_swizzle(nir_alu_instr *alu, unsigned src_idx)
 static bool
 is_only_uniform_src(nir_src *src)
 {
-   if (!src->is_ssa)
-      return false;
-
    nir_instr *instr = src->ssa->parent_instr;
 
    switch (instr->type) {
@@ -379,7 +374,7 @@ is_only_uniform_src(nir_src *src)
       nir_alu_instr *alu = nir_instr_as_alu(instr);
       for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
          if (!is_only_uniform_src(&alu->src[i].src))
-             return false;
+            return false;
       }
       return true;
    }
@@ -441,7 +436,7 @@ compute_induction_information(loop_info_state *state)
                nir_instr_as_phi(src_var->def->parent_instr);
             nir_alu_instr *src_phi_alu = phi_instr_as_alu(src_phi);
             if (src_phi_alu) {
-               src_var = get_loop_var(&src_phi_alu->dest.dest.ssa, state);
+               src_var = get_loop_var(&src_phi_alu->def, state);
                if (!src_var->in_if_branch)
                   break;
             }
@@ -465,7 +460,7 @@ compute_induction_information(loop_info_state *state)
                   /* Is one of the operands const or uniform, and the other the phi.
                    * The phi source can't be swizzled in any way.
                    */
-                  if (alu->src[1-i].src.ssa == &phi->dest.ssa &&
+                  if (alu->src[1 - i].src.ssa == &phi->def &&
                       alu_src_has_identity_swizzle(alu, 1 - i)) {
                      if (is_only_uniform_src(&alu->src[i].src))
                         var->update_src = alu->src + i;
@@ -513,9 +508,9 @@ compute_induction_information(loop_info_state *state)
          if (var->type == basic_induction) {
             nir_loop_induction_variable *ivar =
                &info->induction_vars[info->num_induction_vars++];
-             ivar->def = var->def;
-             ivar->init_src = var->init_src;
-             ivar->update_src = var->update_src;
+            ivar->def = var->def;
+            ivar->init_src = var->init_src;
+            ivar->update_src = var->update_src;
          }
       }
       /* don't overflow */
@@ -599,7 +594,6 @@ find_array_access_via_induction(loop_info_state *state,
       if (d->deref_type != nir_deref_type_array)
          continue;
 
-      assert(d->arr.index.is_ssa);
       nir_loop_variable *array_index = get_loop_var(d->arr.index.ssa, state);
 
       if (array_index->type != basic_induction)
@@ -623,7 +617,7 @@ find_array_access_via_induction(loop_info_state *state,
 
 static bool
 guess_loop_limit(loop_info_state *state, nir_const_value *limit_val,
-                 nir_ssa_scalar basic_ind)
+                 nir_scalar basic_ind)
 {
    unsigned min_array_size = 0;
 
@@ -678,18 +672,18 @@ guess_loop_limit(loop_info_state *state, nir_const_value *limit_val,
 }
 
 static bool
-try_find_limit_of_alu(nir_ssa_scalar limit, nir_const_value *limit_val,
+try_find_limit_of_alu(nir_scalar limit, nir_const_value *limit_val,
                       nir_loop_terminator *terminator, loop_info_state *state)
 {
-   if (!nir_ssa_scalar_is_alu(limit))
+   if (!nir_scalar_is_alu(limit))
       return false;
 
-   nir_op limit_op = nir_ssa_scalar_alu_op(limit);
+   nir_op limit_op = nir_scalar_alu_op(limit);
    if (limit_op == nir_op_imin || limit_op == nir_op_fmin) {
       for (unsigned i = 0; i < 2; i++) {
-         nir_ssa_scalar src = nir_ssa_scalar_chase_alu_src(limit, i);
-         if (nir_ssa_scalar_is_const(src)) {
-            *limit_val = nir_ssa_scalar_as_const_value(src);
+         nir_scalar src = nir_scalar_chase_alu_src(limit, i);
+         if (nir_scalar_is_const(src)) {
+            *limit_val = nir_scalar_as_const_value(src);
             terminator->exact_trip_count_unknown = true;
             return true;
          }
@@ -723,7 +717,7 @@ eval_const_binop(nir_op op, unsigned bit_size,
 }
 
 static int
-find_replacement(const nir_ssa_def **originals, const nir_ssa_def *key,
+find_replacement(const nir_def **originals, const nir_def *key,
                  unsigned num_replacements)
 {
    for (int i = 0; i < num_replacements; i++) {
@@ -757,14 +751,11 @@ find_replacement(const nir_ssa_def **originals, const nir_ssa_def *key,
  */
 static bool
 try_eval_const_alu(nir_const_value *dest, nir_alu_instr *alu,
-                   const nir_ssa_def **originals,
+                   const nir_def **originals,
                    const nir_const_value **replacements,
                    unsigned num_replacements, unsigned execution_mode)
 {
    nir_const_value src[NIR_MAX_VEC_COMPONENTS][NIR_MAX_VEC_COMPONENTS];
-
-   if (!alu->dest.dest.is_ssa)
-      return false;
 
    /* In the case that any outputs/inputs have unsized types, then we need to
     * guess the bit-size. In this case, the validator ensures that all
@@ -777,12 +768,9 @@ try_eval_const_alu(nir_const_value *dest, nir_alu_instr *alu,
     */
    unsigned bit_size = 0;
    if (!nir_alu_type_get_type_size(nir_op_infos[alu->op].output_type))
-      bit_size = alu->dest.dest.ssa.bit_size;
+      bit_size = alu->def.bit_size;
 
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-      if (!alu->src[i].src.is_ssa)
-         return false;
-
       if (bit_size == 0 &&
           !nir_alu_type_get_type_size(nir_op_infos[alu->op].input_types[i]))
          bit_size = alu->src[i].src.ssa->bit_size;
@@ -816,23 +804,17 @@ try_eval_const_alu(nir_const_value *dest, nir_alu_instr *alu,
             return false;
          }
       }
-
-      /* We shouldn't have any source modifiers in the optimization loop. */
-      assert(!alu->src[i].abs && !alu->src[i].negate);
    }
 
    if (bit_size == 0)
       bit_size = 32;
-
-   /* We shouldn't have any saturate modifiers in the optimization loop. */
-   assert(!alu->dest.saturate);
 
    nir_const_value *srcs[NIR_MAX_VEC_COMPONENTS];
 
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i)
       srcs[i] = src[i];
 
-   nir_eval_const_opcode(alu->op, dest, alu->dest.dest.ssa.num_components,
+   nir_eval_const_opcode(alu->op, dest, alu->def.num_components,
                          bit_size, srcs, execution_mode);
 
    return true;
@@ -909,7 +891,7 @@ get_iteration(nir_op cond_op, nir_const_value initial, nir_const_value step,
 
 static int32_t
 get_iteration_empirical(nir_alu_instr *cond_alu, nir_alu_instr *incr_alu,
-                        nir_ssa_def *basis, nir_const_value initial,
+                        nir_def *basis, nir_const_value initial,
                         bool invert_cond, unsigned execution_mode,
                         unsigned max_unroll_iterations)
 {
@@ -917,7 +899,7 @@ get_iteration_empirical(nir_alu_instr *cond_alu, nir_alu_instr *incr_alu,
    nir_const_value result;
    nir_const_value iter = initial;
 
-   const nir_ssa_def *originals[2] = { basis, NULL };
+   const nir_def *originals[2] = { basis, NULL };
    const nir_const_value *replacements[2] = { &iter, NULL };
 
    while (iter_count <= max_unroll_iterations) {
@@ -945,14 +927,14 @@ get_iteration_empirical(nir_alu_instr *cond_alu, nir_alu_instr *incr_alu,
 }
 
 static bool
-will_break_on_first_iteration(nir_alu_instr *cond_alu, nir_ssa_def *basis,
-                              nir_ssa_def *limit_basis,
+will_break_on_first_iteration(nir_alu_instr *cond_alu, nir_def *basis,
+                              nir_def *limit_basis,
                               nir_const_value initial, nir_const_value limit,
                               bool invert_cond, unsigned execution_mode)
 {
    nir_const_value result;
 
-   const nir_ssa_def *originals[2] = { basis, limit_basis };
+   const nir_def *originals[2] = { basis, limit_basis };
    const nir_const_value *replacements[2] = { &initial, &limit };
 
    ASSERTED bool success = try_eval_const_alu(&result, cond_alu, originals,
@@ -1013,10 +995,10 @@ test_iterations(int32_t iter_int, nir_const_value step,
 }
 
 static int
-calculate_iterations(nir_ssa_def *basis, nir_ssa_def *limit_basis,
+calculate_iterations(nir_def *basis, nir_def *limit_basis,
                      nir_const_value initial, nir_const_value step,
                      nir_const_value limit, nir_alu_instr *alu,
-                     nir_ssa_scalar cond, nir_op alu_op, bool limit_rhs,
+                     nir_scalar cond, nir_op alu_op, bool limit_rhs,
                      bool invert_cond, unsigned execution_mode,
                      unsigned max_unroll_iterations)
 {
@@ -1048,8 +1030,8 @@ calculate_iterations(nir_ssa_def *basis, nir_ssa_def *limit_basis,
     */
    unsigned trip_offset = 0;
    nir_alu_instr *cond_alu = nir_instr_as_alu(cond.def->parent_instr);
-   if (cond_alu->src[0].src.ssa == &alu->dest.dest.ssa ||
-       cond_alu->src[1].src.ssa == &alu->dest.dest.ssa) {
+   if (cond_alu->src[0].src.ssa == &alu->def ||
+       cond_alu->src[1].src.ssa == &alu->def) {
       trip_offset = 1;
    }
 
@@ -1130,45 +1112,16 @@ calculate_iterations(nir_ssa_def *basis, nir_ssa_def *limit_basis,
    return -1;
 }
 
-static nir_op
-inverse_comparison(nir_op alu_op)
-{
-   switch (alu_op) {
-   case nir_op_fge:
-      return nir_op_flt;
-   case nir_op_ige:
-      return nir_op_ilt;
-   case nir_op_uge:
-      return nir_op_ult;
-   case nir_op_flt:
-      return nir_op_fge;
-   case nir_op_ilt:
-      return nir_op_ige;
-   case nir_op_ult:
-      return nir_op_uge;
-   case nir_op_feq:
-      return nir_op_fneu;
-   case nir_op_ieq:
-      return nir_op_ine;
-   case nir_op_fneu:
-      return nir_op_feq;
-   case nir_op_ine:
-      return nir_op_ieq;
-   default:
-      unreachable("Unsuported comparison!");
-   }
-}
-
 static bool
-get_induction_and_limit_vars(nir_ssa_scalar cond,
-                             nir_ssa_scalar *ind,
-                             nir_ssa_scalar *limit,
+get_induction_and_limit_vars(nir_scalar cond,
+                             nir_scalar *ind,
+                             nir_scalar *limit,
                              bool *limit_rhs,
                              loop_info_state *state)
 {
-   nir_ssa_scalar rhs, lhs;
-   lhs = nir_ssa_scalar_chase_alu_src(cond, 0);
-   rhs = nir_ssa_scalar_chase_alu_src(cond, 1);
+   nir_scalar rhs, lhs;
+   lhs = nir_scalar_chase_alu_src(cond, 0);
+   rhs = nir_scalar_chase_alu_src(cond, 1);
 
    nir_loop_variable *src0_lv = get_loop_var(lhs.def, state);
    nir_loop_variable *src1_lv = get_loop_var(rhs.def, state);
@@ -1195,40 +1148,40 @@ get_induction_and_limit_vars(nir_ssa_scalar cond,
 }
 
 static bool
-try_find_trip_count_vars_in_iand(nir_ssa_scalar *cond,
-                                 nir_ssa_scalar *ind,
-                                 nir_ssa_scalar *limit,
+try_find_trip_count_vars_in_iand(nir_scalar *cond,
+                                 nir_scalar *ind,
+                                 nir_scalar *limit,
                                  bool *limit_rhs,
                                  loop_info_state *state)
 {
-   const nir_op alu_op = nir_ssa_scalar_alu_op(*cond);
+   const nir_op alu_op = nir_scalar_alu_op(*cond);
    assert(alu_op == nir_op_ieq || alu_op == nir_op_inot);
 
-   nir_ssa_scalar iand = nir_ssa_scalar_chase_alu_src(*cond, 0);
+   nir_scalar iand = nir_scalar_chase_alu_src(*cond, 0);
 
    if (alu_op == nir_op_ieq) {
-      nir_ssa_scalar zero = nir_ssa_scalar_chase_alu_src(*cond, 1);
+      nir_scalar zero = nir_scalar_chase_alu_src(*cond, 1);
 
-      if (!nir_ssa_scalar_is_alu(iand) || !nir_ssa_scalar_is_const(zero)) {
+      if (!nir_scalar_is_alu(iand) || !nir_scalar_is_const(zero)) {
          /* Maybe we had it the wrong way, flip things around */
-         nir_ssa_scalar tmp = zero;
+         nir_scalar tmp = zero;
          zero = iand;
          iand = tmp;
 
          /* If we still didn't find what we need then return */
-         if (!nir_ssa_scalar_is_const(zero))
+         if (!nir_scalar_is_const(zero))
             return false;
       }
 
       /* If the loop is not breaking on (x && y) == 0 then return */
-      if (nir_ssa_scalar_as_uint(zero) != 0)
+      if (nir_scalar_as_uint(zero) != 0)
          return false;
    }
 
-   if (!nir_ssa_scalar_is_alu(iand))
+   if (!nir_scalar_is_alu(iand))
       return false;
 
-   if (nir_ssa_scalar_alu_op(iand) != nir_op_iand)
+   if (nir_scalar_alu_op(iand) != nir_op_iand)
       return false;
 
    /* Check if iand src is a terminator condition and try get induction var
@@ -1236,14 +1189,14 @@ try_find_trip_count_vars_in_iand(nir_ssa_scalar *cond,
     */
    bool found_induction_var = false;
    for (unsigned i = 0; i < 2; i++) {
-      nir_ssa_scalar src = nir_ssa_scalar_chase_alu_src(iand, i);
+      nir_scalar src = nir_scalar_chase_alu_src(iand, i);
       if (nir_is_terminator_condition_with_two_inputs(src) &&
           get_induction_and_limit_vars(src, ind, limit, limit_rhs, state)) {
          *cond = src;
          found_induction_var = true;
 
          /* If we've found one with a constant limit, stop. */
-         if (nir_ssa_scalar_is_const(*limit))
+         if (nir_scalar_is_const(*limit))
             return true;
       }
    }
@@ -1269,10 +1222,9 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
    list_for_each_entry(nir_loop_terminator, terminator,
                        &state->loop->info->loop_terminator_list,
                        loop_terminator_link) {
-      assert(terminator->nif->condition.is_ssa);
-      nir_ssa_scalar cond = { terminator->nif->condition.ssa, 0 };
+      nir_scalar cond = { terminator->nif->condition.ssa, 0 };
 
-      if (!nir_ssa_scalar_is_alu(cond)) {
+      if (!nir_scalar_is_alu(cond)) {
          /* If we get here the loop is dead and will get cleaned up by the
           * nir_opt_dead_cf pass.
           */
@@ -1281,13 +1233,13 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
          continue;
       }
 
-      nir_op alu_op = nir_ssa_scalar_alu_op(cond);
+      nir_op alu_op = nir_scalar_alu_op(cond);
 
       bool invert_cond = terminator->continue_from_then;
 
       bool limit_rhs;
-      nir_ssa_scalar basic_ind = { NULL, 0 };
-      nir_ssa_scalar limit;
+      nir_scalar basic_ind = { NULL, 0 };
+      nir_scalar limit;
       if ((alu_op == nir_op_inot || alu_op == nir_op_ieq) &&
           try_find_trip_count_vars_in_iand(&cond, &basic_ind, &limit,
                                            &limit_rhs, state)) {
@@ -1296,7 +1248,7 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
           * inverse of x or y (i.e. which ever contained the induction var) in
           * order to compute the trip count.
           */
-         alu_op = nir_ssa_scalar_alu_op(cond);
+         alu_op = nir_scalar_alu_op(cond);
          invert_cond = !invert_cond;
          trip_count_known = false;
          terminator->exact_trip_count_unknown = true;
@@ -1307,8 +1259,8 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
             /* Extract and inverse the comparision if it is wrapped in an inot
              */
             if (alu_op == nir_op_inot) {
-               cond = nir_ssa_scalar_chase_alu_src(cond, 0);
-               alu_op = nir_ssa_scalar_alu_op(cond);
+               cond = nir_scalar_chase_alu_src(cond, 0);
+               alu_op = nir_scalar_alu_op(cond);
                invert_cond = !invert_cond;
             }
 
@@ -1330,8 +1282,8 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
 
       /* Attempt to find a constant limit for the loop */
       nir_const_value limit_val;
-      if (nir_ssa_scalar_is_const(limit)) {
-         limit_val = nir_ssa_scalar_as_const_value(limit);
+      if (nir_scalar_is_const(limit)) {
+         limit_val = nir_scalar_as_const_value(limit);
       } else {
          trip_count_known = false;
 
@@ -1360,8 +1312,8 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
        * earlier that the phi source has a scalar swizzle, we can take the
        * component from basic_ind.
        */
-      nir_ssa_scalar initial_s = { lv->init_src->ssa, basic_ind.comp };
-      nir_ssa_scalar alu_s = {
+      nir_scalar initial_s = { lv->init_src->ssa, basic_ind.comp };
+      nir_scalar alu_s = {
          lv->update_src->src.ssa,
          lv->update_src->swizzle[basic_ind.comp]
       };
@@ -1369,16 +1321,16 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
       /* We are not guaranteed by that at one of these sources is a constant.
        * Try to find one.
        */
-      if (!nir_ssa_scalar_is_const(initial_s) ||
-          !nir_ssa_scalar_is_const(alu_s))
+      if (!nir_scalar_is_const(initial_s) ||
+          !nir_scalar_is_const(alu_s))
          continue;
 
-      nir_const_value initial_val = nir_ssa_scalar_as_const_value(initial_s);
-      nir_const_value step_val = nir_ssa_scalar_as_const_value(alu_s);
+      nir_const_value initial_val = nir_scalar_as_const_value(initial_s);
+      nir_const_value step_val = nir_scalar_as_const_value(alu_s);
 
       int iterations = calculate_iterations(lv->basis, limit.def,
                                             initial_val, step_val, limit_val,
-                                            nir_instr_as_alu(lv->update_src->src.parent_instr),
+                                            nir_instr_as_alu(nir_src_parent_instr(&lv->update_src->src)),
                                             cond,
                                             alu_op, limit_rhs,
                                             invert_cond,
@@ -1427,9 +1379,9 @@ force_unroll_array_access(loop_info_state *state, nir_deref_instr *deref,
    if (array_size) {
       if ((array_size == state->loop->info->max_trip_count) &&
           nir_deref_mode_must_be(deref, nir_var_shader_in |
-                                        nir_var_shader_out |
-                                        nir_var_shader_temp |
-                                        nir_var_function_temp))
+                                           nir_var_shader_out |
+                                           nir_var_shader_temp |
+                                           nir_var_function_temp))
          return true;
 
       if (nir_deref_mode_must_be(deref, state->indirect_mask))
@@ -1452,7 +1404,6 @@ force_unroll_heuristics(loop_info_state *state, nir_block *block)
             nir_tex_instr_src_index(tex_instr,
                                     nir_tex_src_sampler_deref);
 
-
          if (sampler_idx >= 0) {
             nir_deref_instr *deref =
                nir_instr_as_deref(tex_instr->src[sampler_idx].src.ssa->parent_instr);
@@ -1460,7 +1411,6 @@ force_unroll_heuristics(loop_info_state *state, nir_block *block)
                return true;
          }
       }
-
 
       if (instr->type != nir_instr_type_intrinsic)
          continue;
@@ -1574,7 +1524,7 @@ initialize_loop_info_state(nir_loop *loop, void *mem_ctx,
    list_inithead(&state->process_list);
 
    if (loop->info)
-     ralloc_free(loop->info);
+      ralloc_free(loop->info);
 
    loop->info = rzalloc(loop, nir_loop_info);
 

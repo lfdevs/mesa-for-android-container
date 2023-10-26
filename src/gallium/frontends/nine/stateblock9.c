@@ -283,7 +283,7 @@ nine_state_copy_common(struct NineDevice9 *device,
                                            (struct NineBuffer9 *)src->stream[i]);
                 if (src->stream[i]) {
                     dst->vtxbuf[i].buffer_offset = src->vtxbuf[i].buffer_offset;
-                    dst->vtxbuf[i].stride = src->vtxbuf[i].stride;
+                    dst->vtxstride[i] = src->vtxstride[i];
                 }
             }
             if (mask->changed.stream_freq & (1 << i))
@@ -463,7 +463,7 @@ nine_state_copy_common_all(struct NineDevice9 *device,
                                        (struct NineBuffer9 *)src->stream[i]);
             if (src->stream[i]) {
                 dst->vtxbuf[i].buffer_offset = src->vtxbuf[i].buffer_offset;
-                dst->vtxbuf[i].stride = src->vtxbuf[i].stride;
+                dst->vtxstride[i] = src->vtxstride[i];
             }
             dst->stream_freq[i] = src->stream_freq[i];
         }

@@ -157,7 +157,7 @@ flatten_named_interface_blocks_declarations::run(exec_list *instructions)
          char *iface_field_name =
             ralloc_asprintf(mem_ctx, "%s %s.%s.%s",
                             var->data.mode == ir_var_shader_in ? "in" : "out",
-                            iface_t->name, var->name, field_name);
+                            glsl_get_type_name(iface_t), var->name, field_name);
 
          hash_entry *entry = _mesa_hash_table_search(interface_namespace,
                                                      iface_field_name);
@@ -290,7 +290,7 @@ flatten_named_interface_blocks_declarations::handle_rvalue(ir_rvalue **rvalue)
       char *iface_field_name =
          ralloc_asprintf(mem_ctx, "%s %s.%s.%s",
                          var->data.mode == ir_var_shader_in ? "in" : "out",
-                         var->get_interface_type()->name,
+                         glsl_get_type_name(var->get_interface_type()),
                          var->name,
                          ir->record->type->fields.structure[ir->field_idx].name);
 

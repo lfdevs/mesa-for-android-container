@@ -677,10 +677,18 @@
     <field name="Pointer" size="64" start="0:0" type="address"/>
   </struct>
 
-  <struct name="Surface With Stride" align="8">
+  <struct name="Surface With Stride" align="16">
     <field name="Pointer" size="64" start="0:0" type="address"/>
     <field name="Row stride" size="32" start="2:0" type="int"/>
     <field name="Surface stride" size="32" start="3:0" type="int"/>
+  </struct>
+
+  <struct name="Multiplanar Surface" align="32">
+    <field name="Plane 0 Pointer" size="64" start="0:0" type="address"/>
+    <field name="Plane 0 Row Stride" size="32" start="2:0" type="int"/>
+    <field name="Plane 1/2 Row Stride" size="32" start="3:0" type="int"/>
+    <field name="Plane 1 Pointer" size="64" start="4:0" type="address"/>
+    <field name="Plane 2 Pointer" size="64" start="6:0" type="address"/>
   </struct>
 
   <struct name="Sampler" size="8" align="32">

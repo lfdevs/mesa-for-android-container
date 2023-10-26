@@ -410,6 +410,10 @@ memory_type_from_vram_type(uint32_t vram_type)
    case AMD_VRAM_TYPE_GDDR6:
       return VK_RMV_MEMORY_TYPE_GDDR6;
    case AMD_VRAM_TYPE_DDR5:
+      return VK_RMV_MEMORY_TYPE_DDR5;
+   case AMD_VRAM_TYPE_LPDDR4:
+      return VK_RMV_MEMORY_TYPE_LPDDR4;
+   case AMD_VRAM_TYPE_LPDDR5:
       return VK_RMV_MEMORY_TYPE_LPDDR5;
    default:
       unreachable("Invalid vram type");
@@ -607,8 +611,8 @@ radv_rmv_log_query_pool_create(struct radv_device *device, VkQueryPool _pool, bo
 
    RADV_FROM_HANDLE(radv_query_pool, pool, _pool);
 
-   if (pool->type != VK_QUERY_TYPE_OCCLUSION && pool->type != VK_QUERY_TYPE_PIPELINE_STATISTICS &&
-       pool->type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+   if (pool->vk.query_type != VK_QUERY_TYPE_OCCLUSION && pool->vk.query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS &&
+       pool->vk.query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
       return;
 
    radv_rmv_log_bo_allocate(device, pool->bo, pool->size, is_internal);
@@ -618,7 +622,7 @@ radv_rmv_log_query_pool_create(struct radv_device *device, VkQueryPool _pool, bo
    create_token.is_driver_internal = is_internal;
    create_token.resource_id = vk_rmv_get_resource_id_locked(&device->vk, (uint64_t)_pool);
    create_token.type = VK_RMV_RESOURCE_TYPE_QUERY_HEAP;
-   create_token.query_pool.type = pool->type;
+   create_token.query_pool.type = pool->vk.query_type;
    create_token.query_pool.has_cpu_access = true;
 
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &create_token);
@@ -802,8 +806,7 @@ radv_rmv_log_descriptor_pool_create(struct radv_device *device, const VkDescript
 }
 
 void
-radv_rmv_log_graphics_pipeline_create(struct radv_device *device, VkPipelineCreateFlags flags,
-                                      struct radv_pipeline *pipeline, bool is_internal)
+radv_rmv_log_graphics_pipeline_create(struct radv_device *device, struct radv_pipeline *pipeline, bool is_internal)
 {
    if (!device->vk.memory_trace_data.is_enabled)
       return;
@@ -834,8 +837,7 @@ radv_rmv_log_graphics_pipeline_create(struct radv_device *device, VkPipelineCrea
 }
 
 void
-radv_rmv_log_compute_pipeline_create(struct radv_device *device, VkPipelineCreateFlags flags,
-                                     struct radv_pipeline *pipeline, bool is_internal)
+radv_rmv_log_compute_pipeline_create(struct radv_device *device, struct radv_pipeline *pipeline, bool is_internal)
 {
    if (!device->vk.memory_trace_data.is_enabled)
       return;

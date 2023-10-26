@@ -23,7 +23,6 @@
 
 #include "vk_android.h"
 
-#include "vk_buffer.h"
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
 #include "vk_image.h"
@@ -148,9 +147,6 @@ vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
                    VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))
       ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
 
-   if (vk_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-
    if (vk_usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
       ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER;
@@ -197,14 +193,9 @@ vk_alloc_ahardware_buffer(const VkMemoryAllocateInfo *pAllocateInfo)
       format = image->ahb_format;
       usage = vk_image_usage_to_ahb_usage(image->create_flags,
                                           image->usage);
-   } else if (dedicated_info && dedicated_info->buffer) {
-      VK_FROM_HANDLE(vk_buffer, buffer, dedicated_info->buffer);
-      w = buffer->size;
-      format = AHARDWAREBUFFER_FORMAT_BLOB;
-      usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
-              AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
-              AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
    } else {
+      /* AHB export allocation for VkBuffer requires a valid allocationSize */
+      assert(pAllocateInfo->allocationSize);
       w = pAllocateInfo->allocationSize;
       format = AHARDWAREBUFFER_FORMAT_BLOB;
       usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
@@ -306,6 +297,24 @@ vk_common_AcquireImageANDROID(VkDevice _device,
    return result;
 }
 
+static VkResult
+vk_anb_semaphore_init_once(struct vk_queue *queue, struct vk_device *device)
+{
+   if (queue->anb_semaphore != VK_NULL_HANDLE)
+      return VK_SUCCESS;
+
+   const VkExportSemaphoreCreateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO,
+      .handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+   };
+   const VkSemaphoreCreateInfo create_info = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = &export_info,
+   };
+   return device->dispatch_table.CreateSemaphore(vk_device_to_handle(device),
+                                                 &create_info, NULL,
+                                                 &queue->anb_semaphore);
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_QueueSignalReleaseImageANDROID(VkQueue _queue,
@@ -318,43 +327,35 @@ vk_common_QueueSignalReleaseImageANDROID(VkQueue _queue,
    struct vk_device *device = queue->base.device;
    VkResult result = VK_SUCCESS;
 
-   if (waitSemaphoreCount == 0) {
-      if (pNativeFenceFd)
-         *pNativeFenceFd = -1;
-      return VK_SUCCESS;
+   STACK_ARRAY(VkPipelineStageFlags, stage_flags, MAX2(1, waitSemaphoreCount));
+   for (uint32_t i = 0; i < MAX2(1, waitSemaphoreCount); i++)
+      stage_flags[i] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+   result = vk_anb_semaphore_init_once(queue, device);
+   if (result != VK_SUCCESS) {
+      STACK_ARRAY_FINISH(stage_flags);
+      return result;
    }
 
-   int fd = -1;
+   const VkSubmitInfo submit_info = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = waitSemaphoreCount,
+      .pWaitSemaphores = pWaitSemaphores,
+      .pWaitDstStageMask = stage_flags,
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = &queue->anb_semaphore,
+   };
+   result = device->dispatch_table.QueueSubmit(_queue, 1, &submit_info,
+                                               VK_NULL_HANDLE);
+   STACK_ARRAY_FINISH(stage_flags);
+   if (result != VK_SUCCESS)
+      return result;
 
-   for (uint32_t i = 0; i < waitSemaphoreCount; ++i) {
-      const VkSemaphoreGetFdInfoKHR get_fd = {
-         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
-         .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
-         .semaphore = pWaitSemaphores[i],
-      };
-      int tmp_fd;
-      result = device->dispatch_table.GetSemaphoreFdKHR(vk_device_to_handle(device),
-                                                        &get_fd, &tmp_fd);
-      if (result != VK_SUCCESS) {
-         if (fd >= 0)
-            close(fd);
-         return result;
-      }
-
-      if (fd < 0) {
-         fd = tmp_fd;
-      } else if (tmp_fd >= 0) {
-         sync_accumulate("vulkan", &fd, tmp_fd);
-         close(tmp_fd);
-      }
-   }
-
-   if (pNativeFenceFd) {
-      *pNativeFenceFd = fd;
-   } else if (fd >= 0) {
-      close(fd);
-      /* We still need to do the exports, to reset the semaphores, but
-       * otherwise we don't wait on them. */
-   }
-   return VK_SUCCESS;
+   const VkSemaphoreGetFdInfoKHR get_fd = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+      .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+      .semaphore = queue->anb_semaphore,
+   };
+   return device->dispatch_table.GetSemaphoreFdKHR(vk_device_to_handle(device),
+                                                   &get_fd, pNativeFenceFd);
 }

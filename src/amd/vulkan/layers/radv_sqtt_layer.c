@@ -125,6 +125,13 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
       radeon_emit(cs, va >> 8);
       radeon_emit(cs, S_00B024_MEM_BASE(va >> 40));
    }
+
+   /* MS */
+   if (pipeline->base.shaders[MESA_SHADER_MESH]) {
+      va = reloc->va[MESA_SHADER_MESH];
+
+      radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+   }
 }
 
 static uint64_t
@@ -358,12 +365,17 @@ radv_describe_draw(struct radv_cmd_buffer *cmd_buffer)
 }
 
 void
-radv_describe_dispatch(struct radv_cmd_buffer *cmd_buffer, int x, int y, int z)
+radv_describe_dispatch(struct radv_cmd_buffer *cmd_buffer, const struct radv_dispatch_info *info)
 {
    if (likely(!cmd_buffer->device->sqtt.bo))
       return;
 
-   radv_write_event_with_dims_marker(cmd_buffer, cmd_buffer->state.current_event_type, x, y, z);
+   if (info->indirect) {
+      radv_write_event_marker(cmd_buffer, cmd_buffer->state.current_event_type, UINT_MAX, UINT_MAX, UINT_MAX);
+   } else {
+      radv_write_event_with_dims_marker(cmd_buffer, cmd_buffer->state.current_event_type, info->blocks[0],
+                                        info->blocks[1], info->blocks[2]);
+   }
 }
 
 void
@@ -755,7 +767,8 @@ sqtt_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
                 flags);
 }
 
-#define EVENT_RT_MARKER(cmd_name, ...) EVENT_MARKER_BASE(cmd_name, Dispatch, cmd_name, __VA_ARGS__);
+#define EVENT_RT_MARKER(cmd_name, ...)                                                                                 \
+   EVENT_MARKER_BASE(cmd_name, Dispatch, cmd_name | ApiRayTracingSeparateCompiled, __VA_ARGS__);
 
 #define EVENT_RT_MARKER_ALIAS(cmd_name, event_name, ...) EVENT_MARKER_BASE(cmd_name, Dispatch, event_name, __VA_ARGS__);
 
@@ -940,6 +953,14 @@ sqtt_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCou
 }
 
 VKAPI_ATTR void VKAPI_CALL
+sqtt_CmdExecuteGeneratedCommandsNV(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                   const VkGeneratedCommandsInfoNV *pGeneratedCommandsInfo)
+{
+   /* There is no ExecuteIndirect Vulkan event in RGP yet. */
+   API_MARKER_ALIAS(ExecuteGeneratedCommandsNV, ExecuteCommands, commandBuffer, isPreprocessed, pGeneratedCommandsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount,
                     const VkViewport *pViewports)
 {
@@ -1061,11 +1082,9 @@ sqtt_CmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffer, const VkDebugUti
 
 /* Pipelines */
 static enum rgp_hardware_stages
-radv_mesa_to_rgp_shader_stage(struct radv_pipeline *pipeline, gl_shader_stage stage)
+radv_get_rgp_shader_stage(struct radv_shader *shader)
 {
-   struct radv_shader *shader = pipeline->shaders[stage];
-
-   switch (stage) {
+   switch (shader->info.stage) {
    case MESA_SHADER_VERTEX:
       if (shader->info.vs.as_ls)
          return RGP_HW_STAGE_LS;
@@ -1103,6 +1122,31 @@ radv_mesa_to_rgp_shader_stage(struct radv_pipeline *pipeline, gl_shader_stage st
    }
 }
 
+static void
+radv_fill_code_object_record(struct radv_device *device, struct rgp_shader_data *shader_data,
+                             struct radv_shader *shader, uint64_t va)
+{
+   struct radv_physical_device *pdevice = device->physical_device;
+   unsigned lds_increment = pdevice->rad_info.gfx_level >= GFX11 && shader->info.stage == MESA_SHADER_FRAGMENT
+                               ? 1024
+                               : pdevice->rad_info.lds_encode_granularity;
+
+   memset(shader_data->rt_shader_name, 0, sizeof(shader_data->rt_shader_name));
+   shader_data->hash[0] = (uint64_t)(uintptr_t)shader;
+   shader_data->hash[1] = (uint64_t)(uintptr_t)shader >> 32;
+   shader_data->code_size = shader->code_size;
+   shader_data->code = shader->code;
+   shader_data->vgpr_count = shader->config.num_vgprs;
+   shader_data->sgpr_count = shader->config.num_sgprs;
+   shader_data->scratch_memory_size = shader->config.scratch_bytes_per_wave;
+   shader_data->lds_size = shader->config.lds_size * lds_increment;
+   shader_data->wavefront_size = shader->info.wave_size;
+   shader_data->base_address = va & 0xffffffffffff;
+   shader_data->elf_symbol_offset = 0;
+   shader_data->hw_stage = radv_get_rgp_shader_stage(shader);
+   shader_data->is_combined = false;
+}
+
 static VkResult
 radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
 {
@@ -1118,28 +1162,15 @@ radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
    record->num_shaders_combined = 0;
    record->pipeline_hash[0] = pipeline->pipeline_hash;
    record->pipeline_hash[1] = pipeline->pipeline_hash;
+   record->is_rt = false;
 
    for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
       struct radv_shader *shader = pipeline->shaders[i];
-      uint64_t va;
 
       if (!shader)
          continue;
 
-      va = radv_sqtt_shader_get_va_reloc(pipeline, i);
-
-      record->shader_data[i].hash[0] = (uint64_t)(uintptr_t)shader;
-      record->shader_data[i].hash[1] = (uint64_t)(uintptr_t)shader >> 32;
-      record->shader_data[i].code_size = shader->code_size;
-      record->shader_data[i].code = shader->code;
-      record->shader_data[i].vgpr_count = shader->config.num_vgprs;
-      record->shader_data[i].sgpr_count = shader->config.num_sgprs;
-      record->shader_data[i].scratch_memory_size = shader->config.scratch_bytes_per_wave;
-      record->shader_data[i].wavefront_size = shader->info.wave_size;
-      record->shader_data[i].base_address = va & 0xffffffffffff;
-      record->shader_data[i].elf_symbol_offset = 0;
-      record->shader_data[i].hw_stage = radv_mesa_to_rgp_shader_stage(pipeline, i);
-      record->shader_data[i].is_combined = false;
+      radv_fill_code_object_record(device, &record->shader_data[i], shader, radv_sqtt_shader_get_va_reloc(pipeline, i));
 
       record->shader_stages_mask |= (1 << i);
       record->num_shaders_combined++;
@@ -1154,12 +1185,134 @@ radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
 }
 
 static VkResult
+radv_add_rt_record(struct radv_device *device, struct rgp_code_object *code_object,
+                   struct radv_ray_tracing_pipeline *pipeline, struct radv_shader *shader, uint32_t stack_size,
+                   uint32_t index, uint64_t hash)
+{
+   struct rgp_code_object_record *record = malloc(sizeof(struct rgp_code_object_record));
+   if (!record)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   struct rgp_shader_data *shader_data = &record->shader_data[shader->info.stage];
+
+   record->shader_stages_mask = 0;
+   record->num_shaders_combined = 0;
+   record->pipeline_hash[0] = hash;
+   record->pipeline_hash[1] = hash;
+
+   radv_fill_code_object_record(device, shader_data, shader, shader->va);
+   shader_data->rt_stack_size = stack_size;
+
+   record->shader_stages_mask |= (1 << shader->info.stage);
+   record->is_rt = true;
+   switch (shader->info.stage) {
+   case MESA_SHADER_RAYGEN:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "rgen_%d", index);
+      break;
+   case MESA_SHADER_CLOSEST_HIT:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "chit_%d", index);
+      break;
+   case MESA_SHADER_MISS:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "miss_%d", index);
+      break;
+   case MESA_SHADER_INTERSECTION:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "traversal");
+      break;
+   case MESA_SHADER_CALLABLE:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "call_%d", index);
+      break;
+   case MESA_SHADER_COMPUTE:
+      snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "_amdgpu_cs_main");
+      break;
+   default:
+      unreachable("invalid rt stage");
+   }
+   record->num_shaders_combined = 1;
+
+   simple_mtx_lock(&code_object->lock);
+   list_addtail(&record->list, &code_object->record);
+   code_object->record_count++;
+   simple_mtx_unlock(&code_object->lock);
+
+   return VK_SUCCESS;
+}
+
+static void
+compute_unique_rt_sha(uint64_t pipeline_hash, unsigned index, unsigned char sha1[SHA1_DIGEST_LENGTH])
+{
+   struct mesa_sha1 ctx;
+   _mesa_sha1_init(&ctx);
+   _mesa_sha1_update(&ctx, &pipeline_hash, sizeof(pipeline_hash));
+   _mesa_sha1_update(&ctx, &index, sizeof(index));
+   _mesa_sha1_final(&ctx, sha1);
+}
+
+static VkResult
+radv_register_rt_stage(struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline, uint32_t index,
+                       uint32_t stack_size, struct radv_shader *shader)
+{
+   unsigned char sha1[SHA1_DIGEST_LENGTH];
+   VkResult result;
+
+   compute_unique_rt_sha(pipeline->base.base.pipeline_hash, index, sha1);
+
+   result = ac_sqtt_add_pso_correlation(&device->sqtt, *(uint64_t *)sha1, pipeline->base.base.pipeline_hash);
+   if (!result)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   result = ac_sqtt_add_code_object_loader_event(&device->sqtt, *(uint64_t *)sha1, shader->va);
+   if (!result)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   result =
+      radv_add_rt_record(device, &device->sqtt.rgp_code_object, pipeline, shader, stack_size, index, *(uint64_t *)sha1);
+   return result;
+}
+
+static VkResult
+radv_register_rt_pipeline(struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline)
+{
+   VkResult result = VK_SUCCESS;
+
+   uint32_t max_any_hit_stack_size = 0;
+   uint32_t max_intersection_stack_size = 0;
+
+   for (unsigned i = 0; i < pipeline->stage_count; i++) {
+      struct radv_ray_tracing_stage *stage = &pipeline->stages[i];
+      if (!radv_ray_tracing_stage_is_compiled(stage)) {
+         if (stage->stage == MESA_SHADER_ANY_HIT)
+            max_any_hit_stack_size = MAX2(max_any_hit_stack_size, stage->stack_size);
+         else if (stage->stage == MESA_SHADER_INTERSECTION)
+            max_intersection_stack_size = MAX2(max_intersection_stack_size, stage->stack_size);
+         else
+            unreachable("invalid non-compiled stage");
+         continue;
+      }
+      struct radv_shader *shader = container_of(pipeline->stages[i].shader, struct radv_shader, base);
+      result = radv_register_rt_stage(device, pipeline, i, stage->stack_size, shader);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   uint32_t idx = pipeline->stage_count;
+
+   /* Combined traversal shader */
+   result = radv_register_rt_stage(device, pipeline, idx++, max_any_hit_stack_size + max_intersection_stack_size,
+                                   pipeline->base.base.shaders[MESA_SHADER_INTERSECTION]);
+   if (result != VK_SUCCESS)
+      return result;
+
+   /* Prolog */
+   result = radv_register_rt_stage(device, pipeline, idx++, 0, pipeline->prolog);
+
+   return result;
+}
+
+static VkResult
 radv_register_pipeline(struct radv_device *device, struct radv_pipeline *pipeline)
 {
    bool result;
    uint64_t base_va = ~0;
 
-   result = ac_sqtt_add_pso_correlation(&device->sqtt, pipeline->pipeline_hash);
+   result = ac_sqtt_add_pso_correlation(&device->sqtt, pipeline->pipeline_hash, pipeline->pipeline_hash);
    if (!result)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -1187,7 +1340,7 @@ radv_register_pipeline(struct radv_device *device, struct radv_pipeline *pipelin
 }
 
 static void
-radv_unregister_pipeline(struct radv_device *device, struct radv_pipeline *pipeline)
+radv_unregister_records(struct radv_device *device, uint64_t hash)
 {
    struct ac_sqtt *sqtt = &device->sqtt;
    struct rgp_pso_correlation *pso_correlation = &sqtt->rgp_pso_correlation;
@@ -1197,7 +1350,7 @@ radv_unregister_pipeline(struct radv_device *device, struct radv_pipeline *pipel
    /* Destroy the PSO correlation record. */
    simple_mtx_lock(&pso_correlation->lock);
    list_for_each_entry_safe (struct rgp_pso_correlation_record, record, &pso_correlation->record, list) {
-      if (record->pipeline_hash[0] == pipeline->pipeline_hash) {
+      if (record->pipeline_hash[0] == hash) {
          pso_correlation->record_count--;
          list_del(&record->list);
          free(record);
@@ -1209,7 +1362,7 @@ radv_unregister_pipeline(struct radv_device *device, struct radv_pipeline *pipel
    /* Destroy the code object loader record. */
    simple_mtx_lock(&loader_events->lock);
    list_for_each_entry_safe (struct rgp_loader_events_record, record, &loader_events->record, list) {
-      if (record->code_object_hash[0] == pipeline->pipeline_hash) {
+      if (record->code_object_hash[0] == hash) {
          loader_events->record_count--;
          list_del(&record->list);
          free(record);
@@ -1221,7 +1374,7 @@ radv_unregister_pipeline(struct radv_device *device, struct radv_pipeline *pipel
    /* Destroy the code object record. */
    simple_mtx_lock(&code_object->lock);
    list_for_each_entry_safe (struct rgp_code_object_record, record, &code_object->record, list) {
-      if (record->pipeline_hash[0] == pipeline->pipeline_hash) {
+      if (record->pipeline_hash[0] == hash) {
          code_object->record_count--;
          list_del(&record->list);
          free(record);
@@ -1250,7 +1403,8 @@ sqtt_CreateGraphicsPipelines(VkDevice _device, VkPipelineCache pipelineCache, ui
       if (!pipeline)
          continue;
 
-      if (pCreateInfos[i].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)
+      const VkPipelineCreateFlagBits2KHR create_flags = radv_get_pipeline_create_flags(&pCreateInfos[i]);
+      if (create_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)
          continue;
 
       result = radv_sqtt_reloc_graphics_shaders(device, radv_pipeline_to_graphics(pipeline));
@@ -1326,10 +1480,11 @@ sqtt_CreateRayTracingPipelinesKHR(VkDevice _device, VkDeferredOperationKHR defer
       if (!pipeline)
          continue;
 
-      if (pCreateInfos[i].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)
+      const VkPipelineCreateFlagBits2KHR create_flags = radv_get_pipeline_create_flags(&pCreateInfos[i]);
+      if (create_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)
          continue;
 
-      result = radv_register_pipeline(device, pipeline);
+      result = radv_register_rt_pipeline(device, radv_pipeline_to_ray_tracing(pipeline));
       if (result != VK_SUCCESS)
          goto fail;
    }
@@ -1353,7 +1508,17 @@ sqtt_DestroyPipeline(VkDevice _device, VkPipeline _pipeline, const VkAllocationC
    if (!_pipeline)
       return;
 
-   radv_unregister_pipeline(device, pipeline);
+   /* Ray tracing pipelines have multiple records, each with their own hash */
+   if (pipeline->type == RADV_PIPELINE_RAY_TRACING) {
+      /* We have one record for each stage, plus one for the traversal shader and one for the prolog */
+      uint32_t record_count = radv_pipeline_to_ray_tracing(pipeline)->stage_count + 2;
+      unsigned char sha1[SHA1_DIGEST_LENGTH];
+      for (uint32_t i = 0; i < record_count; ++i) {
+         compute_unique_rt_sha(pipeline->pipeline_hash, i, sha1);
+         radv_unregister_records(device, *(uint64_t *)sha1);
+      }
+   } else
+      radv_unregister_records(device, pipeline->pipeline_hash);
 
    if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
       struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);

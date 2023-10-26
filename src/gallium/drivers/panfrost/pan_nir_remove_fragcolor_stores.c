@@ -25,12 +25,8 @@
 #include "pan_context.h"
 
 static bool
-pass(nir_builder *b, nir_instr *instr, void *data)
+pass(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 
@@ -39,7 +35,7 @@ pass(nir_builder *b, nir_instr *instr, void *data)
 
    if (location >= FRAG_RESULT_DATA0 &&
        (location - FRAG_RESULT_DATA0) >= (*nr_cbufs)) {
-      nir_instr_remove(instr);
+      nir_instr_remove(&intr->instr);
       return true;
    } else {
       return false;
@@ -49,6 +45,6 @@ pass(nir_builder *b, nir_instr *instr, void *data)
 bool
 panfrost_nir_remove_fragcolor_stores(nir_shader *s, unsigned nr_cbufs)
 {
-   return nir_shader_instructions_pass(
+   return nir_shader_intrinsics_pass(
       s, pass, nir_metadata_block_index | nir_metadata_dominance, &nr_cbufs);
 }

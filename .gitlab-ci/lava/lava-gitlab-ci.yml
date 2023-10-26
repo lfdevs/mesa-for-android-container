@@ -116,6 +116,8 @@ variables:
 .lava-traces-base:
   variables:
     HWCI_TEST_SCRIPT: "/install/piglit/piglit-traces.sh"
+    # until we overcome Infrastructure issues, give traces extra 5 min before timeout
+    DEVICE_HANGING_TIMEOUT_SEC: 600
   artifacts:
     reports:
       junit: results/junit.xml

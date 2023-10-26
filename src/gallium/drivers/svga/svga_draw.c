@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -503,7 +503,7 @@ svga_validate_constant_buffers(struct svga_context *svga,
       unsigned enabled_rawbufs = svga->state.hw_draw.enabled_rawbufs[shader] & ~1u;
       while (enabled_rawbufs) {
          unsigned i = u_bit_scan(&enabled_rawbufs);
-         buffer = svga_buffer(svga->curr.constbufs[shader][i].buffer);
+         buffer = svga_buffer(svga->state.hw_draw.rawbufs[shader][i].buffer);
 
          assert(buffer != NULL);
          handle = svga_buffer_handle(svga, &buffer->b,
@@ -702,7 +702,7 @@ validate_vertex_buffers(struct svga_hwtnl *hwtnl,
 
       /* Set IA slot0 input buffer to the SO buffer */
       assert(vbuf_count == 1);
-      vbuffer_attrs[0].stride = hwtnl->cmd.vbufs[0].stride;
+      vbuffer_attrs[0].stride = svga->curr.velems->strides[0];
       vbuffer_attrs[0].offset = hwtnl->cmd.vbufs[0].buffer_offset;
       vbuffer_attrs[0].sid = 0;
       assert(so_vertex_count->buffer != NULL);
@@ -717,7 +717,7 @@ validate_vertex_buffers(struct svga_hwtnl *hwtnl,
          struct svga_buffer *sbuf =
             svga_buffer(hwtnl->cmd.vbufs[i].buffer.resource);
 
-         vbuffer_attrs[i].stride = hwtnl->cmd.vbufs[i].stride;
+         vbuffer_attrs[i].stride = svga->curr.velems->strides[i];
          vbuffer_attrs[i].offset = hwtnl->cmd.vbufs[i].buffer_offset;
          vbuffer_attrs[i].sid = 0;
 

@@ -22,7 +22,6 @@
  *
  */
 
-
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_control_flow.h"
@@ -40,7 +39,7 @@ lower_loop_continue_block(nir_builder *b, nir_loop *loop, bool *repair_ssa)
    unsigned num_continue = 0;
    nir_block *single_predecessor = NULL;
    set_foreach(cont->predecessors, entry) {
-      nir_block *pred = (nir_block*) entry->key;
+      nir_block *pred = (nir_block *)entry->key;
       /* If the continue block has no predecessors, it is unreachable. */
       if (pred->predecessors->entries == 0)
          continue;
@@ -101,7 +100,6 @@ lower_loop_continue_block(nir_builder *b, nir_loop *loop, bool *repair_ssa)
    nir_loop_remove_continue_construct(loop);
    return true;
 }
-
 
 static bool
 visit_cf_list(nir_builder *b, struct exec_list *list, bool *repair_ssa)
@@ -171,4 +169,3 @@ nir_lower_continue_constructs(nir_shader *shader)
 
    return progress;
 }
-

@@ -470,7 +470,7 @@ Additional configuration
 These are some largely unresearched options found in the register declarations.
 PAL doesn't use them, so it's unknown if they make any significant difference.
 No effect was found in `nvpro-samples/vk_order_independent_transparency <https://github.com/nvpro-samples/vk_order_independent_transparency>`_
-during testing on GFX9 ``CHIP_RAVEN`` and GFX11 ``CHIP_GFX1100``.
+during testing on GFX9 ``CHIP_RAVEN`` and GFX11 ``CHIP_NAVI31``.
 
 * ``DB_SHADER_CONTROL.EXEC_IF_OVERLAPPED`` on GFX9–10.3.
 * ``PA_SC_BINNER_CNTL_0.BIN_MAPPING_MODE = BIN_MAP_MODE_POPS`` on GFX10+.

@@ -163,7 +163,7 @@ static void si_emit_max_16_sample_locs(struct radeon_cmdbuf *cs, uint64_t centro
    radeon_end();
 }
 
-static void si_emit_sample_locations(struct si_context *sctx)
+static void si_emit_sample_locations(struct si_context *sctx, unsigned index)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;

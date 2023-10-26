@@ -41,12 +41,12 @@
 #define VG(x) ((void)0)
 #endif
 
-#include "common/intel_clflush.h"
 #include "common/intel_decoder.h"
 #include "common/intel_engine.h"
 #include "common/intel_gem.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_measure.h"
+#include "common/intel_mem.h"
 #include "common/intel_sample_positions.h"
 #include "dev/intel_device_info.h"
 #include "blorp/blorp.h"
@@ -536,7 +536,7 @@ union anv_free_list {
    /* Make sure it's aligned to 64 bits. This will make atomic operations
     * faster on 32 bit platforms.
     */
-   uint64_t u64 __attribute__ ((aligned (8)));
+   alignas(8) uint64_t u64;
 };
 
 #define ANV_FREE_LIST_EMPTY ((union anv_free_list) { { UINT32_MAX, 0 } })
@@ -550,7 +550,7 @@ struct anv_block_state {
       /* Make sure it's aligned to 64 bits. This will make atomic operations
        * faster on 32 bit platforms.
        */
-      uint64_t u64 __attribute__ ((aligned (8)));
+      alignas(8) uint64_t u64;
    };
 };
 
@@ -836,7 +836,7 @@ struct anv_memory_heap {
     *
     * Align it to 64 bits to make atomic operations faster on 32 bit platforms.
     */
-   VkDeviceSize      used __attribute__ ((aligned (8)));
+   alignas(8) VkDeviceSize used;
 };
 
 struct anv_memregion {
@@ -907,7 +907,7 @@ struct anv_physical_device {
       struct anv_memory_type                    types[VK_MAX_MEMORY_TYPES];
       uint32_t                                  heap_count;
       struct anv_memory_heap                    heaps[VK_MAX_MEMORY_HEAPS];
-      bool                                      need_clflush;
+      bool                                      need_flush;
     } memory;
 
     struct anv_memregion                        sys;
@@ -1425,7 +1425,7 @@ write_reloc(const struct anv_device *device, void *p, uint64_t v, bool flush)
       *(uint32_t *)p = v;
    }
 
-   if (flush && device->physical->memory.need_clflush)
+   if (flush && device->physical->memory.need_flush)
       intel_flush_range(p, reloc_size);
 }
 

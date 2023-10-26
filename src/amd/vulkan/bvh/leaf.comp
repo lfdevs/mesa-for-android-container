@@ -268,8 +268,10 @@ build_instance(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint3
    AccelerationStructureInstance instance = DEREF(REF(AccelerationStructureInstance)(src_ptr));
    DEREF(node).base_ptr = instance.accelerationStructureReference;
 
-   /* An inactive instance is one whose acceleration structure handle is VK_NULL_HANDLE. */
-   if (instance.accelerationStructureReference == 0)
+   /* An inactive instance is one whose acceleration structure handle is VK_NULL_HANDLE. Since the active terminology is
+    * only relevant for BVH updates, which we do not implement, we can also skip instances with mask == 0.
+    */
+   if (instance.accelerationStructureReference == 0 || instance.custom_instance_and_mask < (1u << 24u))
       return false;
 
    DEREF(node).otw_matrix = instance.transform;
@@ -293,8 +295,9 @@ void
 main(void)
 {
    uint32_t global_id = gl_GlobalInvocationID.x;
+   uint32_t primitive_id = args.first_id + global_id;
 
-   REF(key_id_pair) id_ptr = INDEX(key_id_pair, args.ids, args.first_id + global_id);
+   REF(key_id_pair) id_ptr = INDEX(key_id_pair, args.ids, primitive_id);
    uint32_t src_offset = global_id * args.stride;
 
    uint32_t dst_stride;
@@ -310,7 +313,7 @@ main(void)
       node_type = radv_ir_node_instance;
    }
 
-   uint32_t dst_offset = args.dst_offset + global_id * dst_stride;
+   uint32_t dst_offset = primitive_id * dst_stride;
    VOID_REF dst_ptr = OFFSET(args.bvh, dst_offset);
 
    radv_aabb bounds;

@@ -31,6 +31,9 @@ typedef enum __GLXdispatchIndex {
     // DestroyPixmap implemented by libglvnd
     // DestroyWindow implemented by libglvnd
     // FreeContextEXT implemented by libglvnd
+    DI_GLInteropExportObjectMESA,
+    DI_GLInteropFlushObjectsMESA,
+    DI_GLInteropQueryDeviceInfoMESA,
     // GetClientString implemented by libglvnd
     // GetConfig implemented by libglvnd
     DI_GetContextIDEXT,

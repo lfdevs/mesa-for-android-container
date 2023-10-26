@@ -986,26 +986,13 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
               ANV_IMAGE_MEMORY_BINDING_PRIVATE);
       must_init_fast_clear_state = true;
 
-      if (image->planes[plane].aux_surface.memory_range.binding ==
-          ANV_IMAGE_MEMORY_BINDING_PRIVATE) {
-         assert(isl_mod_info->aux_usage == ISL_AUX_USAGE_NONE);
-
-         /* The aux surface, like the fast clear state, lives in
-          * a driver-private bo.  We must initialize the aux surface for the
-          * same reasons we must initialize the fast clear state.
-          */
-         must_init_aux_surface = true;
-      } else {
-         assert(isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE);
-
-         /* The aux surface, unlike the fast clear state, lives in
-          * application-visible VkDeviceMemory and is shared with the
-          * external/foreign queue. Therefore, when we acquire ownership of the
-          * image with a defined VkImageLayout, the aux surface is valid and has
-          * the aux state required by the modifier.
-          */
-         must_init_aux_surface = false;
-      }
+      /* The aux surface, like the fast clear state, lives in
+       * a driver-private bo.  We must initialize the aux surface for the
+       * same reasons we must initialize the fast clear state.
+       */
+      assert(image->planes[plane].aux_surface.memory_range.binding ==
+             ANV_IMAGE_MEMORY_BINDING_PRIVATE);
+      must_init_aux_surface = true;
    }
 
    if (must_init_fast_clear_state) {
@@ -1112,13 +1099,13 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
     * acquire/release direction.
     */
    if (private_binding_acquire) {
-      initial_aux_usage = isl_mod_info->aux_usage;
-      initial_fast_clear = isl_mod_info->supports_clear_color ?
-         initial_fast_clear : ANV_FAST_CLEAR_NONE;
+      assert(!isl_drm_modifier_has_aux(isl_mod_info->modifier));
+      initial_aux_usage = ISL_AUX_USAGE_NONE;
+      initial_fast_clear = ANV_FAST_CLEAR_NONE;
    } else if (private_binding_release) {
-      final_aux_usage = isl_mod_info->aux_usage;
-      final_fast_clear = isl_mod_info->supports_clear_color ?
-         final_fast_clear : ANV_FAST_CLEAR_NONE;
+      assert(!isl_drm_modifier_has_aux(isl_mod_info->modifier));
+      final_aux_usage = ISL_AUX_USAGE_NONE;
+      final_fast_clear = ANV_FAST_CLEAR_NONE;
    }
 
    /* The current code assumes that there is no mixing of CCS_E and CCS_D.

@@ -25,25 +25,6 @@
 
 /* queue commands */
 
-void
-vn_GetDeviceQueue2(VkDevice device,
-                   const VkDeviceQueueInfo2 *pQueueInfo,
-                   VkQueue *pQueue)
-{
-   struct vn_device *dev = vn_device_from_handle(device);
-
-   for (uint32_t i = 0; i < dev->queue_count; i++) {
-      struct vn_queue *queue = &dev->queues[i];
-      if (queue->family == pQueueInfo->queueFamilyIndex &&
-          queue->index == pQueueInfo->queueIndex &&
-          queue->flags == pQueueInfo->flags) {
-         *pQueue = vn_queue_to_handle(queue);
-         return;
-      }
-   }
-   unreachable("bad queue family/index");
-}
-
 static bool
 vn_semaphore_wait_external(struct vn_device *dev, struct vn_semaphore *sem);
 
@@ -220,6 +201,10 @@ static VkResult
 vn_queue_submission_fix_batch_semaphores(struct vn_queue_submission *submit,
                                          uint32_t batch_index)
 {
+   struct vk_queue *queue_vk = vk_queue_from_handle(submit->queue_handle);
+   VkDevice dev_handle = vk_device_to_handle(queue_vk->base.device);
+   struct vn_device *dev = vn_device_from_handle(dev_handle);
+
    uint32_t wait_count = vn_get_wait_semaphore_count(submit, batch_index);
    uint32_t signal_count = vn_get_signal_semaphore_count(submit, batch_index);
 
@@ -231,8 +216,6 @@ vn_queue_submission_fix_batch_semaphores(struct vn_queue_submission *submit,
       if (payload->type != VN_SYNC_TYPE_IMPORTED_SYNC_FD)
          continue;
 
-      struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-      struct vn_device *dev = queue->device;
       if (!vn_semaphore_wait_external(dev, sem))
          return VK_ERROR_DEVICE_LOST;
 
@@ -243,8 +226,8 @@ vn_queue_submission_fix_batch_semaphores(struct vn_queue_submission *submit,
          .semaphore = sem_handle,
          .resourceId = 0,
       };
-      vn_async_vkImportSemaphoreResourceMESA(
-         dev->instance, vn_device_to_handle(dev), &res_info);
+      vn_async_vkImportSemaphoreResourceMESA(dev->instance, dev_handle,
+                                             &res_info);
    }
 
    bool batch_has_sem_feedback = false;
@@ -302,7 +285,7 @@ static VkResult
 vn_queue_submission_alloc_storage(struct vn_queue_submission *submit)
 {
    struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   const VkAllocationCallbacks *alloc = &queue->device->base.base.alloc;
+   const VkAllocationCallbacks *alloc = &queue->base.base.base.device->alloc;
    size_t batch_size = 0;
    size_t cmd_size = 0;
    size_t alloc_size = 0;
@@ -414,7 +397,8 @@ vn_set_sem_feedback_cmd(struct vn_queue *queue,
                         VkCommandBuffer *cmd_handle)
 {
    VkResult result;
-   struct vn_device *dev = queue->device;
+   struct vk_queue *queue_vk = &queue->base.base;
+   struct vn_device *dev = (void *)queue_vk->base.device;
    const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
    struct vn_feedback_src *free_feedback_src = NULL;
 
@@ -451,8 +435,8 @@ vn_set_sem_feedback_cmd(struct vn_queue *queue,
 
    vn_feedback_set_counter(free_feedback_src->src_slot, counter);
 
-   for (uint32_t i = 0; i < queue->device->queue_family_count; i++) {
-      if (queue->device->queue_families[i] == queue->family) {
+   for (uint32_t i = 0; i < dev->queue_family_count; i++) {
+      if (dev->queue_families[i] == queue_vk->queue_family_index) {
          *cmd_handle = free_feedback_src->commands[i];
          return VK_SUCCESS;
       }
@@ -560,10 +544,13 @@ vn_queue_submission_add_semaphore_feedback(
 static const VkCommandBuffer *
 vn_get_fence_feedback_cmd(struct vn_queue *queue, struct vn_fence *fence)
 {
+   struct vk_queue *queue_vk = &queue->base.base;
+   struct vn_device *dev = (void *)queue_vk->base.device;
+
    assert(fence->feedback.slot);
 
-   for (uint32_t i = 0; i < queue->device->queue_family_count; i++) {
-      if (queue->device->queue_families[i] == queue->family)
+   for (uint32_t i = 0; i < dev->queue_family_count; i++) {
+      if (dev->queue_families[i] == queue_vk->queue_family_index)
          return &fence->feedback.commands[i];
    }
 
@@ -733,9 +720,8 @@ vn_queue_sem_recycle_src_feedback(VkDevice dev_handle, VkSemaphore sem_handle)
 static void
 vn_queue_recycle_src_feedback(struct vn_queue_submission *submit)
 {
-   struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   struct vn_device *dev = queue->device;
-   VkDevice dev_handle = vn_device_to_handle(dev);
+   struct vk_queue *queue_vk = vk_queue_from_handle(submit->queue_handle);
+   VkDevice dev_handle = vk_device_to_handle(queue_vk->base.device);
 
    for (uint32_t batch_index = 0; batch_index < submit->batch_count;
         batch_index++) {
@@ -762,7 +748,7 @@ static void
 vn_queue_submission_cleanup(struct vn_queue_submission *submit)
 {
    struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   const VkAllocationCallbacks *alloc = &queue->device->base.base.alloc;
+   const VkAllocationCallbacks *alloc = &queue->base.base.base.device->alloc;
 
    /* TODO clean up pending src feedbacks on failure? */
    if (submit->has_feedback_semaphore)
@@ -795,14 +781,14 @@ vn_queue_submission_prepare_submit(struct vn_queue_submission *submit)
 static void
 vn_queue_wsi_present(struct vn_queue_submission *submit)
 {
-   struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   struct vn_device *dev = queue->device;
-   struct vn_instance *instance = queue->device->instance;
+   struct vk_queue *queue_vk = vk_queue_from_handle(submit->queue_handle);
+   struct vn_device *dev = (void *)queue_vk->base.device;
+   struct vn_instance *instance = dev->instance;
 
    if (!submit->wsi_mem)
       return;
 
-   if (dev->instance->renderer->info.has_implicit_fencing) {
+   if (instance->renderer->info.has_implicit_fencing) {
       struct vn_renderer_submit_batch batch = {
          .ring_idx = submit->external_payload.ring_idx,
       };
@@ -840,7 +826,7 @@ static VkResult
 vn_queue_submit(struct vn_queue_submission *submit)
 {
    struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   struct vn_device *dev = queue->device;
+   struct vn_device *dev = (void *)queue->base.base.base.device;
    struct vn_instance *instance = dev->instance;
    VkResult result;
 
@@ -857,7 +843,7 @@ vn_queue_submit(struct vn_queue_submission *submit)
     */
    result = vn_queue_submission_prepare_submit(submit);
    if (result != VK_SUCCESS)
-      return vn_error(dev->instance, result);
+      return vn_error(instance, result);
 
    /* skip no-op submit */
    if (!submit->batch_count && submit->fence_handle == VK_NULL_HANDLE)
@@ -876,7 +862,7 @@ vn_queue_submit(struct vn_queue_submission *submit)
 
       if (result != VK_SUCCESS) {
          vn_queue_submission_cleanup(submit);
-         return vn_error(dev->instance, result);
+         return vn_error(instance, result);
       }
    } else {
       struct vn_instance_submit_command instance_submit;
@@ -891,7 +877,7 @@ vn_queue_submit(struct vn_queue_submission *submit)
       }
       if (!instance_submit.ring_seqno_valid) {
          vn_queue_submission_cleanup(submit);
-         return vn_error(dev->instance, VK_ERROR_DEVICE_LOST);
+         return vn_error(instance, VK_ERROR_DEVICE_LOST);
       }
       submit->external_payload.ring_seqno_valid = true;
       submit->external_payload.ring_seqno = instance_submit.ring_seqno;
@@ -971,7 +957,7 @@ static VkResult
 vn_queue_bind_sparse_submit(struct vn_queue_submission *submit)
 {
    struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   struct vn_device *dev = queue->device;
+   struct vn_device *dev = (void *)queue->base.base.base.device;
    struct vn_instance *instance = dev->instance;
    VkResult result;
 
@@ -980,7 +966,7 @@ vn_queue_bind_sparse_submit(struct vn_queue_submission *submit)
          instance, submit->queue_handle, submit->batch_count,
          submit->sparse_batches, submit->fence_handle);
       if (result != VK_SUCCESS)
-         return vn_error(dev->instance, result);
+         return vn_error(instance, result);
    } else {
       struct vn_instance_submit_command instance_submit;
       vn_submit_vkQueueBindSparse(instance, 0, submit->queue_handle,
@@ -988,7 +974,7 @@ vn_queue_bind_sparse_submit(struct vn_queue_submission *submit)
                                   submit->fence_handle, &instance_submit);
 
       if (!instance_submit.ring_seqno_valid)
-         return vn_error(dev->instance, VK_ERROR_DEVICE_LOST);
+         return vn_error(instance, VK_ERROR_DEVICE_LOST);
    }
 
    return VK_SUCCESS;
@@ -999,7 +985,7 @@ vn_queue_bind_sparse_submit_batch(struct vn_queue_submission *submit,
                                   uint32_t batch_index)
 {
    struct vn_queue *queue = vn_queue_from_handle(submit->queue_handle);
-   VkDevice dev_handle = vn_device_to_handle(queue->device);
+   VkDevice dev_handle = vk_device_to_handle(queue->base.base.base.device);
    const VkBindSparseInfo *sparse_info = &submit->sparse_batches[batch_index];
    const VkSemaphore *signal_sem = sparse_info->pSignalSemaphores;
    uint32_t signal_sem_count = sparse_info->signalSemaphoreCount;
@@ -1190,7 +1176,8 @@ vn_QueueWaitIdle(VkQueue _queue)
 {
    VN_TRACE_FUNC();
    struct vn_queue *queue = vn_queue_from_handle(_queue);
-   VkDevice dev_handle = vn_device_to_handle(queue->device);
+   VkDevice dev_handle = vk_device_to_handle(queue->base.base.base.device);
+   struct vn_device *dev = vn_device_from_handle(dev_handle);
    VkResult result;
 
    /* lazily create queue wait fence for queue idle waiting */
@@ -1213,7 +1200,7 @@ vn_QueueWaitIdle(VkQueue _queue)
       vn_WaitForFences(dev_handle, 1, &queue->wait_fence, true, UINT64_MAX);
    vn_ResetFences(dev_handle, 1, &queue->wait_fence);
 
-   return vn_result(queue->device->instance, result);
+   return vn_result(dev->instance, result);
 }
 
 /* fence commands */
@@ -1682,6 +1669,11 @@ vn_GetFenceFdKHR(VkDevice device,
 
       vn_sync_payload_release(dev, &fence->temporary);
       fence->payload = &fence->permanent;
+
+#ifdef VN_USE_WSI_PLATFORM
+      if (!dev->renderer->info.has_implicit_fencing)
+         sync_wait(fd, -1);
+#endif
    } else {
       assert(payload->type == VN_SYNC_TYPE_IMPORTED_SYNC_FD);
 
@@ -2139,6 +2131,10 @@ vn_GetSemaphoreFdKHR(VkDevice device,
       if (result != VK_SUCCESS)
          return vn_error(dev->instance, result);
 
+#ifdef VN_USE_WSI_PLATFORM
+      if (!dev->renderer->info.has_implicit_fencing)
+         sync_wait(fd, -1);
+#endif
    } else {
       assert(payload->type == VN_SYNC_TYPE_IMPORTED_SYNC_FD);
 

@@ -126,6 +126,9 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
 
       assert((offset + slice->size0) <= fd_bo_size(rsc->bo));
 
+      /* Batch with no draws? */
+      fd_ringbuffer_attach_bo(ring, rsc->bo);
+
       OUT_REG(
          ring,
          RB_MRT_BUF_INFO(CHIP, i, .color_format = format,
@@ -170,6 +173,12 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
       uint32_t offset =
          fd_resource_offset(rsc, zsbuf->u.tex.level, zsbuf->u.tex.first_layer);
 
+      /* We could have a depth buffer, but no draws with depth write/test
+       * enabled, in which case it wouldn't have been part of the batch
+       * resource tracking
+       */
+      fd_ringbuffer_attach_bo(ring, rsc->bo);
+
       OUT_REG(
          ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
          A6XX_RB_DEPTH_BUFFER_PITCH(stride),
@@ -195,6 +204,8 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
          uint32_t base = gmem ? gmem->zsbuf_base[1] : 0;
          uint32_t offset =
             fd_resource_offset(rsc->stencil, zsbuf->u.tex.level, zsbuf->u.tex.first_layer);
+
+         fd_ringbuffer_attach_bo(ring, rsc->stencil->bo);
 
          OUT_REG(ring, RB_STENCIL_INFO(CHIP, .separate_stencil = true),
                  A6XX_RB_STENCIL_BUFFER_PITCH(stride),
@@ -274,6 +285,13 @@ emit_lrz_clears(struct fd_batch *batch)
    struct fd_resource *zsbuf = fd_resource(pfb->zsbuf->texture);
 
    foreach_subpass (subpass, batch) {
+      /* The lrz buffer isn't explicitly tracked by the batch resource
+       * tracking (tracking the zsbuf is sufficient), but it still needs
+       * to be attached to the ring
+       */
+      if (subpass->lrz)
+         fd_ringbuffer_attach_bo(batch->gmem, subpass->lrz);
+
       if (!(subpass->fast_cleared & FD_BUFFER_LRZ))
          continue;
 
@@ -421,6 +439,8 @@ patch_fb_read_sysmem(struct fd_batch *batch)
       fdl6_get_ubwc_blockwidth(&rsc->layout, &block_width, &block_height);
 
       struct fdl_view_args args = {
+         .chip = A6XX,
+
          .iova = fd_bo_get_iova(rsc->bo),
 
          .base_miplevel = psurf->u.tex.level,
@@ -494,10 +514,6 @@ update_render_cntl(struct fd_batch *batch, struct pipe_framebuffer_state *pfb,
    }
 }
 
-/* extra size to store VSC_DRAW_STRM_SIZE: */
-#define VSC_DRAW_STRM_SIZE(pitch) ((pitch)*32 + 0x100)
-#define VSC_PRIM_STRM_SIZE(pitch) ((pitch)*32)
-
 static void
 update_vsc_pipe(struct fd_batch *batch)
 {
@@ -505,6 +521,7 @@ update_vsc_pipe(struct fd_batch *batch)
    struct fd6_context *fd6_ctx = fd6_context(ctx);
    const struct fd_gmem_stateobj *gmem = batch->gmem_state;
    struct fd_ringbuffer *ring = batch->gmem;
+   unsigned max_vsc_pipes = batch->ctx->screen->info->num_vsc_pipes;
    int i;
 
    if (batch->draw_strm_bits / 8 > fd6_ctx->vsc_draw_strm_pitch) {
@@ -530,27 +547,34 @@ update_vsc_pipe(struct fd_batch *batch)
    }
 
    if (!fd6_ctx->vsc_draw_strm) {
-      fd6_ctx->vsc_draw_strm = fd_bo_new(
-         ctx->screen->dev, VSC_DRAW_STRM_SIZE(fd6_ctx->vsc_draw_strm_pitch),
-         FD_BO_NOMAP, "vsc_draw_strm");
+      /* We also use four bytes per vsc pipe at the end of the draw
+       * stream buffer for VSC_DRAW_STRM_SIZE written back by hw
+       * (see VSC_DRAW_STRM_SIZE_ADDRESS)
+       */
+      unsigned sz = (max_vsc_pipes * fd6_ctx->vsc_draw_strm_pitch) +
+                    (max_vsc_pipes * 4);
+      fd6_ctx->vsc_draw_strm =
+         fd_bo_new(ctx->screen->dev, sz, FD_BO_NOMAP, "vsc_draw_strm");
    }
 
    if (!fd6_ctx->vsc_prim_strm) {
-      fd6_ctx->vsc_prim_strm = fd_bo_new(
-         ctx->screen->dev, VSC_PRIM_STRM_SIZE(fd6_ctx->vsc_prim_strm_pitch),
-         FD_BO_NOMAP, "vsc_prim_strm");
+      unsigned sz = max_vsc_pipes * fd6_ctx->vsc_prim_strm_pitch;
+      fd6_ctx->vsc_prim_strm =
+         fd_bo_new(ctx->screen->dev, sz, FD_BO_NOMAP, "vsc_prim_strm");
    }
 
-   OUT_REG(
-      ring, A6XX_VSC_BIN_SIZE(.width = gmem->bin_w, .height = gmem->bin_h),
-      A6XX_VSC_DRAW_STRM_SIZE_ADDRESS(.bo = fd6_ctx->vsc_draw_strm,
-                                      .bo_offset =
-                                         32 * fd6_ctx->vsc_draw_strm_pitch));
+   fd_ringbuffer_attach_bo(ring, fd6_ctx->vsc_draw_strm);
+   fd_ringbuffer_attach_bo(ring, fd6_ctx->vsc_prim_strm);
+
+   OUT_REG(ring, A6XX_VSC_BIN_SIZE(.width = gmem->bin_w, .height = gmem->bin_h),
+           A6XX_VSC_DRAW_STRM_SIZE_ADDRESS(.bo = fd6_ctx->vsc_draw_strm,
+                                           .bo_offset = max_vsc_pipes *
+                                              fd6_ctx->vsc_draw_strm_pitch));
 
    OUT_REG(ring, A6XX_VSC_BIN_COUNT(.nx = gmem->nbins_x, .ny = gmem->nbins_y));
 
-   OUT_PKT4(ring, REG_A6XX_VSC_PIPE_CONFIG_REG(0), 32);
-   for (i = 0; i < 32; i++) {
+   OUT_PKT4(ring, REG_A6XX_VSC_PIPE_CONFIG_REG(0), max_vsc_pipes);
+   for (i = 0; i < max_vsc_pipes; i++) {
       const struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
       OUT_RING(ring, A6XX_VSC_PIPE_CONFIG_REG_X(pipe->x) |
                         A6XX_VSC_PIPE_CONFIG_REG_Y(pipe->y) |
@@ -567,9 +591,6 @@ update_vsc_pipe(struct fd_batch *batch)
       ring, A6XX_VSC_DRAW_STRM_ADDRESS(.bo = fd6_ctx->vsc_draw_strm),
       A6XX_VSC_DRAW_STRM_PITCH(.dword = fd6_ctx->vsc_draw_strm_pitch),
       A6XX_VSC_DRAW_STRM_LIMIT(.dword = fd6_ctx->vsc_draw_strm_pitch - 64));
-
-   fd_ringbuffer_attach_bo(ring, fd6_ctx->vsc_draw_strm);
-   fd_ringbuffer_attach_bo(ring, fd6_ctx->vsc_prim_strm);
 }
 
 /*
@@ -693,6 +714,8 @@ emit_common_init(struct fd_batch *batch)
 
    if (!result)
       return;
+
+   fd_ringbuffer_attach_bo(ring, at->results_mem);
 
    OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_CONTROL, 1);
    OUT_RING(ring, A6XX_RB_SAMPLE_COUNT_CONTROL_COPY);
@@ -1088,6 +1111,7 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
 
    if (use_hw_binning(batch)) {
       const struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[tile->p];
+      unsigned num_vsc_pipes = ctx->screen->info->num_vsc_pipes;
 
       OUT_PKT7(ring, CP_WAIT_FOR_ME, 0);
 
@@ -1099,9 +1123,10 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
                         CP_SET_BIN_DATA5_0_VSC_N(tile->n));
       OUT_RELOC(ring, fd6_ctx->vsc_draw_strm, /* per-pipe draw-stream address */
                 (tile->p * fd6_ctx->vsc_draw_strm_pitch), 0, 0);
-      OUT_RELOC(ring,
-                fd6_ctx->vsc_draw_strm, /* VSC_DRAW_STRM_ADDRESS + (p * 4) */
-                (tile->p * 4) + (32 * fd6_ctx->vsc_draw_strm_pitch), 0, 0);
+      OUT_RELOC(
+         ring, fd6_ctx->vsc_draw_strm, /* VSC_DRAW_STRM_ADDRESS + (p * 4) */
+         (tile->p * 4) + (num_vsc_pipes * fd6_ctx->vsc_draw_strm_pitch),
+         0, 0);
       OUT_RELOC(ring, fd6_ctx->vsc_prim_strm,
                 (tile->p * fd6_ctx->vsc_prim_strm_pitch), 0, 0);
 

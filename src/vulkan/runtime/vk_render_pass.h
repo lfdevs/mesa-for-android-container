@@ -399,6 +399,41 @@ vk_get_command_buffer_inheritance_as_rendering_resume(
    const VkCommandBufferBeginInfo *pBeginInfo,
    void *stack_data);
 
+/**
+ * Return true if the subpass dependency is framebuffer-local.
+ */
+static bool
+vk_subpass_dependency_is_fb_local(const VkSubpassDependency2 *dep,
+                                  VkPipelineStageFlags2 src_stage_mask,
+                                  VkPipelineStageFlags2 dst_stage_mask)
+{
+   if (dep->srcSubpass == VK_SUBPASS_EXTERNAL ||
+       dep->dstSubpass == VK_SUBPASS_EXTERNAL)
+      return true;
+
+  /* This is straight from the Vulkan 1.2 spec, section 7.1.4 "Framebuffer
+   * Region Dependencies":
+   */
+   const VkPipelineStageFlags2 framebuffer_space_stages =
+      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+      VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+      VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+   const VkPipelineStageFlags2 src_framebuffer_space_stages = 
+      framebuffer_space_stages | VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+   const VkPipelineStageFlags2 dst_framebuffer_space_stages = 
+      framebuffer_space_stages | VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+
+   /* Check for frambuffer-space dependency. */
+   if ((src_stage_mask & ~src_framebuffer_space_stages) ||
+       (dst_stage_mask & ~dst_framebuffer_space_stages))
+      return false;
+
+   /* Check for framebuffer-local dependency. */
+   return dep->dependencyFlags & VK_DEPENDENCY_BY_REGION_BIT;
+}
+
 #ifdef __cplusplus
 }
 #endif

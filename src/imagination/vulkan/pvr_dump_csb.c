@@ -1263,8 +1263,7 @@ print_block_ppp_state_isp(struct pvr_dump_csb_ctx *const csb_ctx,
    pvr_dump_field_member_u32(base_ctx, &isp_ctl, validid);
 
    if (!has_fa || has_fb != isp_ctl.bpres || has_ba != isp_ctl.two_sided ||
-       has_bb != (isp_ctl.bpres && isp_ctl.two_sided) ||
-       has_dbsc != (isp_ctl.dbenable || isp_ctl.scenable)) {
+       has_bb != (isp_ctl.bpres && isp_ctl.two_sided)) {
       pvr_dump_error(
          base_ctx,
          "words declared by ppp header do not match requirements of ispctl word");
@@ -2365,7 +2364,7 @@ static bool dump_first_buffer(struct pvr_dump_buffer_ctx *const ctx,
    if (!ret)
       pvr_dump_println(&ctx->base,
                        "<error while decoding at 0x%tx>",
-                       ctx->ptr - ctx->initial_ptr);
+                       (uint8_t *)ctx->ptr - (uint8_t *)ctx->initial_ptr);
 
    pvr_dump_buffer_restart(ctx);
    pvr_dump_mark_section(&ctx->base, "First buffer hexdump");

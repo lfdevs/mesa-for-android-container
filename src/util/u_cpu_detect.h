@@ -88,7 +88,6 @@ struct util_cpu_caps_t {
    unsigned cacheline;
 
    unsigned has_intel:1;
-   unsigned has_tsc:1;
    unsigned has_mmx:1;
    unsigned has_mmx2:1;
    unsigned has_sse:1;
@@ -120,6 +119,8 @@ struct util_cpu_caps_t {
    unsigned has_avx512bw:1;
    unsigned has_avx512vl:1;
    unsigned has_avx512vbmi:1;
+
+   unsigned has_clflushopt:1;
 
    unsigned num_L3_caches;
    unsigned num_cpu_mask_bits;

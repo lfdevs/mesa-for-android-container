@@ -215,6 +215,7 @@ struct r600_bytecode_cf {
 	unsigned isa[2];
 	unsigned nlds_read;
 	unsigned nqueue_read;
+	unsigned clause_local_written;
 };
 
 #define FC_NONE				0
@@ -289,7 +290,6 @@ struct r600_bytecode {
 
 /* eg_asm.c */
 int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf);
-int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_clause);
 int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gds, unsigned id);
 int eg_bytecode_alu_build(struct r600_bytecode *bc,
 			  struct r600_bytecode_alu *alu, unsigned id);

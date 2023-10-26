@@ -5,10 +5,6 @@ api@clbuildprogram,Fail
 # Failed (error code: CL_INVALID_OPERATION): CL_SUCCESS when compiling an empty string..
 api@clcompileprogram,Fail
 
-# Unexpected CL error: CL_INVALID_OPERATION -59
-# Failed to compile binary program.
-api@clcreateprogramwithbinary,Fail
-
 # Failed (error code: CL_INVALID_COMMAND_QUEUE): Get size of CL_QUEUE_SIZE.
 api@clgetcommandqueueinfo,Fail
 

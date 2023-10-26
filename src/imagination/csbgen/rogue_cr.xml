@@ -669,19 +669,7 @@ SOFTWARE.
     <field name="width" start="0" end="1" type="PIXEL_WIDTH"/>
   </struct>
 
-  <struct name="USC_CLEAR_REGISTER0" length="1">
-    <field name="val" start="0" end="31" type="uint"/>
-  </struct>
-
-  <struct name="USC_CLEAR_REGISTER1" length="1">
-    <field name="val" start="0" end="31" type="uint"/>
-  </struct>
-
-  <struct name="USC_CLEAR_REGISTER2" length="1">
-    <field name="val" start="0" end="31" type="uint"/>
-  </struct>
-
-  <struct name="USC_CLEAR_REGISTER3" length="1">
+  <struct name="USC_CLEAR_REGISTER" length="1">
     <field name="val" start="0" end="31" type="uint"/>
   </struct>
 

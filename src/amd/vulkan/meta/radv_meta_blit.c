@@ -47,14 +47,14 @@ build_nir_vertex_shader(struct radv_device *dev)
    tex_pos_out->data.location = VARYING_SLOT_VAR0;
    tex_pos_out->data.interpolation = INTERP_MODE_SMOOTH;
 
-   nir_ssa_def *outvec = nir_gen_rect_vertices(&b, NULL, NULL);
+   nir_def *outvec = nir_gen_rect_vertices(&b, NULL, NULL);
 
    nir_store_var(&b, pos_out, outvec, 0xf);
 
-   nir_ssa_def *src_box = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
-   nir_ssa_def *src0_z = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 16, .range = 4);
+   nir_def *src_box = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
+   nir_def *src0_z = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 16, .range = 4);
 
-   nir_ssa_def *vertex_id = nir_load_vertex_id_zero_base(&b);
+   nir_def *vertex_id = nir_load_vertex_id_zero_base(&b);
 
    /* vertex 0 - src0_x, src0_y, src0_z */
    /* vertex 1 - src0_x, src1_y, src0_z*/
@@ -62,16 +62,16 @@ build_nir_vertex_shader(struct radv_device *dev)
    /* so channel 0 is vertex_id != 2 ? src_x : src_x + w
       channel 1 is vertex id != 1 ? src_y : src_y + w */
 
-   nir_ssa_def *c0cmp = nir_ine_imm(&b, vertex_id, 2);
-   nir_ssa_def *c1cmp = nir_ine_imm(&b, vertex_id, 1);
+   nir_def *c0cmp = nir_ine_imm(&b, vertex_id, 2);
+   nir_def *c1cmp = nir_ine_imm(&b, vertex_id, 1);
 
-   nir_ssa_def *comp[4];
+   nir_def *comp[4];
    comp[0] = nir_bcsel(&b, c0cmp, nir_channel(&b, src_box, 0), nir_channel(&b, src_box, 2));
 
    comp[1] = nir_bcsel(&b, c1cmp, nir_channel(&b, src_box, 1), nir_channel(&b, src_box, 3));
    comp[2] = src0_z;
    comp[3] = nir_imm_float(&b, 1.0);
-   nir_ssa_def *out_tex_vec = nir_vec(&b, comp, 4);
+   nir_def *out_tex_vec = nir_vec(&b, comp, 4);
    nir_store_var(&b, tex_pos_out, out_tex_vec, 0xf);
    return b.shader;
 }
@@ -89,7 +89,7 @@ build_nir_copy_fragment_shader(struct radv_device *dev, enum glsl_sampler_dim te
     * position.
     */
    unsigned swz[] = {0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2};
-   nir_ssa_def *const tex_pos =
+   nir_def *const tex_pos =
       nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
    const struct glsl_type *sampler_type =
@@ -99,7 +99,7 @@ build_nir_copy_fragment_shader(struct radv_device *dev, enum glsl_sampler_dim te
    sampler->data.binding = 0;
 
    nir_deref_instr *tex_deref = nir_build_deref_var(&b, sampler);
-   nir_ssa_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
+   nir_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
 
    nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
    color_out->data.location = FRAG_RESULT_DATA0;
@@ -121,7 +121,7 @@ build_nir_copy_fragment_shader_depth(struct radv_device *dev, enum glsl_sampler_
     * position.
     */
    unsigned swz[] = {0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2};
-   nir_ssa_def *const tex_pos =
+   nir_def *const tex_pos =
       nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
    const struct glsl_type *sampler_type =
@@ -131,7 +131,7 @@ build_nir_copy_fragment_shader_depth(struct radv_device *dev, enum glsl_sampler_
    sampler->data.binding = 0;
 
    nir_deref_instr *tex_deref = nir_build_deref_var(&b, sampler);
-   nir_ssa_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
+   nir_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
 
    nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
    color_out->data.location = FRAG_RESULT_DEPTH;
@@ -153,7 +153,7 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *dev, enum glsl_sample
     * position.
     */
    unsigned swz[] = {0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2};
-   nir_ssa_def *const tex_pos =
+   nir_def *const tex_pos =
       nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
    const struct glsl_type *sampler_type =
@@ -163,7 +163,7 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *dev, enum glsl_sample
    sampler->data.binding = 0;
 
    nir_deref_instr *tex_deref = nir_build_deref_var(&b, sampler);
-   nir_ssa_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
+   nir_def *color = nir_tex_deref(&b, tex_deref, tex_deref, tex_pos);
 
    nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
    color_out->data.location = FRAG_RESULT_STENCIL;
@@ -427,7 +427,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
       dst_end = region->dstOffsets[1].z;
    } else {
       dst_start = dst_res->baseArrayLayer;
-      dst_end = dst_start + dst_res->layerCount;
+      dst_end = dst_start + vk_image_subresource_layer_count(&dst_image->vk, dst_res);
    }
 
    unsigned src_start, src_end;
@@ -437,7 +437,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
       src_end = region->srcOffsets[1].z;
    } else {
       src_start = src_res->baseArrayLayer;
-      src_end = src_start + src_res->layerCount;
+      src_end = src_start + vk_image_subresource_layer_count(&src_image->vk, src_res);
    }
 
    bool flip_z = flip_coords(&src_start, &src_end, &dst_start, &dst_end);

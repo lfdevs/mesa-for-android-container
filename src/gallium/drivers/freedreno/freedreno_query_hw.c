@@ -299,22 +299,6 @@ fd_hw_sample_init(struct fd_batch *batch, uint32_t size)
    samp->tile_stride = 0;
    batch->next_sample_offset += size;
 
-   if (!batch->query_buf) {
-      struct pipe_screen *pscreen = &batch->ctx->screen->base;
-      struct pipe_resource templ = {
-         .target = PIPE_BUFFER,
-         .format = PIPE_FORMAT_R8_UNORM,
-         .bind = PIPE_BIND_QUERY_BUFFER,
-         .width0 = 0, /* create initially zero size buffer */
-         .height0 = 1,
-         .depth0 = 1,
-         .array_size = 1,
-         .last_level = 0,
-         .nr_samples = 1,
-      };
-      batch->query_buf = pscreen->resource_create(pscreen, &templ);
-   }
-
    pipe_resource_reference(&samp->prsc, batch->query_buf);
 
    return samp;

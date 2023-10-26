@@ -795,6 +795,10 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
                compat->presentModeCount = 1;
             }
          } else {
+            if (!present_mode)
+               wsi_common_vk_warn_once("Use of VkSurfacePresentModeCompatibilityEXT "
+                                       "without a VkSurfacePresentModeEXT set. This is an "
+                                       "application bug.\n");
             compat->presentModeCount = 1;
          }
          break;
@@ -1142,7 +1146,8 @@ static void x11_notify_pending_present(struct x11_swapchain *swapchain,
    /* It is possible that an IDLE is observed before PRESENT_COMPLETE when
     * not flipping. In this case, reading image->present_id might be a race
     * in the FIFO management thread. */
-   image->signal_present_id = image->present_id;
+   if (image->present_id)
+      image->signal_present_id = image->present_id;
 }
 
 static void x11_swapchain_notify_error(struct x11_swapchain *swapchain, VkResult result)

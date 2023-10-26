@@ -35,7 +35,7 @@
 static nir_deref_instr *
 deref_offset_var(nir_builder *b, unsigned binding, unsigned offset_align_state)
 {
-   gl_state_index16 tokens[STATE_LENGTH] = {offset_align_state, binding};
+   gl_state_index16 tokens[STATE_LENGTH] = { offset_align_state, binding };
    nir_variable *var = nir_find_state_variable(b->shader, tokens);
    if (!var) {
       var = nir_state_variable_create(b->shader, glsl_uint_type(), "offset", tokens);
@@ -91,16 +91,16 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
       return false;
    }
 
-   nir_ssa_def *buffer = nir_imm_int(b, ssbo_offset + nir_intrinsic_base(instr));
-   nir_ssa_def *temp = NULL;
+   nir_def *buffer = nir_imm_int(b, ssbo_offset + nir_intrinsic_base(instr));
+   nir_def *temp = NULL;
 
-   nir_ssa_def *offset_load = NULL;
+   nir_def *offset_load = NULL;
    if (offset_align_state) {
       nir_deref_instr *deref_offset = deref_offset_var(b, nir_intrinsic_base(instr), offset_align_state);
       offset_load = nir_load_deref(b, deref_offset);
    }
    nir_intrinsic_instr *new_instr =
-         nir_intrinsic_instr_create(b->shader, op);
+      nir_intrinsic_instr_create(b->shader, op);
    if (nir_intrinsic_has_atomic_op(new_instr))
       nir_intrinsic_set_atomic_op(new_instr, atomic_op);
 
@@ -112,7 +112,7 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
       /* remapped to ssbo_atomic_add: { buffer_idx, offset, +1 } */
       temp = nir_imm_int(b, +1);
       new_instr->src[0] = nir_src_for_ssa(buffer);
-      nir_src_copy(&new_instr->src[1], &instr->src[0], &new_instr->instr);
+      new_instr->src[1] = nir_src_for_ssa(instr->src[0].ssa);
       new_instr->src[2] = nir_src_for_ssa(temp);
       break;
    case nir_intrinsic_atomic_counter_pre_dec:
@@ -121,21 +121,21 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
       /* NOTE semantic difference so we adjust the return value below */
       temp = nir_imm_int(b, -1);
       new_instr->src[0] = nir_src_for_ssa(buffer);
-      nir_src_copy(&new_instr->src[1], &instr->src[0], &new_instr->instr);
+      new_instr->src[1] = nir_src_for_ssa(instr->src[0].ssa);
       new_instr->src[2] = nir_src_for_ssa(temp);
       break;
    case nir_intrinsic_atomic_counter_read:
       /* remapped to load_ssbo: { buffer_idx, offset } */
       new_instr->src[0] = nir_src_for_ssa(buffer);
-      nir_src_copy(&new_instr->src[1], &instr->src[0], &new_instr->instr);
+      new_instr->src[1] = nir_src_for_ssa(instr->src[0].ssa);
       break;
    default:
       /* remapped to ssbo_atomic_x: { buffer_idx, offset, data, (compare)? } */
       new_instr->src[0] = nir_src_for_ssa(buffer);
-      nir_src_copy(&new_instr->src[1], &instr->src[0], &new_instr->instr);
-      nir_src_copy(&new_instr->src[2], &instr->src[1], &new_instr->instr);
+      new_instr->src[1] = nir_src_for_ssa(instr->src[0].ssa);
+      new_instr->src[2] = nir_src_for_ssa(instr->src[1].ssa);
       if (op == nir_intrinsic_ssbo_atomic_swap)
-         nir_src_copy(&new_instr->src[3], &instr->src[2], &new_instr->instr);
+         new_instr->src[3] = nir_src_for_ssa(instr->src[2].ssa);
       break;
    }
 
@@ -153,20 +153,20 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
        * num_components with one that has variable number.  So
        * best to take this from the dest:
        */
-      new_instr->num_components = instr->dest.ssa.num_components;
+      new_instr->num_components = instr->def.num_components;
    }
 
-   nir_ssa_dest_init(&new_instr->instr, &new_instr->dest,
-                     instr->dest.ssa.num_components, instr->dest.ssa.bit_size);
+   nir_def_init(&new_instr->instr, &new_instr->def,
+                instr->def.num_components, instr->def.bit_size);
    nir_instr_insert_before(&instr->instr, &new_instr->instr);
    nir_instr_remove(&instr->instr);
 
    if (instr->intrinsic == nir_intrinsic_atomic_counter_pre_dec) {
       b->cursor = nir_after_instr(&new_instr->instr);
-      nir_ssa_def *result = nir_iadd(b, &new_instr->dest.ssa, temp);
-      nir_ssa_def_rewrite_uses(&instr->dest.ssa, result);
+      nir_def *result = nir_iadd(b, &new_instr->def, temp);
+      nir_def_rewrite_uses(&instr->def, result);
    } else {
-      nir_ssa_def_rewrite_uses(&instr->dest.ssa, &new_instr->dest.ssa);
+      nir_def_rewrite_uses(&instr->def, &new_instr->def);
    }
 
    return true;
@@ -197,7 +197,7 @@ nir_lower_atomics_to_ssbo(nir_shader *shader, unsigned offset_align_state)
       }
 
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+                                     nir_metadata_dominance);
    }
 
    if (progress) {
@@ -237,14 +237,14 @@ nir_lower_atomics_to_ssbo(nir_shader *shader, unsigned offset_align_state)
                                           ssbo->data.binding + 1);
 
             struct glsl_struct_field field = {
-                  .type = type,
-                  .name = "counters",
-                  .location = -1,
+               .type = type,
+               .name = "counters",
+               .location = -1,
             };
 
             ssbo->interface_type =
-                  glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
-                                      false, "counters");
+               glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                                   false, "counters");
 
             replaced |= (1 << var->data.binding);
          }
@@ -255,4 +255,3 @@ nir_lower_atomics_to_ssbo(nir_shader *shader, unsigned offset_align_state)
 
    return progress;
 }
-

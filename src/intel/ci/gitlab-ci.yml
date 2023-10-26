@@ -1,52 +1,46 @@
-.intel-common-test:
-  extends:
-    - .lava-test-deqp:x86_64
-  variables:
-    DTB: ""
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    FLAKES_CHANNEL: "#intel-ci"
-    HWCI_FREQ_MAX: "true"
+include:
+  - local: 'src/intel/ci/gitlab-ci-inc.yml'
 
-.anv-test:
+anv-jsl:
   extends:
-    - .intel-common-test
-    - .anv-rules
-  variables:
-    DRIVER_NAME: anv
-
-.iris-test:
-  extends:
-    - .intel-common-test
-    - .iris-rules
-  variables:
-    DRIVER_NAME: iris
-
-.intel-test:
-  extends:
-    - .intel-common-test
-    - .intel-rules
-
-## ANV only
-# 15; 10 i5 boards + 5 i7 boards (2023-01-17)
-.anv-tgl-test:
-  extends:
+    - .jsl-test
     - .anv-test
   variables:
-    DEVICE_TYPE: asus-cx9400-volteer
-    GPU_VERSION: anv-tgl
-    FDO_CI_CONCURRENT: 9
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
+    DEQP_SUITE: anv-jsl
+    VK_DRIVER: intel
+    DEQP_FRACTION: 2
+  parallel: 4
 
-anv-tgl-vk:
+# We don't enable a full run of anv-jsl nightly because it's about 8 hours of
+# runtime, which would take too many boards at once.
+.anv-jsl-full:
+  extends:
+    - anv-jsl
+    - .intel-manual-rules
+  variables:
+    DEQP_SUITE: anv-jsl-full
+    JOB_TIMEOUT: 60
+  parallel: 4
+
+anv-tgl:
   extends:
     - .anv-tgl-test
   variables:
-    DEQP_SUITE: anv-tgl-vk
-    DEQP_VER: vk
-    DEQP_FRACTION: 2 # temporarily drop network load
+    DEQP_SUITE: anv-tgl
+    DEQP_FRACTION: 5 # temporarily drop network load
     VK_DRIVER: intel
   parallel: 6 # 15 - 3 zink - 3 post-merge perf + headroom
+
+anv-tgl-full:
+  extends:
+    - anv-tgl
+    - .intel-manual-rules
+  variables:
+    DEQP_SUITE: anv-tgl-full
+    DEQP_FRACTION: 1
+    JOB_TIMEOUT: 90
+  timeout: 100m
+  parallel: 4
 
 hasvk-hsw-full:
   extends:
@@ -66,17 +60,30 @@ hasvk-hsw:
   variables:
     DEQP_FRACTION: 10
 
+anv-jsl-angle:
+  extends:
+    - .jsl-test
+    - .anv-angle-test
+  variables:
+    DEQP_SUITE: anv-jsl-angle
+    GPU_VERSION: angle-anv-jsl
+
+anv-jsl-angle-full:
+  extends:
+    - anv-jsl-angle
+    - .intel-manual-rules
+  variables:
+    DEQP_SUITE: anv-jsl-angle-full
+    JOB_TIMEOUT: 60
+  parallel: 2
+
 anv-tgl-angle:
   extends:
     - .anv-tgl-test
-    - .intel-rules # Note: Xorg uses iris, so depend on both GL and vulkan
+    - .anv-angle-test
   variables:
     DEQP_SUITE: anv-tgl-angle
     GPU_VERSION: angle-anv-tgl
-    VK_DRIVER: intel
-    USE_ANGLE: 1
-    # ANGLE requires X11 running for some reason.
-    HWCI_START_XORG: 1
 
 anv-tgl-angle-full:
   extends:
@@ -85,79 +92,6 @@ anv-tgl-angle-full:
   variables:
     DEQP_SUITE: anv-tgl-angle-full
     JOB_TIMEOUT: 60
-
-## Iris only
-# 5 boards
-.iris-apl-test:
-  extends:
-    - .iris-test
-  variables:
-    DEVICE_TYPE: asus-C523NA-A20057-coral
-    GPU_VERSION: iris-apl
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
-    FDO_CI_CONCURRENT: 5
-
-# 4 boards
-.iris-glk-test:
-  extends:
-    - .iris-test
-  variables:
-    DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
-    GPU_VERSION: iris-glk
-    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
-    FDO_CI_CONCURRENT: 3
-
-# 5 boards, manual for now due to the GPU being occasionally stuck
-.iris-amly-test:
-  extends:
-    - .iris-test
-    - .iris-manual-rules
-  variables:
-    DEVICE_TYPE: asus-C433TA-AJ0005-rammus
-    GPU_VERSION: iris-amly
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
-    FDO_CI_CONCURRENT: 5
-
-# 7 boards
-.iris-kbl-test:
-  extends:
-    - .iris-test
-  variables:
-    DEVICE_TYPE: hp-x360-14-G1-sona
-    GPU_VERSION: iris-kbl
-    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
-    FDO_CI_CONCURRENT: 9
-
-# 5 boards
-.iris-whl-test:
-  extends:
-    - .iris-test
-  variables:
-    DEVICE_TYPE: dell-latitude-5400-8665U-sarien
-    GPU_VERSION: iris-whl
-    RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
-    FDO_CI_CONCURRENT: 9
-
-# 5 boards
-.iris-cml-test:
-  extends:
-    - .iris-test
-    - .iris-manual-rules    # Devices have too often network problems and fail to boot.
-  variables:
-    DEVICE_TYPE: asus-C436FA-Flip-hatch
-    GPU_VERSION: iris-cml
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
-    FDO_CI_CONCURRENT: 9
-
-# 8 boards
-.iris-jsl-test:
-  extends:
-    - .iris-test
-  variables:
-    DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
-    GPU_VERSION: iris-jsl
-    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
-    FDO_CI_CONCURRENT: 3
 
 iris-apl-deqp:
   extends:
@@ -206,13 +140,6 @@ iris-kbl-deqp:
     DEQP_SUITE: iris-kbl
   parallel: 3
 
-iris-whl-deqp:
-  extends:
-    - .iris-whl-test
-  variables:
-    DEQP_SUITE: iris-whl
-  parallel: 4
-
 iris-cml-deqp:
   extends:
     - .iris-cml-test
@@ -220,12 +147,14 @@ iris-cml-deqp:
     DEQP_SUITE: iris-cml
   parallel: 4
 
-#iris-jsl-deqp:
-#  extends:
-#    - .iris-jsl-test
-#  variables:
-#    DEQP_SUITE: iris-jsl
-#  parallel: 8
+iris-jsl-deqp:
+  extends:
+    - .jsl-test
+    - .iris-test
+  variables:
+    DEQP_SUITE: iris-jsl
+    DEQP_FRACTION: 4
+  parallel: 2
 
 iris-amly-egl:
   extends:
@@ -240,22 +169,12 @@ iris-kbl-piglit:
   extends:
     - .iris-kbl-test
     - .lava-piglit
-  parallel: 3
+  parallel: 2
   variables:
     HWCI_START_XORG: 1
     PIGLIT_NO_WINDOW: 0
     PIGLIT_PLATFORM: mixed_glx_egl
     PIGLIT_PROFILES: gpu
-
-.iris-traces:
-  extends:
-    - .lava-traces-base
-  variables:
-    EGL_PLATFORM: surfaceless
-    PIGLIT_REPLAY_DEVICE_NAME: "gl-${GPU_VERSION}"
-    PIGLIT_RESULTS: "${GPU_VERSION}-${PIGLIT_PROFILES}"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-iris.yml"
-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
 iris-apl-traces:
   variables:
@@ -285,40 +204,12 @@ iris-kbl-traces:
     - .iris-kbl-test
     - .iris-traces
 
-iris-whl-traces:
-  variables:
-    GPU_VERSION: intel-whl
-  extends:
-    - .iris-whl-test
-    - .iris-traces
-
 iris-cml-traces:
   variables:
     GPU_VERSION: intel-cml
   extends:
     - .iris-cml-test
     - .iris-traces
-
-.profile-traces:
-  extends:
-    - .iris-traces
-    - .iris-rules-performance
-  variables:
-    PIGLIT_REPLAY_SUBCOMMAND: "profile"
-    PIGLIT_REPLAY_EXTRA_ARGS: "--db-path ${CI_PROJECT_DIR}/replayer-db/"
-    # More than this can hit OOM due to BOs leaked during the replay of the last frame
-    PIGLIT_REPLAY_LOOP_TIMES: 150
-    # We don't want for more than one workload to be submitted to the GPU at a time
-    FDO_CI_CONCURRENT: 1
-    # Piglit is very sparse in its status output and downloads of big traces can take a while
-    LAVA_DEVICE_HANGING_TIMEOUT_SEC: 600
-    # So we aren't capped by VSync by the X server
-    EGL_PLATFORM: surfaceless
-    GIT_STRATEGY: none
-    HWCI_FREQ_MAX: "true"
-    LAVA_TAGS: "cbg-0"
-    # Ensure that we are using the release build artifact
-    S3_ARTIFACT_NAME: mesa-x86_64-default-release
 
 iris-apl-traces-performance:
   extends:
@@ -348,47 +239,10 @@ iris-kbl-traces-performance:
   variables:
     GPU_VERSION: intel-kbl
 
-iris-whl-traces-performance:
-  extends:
-    - .iris-whl-test
-    - .profile-traces
-  variables:
-    GPU_VERSION: intel-whl
-
-.iris-cml-traces-performance:
-  extends:
-    - .iris-cml-test
-    - .profile-traces
-  variables:
-    GPU_VERSION: intel-cml
-
-## Intel (anv + iris)
-.intel-tgl-test:
-  extends:
-    - .anv-tgl-test
-    - .intel-test
-  variables:
-    GPU_VERSION: intel-tgl
-
-.intel-whl-test:
-  extends:
-    - .iris-whl-test
-    - .intel-test
-  variables:
-    GPU_VERSION: intel-whl
-
 intel-tgl-skqp:
   extends:
     - .intel-tgl-test
   variables:
     DEQP_SUITE: intel-tgl-skqp
-    VK_DRIVER: intel
-    HWCI_START_XORG: 1
-
-intel-whl-skqp:
-  extends:
-    - .intel-whl-test
-  variables:
-    DEQP_SUITE: intel-whl-skqp
     VK_DRIVER: intel
     HWCI_START_XORG: 1

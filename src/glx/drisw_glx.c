@@ -32,6 +32,7 @@
 #include <dlfcn.h>
 #include "dri_common.h"
 #include "drisw_priv.h"
+#include "dri3_priv.h"
 #include <X11/extensions/shmproto.h>
 #include <assert.h>
 #include <vulkan/vulkan_core.h>
@@ -726,7 +727,11 @@ driswCreateDrawable(struct glx_screen *base, XID xDrawable,
    /* Create a new drawable */
    if (kopper) {
       pdp->driDrawable =
-         kopper->createNewDrawable(psc->driScreen, config->driConfig, pdp, !(type & GLX_WINDOW_BIT));
+         kopper->createNewDrawable(psc->driScreen, config->driConfig, pdp,
+         &(__DRIkopperDrawableInfo){
+            .multiplanes_available = psc->has_multibuffer,
+            .is_pixmap = !(type & GLX_WINDOW_BIT),
+         });
 
       pdp->swapInterval = dri_get_initial_swap_interval(psc->driScreen, psc->config);
       psc->kopper->setSwapInterval(pdp->driDrawable, pdp->swapInterval);
@@ -988,6 +993,17 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
    if (!configs || !visuals) {
        ErrorMessageF("No matching fbConfigs or visuals found\n");
        goto handle_error;
+   }
+
+   if (pdpyp->zink) {
+      bool err;
+      psc->has_multibuffer = dri3_check_multibuffer(priv->dpy, &err);
+      if (!psc->has_multibuffer &&
+          !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) &&
+          !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
+         CriticalErrorMessageF("DRI3 not available\n");
+         goto handle_error;
+      }
    }
 
    glx_config_destroy_list(psc->base.configs);

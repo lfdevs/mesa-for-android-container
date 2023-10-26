@@ -39,11 +39,10 @@ class vec4_tes_visitor : public vec4_visitor
 {
 public:
    vec4_tes_visitor(const struct brw_compiler *compiler,
-                   void *log_data,
+                    const struct brw_compile_params *params,
                    const struct brw_tes_prog_key *key,
                    struct brw_tes_prog_data *prog_data,
                    const nir_shader *nir,
-                   void *mem_ctx,
                    bool debug_enabled);
 
 protected:

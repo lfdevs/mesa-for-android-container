@@ -442,9 +442,10 @@ util_queue_init(struct util_queue *queue,
       snprintf(queue->name, sizeof(queue->name), "%s", name);
    }
 
+   queue->create_threads_on_demand = true;
    queue->flags = flags;
    queue->max_threads = num_threads;
-   queue->num_threads = (flags & UTIL_QUEUE_INIT_SCALE_THREADS) ? 1 : num_threads;
+   queue->num_threads = 1;
    queue->max_jobs = max_jobs;
    queue->global_data = global_data;
 
@@ -582,7 +583,7 @@ util_queue_add_job_locked(struct util_queue *queue,
 
    /* Scale the number of threads up if there's already one job waiting. */
    if (queue->num_queued > 0 &&
-       queue->flags & UTIL_QUEUE_INIT_SCALE_THREADS &&
+       queue->create_threads_on_demand &&
        execute != util_queue_finish_execute &&
        queue->num_threads < queue->max_threads) {
       util_queue_adjust_num_threads(queue, queue->num_threads + 1, true);
@@ -719,8 +720,7 @@ util_queue_finish(struct util_queue *queue)
     * Also note that util_queue_add_job can unlock the mutex if there is not
     * enough space in the queue and wait for space.
     */
-   unsigned saved_flags = queue->flags;
-   queue->flags &= ~UTIL_QUEUE_INIT_SCALE_THREADS;
+   queue->create_threads_on_demand = false;
 
    fences = malloc(queue->num_threads * sizeof(*fences));
    util_barrier_init(&barrier, queue->num_threads);
@@ -730,7 +730,7 @@ util_queue_finish(struct util_queue *queue)
       util_queue_add_job_locked(queue, &barrier, &fences[i],
                                 util_queue_finish_execute, NULL, 0, true);
    }
-   queue->flags = saved_flags;
+   queue->create_threads_on_demand = true;
    mtx_unlock(&queue->lock);
 
    for (unsigned i = 0; i < queue->num_threads; ++i) {

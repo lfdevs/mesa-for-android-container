@@ -81,8 +81,6 @@ public:
    PVirtualValue copy_src(r600_bytecode_alu_src& src, const VirtualValue& s);
 
    EBufferIndexMode emit_index_reg(const VirtualValue& addr, unsigned idx);
-   EBufferIndexMode get_index_mode(const InstrWithResource& instr,
-                                   unsigned idx);
 
    void emit_endif();
    void emit_else();
@@ -426,6 +424,11 @@ AssamblerVisitor::emit_alu_op(const AluInstr& ai)
       }
    }
 
+   if (alu.dst.sel >= g_clause_local_start && alu.dst.sel < g_clause_local_end) {
+      int clidx = 4 * (alu.dst.sel - g_clause_local_start) + alu.dst.chan;
+      m_bc->cf_last->clause_local_written |= 1 << clidx;
+   }
+
    if (ai.opcode() == op1_set_cf_idx0) {
       m_bc->index_loaded[0] = 1;
       m_bc->index_reg[0] = -1;
@@ -445,24 +448,35 @@ AssamblerVisitor::visit(const AluGroup& group)
    if (group.slots() == 0)
       return;
 
-   if (group.has_lds_group_start()) {
-      if (m_bc->cf_last->ndw + 2 * (*group.begin())->required_slots() > 220) {
-         assert(m_bc->cf_last->nlds_read == 0);
-         m_bc->force_add_cf = 1;
-         m_last_addr = nullptr;
-      }
-   } else if (m_bc->cf_last) {
-      if (m_bc->cf_last->ndw + 2 * group.slots() > 240) {
-         assert(m_bc->cf_last->nlds_read == 0);
-         m_bc->force_add_cf = 1;
-         m_last_addr = nullptr;
-      } else {
-         auto instr = *group.begin();
-         if (instr && !instr->has_alu_flag(alu_is_lds) &&
-             instr->opcode() == op0_group_barrier && m_bc->cf_last->ndw + 14 > 240) {
+   static const unsigned slot_limit = 256;
+
+   if (m_bc->cf_last && !m_bc->force_add_cf) {
+      if (group.has_lds_group_start()) {
+         if (m_bc->cf_last->ndw + 2 * (*group.begin())->required_slots() > slot_limit) {
             assert(m_bc->cf_last->nlds_read == 0);
+            assert(0 && "Not allowed to start new alu group here");
             m_bc->force_add_cf = 1;
             m_last_addr = nullptr;
+         }
+      } else {
+         if (m_bc->cf_last->ndw + 2 * group.slots() > slot_limit) {
+            std::cerr << "m_bc->cf_last->ndw = " << m_bc->cf_last->ndw
+                      << " group.slots() = " << group.slots()
+                      << " -> " << m_bc->cf_last->ndw + 2 * group.slots()
+                      << "> slot_limit = " << slot_limit << "\n";
+            assert(m_bc->cf_last->nlds_read == 0);
+            assert(0 && "Not allowed to start new alu group here");
+            m_bc->force_add_cf = 1;
+            m_last_addr = nullptr;
+         } else {
+            auto instr = *group.begin();
+            if (instr && !instr->has_alu_flag(alu_is_lds) &&
+                instr->opcode() == op0_group_barrier && m_bc->cf_last->ndw + 14 > slot_limit) {
+               assert(0 && "Not allowed to start new alu group here");
+               assert(m_bc->cf_last->nlds_read == 0);
+               m_bc->force_add_cf = 1;
+               m_last_addr = nullptr;
+            }
          }
       }
    }
@@ -498,8 +512,6 @@ AssamblerVisitor::visit(const TexInstr& tex_instr)
 {
    clear_states(sf_vtx | sf_alu);
 
-   EBufferIndexMode index_mode = get_index_mode(tex_instr, 1);
-
    if (tex_fetch_results.find(tex_instr.src().sel()) != tex_fetch_results.end()) {
       m_bc->force_add_cf = 1;
       tex_fetch_results.clear();
@@ -508,7 +520,7 @@ AssamblerVisitor::visit(const TexInstr& tex_instr)
    r600_bytecode_tex tex;
    memset(&tex, 0, sizeof(struct r600_bytecode_tex));
    tex.op = tex_instr.opcode();
-   tex.sampler_id = tex_instr.resource_base();
+   tex.sampler_id = tex_instr.sampler_id();
    tex.resource_id = tex_instr.resource_id();
    tex.src_gpr = tex_instr.src().sel();
    tex.dst_gpr = tex_instr.dst().sel();
@@ -527,8 +539,8 @@ AssamblerVisitor::visit(const TexInstr& tex_instr)
    tex.offset_x = tex_instr.get_offset(0);
    tex.offset_y = tex_instr.get_offset(1);
    tex.offset_z = tex_instr.get_offset(2);
-   tex.resource_index_mode = index_mode;
-   tex.sampler_index_mode = index_mode;
+   tex.resource_index_mode = tex_instr.resource_index_mode();
+   tex.sampler_index_mode = tex_instr.sampler_index_mode();
 
    if (tex.dst_sel_x < 4 && tex.dst_sel_y < 4 && tex.dst_sel_z < 4 && tex.dst_sel_w < 4)
       tex_fetch_results.insert(tex.dst_gpr);
@@ -701,8 +713,6 @@ AssamblerVisitor::visit(const FetchInstr& fetch_instr)
 
    clear_states(clear_flags | sf_alu);
 
-   EBufferIndexMode index_mode = get_index_mode(fetch_instr, 0);
-
    if (fetch_instr.has_fetch_flag(FetchInstr::wait_ack))
       emit_wait_ack();
 
@@ -727,7 +737,7 @@ AssamblerVisitor::visit(const FetchInstr& fetch_instr)
    struct r600_bytecode_vtx vtx;
    memset(&vtx, 0, sizeof(vtx));
    vtx.op = fetch_instr.opcode();
-   vtx.buffer_id = fetch_instr.resource_base();
+   vtx.buffer_id = fetch_instr.resource_id();
    vtx.fetch_type = fetch_instr.fetch_type();
    vtx.src_gpr = fetch_instr.src().sel();
    vtx.src_sel_x = fetch_instr.src().chan();
@@ -742,7 +752,7 @@ AssamblerVisitor::visit(const FetchInstr& fetch_instr)
    vtx.num_format_all = fetch_instr.num_format(); /* NUM_FORMAT_SCALED */
    vtx.format_comp_all = fetch_instr.has_fetch_flag(FetchInstr::format_comp_signed);
    vtx.endian = fetch_instr.endian_swap();
-   vtx.buffer_index_mode = index_mode;
+   vtx.buffer_index_mode = fetch_instr.resource_index_mode();
    vtx.offset = fetch_instr.src_offset();
    vtx.indexed = fetch_instr.has_fetch_flag(FetchInstr::indexed);
    vtx.uncached = fetch_instr.has_fetch_flag(FetchInstr::uncached);
@@ -822,10 +832,7 @@ AssamblerVisitor::visit(const RatInstr& instr)
    if (m_ack_suggested /*&& instr.has_instr_flag(Instr::ack_rat_return_write)*/)
       emit_wait_ack();
 
-
-   EBufferIndexMode index_mode = get_index_mode(instr, 1);
-
-   int rat_idx = instr.resource_base();
+   int rat_idx = instr.resource_id();
 
    memset(&gds, 0, sizeof(struct r600_bytecode_gds));
 
@@ -833,7 +840,7 @@ AssamblerVisitor::visit(const RatInstr& instr)
    auto cf = m_bc->cf_last;
    cf->rat.id = rat_idx + m_shader->rat_base;
    cf->rat.inst = instr.rat_op();
-   cf->rat.index_mode = index_mode;
+   cf->rat.index_mode = instr.resource_index_mode();
    cf->output.type = instr.need_ack() ? 3 : 1;
    cf->output.gpr = instr.data_gpr();
    cf->output.index_gpr = instr.index_gpr();
@@ -876,7 +883,11 @@ AssamblerVisitor::visit(const Block& block)
    if (block.empty())
       return;
 
-   m_bc->force_add_cf = block.has_instr_flag(Instr::force_cf);
+   if (block.has_instr_flag(Instr::force_cf)) {
+      m_bc->force_add_cf = 1;
+      m_bc->ar_loaded = 0;
+      m_last_addr = nullptr;
+   }
    sfn_log << SfnLog::assembly << "Translate block  size: " << block.size()
            << " new_cf:" << m_bc->force_add_cf << "\n";
 
@@ -927,6 +938,7 @@ AssamblerVisitor::visit(const IfInstr& instr)
    if (needs_workaround) {
       r600_bytecode_add_cfinst(m_bc, CF_OP_PUSH);
       m_bc->cf_last->cf_addr = m_bc->cf_last->id + 2;
+      r600_bytecode_add_cfinst(m_bc, CF_OP_ALU);
       pred->set_cf_type(cf_alu);
    }
 
@@ -986,13 +998,11 @@ AssamblerVisitor::visit(const GDSInstr& instr)
 {
    struct r600_bytecode_gds gds;
 
-   EBufferIndexMode index_mode = get_index_mode(instr, 0);
-
    memset(&gds, 0, sizeof(struct r600_bytecode_gds));
 
    gds.op = ds_opcode_map.at(instr.opcode());
-   gds.uav_id = instr.resource_base();
-   gds.uav_index_mode = index_mode;
+   gds.uav_id = instr.resource_id();
+   gds.uav_index_mode = instr.resource_index_mode();
    gds.src_gpr = instr.src().sel();
 
    gds.src_sel_x = instr.src()[0]->chan() < 7 ? instr.src()[0]->chan() : 4;
@@ -1192,9 +1202,9 @@ AssamblerVisitor::emit_loop_cont()
 bool
 AssamblerVisitor::copy_dst(r600_bytecode_alu_dst& dst, const Register& d, bool write)
 {
-   if (write && d.sel() > 124) {
-      R600_ERR("shader_from_nir: Don't support more then 124 GPRs, but try "
-               "using %d\n",
+   if (write && d.sel() > g_clause_local_end) {
+      R600_ERR("shader_from_nir: Don't support more then 123 GPRs + 4 clause "
+               "local, but try using %d\n",
                d.sel());
       m_result = false;
       return false;
@@ -1214,17 +1224,6 @@ AssamblerVisitor::copy_dst(r600_bytecode_alu_dst& dst, const Register& d, bool w
    }
 
    return true;
-}
-
-EBufferIndexMode AssamblerVisitor::get_index_mode(const InstrWithResource& instr,
-                                                  unsigned idx)
-{
-   EBufferIndexMode index_mode = instr.buffer_index_mode();
-
-   if (index_mode == bim_none && instr.resource_offset())
-      index_mode = emit_index_reg(*instr.resource_offset(), idx);
-
-   return index_mode;
 }
 
 void
@@ -1262,6 +1261,13 @@ AssamblerVisitor::copy_src(r600_bytecode_alu_src& src, const VirtualValue& s)
    src.sel = s.sel();
    src.chan = s.chan();
 
+   if (s.sel() >= g_clause_local_start && s.sel() < g_clause_local_end ) {
+      assert(m_bc->cf_last);
+      int clidx = 4 * (s.sel() - g_clause_local_start) + s.chan();
+      /* Ensure that the clause local register was already written */
+      assert(m_bc->cf_last->clause_local_written & (1 << clidx));
+   }
+
    s.accept(visitor);
    return visitor.m_buffer_offset;
 }
@@ -1275,7 +1281,7 @@ EncodeSourceVisitor::EncodeSourceVisitor(r600_bytecode_alu_src& s, r600_bytecode
 void
 EncodeSourceVisitor::visit(const Register& value)
 {
-   assert(value.sel() <= 124 && "Only have 124 registers");
+   assert(value.sel() < g_clause_local_end && "Only have 123 reisters + 4 clause local");
 }
 
 void

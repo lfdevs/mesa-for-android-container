@@ -2074,6 +2074,27 @@ vn_decode_VkSubmitFlagBits(struct vn_cs_decoder *dec, VkSubmitFlagBits *val)
     vn_decode_int32_t(dec, (int32_t *)val);
 }
 
+/* enum VkGraphicsPipelineLibraryFlagBitsEXT */
+
+static inline size_t
+vn_sizeof_VkGraphicsPipelineLibraryFlagBitsEXT(const VkGraphicsPipelineLibraryFlagBitsEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkGraphicsPipelineLibraryFlagBitsEXT(struct vn_cs_encoder *enc, const VkGraphicsPipelineLibraryFlagBitsEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkGraphicsPipelineLibraryFlagBitsEXT(struct vn_cs_decoder *dec, VkGraphicsPipelineLibraryFlagBitsEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
 /* enum VkAttachmentLoadOp */
 
 static inline size_t

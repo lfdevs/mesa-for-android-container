@@ -49,24 +49,24 @@ get_indirect_draw_base_vertex_transform(const nir_shader_compiler_options *optio
    input_ssbo->data.driver_location = 0;
    output_ssbo->data.driver_location = 1;
 
-   nir_ssa_def *draw_id = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   nir_def *draw_id = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
    if (args->base_vertex.dynamic_count) {
-      nir_ssa_def *count = nir_load_ubo(&b, 1, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 0),
+      nir_def *count = nir_load_ubo(&b, 1, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 0),
          (gl_access_qualifier)0, 4, 0, 0, 4);
       nir_push_if(&b, nir_ilt(&b, draw_id, count));
    }
 
    nir_variable *stride_ubo = NULL;
-   nir_ssa_def *in_stride_offset_and_base_drawid = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "d3d12_Stride",
+   nir_def *in_stride_offset_and_base_drawid = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "d3d12_Stride",
       glsl_uvec4_type(), &stride_ubo);
-   nir_ssa_def *in_offset = nir_iadd(&b, nir_channel(&b, in_stride_offset_and_base_drawid, 1),
+   nir_def *in_offset = nir_iadd(&b, nir_channel(&b, in_stride_offset_and_base_drawid, 1),
       nir_imul(&b, nir_channel(&b, in_stride_offset_and_base_drawid, 0), draw_id));
-   nir_ssa_def *in_data0 = nir_load_ssbo(&b, 4, 32, nir_imm_int(&b, 0), in_offset, (gl_access_qualifier)0, 4, 0);
+   nir_def *in_data0 = nir_load_ssbo(&b, 4, 32, nir_imm_int(&b, 0), in_offset, (gl_access_qualifier)0, 4, 0);
 
-   nir_ssa_def *in_data1 = NULL;
-   nir_ssa_def *base_vertex = NULL, *base_instance = NULL;
+   nir_def *in_data1 = NULL;
+   nir_def *base_vertex = NULL, *base_instance = NULL;
    if (args->base_vertex.indexed) {
-      nir_ssa_def *in_offset1 = nir_iadd(&b, in_offset, nir_imm_int(&b, 16));
+      nir_def *in_offset1 = nir_iadd(&b, in_offset, nir_imm_int(&b, 16));
       in_data1 = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), in_offset1, (gl_access_qualifier)0, 4, 0);
       base_vertex = nir_channel(&b, in_data0, 3);
       base_instance = in_data1;
@@ -78,11 +78,11 @@ get_indirect_draw_base_vertex_transform(const nir_shader_compiler_options *optio
    /* 4 additional uints for base vertex, base instance, draw ID, and a bool for indexed draw */
    unsigned out_stride = sizeof(uint32_t) * ((args->base_vertex.indexed ? 5 : 4) + 4);
 
-   nir_ssa_def *out_offset = nir_imul(&b, draw_id, nir_imm_int(&b, out_stride));
-   nir_ssa_def *out_data0 = nir_vec4(&b, base_vertex, base_instance,
+   nir_def *out_offset = nir_imul(&b, draw_id, nir_imm_int(&b, out_stride));
+   nir_def *out_data0 = nir_vec4(&b, base_vertex, base_instance,
       nir_iadd(&b, draw_id, nir_channel(&b, in_stride_offset_and_base_drawid, 2)),
       nir_imm_int(&b, args->base_vertex.indexed ? -1 : 0));
-   nir_ssa_def *out_data1 = in_data0;
+   nir_def *out_data1 = in_data0;
 
    nir_store_ssbo(&b, out_data0, nir_imm_int(&b, 1), out_offset, 0xf, (gl_access_qualifier)0, 4, 0);
    nir_store_ssbo(&b, out_data1, nir_imm_int(&b, 1), nir_iadd(&b, out_offset, nir_imm_int(&b, 16)),
@@ -116,29 +116,29 @@ get_fake_so_buffer_copy_back(const nir_shader_compiler_options *options, const d
       glsl_array_type(glsl_uint_type(), 5, 0), "input_ubo");
    input_ubo->data.driver_location = 0;
 
-   nir_ssa_def *original_so_filled_size = nir_load_ubo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 4 * sizeof(uint32_t)),
+   nir_def *original_so_filled_size = nir_load_ubo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 4 * sizeof(uint32_t)),
       (gl_access_qualifier)0, 4, 0, 4 * sizeof(uint32_t), 4);
 
    nir_variable *state_var = nullptr;
-   nir_ssa_def *fake_so_multiplier = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "fake_so_multiplier", glsl_uint_type(), &state_var);
+   nir_def *fake_so_multiplier = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "fake_so_multiplier", glsl_uint_type(), &state_var);
 
-   nir_ssa_def *vertex_offset = nir_imul(&b, nir_imm_int(&b, key->fake_so_buffer_copy_back.stride),
+   nir_def *vertex_offset = nir_imul(&b, nir_imm_int(&b, key->fake_so_buffer_copy_back.stride),
       nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0));
 
-   nir_ssa_def *output_offset_base = nir_iadd(&b, original_so_filled_size, vertex_offset);
-   nir_ssa_def *input_offset_base = nir_imul(&b, vertex_offset, fake_so_multiplier);
+   nir_def *output_offset_base = nir_iadd(&b, original_so_filled_size, vertex_offset);
+   nir_def *input_offset_base = nir_imul(&b, vertex_offset, fake_so_multiplier);
 
    for (unsigned i = 0; i < key->fake_so_buffer_copy_back.num_ranges; ++i) {
       auto& output = key->fake_so_buffer_copy_back.ranges[i];
       assert(output.size % 4 == 0 && output.offset % 4 == 0);
-      nir_ssa_def *field_offset = nir_imm_int(&b, output.offset);
-      nir_ssa_def *output_offset = nir_iadd(&b, output_offset_base, field_offset);
-      nir_ssa_def *input_offset = nir_iadd(&b, input_offset_base, field_offset);
+      nir_def *field_offset = nir_imm_int(&b, output.offset);
+      nir_def *output_offset = nir_iadd(&b, output_offset_base, field_offset);
+      nir_def *input_offset = nir_iadd(&b, input_offset_base, field_offset);
 
       for (unsigned loaded = 0; loaded < output.size; loaded += 16) {
          unsigned to_load = MIN2(output.size, 16);
          unsigned components = to_load / 4;
-         nir_ssa_def *loaded_data = nir_load_ssbo(&b, components, 32, nir_imm_int(&b, 1),
+         nir_def *loaded_data = nir_load_ssbo(&b, components, 32, nir_imm_int(&b, 1),
             nir_iadd(&b, input_offset, nir_imm_int(&b, loaded)), (gl_access_qualifier)0, 4, 0);
          nir_store_ssbo(&b, loaded_data, nir_imm_int(&b, 0),
             nir_iadd(&b, output_offset, nir_imm_int(&b, loaded)), (1u << components) - 1, (gl_access_qualifier)0, 4, 0);
@@ -158,24 +158,24 @@ get_fake_so_buffer_vertex_count(const nir_shader_compiler_options *options)
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "FakeSOBufferVertexCount");
 
    nir_variable_create(b.shader, nir_var_mem_ssbo, glsl_array_type(glsl_uint_type(), 0, 0), "fake_so");
-   nir_ssa_def *fake_buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
+   nir_def *fake_buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
 
    nir_variable *real_so_var = nir_variable_create(b.shader, nir_var_mem_ssbo,
       glsl_array_type(glsl_uint_type(), 0, 0), "real_so");
    real_so_var->data.driver_location = 1;
-   nir_ssa_def *real_buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
+   nir_def *real_buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
 
    nir_variable *state_var = nullptr;
-   nir_ssa_def *state_var_data = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "state_var", glsl_uvec4_type(), &state_var);
-   nir_ssa_def *stride = nir_channel(&b, state_var_data, 0);
-   nir_ssa_def *fake_so_multiplier = nir_channel(&b, state_var_data, 1);
+   nir_def *state_var_data = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "state_var", glsl_uvec4_type(), &state_var);
+   nir_def *stride = nir_channel(&b, state_var_data, 0);
+   nir_def *fake_so_multiplier = nir_channel(&b, state_var_data, 1);
 
-   nir_ssa_def *real_so_bytes_added = nir_idiv(&b, fake_buffer_filled_size, fake_so_multiplier);
-   nir_ssa_def *vertex_count = nir_idiv(&b, real_so_bytes_added, stride);
-   nir_ssa_def *to_write_to_fake_buffer = nir_vec4(&b, vertex_count, nir_imm_int(&b, 1), nir_imm_int(&b, 1), real_buffer_filled_size);
+   nir_def *real_so_bytes_added = nir_idiv(&b, fake_buffer_filled_size, fake_so_multiplier);
+   nir_def *vertex_count = nir_idiv(&b, real_so_bytes_added, stride);
+   nir_def *to_write_to_fake_buffer = nir_vec4(&b, vertex_count, nir_imm_int(&b, 1), nir_imm_int(&b, 1), real_buffer_filled_size);
    nir_store_ssbo(&b, to_write_to_fake_buffer, nir_imm_int(&b, 0), nir_imm_int(&b, 4), 0xf, (gl_access_qualifier)0, 4, 0);
 
-   nir_ssa_def *updated_filled_size = nir_iadd(&b, real_buffer_filled_size, real_so_bytes_added);
+   nir_def *updated_filled_size = nir_iadd(&b, real_buffer_filled_size, real_so_bytes_added);
    nir_store_ssbo(&b, updated_filled_size, nir_imm_int(&b, 1), nir_imm_int(&b, 0), 1, (gl_access_qualifier)0, 4, 0);
 
    nir_validate_shader(b.shader, "creation");
@@ -191,18 +191,18 @@ get_draw_auto(const nir_shader_compiler_options *options)
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "DrawAuto");
 
    nir_variable_create(b.shader, nir_var_mem_ssbo, glsl_array_type(glsl_uint_type(), 0, 0), "ssbo");
-   nir_ssa_def *buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
+   nir_def *buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
 
    nir_variable *state_var = nullptr;
-   nir_ssa_def *state_var_data = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "state_var", glsl_uvec4_type(), &state_var);
-   nir_ssa_def *stride = nir_channel(&b, state_var_data, 0);
-   nir_ssa_def *vb_offset = nir_channel(&b, state_var_data, 1);
+   nir_def *state_var_data = d3d12_get_state_var(&b, D3D12_STATE_VAR_TRANSFORM_GENERIC0, "state_var", glsl_uvec4_type(), &state_var);
+   nir_def *stride = nir_channel(&b, state_var_data, 0);
+   nir_def *vb_offset = nir_channel(&b, state_var_data, 1);
 
-   nir_ssa_def *vb_bytes = nir_bcsel(&b, nir_ilt(&b, vb_offset, buffer_filled_size),
+   nir_def *vb_bytes = nir_bcsel(&b, nir_ilt(&b, vb_offset, buffer_filled_size),
       nir_isub(&b, buffer_filled_size, vb_offset), nir_imm_int(&b, 0));
 
-   nir_ssa_def *vertex_count = nir_idiv(&b, vb_bytes, stride);
-   nir_ssa_def *to_write = nir_vec4(&b, vertex_count, nir_imm_int(&b, 1), nir_imm_int(&b, 0), nir_imm_int(&b, 0));
+   nir_def *vertex_count = nir_idiv(&b, vb_bytes, stride);
+   nir_def *to_write = nir_vec4(&b, vertex_count, nir_imm_int(&b, 1), nir_imm_int(&b, 0), nir_imm_int(&b, 0));
    nir_store_ssbo(&b, to_write, nir_imm_int(&b, 0), nir_imm_int(&b, 4), 0xf, (gl_access_qualifier)0, 4, 0);
 
    nir_validate_shader(b.shader, "creation");

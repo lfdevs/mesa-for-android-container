@@ -230,6 +230,9 @@ void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
 	if (gpu->dev->use_softpin)
 		req.flags |= ETNA_SUBMIT_SOFTPIN;
 
+	if (stream->offset == priv->offset_end_of_context_init && !out_fence_fd)
+		is_noop = true;
+
 	if (unlikely(is_noop))
 		ret = 0;
 	else
@@ -254,6 +257,7 @@ void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
 	priv->submit.nr_relocs = 0;
 	priv->submit.nr_pmrs = 0;
 	priv->nr_bos = 0;
+	priv->offset_end_of_context_init = 0;
 }
 
 void etna_cmd_stream_reloc(struct etna_cmd_stream *stream,
@@ -282,6 +286,18 @@ void etna_cmd_stream_ref_bo(struct etna_cmd_stream *stream, struct etna_bo *bo,
 		uint32_t flags)
 {
 	bo2idx(stream, bo, flags);
+}
+
+void etna_cmd_stream_mark_end_of_context_init(struct etna_cmd_stream *stream)
+{
+   struct etna_cmd_stream_priv *priv = etna_cmd_stream_priv(stream);
+
+   /* 
+    * All commands before the end of context init are guaranteed to only alter GPU internal
+    * state and have no externally visible side effects, so we can skip the submit if the
+    * command buffer contains only context init commands.
+    */
+   priv->offset_end_of_context_init = stream->offset;
 }
 
 void etna_cmd_stream_perf(struct etna_cmd_stream *stream, const struct etna_perf *p)

@@ -1,4 +1,4 @@
-# LLVM 16.0.0
+# LLVM 18.0.0git
 
 # piglit failures
 glx@glx-make-current,Fail
@@ -122,8 +122,12 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
 # glcts failures
+GTF-GL46.gtf21.GL3Tests.texture_lod_bias.texture_lod_bias_all,Fail
+GTF-GL46.gtf21.GLCoverage.CoverageGL21,Crash
+GTF-GL46.gtf30.GL3Tests.fragment_coord_conventions.fragment_coord_conventions_multisample,Fail
+GTF-GL46.gtf32.GL3Tests.fragment_coord_conventions.fragment_coord_conventions_32_multisample,Fail
+GTF-GL46.gtf40.GL3Tests.transform_feedback2.transform_feedback2_two_buffers,Fail
 ## Test issue - https://github.com/KhronosGroup/VK-GL-CTS/issues/251
-KHR-GL46.shader_ballot_tests.ShaderBallotFunctionRead,Fail
 ## Fail because GFX10+ removed MS texture support (see si_get_sparse_texture_virtual_page_size)
 KHR-GL46.sparse_texture2_tests.SparseTexture2Allocation,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment,Fail
@@ -134,15 +138,19 @@ KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor,Fail
 KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency,Fail
 KHR-Single-GL46.enhanced_layouts.xfb_capture_inactive_output_component,Fail
 
+# escts failures
+KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS,Fail
+KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
+
 # gfx11-only failures
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
-spec@egl 1.4@egl-ext_egl_image_storage,Crash
 
 KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Crash
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Crash
+KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
+KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail
 
-dEQP-GLES31.functional.separate_shader.random.113,Fail
-dEQP-GLES31.functional.separate_shader.random.82,Fail
+# I saw these on Navi31, but not Navi33
+dEQP-GLES3.functional.fragment_ops.interaction.basic_shader.39,Fail
+dEQP-GLES3.functional.fragment_ops.interaction.basic_shader.94,Fail

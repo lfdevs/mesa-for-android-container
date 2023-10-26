@@ -129,7 +129,7 @@ init_field_for_type(struct field *field, struct field *parent,
                     const char *name,
                     struct split_var_state *state)
 {
-   *field = (struct field) {
+   *field = (struct field){
       .parent = parent,
       .type = type,
    };
@@ -312,8 +312,8 @@ split_struct_derefs_impl(nir_function_impl *impl,
          }
 
          assert(new_deref->type == deref->type);
-         nir_ssa_def_rewrite_uses(&deref->dest.ssa,
-                                  &new_deref->dest.ssa);
+         nir_def_rewrite_uses(&deref->def,
+                              &new_deref->def);
          nir_deref_instr_remove_if_unused(deref);
       }
    }
@@ -361,7 +361,7 @@ nir_split_struct_vars(nir_shader *shader, nir_variable_mode modes)
                                   modes, mem_ctx);
 
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+                                        nir_metadata_dominance);
          progress = true;
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);
@@ -427,7 +427,7 @@ init_var_list_array_infos(nir_shader *shader,
 
       struct array_var_info *info =
          rzalloc_size(mem_ctx, sizeof(*info) +
-                               num_levels * sizeof(info->levels[0]));
+                                  num_levels * sizeof(info->levels[0]));
 
       info->base_var = var;
       info->num_levels = num_levels;
@@ -770,7 +770,7 @@ split_array_copies_impl(nir_function_impl *impl,
          b.cursor = nir_instr_remove(&copy->instr);
 
          emit_split_copies(&b, dst_info, &dst_path, 0, dst_path.path[0],
-                               src_info, &src_path, 0, src_path.path[0]);
+                           src_info, &src_path, 0, src_path.path[0]);
       }
    }
 }
@@ -833,11 +833,11 @@ split_array_access_impl(nir_function_impl *impl,
                 * garbage in the destination alone.
                 */
                if (intrin->intrinsic == nir_intrinsic_load_deref) {
-                  nir_ssa_def *u =
-                     nir_ssa_undef(&b, intrin->dest.ssa.num_components,
-                                       intrin->dest.ssa.bit_size);
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                           u);
+                  nir_def *u =
+                     nir_undef(&b, intrin->def.num_components,
+                               intrin->def.bit_size);
+                  nir_def_rewrite_uses(&intrin->def,
+                                       u);
                }
                nir_instr_remove(&intrin->instr);
                for (unsigned i = 0; i < num_derefs; i++)
@@ -866,8 +866,7 @@ split_array_access_impl(nir_function_impl *impl,
             assert(new_deref->type == deref->type);
 
             /* Rewrite the deref source to point to the split one */
-            nir_instr_rewrite_src(&intrin->instr, &intrin->src[d],
-                                  nir_src_for_ssa(&new_deref->dest.ssa));
+            nir_src_rewrite(&intrin->src[d], &new_deref->def);
             nir_deref_instr_remove_if_unused(deref);
          }
       }
@@ -952,7 +951,7 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
          split_array_access_impl(impl, var_info_map, modes, mem_ctx);
 
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+                                        nir_metadata_dominance);
          progress = true;
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);
@@ -1017,7 +1016,7 @@ get_vec_var_usage(nir_variable *var,
 
    struct vec_var_usage *usage =
       rzalloc_size(mem_ctx, sizeof(*usage) +
-                            num_levels * sizeof(usage->levels[0]));
+                               num_levels * sizeof(usage->levels[0]));
 
    usage->num_levels = num_levels;
    const struct glsl_type *type = var->type;
@@ -1131,8 +1130,7 @@ mark_deref_used(nir_deref_instr *deref,
 
       unsigned max_used;
       if (deref->deref_type == nir_deref_type_array) {
-         max_used = nir_src_is_const(deref->arr.index) ?
-                    nir_src_as_uint(deref->arr.index) : UINT_MAX;
+         max_used = nir_src_is_const(deref->arr.index) ? nir_src_as_uint(deref->arr.index) : UINT_MAX;
       } else {
          /* For wildcards, we read or wrote the whole thing. */
          assert(deref->deref_type == nir_deref_type_array_wildcard);
@@ -1174,8 +1172,6 @@ src_is_load_deref(nir_src src, nir_src deref_src)
    if (load == NULL || load->intrinsic != nir_intrinsic_load_deref)
       return false;
 
-   assert(load->src[0].is_ssa);
-
    return load->src[0].ssa == deref_src.ssa;
 }
 
@@ -1195,7 +1191,6 @@ get_non_self_referential_store_comps(nir_intrinsic_instr *store)
 {
    nir_component_mask_t comps = nir_intrinsic_write_mask(store);
 
-   assert(store->src[1].is_ssa);
    nir_instr *src_instr = store->src[1].ssa->parent_instr;
    if (src_instr->type != nir_instr_type_alu)
       return comps;
@@ -1246,7 +1241,7 @@ find_used_components_impl(nir_function_impl *impl,
          switch (intrin->intrinsic) {
          case nir_intrinsic_load_deref:
             mark_deref_used(nir_src_as_deref(intrin->src[0]),
-                            nir_ssa_def_components_read(&intrin->dest.ssa), 0,
+                            nir_def_components_read(&intrin->def), 0,
                             NULL, var_usage_map, modes, mem_ctx);
             break;
 
@@ -1555,11 +1550,11 @@ shrink_vec_var_access_impl(nir_function_impl *impl,
 
             if (usage->comps_kept == 0 || vec_deref_is_oob(deref, usage)) {
                if (intrin->intrinsic == nir_intrinsic_load_deref) {
-                  nir_ssa_def *u =
-                     nir_ssa_undef(&b, intrin->dest.ssa.num_components,
-                                       intrin->dest.ssa.bit_size);
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                           u);
+                  nir_def *u =
+                     nir_undef(&b, intrin->def.num_components,
+                               intrin->def.bit_size);
+                  nir_def_rewrite_uses(&intrin->def,
+                                       u);
                }
                nir_instr_remove(&intrin->instr);
                nir_deref_instr_remove_if_unused(deref);
@@ -1575,28 +1570,28 @@ shrink_vec_var_access_impl(nir_function_impl *impl,
             if (intrin->intrinsic == nir_intrinsic_load_deref) {
                b.cursor = nir_after_instr(&intrin->instr);
 
-               nir_ssa_def *undef =
-                  nir_ssa_undef(&b, 1, intrin->dest.ssa.bit_size);
-               nir_ssa_def *vec_srcs[NIR_MAX_VEC_COMPONENTS];
+               nir_def *undef =
+                  nir_undef(&b, 1, intrin->def.bit_size);
+               nir_def *vec_srcs[NIR_MAX_VEC_COMPONENTS];
                unsigned c = 0;
                for (unsigned i = 0; i < intrin->num_components; i++) {
                   if (usage->comps_kept & (1u << i))
-                     vec_srcs[i] = nir_channel(&b, &intrin->dest.ssa, c++);
+                     vec_srcs[i] = nir_channel(&b, &intrin->def, c++);
                   else
                      vec_srcs[i] = undef;
                }
-               nir_ssa_def *vec = nir_vec(&b, vec_srcs, intrin->num_components);
+               nir_def *vec = nir_vec(&b, vec_srcs, intrin->num_components);
 
-               nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa,
-                                              vec,
-                                              vec->parent_instr);
+               nir_def_rewrite_uses_after(&intrin->def,
+                                          vec,
+                                          vec->parent_instr);
 
                /* The SSA def is now only used by the swizzle.  It's safe to
                 * shrink the number of components.
                 */
-               assert(list_length(&intrin->dest.ssa.uses) == c);
+               assert(list_length(&intrin->def.uses) == c);
                intrin->num_components = c;
-               intrin->dest.ssa.num_components = c;
+               intrin->def.num_components = c;
             } else {
                nir_component_mask_t write_mask =
                   nir_intrinsic_write_mask(intrin);
@@ -1615,12 +1610,11 @@ shrink_vec_var_access_impl(nir_function_impl *impl,
 
                b.cursor = nir_before_instr(&intrin->instr);
 
-               nir_ssa_def *swizzled =
+               nir_def *swizzled =
                   nir_swizzle(&b, intrin->src[1].ssa, swizzle, c);
 
                /* Rewrite to use the compacted source */
-               nir_instr_rewrite_src(&intrin->instr, &intrin->src[1],
-                                     nir_src_for_ssa(swizzled));
+               nir_src_rewrite(&intrin->src[1], swizzled);
                nir_intrinsic_set_write_mask(intrin, new_write_mask);
                intrin->num_components = c;
             }
@@ -1709,7 +1703,7 @@ nir_shrink_vec_array_vars(nir_shader *shader, nir_variable_mode modes)
          shrink_vec_var_access_impl(impl, var_usage_map, modes);
 
          nir_metadata_preserve(impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+                                        nir_metadata_dominance);
          progress = true;
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);

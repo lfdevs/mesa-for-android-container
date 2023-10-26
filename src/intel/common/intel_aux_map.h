@@ -106,16 +106,18 @@ intel_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf);
 
 uint64_t *
 intel_aux_map_get_entry(struct intel_aux_map_context *ctx,
-                        uint64_t address,
-                        uint64_t *entry_address);
+                        uint64_t main_address,
+                        uint64_t *aux_entry_address);
 
-void
-intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t address,
+/* Fails if a mapping is attempted that would conflict with an existing one.
+ */
+bool
+intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
                           uint64_t aux_address, uint64_t main_size_B,
                           uint64_t format_bits);
 
 void
-intel_aux_map_unmap_range(struct intel_aux_map_context *ctx, uint64_t address,
+intel_aux_map_unmap_range(struct intel_aux_map_context *ctx, uint64_t main_address,
                           uint64_t size);
 
 #ifdef __cplusplus

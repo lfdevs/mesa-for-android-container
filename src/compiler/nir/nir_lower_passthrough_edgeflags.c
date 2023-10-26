@@ -30,9 +30,9 @@ lower_impl(nir_function_impl *impl)
    nir_shader *shader = impl->function->shader;
    nir_builder b;
    nir_variable *in, *out;
-   nir_ssa_def *def;
+   nir_def *def;
 
-   b = nir_builder_at(nir_before_cf_list(&impl->body));
+   b = nir_builder_at(nir_before_impl(impl));
 
    /* The edge flag is the last input in st/mesa.  This code is also called by
     * i965 which calls it before any input locations are assigned.
@@ -46,11 +46,11 @@ lower_impl(nir_function_impl *impl)
              util_bitcount64(shader->info.outputs_written));
 
       /* Load an edge flag. */
-      nir_io_semantics load_sem = {0};
+      nir_io_semantics load_sem = { 0 };
       load_sem.location = VERT_ATTRIB_EDGEFLAG;
       load_sem.num_slots = 1;
 
-      nir_ssa_def *load =
+      nir_def *load =
          nir_load_input(&b, 1, 32, nir_imm_int(&b, 0),
                         .base = shader->num_inputs++,
                         .component = 0,
@@ -58,7 +58,7 @@ lower_impl(nir_function_impl *impl)
                         .io_semantics = load_sem);
 
       /* Store an edge flag. */
-      nir_io_semantics semantics = {0};
+      nir_io_semantics semantics = { 0 };
       semantics.location = VARYING_SLOT_EDGE;
       semantics.num_slots = 1;
 
@@ -70,7 +70,7 @@ lower_impl(nir_function_impl *impl)
                        .write_mask = 0x1);
 
       nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+                                     nir_metadata_dominance);
       return;
    }
 
@@ -86,10 +86,11 @@ lower_impl(nir_function_impl *impl)
    nir_store_var(&b, out, def, 0xf);
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+                                  nir_metadata_dominance);
 }
 
-void nir_lower_passthrough_edgeflags(nir_shader *shader)
+void
+nir_lower_passthrough_edgeflags(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_VERTEX);
 

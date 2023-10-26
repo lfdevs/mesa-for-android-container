@@ -145,37 +145,6 @@ get_clear_data(struct zink_context *ctx, struct zink_framebuffer_clear *fb_clear
    return add_new_clear(fb_clear);
 }
 
-static void
-convert_color(struct pipe_surface *psurf, union pipe_color_union *color)
-{
-   const struct util_format_description *desc = util_format_description(psurf->format);
-   union pipe_color_union tmp = *color;
-
-   if (zink_format_is_emulated_alpha(psurf->format)) {
-      if (util_format_is_alpha(psurf->format)) {
-         tmp.ui[0] = tmp.ui[3];
-         tmp.ui[1] = 0;
-         tmp.ui[2] = 0;
-         tmp.ui[3] = 0;
-      } else if (util_format_is_luminance(psurf->format)) {
-         tmp.ui[1] = 0;
-         tmp.ui[2] = 0;
-         tmp.f[3] = 1.0;
-      } else if (util_format_is_luminance_alpha(psurf->format)) {
-         tmp.ui[1] = tmp.ui[3];
-         tmp.ui[2] = 0;
-         tmp.f[3] = 1.0;
-      } else /* zink_format_is_red_alpha */ {
-         tmp.ui[1] = tmp.ui[3];
-         tmp.ui[2] = 0;
-         tmp.ui[3] = 0;
-      }
-      memcpy(color, &tmp, sizeof(union pipe_color_union));
-   }
-   for (unsigned i = 0; i < 4; i++)
-      zink_format_clamp_channel_color(desc, color, &tmp, i);
-}
-
 void
 zink_clear(struct pipe_context *pctx,
            unsigned buffers,
@@ -184,6 +153,7 @@ zink_clear(struct pipe_context *pctx,
            double depth, unsigned stencil)
 {
    struct zink_context *ctx = zink_context(pctx);
+   struct zink_screen *screen = zink_screen(pctx->screen);
    struct pipe_framebuffer_state *fb = &ctx->fb_state;
    struct zink_batch *batch = &ctx->batch;
    bool needs_rp = false;
@@ -288,7 +258,7 @@ zink_clear(struct pipe_context *pctx,
             clear->conditional = ctx->render_condition_active;
             clear->has_scissor = needs_rp;
             memcpy(&clear->color, pcolor, sizeof(union pipe_color_union));
-            convert_color(psurf, &clear->color);
+            zink_convert_color(screen, psurf->format, &clear->color, pcolor);
             if (scissor_state && needs_rp)
                clear->scissor = *scissor_state;
             if (zink_fb_clear_first_needs_explicit(fb_clear))
@@ -465,6 +435,7 @@ zink_clear_texture_dynamic(struct pipe_context *pctx,
                            const void *data)
 {
    struct zink_context *ctx = zink_context(pctx);
+   struct zink_screen *screen = zink_screen(pctx->screen);
    struct zink_resource *res = zink_resource(pres);
 
    bool full_clear = 0 <= box->x && u_minify(pres->width0, level) >= box->x + box->width &&
@@ -488,12 +459,12 @@ zink_clear_texture_dynamic(struct pipe_context *pctx,
    info.renderArea.extent.height = box->height;
    info.layerCount = MAX2(box->depth, 1);
 
-   union pipe_color_union color;
+   union pipe_color_union color, tmp;
    float depth = 0.0;
    uint8_t stencil = 0;
    if (res->aspect & VK_IMAGE_ASPECT_COLOR_BIT) {
-      util_format_unpack_rgba(pres->format, color.ui, data, 1);
-      convert_color(surf, &color);
+      util_format_unpack_rgba(pres->format, tmp.ui, data, 1);
+      zink_convert_color(screen, surf->format, &color, &tmp);
    } else {
       if (res->aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
          util_format_unpack_z_float(pres->format, &depth, data, 1);

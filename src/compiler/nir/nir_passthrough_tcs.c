@@ -50,21 +50,21 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
       nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                         VARYING_SLOT_TESS_LEVEL_INNER, glsl_vec_type(2));
 
-   nir_ssa_def *inner = nir_load_var(&b, in_inner);
+   nir_def *inner = nir_load_var(&b, in_inner);
    nir_store_var(&b, out_inner, inner, 0x3);
 
    nir_variable *in_outer =
-       nir_create_variable_with_location(b.shader, nir_var_system_value,
+      nir_create_variable_with_location(b.shader, nir_var_system_value,
                                         SYSTEM_VALUE_TESS_LEVEL_OUTER_DEFAULT, glsl_vec4_type());
 
    nir_variable *out_outer =
       nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                         VARYING_SLOT_TESS_LEVEL_OUTER, glsl_vec4_type());
 
-   nir_ssa_def *outer = nir_load_var(&b, in_outer);
+   nir_def *outer = nir_load_var(&b, in_outer);
    nir_store_var(&b, out_outer, outer, 0xf);
 
-   nir_ssa_def *id = nir_load_invocation_id(&b);
+   nir_def *id = nir_load_invocation_id(&b);
    for (unsigned i = 0; i < num_locations; i++) {
       const struct glsl_type *type;
       unsigned semantic = locations[i];
@@ -75,13 +75,13 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
          continue;
 
       nir_variable *in = nir_create_variable_with_location(b.shader, nir_var_shader_in,
-                                                            semantic, type);
+                                                           semantic, type);
 
       nir_variable *out = nir_create_variable_with_location(b.shader, nir_var_shader_out,
                                                             semantic, type);
 
       /* no need to use copy_var to save a lower pass */
-      nir_ssa_def *value = nir_load_array_var(&b, in, id);
+      nir_def *value = nir_load_array_var(&b, in, id);
       nir_store_array_var(&b, out, id, value, 0xf);
    }
 
@@ -92,7 +92,6 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
    return b.shader;
 }
 
-
 nir_shader *
 nir_create_passthrough_tcs(const nir_shader_compiler_options *options,
                            const nir_shader *vs, uint8_t patch_vertices)
@@ -100,7 +99,7 @@ nir_create_passthrough_tcs(const nir_shader_compiler_options *options,
    unsigned locations[MAX_VARYING];
    unsigned num_outputs = 0;
 
-   nir_foreach_shader_out_variable (var, vs) {
+   nir_foreach_shader_out_variable(var, vs) {
       assert(num_outputs < ARRAY_SIZE(locations));
       locations[num_outputs++] = var->data.location;
    }

@@ -29,7 +29,7 @@ static link_uniform_block_active *
 process_block(void *mem_ctx, struct hash_table *ht, ir_variable *var)
 {
    const hash_entry *const existing_block =
-      _mesa_hash_table_search(ht, var->get_interface_type()->name);
+      _mesa_hash_table_search(ht, glsl_get_type_name(var->get_interface_type()));
 
    const glsl_type *const block_type = var->is_interface_instance()
       ? var->type : var->get_interface_type();
@@ -55,7 +55,7 @@ process_block(void *mem_ctx, struct hash_table *ht, ir_variable *var)
          b->binding = 0;
       }
 
-      _mesa_hash_table_insert(ht, var->get_interface_type()->name, (void *) b);
+      _mesa_hash_table_insert(ht, glsl_get_type_name(var->get_interface_type()), (void *) b);
       return b;
    } else {
       link_uniform_block_active *const b =
@@ -178,7 +178,7 @@ link_uniform_block_active_visitor::visit(ir_variable *var)
    if (b == NULL) {
       linker_error(this->prog,
                    "uniform block `%s' has mismatching definitions",
-                   var->get_interface_type()->name);
+                   glsl_get_type_name(var->get_interface_type()));
       this->success = false;
       return visit_stop;
    }
@@ -244,7 +244,7 @@ link_uniform_block_active_visitor::visit_enter(ir_dereference_array *ir)
    if (b == NULL) {
       linker_error(prog,
                    "uniform block `%s' has mismatching definitions",
-                   var->get_interface_type()->name);
+                   glsl_get_type_name(var->get_interface_type()));
       this->success = false;
       return visit_stop;
    }
@@ -282,7 +282,7 @@ link_uniform_block_active_visitor::visit(ir_dereference_variable *ir)
    if (b == NULL) {
       linker_error(this->prog,
                    "uniform block `%s' has mismatching definitions",
-                   var->get_interface_type()->name);
+                   glsl_get_type_name(var->get_interface_type()));
       this->success = false;
       return visit_stop;
    }

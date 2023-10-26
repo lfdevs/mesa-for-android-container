@@ -482,12 +482,6 @@ struct gl_shader_program
     */
    struct gl_linked_shader *_LinkedShaders[MESA_SHADER_STAGES];
 
-   /**
-    * True if any of the fragment shaders attached to this program use:
-    * #extension ARB_fragment_coord_conventions: enable
-    */
-   GLboolean ARB_fragment_coord_conventions_enable;
-
    unsigned GLSL_Version; /**< GLSL version used for linking */
 };
 

@@ -21,6 +21,7 @@ use std::cmp;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::mem;
 use std::mem::size_of;
 use std::ops::AddAssign;
 use std::os::raw::c_void;
@@ -116,7 +117,7 @@ pub struct Mem {
     pub image_desc: cl_image_desc,
     pub image_elem_size: u8,
     pub props: Vec<cl_mem_properties>,
-    pub cbs: Mutex<Vec<Box<dyn Fn(cl_mem)>>>,
+    pub cbs: Mutex<Vec<MemCB>>,
     res: Option<HashMap<&'static Device, Arc<PipeResource>>>,
     maps: Mutex<Mappings>,
 }
@@ -374,15 +375,28 @@ impl Mem {
             ResourceType::Normal
         };
 
-        let pipe_format = image_format.to_pipe_format().unwrap();
         let texture = if parent.is_none() {
-            Some(context.create_texture(
+            let mut texture = context.create_texture(
                 &image_desc,
-                pipe_format,
+                image_format,
                 host_ptr,
                 bit_check(flags, CL_MEM_COPY_HOST_PTR),
                 res_type,
-            )?)
+            );
+
+            // if we error allocating a Staging resource, just try with normal as
+            // `CL_MEM_ALLOC_HOST_PTR` is just a performance hint.
+            if res_type == ResourceType::Staging && texture.is_err() {
+                texture = context.create_texture(
+                    &image_desc,
+                    image_format,
+                    host_ptr,
+                    bit_check(flags, CL_MEM_COPY_HOST_PTR),
+                    ResourceType::Normal,
+                )
+            }
+
+            Some(texture?)
         } else {
             None
         };
@@ -393,6 +407,7 @@ impl Mem {
             ptr::null_mut()
         };
 
+        let pipe_format = image_format.to_pipe_format().unwrap();
         Ok(Arc::new(Self {
             base: CLObjectBase::new(),
             context: context,
@@ -537,6 +552,7 @@ impl Mem {
                     cl_mem_type_to_texture_target(self.image_desc.image_type),
                     self.pipe_format,
                     ResourceType::Staging,
+                    false,
                 )
                 .ok_or(CL_OUT_OF_RESOURCES)?;
             let tx = ctx.texture_map_coherent(&shadow, bx, rw);
@@ -1219,15 +1235,12 @@ impl Mem {
 
 impl Drop for Mem {
     fn drop(&mut self) {
-        let cl = cl_mem::from_ptr(self);
-        self.cbs
-            .get_mut()
-            .unwrap()
-            .iter()
-            .rev()
-            .for_each(|cb| cb(cl));
+        let cbs = mem::take(self.cbs.get_mut().unwrap());
+        for cb in cbs.into_iter().rev() {
+            cb.call(self);
+        }
 
-        for (d, tx) in self.maps.lock().unwrap().tx.drain() {
+        for (d, tx) in self.maps.get_mut().unwrap().tx.drain() {
             d.helper_ctx().unmap(tx.tx);
         }
     }

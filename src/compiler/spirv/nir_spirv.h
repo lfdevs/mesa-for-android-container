@@ -64,7 +64,7 @@ struct spirv_to_nir_options {
    /* Initial value for shader_info::float_controls_execution_mode,
     * indicates hardware requirements rather than shader author intent
     */
-   uint16_t float_controls_execution_mode;
+   uint32_t float_controls_execution_mode;
 
    /* Initial subgroup size.  This may be overwritten for CL kernels */
    enum gl_subgroup_size subgroup_size;
@@ -122,6 +122,9 @@ struct spirv_to_nir_options {
     * but continue executing other tests.
     */
    bool skip_os_break_in_debug_build;
+
+   /* Shader index provided by VkPipelineShaderStageNodeCreateInfoAMDX */
+   uint32_t shader_index;
 };
 
 enum spirv_verify_result {

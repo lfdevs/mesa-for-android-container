@@ -75,8 +75,9 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
       .lower_unpack_32_2x16_split = true,
       .lower_unpack_64_2x32_split = true,
       .lower_find_lsb = true,
-      .lower_ifind_msb_to_uclz = true,
-      .lower_ufind_msb_to_uclz = true,
+      .lower_ifind_msb = true,
+      .lower_ufind_msb = true,
+      .has_uclz = true,
    };
 
    compiler->regs = etna_ra_setup(compiler);
@@ -93,6 +94,7 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
 void
 etna_compiler_destroy(const struct etna_compiler *compiler)
 {
+   disk_cache_destroy(compiler->disk_cache);
    ralloc_free((void *)compiler);
 }
 

@@ -22,7 +22,6 @@ general_ir_test_files = files(
   'array_refcount_test.cpp',
   'builtin_variable_test.cpp',
   'general_ir_test.cpp',
-  'lower_int64_test.cpp',
   'opt_add_neg_to_sub_test.cpp',
 )
 general_ir_test_files += ir_expression_operation_h
@@ -55,7 +54,7 @@ test(
     gnu_symbol_visibility : 'hidden',
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
     link_with : [libglsl, libglsl_util],
-    dependencies : [dep_thread, idep_gtest, idep_mesautil],
+    dependencies : [dep_thread, idep_gtest, idep_mesautil, idep_compiler],
   ),
   suite : ['compiler', 'glsl'],
   protocol : 'gtest',

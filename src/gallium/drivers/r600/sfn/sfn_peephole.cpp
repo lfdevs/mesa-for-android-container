@@ -53,6 +53,7 @@ public:
 
    void apply_source_mods(AluInstr *alu);
    void apply_dest_clamp(AluInstr *alu);
+   void try_fuse_with_prev(AluInstr *alu);
 
    bool progress{false};
 };
@@ -88,6 +89,9 @@ PeepholeVisitor::visit(AluInstr *instr)
    case op1_mov:
       if (instr->has_alu_flag(alu_dst_clamp))
          apply_dest_clamp(instr);
+      else if (!instr->has_source_mod(0, AluInstr::mod_abs) &&
+               !instr->has_source_mod(0, AluInstr::mod_neg))
+         try_fuse_with_prev(instr);
       break;
    case op2_add:
    case op2_add_int:
@@ -232,6 +236,30 @@ void PeepholeVisitor::apply_source_mods(AluInstr *alu)
       }
 
       progress |= alu->replace_src(i, new_src, to_set, to_clear);
+   }
+}
+
+void PeepholeVisitor::try_fuse_with_prev(AluInstr *alu)
+{
+   if (auto reg = alu->src(0).as_register()) {
+      if (!reg->has_flag(Register::ssa) ||
+          reg->uses().size() != 1 ||
+          reg->parents().size() != 1)
+         return;
+      auto p = *reg->parents().begin();
+      auto dest = alu->dest();
+      if (!dest->has_flag(Register::ssa) &&
+          alu->block_id() != p->block_id())
+         return;
+      if (p->replace_dest(dest, alu)) {
+         dest->del_parent(alu);
+         dest->add_parent(p);
+         for (auto d : alu->dependend_instr()) {
+            d->add_required_instr(p);
+         }
+         alu->set_dead();
+         progress = true;
+      }
    }
 }
 

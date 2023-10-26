@@ -78,10 +78,6 @@ anv_indirect_descriptor_data_for_type(VkDescriptorType type)
 
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-      data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
-             ANV_DESCRIPTOR_INDIRECT_SAMPLED_IMAGE;
-      break;
-
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
              ANV_DESCRIPTOR_INDIRECT_SAMPLED_IMAGE;
@@ -148,22 +144,10 @@ anv_direct_descriptor_data_for_type(VkDescriptorType type)
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-      data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
-             ANV_DESCRIPTOR_SURFACE;
-      break;
-
    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-      data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
-             ANV_DESCRIPTOR_SURFACE;
-      break;
-
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-      data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
-             ANV_DESCRIPTOR_SURFACE;
-         break;
-
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
       data = ANV_DESCRIPTOR_BTI_SURFACE_STATE |
@@ -806,11 +790,11 @@ static void
 sha1_update_immutable_sampler(struct mesa_sha1 *ctx,
                               const struct anv_sampler *sampler)
 {
-   if (!sampler->conversion)
+   if (!sampler->vk.ycbcr_conversion)
       return;
 
    /* The only thing that affects the shader is ycbcr conversion */
-   SHA1_UPDATE_VALUE(ctx, sampler->conversion->state);
+   SHA1_UPDATE_VALUE(ctx, sampler->vk.ycbcr_conversion->state);
 }
 
 static void
@@ -861,6 +845,7 @@ anv_pipeline_sets_layout_init(struct anv_pipeline_sets_layout *layout,
    memset(layout, 0, sizeof(*layout));
 
    layout->device = device;
+   layout->push_descriptor_set_index = -1;
    layout->independent_sets = independent_sets;
 }
 
@@ -890,6 +875,12 @@ anv_pipeline_sets_layout_add(struct anv_pipeline_sets_layout *layout,
    layout->num_dynamic_buffers += set_layout->dynamic_offset_count;
 
    assert(layout->num_dynamic_buffers < MAX_DYNAMIC_BUFFERS);
+
+   if (set_layout->flags &
+       VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) {
+      assert(layout->push_descriptor_set_index == -1);
+      layout->push_descriptor_set_index = set_idx;
+   }
 }
 
 void
@@ -1542,6 +1533,79 @@ VkResult anv_FreeDescriptorSets(
    return VK_SUCCESS;
 }
 
+void
+anv_push_descriptor_set_init(struct anv_cmd_buffer *cmd_buffer,
+                             struct anv_push_descriptor_set *push_set,
+                             struct anv_descriptor_set_layout *layout)
+{
+   struct anv_descriptor_set *set = &push_set->set;
+
+   if (set->layout != layout) {
+      if (set->layout) {
+         anv_descriptor_set_layout_unref(cmd_buffer->device, set->layout);
+      } else {
+         /* one-time initialization */
+         vk_object_base_init(&cmd_buffer->device->vk, &set->base,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET);
+         set->is_push = true;
+         set->buffer_views = push_set->buffer_views;
+      }
+
+      anv_descriptor_set_layout_ref(layout);
+      set->layout = layout;
+      set->generate_surface_states = 0;
+   }
+
+   assert(set->is_push && set->buffer_views);
+   set->size = anv_descriptor_set_layout_size(layout, false /* host_only */, 0);
+   set->buffer_view_count = layout->buffer_view_count;
+   set->descriptor_count = layout->descriptor_count;
+
+   if (layout->descriptor_buffer_size &&
+       (push_set->set_used_on_gpu ||
+        set->desc_mem.alloc_size < layout->descriptor_buffer_size)) {
+      struct anv_physical_device *pdevice = cmd_buffer->device->physical;
+      struct anv_state_stream *push_stream =
+         pdevice->indirect_descriptors ?
+         &cmd_buffer->push_descriptor_stream :
+         &cmd_buffer->surface_state_stream;
+      uint64_t push_base_address = pdevice->indirect_descriptors ?
+         pdevice->va.push_descriptor_pool.addr :
+         pdevice->va.internal_surface_state_pool.addr;
+
+      /* The previous buffer is either actively used by some GPU command (so
+       * we can't modify it) or is too small.  Allocate a new one.
+       */
+      struct anv_state desc_mem =
+         anv_state_stream_alloc(push_stream,
+                                anv_descriptor_set_layout_descriptor_buffer_size(layout, 0),
+                                ANV_UBO_ALIGNMENT);
+      if (set->desc_mem.alloc_size) {
+         /* TODO: Do we really need to copy all the time? */
+         memcpy(desc_mem.map, set->desc_mem.map,
+                MIN2(desc_mem.alloc_size, set->desc_mem.alloc_size));
+      }
+      set->desc_mem = desc_mem;
+
+      set->desc_addr = anv_state_pool_state_address(
+         push_stream->state_pool,
+         set->desc_mem);
+      set->desc_offset = anv_address_physical(set->desc_addr) -
+                         push_base_address;
+   }
+}
+
+void
+anv_push_descriptor_set_finish(struct anv_push_descriptor_set *push_set)
+{
+   struct anv_descriptor_set *set = &push_set->set;
+   if (set->layout) {
+      struct anv_device *device =
+         container_of(set->base.device, struct anv_device, vk);
+      anv_descriptor_set_layout_unref(device, set->layout);
+   }
+}
+
 static uint32_t
 anv_surface_state_to_handle(struct anv_physical_device *device,
                             struct anv_state state)
@@ -1834,7 +1898,7 @@ anv_descriptor_write_surface_state(struct anv_device *device,
       anv_isl_format_for_descriptor_type(device, desc->type);
    anv_fill_buffer_surface_state(device, bview->general.state.map,
                                  format, ISL_SWIZZLE_IDENTITY,
-                                 usage, bview->address, bview->range, 1);
+                                 usage, bview->address, bview->vk.range, 1);
 }
 
 void
@@ -1925,7 +1989,7 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
 
       desc->set_buffer_view = bview;
 
-      bview->range = desc->bind_range;
+      bview->vk.range = desc->bind_range;
       bview->address = bind_addr;
 
       if (set->is_push)
@@ -1983,18 +2047,17 @@ anv_descriptor_set_write_acceleration_structure(struct anv_device *device,
    memcpy(desc_map, &desc_data, sizeof(desc_data));
 }
 
-void anv_UpdateDescriptorSets(
-    VkDevice                                    _device,
-    uint32_t                                    descriptorWriteCount,
-    const VkWriteDescriptorSet*                 pDescriptorWrites,
-    uint32_t                                    descriptorCopyCount,
-    const VkCopyDescriptorSet*                  pDescriptorCopies)
+void
+anv_descriptor_set_write(struct anv_device *device,
+                         struct anv_descriptor_set *set_override,
+                         uint32_t write_count,
+                         const VkWriteDescriptorSet *writes)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
-
-   for (uint32_t i = 0; i < descriptorWriteCount; i++) {
-      const VkWriteDescriptorSet *write = &pDescriptorWrites[i];
-      ANV_FROM_HANDLE(anv_descriptor_set, set, write->dstSet);
+   for (uint32_t i = 0; i < write_count; i++) {
+      const VkWriteDescriptorSet *write = &writes[i];
+      struct anv_descriptor_set *set = unlikely(set_override) ?
+         set_override :
+         anv_descriptor_set_from_handle(write->dstSet);
 
       switch (write->descriptorType) {
       case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -2074,6 +2137,19 @@ void anv_UpdateDescriptorSets(
          break;
       }
    }
+}
+
+void anv_UpdateDescriptorSets(
+    VkDevice                                    _device,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites,
+    uint32_t                                    descriptorCopyCount,
+    const VkCopyDescriptorSet*                  pDescriptorCopies)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+
+   anv_descriptor_set_write(device, NULL, descriptorWriteCount,
+                            pDescriptorWrites);
 
    for (uint32_t i = 0; i < descriptorCopyCount; i++) {
       const VkCopyDescriptorSet *copy = &pDescriptorCopies[i];
@@ -2140,7 +2216,7 @@ void anv_UpdateDescriptorSets(
 
             dst_desc->set_buffer_view = dst_bview;
 
-            dst_bview->range = src_bview->range;
+            dst_bview->vk.range = src_bview->vk.range;
             dst_bview->address = src_bview->address;
 
             memcpy(dst_bview->general.state.map,

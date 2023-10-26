@@ -18,11 +18,6 @@ dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 
 dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked,Fail
 
-# A glTexImage, glDraw, glTexSubImage sequence into a texture is missing what looks like the drawing.
-dEQP-GLES2.functional.fbo.render.texsubimage.after_render_tex2d_rgba,Fail
-# A glTexImage, glDraw, glTexSubImage, glDraw sequence into a texture is missing what looks like the first drawing.
-dEQP-GLES2.functional.fbo.render.texsubimage.between_render_tex2d_rgba,Fail
-
 # Sampling grid slightly off in test 2?
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_mirror_rgba8888,Fail
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888,Fail
@@ -37,12 +32,6 @@ dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_repeat_non_square,Fa
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_clamp_non_square,Fail
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_mirror_non_square,Fail
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_repeat_non_square,Fail
-
-# Sequence of glTexImage, glDraw, glCopyTexSubImage.
-# background red/green checkerboard on the left side is incorrectly white.
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgba,Fail
-# Maybe it was copied as RGB instead of RGBA?
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgba,Fail
 
 # One of the pixels on the left edge near the bottom is wrong for both min and
 # mag.  Also a line of pixels through the image in minification.
@@ -112,6 +101,7 @@ glx@glx_arb_create_context_no_error@no error,Fail
 # piglit: error: Test timed out.
 glx@glx_arb_sync_control@waitformsc,Fail
 
+glslparsertest@glsl2@gst-gl-text-download-i420-yv12.frag,Fail
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail
@@ -782,8 +772,10 @@ spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)-
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right bottom PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right middle PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: FIRST,Fail
-
-glslparsertest@glsl2@gst-gl-text-download-i420-yv12.frag,Fail
+spec@arb_clear_texture@arb_clear_texture-3d,Fail
+spec@arb_clear_texture@arb_clear_texture-depth,Fail
+spec@arb_clear_texture@arb_clear_texture-sized-formats,Fail
+spec@arb_clear_texture@arb_clear_texture-supported-formats,Fail
 spec@glsl-1.10@execution@glsl-fs-inline-explosion,Crash
 spec@glsl-1.10@execution@glsl-vs-inline-explosion,Crash
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
@@ -1192,3 +1184,10 @@ spec@ext_framebuffer_multisample@unaligned-blit 4 stencil msaa,Fail
 
 # https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/817
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
+
+# New CTS failures in 1.3.6.3
+wayland-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
+x11-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
+
+# Bisected to 35ae5dce39c ("mesa: don't pass Infs to the shader via gl_Fog.scale")
+spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail

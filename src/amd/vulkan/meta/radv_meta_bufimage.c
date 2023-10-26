@@ -46,24 +46,24 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
+   nir_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
 
-   nir_ssa_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
-   nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
+   nir_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
+   nir_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
 
-   nir_ssa_def *img_coord = nir_iadd(&b, global_id, offset);
-   nir_ssa_def *outval =
+   nir_def *img_coord = nir_iadd(&b, global_id, offset);
+   nir_def *outval =
       nir_txf_deref(&b, nir_build_deref_var(&b, input_img), nir_trim_vector(&b, img_coord, 2 + is_3d), NULL);
 
-   nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
-   nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
+   nir_def *pos_x = nir_channel(&b, global_id, 0);
+   nir_def *pos_y = nir_channel(&b, global_id, 1);
 
-   nir_ssa_def *tmp = nir_imul(&b, pos_y, stride);
+   nir_def *tmp = nir_imul(&b, pos_y, stride);
    tmp = nir_iadd(&b, tmp, pos_x);
 
-   nir_ssa_def *coord = nir_replicate(&b, tmp, 4);
+   nir_def *coord = nir_replicate(&b, tmp, 4);
 
-   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, coord, nir_ssa_undef(&b, 1, 32), outval,
+   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, coord, nir_undef(&b, 1, 32), outval,
                          nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_BUF);
 
    return b.shader;
@@ -196,26 +196,25 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
+   nir_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
 
-   nir_ssa_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
-   nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
+   nir_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
+   nir_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
 
-   nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
-   nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
+   nir_def *pos_x = nir_channel(&b, global_id, 0);
+   nir_def *pos_y = nir_channel(&b, global_id, 1);
 
-   nir_ssa_def *buf_coord = nir_imul(&b, pos_y, stride);
+   nir_def *buf_coord = nir_imul(&b, pos_y, stride);
    buf_coord = nir_iadd(&b, buf_coord, pos_x);
 
-   nir_ssa_def *coord = nir_iadd(&b, global_id, offset);
-   nir_ssa_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), buf_coord, NULL);
+   nir_def *coord = nir_iadd(&b, global_id, offset);
+   nir_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), buf_coord, NULL);
 
-   nir_ssa_def *img_coord =
-      nir_vec4(&b, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1),
-               is_3d ? nir_channel(&b, coord, 2) : nir_ssa_undef(&b, 1, 32), nir_ssa_undef(&b, 1, 32));
+   nir_def *img_coord = nir_vec4(&b, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1),
+                                 is_3d ? nir_channel(&b, coord, 2) : nir_undef(&b, 1, 32), nir_undef(&b, 1, 32));
 
-   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, img_coord, nir_ssa_undef(&b, 1, 32),
-                         outval, nir_imm_int(&b, 0), .image_dim = dim);
+   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, img_coord, nir_undef(&b, 1, 32), outval,
+                         nir_imm_int(&b, 0), .image_dim = dim);
 
    return b.shader;
 }
@@ -344,31 +343,31 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
-   nir_ssa_def *pitch = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 8), .range = 12);
-   nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
+   nir_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
+   nir_def *pitch = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 8), .range = 12);
+   nir_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
 
-   nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
-   nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
+   nir_def *pos_x = nir_channel(&b, global_id, 0);
+   nir_def *pos_y = nir_channel(&b, global_id, 1);
 
-   nir_ssa_def *buf_coord = nir_imul(&b, pos_y, stride);
+   nir_def *buf_coord = nir_imul(&b, pos_y, stride);
    buf_coord = nir_iadd(&b, buf_coord, pos_x);
 
-   nir_ssa_def *img_coord = nir_iadd(&b, global_id, offset);
+   nir_def *img_coord = nir_iadd(&b, global_id, offset);
 
-   nir_ssa_def *global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, img_coord, 1), pitch),
-                                      nir_imul_imm(&b, nir_channel(&b, img_coord, 0), 3));
+   nir_def *global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, img_coord, 1), pitch),
+                                  nir_imul_imm(&b, nir_channel(&b, img_coord, 0), 3));
 
-   nir_ssa_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), buf_coord, NULL);
+   nir_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), buf_coord, NULL);
 
    for (int chan = 0; chan < 3; chan++) {
-      nir_ssa_def *local_pos = nir_iadd_imm(&b, global_pos, chan);
+      nir_def *local_pos = nir_iadd_imm(&b, global_pos, chan);
 
-      nir_ssa_def *coord = nir_replicate(&b, local_pos, 4);
+      nir_def *coord = nir_replicate(&b, local_pos, 4);
 
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, coord, nir_ssa_undef(&b, 1, 32),
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, coord, nir_undef(&b, 1, 32),
                             nir_channel(&b, outval, chan), nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_BUF);
    }
 
@@ -472,18 +471,17 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d, int samples)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
+   nir_def *global_id = get_global_ids(&b, is_3d ? 3 : 2);
 
-   nir_ssa_def *src_offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
-   nir_ssa_def *dst_offset =
-      nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 12), .range = is_3d ? 24 : 20);
+   nir_def *src_offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range = is_3d ? 12 : 8);
+   nir_def *dst_offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 12), .range = is_3d ? 24 : 20);
 
-   nir_ssa_def *src_coord = nir_iadd(&b, global_id, src_offset);
+   nir_def *src_coord = nir_iadd(&b, global_id, src_offset);
    nir_deref_instr *input_img_deref = nir_build_deref_var(&b, input_img);
 
-   nir_ssa_def *dst_coord = nir_iadd(&b, global_id, dst_offset);
+   nir_def *dst_coord = nir_iadd(&b, global_id, dst_offset);
 
-   nir_ssa_def *tex_vals[8];
+   nir_def *tex_vals[8];
    if (is_multisampled) {
       for (uint32_t i = 0; i < samples; i++) {
          tex_vals[i] = nir_txf_ms_deref(&b, input_img_deref, nir_trim_vector(&b, src_coord, 2), nir_imm_int(&b, i));
@@ -492,13 +490,12 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d, int samples)
       tex_vals[0] = nir_txf_deref(&b, input_img_deref, nir_trim_vector(&b, src_coord, 2 + is_3d), nir_imm_int(&b, 0));
    }
 
-   nir_ssa_def *img_coord =
-      nir_vec4(&b, nir_channel(&b, dst_coord, 0), nir_channel(&b, dst_coord, 1),
-               is_3d ? nir_channel(&b, dst_coord, 2) : nir_ssa_undef(&b, 1, 32), nir_ssa_undef(&b, 1, 32));
+   nir_def *img_coord = nir_vec4(&b, nir_channel(&b, dst_coord, 0), nir_channel(&b, dst_coord, 1),
+                                 is_3d ? nir_channel(&b, dst_coord, 2) : nir_undef(&b, 1, 32), nir_undef(&b, 1, 32));
 
    for (uint32_t i = 0; i < samples; i++) {
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, img_coord, nir_imm_int(&b, i),
-                            tex_vals[i], nir_imm_int(&b, 0), .image_dim = dim);
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, img_coord, nir_imm_int(&b, i), tex_vals[i],
+                            nir_imm_int(&b, 0), .image_dim = dim);
    }
 
    return b.shader;
@@ -641,34 +638,34 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *src_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range = 12);
-   nir_ssa_def *dst_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 12), .range = 24);
+   nir_def *src_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range = 12);
+   nir_def *dst_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 12), .range = 24);
 
-   nir_ssa_def *src_stride = nir_channel(&b, src_offset, 2);
-   nir_ssa_def *dst_stride = nir_channel(&b, dst_offset, 2);
+   nir_def *src_stride = nir_channel(&b, src_offset, 2);
+   nir_def *dst_stride = nir_channel(&b, dst_offset, 2);
 
-   nir_ssa_def *src_img_coord = nir_iadd(&b, global_id, src_offset);
-   nir_ssa_def *dst_img_coord = nir_iadd(&b, global_id, dst_offset);
+   nir_def *src_img_coord = nir_iadd(&b, global_id, src_offset);
+   nir_def *dst_img_coord = nir_iadd(&b, global_id, dst_offset);
 
-   nir_ssa_def *src_global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, src_img_coord, 1), src_stride),
-                                          nir_imul_imm(&b, nir_channel(&b, src_img_coord, 0), 3));
+   nir_def *src_global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, src_img_coord, 1), src_stride),
+                                      nir_imul_imm(&b, nir_channel(&b, src_img_coord, 0), 3));
 
-   nir_ssa_def *dst_global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, dst_img_coord, 1), dst_stride),
-                                          nir_imul_imm(&b, nir_channel(&b, dst_img_coord, 0), 3));
+   nir_def *dst_global_pos = nir_iadd(&b, nir_imul(&b, nir_channel(&b, dst_img_coord, 1), dst_stride),
+                                      nir_imul_imm(&b, nir_channel(&b, dst_img_coord, 0), 3));
 
    for (int chan = 0; chan < 3; chan++) {
       /* src */
-      nir_ssa_def *src_local_pos = nir_iadd_imm(&b, src_global_pos, chan);
-      nir_ssa_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), src_local_pos, NULL);
+      nir_def *src_local_pos = nir_iadd_imm(&b, src_global_pos, chan);
+      nir_def *outval = nir_txf_deref(&b, nir_build_deref_var(&b, input_img), src_local_pos, NULL);
 
       /* dst */
-      nir_ssa_def *dst_local_pos = nir_iadd_imm(&b, dst_global_pos, chan);
+      nir_def *dst_local_pos = nir_iadd_imm(&b, dst_global_pos, chan);
 
-      nir_ssa_def *dst_coord = nir_replicate(&b, dst_local_pos, 4);
+      nir_def *dst_coord = nir_replicate(&b, dst_local_pos, 4);
 
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, dst_coord, nir_ssa_undef(&b, 1, 32),
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, dst_coord, nir_undef(&b, 1, 32),
                             nir_channel(&b, outval, 0), nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_BUF);
    }
 
@@ -769,21 +766,21 @@ build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d, int samples
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 0;
 
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *clear_val = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
-   nir_ssa_def *layer = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 16), .range = 20);
+   nir_def *clear_val = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
+   nir_def *layer = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 16), .range = 20);
 
-   nir_ssa_def *comps[4];
+   nir_def *comps[4];
    comps[0] = nir_channel(&b, global_id, 0);
    comps[1] = nir_channel(&b, global_id, 1);
    comps[2] = layer;
-   comps[3] = nir_ssa_undef(&b, 1, 32);
+   comps[3] = nir_undef(&b, 1, 32);
    global_id = nir_vec(&b, comps, 4);
 
    for (uint32_t i = 0; i < samples; i++) {
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, global_id, nir_imm_int(&b, i),
-                            clear_val, nir_imm_int(&b, 0), .image_dim = dim);
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, global_id, nir_imm_int(&b, i), clear_val,
+                            nir_imm_int(&b, 0), .image_dim = dim);
    }
 
    return b.shader;
@@ -917,22 +914,22 @@ build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 0;
 
-   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *clear_val = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range = 12);
-   nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
+   nir_def *clear_val = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range = 12);
+   nir_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range = 16);
 
-   nir_ssa_def *global_x = nir_channel(&b, global_id, 0);
-   nir_ssa_def *global_y = nir_channel(&b, global_id, 1);
+   nir_def *global_x = nir_channel(&b, global_id, 0);
+   nir_def *global_y = nir_channel(&b, global_id, 1);
 
-   nir_ssa_def *global_pos = nir_iadd(&b, nir_imul(&b, global_y, stride), nir_imul_imm(&b, global_x, 3));
+   nir_def *global_pos = nir_iadd(&b, nir_imul(&b, global_y, stride), nir_imul_imm(&b, global_x, 3));
 
    for (unsigned chan = 0; chan < 3; chan++) {
-      nir_ssa_def *local_pos = nir_iadd_imm(&b, global_pos, chan);
+      nir_def *local_pos = nir_iadd_imm(&b, global_pos, chan);
 
-      nir_ssa_def *coord = nir_replicate(&b, local_pos, 4);
+      nir_def *coord = nir_replicate(&b, local_pos, 4);
 
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, coord, nir_ssa_undef(&b, 1, 32),
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, coord, nir_undef(&b, 1, 32),
                             nir_channel(&b, clear_val, chan), nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_BUF);
    }
 
@@ -1099,7 +1096,7 @@ create_bview(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buffer, uns
 
 static void
 create_buffer_from_image(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *surf,
-                         VkBufferUsageFlagBits usage, VkBuffer *buffer)
+                         VkBufferUsageFlagBits2KHR usage, VkBuffer *buffer)
 {
    struct radv_device *device = cmd_buffer->device;
    struct radv_device_memory mem;
@@ -1109,9 +1106,13 @@ create_buffer_from_image(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_bl
    radv_create_buffer(device,
                       &(VkBufferCreateInfo){
                          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                         .pNext =
+                            &(VkBufferUsageFlags2CreateInfoKHR){
+                               .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR,
+                               .usage = usage,
+                            },
                          .flags = 0,
                          .size = surf->image->size,
-                         .usage = usage,
                          .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
                       },
                       NULL, buffer, true);
@@ -1357,7 +1358,7 @@ radv_meta_buffer_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struc
     * image as a buffer with the same underlying memory. The compute
     * shader will copy all components separately using a R32 format.
     */
-   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &buffer);
+   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR, &buffer);
 
    create_bview(cmd_buffer, src->buffer, src->offset, src->format, &src_view);
    create_bview_for_r32g32b32(cmd_buffer, radv_buffer_from_handle(buffer), dst_offset, dst->format, &dst_view);
@@ -1504,8 +1505,8 @@ radv_meta_image_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct
     * image as a buffer with the same underlying memory. The compute
     * shader will copy all components separately using a R32 format.
     */
-   create_buffer_from_image(cmd_buffer, src, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, &src_buffer);
-   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dst_buffer);
+   create_buffer_from_image(cmd_buffer, src, VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR, &src_buffer);
+   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR, &dst_buffer);
 
    create_bview_for_r32g32b32(cmd_buffer, radv_buffer_from_handle(src_buffer), src_offset, src->format, &src_view);
    create_bview_for_r32g32b32(cmd_buffer, radv_buffer_from_handle(dst_buffer), dst_offset, dst->format, &dst_view);
@@ -1647,7 +1648,7 @@ radv_meta_clear_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct ra
     * image as a buffer with the same underlying memory. The compute
     * shader will clear all components separately using a R32 format.
     */
-   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &buffer);
+   create_buffer_from_image(cmd_buffer, dst, VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR, &buffer);
 
    create_bview_for_r32g32b32(cmd_buffer, radv_buffer_from_handle(buffer), 0, dst->format, &dst_view);
    cleari_r32g32b32_bind_descriptors(cmd_buffer, &dst_view);

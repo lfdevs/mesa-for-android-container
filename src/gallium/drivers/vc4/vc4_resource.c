@@ -95,6 +95,46 @@ vc4_resource_transfer_unmap(struct pipe_context *pctx,
         slab_free(&vc4->transfer_pool, ptrans);
 }
 
+static void
+vc4_map_usage_prep(struct pipe_context *pctx,
+                   struct pipe_resource *prsc,
+                   unsigned usage)
+{
+        struct vc4_context *vc4 = vc4_context(pctx);
+        struct vc4_resource *rsc = vc4_resource(prsc);
+
+        if (usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE) {
+                if (vc4_resource_bo_alloc(rsc)) {
+                        /* If it might be bound as one of our vertex buffers,
+                         * make sure we re-emit vertex buffer state.
+                         */
+                        if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
+                                vc4->dirty |= VC4_DIRTY_VTXBUF;
+                        if (prsc->bind & PIPE_BIND_CONSTANT_BUFFER)
+                                vc4->dirty |= VC4_DIRTY_CONSTBUF;
+                } else {
+                        /* If we failed to reallocate, flush users so that we
+                         * don't violate any syncing requirements.
+                         */
+                        vc4_flush_jobs_reading_resource(vc4, prsc);
+                }
+        } else if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
+                /* If we're writing and the buffer is being used by the CL, we
+                 * have to flush the CL first. If we're only reading, we need
+                 * to flush if the CL has written our buffer.
+                 */
+                if (usage & PIPE_MAP_WRITE)
+                        vc4_flush_jobs_reading_resource(vc4, prsc);
+                else
+                        vc4_flush_jobs_writing_resource(vc4, prsc);
+        }
+
+        if (usage & PIPE_MAP_WRITE) {
+                rsc->writes++;
+                rsc->initialized_buffers = ~0;
+        }
+}
+
 static void *
 vc4_resource_transfer_map(struct pipe_context *pctx,
                           struct pipe_resource *prsc,
@@ -124,34 +164,7 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                 usage |= PIPE_MAP_DISCARD_WHOLE_RESOURCE;
         }
 
-        if (usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE) {
-                if (vc4_resource_bo_alloc(rsc)) {
-                        /* If it might be bound as one of our vertex buffers,
-                         * make sure we re-emit vertex buffer state.
-                         */
-                        if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
-                                vc4->dirty |= VC4_DIRTY_VTXBUF;
-                } else {
-                        /* If we failed to reallocate, flush users so that we
-                         * don't violate any syncing requirements.
-                         */
-                        vc4_flush_jobs_reading_resource(vc4, prsc);
-                }
-        } else if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
-                /* If we're writing and the buffer is being used by the CL, we
-                 * have to flush the CL first.  If we're only reading, we need
-                 * to flush if the CL has written our buffer.
-                 */
-                if (usage & PIPE_MAP_WRITE)
-                        vc4_flush_jobs_reading_resource(vc4, prsc);
-                else
-                        vc4_flush_jobs_writing_resource(vc4, prsc);
-        }
-
-        if (usage & PIPE_MAP_WRITE) {
-                rsc->writes++;
-                rsc->initialized_buffers = ~0;
-        }
+        vc4_map_usage_prep(pctx, prsc, usage);
 
         trans = slab_zalloc(&vc4->transfer_pool);
         if (!trans)
@@ -240,8 +253,12 @@ vc4_texture_subdata(struct pipe_context *pctx,
         }
 
         /* Otherwise, map and store the texture data directly into the tiled
-         * texture.
+         * texture.  Note that gallium's texture_subdata may be called with
+         * obvious usage flags missing!
          */
+        vc4_map_usage_prep(pctx, prsc, usage | (PIPE_MAP_WRITE |
+                                                PIPE_MAP_DISCARD_RANGE));
+
         void *buf;
         if (usage & PIPE_MAP_UNSYNCHRONIZED)
                 buf = vc4_bo_map_unsynchronized(rsc->bo);

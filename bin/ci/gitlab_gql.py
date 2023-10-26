@@ -3,6 +3,8 @@
 
 import re
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from collections import defaultdict
+from copy import deepcopy
 from dataclasses import dataclass, field
 from os import getenv
 from pathlib import Path
@@ -14,7 +16,7 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from graphql import DocumentNode
 
-Dag = dict[str, list[str]]
+Dag = dict[str, set[str]]
 TOKEN_DIR = Path(getenv("XDG_CONFIG_HOME") or Path.home() / ".config")
 
 
@@ -85,7 +87,7 @@ def create_job_needs_dag(
 ) -> tuple[Dag, dict[str, dict[str, Any]]]:
 
     result = gl_gql.query("pipeline_details.gql", params)
-    dag = {}
+    incomplete_dag = defaultdict(set)
     jobs = {}
     pipeline = result["project"]["pipeline"]
     if not pipeline:
@@ -96,20 +98,23 @@ def create_job_needs_dag(
             for job in stage_job["jobs"]["nodes"]:
                 needs = job.pop("needs")["nodes"]
                 jobs[job["name"]] = job
-                dag[job["name"]] = {node["name"] for node in needs}
+                incomplete_dag[job["name"]] = {node["name"] for node in needs}
+                # ensure that all needed nodes its in the graph
+                [incomplete_dag[node["name"]] for node in needs]
 
-    for job, needs in dag.items():
-        needs: set
+    final_dag: Dag = {}
+    for job, needs in incomplete_dag.items():
+        final_needs: set = deepcopy(needs)
         partial = True
 
         while partial:
-            next_depth = {n for dn in needs for n in dag[dn]}
-            partial = not needs.issuperset(next_depth)
-            needs = needs.union(next_depth)
+            next_depth = {n for dn in final_needs for n in incomplete_dag[dn]}
+            partial = not final_needs.issuperset(next_depth)
+            final_needs = final_needs.union(next_depth)
 
-        dag[job] = needs
+        final_dag[job] = final_needs
 
-    return dag, jobs
+    return final_dag, jobs
 
 
 def filter_dag(dag: Dag, regex: Pattern) -> Dag:

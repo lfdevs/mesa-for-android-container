@@ -41,6 +41,7 @@ anv_entrypoints = custom_target(
     '--device-prefix', 'gfx11',
     '--device-prefix', 'gfx12',
     '--device-prefix', 'gfx125',
+    '--device-prefix', 'gfx20',
     '--device-prefix', 'doom64',
     '--device-prefix', 'hitman3',
     '--device-prefix', 'android'
@@ -76,6 +77,7 @@ intel_icd = custom_target(
   ],
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
+  install_tag : 'runtime',
   install : true,
 )
 
@@ -99,26 +101,24 @@ libanv_per_hw_ver_libs = []
 anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
   'genX_cmd_buffer.c',
+  'genX_gfx_state.c',
   'genX_gpu_memcpy.c',
+  'genX_init_state.c',
   'genX_pipeline.c',
   'genX_query.c',
-  'genX_state.c',
+  'genX_simple_shader.c',
   'genX_video.c',
 )
 if with_intel_vk_rt
   anv_per_hw_ver_files += files('genX_acceleration_structure.c',)
 endif
 
-foreach g : [['90', ['gfx8_cmd_buffer.c']],
-             ['110', ['gfx8_cmd_buffer.c']],
-             ['120', ['gfx8_cmd_buffer.c']],
-             ['125', ['gfx8_cmd_buffer.c']]]
-  _gfx_ver = g[0]
+foreach _gfx_ver : ['90', '110', '120', '125', '200']
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
-    [anv_per_hw_ver_files, g[1], anv_entrypoints[0], anv_internal_spvs, ],
+    [anv_per_hw_ver_files, anv_entrypoints[0], anv_internal_spvs, ],
     include_directories : [
-      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel,
+      inc_include, inc_src, inc_intel,
     ],
     c_args : anv_flags + ['-DGFX_VERx10=@0@'.format(_gfx_ver)],
     gnu_symbol_visibility : 'hidden',
@@ -136,7 +136,11 @@ libanv_files = files(
   'i915/anv_batch_chain.h',
   'i915/anv_device.c',
   'i915/anv_device.h',
+  'i915/anv_gem.c',
+  'i915/anv_gem.h',
   'i915/anv_kmd_backend.c',
+  'i915/anv_queue.c',
+  'i915/anv_queue.h',
   'layers/anv_doom64.c',
   'layers/anv_hitman3.c',
   'layers/anv_android_layer.c',
@@ -178,6 +182,8 @@ libanv_files = files(
   'anv_pipeline_cache.c',
   'anv_private.h',
   'anv_queue.c',
+  'anv_sparse.c',
+  'anv_astc_emu.c',
   'anv_util.c',
   'anv_utrace.c',
   'anv_va.c',
@@ -208,6 +214,7 @@ if with_xlib_lease
 endif
 
 if with_platform_android
+  anv_deps += idep_u_gralloc
   libanv_files += files('anv_android.c')
 else
   libanv_files += files('anv_android_stubs.c')
@@ -223,7 +230,7 @@ libanv_common = static_library(
     anv_internal_spvs,
   ],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
+    inc_include, inc_src, inc_intel,
     inc_util,
   ],
   c_args : anv_flags,
@@ -236,7 +243,7 @@ libvulkan_intel = shared_library(
   'vulkan_intel',
   [files('anv_gem.c'), anv_entrypoints[0]],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
+    inc_include, inc_src, inc_intel,
   ],
   link_whole : [libanv_common, libanv_per_hw_ver_libs] + optional_libgrl,
   link_with : [
@@ -273,7 +280,7 @@ if with_tests
     'vulkan_intel_test',
     [files('anv_gem_stubs.c'), anv_entrypoints[0]],
     include_directories : [
-      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
+      inc_include, inc_src, inc_intel,
     ],
     link_whole : libanv_common,
     link_with : [
@@ -289,26 +296,34 @@ if with_tests
     gnu_symbol_visibility : 'hidden',
   )
 
-  foreach t : ['block_pool_no_free', 'block_pool_grow_first',
-               'state_pool_no_free', 'state_pool_free_list_only',
-               'state_pool', 'state_pool_padding']
-    test(
-      'anv_@0@'.format(t),
-      executable(
-        t,
-        ['tests/@0@.c'.format(t), anv_entrypoints[0]],
-        c_args : [ sse2_args ],
-        link_with : libvulkan_intel_test,
-        dependencies : [
-          dep_libdrm, dep_thread, dep_m, dep_valgrind,
-          idep_vulkan_util, idep_vulkan_wsi_headers,
-          idep_vulkan_runtime, idep_intel_driver_ds, idep_intel_dev,
-        ],
-        include_directories : [
-          inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
-        ],
-      ),
-      suite : ['intel'],
-    )
-  endforeach
+  files_anv_tests = files(
+    'tests/anv_tests.cpp',
+
+    'tests/state_pool.c',
+    'tests/state_pool_free_list_only.c',
+    'tests/state_pool_no_free.c',
+    'tests/state_pool_padding.c',
+    'tests/block_pool_no_free.c',
+    'tests/block_pool_grow_first.c',
+  )
+
+  test(
+    'anv_tests',
+    executable(
+      'anv_tests',
+      [files_anv_tests, anv_entrypoints[0]],
+      c_args : [ sse2_args ],
+      link_with : libvulkan_intel_test,
+      dependencies : [
+        idep_gtest, dep_libdrm, dep_thread, dep_m, dep_valgrind,
+        idep_vulkan_util, idep_vulkan_wsi_headers,
+        idep_vulkan_runtime, idep_intel_driver_ds, idep_intel_dev,
+      ],
+      include_directories : [
+        inc_include, inc_src, inc_intel,
+      ],
+    ),
+    suite : ['intel'],
+    protocol : 'gtest',
+  )
 endif

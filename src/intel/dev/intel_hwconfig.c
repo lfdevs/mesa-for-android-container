@@ -24,11 +24,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "drm-uapi/i915_drm.h"
 #include "intel_device_info.h"
 #include "intel_hwconfig.h"
 #include "intel_hwconfig_types.h"
 #include "intel/common/intel_gem.h"
+#include "i915/intel_device_info.h"
+#include "xe/intel_device_info.h"
 
 #include "util/log.h"
 
@@ -298,12 +299,23 @@ intel_print_hwconfig_table(const struct hwconfig *hwconfig,
 }
 
 void
-intel_get_and_print_hwconfig_table(int fd)
+intel_get_and_print_hwconfig_table(int fd, struct intel_device_info *devinfo)
 {
    struct hwconfig *hwconfig;
    int32_t hwconfig_len = 0;
-   hwconfig = intel_i915_query_alloc(fd, DRM_I915_QUERY_HWCONFIG_BLOB,
-                                     &hwconfig_len);
+
+   switch (devinfo->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      hwconfig = intel_device_info_i915_query_hwconfig(fd, &hwconfig_len);
+      break;
+   case INTEL_KMD_TYPE_XE:
+      hwconfig = intel_device_info_xe_query_hwconfig(fd, &hwconfig_len);
+      break;
+   default:
+      unreachable("unknown kmd type");
+      break;
+   }
+
    if (hwconfig) {
       intel_print_hwconfig_table(hwconfig, hwconfig_len);
       free(hwconfig);

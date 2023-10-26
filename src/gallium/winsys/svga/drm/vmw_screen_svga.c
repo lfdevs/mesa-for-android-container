@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -107,8 +107,8 @@ typedef struct MKSGuestStatCounterTime {
 #define MKS_GUEST_STAT_FLAG_NONE    0
 #define MKS_GUEST_STAT_FLAG_TIME    (1U << 0)
 
-typedef __attribute__((aligned(32))) struct MKSGuestStatInfoEntry {
-   union {
+typedef struct MKSGuestStatInfoEntry {
+   alignas(32) union {
       const char *s;
       uint64_t u;
    } name;
@@ -123,6 +123,7 @@ typedef __attribute__((aligned(32))) struct MKSGuestStatInfoEntry {
       uint64_t u;
    } stat;
 } MKSGuestStatInfoEntry;
+static_assert(alignof(struct MKSGuestStatInfoEntry) == 32, "");
 
 static thread_local struct svga_winsys_stats_timeframe *mksstat_tls_global = NULL;
 
@@ -384,20 +385,20 @@ vmw_svga_winsys_buffer_create(struct svga_winsys_screen *sws,
 	 return NULL;
       provider = vws->pools.query_fenced;
    } else if (usage == SVGA_BUFFER_USAGE_SHADER) {
-      provider = vws->pools.mob_shader_slab_fenced;
+      provider = vws->pools.dma_slab_fenced;
    } else {
       if (size > VMW_GMR_POOL_SIZE)
          return NULL;
-      provider = vws->pools.gmr_fenced;
+      provider = vws->pools.dma_fenced;
    }
 
    assert(provider);
    buffer = provider->create_buffer(provider, size, &desc.pb_desc);
 
-   if(!buffer && provider == vws->pools.gmr_fenced) {
+   if(!buffer && provider == vws->pools.dma_fenced) {
 
       assert(provider);
-      provider = vws->pools.gmr_slab_fenced;
+      provider = vws->pools.dma_slab_fenced;
       buffer = provider->create_buffer(provider, size, &desc.pb_desc);
    }
 
@@ -506,7 +507,7 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
    surface->screen = vws;
    (void) mtx_init(&surface->mutex, mtx_plain);
    surface->shared = !!(usage & SVGA_SURFACE_USAGE_SHARED);
-   provider = (surface->shared) ? vws->pools.gmr : vws->pools.mob_fenced;
+   provider = (surface->shared) ? vws->pools.dma_base : vws->pools.dma_fenced;
 
    /*
     * When multisampling is not supported sample count received is 0,
@@ -551,7 +552,7 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
          desc.pb_desc.usage = 0;
          pb_buf = provider->create_buffer(provider, buffer_size, &desc.pb_desc);
          surface->buf = vmw_svga_winsys_buffer_wrap(pb_buf);
-         if (surface->buf && !vmw_gmr_bufmgr_region_ptr(pb_buf, &ptr))
+         if (surface->buf && !vmw_dma_bufmgr_region_ptr(pb_buf, &ptr))
             assert(0);
       }
 
@@ -616,8 +617,8 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
 
       /* Best estimate for surface size, used for early flushing. */
       surface->size = buffer_size;
-      surface->buf = NULL; 
-   }      
+      surface->buf = NULL;
+   }
 
    return svga_winsys_surface(surface);
 
@@ -641,8 +642,8 @@ vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
    uint32_t buffer_size;
 
-   buffer_size = svga3dsurface_get_serialized_size(format, size, 
-                                                   numMipLevels, 
+   buffer_size = svga3dsurface_get_serialized_size(format, size,
+                                                   numMipLevels,
                                                    numLayers);
    if (numSamples > 1)
       buffer_size *= numSamples;
@@ -701,7 +702,7 @@ static bool
 vmw_svga_winsys_get_cap(struct svga_winsys_screen *sws,
                         SVGA3dDevCapIndex index,
                         SVGA3dDevCapResult *result)
-{   
+{
    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
 
    if (index > vws->ioctl.num_cap_3d ||

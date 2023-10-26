@@ -12,13 +12,10 @@
 
 static LLVMValueRef get_vertex_index(struct si_shader_context *ctx,
                                      struct si_vs_prolog_bits *key, unsigned input_index,
-                                     LLVMValueRef instance_divisor_constbuf,
-                                     unsigned start_instance, unsigned base_vertex)
+                                     LLVMValueRef instance_divisor_constbuf)
 {
-   LLVMValueRef instance_id = ctx->abi.instance_id_replaced ?
-      ctx->abi.instance_id_replaced : ctx->abi.instance_id;
-   LLVMValueRef vertex_id = ctx->abi.vertex_id_replaced ?
-      ctx->abi.vertex_id_replaced : ctx->abi.vertex_id;
+   LLVMValueRef instance_id = ctx->abi.instance_id;
+   LLVMValueRef vertex_id = ctx->abi.vertex_id;
 
    bool divisor_is_one = key->instance_divisor_is_one & (1u << input_index);
    bool divisor_is_fetched =key->instance_divisor_is_fetched & (1u << input_index);
@@ -46,12 +43,12 @@ static LLVMValueRef get_vertex_index(struct si_shader_context *ctx,
 
    if (divisor_is_one || divisor_is_fetched) {
       /* Add StartInstance. */
-      index = LLVMBuildAdd(ctx->ac.builder, index,
-                           LLVMGetParam(ctx->main_fn.value, start_instance), "");
+      LLVMValueRef start_instance = ac_get_arg(&ctx->ac, ctx->args->ac.start_instance);
+      index = LLVMBuildAdd(ctx->ac.builder, index, start_instance, "");
    } else {
       /* VertexID + BaseVertex */
-      index = LLVMBuildAdd(ctx->ac.builder, vertex_id,
-                           LLVMGetParam(ctx->main_fn.value, base_vertex), "");
+      LLVMValueRef base_vertex = ac_get_arg(&ctx->ac, ctx->args->ac.base_vertex);
+      index = LLVMBuildAdd(ctx->ac.builder, vertex_id, base_vertex, "");
    }
 
    return index;
@@ -73,119 +70,87 @@ static LLVMValueRef get_vertex_index(struct si_shader_context *ctx,
  *   (InstanceID + StartInstance),
  *   (InstanceID / 2 + StartInstance)
  */
-void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
-                             UNUSED bool separate_prolog)
+void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part_key *key)
 {
-   LLVMTypeRef *returns;
-   LLVMValueRef ret, func;
-   int num_returns, i;
-   unsigned first_vs_vgpr = key->vs_prolog.num_merged_next_stage_vgprs;
-   unsigned num_input_vgprs =
-      key->vs_prolog.num_merged_next_stage_vgprs + 4;
-   struct ac_arg input_sgpr_param[key->vs_prolog.num_input_sgprs];
-   struct ac_arg input_vgpr_param[10];
-   LLVMValueRef input_vgprs[10];
-   unsigned num_all_input_regs = key->vs_prolog.num_input_sgprs + num_input_vgprs;
-   unsigned user_sgpr_base = key->vs_prolog.num_merged_next_stage_vgprs ? 8 : 0;
+   struct si_shader_args *args = ctx->args;
+   si_get_vs_prolog_args(ctx->screen->info.gfx_level, args, key);
 
-   memset(ctx->args, 0, sizeof(*ctx->args));
+   const unsigned num_input_sgprs = args->ac.num_sgprs_used;
+   const unsigned num_input_vgprs = args->ac.num_vgprs_used;
 
    /* 4 preloaded VGPRs + vertex load indices as prolog outputs */
-   returns = alloca((num_all_input_regs + key->vs_prolog.num_inputs) * sizeof(LLVMTypeRef));
-   num_returns = 0;
+   const unsigned num_output_gprs =
+      num_input_sgprs + num_input_vgprs + key->vs_prolog.num_inputs;
+   LLVMTypeRef returns[num_output_gprs];
+   int num_returns = 0;
 
-   /* Declare input and output SGPRs. */
-   for (i = 0; i < key->vs_prolog.num_input_sgprs; i++) {
-      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &input_sgpr_param[i]);
+   /* Output SGPRs. */
+   for (int i = 0; i < num_input_sgprs; i++)
       returns[num_returns++] = ctx->ac.i32;
-   }
 
-   /* Preloaded VGPRs (outputs must be floats) */
-   for (i = 0; i < num_input_vgprs; i++) {
-      ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &input_vgpr_param[i]);
+   /* Output VGPRs */
+   for (int i = 0; i < num_input_vgprs; i++)
       returns[num_returns++] = ctx->ac.f32;
-   }
 
    /* Vertex load indices. */
-   for (i = 0; i < key->vs_prolog.num_inputs; i++)
+   for (int i = 0; i < key->vs_prolog.num_inputs; i++)
       returns[num_returns++] = ctx->ac.f32;
 
    /* Create the function. */
    si_llvm_create_func(ctx, "vs_prolog", returns, num_returns, 0);
-   func = ctx->main_fn.value;
+   LLVMValueRef func = ctx->main_fn.value;
 
-   for (i = 0; i < num_input_vgprs; i++) {
-      input_vgprs[i] = ac_get_arg(&ctx->ac, input_vgpr_param[i]);
-   }
+   LLVMValueRef input_vgprs[num_input_vgprs];
+   for (int i = 0; i < num_input_vgprs; i++)
+      input_vgprs[i] = LLVMGetParam(func, num_input_sgprs + i);
 
    if (key->vs_prolog.num_merged_next_stage_vgprs) {
-      if (!key->vs_prolog.is_monolithic)
-         ac_init_exec_full_mask(&ctx->ac);
+      ac_init_exec_full_mask(&ctx->ac);
 
       if (key->vs_prolog.as_ls && ctx->screen->info.has_ls_vgpr_init_bug) {
          /* If there are no HS threads, SPI loads the LS VGPRs
           * starting at VGPR 0. Shift them back to where they
           * belong.
           */
+         LLVMValueRef hs_thread_count =
+            si_unpack_param(ctx, args->ac.merged_wave_info, 8, 8);
          LLVMValueRef has_hs_threads =
-            LLVMBuildICmp(ctx->ac.builder, LLVMIntNE,
-                          si_unpack_param(ctx, input_sgpr_param[3], 8, 8), ctx->ac.i32_0, "");
+            LLVMBuildICmp(ctx->ac.builder, LLVMIntNE, hs_thread_count, ctx->ac.i32_0, "");
 
-         for (i = 4; i > 0; --i) {
+         for (int i = 4; i > 0; --i) {
             input_vgprs[i + 1] = LLVMBuildSelect(ctx->ac.builder, has_hs_threads,
                                                  input_vgprs[i + 1], input_vgprs[i - 1], "");
          }
       }
    }
 
-   unsigned vertex_id_vgpr = first_vs_vgpr;
-   unsigned instance_id_vgpr = ctx->screen->info.gfx_level >= GFX10
-                                  ? first_vs_vgpr + 3
-                                  : first_vs_vgpr + (key->vs_prolog.as_ls ? 2 : 1);
-
-   ctx->abi.vertex_id = input_vgprs[vertex_id_vgpr];
-   ctx->abi.instance_id = input_vgprs[instance_id_vgpr];
-   ctx->abi.vertex_id_replaced = NULL;
-   ctx->abi.instance_id_replaced = NULL;
+   ctx->abi.vertex_id = input_vgprs[args->ac.vertex_id.arg_index - num_input_sgprs];
+   ctx->abi.instance_id = input_vgprs[args->ac.instance_id.arg_index - num_input_sgprs];
 
    /* Copy inputs to outputs. This should be no-op, as the registers match,
     * but it will prevent the compiler from overwriting them unintentionally.
     */
-   ret = ctx->return_value;
-   for (i = 0; i < key->vs_prolog.num_input_sgprs; i++) {
+   LLVMValueRef ret = ctx->return_value;
+   for (int i = 0; i < num_input_sgprs; i++) {
       LLVMValueRef p = LLVMGetParam(func, i);
       ret = LLVMBuildInsertValue(ctx->ac.builder, ret, p, i, "");
    }
-   for (i = 0; i < num_input_vgprs; i++) {
-      LLVMValueRef p = input_vgprs[i];
-
-      if (i == vertex_id_vgpr)
-         p = ctx->abi.vertex_id;
-      else if (i == instance_id_vgpr)
-         p = ctx->abi.instance_id;
-
-      p = ac_to_float(&ctx->ac, p);
-      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, p, key->vs_prolog.num_input_sgprs + i, "");
+   for (int i = 0; i < num_input_vgprs; i++) {
+      LLVMValueRef p = ac_to_float(&ctx->ac, input_vgprs[i]);
+      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, p, num_input_sgprs + i, "");
    }
 
    /* Compute vertex load indices from instance divisors. */
-   LLVMValueRef instance_divisor_constbuf = NULL;
+   LLVMValueRef instance_divisor_constbuf =
+      key->vs_prolog.states.instance_divisor_is_fetched ?
+      si_prolog_get_internal_binding_slot(ctx, SI_VS_CONST_INSTANCE_DIVISORS) : NULL;
 
-   if (key->vs_prolog.states.instance_divisor_is_fetched) {
-      LLVMValueRef list = si_prolog_get_internal_bindings(ctx);
-      LLVMValueRef buf_index = LLVMConstInt(ctx->ac.i32, SI_VS_CONST_INSTANCE_DIVISORS, 0);
-      instance_divisor_constbuf = ac_build_load_to_sgpr(&ctx->ac,
-         (struct ac_llvm_pointer) { .v = list, .t = ctx->ac.v4i32 }, buf_index);
-   }
-
-   for (i = 0; i < key->vs_prolog.num_inputs; i++) {
+   for (int i = 0; i < key->vs_prolog.num_inputs; i++) {
       LLVMValueRef index = get_vertex_index(ctx, &key->vs_prolog.states, i,
-                                            instance_divisor_constbuf,
-                                            user_sgpr_base + SI_SGPR_START_INSTANCE,
-                                            user_sgpr_base + SI_SGPR_BASE_VERTEX);
+                                            instance_divisor_constbuf);
 
       index = ac_to_float(&ctx->ac, index);
-      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, index, ctx->args->ac.arg_count + i, "");
+      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, index, args->ac.arg_count + i, "");
    }
 
    si_llvm_build_ret(ctx, ret);

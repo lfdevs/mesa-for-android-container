@@ -27,8 +27,9 @@
 #define FAMILY_RV      0x8E //# 142 / Raven
 #define FAMILY_NV      0x8F //# 143 / Navi: 10
 #define FAMILY_VGH     0x90 //# 144 / Van Gogh
-#define FAMILY_GFX1100 0x91
+#define FAMILY_NV3     0x91 //# 145 / Navi: 3x
 #define FAMILY_GFX1103 0x94
+#define FAMILY_GFX1150 0x96
 #define FAMILY_RMB     0x92 //# 146 / Rembrandt
 #define FAMILY_RPL     0x95 //# 149 / Raphael
 #define FAMILY_MDN     0x97 //# 151 / Mendocino
@@ -45,7 +46,7 @@
 #define FAMILY_IS_AI(f)      FAMILY_IS(f, AI)
 #define FAMILY_IS_RV(f)      FAMILY_IS(f, RV)
 #define FAMILY_IS_NV(f)      FAMILY_IS(f, NV)
-#define FAMILY_IS_GFX1100(f) FAMILY_IS(f, GFX1100)
+#define FAMILY_IS_NV3(f)     FAMILY_IS(f, NV3)
 #define FAMILY_IS_RMB(f)     FAMILY_IS(f, RMB)
 
 #define AMDGPU_UNKNOWN          0xFF
@@ -95,12 +96,13 @@
 
 #define AMDGPU_VANGOGH_RANGE    0x01, 0xFF //# 1 <= x < max
 
-#define AMDGPU_GFX1100_RANGE    0x01, 0x10 //# 01 <= x < 16
-#define AMDGPU_GFX1101_RANGE    0x20, 0xFF //# 32 <= x < 255
-#define AMDGPU_GFX1102_RANGE    0x10, 0x20 //# 16 <= x < 32
-
+#define AMDGPU_NAVI31_RANGE     0x01, 0x10 //# 01 <= x < 16
+#define AMDGPU_NAVI32_RANGE     0x20, 0xFF //# 32 <= x < 255
+#define AMDGPU_NAVI33_RANGE     0x10, 0x20 //# 16 <= x < 32
 #define AMDGPU_GFX1103_R1_RANGE 0x01, 0x80 //# 1 <= x < 128
 #define AMDGPU_GFX1103_R2_RANGE 0x80, 0xFF //# 128 <= x < max
+
+#define AMDGPU_GFX1150_RANGE    0x01, 0xFF //# 1 <= x < max
 
 #define AMDGPU_REMBRANDT_RANGE  0x01, 0xFF //# 01 <= x < 255
 
@@ -168,11 +170,12 @@
 
 #define ASICREV_IS_VANGOGH(r)          ASICREV_IS(r, VANGOGH)
 
-#define ASICREV_IS_GFX1100(r)          ASICREV_IS(r, GFX1100)
-#define ASICREV_IS_GFX1101(r)          ASICREV_IS(r, GFX1101)
-#define ASICREV_IS_GFX1102(r)          ASICREV_IS(r, GFX1102)
+#define ASICREV_IS_NAVI31_P(r)         ASICREV_IS(r, NAVI31)
+#define ASICREV_IS_NAVI32_P(r)         ASICREV_IS(r, NAVI32)
+#define ASICREV_IS_NAVI33_P(r)         ASICREV_IS(r, NAVI33)
 #define ASICREV_IS_GFX1103_R1(r)       ASICREV_IS(r, GFX1103_R1)
 #define ASICREV_IS_GFX1103_R2(r)       ASICREV_IS(r, GFX1103_R2)
+#define ASICREV_IS_GFX1150(r)          ASICREV_IS(r, GFX1150)
 
 #define ASICREV_IS_REMBRANDT(r)        ASICREV_IS(r, REMBRANDT)
 

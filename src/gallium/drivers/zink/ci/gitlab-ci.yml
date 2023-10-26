@@ -1,31 +1,5 @@
-.zink-test:
-  variables:
-    MESA_LOADER_DRIVER_OVERRIDE: "zink"
-    FLAKES_CHANNEL: "#zink-ci"
-
-.zink-trace-test:
-  extends:
-    - .zink-test
-  variables:
-    # The libX11 in the debian we use doesn't XInitThreads() by default (need
-    # 1.8.1 for that), and eglretrace's waffle GLX path doesn't call it either,
-    # which ends up causing trouble with kopper's X usage.  Use gbm for our
-    # trace replay, instead.
-    # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6753
-    HWCI_START_XORG: ""
-    WAFFLE_PLATFORM: gbm
-    PIGLIT_PLATFORM: gbm
-
-.zink-lvp-test:
-  extends:
-    - .zink-lvp-rules
-    - .zink-test
-  variables:
-    LIBGL_ALWAYS_SOFTWARE: "true"
-    LVP_POISON_MEMORY: "1"
-    GPU_VERSION: zink-lvp
-    # Fix non-conformant llvmpipe filter defaults
-    GALLIVM_PERF: "no_quad_lod"
+include:
+  - local: 'src/gallium/drivers/zink/ci/gitlab-ci-inc.yml'
 
 zink-lvp:
   extends:
@@ -34,28 +8,23 @@ zink-lvp:
     - .zink-lvp-test
   variables:
     DEQP_SUITE: zink-lvp
-    DEQP_FRACTION: 4
+    DEQP_FRACTION: 8
     PIGLIT_NO_WINDOW: 1
-    XVFB_SCRIPT: "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
+    # Enable validation (except for on piglit, see deqp-zink-lvp.toml), logging
+    # to stdout and aborting on unknown failures.
+    ZINK_DEBUG: validation
+    XVFB_SCRIPT: "VK_DRIVER=lvp install/deqp-runner.sh"
   script: |
     xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
-
-.zink-anv-test:
-  extends:
-    - .anv-tgl-test
-    - .zink-anv-rules
-    - .zink-test
-  variables:
-    VK_DRIVER: intel
-    GPU_VERSION: zink-anv-tgl
 
 zink-anv-tgl:
   extends:
     - .zink-anv-test
+  timeout: 1h
   variables:
     DEQP_SUITE: zink-anv-tgl
     PIGLIT_NO_WINDOW: 1
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
     # We use gbm because X can die:
     # MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
     # Xorg: ../src/gallium/drivers/zink/zink_batch.c:599: zink_end_batch: Assertion `!ctx->batch_states' failed.
@@ -68,9 +37,9 @@ zink-anv-tgl-full:
     - .zink-anv-manual-rules
   variables:
     DEQP_SUITE: zink-anv-tgl-full
-    JOB_TIMEOUT: 90
+    JOB_TIMEOUT: 105
     HWCI_START_WESTON: 1
-  timeout: 1h 30m
+  timeout: 1h 45m
   parallel: 3
 
 zink-anv-tgl-traces:
@@ -83,7 +52,6 @@ zink-anv-tgl-traces:
     # dependencies right.
     - .lava-traces-base
   variables:
-    MESA_LOADER_DRIVER_OVERRIDE: zink
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-zink.yml"
 
 zink-anv-tgl-traces-restricted:
@@ -92,7 +60,7 @@ zink-anv-tgl-traces-restricted:
     - .zink-anv-rules-restricted
   variables:
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-zink-restricted.yml"
-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}
+    PIGLIT_REPLAY_EXTRA_ARGS: --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}
   allow_failure: true
 
 zink-tu-a618:
@@ -137,38 +105,28 @@ zink-tu-a618-traces-performance:
     - !reference [zink-tu-a618-traces, needs]
     - !reference [.piglit-performance:arm64, needs]
 
-.zink-freedreno-a630-traces:
-  extends:
-    - a630-traces
-    - .zink-turnip-rules
-    - .zink-trace-test
-  variables:
-    PIGLIT_REPLAY_DEVICE_NAME: "zink-a630"
-
 ############### Combined testing (GL, GLES, Piglit) on RADV
-.radv-zink-test-valve:
+zink-radv-polaris10-valve:
   extends:
-    - .zink-test
-    - .test-radv
-    - .b2c-test-gl
+    - .radv-zink-test-valve
+    - .polaris10-test-valve-kws
+    - .zink-radv-manual-rules
   variables:
-    PIGLIT_PROFILES: all
-    PIGLIT_PLATFORM: gbm
-    HWCI_TEST_SCRIPT: ./install/valve/gl_combined_testing.sh
-    B2C_JOB_SUCCESS_REGEX: 'Execution is over, pipeline status: 0'
-
-    # Disable reporting, since DUTs don't have internet access
-    FLAKES_CHANNEL: ""
+    GPU_VERSION: zink-radv-polaris10
+    ZINK_DEBUG: quiet
 
 zink-radv-navi10-valve:
   extends:
     - .radv-zink-test-valve
-    - .navi10-test-valve
+    - .navi10-test-valve-mupuf
     - .zink-radv-manual-rules
+  timeout: 40m
   variables:
+    B2C_TIMEOUT_OVERALL_MINUTES: 30
     GPU_VERSION: zink-radv-navi10
 
 zink-radv-vangogh-valve:
+  timeout: 35m
   parallel: 3
   extends:
     - .radv-zink-test-valve
@@ -176,6 +134,10 @@ zink-radv-vangogh-valve:
     - .zink-radv-rules
   variables:
     GPU_VERSION: zink-radv-vangogh
+    B2C_SESSION_REBOOT_REGEX: 'BUG: kernel NULL pointer dereference, address'
+    B2C_TIMEOUT_BOOT_RETRIES: 1
+    B2C_TIMEOUT_BOOT_MINUTES: 30
+    B2C_TIMEOUT_OVERALL_MINUTES: 30
   # Override the list of tags to drop `priority:low`
   tags:
     - amdgpu:codename:VANGOGH

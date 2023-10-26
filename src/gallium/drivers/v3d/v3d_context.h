@@ -215,6 +215,9 @@ struct v3d_uncompiled_shader {
         uint16_t tf_specs[16];
         uint16_t tf_specs_psiz[16];
         uint32_t num_tf_specs;
+
+        /* For caching */
+        unsigned char sha1[20];
 };
 
 struct v3d_compiled_shader {
@@ -265,6 +268,7 @@ struct v3d_vertex_stateobj {
         unsigned num_elements;
 
         uint8_t attrs[16 * (V3D_MAX_VS_INPUTS / 4)];
+        /* defaults can be NULL for some hw generation */
         struct pipe_resource *defaults;
         uint32_t defaults_offset;
 };
@@ -794,7 +798,8 @@ void v3d_ensure_prim_counts_allocated(struct v3d_context *ctx);
 void v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
                                   enum pipe_shader_type shader);
 
-void v3d_get_tile_buffer_size(bool is_msaa,
+void v3d_get_tile_buffer_size(const struct v3d_device_info *devinfo,
+                              bool is_msaa,
                               bool double_buffer,
                               uint32_t nr_cbufs,
                               struct pipe_surface **cbufs,
@@ -807,10 +812,12 @@ bool v3d_render_condition_check(struct v3d_context *v3d);
 
 #ifdef ENABLE_SHADER_CACHE
 struct v3d_compiled_shader *v3d_disk_cache_retrieve(struct v3d_context *v3d,
-                                                    const struct v3d_key *key);
+                                                    const struct v3d_key *key,
+                                                    const struct v3d_uncompiled_shader *uncompiled);
 
 void v3d_disk_cache_store(struct v3d_context *v3d,
                           const struct v3d_key *key,
+                          const struct v3d_uncompiled_shader *uncompiled,
                           const struct v3d_compiled_shader *shader,
                           uint64_t *qpu_insts,
                           uint32_t qpu_size);
@@ -818,14 +825,50 @@ void v3d_disk_cache_store(struct v3d_context *v3d,
 
 /* Helper to call hw ver specific functions */
 #define v3d_X(devinfo, thing) ({                                \
-        __typeof(&v3d42_##thing) v3d_X_thing;                   \
-        if ((devinfo)->ver >= 42)                               \
-                v3d_X_thing = &v3d42_##thing;                   \
-        else if ((devinfo)->ver >= 33)                          \
+        __typeof(&v3d33_##thing) v3d_X_thing;                   \
+        switch (devinfo->ver) {                                 \
+        case 33:                                                \
+        case 40:                                                \
                 v3d_X_thing = &v3d33_##thing;                   \
-        else                                                    \
+                break;                                          \
+        case 42:                                                \
+                v3d_X_thing = &v3d42_##thing;                   \
+                break;                                          \
+        case 71:                                                \
+                v3d_X_thing = &v3d71_##thing;                   \
+                break;                                          \
+        default:                                                \
                 unreachable("Unsupported hardware generation"); \
+        }                                                       \
         v3d_X_thing;                                            \
+})
+
+/* FIXME: The same for vulkan/opengl. Common place? define it at the
+ * v3d_packet files?
+ */
+#define V3D33_CLIPPER_XY_GRANULARITY 256.0f
+#define V3D42_CLIPPER_XY_GRANULARITY 256.0f
+#define V3D71_CLIPPER_XY_GRANULARITY 64.0f
+
+/* Helper to get hw-specific macro values */
+#define V3DV_X(devinfo, thing) ({                               \
+   __typeof(V3D33_##thing) V3D_X_THING;                         \
+   switch (devinfo->ver) {                                      \
+   case 33:                                                     \
+   case 40:                                                     \
+      V3D_X_THING = V3D33_##thing;                              \
+      break;                                                    \
+      case 41:                                                  \
+   case 42:                                                     \
+      V3D_X_THING = V3D42_##thing;                              \
+      break;                                                    \
+   case 71:                                                     \
+      V3D_X_THING = V3D71_##thing;                              \
+      break;                                                    \
+   default:                                                     \
+      unreachable("Unsupported hardware generation");           \
+   }                                                            \
+   V3D_X_THING;                                                 \
 })
 
 #ifdef v3dX
@@ -836,6 +879,10 @@ void v3d_disk_cache_store(struct v3d_context *v3d,
 #  undef v3dX
 
 #  define v3dX(x) v3d42_##x
+#  include "v3dx_context.h"
+#  undef v3dX
+
+#  define v3dX(x) v3d71_##x
 #  include "v3dx_context.h"
 #  undef v3dX
 #endif

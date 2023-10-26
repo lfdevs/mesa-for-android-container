@@ -12,7 +12,8 @@ extern "C" {
 struct pipe_screen;
 struct renderonly;
 
-struct pipe_screen *agx_screen_create(int fd, struct renderonly *ro);
+struct pipe_screen *agx_screen_create(int fd, struct renderonly *ro,
+                                      const struct pipe_screen_config *config);
 
 #ifdef __cplusplus
 }

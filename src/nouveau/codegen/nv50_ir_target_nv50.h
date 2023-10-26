@@ -24,12 +24,6 @@
 
 namespace nv50_ir {
 
-#define NVC0_BUILTIN_DIV_U32 0
-#define NVC0_BUILTIN_DIV_S32 1
-#define NVC0_BUILTIN_RCP_F64 2
-#define NVC0_BUILTIN_RSQ_F64 3
-
-#define NVC0_BUILTIN_COUNT 4
 
 class TargetNV50 : public Target
 {

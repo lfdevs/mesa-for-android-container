@@ -10,6 +10,17 @@ template = """/*
 #include <stdint.h>
 #include "util/macros.h"
 
+enum agx_schedule_class {
+   AGX_SCHEDULE_CLASS_INVALID,
+   AGX_SCHEDULE_CLASS_NONE,
+   AGX_SCHEDULE_CLASS_LOAD,
+   AGX_SCHEDULE_CLASS_STORE,
+   AGX_SCHEDULE_CLASS_ATOMIC,
+   AGX_SCHEDULE_CLASS_COVERAGE,
+   AGX_SCHEDULE_CLASS_PRELOAD,
+   AGX_SCHEDULE_CLASS_BARRIER,
+};
+
 /* Listing of opcodes */
 
 enum agx_opcode {
@@ -62,6 +73,7 @@ struct agx_opcode_info {
    enum agx_immediate immediates;
    struct agx_encoding encoding;
    struct agx_encoding encoding_16;
+   enum agx_schedule_class schedule_class;
    bool is_float : 1;
    bool can_eliminate : 1;
    bool can_reorder : 1;

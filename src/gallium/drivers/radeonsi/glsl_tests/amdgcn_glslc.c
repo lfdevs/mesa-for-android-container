@@ -172,7 +172,7 @@ main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         if (strstr(argv[i], "-mcpu=") == argv[i]) {
-            setenv("SI_FORCE_FAMILY", argv[i] + 6, 1);
+            setenv("AMD_FORCE_FAMILY", argv[i] + 6, 1);
         } else if (filename == NULL) {
             filename = argv[i];
         } else {

@@ -60,10 +60,12 @@ enum st_update_flag {
 static void ALWAYS_INLINE
 init_velement(struct pipe_vertex_element *velements,
               const struct gl_vertex_format *vformat,
-              int src_offset, unsigned instance_divisor,
+              int src_offset, unsigned src_stride,
+              unsigned instance_divisor,
               int vbo_index, bool dual_slot, int idx)
 {
    velements[idx].src_offset = src_offset;
+   velements[idx].src_stride = src_stride;
    velements[idx].src_format = vformat->_PipeFormat;
    velements[idx].instance_divisor = instance_divisor;
    velements[idx].vertex_buffer_index = vbo_index;
@@ -109,13 +111,13 @@ setup_arrays(struct st_context *st,
             vbuffer[bufidx].is_user_buffer = true;
             vbuffer[bufidx].buffer_offset = 0;
          }
-         vbuffer[bufidx].stride = binding->Stride; /* in bytes */
 
          if (UPDATE == UPDATE_BUFFERS_ONLY)
             continue;
 
          /* Set the vertex element. */
          init_velement(velements->velems, &attrib->Format, 0,
+                       binding->Stride,
                        binding->InstanceDivisor, bufidx,
                        dual_slot_inputs & BITFIELD_BIT(attr),
                        util_bitcount_fast<POPCNT>(inputs_read & BITFIELD_MASK(attr)));
@@ -143,7 +145,6 @@ setup_arrays(struct st_context *st,
          vbuffer[bufidx].is_user_buffer = true;
          vbuffer[bufidx].buffer_offset = 0;
       }
-      vbuffer[bufidx].stride = binding->Stride; /* in bytes */
 
       const GLbitfield boundmask = _mesa_draw_bound_attrib_bits(binding);
       GLbitfield attrmask = mask & boundmask;
@@ -162,7 +163,7 @@ setup_arrays(struct st_context *st,
             = _mesa_draw_array_attrib(vao, attr);
          const GLuint off = _mesa_draw_attributes_relative_offset(attrib);
          init_velement(velements->velems, &attrib->Format, off,
-                       binding->InstanceDivisor, bufidx,
+                       binding->Stride, binding->InstanceDivisor, bufidx,
                        dual_slot_inputs & BITFIELD_BIT(attr),
                        util_bitcount_fast<POPCNT>(inputs_read & BITFIELD_MASK(attr)));
       } while (attrmask);
@@ -217,7 +218,6 @@ st_setup_current(struct st_context *st,
       vbuffer[bufidx].is_user_buffer = false;
       vbuffer[bufidx].buffer.resource = NULL;
       /* vbuffer[bufidx].buffer_offset is set below */
-      vbuffer[bufidx].stride = 0;
 
       /* Use const_uploader for zero-stride vertex attributes, because
        * it may use a better memory placement than stream_uploader.
@@ -253,7 +253,7 @@ st_setup_current(struct st_context *st,
 
          if (UPDATE == UPDATE_ALL) {
             init_velement(velements->velems, &attrib->Format, cursor - ptr,
-                          0, bufidx, dual_slot_inputs & BITFIELD_BIT(attr),
+                          0, 0, bufidx, dual_slot_inputs & BITFIELD_BIT(attr),
                           util_bitcount_fast<POPCNT>(inputs_read & BITFIELD_MASK(attr)));
          }
 
@@ -287,14 +287,13 @@ st_setup_current_user(struct st_context *st,
          = _mesa_draw_current_attrib(ctx, attr);
       const unsigned bufidx = (*num_vbuffers)++;
 
-      init_velement(velements->velems, &attrib->Format, 0, 0,
+      init_velement(velements->velems, &attrib->Format, 0, 0, 0,
                     bufidx, dual_slot_inputs & BITFIELD_BIT(attr),
                     util_bitcount(inputs_read & BITFIELD_MASK(attr)));
 
       vbuffer[bufidx].is_user_buffer = true;
       vbuffer[bufidx].buffer.user = attrib->Ptr;
       vbuffer[bufidx].buffer_offset = 0;
-      vbuffer[bufidx].stride = 0;
    }
 }
 
@@ -357,7 +356,7 @@ st_update_array_templ(struct st_context *st,
       st->uses_user_vertex_buffers = uses_user_vertex_buffers;
    } else {
       /* Only vertex buffers. */
-      cso_set_vertex_buffers(cso, 0, num_vbuffers, unbind_trailing_vbuffers,
+      cso_set_vertex_buffers(cso, num_vbuffers, unbind_trailing_vbuffers,
                              true, vbuffer);
       /* This can change only when we update vertex elements. */
       assert(st->uses_user_vertex_buffers == uses_user_vertex_buffers);
