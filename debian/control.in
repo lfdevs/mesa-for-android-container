@@ -18,8 +18,8 @@ Build-Depends:
  libsensors-dev [!hurd-any],
  libxfixes-dev,
  libxext-dev,
- libva-dev (>= 1.6.0) [linux-any kfreebsd-any] <!pkg.mesa.nolibva>,
- libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
+ libva-dev (>= 1.6.0) [linux-any] <!pkg.mesa.nolibva>,
+ libvdpau-dev (>= 1.1.1) [linux-any],
  libvulkan-dev [@LLVM_ARCHS@],
  x11proto-dev,
  linux-libc-dev (>= 2.6.31) [linux-any],
@@ -124,7 +124,7 @@ Description: state-tracker for Direct3D9 -- development files
 
 Package: libgbm1
 Section: libs
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -138,7 +138,7 @@ Description: generic buffer management API -- runtime
 
 Package: libgbm-dev
 Section: libdevel
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Depends:
  libgbm1 (= ${binary:Version}),
  ${misc:Depends},
@@ -320,7 +320,7 @@ Description: Mesa Off-screen rendering extension -- development files
 
 Package: mesa-va-drivers
 Section: libs
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Build-Profiles: <!pkg.mesa.nolibva>
 Depends:
  ${shlibs:Depends},
@@ -342,7 +342,7 @@ Description: Mesa VA-API video acceleration drivers
 
 Package: mesa-vdpau-drivers
 Section: libs
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Depends:
  libvdpau1,
  ${shlibs:Depends},

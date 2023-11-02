@@ -819,7 +819,8 @@ zink_draw(struct pipe_context *pctx,
    if ((BATCH_CHANGED || ctx->blend_state_changed)) {
       if (ctx->gfx_pipeline_state.blend_state) {
          if (ctx->ds3_states & BITFIELD_BIT(ZINK_DS3_BLEND_A2C))
-            VKCTX(CmdSetAlphaToCoverageEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->alpha_to_coverage);
+            VKCTX(CmdSetAlphaToCoverageEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->alpha_to_coverage &&
+                                                                        ctx->gfx_stages[MESA_SHADER_FRAGMENT]->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_DATA0));
          if (ctx->ds3_states & BITFIELD_BIT(ZINK_DS3_BLEND_A21))
             VKCTX(CmdSetAlphaToOneEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->alpha_to_one);
          if (ctx->fb_state.nr_cbufs) {

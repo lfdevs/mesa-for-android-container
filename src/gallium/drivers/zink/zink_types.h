@@ -1148,6 +1148,8 @@ struct zink_compute_program {
    struct zink_shader *shader;
    struct hash_table pipelines;
 
+   simple_mtx_t cache_lock; //extra lock because threads are insane and sand was not meant to think
+
    VkPipeline base_pipeline;
 };
 
@@ -1231,6 +1233,7 @@ struct zink_resource_object {
    bool copies_valid;
    bool copies_need_reset; //for use with batch state resets
 
+   struct u_rwlock copy_lock;
    struct util_dynarray copies[16]; //regions being copied to; for barrier omission
 
    VkBuffer storage_buffer;

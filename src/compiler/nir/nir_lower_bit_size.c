@@ -203,7 +203,7 @@ lower_intrinsic_instr(nir_builder *b, nir_intrinsic_instr *intrin,
 
       if (intrin->intrinsic != nir_intrinsic_vote_feq &&
           intrin->intrinsic != nir_intrinsic_vote_ieq)
-         res = nir_u2uN(b, res, old_bit_size);
+         res = nir_convert_to_bit_size(b, res, type, old_bit_size);
 
       nir_def_rewrite_uses(&intrin->def, res);
       break;

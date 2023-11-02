@@ -87,7 +87,15 @@ num_array_levels_in_array_of_vector_type(const struct glsl_type *type)
       if (glsl_type_is_array_or_matrix(type)) {
          num_levels++;
          type = glsl_get_array_element(type);
-      } else if (glsl_type_is_vector_or_scalar(type)) {
+      } else if (glsl_type_is_vector_or_scalar(type) &&
+                 !glsl_type_is_cmat(type)) {
+         /* glsl_type_is_vector_or_scalar would more accruately be called "can
+          * be an r-value that isn't an array, structure, or matrix. This
+          * optimization pass really shouldn't do anything to cooperative
+          * matrices. These matrices will eventually be lowered to something
+          * else (dependent on the backend), and that thing may (or may not)
+          * be handled by this or another pass.
+          */
          return num_levels;
       } else {
          /* Not an array of vectors */

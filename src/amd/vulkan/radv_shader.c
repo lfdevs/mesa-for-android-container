@@ -1404,7 +1404,7 @@ radv_init_shader_upload_queue(struct radv_device *device)
       struct radv_shader_dma_submission *submission = calloc(1, sizeof(struct radv_shader_dma_submission));
       submission->cs = ws->cs_create(ws, AMD_IP_SDMA, false);
       if (!submission->cs)
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
+         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
       list_addtail(&submission->list, &device->shader_dma_submissions);
    }
 

@@ -1212,6 +1212,7 @@ zink_screen_init_compiler(struct zink_screen *screen)
       .lower_fsat = true,
       .lower_hadd = true,
       .lower_iadd_sat = true,
+      .lower_fisnormal = true,
       .lower_extract_byte = true,
       .lower_extract_word = true,
       .lower_insert_byte = true,
@@ -2775,6 +2776,11 @@ zink_compiler_assign_io(struct zink_screen *screen, nir_shader *producer, nir_sh
          NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_temp, NULL);
          optimize_nir(producer, NULL, true);
       }
+   }
+   if (consumer->info.stage != MESA_SHADER_FRAGMENT) {
+      producer->info.has_transform_feedback_varyings = false;
+      nir_foreach_shader_out_variable(var, producer)
+         var->data.explicit_xfb_buffer = false;
    }
    if (producer->info.stage == MESA_SHADER_TESS_CTRL) {
       /* never assign from tcs -> tes, always invert */

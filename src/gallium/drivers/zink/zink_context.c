@@ -231,6 +231,11 @@ zink_context_destroy(struct pipe_context *pctx)
    if (!(ctx->flags & ZINK_CONTEXT_COPY_ONLY))
       p_atomic_dec(&screen->base.num_contexts);
 
+   util_dynarray_foreach(&ctx->di.global_bindings, struct pipe_resource *, res) {
+      pipe_resource_reference(res, NULL);
+   }
+   util_dynarray_fini(&ctx->di.global_bindings);
+
    ralloc_free(ctx);
 }
 

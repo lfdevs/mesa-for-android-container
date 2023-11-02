@@ -1610,6 +1610,11 @@ tu_emit_renderpass_begin(struct tu_cmd_buffer *cmd)
     */
    BITSET_SET(cmd->vk.dynamic_graphics_state.dirty,
               MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES);
+   /* PC_PRIMITIVE_CNTL_0 isn't a part of a draw state and may be changed
+    * by blits.
+    */
+   BITSET_SET(cmd->vk.dynamic_graphics_state.dirty,
+              MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE);
 }
 
 template <chip CHIP>

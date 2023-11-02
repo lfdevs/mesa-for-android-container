@@ -369,6 +369,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    if (!first_cs)
       u_trace_fini(&ctx->trace);
 
+   u_trace_init(&ctx->trace, &ctx->ds.trace_context);
+
    if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
       is_secure = ctx->ws->cs_is_secure(&ctx->gfx_cs);
 
@@ -583,7 +585,6 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    assert(!ctx->gfx_cs.prev_dw);
    ctx->initial_gfx_cs_size = ctx->gfx_cs.current.cdw;
 
-   u_trace_init(&ctx->trace, &ctx->ds.trace_context);
    /* All buffer references are removed on a flush, so si_check_needs_implicit_sync
     * cannot determine if si_make_CB_shader_coherent() needs to be called.
     * ctx->force_cb_shader_coherent will be cleared by the first call to

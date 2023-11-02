@@ -1416,7 +1416,7 @@ anv_batch_emit_reloc(struct anv_batch *batch,
 static inline void
 write_reloc(const struct anv_device *device, void *p, uint64_t v, bool flush)
 {
-   unsigned reloc_size = 0;
+   UNUSED unsigned reloc_size = 0;
    if (device->info->ver >= 8) {
       reloc_size = sizeof(uint64_t);
       *(uint64_t *)p = intel_canonical_address(v);
@@ -1425,8 +1425,10 @@ write_reloc(const struct anv_device *device, void *p, uint64_t v, bool flush)
       *(uint32_t *)p = v;
    }
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (flush && device->physical->memory.need_flush)
       intel_flush_range(p, reloc_size);
+#endif
 }
 
 static inline uint64_t

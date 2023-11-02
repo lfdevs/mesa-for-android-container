@@ -1095,7 +1095,11 @@ write_buffer_descriptor(struct radv_device *device, unsigned *dst, uint64_t va, 
 
    dst[0] = va;
    dst[1] = S_008F04_BASE_ADDRESS_HI(va >> 32);
-   dst[2] = range;
+   /* robustBufferAccess is relaxed enough to allow this (in combination with the alignment/size
+    * we return from vkGetBufferMemoryRequirements) and this allows the shader compiler to create
+    * more efficient 8/16-bit buffer accesses.
+    */
+   dst[2] = align(range, 4);
    dst[3] = rsrc_word3;
 }
 
@@ -1111,12 +1115,6 @@ write_buffer_descriptor_impl(struct radv_device *device, struct radv_cmd_buffer 
 
       range = vk_buffer_range(&buffer->vk, buffer_info->offset, buffer_info->range);
       assert(buffer->vk.size > 0 && range > 0);
-
-      /* robustBufferAccess is relaxed enough to allow this (in combination with the alignment/size
-       * we return from vkGetBufferMemoryRequirements) and this allows the shader compiler to create
-       * more efficient 8/16-bit buffer accesses.
-       */
-      range = align(range, 4);
    }
 
    write_buffer_descriptor(device, dst, va, range);

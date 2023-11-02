@@ -3898,6 +3898,15 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
       NIR_PASS_V(s, nir_remove_dead_variables, nir_var_shader_in, NULL);
    }
 
+   /* Lower tesslevel indirect derefs for tessellation shader.
+    * tesslevels are now a compact array variable and nir expects a constant
+    * array index into the compact array variable.
+    */
+   if (s->info.stage == MESA_SHADER_TESS_CTRL ||
+       s->info.stage == MESA_SHADER_TESS_EVAL) {
+      NIR_PASS_V(s, nir_lower_indirect_derefs, 0 , UINT32_MAX);
+   }
+
    NIR_PASS_V(s, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
               type_size, (nir_lower_io_options)0);
 

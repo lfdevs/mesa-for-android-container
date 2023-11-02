@@ -48,7 +48,8 @@ foreach item : anv_internal_shaders
   anv_internal_spvs += custom_target(
     spv_filename,
     input : [glsl2spirv, f, files('common_generated_draws.glsl',
-                                  'common_query_copy.glsl')],
+                                  'common_query_copy.glsl',
+                                  'interface.h')],
     output : spv_filename,
     command : [
       prog_python, '@INPUT0@', '@INPUT1@', '@OUTPUT@',

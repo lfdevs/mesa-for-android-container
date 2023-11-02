@@ -256,10 +256,6 @@ bo_create_internal(struct zink_screen *screen,
    struct zink_bo *bo = NULL;
    bool init_pb_cache;
 
-   /* too big for vk alloc */
-   if (size > UINT32_MAX)
-      return NULL;
-
    alignment = get_optimal_alignment(screen, size, alignment);
 
    VkMemoryAllocateFlagsInfo ai;

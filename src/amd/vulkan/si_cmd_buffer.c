@@ -1277,11 +1277,19 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level
    }
 
    if (flush_bits & RADV_CMD_FLAG_START_PIPELINE_STATS) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      if (qf == RADV_QUEUE_GENERAL) {
+         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      } else if (qf == RADV_QUEUE_COMPUTE) {
+         radeon_set_sh_reg(cs, R_00B828_COMPUTE_PIPELINESTAT_ENABLE, S_00B828_PIPELINESTAT_ENABLE(1));
+      }
    } else if (flush_bits & RADV_CMD_FLAG_STOP_PIPELINE_STATS) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      if (qf == RADV_QUEUE_GENERAL) {
+         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      } else if (qf == RADV_QUEUE_COMPUTE) {
+         radeon_set_sh_reg(cs, R_00B828_COMPUTE_PIPELINESTAT_ENABLE, S_00B828_PIPELINESTAT_ENABLE(0));
+      }
    }
 }
 
@@ -1469,11 +1477,19 @@ si_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enum 
       si_emit_acquire_mem(cs, is_mec, gfx_level == GFX9, cp_coher_cntl);
 
    if (flush_bits & RADV_CMD_FLAG_START_PIPELINE_STATS) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      if (qf == RADV_QUEUE_GENERAL) {
+         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      } else if (qf == RADV_QUEUE_COMPUTE) {
+         radeon_set_sh_reg(cs, R_00B828_COMPUTE_PIPELINESTAT_ENABLE, S_00B828_PIPELINESTAT_ENABLE(1));
+      }
    } else if (flush_bits & RADV_CMD_FLAG_STOP_PIPELINE_STATS) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      if (qf == RADV_QUEUE_GENERAL) {
+         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      } else if (qf == RADV_QUEUE_COMPUTE) {
+         radeon_set_sh_reg(cs, R_00B828_COMPUTE_PIPELINESTAT_ENABLE, S_00B828_PIPELINESTAT_ENABLE(0));
+      }
    }
 }
 

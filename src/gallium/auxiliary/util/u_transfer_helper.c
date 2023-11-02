@@ -208,6 +208,10 @@ transfer_map_msaa(struct pipe_context *pctx,
          .depth0 = 1,
          .array_size = 1,
    };
+   if (util_format_is_depth_or_stencil(tmpl.format))
+      tmpl.bind |= PIPE_BIND_DEPTH_STENCIL;
+   else
+      tmpl.bind |= PIPE_BIND_RENDER_TARGET;
    trans->ss = pscreen->resource_create(pscreen, &tmpl);
    if (!trans->ss) {
       free(trans);

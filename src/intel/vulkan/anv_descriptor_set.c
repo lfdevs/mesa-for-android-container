@@ -280,7 +280,9 @@ anv_descriptor_size_for_mutable_type(const struct anv_physical_device *device,
 {
    unsigned size = 0;
 
-   if (!mutable_info || mutable_info->mutableDescriptorTypeListCount == 0) {
+   if (!mutable_info ||
+       mutable_info->mutableDescriptorTypeListCount == 0 ||
+       binding >= mutable_info->mutableDescriptorTypeListCount) {
       for(VkDescriptorType i = 0; i <= VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; i++) {
 
          if (i == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||

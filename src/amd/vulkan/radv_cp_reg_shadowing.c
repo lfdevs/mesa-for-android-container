@@ -44,7 +44,7 @@ radv_create_shadow_regs_preamble(const struct radv_device *device, struct radv_q
 
    struct radeon_cmdbuf *cs = ws->cs_create(ws, AMD_IP_GFX, false);
    if (!cs)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    radeon_check_space(ws, cs, 256);
 
@@ -131,7 +131,7 @@ radv_init_shadowed_regs_buffer_state(const struct radv_device *device, struct ra
 
    cs = ws->cs_create(ws, AMD_IP_GFX, false);
    if (!cs)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    radeon_check_space(ws, cs, 768);
 

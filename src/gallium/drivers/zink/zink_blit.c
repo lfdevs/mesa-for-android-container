@@ -122,6 +122,18 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
    region.extent.width = info->dst.box.width;
    region.extent.height = info->dst.box.height;
    region.extent.depth = info->dst.box.depth;
+   if (region.srcOffset.x + region.extent.width >= u_minify(src->base.b.width0, region.srcSubresource.mipLevel))
+      region.extent.width = u_minify(src->base.b.width0, region.srcSubresource.mipLevel) - region.srcOffset.x;
+   if (region.dstOffset.x + region.extent.width >= u_minify(dst->base.b.width0, region.dstSubresource.mipLevel))
+      region.extent.width = u_minify(dst->base.b.width0, region.dstSubresource.mipLevel) - region.dstOffset.x;
+   if (region.srcOffset.y + region.extent.height >= u_minify(src->base.b.height0, region.srcSubresource.mipLevel))
+      region.extent.height = u_minify(src->base.b.height0, region.srcSubresource.mipLevel) - region.srcOffset.y;
+   if (region.dstOffset.y + region.extent.height >= u_minify(dst->base.b.height0, region.dstSubresource.mipLevel))
+      region.extent.height = u_minify(dst->base.b.height0, region.dstSubresource.mipLevel) - region.dstOffset.y;
+   if (region.srcOffset.z + region.extent.depth >= u_minify(src->base.b.depth0, region.srcSubresource.mipLevel))
+      region.extent.depth = u_minify(src->base.b.depth0, region.srcSubresource.mipLevel) - region.srcOffset.z;
+   if (region.dstOffset.z + region.extent.depth >= u_minify(dst->base.b.depth0, region.dstSubresource.mipLevel))
+      region.extent.depth = u_minify(dst->base.b.depth0, region.dstSubresource.mipLevel) - region.dstOffset.z;
    VKCTX(CmdResolveImage)(cmdbuf, use_src->obj->image, src->layout,
                      dst->obj->image, dst->layout,
                      1, &region);

@@ -750,8 +750,12 @@ impl Device {
     }
 
     pub fn image_buffer_size(&self) -> usize {
-        self.screen
-            .param(pipe_cap::PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT) as usize
+        min(
+            // the CTS requires it to not exceed `CL_MAX_MEM_ALLOC_SIZE`
+            self.max_mem_alloc(),
+            self.screen
+                .param(pipe_cap::PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT) as cl_ulong,
+        ) as usize
     }
 
     pub fn image_read_count(&self) -> cl_uint {
@@ -852,7 +856,7 @@ impl Device {
     pub fn param_max_size(&self) -> usize {
         min(
             self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) as u32,
-            32 * 1024,
+            4 * 1024,
         ) as usize
     }
 

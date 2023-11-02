@@ -155,7 +155,16 @@ if gallium_drivers.contains('auto')
     error('Unknown OS @0@. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.'.format(
           host_machine.system()))
   endif
+elif gallium_drivers.contains('all')
+   # Build-test everything except for i915, which depends on libdrm-intel which
+   # is not available on non-Intel distros.
+   gallium_drivers = [
+     'r300', 'r600', 'radeonsi', 'crocus', 'v3d', 'vc4', 'freedreno', 'etnaviv',
+     'nouveau', 'svga', 'tegra', 'virgl', 'lima', 'panfrost', 'swrast', 'iris',
+     'zink', 'd3d12', 'asahi'
+   ]
 endif
+
 with_gallium_radeonsi = gallium_drivers.contains('radeonsi')
 with_gallium_r300 = gallium_drivers.contains('r300')
 with_gallium_r600 = gallium_drivers.contains('r600')
@@ -213,6 +222,12 @@ if _vulkan_drivers.contains('auto')
     error('Unknown OS @0@. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.'.format(
           host_machine.system()))
   endif
+elif _vulkan_drivers.contains('all')
+   # Build every vulkan driver regardless of architecture.
+   _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'swrast',
+                      'freedreno', 'panfrost', 'virtio', 'broadcom',
+                      'imagination-experimental', 'microsoft-experimental',
+                      'nouveau-experimental']
 endif
 
 with_intel_vk = _vulkan_drivers.contains('intel')
@@ -1459,7 +1474,6 @@ elif with_intel_vk or with_intel_hasvk
   error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
 endif
 
-# only used in Iris and ANV
 if with_any_intel and ['x86', 'x86_64'].contains(host_machine.cpu_family())
   pre_args += '-DSUPPORT_INTEL_INTEGRATED_GPUS'
 endif
@@ -1468,13 +1482,6 @@ if get_option('intel-xe-kmd').enabled()
   pre_args += '-DINTEL_XE_KMD_SUPPORTED'
 endif
 
-if with_intel_hasvk and host_machine.cpu_family().startswith('x86') == false
-  error('Intel "hasvk" Vulkan driver requires x86 or x86_64 CPU family')
-endif
-
-if with_gallium_crocus and host_machine.cpu_family().startswith('x86') == false
-  error('Intel "crocus" Gallium driver requires x86 or x86_64 CPU family')
-endif
 
 if with_gallium_i915 and host_machine.cpu_family().startswith('x86') == false
   error('Intel "i915" Gallium driver requires x86 or x86_64 CPU family')

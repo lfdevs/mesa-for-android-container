@@ -2333,8 +2333,10 @@ anv_device_init_trivial_batch(struct anv_device *device)
    anv_batch_emit(&batch, GFX7_MI_BATCH_BUFFER_END, bbe);
    anv_batch_emit(&batch, GFX7_MI_NOOP, noop);
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (device->physical->memory.need_flush)
       intel_flush_range(batch.start, batch.next - batch.start);
+#endif
 
    return VK_SUCCESS;
 }
@@ -3480,8 +3482,10 @@ VkResult anv_FlushMappedMemoryRanges(
    if (!device->physical->memory.need_flush)
       return VK_SUCCESS;
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    /* Make sure the writes we're flushing have landed. */
    __builtin_ia32_mfence();
+#endif
 
    for (uint32_t i = 0; i < memoryRangeCount; i++) {
       ANV_FROM_HANDLE(anv_device_memory, mem, pMemoryRanges[i].memory);
@@ -3492,9 +3496,11 @@ VkResult anv_FlushMappedMemoryRanges(
       if (map_offset >= mem->map_size)
          continue;
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
       intel_flush_range(mem->map + map_offset,
                         MIN2(pMemoryRanges[i].size,
                              mem->map_size - map_offset));
+#endif
    }
 
    return VK_SUCCESS;
@@ -3519,13 +3525,17 @@ VkResult anv_InvalidateMappedMemoryRanges(
       if (map_offset >= mem->map_size)
          continue;
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
       intel_invalidate_range(mem->map + map_offset,
                              MIN2(pMemoryRanges[i].size,
                                   mem->map_size - map_offset));
+#endif
    }
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    /* Make sure no reads get moved up above the invalidate. */
    __builtin_ia32_mfence();
+#endif
 
    return VK_SUCCESS;
 }

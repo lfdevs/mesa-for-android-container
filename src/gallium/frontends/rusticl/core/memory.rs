@@ -1231,6 +1231,19 @@ impl Mem {
 
         Ok(())
     }
+
+    pub fn pipe_image_host_access(&self) -> u16 {
+        // those flags are all mutually exclusive
+        (if bit_check(self.flags, CL_MEM_HOST_READ_ONLY) {
+            PIPE_IMAGE_ACCESS_READ
+        } else if bit_check(self.flags, CL_MEM_HOST_WRITE_ONLY) {
+            PIPE_IMAGE_ACCESS_WRITE
+        } else if bit_check(self.flags, CL_MEM_HOST_NO_ACCESS) {
+            0
+        } else {
+            PIPE_IMAGE_ACCESS_READ_WRITE
+        }) as u16
+    }
 }
 
 impl Drop for Mem {

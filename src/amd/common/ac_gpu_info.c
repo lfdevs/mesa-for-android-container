@@ -705,9 +705,6 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
       return false;
    }
 
-   assert(util_is_power_of_two_or_zero(info->ip[AMD_IP_COMPUTE].num_queues));
-   assert(util_is_power_of_two_or_zero(info->ip[AMD_IP_SDMA].num_queues));
-
    r = amdgpu_query_firmware_version(dev, AMDGPU_INFO_FW_GFX_ME, 0, 0, &info->me_fw_version,
                                      &info->me_fw_feature);
    if (r) {

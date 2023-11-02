@@ -1853,7 +1853,6 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
    UNOP(nir_op_f2f64, SpvOpFConvert)
    UNOP(nir_op_bitfield_reverse, SpvOpBitReverse)
    UNOP(nir_op_bit_count, SpvOpBitCount)
-   UNOP(nir_op_fisnormal, SpvOpIsNormal)
 #undef UNOP
 
    case nir_op_f2f16_rtz:
@@ -3295,6 +3294,7 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       break;
 
    case nir_intrinsic_load_sample_id:
+      spirv_builder_emit_cap(&ctx->builder, SpvCapabilitySampleRateShading);
       emit_load_uint_input(ctx, intr, &ctx->sample_id_var, "gl_SampleId", SpvBuiltInSampleId);
       break;
 
@@ -4663,7 +4663,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
       spirv_builder_emit_cap(&ctx.builder, SpvCapabilitySubgroupBallotKHR);
       spirv_builder_emit_extension(&ctx.builder, "SPV_KHR_shader_ballot");
    }
-   if (s->info.has_transform_feedback_varyings) {
+   if (s->info.has_transform_feedback_varyings && s->info.stage != MESA_SHADER_FRAGMENT) {
       spirv_builder_emit_cap(&ctx.builder, SpvCapabilityTransformFeedback);
       spirv_builder_emit_exec_mode(&ctx.builder, entry_point,
                                    SpvExecutionModeXfb);

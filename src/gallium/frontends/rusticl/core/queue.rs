@@ -13,12 +13,13 @@ use std::collections::HashSet;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Weak;
 use std::thread;
 use std::thread::JoinHandle;
 
 struct QueueState {
     pending: Vec<Arc<Event>>,
-    last: Option<Arc<Event>>,
+    last: Weak<Event>,
     // `Sync` on `Sender` was stabilized in 1.72, until then, put it into our Mutex.
     // see https://github.com/rust-lang/rust/commit/5f56956b3c7edb9801585850d1f41b0aeb1888ff
     chan_in: mpsc::Sender<Vec<Arc<Event>>>,
@@ -62,7 +63,7 @@ impl Queue {
             props_v2: props_v2,
             state: Mutex::new(QueueState {
                 pending: Vec::new(),
-                last: None,
+                last: Weak::new(),
                 chan_in: tx_q,
             }),
             _thrd: thread::Builder::new()
@@ -134,7 +135,7 @@ impl Queue {
         // Update last if and only if we get new events, this prevents breaking application code
         // doing things like `clFlush(q); clFinish(q);`
         if let Some(last) = state.pending.last() {
-            state.last = Some(last.clone());
+            state.last = Arc::downgrade(last);
         }
 
         let events = state.pending.drain(0..).collect();
@@ -144,9 +145,10 @@ impl Queue {
             .send(events)
             .map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
         if wait {
-            // Waiting on the last event is good enough here as the queue will process it in order,
-            // also take the value so we can release the event once we are done
-            state.last.take().map(|e| e.wait());
+            // Waiting on the last event is good enough here as the queue will process it in order
+            // It's not a problem if the weak ref is invalid as that means the work is already done
+            // and waiting isn't necessary anymore.
+            state.last.upgrade().map(|e| e.wait());
         }
         Ok(())
     }

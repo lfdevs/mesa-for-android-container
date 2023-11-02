@@ -3373,14 +3373,14 @@ copy_buffer_sub_data(struct gl_context *ctx, struct gl_buffer_object *src,
       return;
    }
 
-   if (readOffset + size > src->Size) {
+   if (size > src->Size || readOffset > src->Size - size) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s(readOffset %d + size %d > src_buffer_size %d)", func,
                   (int) readOffset, (int) size, (int) src->Size);
       return;
    }
 
-   if (writeOffset + size > dst->Size) {
+   if (size > dst->Size || writeOffset > dst->Size - size) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s(writeOffset %d + size %d > dst_buffer_size %d)", func,
                   (int) writeOffset, (int) size, (int) dst->Size);

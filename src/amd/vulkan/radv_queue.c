@@ -996,7 +996,7 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
       struct radeon_cmdbuf *cs = NULL;
       cs = ws->cs_create(ws, radv_queue_family_to_ring(device->physical_device, queue->qf), false);
       if (!cs) {
-         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
          goto fail;
       }
 
@@ -1263,8 +1263,10 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
    struct radeon_cmdbuf *ace_pre_cs = ws->cs_create(ws, AMD_IP_COMPUTE, false);
    struct radeon_cmdbuf *ace_post_cs = ws->cs_create(ws, AMD_IP_COMPUTE, false);
 
-   if (!leader_pre_cs || !leader_post_cs || !ace_pre_cs || !ace_post_cs)
+   if (!leader_pre_cs || !leader_post_cs || !ace_pre_cs || !ace_post_cs) {
+      r = VK_ERROR_OUT_OF_DEVICE_MEMORY;
       goto fail;
+   }
 
    radeon_check_space(ws, leader_pre_cs, 256);
    radeon_check_space(ws, leader_post_cs, 256);

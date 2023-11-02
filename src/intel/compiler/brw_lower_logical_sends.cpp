@@ -2715,6 +2715,7 @@ lower_math_logical_send(const fs_builder &bld, fs_inst *inst)
 
 static void
 lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
+                                const struct brw_wm_prog_key *wm_prog_key,
                                 const struct brw_wm_prog_data *wm_prog_data)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
@@ -2747,7 +2748,7 @@ lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
 
    const bool dynamic_mode =
       inst->opcode == FS_OPCODE_INTERPOLATE_AT_SAMPLE &&
-      wm_prog_data->persample_dispatch == BRW_SOMETIMES;
+      wm_prog_key->multisample_fbo == BRW_SOMETIMES;
 
    fs_reg desc = inst->src[1];
    uint32_t desc_imm =
@@ -2799,7 +2800,7 @@ lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
       desc = ubld.vgrf(BRW_REGISTER_TYPE_UD);
 
       check_dynamic_msaa_flag(ubld, wm_prog_data,
-                              BRW_WM_MSAA_FLAG_PERSAMPLE_DISPATCH);
+                              BRW_WM_MSAA_FLAG_MULTISAMPLE_FBO);
       if (orig_desc.file == IMM) {
          /* Not using SEL here because we would generate an instruction with 2
           * immediate sources which is not supported by HW.
@@ -3185,6 +3186,7 @@ fs_visitor::lower_logical_sends()
       case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
       case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
          lower_interpolator_logical_send(ibld, inst,
+                                         (const brw_wm_prog_key *)key,
                                          brw_wm_prog_data(prog_data));
          break;
 

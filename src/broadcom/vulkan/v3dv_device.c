@@ -2766,6 +2766,18 @@ get_buffer_memory_requirements(struct v3dv_buffer *buffer,
       .size = align64(buffer->size, buffer->alignment),
    };
 
+   /* UBO and SSBO may be read using ldunifa, which prefetches the next
+    * 4 bytes after a read. If the buffer's size is exactly a multiple
+    * of a page size and the shader reads the last 4 bytes with ldunifa
+    * the prefetching would read out of bounds and cause an MMU error,
+    * so we allocate extra space to avoid kernel error spamming.
+    */
+   bool can_ldunifa = buffer->usage &
+                      (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                       VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+   if (can_ldunifa && (buffer->size % 4096 == 0))
+      pMemoryRequirements->memoryRequirements.size += buffer->alignment;
+
    vk_foreach_struct(ext, pMemoryRequirements->pNext) {
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
