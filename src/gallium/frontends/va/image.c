@@ -435,6 +435,9 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    pipe_resource_reference(&img_buf->derived_surface.resource, surfaces[0]->texture);
    img_buf->derived_image_buffer = new_buffer;
 
+   if (surf->ctx)
+      img_buf->derived_surface.entrypoint = surf->ctx->templat.entrypoint;
+
    img->buf = handle_table_add(VL_VA_DRIVER(ctx)->htab, img_buf);
    mtx_unlock(&drv->mutex);
 

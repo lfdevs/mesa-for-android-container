@@ -182,7 +182,7 @@ libr600 = static_library(
     inc_src, inc_mapi, inc_mesa, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common,
     inc_gallium_drivers,
   ],
-
+  link_with : [ libgalliumvl ],
   dependencies: [dep_libdrm_radeon, dep_elf, dep_llvm, idep_nir, idep_nir_headers],
 )
 

@@ -81,6 +81,8 @@ create_dag(agx_context *ctx, agx_block *block, void *memctx)
       assert(dep != AGX_SCHEDULE_CLASS_INVALID && "invalid instruction seen");
 
       bool barrier = dep == AGX_SCHEDULE_CLASS_BARRIER;
+      bool discards =
+         I->op == AGX_OPCODE_SAMPLE_MASK || I->op == AGX_OPCODE_ZS_EMIT;
 
       if (dep == AGX_SCHEDULE_CLASS_STORE)
          add_dep(node, memory_load);
@@ -93,6 +95,10 @@ create_dag(agx_context *ctx, agx_block *block, void *memctx)
 
       if (dep == AGX_SCHEDULE_CLASS_COVERAGE || barrier)
          serialize(node, &coverage);
+
+      /* Make sure side effects happen before a discard */
+      if (discards)
+         add_dep(node, memory_store);
 
       if (dep == AGX_SCHEDULE_CLASS_PRELOAD)
          serialize(node, &preload);

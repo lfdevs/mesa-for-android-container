@@ -92,6 +92,7 @@ MESON_GEN_NINJA := \
 	-Dllvm=$(if $(MESON_GEN_LLVM_STUB),enabled,disabled)                         \
 	-Dcpp_rtti=false                                                             \
 	-Dlmsensors=disabled                                                         \
+	-Dandroid-libbacktrace=disabled                                              \
 
 MESON_BUILD := PATH=/usr/bin:/bin:/sbin:$$PATH ninja -C $(MESON_OUT_DIR)/build
 
@@ -203,7 +204,9 @@ define m-c-flags
 endef
 
 define filter-c-flags
-  $(filter-out -std=gnu++17 -std=gnu++14 -std=gnu99 -fno-rtti, \
+  $(filter-out -std=gnu++17 -std=gnu++14 -std=gnu99 -fno-rtti \
+    -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang \
+    -ftrivial-auto-var-init=zero,
     $(patsubst  -W%,, $1))
 endef
 

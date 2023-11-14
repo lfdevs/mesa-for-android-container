@@ -183,7 +183,7 @@ nvk_cmd_buffer_upload_alloc(struct nvk_cmd_buffer *cmd,
    assert(size <= NVK_CMD_BO_SIZE);
 
    uint32_t offset = cmd->upload_offset;
-   if (align > 0)
+   if (alignment > 0)
       offset = align(offset, alignment);
 
    assert(offset <= NVK_CMD_BO_SIZE);

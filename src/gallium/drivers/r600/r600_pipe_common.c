@@ -37,6 +37,8 @@
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 #include "radeon_video.h"
+#include "git_sha1.h"
+
 #include <inttypes.h>
 #include <sys/utsname.h>
 #include <stdlib.h>
@@ -1207,6 +1209,50 @@ static int r600_get_screen_fd(struct pipe_screen *screen)
 	return ws->get_fd(ws);
 }
 
+static void r600_get_driver_uuid(UNUSED struct pipe_screen *screen, char *uuid)
+{
+	const char *driver_id = PACKAGE_VERSION MESA_GIT_SHA1 "r600";
+
+	/* The driver UUID is used for determining sharability of images and
+	 * memory between two Vulkan instances in separate processes, but also
+	 * to determining memory objects and sharability between Vulkan and
+	 * OpenGL driver. People who want to share memory need to also check
+	 * the device UUID.
+	 */
+	struct mesa_sha1 sha1_ctx;
+	_mesa_sha1_init(&sha1_ctx);
+
+	_mesa_sha1_update(&sha1_ctx, driver_id, strlen(driver_id));
+
+	uint8_t sha1[SHA1_DIGEST_LENGTH];
+	_mesa_sha1_final(&sha1_ctx, sha1);
+
+	assert(SHA1_DIGEST_LENGTH >= PIPE_UUID_SIZE);
+	memcpy(uuid, sha1, PIPE_UUID_SIZE);
+}
+
+static void r600_get_device_uuid(struct pipe_screen *screen, char *uuid)
+{
+	uint32_t *uint_uuid = (uint32_t *)uuid;
+	struct r600_common_screen* rs = (struct r600_common_screen*)screen;
+
+	assert(PIPE_UUID_SIZE >= sizeof(uint32_t) * 4);
+
+	/* Copied from ac_device_info
+	 * Use the device info directly instead of using a sha1. GL/VK UUIDs
+	 * are 16 byte vs 20 byte for sha1, and the truncation that would be
+	 * required would get rid of part of the little entropy we have.
+	 */
+	memset(uuid, 0, PIPE_UUID_SIZE);
+	if (!rs->info.pci.valid)
+		fprintf(stderr,
+		"r600 device_uuid output is based on invalid pci bus info.\n");
+	uint_uuid[0] = rs->info.pci.domain;
+	uint_uuid[1] = rs->info.pci.bus;
+	uint_uuid[2] = rs->info.pci.dev;
+	uint_uuid[3] = rs->info.pci.func;
+}
+
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
@@ -1247,6 +1293,8 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->b.resource_destroy = r600_resource_destroy;
 	rscreen->b.resource_from_user_memory = r600_buffer_from_user_memory;
 	rscreen->b.query_memory_info = r600_query_memory_info;
+	rscreen->b.get_device_uuid = r600_get_device_uuid;
+	rscreen->b.get_driver_uuid = r600_get_driver_uuid;
 
 	if (rscreen->info.ip[AMD_IP_UVD].num_queues) {
 		rscreen->b.get_video_param = rvid_get_video_param;

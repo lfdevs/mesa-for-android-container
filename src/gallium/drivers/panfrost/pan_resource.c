@@ -1532,9 +1532,8 @@ panfrost_pack_afbc(struct panfrost_context *ctx,
    if (ratio > screen->max_afbc_packing_ratio)
       return;
 
-   if (dev->debug & PAN_DBG_PERF) {
-      printf("%i%%: %i KB -> %i KB\n", ratio, old_size / 1024, new_size / 1024);
-   }
+   perf_debug(dev, "%i%%: %i KB -> %i KB\n", ratio, old_size / 1024,
+              new_size / 1024);
 
    struct panfrost_bo *dst =
       panfrost_bo_create(dev, new_size, 0, "AFBC compact texture");

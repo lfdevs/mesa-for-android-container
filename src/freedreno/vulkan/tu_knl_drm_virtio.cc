@@ -1445,6 +1445,7 @@ virtio_queue_submit(struct tu_queue *queue, struct vk_queue_submit *submit)
       in_syncobjs[nr_in_syncobjs++] = (struct drm_virtgpu_execbuffer_syncobj) {
          .handle = tu_syncobj_from_vk_sync(sync),
          .flags = 0,
+         .point = submit->waits[i].wait_value,
       };
    }
 
@@ -1454,6 +1455,7 @@ virtio_queue_submit(struct tu_queue *queue, struct vk_queue_submit *submit)
       out_syncobjs[nr_out_syncobjs++] = (struct drm_virtgpu_execbuffer_syncobj) {
          .handle = tu_syncobj_from_vk_sync(sync),
          .flags = 0,
+         .point = submit->signals[i].signal_value,
       };
    }
 

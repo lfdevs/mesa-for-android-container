@@ -16,7 +16,6 @@ text: |-
     stk:                  11.15s
     0ad:                  10.93s
     counterstrike:         9.87s
-    minetest:              8.24s
     neverball:             8.53s
 
 traces:
@@ -233,39 +232,6 @@ traces:
       checksum: d25edb433abfcde517b626b3071906ff
     zink-a630:
       checksum: d25edb433abfcde517b626b3071906ff
-
-  minetest/minetest-high-v2.trace:
-    freedreno-a306:
-      label: [crash]
-    freedreno-a530:
-      checksum: 48d4d4776885fd120429cd36a35ddaf2
-    freedreno-a618:
-      checksum: 2aebe86d6c0488b953bfaacd8000c01a
-    freedreno-a630:
-      checksum: 2aebe86d6c0488b953bfaacd8000c01a
-    zink-a618:
-      label: [skip, flakes]
-      checksum: c167b29121b4bbba7675070b2ab1f51a
-    zink-a630:
-      label: [skip, flakes]
-      checksum: c167b29121b4bbba7675070b2ab1f51a
-
-  minetest/minetest-v2.trace:
-    freedreno-a306:
-      checksum: 37081a69137df415cfda13dac62966c4
-    freedreno-a530:
-      checksum: 824672b1eef72c0223ac754dfc46e2d5
-    freedreno-a618:
-      checksum: e9b5d984b49f888ff1a4787fe2baea71
-    freedreno-a630:
-      label: [skip, flakes]
-      checksum: 1db3e8a057748109bd06734860396abf
-    zink-a618:
-      checksum: f534d68a62934453325f11ff19e2241a
-    zink-a630:
-      label: [skip, flakes]
-      checksum: f534d68a62934453325f11ff19e2241a
-      text: occasional Different pixels 1 (no tolerance), 0 (1% tol.)
 
   filament/filament-default.trace:
     freedreno-a306:

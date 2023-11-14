@@ -591,6 +591,12 @@ static bool pvr_physical_device_get_properties(
 
       /* Vulkan 1.2 / VK_KHR_timeline_semaphore */
       .maxTimelineSemaphoreValueDifference = UINT64_MAX,
+
+      /* Vulkan 1.3 / VK_EXT_texel_buffer_alignment */
+      .storageTexelBufferOffsetAlignmentBytes = 16,
+      .storageTexelBufferOffsetSingleTexelAlignment = true,
+      .uniformTexelBufferOffsetAlignmentBytes = 16,
+      .uniformTexelBufferOffsetSingleTexelAlignment = false,
    };
 
    snprintf(properties->deviceName,

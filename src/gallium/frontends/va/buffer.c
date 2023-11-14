@@ -173,6 +173,11 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
             usage = PIPE_MAP_READ;
          else
             usage = PIPE_MAP_WRITE;
+
+         /* Map decoder and postproc surfaces also for reading. */
+         if (buf->derived_surface.entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
+             buf->derived_surface.entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING)
+            usage |= PIPE_MAP_READ;
       }
 
       if (flags & VA_MAPBUFFER_FLAG_READ)

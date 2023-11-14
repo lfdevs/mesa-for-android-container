@@ -214,6 +214,11 @@ radv_generate_pipeline_key(const struct radv_device *device, const VkPipelineSha
          key.vertex_robustness1 = 1u;
    }
 
+   for (uint32_t i = 0; i < num_stages; i++) {
+      if (stages[i].stage == VK_SHADER_STAGE_MESH_BIT_EXT && device->mesh_fast_launch_2)
+         key.mesh_fast_launch_2 = 1u;
+   }
+
    return key;
 }
 

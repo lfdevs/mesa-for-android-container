@@ -216,7 +216,11 @@ fi
 [ ${EXIT_CODE} -eq 0 ] && RESULT=pass || RESULT=fail
 
 set +x
-echo "hwci: mesa: $RESULT"
-# Sleep a bit to avoid kernel dump message interleave from LAVA ENDTC signal
-sleep 1
+
+# Print the final result; both bare-metal and LAVA look for this string to get
+# the result of our run, so try really hard to get it out rather than losing
+# the run. The device gets shut down right at this point, and a630 seems to
+# enjoy corrupting the last line of serial output before shutdown.
+for _ in $(seq 0 3); do echo "hwci: mesa: $RESULT"; sleep 1; echo; done
+
 exit $EXIT_CODE

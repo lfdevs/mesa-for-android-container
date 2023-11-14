@@ -1148,7 +1148,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
          context->desc.h264enc.frame_num_cnt++;
 
       /* keep other path the same way */
-      if (!screen->get_video_param(screen, ProfileToPipe(context->templat.profile),
+      if (!screen->get_video_param(screen, context->templat.profile,
                                   context->decoder->entrypoint,
                                   PIPE_VIDEO_CAP_ENC_QUALITY_LEVEL)) {
 

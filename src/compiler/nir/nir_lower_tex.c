@@ -872,10 +872,14 @@ lower_tex_to_txd(nir_builder *b, nir_tex_instr *tex)
       txd->src[i].src = nir_src_for_ssa(tex->src[i].src.ssa);
       txd->src[i].src_type = tex->src[i].src_type;
    }
-   int coord = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   assert(coord >= 0);
-   nir_def *dfdx = nir_fddx(b, tex->src[coord].src.ssa);
-   nir_def *dfdy = nir_fddy(b, tex->src[coord].src.ssa);
+   int coord_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   assert(coord_idx >= 0);
+   nir_def *coord = tex->src[coord_idx].src.ssa;
+   /* don't take the derivative of the array index */
+   if (tex->is_array)
+      coord = nir_channels(b, coord, nir_component_mask(coord->num_components - 1));
+   nir_def *dfdx = nir_fddx(b, coord);
+   nir_def *dfdy = nir_fddy(b, coord);
    txd->src[tex->num_srcs] = nir_tex_src_for_ssa(nir_tex_src_ddx, dfdx);
    txd->src[tex->num_srcs + 1] = nir_tex_src_for_ssa(nir_tex_src_ddy, dfdy);
 

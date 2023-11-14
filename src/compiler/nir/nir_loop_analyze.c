@@ -820,14 +820,46 @@ try_eval_const_alu(nir_const_value *dest, nir_alu_instr *alu,
    return true;
 }
 
+static nir_op
+invert_comparison_if_needed(nir_op alu_op, bool invert)
+{
+   if (!invert)
+      return alu_op;
+
+   switch (alu_op) {
+      case nir_op_fge:
+         return nir_op_flt;
+      case nir_op_ige:
+         return nir_op_ilt;
+      case nir_op_uge:
+         return nir_op_ult;
+      case nir_op_flt:
+         return nir_op_fge;
+      case nir_op_ilt:
+         return nir_op_ige;
+      case nir_op_ult:
+         return nir_op_uge;
+      case nir_op_feq:
+         return nir_op_fneu;
+      case nir_op_ieq:
+         return nir_op_ine;
+      case nir_op_fneu:
+         return nir_op_feq;
+      case nir_op_ine:
+         return nir_op_ieq;
+      default:
+         unreachable("Unsuported comparison!");
+   }
+}
+
 static int32_t
 get_iteration(nir_op cond_op, nir_const_value initial, nir_const_value step,
-              nir_const_value limit, unsigned bit_size,
+              nir_const_value limit, bool invert_cond, unsigned bit_size,
               unsigned execution_mode)
 {
    nir_const_value span, iter;
 
-   switch (cond_op) {
+   switch (invert_comparison_if_needed(cond_op, invert_cond)) {
    case nir_op_ine:
       /* In order for execution to be here, limit must be the same as initial.
        * Otherwise will_break_on_first_iteration would have returned false.
@@ -1060,8 +1092,8 @@ calculate_iterations(nir_def *basis, nir_def *limit_basis,
       assert(nir_src_bit_size(alu->src[0].src) ==
              nir_src_bit_size(alu->src[1].src));
 
-      iter_int = get_iteration(alu_op, initial, step, limit, bit_size,
-                               execution_mode);
+      iter_int = get_iteration(alu_op, initial, step, limit, invert_cond,
+                               bit_size, execution_mode);
       break;
    case nir_op_fmul:
       /* Detecting non-zero loop counts when the loop increment is floating
@@ -1087,7 +1119,8 @@ calculate_iterations(nir_def *basis, nir_def *limit_basis,
    if (iter_int < 0)
       return -1;
 
-   if (alu_op == nir_op_ine || alu_op == nir_op_fneu)
+   nir_op actual_alu_op = invert_comparison_if_needed(alu_op, invert_cond);
+   if (actual_alu_op == nir_op_ine || actual_alu_op == nir_op_fneu)
       return iter_int;
 
    /* An explanation from the GLSL unrolling pass:

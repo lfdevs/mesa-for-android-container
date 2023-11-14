@@ -760,12 +760,8 @@ partial_unroll(nir_shader *shader, nir_loop *loop, unsigned trip_count)
 
    /* Insert break back into terminator */
    nir_jump_instr *brk = nir_jump_instr_create(shader, nir_jump_break);
-   nir_if *nif = nir_block_get_following_if(nir_loop_first_block(new_loop));
-   if (terminator->continue_from_then) {
-      nir_instr_insert_after_block(nir_if_last_else_block(nif), &brk->instr);
-   } else {
-      nir_instr_insert_after_block(nir_if_last_then_block(nif), &brk->instr);
-   }
+   nir_block *break_block = _mesa_hash_table_search(remap_table, terminator->break_block)->data;
+   nir_instr_insert_after_block(break_block, &brk->instr);
 
    /* Delete the original loop header and body */
    nir_cf_delete(&lp_header);

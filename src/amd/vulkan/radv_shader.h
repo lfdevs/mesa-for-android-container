@@ -99,6 +99,7 @@ struct radv_pipeline_key {
    uint32_t mesh_shader_queries : 1;
 
    uint32_t vertex_robustness1 : 1;
+   uint32_t mesh_fast_launch_2 : 1;
 
    struct radv_shader_stage_key stage_info[MESA_VULKAN_SHADER_STAGES];
 

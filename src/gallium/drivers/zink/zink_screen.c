@@ -1520,10 +1520,14 @@ zink_destroy_screen(struct pipe_screen *pscreen)
    if (screen->dev)
       VKSCR(DestroyDevice)(screen->dev, NULL);
 
-   VKSCR(DestroyInstance)(screen->instance, NULL);
+   if (screen->instance)
+      VKSCR(DestroyInstance)(screen->instance, NULL);
+
    util_idalloc_mt_fini(&screen->buffer_ids);
 
-   util_dl_close(screen->loader_lib);
+   if (screen->loader_lib)
+      util_dl_close(screen->loader_lib);
+
    if (screen->drm_fd != -1)
       close(screen->drm_fd);
 
@@ -2875,6 +2879,7 @@ init_driver_workarounds(struct zink_screen *screen)
    /* these drivers can successfully do INVALID <-> LINEAR dri3 modifier swap */
    switch (screen->info.driver_props.driverID) {
    case VK_DRIVER_ID_MESA_TURNIP:
+   case VK_DRIVER_ID_MESA_VENUS:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
    default:

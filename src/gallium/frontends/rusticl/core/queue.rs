@@ -9,7 +9,7 @@ use mesa_rust::pipe::context::PipeContext;
 use mesa_rust_util::properties::*;
 use rusticl_opencl_gen::*;
 
-use std::collections::HashSet;
+use std::mem;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -131,34 +131,41 @@ impl Queue {
 
     pub fn flush(&self, wait: bool) -> CLResult<()> {
         let mut state = self.state.lock().unwrap();
+        let events = mem::take(&mut state.pending);
+        let mut queues = Event::deep_unflushed_queues(&events);
 
         // Update last if and only if we get new events, this prevents breaking application code
         // doing things like `clFlush(q); clFinish(q);`
-        if let Some(last) = state.pending.last() {
+        if let Some(last) = events.last() {
             state.last = Arc::downgrade(last);
+
+            // This should never ever error, but if it does return an error
+            state
+                .chan_in
+                .send(events)
+                .map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
         }
 
-        let events = state.pending.drain(0..).collect();
-        // This should never ever error, but if it does return an error
-        state
-            .chan_in
-            .send(events)
-            .map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
-        if wait {
+        let last = wait.then(|| state.last.clone());
+
+        // We have to unlock before actually flushing otherwise we'll run into dead locks when a
+        // queue gets flushed concurrently.
+        drop(state);
+
+        // We need to flush out other queues implicitly and this _has_ to happen after taking the
+        // pending events, otherwise we'll risk dead locks when waiting on events.
+        queues.remove(self);
+        for q in queues {
+            q.flush(false)?;
+        }
+
+        if let Some(last) = last {
             // Waiting on the last event is good enough here as the queue will process it in order
             // It's not a problem if the weak ref is invalid as that means the work is already done
             // and waiting isn't necessary anymore.
-            state.last.upgrade().map(|e| e.wait());
+            last.upgrade().map(|e| e.wait());
         }
         Ok(())
-    }
-
-    pub fn dependencies_for_pending_events(&self) -> HashSet<Arc<Queue>> {
-        let state = self.state.lock().unwrap();
-
-        let mut queues = Event::deep_unflushed_queues(&state.pending);
-        queues.remove(self);
-        queues
     }
 
     pub fn is_profiling_enabled(&self) -> bool {

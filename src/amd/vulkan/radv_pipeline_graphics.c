@@ -1338,6 +1338,13 @@ radv_link_shaders(const struct radv_device *device, nir_shader *producer, nir_sh
       nir_link_xfb_varyings(producer, consumer);
    }
 
+   unsigned array_deref_of_vec_options =
+      nir_lower_direct_array_deref_of_vec_load | nir_lower_indirect_array_deref_of_vec_load |
+      nir_lower_direct_array_deref_of_vec_store | nir_lower_indirect_array_deref_of_vec_store;
+
+   NIR_PASS(progress, producer, nir_lower_array_deref_of_vec, nir_var_shader_out, array_deref_of_vec_options);
+   NIR_PASS(progress, consumer, nir_lower_array_deref_of_vec, nir_var_shader_in, array_deref_of_vec_options);
+
    nir_lower_io_arrays_to_elements(producer, consumer);
    nir_validate_shader(producer, "after nir_lower_io_arrays_to_elements");
    nir_validate_shader(consumer, "after nir_lower_io_arrays_to_elements");
@@ -1620,6 +1627,12 @@ radv_pipeline_needs_noop_fs(struct radv_graphics_pipeline *pipeline, const struc
 static void
 radv_remove_varyings(nir_shader *nir)
 {
+   /* We can't demote mesh outputs to nir_var_shader_temp yet, because
+    * they don't support array derefs of vectors.
+    */
+   if (nir->info.stage == MESA_SHADER_MESH)
+      return;
+
    bool fixup_derefs = false;
 
    nir_foreach_shader_out_variable (var, nir) {

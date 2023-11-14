@@ -640,7 +640,9 @@ static bool si_resource_get_param(struct pipe_screen *screen, struct pipe_contex
       if (resource->target == PIPE_BUFFER) {
          *value = 0;
       } else {
-         uint64_t level_offset = tex->surface.is_linear ? tex->surface.u.gfx9.offset[level] : 0;
+         uint64_t level_offset = 0;
+         if (sscreen->info.gfx_level >= GFX9 && tex->surface.is_linear)
+            level_offset = tex->surface.u.gfx9.offset[level];
          *value = ac_surface_get_plane_offset(sscreen->info.gfx_level,
                                               &tex->surface, plane, layer)  + level_offset;
       }

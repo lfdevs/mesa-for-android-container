@@ -790,9 +790,15 @@ specialize_wildcards(nir_builder *b,
                      nir_deref_path *specific)
 {
    nir_deref_instr **deref_p = &deref->path[1];
+   nir_deref_instr *ret_tail = deref->path[0];
+   for (; *deref_p; deref_p++) {
+      if ((*deref_p)->deref_type == nir_deref_type_array_wildcard)
+         break;
+      ret_tail = *deref_p;
+   }
+
    nir_deref_instr **guide_p = &guide->path[1];
    nir_deref_instr **spec_p = &specific->path[1];
-   nir_deref_instr *ret_tail = deref->path[0];
    for (; *deref_p; deref_p++) {
       if ((*deref_p)->deref_type == nir_deref_type_array_wildcard) {
          /* This is where things get tricky.  We have to search through

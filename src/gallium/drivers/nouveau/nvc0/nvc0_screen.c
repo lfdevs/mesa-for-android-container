@@ -207,6 +207,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_MB:
       return 0; /* TODO: use 1/2 of VRAM for this? */
 
+   case PIPE_CAP_TIMER_RESOLUTION:
+      return 1000;
+
    case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART:
    case PIPE_CAP_SUPPORTED_PRIM_MODES:
       return BITFIELD_MASK(MESA_PRIM_COUNT);

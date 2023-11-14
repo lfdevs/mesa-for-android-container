@@ -1026,7 +1026,8 @@ Lower64BitToVec2::load_64_to_vec2(nir_intrinsic_instr *intr)
    intr->num_components *= 2;
    intr->def.bit_size = 32;
    intr->def.num_components *= 2;
-   nir_intrinsic_set_component(intr, nir_intrinsic_component(intr) * 2);
+   if (nir_intrinsic_has_component(intr))
+      nir_intrinsic_set_component(intr, nir_intrinsic_component(intr) * 2);
    return NIR_LOWER_INSTR_PROGRESS;
 }
 
