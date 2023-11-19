@@ -767,10 +767,10 @@ sqtt_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
                 flags);
 }
 
-#define EVENT_RT_MARKER(cmd_name, ...)                                                                                 \
-   EVENT_MARKER_BASE(cmd_name, Dispatch, cmd_name | ApiRayTracingSeparateCompiled, __VA_ARGS__);
+#define EVENT_RT_MARKER(cmd_name, flags, ...) EVENT_MARKER_BASE(cmd_name, Dispatch, cmd_name | flags, __VA_ARGS__);
 
-#define EVENT_RT_MARKER_ALIAS(cmd_name, event_name, ...) EVENT_MARKER_BASE(cmd_name, Dispatch, event_name, __VA_ARGS__);
+#define EVENT_RT_MARKER_ALIAS(cmd_name, event_name, flags, ...)                                                        \
+   EVENT_MARKER_BASE(cmd_name, Dispatch, event_name | flags, __VA_ARGS__);
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
@@ -779,8 +779,8 @@ sqtt_CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddress
                      const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
                      uint32_t height, uint32_t depth)
 {
-   EVENT_RT_MARKER(TraceRaysKHR, commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
-                   pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
+   EVENT_RT_MARKER(TraceRaysKHR, ApiRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
+                   pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -791,14 +791,15 @@ sqtt_CmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
                              const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                              VkDeviceAddress indirectDeviceAddress)
 {
-   EVENT_RT_MARKER(TraceRaysIndirectKHR, commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
-                   pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress);
+   EVENT_RT_MARKER(TraceRaysIndirectKHR, ApiRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
+                   pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress)
 {
-   EVENT_RT_MARKER_ALIAS(TraceRaysIndirect2KHR, TraceRaysIndirectKHR, commandBuffer, indirectDeviceAddress);
+   EVENT_RT_MARKER_ALIAS(TraceRaysIndirect2KHR, TraceRaysIndirectKHR, ApiRayTracingSeparateCompiled, commandBuffer,
+                         indirectDeviceAddress);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -806,27 +807,27 @@ sqtt_CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t i
                                        const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
                                        const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
 {
-   EVENT_RT_MARKER(BuildAccelerationStructuresKHR, commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
+   EVENT_RT_MARKER(BuildAccelerationStructuresKHR, 0, commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdCopyAccelerationStructureKHR(VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR *pInfo)
 {
-   EVENT_RT_MARKER(CopyAccelerationStructureKHR, commandBuffer, pInfo);
+   EVENT_RT_MARKER(CopyAccelerationStructureKHR, 0, commandBuffer, pInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdCopyAccelerationStructureToMemoryKHR(VkCommandBuffer commandBuffer,
                                              const VkCopyAccelerationStructureToMemoryInfoKHR *pInfo)
 {
-   EVENT_RT_MARKER(CopyAccelerationStructureToMemoryKHR, commandBuffer, pInfo);
+   EVENT_RT_MARKER(CopyAccelerationStructureToMemoryKHR, 0, commandBuffer, pInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdCopyMemoryToAccelerationStructureKHR(VkCommandBuffer commandBuffer,
                                              const VkCopyMemoryToAccelerationStructureInfoKHR *pInfo)
 {
-   EVENT_RT_MARKER(CopyMemoryToAccelerationStructureKHR, commandBuffer, pInfo);
+   EVENT_RT_MARKER(CopyMemoryToAccelerationStructureKHR, 0, commandBuffer, pInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -22,11 +22,6 @@ traces:
       label: [skip, broken, flakes]
       checksum: 9b5090a236350f04cb2a61c5f0c0fe0f
       text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8986
-  freedoom/freedoom-phase2-gl-high.trace:
-    gl-zink-anv-tgl:
-      label: [skip]
-      text: "Fails on CI as well as when run locally"
-      checksum: 288b762ac80ed76e18f848649a618be1
   glxgears/glxgears-2-v2.trace:
     gl-zink-anv-tgl:
       checksum: f53ac20e17da91c0359c31f2fa3f401e

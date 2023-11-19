@@ -1,3 +1,14 @@
+mesa (23.3.0~rc4-1) experimental; urgency=medium
+
+  [ Fabio Pedretti ]
+  * remove double space
+  * use a variable for WSL archs
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 19 Nov 2023 20:28:57 +0200
+
 mesa (23.3.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.

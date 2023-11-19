@@ -153,9 +153,6 @@ traces:
     gl-vmware-llvmpipe:
       label: [skip, broken]
       text: missing background, error Too many compute shader storage blocks (9/8)
-  freedoom/freedoom-phase2-gl-high.trace:
-    gl-vmware-llvmpipe:
-      label: [unsupported]
   unvanquished/unvanquished-lowest.trace:
     gl-vmware-llvmpipe:
       label: [unsupported]

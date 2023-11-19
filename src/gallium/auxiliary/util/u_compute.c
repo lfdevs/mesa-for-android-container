@@ -106,8 +106,10 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
                       blit_info->dst.box.y,
                       blit_info->dst.box.z,
                       0,
-                      u_bitcast_f2u((blit_info->src.box.width - 0.5) / (float)src->width0),
-                      u_bitcast_f2u((blit_info->src.box.height - 0.5) / (float)src->height0),
+                      u_bitcast_f2u((blit_info->src.box.x + blit_info->src.box.width - 0.5) /
+                                    (float)src->width0),
+                      u_bitcast_f2u((blit_info->src.box.y + blit_info->src.box.height - 0.5) /
+                                    (float)src->height0),
                       0,
                       0};
 

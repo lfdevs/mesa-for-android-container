@@ -2774,6 +2774,13 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
    if (intel_device_info_is_dg2(dev->info))
       return false;
 
+   /* On Gfx12+ this format is not listed in TGL PRMs, Volume 2b: Command
+    * Reference: Enumerations, RenderCompressionFormat
+    */
+   if (ISL_GFX_VER(dev) >= 12 &&
+       surf->format == ISL_FORMAT_R9G9B9E5_SHAREDEXP)
+      return false;
+
    /* The following are true of all multisampled surfaces */
    assert(surf->samples > 1);
    assert(surf->dim == ISL_SURF_DIM_2D);

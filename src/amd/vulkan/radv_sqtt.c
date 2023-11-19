@@ -579,7 +579,9 @@ radv_unregister_queue(struct radv_device *device, struct radv_queue *queue)
 static void
 radv_register_queues(struct radv_device *device, struct ac_sqtt *sqtt)
 {
-   radv_register_queue(device, &device->queues[RADV_QUEUE_GENERAL][0]);
+   if (device->queue_count[RADV_QUEUE_GENERAL] == 1)
+      radv_register_queue(device, &device->queues[RADV_QUEUE_GENERAL][0]);
+
    for (uint32_t i = 0; i < device->queue_count[RADV_QUEUE_COMPUTE]; i++)
       radv_register_queue(device, &device->queues[RADV_QUEUE_COMPUTE][i]);
 }
@@ -587,7 +589,9 @@ radv_register_queues(struct radv_device *device, struct ac_sqtt *sqtt)
 static void
 radv_unregister_queues(struct radv_device *device, struct ac_sqtt *sqtt)
 {
-   radv_unregister_queue(device, &device->queues[RADV_QUEUE_GENERAL][0]);
+   if (device->queue_count[RADV_QUEUE_GENERAL] == 1)
+      radv_unregister_queue(device, &device->queues[RADV_QUEUE_GENERAL][0]);
+
    for (uint32_t i = 0; i < device->queue_count[RADV_QUEUE_COMPUTE]; i++)
       radv_unregister_queue(device, &device->queues[RADV_QUEUE_COMPUTE][i]);
 }

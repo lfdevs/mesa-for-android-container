@@ -52,7 +52,7 @@ vk_instance_init(struct vk_instance *instance,
                  const VkAllocationCallbacks *alloc)
 {
    memset(instance, 0, sizeof(*instance));
-   vk_object_base_init(NULL, &instance->base, VK_OBJECT_TYPE_INSTANCE);
+   vk_object_base_instance_init(instance, &instance->base, VK_OBJECT_TYPE_INSTANCE);
    instance->alloc = *alloc;
 
    util_cpu_trace_init();
@@ -75,8 +75,8 @@ vk_instance_init(struct vk_instance *instance,
          if (!messenger)
             return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-         vk_object_base_init(NULL, &messenger->base,
-                             VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT);
+         vk_object_base_instance_init(instance, &messenger->base,
+                                      VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT);
 
          messenger->alloc = *alloc;
          messenger->severity = debugMessengerCreateInfo->messageSeverity;

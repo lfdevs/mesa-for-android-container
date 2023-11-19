@@ -1871,7 +1871,8 @@ zink_bind_fs_state(struct pipe_context *pctx,
    if (cso) {
       shader_info *info = &ctx->gfx_stages[MESA_SHADER_FRAGMENT]->info;
       bool new_writes_cbuf0 = (info->outputs_written & BITFIELD_BIT(FRAG_RESULT_DATA0)) > 0;
-      if (ctx->gfx_pipeline_state.blend_state && ctx->gfx_pipeline_state.blend_state->alpha_to_coverage && writes_cbuf0 != new_writes_cbuf0) {
+      if (ctx->gfx_pipeline_state.blend_state && ctx->gfx_pipeline_state.blend_state->alpha_to_coverage &&
+          writes_cbuf0 != new_writes_cbuf0 && zink_screen(pctx->screen)->info.have_EXT_extended_dynamic_state3) {
          ctx->blend_state_changed = true;
          ctx->ds3_states |= BITFIELD_BIT(ZINK_DS3_BLEND_A2C);
       }

@@ -956,14 +956,10 @@ draw_layers(struct vl_compositor       *c,
          drawn.translate_y = layer->viewport.translate[1];
          drawn.sampler0_w = (float)layer->sampler_views[0]->texture->width0;
          drawn.sampler0_h = (float)layer->sampler_views[0]->texture->height0;
-         drawn.clamp_x = (float)samplers[0]->texture->width0 *
-            (layer->src.br.x - layer->src.tl.x) - 0.5;
-         drawn.clamp_y = (float)samplers[0]->texture->height0 *
-            (layer->src.br.y - layer->src.tl.y) - 0.5;
-         drawn.chroma_clamp_x = (float)sampler1->texture->width0 *
-            (layer->src.br.x - layer->src.tl.x) - 0.5;
-         drawn.chroma_clamp_y = (float)sampler1->texture->height0 *
-            (layer->src.br.y - layer->src.tl.y) - 0.5;
+         drawn.clamp_x = (float)samplers[0]->texture->width0 * layer->src.br.x - 0.5;
+         drawn.clamp_y = (float)samplers[0]->texture->height0 * layer->src.br.y - 0.5;
+         drawn.chroma_clamp_x = (float)sampler1->texture->width0 * layer->src.br.x - 0.5;
+         drawn.chroma_clamp_y = (float)sampler1->texture->height0 * layer->src.br.y - 0.5;
          drawn.chroma_offset_x = chroma_offset_x(s->chroma_location);
          drawn.chroma_offset_y = chroma_offset_y(s->chroma_location);
          set_viewport(s, &drawn, samplers);

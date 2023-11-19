@@ -122,11 +122,6 @@ traces:
       label: [unsupported]
     gl-panfrost-t860:
       label: [unsupported]
-  freedoom/freedoom-phase2-gl-high.trace:
-    gl-panfrost-t760:
-      label: [unsupported]
-    gl-panfrost-t860:
-      label: [unsupported]
   unvanquished/unvanquished-lowest.trace:
     gl-panfrost-t760:
       label: [unsupported]

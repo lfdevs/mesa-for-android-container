@@ -1356,7 +1356,7 @@ RADV driver environment variables
 
 .. envvar:: RADV_THREAD_TRACE_CACHE_COUNTERS
 
-   enable/disable SQTT/RGP cache counters on GFX10+ (disabled by default)
+   enable/disable SQTT/RGP cache counters on GFX10+ (enabled by default)
 
 .. envvar:: RADV_THREAD_TRACE_INSTRUCTION_TIMING
 

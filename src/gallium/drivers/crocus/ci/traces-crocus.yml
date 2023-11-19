@@ -164,13 +164,6 @@ traces:
       label: [unsupported]
     crocus-hsw:
       checksum: c07530897dc5a6882cbf35737334336b
-  freedoom/freedoom-phase2-gl-high.trace:
-    crocus-g41:
-      label: [unsupported]
-    crocus-hsw:
-      label: [skip, crash]
-      checksum: 997ec70d945fdbda8a98efe831000338
-      text: "abort() called"
   unvanquished/unvanquished-lowest.trace:
     crocus-g41:
       label: [unsupported]

@@ -659,7 +659,7 @@ vk_pipeline_cache_destroy(struct vk_pipeline_cache *cache,
 {
    if (cache->object_cache) {
       if (!cache->weak_ref) {
-         set_foreach_remove(cache->object_cache, entry) {
+         set_foreach(cache->object_cache, entry) {
             vk_pipeline_cache_object_unref(cache->base.device, (void *)entry->key);
          }
       } else {

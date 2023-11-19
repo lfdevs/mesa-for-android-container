@@ -879,9 +879,13 @@ try_evict_regs(struct ra_ctx *ctx, struct ra_file *file,
       if (evicted)
          continue;
 
-      /* If we couldn't evict this range, we may be able to swap it with a
-       * killed range to acheive the same effect.
+      /* If we couldn't evict this range, but the register we're allocating is
+       * allowed to overlap with a killed range, then we may be able to swap it
+       * with a killed range to acheive the same effect.
        */
+      if (is_early_clobber(reg) || is_source)
+         return false;
+
       foreach_interval (killed, file) {
          if (!killed->is_killed)
             continue;

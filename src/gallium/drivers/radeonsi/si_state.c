@@ -1570,8 +1570,7 @@ static void si_emit_db_render_state(struct si_context *sctx, unsigned index)
             max_allowed_tiles_in_wave = 15;
       }
 
-      db_render_control |= S_028000_OREO_MODE(V_028000_OMODE_O_THEN_B) |
-                           S_028000_MAX_ALLOWED_TILES_IN_WAVE(max_allowed_tiles_in_wave);
+      db_render_control |= S_028000_MAX_ALLOWED_TILES_IN_WAVE(max_allowed_tiles_in_wave);
    }
 
    /* DB_COUNT_CONTROL (occlusion queries) */

@@ -1017,6 +1017,9 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                 slice->stride = whandle->stride;
         }
 
+        /* Prevent implicit clearing of the imported buffer contents. */
+        rsc->writes = 1;
+
         return prsc;
 
 fail:

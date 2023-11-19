@@ -27,11 +27,6 @@ traces:
       label: [unsupported]
       text: needs GL 4.1
 
-  freedoom/freedoom-phase2-gl-high.trace:
-    broadcom-rpi4:
-      label: [unsupported]
-      text: needs GL 4.6
-
   glxgears/glxgears-2-v2.trace:
     broadcom-rpi4:
       label: [skip, flakes]

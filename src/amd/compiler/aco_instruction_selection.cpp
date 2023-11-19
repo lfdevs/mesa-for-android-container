@@ -8640,7 +8640,7 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
          src =
             bld.sop2(Builder::s_and, bld.def(bld.lm), bld.def(s1, scc), src, Operand(exec, bld.lm));
          src = bld.sop2(Builder::s_and, bld.def(bld.lm), bld.def(s1, scc), mask_tmp, src);
-         bld.sop1(Builder::s_wqm, Definition(dst), src);
+         bld.sop1(Builder::s_wqm, Definition(dst), bld.def(s1, scc), src);
       } else if (instr->def.bit_size <= 32 || bool_use_valu) {
          unsigned excess_bytes = bool_use_valu ? 0 : 4 - instr->def.bit_size / 8;
          Definition def = (excess_bytes || bool_use_valu) ? bld.def(v1) : Definition(dst);

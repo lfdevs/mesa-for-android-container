@@ -691,6 +691,8 @@ vl_compositor_yuv_deint_full(struct vl_compositor_state *s,
    vl_compositor_render(s, c, dst_surfaces[0], NULL, false);
 
    if (dst_rect) {
+      dst_rect->x0 /= 2;
+      dst_rect->y0 /= 2;
       dst_rect->x1 /= 2;
       dst_rect->y1 /= 2;
    }
@@ -727,6 +729,8 @@ vl_compositor_convert_rgb_to_yuv(struct vl_compositor_state *s,
    vl_compositor_render(s, c, dst_surfaces[0], NULL, false);
 
    if (dst_rect) {
+      dst_rect->x0 /= 2;
+      dst_rect->y0 /= 2;
       dst_rect->x1 /= 2;
       dst_rect->y1 /= 2;
    }

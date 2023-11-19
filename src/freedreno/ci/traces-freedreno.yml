@@ -704,27 +704,6 @@ traces:
       label: [skip, flakes]
       text: Inconsistent rendering, but looks good.
 
-  freedoom/freedoom-phase2-gl-high.trace:
-    freedreno-a306:
-      label: [unsupported]
-    freedreno-a530:
-      label: [unsupported]
-      text: needs GL 4.6
-    freedreno-a618:
-      checksum: a2dbcd27c404a1bb0f7d60476d93d22c
-    freedreno-a630:
-      checksum: a2dbcd27c404a1bb0f7d60476d93d22c
-    zink-a618:
-      label: [crash]
-      text: |-
-        ../src/gallium/drivers/zink/zink_context.c:541: update_descriptor_state_ubo:
-        Assertion `ctx->di.ubos[shader][slot].range <= screen->info.props.limits.maxUniformBufferRange' failed.
-    zink-a630:
-      label: [crash]
-      text: |-
-        ../src/gallium/drivers/zink/zink_context.c:541: update_descriptor_state_ubo:
-        Assertion `ctx->di.ubos[shader][slot].range <= screen->info.props.limits.maxUniformBufferRange' failed.
-
   unvanquished/unvanquished-lowest.trace:
     freedreno-a306:
       label: [skip]

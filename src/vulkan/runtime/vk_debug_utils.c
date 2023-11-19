@@ -213,11 +213,14 @@ vk_common_SetDebugUtilsObjectNameEXT(
       vk_object_base_from_u64_handle(pNameInfo->objectHandle,
                                      pNameInfo->objectType);
 
+   assert(object->device != NULL || object->instance != NULL);
+   VkAllocationCallbacks *alloc = object->device != NULL ?
+      &object->device->alloc : &object->instance->alloc;
    if (object->object_name) {
-      vk_free(&device->alloc, object->object_name);
+      vk_free(alloc, object->object_name);
       object->object_name = NULL;
    }
-   object->object_name = vk_strdup(&device->alloc, pNameInfo->pObjectName,
+   object->object_name = vk_strdup(alloc, pNameInfo->pObjectName,
                                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!object->object_name)
       return VK_ERROR_OUT_OF_HOST_MEMORY;

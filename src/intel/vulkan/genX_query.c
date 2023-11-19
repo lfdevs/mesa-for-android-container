@@ -1391,12 +1391,22 @@ void genX(CmdWriteTimestamp2)(
 
       bool cs_stall_needed =
          (GFX_VER == 9 && cmd_buffer->device->info->gt == 4);
-      genx_batch_emit_pipe_control_write
-         (&cmd_buffer->batch, cmd_buffer->device->info, WriteTimestamp,
-          anv_address_add(query_addr, 8), 0,
-          cs_stall_needed ? ANV_PIPE_CS_STALL_BIT : 0);
 
-      emit_query_pc_availability(cmd_buffer, query_addr, true);
+      if (anv_cmd_buffer_is_blitter_queue(cmd_buffer) ||
+          anv_cmd_buffer_is_video_queue(cmd_buffer)) {
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_FLUSH_DW), dw) {
+            dw.Address = anv_address_add(query_addr, 8);
+            dw.PostSyncOperation = WriteTimestamp;
+         }
+         emit_query_mi_flush_availability(cmd_buffer, query_addr, true);
+      } else {
+         genx_batch_emit_pipe_control_write
+            (&cmd_buffer->batch, cmd_buffer->device->info, WriteTimestamp,
+             anv_address_add(query_addr, 8), 0,
+             cs_stall_needed ? ANV_PIPE_CS_STALL_BIT : 0);
+         emit_query_pc_availability(cmd_buffer, query_addr, true);
+      }
+
    }
 
 

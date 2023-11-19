@@ -5,10 +5,6 @@ KHR-GL46.shader_image_load_store.basic-allTargets-store,Fail
 KHR-GL46.shader_subroutine.control_flow_and_returned_subroutine_values_used_as_subroutine_input,Fail
 KHR-GL46.tessellation_shader.single.max_patch_vertices,Fail
 
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/8886
-dEQP-GLES31.functional.synchronization.inter_invocation.image_atomic_read_write,Crash
-
-
 # Fails when TU_DEBUG=forcebin is set
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_vert,Fail
 

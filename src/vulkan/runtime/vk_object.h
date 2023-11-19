@@ -57,6 +57,14 @@ struct vk_object_base {
     */
    struct vk_device *device;
 
+   /** Pointer to the instance in which this object exists
+    *
+    * This is NULL for device level objects as it's main purpose is to make
+    * the instance allocator reachable for freeing data owned by instance
+    * level objects.
+    */
+   struct vk_instance *instance;
+
    /* True if this object is fully constructed and visible to the client */
    bool client_visible;
 
@@ -76,6 +84,16 @@ struct vk_object_base {
 void vk_object_base_init(struct vk_device *device,
                          struct vk_object_base *base,
                          VkObjectType obj_type);
+
+/** Initialize a vk_base_object for an instance level object
+ *
+ * :param instance:     |in|  The vk_instance this object was created from
+ * :param base:         |out| The vk_object_base to initialize
+ * :param obj_type:     |in|  The VkObjectType of the object being initialized
+ */
+void vk_object_base_instance_init(struct vk_instance *instance,
+                                  struct vk_object_base *base,
+                                  VkObjectType obj_type);
 
 /** Tear down a vk_object_base
  *

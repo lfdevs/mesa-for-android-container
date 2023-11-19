@@ -25,6 +25,7 @@
 
 #include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
+#include "vk_instance.h"
 #include "vk_device.h"
 #include "util/hash_table.h"
 #include "util/ralloc.h"
@@ -38,6 +39,20 @@ vk_object_base_init(struct vk_device *device,
    base->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
    base->type = obj_type;
    base->device = device;
+   base->instance = NULL;
+   base->client_visible = false;
+   base->object_name = NULL;
+   util_sparse_array_init(&base->private_data, sizeof(uint64_t), 8);
+}
+
+void vk_object_base_instance_init(struct vk_instance *instance,
+                                  struct vk_object_base *base,
+                                  VkObjectType obj_type)
+{
+   base->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
+   base->type = obj_type;
+   base->device = NULL;
+   base->instance = instance;
    base->client_visible = false;
    base->object_name = NULL;
    util_sparse_array_init(&base->private_data, sizeof(uint64_t), 8);
@@ -48,8 +63,14 @@ vk_object_base_finish(struct vk_object_base *base)
 {
    util_sparse_array_finish(&base->private_data);
 
-   if (base->object_name != NULL)
+   if (base->object_name == NULL)
+      return;
+
+   assert(base->device != NULL || base->instance != NULL);
+   if (base->device)
       vk_free(&base->device->alloc, base->object_name);
+   else
+      vk_free(&base->instance->alloc, base->object_name);
 }
 
 void

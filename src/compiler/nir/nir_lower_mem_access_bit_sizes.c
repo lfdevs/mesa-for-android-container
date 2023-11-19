@@ -317,25 +317,25 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
          chunk_bytes = MIN2(max_chunk_bytes, requested_bytes - max_pad);
          unsigned chunk_bits = chunk_bytes * 8;
 
-         nir_def *chunk_value = value;
-         /* The one special case where nir_extract_bits cannot get a scalar by asking for
-          * 1 component of chunk_bits.
-          */
+         nir_def *data;
          if (chunk_bits == 24) {
-            chunk_value = nir_pad_vec4(b, chunk_value);
-            chunk_bits = 32;
+            /* This is a bit of a special case because we don't have 24-bit integers */
+            data = nir_extract_bits(b, &value, 1, chunk_start * 8, 3, 8);
+            data = nir_pack_bits(b, nir_pad_vector_imm_int(b, data, 0, 4), 32);
+         } else {
+            data = nir_extract_bits(b, &value, 1, chunk_start * 8, 1, chunk_bits);
+            data = nir_u2u32(b, data);
          }
 
-         nir_def *data = nir_u2u32(b,
-                                   nir_extract_bits(b, &chunk_value, 1, chunk_start * 8,
-                                                    1, chunk_bits));
          nir_def *iand_mask = nir_imm_int(b, (1 << chunk_bits) - 1);
 
          if (chunk_align < requested.align) {
             nir_def *shift = nir_u2u32(b, nir_imul_imm(b, pad, 8));
             data = nir_ishl(b, data, shift);
-            iand_mask = nir_inot(b, nir_ishl(b, iand_mask, shift));
+            iand_mask = nir_ishl(b, iand_mask, shift);
          }
+
+         iand_mask = nir_inot(b, iand_mask);
 
          switch (intrin->intrinsic) {
          case nir_intrinsic_store_ssbo:

@@ -8073,7 +8073,8 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
     * ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER capture type are not set for
     * transfer queue.
     */
-   if (batch->engine_class == INTEL_ENGINE_CLASS_COPY) {
+   if ((batch->engine_class == INTEL_ENGINE_CLASS_COPY) ||
+       (batch->engine_class == INTEL_ENGINE_CLASS_VIDEO)) {
       assert(type != ANV_TIMESTAMP_CAPTURE_AT_CS_STALL &&
              type != ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER);
    }
@@ -8087,7 +8088,8 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
    }
 
    case ANV_TIMESTAMP_CAPTURE_END_OF_PIPE: {
-      if (batch->engine_class == INTEL_ENGINE_CLASS_COPY) {
+      if ((batch->engine_class == INTEL_ENGINE_CLASS_COPY) ||
+          (batch->engine_class == INTEL_ENGINE_CLASS_VIDEO)) {
          anv_batch_emit(batch, GENX(MI_FLUSH_DW), fd) {
             fd.PostSyncOperation = WriteTimestamp;
             fd.Address = addr;

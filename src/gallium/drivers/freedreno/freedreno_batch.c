@@ -549,8 +549,10 @@ fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc)
           * ctx dependencies and let the app have the undefined behavior
           * it asked for:
           */
-         if (track->write_batch->ctx != batch->ctx)
+         if (track->write_batch->ctx != batch->ctx) {
+            fd_ringbuffer_attach_bo(batch->draw, rsc->bo);
             return;
+         }
 
          flush_write_batch(rsc);
       }
@@ -599,6 +601,7 @@ fd_batch_resource_read_slowpath(struct fd_batch *batch, struct fd_resource *rsc)
           * by avoiding cross-ctx dependencies and let the app have the
           * undefined behavior it asked for:
           */
+         fd_ringbuffer_attach_bo(batch->draw, rsc->bo);
          return;
       }
 

@@ -174,7 +174,7 @@ endif
 
 libr600 = static_library(
   'r600',
-  [files_r600, egd_tables_h],
+  [files_r600, egd_tables_h, sha1_h],
   c_args : [r600_c_args, '-Wstrict-overflow=0'],
   cpp_args: r600_cpp_args,
   gnu_symbol_visibility : 'hidden',
