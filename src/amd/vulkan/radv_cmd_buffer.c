@@ -9710,11 +9710,11 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, const struct radv
          radeon_emit(cs, dispatch_initiator);
       }
    } else {
+      const unsigned *cs_block_size = compute_shader->info.cs.block_size;
       unsigned blocks[3] = {info->blocks[0], info->blocks[1], info->blocks[2]};
       unsigned offsets[3] = {info->offsets[0], info->offsets[1], info->offsets[2]};
 
       if (info->unaligned) {
-         const unsigned *cs_block_size = compute_shader->info.cs.block_size;
          unsigned remainder[3];
 
          /* If aligned, these should be an entire block size,
@@ -9777,6 +9777,21 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, const struct radv
          radv_cs_emit_compute_predication(&cmd_buffer->state, cs, cmd_buffer->mec_inv_pred_va,
                                           &cmd_buffer->mec_inv_pred_emitted, 5 /* DISPATCH_DIRECT size */);
          predicating = false;
+      }
+
+      if (cmd_buffer->device->physical_device->rad_info.has_async_compute_threadgroup_bug &&
+          cmd_buffer->qf == RADV_QUEUE_COMPUTE) {
+         for (unsigned i = 0; i < 3; i++) {
+            if (info->unaligned) {
+               /* info->blocks is already in thread dimensions for unaligned dispatches. */
+               blocks[i] = info->blocks[i];
+            } else {
+               /* Force the async compute dispatch to be in "thread" dim mode to workaround a hw bug. */
+               blocks[i] *= cs_block_size[i];
+            }
+
+            dispatch_initiator |= S_00B800_USE_THREAD_DIMENSIONS(1);
+         }
       }
 
       radeon_emit(cs, PKT3(PKT3_DISPATCH_DIRECT, 3, predicating) | PKT3_SHADER_TYPE_S(1));

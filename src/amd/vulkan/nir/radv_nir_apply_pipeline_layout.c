@@ -34,7 +34,7 @@ typedef struct {
    uint32_t address32_hi;
    bool disable_aniso_single_level;
    bool has_image_load_dcc_bug;
-   bool conformant_trunc_coord;
+   bool disable_tg4_trunc_coord;
 
    const struct radv_shader_args *args;
    const struct radv_shader_info *info;
@@ -246,7 +246,7 @@ get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *der
       }
 
       uint32_t dword0_mask =
-         tex->op == nir_texop_tg4 && !state->conformant_trunc_coord ? C_008F30_TRUNC_COORD : 0xffffffffu;
+         tex->op == nir_texop_tg4 && state->disable_tg4_trunc_coord ? C_008F30_TRUNC_COORD : 0xffffffffu;
       const uint32_t *samplers = radv_immutable_samplers(layout, binding);
       return nir_imm_ivec4(b, samplers[constant_index * 4 + 0] & dword0_mask, samplers[constant_index * 4 + 1],
                            samplers[constant_index * 4 + 2], samplers[constant_index * 4 + 3]);
@@ -330,7 +330,7 @@ get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *der
       comp[6] = nir_iand_imm(b, comp[6], C_00A018_WRITE_COMPRESS_ENABLE);
 
       return nir_vec(b, comp, 8);
-   } else if (desc_type == AC_DESC_SAMPLER && tex->op == nir_texop_tg4 && !state->conformant_trunc_coord) {
+   } else if (desc_type == AC_DESC_SAMPLER && tex->op == nir_texop_tg4 && state->disable_tg4_trunc_coord) {
       nir_def *comp[4];
       for (unsigned i = 0; i < 4; i++)
          comp[i] = nir_channel(b, desc, i);
@@ -507,7 +507,8 @@ radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device, c
       .address32_hi = device->physical_device->rad_info.address32_hi,
       .disable_aniso_single_level = device->instance->disable_aniso_single_level,
       .has_image_load_dcc_bug = device->physical_device->rad_info.has_image_load_dcc_bug,
-      .conformant_trunc_coord = device->physical_device->rad_info.conformant_trunc_coord,
+      .disable_tg4_trunc_coord =
+         !device->physical_device->rad_info.conformant_trunc_coord && !device->disable_trunc_coord,
       .args = args,
       .info = info,
       .layout = layout,

@@ -32,6 +32,7 @@
 #else
 
 #include <errno.h>
+#include <stdint.h>
 
 #define DRM_NODE_PRIMARY 0
 #define DRM_NODE_CONTROL 1

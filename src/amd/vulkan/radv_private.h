@@ -410,6 +410,7 @@ struct radv_instance {
    bool disable_tc_compat_htile_in_general;
    bool disable_shrink_image_store;
    bool disable_aniso_single_level;
+   bool disable_trunc_coord;
    bool zero_vram;
    bool disable_sinking_load_input_fs;
    bool flush_before_query_copy;
@@ -1042,6 +1043,9 @@ struct radv_device {
    /* Whether anisotropy is forced with RADV_TEX_ANISO (-1 is disabled). */
    int force_aniso;
 
+   /* Always disable TRUNC_COORD. */
+   bool disable_trunc_coord;
+
    struct radv_device_border_color_data border_color_data;
 
    /* Thread trace. */
@@ -1201,7 +1205,7 @@ struct radv_descriptor_pool {
    uint32_t max_entry_count;
 
    union {
-      struct radv_descriptor_set_layout *layouts[0];
+      struct radv_descriptor_set *sets[0];
       struct radv_descriptor_pool_entry entries[0];
    };
 };

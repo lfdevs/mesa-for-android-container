@@ -1476,7 +1476,6 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
 EGLBoolean
 dri2_initialize_android(_EGLDisplay *disp)
 {
-   _EGLDevice *dev;
    bool device_opened = false;
    struct dri2_egl_display *dri2_dpy;
    const char *err;
@@ -1505,16 +1504,13 @@ dri2_initialize_android(_EGLDisplay *disp)
 
    dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
 
-   dev = _eglFindDevice(dri2_dpy->fd_render_gpu, false);
-   if (!dev) {
-      err = "DRI2: failed to find EGLDevice";
+   if (!dri2_setup_extensions(disp)) {
+      err = "DRI2: failed to setup extensions";
       goto cleanup;
    }
 
-   disp->Device = dev;
-
-   if (!dri2_setup_extensions(disp)) {
-      err = "DRI2: failed to setup extensions";
+   if (!dri2_setup_device(disp, false)) {
+      err = "DRI2: failed to setup EGLDevice";
       goto cleanup;
    }
 

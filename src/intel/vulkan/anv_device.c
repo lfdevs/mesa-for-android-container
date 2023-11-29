@@ -78,6 +78,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_VK_KHR_PRESENT_WAIT(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(true)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(false)
+      DRI_CONF_ANV_DISABLE_FCV(false)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
       DRI_CONF_ANV_FP64_WORKAROUND_ENABLED(false)
       DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(4)
@@ -1366,6 +1367,8 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       device->flush_astc_ldr_void_extent_denorms =
          device->has_astc_ldr && !device->emu_astc_ldr;
    }
+   device->disable_fcv = intel_device_info_is_mtl(&device->info) ||
+                         instance->disable_fcv;
 
    result = anv_physical_device_init_heaps(device, fd);
    if (result != VK_SUCCESS)
@@ -1609,6 +1612,8 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptioni(&instance->dri_options, "force_vk_vendor");
     instance->has_fake_sparse =
        driQueryOptionb(&instance->dri_options, "fake_sparse");
+    instance->disable_fcv =
+            driQueryOptionb(&instance->dri_options, "anv_disable_fcv");
 }
 
 VkResult anv_CreateInstance(

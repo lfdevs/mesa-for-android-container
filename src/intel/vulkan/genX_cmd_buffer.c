@@ -4545,7 +4545,7 @@ void genX(CmdDrawMultiIndexedEXT)(
          prim.StartInstanceLocation    = firstInstance;
          prim.BaseVertexLocation       = pVertexOffset ? *pVertexOffset : draw->vertexOffset;
          prim.ExtendedParametersPresent = true;
-         prim.ExtendedParameter0       = draw->vertexOffset;
+         prim.ExtendedParameter0       = pVertexOffset ? *pVertexOffset : draw->vertexOffset;
          prim.ExtendedParameter1       = firstInstance;
          prim.ExtendedParameter2       = i;
       }

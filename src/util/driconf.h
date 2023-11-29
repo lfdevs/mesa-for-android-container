@@ -649,6 +649,10 @@
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
                  "Disable anisotropic filtering for single level images")
 
+#define DRI_CONF_RADV_DISABLE_TRUNC_COORD(def) \
+  DRI_CONF_OPT_B(radv_disable_trunc_coord, def, \
+                 "Disable TRUNC_COORD to use D3D10/11/12 point sampling behaviour. This has special behaviour for DXVK.")
+
 #define DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(def) \
    DRI_CONF_OPT_B(radv_disable_sinking_load_input_fs, def, \
                   "Disable sinking load inputs for fragment shaders")
@@ -724,6 +728,10 @@
 #define DRI_CONF_ANV_FORCE_INDIRECT_DESCRIPTORS(def) \
    DRI_CONF_OPT_B(force_indirect_descriptors, def, \
                   "Use an indirection to access buffer/image/texture/sampler handles")
+
+#define DRI_CONF_ANV_DISABLE_FCV(def) \
+   DRI_CONF_OPT_B(anv_disable_fcv, def, \
+                  "Disable FCV optimization")
 
 /**
  * \brief DZN specific configuration options

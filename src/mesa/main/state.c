@@ -687,6 +687,9 @@ set_vertex_processing_mode(struct gl_context *ctx, gl_vertex_processing_mode m)
    default:
       assert(0);
    }
+
+   _mesa_set_varying_vp_inputs(ctx, ctx->VertexProgram._VPModeInputFilter &
+                               ctx->Array._DrawVAO->_EnabledWithMapMode);
 }
 
 

@@ -144,6 +144,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_DISABLE_TC_COMPAT_HTILE_GENERAL(false)
       DRI_CONF_RADV_DISABLE_DCC(false)
       DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(false)
+      DRI_CONF_RADV_DISABLE_TRUNC_COORD(false)
       DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(false)
       DRI_CONF_RADV_DGC(false)
       DRI_CONF_RADV_FLUSH_BEFORE_QUERY_COPY(false)
@@ -190,6 +191,8 @@ radv_init_dri_options(struct radv_instance *instance)
    instance->zero_vram = driQueryOptionb(&instance->dri_options, "radv_zero_vram");
 
    instance->disable_aniso_single_level = driQueryOptionb(&instance->dri_options, "radv_disable_aniso_single_level");
+
+   instance->disable_trunc_coord = driQueryOptionb(&instance->dri_options, "radv_disable_trunc_coord");
 
    instance->disable_sinking_load_input_fs =
       driQueryOptionb(&instance->dri_options, "radv_disable_sinking_load_input_fs");

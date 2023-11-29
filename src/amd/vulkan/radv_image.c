@@ -75,6 +75,13 @@ radv_use_tc_compat_htile_for_image(struct radv_device *device, const VkImageCrea
    if (device->physical_device->rad_info.gfx_level < GFX8)
       return false;
 
+   /* TC-compat HTILE looks broken on Tonga (and Iceland is the same design) and the documented bug
+    * workarounds don't help.
+    */
+   if (device->physical_device->rad_info.family == CHIP_TONGA ||
+       device->physical_device->rad_info.family == CHIP_ICELAND)
+      return false;
+
    if (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR)
       return false;
 
@@ -2225,7 +2232,8 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
        * block compatible format and the compressed format, so even if we take
        * the plain converted dimensions the physical layout is correct.
        */
-      if (device->physical_device->rad_info.gfx_level >= GFX9 && vk_format_is_block_compressed(image->vk.format) &&
+      if (device->physical_device->rad_info.gfx_level >= GFX9 &&
+          vk_format_is_block_compressed(image->planes[iview->plane_id].format) &&
           !vk_format_is_block_compressed(iview->vk.format)) {
          /* If we have multiple levels in the view we should ideally take the last level,
           * but the mip calculation has a max(..., 1) so walking back to the base mip in an

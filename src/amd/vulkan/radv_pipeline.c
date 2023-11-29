@@ -157,6 +157,8 @@ radv_generate_pipeline_key(const struct radv_device *device, const VkPipelineSha
    key.disable_aniso_single_level =
       device->instance->disable_aniso_single_level && device->physical_device->rad_info.gfx_level < GFX8;
 
+   key.disable_trunc_coord = device->disable_trunc_coord;
+
    key.image_2d_view_of_3d = device->image_2d_view_of_3d && device->physical_device->rad_info.gfx_level == GFX9;
 
    key.tex_non_uniform = device->instance->tex_non_uniform;
@@ -622,7 +624,8 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_pipeline_key 
    NIR_PASS(_, stage->nir, ac_nir_lower_tex,
             &(ac_nir_lower_tex_options){
                .gfx_level = gfx_level,
-               .lower_array_layer_round_even = !device->physical_device->rad_info.conformant_trunc_coord,
+               .lower_array_layer_round_even =
+                  !device->physical_device->rad_info.conformant_trunc_coord || device->disable_trunc_coord,
                .fix_derivs_in_divergent_cf = fix_derivs_in_divergent_cf,
                .max_wqm_vgprs = 64, // TODO: improve spiller and RA support for linear VGPRs
             });

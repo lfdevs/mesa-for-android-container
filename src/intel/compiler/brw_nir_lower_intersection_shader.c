@@ -196,7 +196,14 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                nir_def *hit_t = intrin->src[0].ssa;
                nir_def *hit_kind = intrin->src[1].ssa;
                nir_def *min_t = nir_load_ray_t_min(b);
-               nir_def *max_t = nir_load_global(b, t_addr, 4, 1, 32);
+
+               struct brw_nir_rt_mem_ray_defs ray_def;
+               brw_nir_rt_load_mem_ray(b, &ray_def, BRW_RT_BVH_LEVEL_WORLD);
+
+               struct brw_nir_rt_mem_hit_defs hit_in = {};
+               brw_nir_rt_load_mem_hit(b, &hit_in, false);
+
+               nir_def *max_t = ray_def.t_far;
 
                /* bool commit_tmp = false; */
                nir_variable *commit_tmp =
@@ -227,8 +234,13 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                   nir_push_if(b, nir_load_var(b, commit_tmp));
                   {
                      nir_store_var(b, commit, nir_imm_true(b), 0x1);
+
+                     nir_def *ray_addr =
+                        brw_nir_rt_mem_ray_addr(b, brw_nir_rt_stack_addr(b), BRW_RT_BVH_LEVEL_WORLD);
+
+                     nir_store_global(b, nir_iadd_imm(b, ray_addr, 16 + 12), 4,  hit_t, 0x1);
                      nir_store_global(b, t_addr, 4,
-                                      nir_vec2(b, hit_t, hit_kind),
+                                      nir_vec2(b, nir_fmin(b, hit_t, hit_in.t), hit_kind),
                                       0x3);
                   }
                   nir_pop_if(b, NULL);

@@ -13,7 +13,7 @@ DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
-LLVM_VERSION = 16
+LLVM_VERSION = 17
 export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
@@ -204,7 +204,7 @@ confflags += \
 	$(confflags_VALGRIND)
 
 override_dh_clean: regen_control
-	sed -i 's/-.*//' VERSION
+	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' | sed 's/-.*//;s/~/-/' > VERSION
 	rm -rf .pc
 	rm -rf build
 	rm -rf configure bin/config.guess bin/config.sub config.h.in

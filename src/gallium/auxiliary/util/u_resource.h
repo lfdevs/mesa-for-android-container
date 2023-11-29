@@ -31,6 +31,12 @@
 unsigned
 util_resource_size(const struct pipe_resource *res);
 
+unsigned
+util_resource_num(const struct pipe_resource *res);
+
+struct pipe_resource *
+util_resource_at_index(const struct pipe_resource *res, unsigned index);
+
 /**
  * Return true if the texture target is an array type.
  *

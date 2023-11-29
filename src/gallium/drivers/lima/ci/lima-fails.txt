@@ -207,6 +207,7 @@ spec@ext_framebuffer_object@fbo-maxsize,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT/GL_FLOAT,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT/GL_UNSIGNED_INT,Fail
+spec@ext_framebuffer_object@fbo-scissor-bitmap,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index16-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index16-copypixels,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index16-drawpixels,Fail
@@ -546,6 +547,7 @@ spec@khr_texture_compression_astc@basic-gles,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
+spec@!opengl 1.0@gl-1.0-dlist-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-dlist-materials,Fail
 spec@!opengl 1.0@gl-1.0-dlist-shademodel,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
@@ -570,6 +572,7 @@ spec@!opengl 1.0@gl-1.0-logicop@GL_XOR,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-ortho-pos,Fail
 spec@!opengl 1.0@gl-1.0-rastercolor,Fail
+spec@!opengl 1.0@gl-1.0-scissor-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 spec@!opengl 1.1@gl-1.1-xor-copypixels,Fail
@@ -640,6 +643,7 @@ spec@!opengl 2.0@vertex-program-two-side enabled front back back2@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2@vs and fs,Fail
 spec@!opengl 2.1@pbo,Fail
+spec@!opengl 2.1@pbo@test_bitmap,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl es 2.0@glsl-fs-pointcoord,Fail

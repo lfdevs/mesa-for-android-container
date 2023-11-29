@@ -138,7 +138,6 @@ struct v3dv_physical_device {
    char *name;
    int32_t render_fd;
    int32_t display_fd;
-   int32_t master_fd;
 
    /* We need these because it is not clear how to detect
     * valid devids in a portable way
@@ -205,9 +204,6 @@ struct v3dv_physical_device {
       bool perfmon;
    } caps;
 };
-
-VkResult v3dv_physical_device_acquire_display(struct v3dv_physical_device *pdevice,
-                                              VkIcdSurfaceBase *surface);
 
 static inline struct v3dv_bo *
 v3dv_device_lookup_bo(struct v3dv_physical_device *device, uint32_t handle)

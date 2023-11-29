@@ -1734,6 +1734,13 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    nir_validate_ssa_dominance(nir, "before nir_convert_from_ssa");
 
+   /* Rerun the divergence analysis before convert_from_ssa as this pass has
+    * some assert on consistent divergence flags.
+    */
+   NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
+   NIR_PASS_V(nir, nir_divergence_analysis);
+   OPT(nir_opt_remove_phis);
+
    OPT(nir_convert_from_ssa, true);
 
    if (!is_scalar) {

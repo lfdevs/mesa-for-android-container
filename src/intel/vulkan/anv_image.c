@@ -830,7 +830,8 @@ add_aux_surface_if_supported(struct anv_device *device,
          if (intel_needs_workaround(device->info, 1607794140)) {
             /* FCV is permanently enabled on this HW. */
             image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
-         } else if (intel_device_info_is_dg2(device->info)) {
+         } else if (device->info->verx10 >= 125 &&
+                    !device->physical->disable_fcv) {
             /* FCV is enabled via 3DSTATE_3D_MODE. We'd expect plain CCS_E to
              * perform better because it allows for non-zero fast clear colors,
              * but we've run into regressions in several benchmarks (F1 22 and

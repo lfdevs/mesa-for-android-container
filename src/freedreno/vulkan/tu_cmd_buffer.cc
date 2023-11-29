@@ -4976,10 +4976,12 @@ tu6_emit_vs_params(struct tu_cmd_buffer *cmd,
    uint32_t offset = vs_params_offset(cmd);
 
    /* Beside re-emitting params when they are changed, we should re-emit
-    * them after constants are invalidated via HLSQ_INVALIDATE_CMD.
+    * them after constants are invalidated via HLSQ_INVALIDATE_CMD or after we
+    * emit an empty vs params.
     */
    if (!(cmd->state.dirty & (TU_CMD_DIRTY_DRAW_STATE | TU_CMD_DIRTY_VS_PARAMS |
                              TU_CMD_DIRTY_PROGRAM)) &&
+       cmd->state.vs_params.iova &&
        (offset == 0 || draw_id == cmd->state.last_vs_params.draw_id) &&
        vertex_offset == cmd->state.last_vs_params.vertex_offset &&
        first_instance == cmd->state.last_vs_params.first_instance) {

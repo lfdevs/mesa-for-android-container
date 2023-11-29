@@ -254,7 +254,7 @@ panfrost_set_shader_images(struct pipe_context *pctx,
                            const struct pipe_image_view *iviews)
 {
    struct panfrost_context *ctx = pan_context(pctx);
-   ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |= PAN_DIRTY_STAGE_IMAGE;
+   ctx->dirty_shader[shader] |= PAN_DIRTY_STAGE_IMAGE;
 
    /* Unbind start_slot...start_slot+count */
    if (!iviews) {

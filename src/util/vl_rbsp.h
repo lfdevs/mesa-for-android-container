@@ -138,6 +138,8 @@ static inline unsigned vl_rbsp_u(struct vl_rbsp *rbsp, unsigned n)
       return 0;
 
    vl_rbsp_fillbits(rbsp);
+   if (n > 16)
+      vl_rbsp_fillbits(rbsp);
    return vl_vlc_get_uimsbf(&rbsp->nal, n);
 }
 

@@ -579,7 +579,6 @@ get_fd_render_gpu_drm(struct gbm_dri_device *gbm_dri, int fd_display_gpu)
 EGLBoolean
 dri2_initialize_drm(_EGLDisplay *disp)
 {
-   _EGLDevice *dev;
    struct gbm_device *gbm;
    const char *err;
    struct dri2_egl_display *dri2_dpy = dri2_display_create();
@@ -640,14 +639,6 @@ dri2_initialize_drm(_EGLDisplay *disp)
       goto cleanup;
    }
 
-   dev = _eglFindDevice(dri2_dpy->fd_render_gpu, dri2_dpy->gbm_dri->software);
-   if (!dev) {
-      err = "DRI2: failed to find EGLDevice";
-      goto cleanup;
-   }
-
-   disp->Device = dev;
-
    dri2_dpy->driver_name = strdup(dri2_dpy->gbm_dri->driver_name);
 
    if (!dri2_load_driver_dri3(disp)) {
@@ -678,6 +669,11 @@ dri2_initialize_drm(_EGLDisplay *disp)
 
    if (!dri2_setup_extensions(disp)) {
       err = "DRI2: failed to find required DRI extensions";
+      goto cleanup;
+   }
+
+   if (!dri2_setup_device(disp, dri2_dpy->gbm_dri->software)) {
+      err = "DRI2: failed to setup EGLDevice";
       goto cleanup;
    }
 

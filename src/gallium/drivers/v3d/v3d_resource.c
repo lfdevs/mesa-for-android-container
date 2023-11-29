@@ -26,6 +26,7 @@
 #include "util/u_memory.h"
 #include "util/format/u_format.h"
 #include "util/u_inlines.h"
+#include "util/u_resource.h"
 #include "util/u_surface.h"
 #include "util/u_transfer_helper.h"
 #include "util/u_upload_mgr.h"
@@ -473,17 +474,21 @@ v3d_resource_get_param(struct pipe_screen *pscreen,
                        enum pipe_resource_param param,
                        unsigned usage, uint64_t *value)
 {
-        struct v3d_resource *rsc = v3d_resource(prsc);
+        struct v3d_resource *rsc =
+                (struct v3d_resource *)util_resource_at_index(prsc, plane);
 
         switch (param) {
         case PIPE_RESOURCE_PARAM_STRIDE:
                 *value = rsc->slices[level].stride;
                 return true;
         case PIPE_RESOURCE_PARAM_OFFSET:
-                *value = 0;
+                *value = rsc->slices[level].offset;
                 return true;
         case PIPE_RESOURCE_PARAM_MODIFIER:
                 *value = v3d_resource_modifier(rsc);
+                return true;
+        case PIPE_RESOURCE_PARAM_NPLANES:
+                *value = util_resource_num(prsc);
                 return true;
         default:
                 return false;

@@ -1246,6 +1246,13 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
                                     info->family == CHIP_BONAIRE ||
                                     info->family == CHIP_KABINI;
 
+   /* HW bug workaround with async compute dispatches when threadgroup > 4096.
+    * The workaround is to change the "threadgroup" dimension mode to "thread"
+    * dimension mode.
+    */
+   info->has_async_compute_threadgroup_bug = info->family == CHIP_ICELAND ||
+                                             info->family == CHIP_TONGA;
+
    /* Support for GFX10.3 was added with F32_ME_FEATURE_VERSION_31 but the
     * feature version wasn't bumped.
     */

@@ -149,21 +149,22 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
       ptr.SliceHashTableStatePointer = device->slice_hash.offset;
    }
 
+   /* TODO: Figure out FCV support for other platforms
+    * Testing indicates that FCV is broken on MTL, but works fine on DG2.
+    * Let's disable FCV on MTL for now till we figure out what's wrong.
+    *
+    * Alternatively, it can be toggled off via drirc option 'anv_disable_fcv'.
+    *
+    * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9987
+    */
    anv_batch_emit(batch, GENX(3DSTATE_3D_MODE), mode) {
       mode.SliceHashingTableEnable = true;
       mode.SliceHashingTableEnableMask = true;
       mode.CrossSliceHashingMode = (util_bitcount(ppipe_mask) > 1 ?
 				    hashing32x32 : NormalMode);
       mode.CrossSliceHashingModeMask = -1;
-      /* TODO: Figure out FCV support for other platforms
-       * Testing indicates that FCV is broken on MTL, but works fine on DG2.
-       * Let's disable FCV on MTL for now till we figure out what's wrong.
-       *
-       * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9987
-       */
-      mode.FastClearOptimizationEnable = intel_device_info_is_dg2(device->info);
-      mode.FastClearOptimizationEnableMask =
-         intel_device_info_is_dg2(device->info);
+      mode.FastClearOptimizationEnable = !device->physical->disable_fcv;
+      mode.FastClearOptimizationEnableMask = !device->physical->disable_fcv;
    }
 #endif
 }
