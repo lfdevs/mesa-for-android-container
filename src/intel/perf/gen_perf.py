@@ -251,10 +251,10 @@ hw_vars["$QueryMode"] = "perf->sys_vars.query_mode"
 def resolve_variable(name, set, allow_counters):
     if name in hw_vars:
         return hw_vars[name]
-    m = re.search('\$GtSlice([0-9]+)$', name)
+    m = re.search(r'\$GtSlice([0-9]+)$', name)
     if m:
         return 'intel_device_info_slice_available(&perf->devinfo, {0})'.format(m.group(1))
-    m = re.search('\$GtSlice([0-9]+)XeCore([0-9]+)$', name)
+    m = re.search(r'\$GtSlice([0-9]+)XeCore([0-9]+)$', name)
     if m:
         return 'intel_device_info_subslice_available(&perf->devinfo, {0}, {1})'.format(m.group(1), m.group(2))
     if allow_counters and name in set.counter_vars:

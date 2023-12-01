@@ -1,5 +1,245 @@
 [
     {
+        "sha": "f843b14c171299e1696ca6d971ccaa496f60c3ab",
+        "description": "d3d12: Fix hevc encoder 32-bit build (uint64_t -> size_t)",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "ae62fc01fa95d7121451ae10d1988a73ff645c9b",
+        "description": "d3d12: Fix h264 encoder 32-bit build (uint64_t -> size_t)",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "500955b6cbc367439549a92498201d34b1f3d5d9",
+        "description": "nak: Only insert barriers around ifs if they actually re-converge",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "804201a3d70af2c78612052ab3e9c13ee0bdbbcb",
+        "description": "nak: Run rustfmt",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "e93935dd0497c1908c5cb6558258266bba07230e",
+        "description": "nvk: Limit shader stages to supported stages",
+        "nominated": false,
+        "nomination_type": 1,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": "c7c73d6d17b38a2f4c899a34614eb3750eea6034",
+        "notes": null
+    },
+    {
+        "sha": "6f9be9a2a055ecbf7850eccae2cb2c819469e241",
+        "description": "hasvk: ensure we reapply always pipeline dynamic state in runtime state",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "2d98236dd525622527df22179756f7b0f1466afa",
+        "description": "ac/nir: fix partial mesh shader output writes on GFX11",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "240e16fc8e27ba76afa1bf5adbd6d70c680027ac",
+        "notes": null
+    },
+    {
+        "sha": "f59665bb62b579c6cc26155a26ce557f9f3357d2",
+        "description": "venus: Do not submit batch manually when no feedback is required",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "a55d26b566f1ba67f770f689e4de9b0f70c0d47b",
+        "notes": null
+    },
+    {
+        "sha": "1924cdc2898b0a14a8afd13db3a06dab9e1d032e",
+        "description": "d3d12: Fix multidimensional array ordering",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "a6740ee7a4de17ce05fa10c872d6a6f08b39b77c",
+        "notes": null
+    },
+    {
+        "sha": "da3f3a46b19ade5de11d964cba1f495c5c2c9615",
+        "description": "ci: uprev vkd3d-proton to 2.11",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "cf510e38a51250702ec90bece7a9d397669ae28f",
+        "description": "intel/ci: fix .hasvk-manual-rules",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "570acf56554a619ca2bf6ed697c876c6b12d7b31",
+        "notes": null
+    },
+    {
+        "sha": "19420731123e850e10c68eb3cd672b00561c48d7",
+        "description": "intel/perf: fix regex escaping",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "aa04b47c6e43e6cc35611a43c1712ef750f161d9",
+        "notes": null
+    },
+    {
+        "sha": "1492d24f89f6e156d83d6f579d1d308eaae996ef",
+        "description": "lp: make sure 0xff is unsigned before shifting it past signed int range",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "023fa0aa5d3ab9baa4a9061d9d7c74e20b723d1f",
+        "description": "etnaviv: Mark etna_rs_gen_clear_surface(..) private",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "9342544ca5c9ec2d7c100fe80f3cb6ac41547231",
+        "description": "etnaviv: rs: Call etna_rs_gen_clear_surface(..) when needed",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "945288ffaecac106c978d10cd4d8512fa2992c47",
+        "description": "radeonsi: check sctx->tess_rings is valid before using it",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "c89ca3b47f11ce2c2e6953d37590021e89c1d119",
+        "notes": null
+    },
+    {
+        "sha": "b6e98677c38a479aa187bc48a1acd5bd8049d4a1",
+        "description": "nir/print: print PATCH0 and VARn_16BIT names instead of numbers for TCS and TES",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "5c8730ebe880d05a36462904e401ed02afae7c4f",
+        "description": "nir: don't declare illegal varyings in nir_create_passthrough_tcs",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "7a9b73fcb81126faa92397d82b627db64e1b8e0f",
+        "description": "nir: fix gathering TESS_LEVEL_INNER/OUTER usage with lowered IO",
+        "nominated": true,
+        "nomination_type": 1,
+        "resolution": 1,
+        "main_sha": null,
+        "because_sha": "10be706778bd670197a66765c550cbb3a0cfda6d",
+        "notes": null
+    },
+    {
+        "sha": "827bbe48298b7e32d46c1b9b777511109762f305",
+        "description": "ci: use released version of meson",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "698344b93c49a9f3a257a0ef4546edf5cd3a9130",
+        "description": "d3d12/driconf: Force on ARB_texture_view for Blender",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "9feecda201d632ec0300d98b9f89a10d309d3f03",
+        "description": "docs: add another -rc",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "69d1e29dc318bb0f1c395c9a9ba1a94056d4dbef",
+        "description": "docs: update calendar for 23.0.0-rc5",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
+        "sha": "28ae3210e1697c0506ca2581ebfceac22992da8f",
+        "description": "nvk: Wire up MESA_VK_VERSION_OVERRIDE",
+        "nominated": false,
+        "nomination_type": 3,
+        "resolution": 4,
+        "main_sha": null,
+        "because_sha": null,
+        "notes": null
+    },
+    {
         "sha": "b07a58157d0b110dbc09a42cffe7046c3200dd3b",
         "description": "radeonsi: remove the LAYER output if the framebuffer state has only 1 layer",
         "nominated": false,

@@ -1405,9 +1405,7 @@ vn_QueueBindSparse(VkQueue queue,
    /* if feedback isn't used in the batch, can directly submit */
    if (!submit.has_feedback_fence && !submit.has_feedback_semaphore &&
        !submit.has_feedback_query) {
-      result = vn_queue_bind_sparse_submit(&submit);
-      if (result != VK_SUCCESS)
-         return result;
+      return vn_queue_bind_sparse_submit(&submit);
    }
 
    for (uint32_t i = 0; i < submit.batch_count; i++) {

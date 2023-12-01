@@ -410,9 +410,15 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
 {
    uint64_t slot_mask = 0;
    uint16_t slot_mask_16bit = 0;
+   bool is_patch_special = false;
 
    if (nir_intrinsic_infos[instr->intrinsic].index_map[NIR_INTRINSIC_IO_SEMANTICS] > 0) {
       nir_io_semantics semantics = nir_intrinsic_io_semantics(instr);
+
+      is_patch_special = semantics.location == VARYING_SLOT_TESS_LEVEL_INNER ||
+                         semantics.location == VARYING_SLOT_TESS_LEVEL_OUTER ||
+                         semantics.location == VARYING_SLOT_BOUNDING_BOX0 ||
+                         semantics.location == VARYING_SLOT_BOUNDING_BOX1;
 
       if (semantics.location >= VARYING_SLOT_PATCH0 &&
           semantics.location <= VARYING_SLOT_PATCH31) {
@@ -516,7 +522,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_input_vertex:
    case nir_intrinsic_load_interpolated_input:
       if (shader->info.stage == MESA_SHADER_TESS_EVAL &&
-          instr->intrinsic == nir_intrinsic_load_input) {
+          instr->intrinsic == nir_intrinsic_load_input &&
+          !is_patch_special) {
          shader->info.patch_inputs_read |= slot_mask;
          if (!nir_src_is_const(*nir_get_io_offset_src(instr)))
             shader->info.patch_inputs_read_indirectly |= slot_mask;
@@ -541,7 +548,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_per_vertex_output:
    case nir_intrinsic_load_per_primitive_output:
       if (shader->info.stage == MESA_SHADER_TESS_CTRL &&
-          instr->intrinsic == nir_intrinsic_load_output) {
+          instr->intrinsic == nir_intrinsic_load_output &&
+          !is_patch_special) {
          shader->info.patch_outputs_read |= slot_mask;
          if (!nir_src_is_const(*nir_get_io_offset_src(instr)))
             shader->info.patch_outputs_accessed_indirectly |= slot_mask;
@@ -575,7 +583,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_store_per_vertex_output:
    case nir_intrinsic_store_per_primitive_output:
       if (shader->info.stage == MESA_SHADER_TESS_CTRL &&
-          instr->intrinsic == nir_intrinsic_store_output) {
+          instr->intrinsic == nir_intrinsic_store_output &&
+          !is_patch_special) {
          shader->info.patch_outputs_written |= slot_mask;
          if (!nir_src_is_const(*nir_get_io_offset_src(instr)))
             shader->info.patch_outputs_accessed_indirectly |= slot_mask;

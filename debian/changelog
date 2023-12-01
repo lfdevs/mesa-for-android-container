@@ -1,3 +1,20 @@
+mesa (23.3.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * rules: Drop checking for linux, now that kfreebsd support got
+    dropped.
+  * rules: Drop a duplicate special case for VULKAN_DRIVERS, and move
+    virtio enabling to the correct place.
+  * rules: LLVM supports JIT on riscv64 now, attempt to enable llvmpipe
+    on it.
+  * rules: Sort default config entries and fix indentation.
+  * rules: Drop WSL_ARCHS, as it's used only once.
+  * rules: Merge two checks for x86 archs.
+  * rules: Handle EGL_PLATFORMS like other lists.
+  * rules: Drop powerpc from wine archs.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 01 Dec 2023 11:39:26 +0200
+
 mesa (23.3.0~rc5-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]

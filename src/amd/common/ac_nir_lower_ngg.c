@@ -3903,6 +3903,7 @@ ms_store_arrayed_output_intrin(nir_builder *b,
       nir_def *soffset = nir_load_ring_attr_offset_amd(b);
       nir_store_buffer_amd(b, store_val, ring, base_addr_off, soffset, arr_index,
                            .base = const_off + param_offset * 16,
+                           .write_mask = write_mask,
                            .memory_modes = nir_var_shader_out,
                            .access = ACCESS_COHERENT | ACCESS_IS_SWIZZLED_AMD);
    } else if (out_mode == ms_out_mode_var) {

@@ -118,7 +118,7 @@
     - !reference [.vulkan-manual-rules, rules]
     - changes:
       - src/intel/**/*
-      when: on_success
+      when: manual
 
 # ruleset to trigger on changes affecting either anv or iris, for jobs using both (piglit, skqp)
 .intel-rules:

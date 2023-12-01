@@ -71,7 +71,7 @@ struct d3d12_bo {
    uint8_t local_reference_mask[16];
 
    d3d12_context_state_table_entry local_context_states[16];
-   uint8_t local_reference_state[8][16];
+   uint8_t local_reference_state[16][8];
 };
 
 struct d3d12_buffer {

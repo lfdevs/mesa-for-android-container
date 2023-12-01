@@ -94,7 +94,7 @@ Description: X acceleration library -- development files
 
 Package: libd3dadapter9-mesa
 Section: libs
-Architecture: amd64 arm64 armel armhf i386 powerpc
+Architecture: amd64 arm64 armel armhf i386
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -108,7 +108,7 @@ Description: state-tracker for Direct3D9
 
 Package: libd3dadapter9-mesa-dev
 Section: libdevel
-Architecture: amd64 arm64 armel armhf i386 powerpc
+Architecture: amd64 arm64 armel armhf i386
 Depends:
  libd3dadapter9-mesa (= ${binary:Version}),
  libudev1 [linux-any],

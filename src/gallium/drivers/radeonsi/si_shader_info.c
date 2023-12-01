@@ -617,7 +617,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    }
 
    /* tess factors are loaded as input instead of system value */
-   info->reads_tess_factors = nir->info.patch_inputs_read &
+   info->reads_tess_factors = nir->info.inputs_read &
       (BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_INNER) |
        BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_OUTER));
 
