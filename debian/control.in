@@ -243,6 +243,7 @@ Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
+ libvulkan1 [@LLVM_ARCHS@],
  ${shlibs:Depends},
  ${misc:Depends}
 Multi-Arch: same

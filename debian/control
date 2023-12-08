@@ -243,6 +243,7 @@ Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
+ libvulkan1 [amd64 arm64 armel armhf i386 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  ${shlibs:Depends},
  ${misc:Depends}
 Multi-Arch: same

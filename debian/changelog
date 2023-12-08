@@ -1,3 +1,13 @@
+mesa (23.3.0-2) experimental; urgency=medium
+
+  * control: Add libvulkan1 to libgl1-mesa-dri Depends where zink is
+    built, since it's loading libvulkan.so.1 directly instead of linking
+    to it.
+  * 0001-zink-initialize-drm_fd-to-1.patch: Fix GDM startup with the X11
+    backend.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 Dec 2023 09:23:13 +0200
+
 mesa (23.3.0-1) experimental; urgency=medium
 
   * New upstream release.
