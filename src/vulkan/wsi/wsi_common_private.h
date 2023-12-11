@@ -354,6 +354,17 @@ struct wsi_swapchain {
     *   but has been locked to maximum of 60 Hz. This would allow for application to request e.g. 40 Hz.
     */
    uint64_t (*poll_early_refresh)(struct wsi_swapchain *swap_chain, uint64_t *interval);
+   VkResult (*cac_plane_adjust)(struct wsi_swapchain *swap_chain,
+                             uint32_t image_index,
+                             uint32_t plane_index,
+                             uint32_t src_x,
+                             uint32_t src_y,
+                             uint32_t src_width,
+                             uint32_t src_height,
+                             uint32_t dst_x,
+                             uint32_t dst_y,
+                             uint32_t dst_width,
+                             uint32_t dst_height);
 };
 
 bool

@@ -16,17 +16,13 @@
 #define VK_INTERNAL_EXTS_H
 
 #include <vulkan/vulkan_core.h>
+#include <vulkan/vk_icd.h>
 
 #include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define VK_PRIMITIVE_TOPOLOGY_META_RECT_LIST_MESA (VkPrimitiveTopology)11
-#define VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA \
-   (VkImageViewCreateFlagBits)0x80000000
-
 
 /* This is always chained to VkImageCreateInfo when a wsi image is created.
  * It indicates that the image can be transitioned to/from
@@ -147,6 +143,53 @@ static const VkPipelineCreateFlagBits2
 #define VK_SHADER_CREATE_UNALIGNED_DISPATCH_BIT_MESA               0x00100000
 #define VK_SHADER_CREATE_DESCRIPTOR_BUFFER_BIT_MESA                0x00200000
 #define VK_SHADER_CREATE_DESCRIPTOR_LEGACY_BIT_MESA                0x00400000
+
+enum VALVESURFACEPLANES { //ordered as they are in DPU plane ordering -- R, B, G
+   RED_L = 0,
+   RED_R,
+   BLUE_L,
+   BLUE_R,
+   GREEN_L,
+   GREEN_R,
+   VALVESURFACEPLANESMAX
+};
+
+typedef struct VkIcdSurfaceDisplay2 {
+   VkIcdSurfaceDisplay base;
+   bool cac_dirty;
+   VkRect2D src_rgb[VALVESURFACEPLANESMAX];
+   VkRect2D dst_rgb[VALVESURFACEPLANESMAX];
+} VkIcdSurfaceDisplay2;
+
+// KHR_display CAC "extension"
+#define VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_CAC_INFO_VALVE (VkStructureType) 1000002099
+#define VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_CAC_INFO_VALVE_cast struct display_surface_create_cac_info_valve
+struct display_surface_create_cac_info_valve {
+   VkStructureType                   sType;
+   const void*                       pNext;
+   VkRect2D src_rgb[VALVESURFACEPLANESMAX];
+   VkRect2D dst_rgb[VALVESURFACEPLANESMAX];
+};
+
+#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_CAC_PLANE_ADJUST_INFO_VALVE (VkStructureType) 1000002100
+#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_CAC_PLANE_ADJUST_INFO_VALVE_cast struct queue_present_cac_plane_adjust_info_valve
+struct queue_present_cac_plane_adjust_info_valve {
+      VkStructureType    sType;
+      const void*        pNext;
+      uint32_t plane_index;
+      uint32_t src_x;
+      uint32_t src_y;
+      uint32_t src_width;
+      uint32_t src_height;
+      uint32_t dst_x;
+      uint32_t dst_y;
+      uint32_t dst_width;
+      uint32_t dst_height;
+};
+
+#define VK_PRIMITIVE_TOPOLOGY_META_RECT_LIST_MESA (VkPrimitiveTopology)11
+#define VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA \
+   (VkImageViewCreateFlagBits)0x80000000
 
 #ifdef __cplusplus
 }
