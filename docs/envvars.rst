@@ -41,22 +41,6 @@ LibGL environment variables
 Core Mesa environment variables
 -------------------------------
 
-.. envvar:: MESA_NO_ASM
-
-   if set, disables all assembly language optimizations
-
-.. envvar:: MESA_NO_MMX
-
-   if set, disables Intel MMX optimizations
-
-.. envvar:: MESA_NO_3DNOW
-
-   if set, disables AMD 3DNow! optimizations
-
-.. envvar:: MESA_NO_SSE
-
-   if set, disables Intel SSE optimizations
-
 .. envvar:: MESA_NO_ERROR
 
    if set to 1, error checking is disabled as per :ext:`GL_KHR_no_error`.

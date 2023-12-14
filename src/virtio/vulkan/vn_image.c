@@ -514,13 +514,23 @@ vn_GetImageMemoryRequirements2(VkDevice device,
 
 void
 vn_GetImageSparseMemoryRequirements2(
-   UNUSED VkDevice device,
-   UNUSED const VkImageSparseMemoryRequirementsInfo2 *pInfo,
+   VkDevice device,
+   const VkImageSparseMemoryRequirementsInfo2 *pInfo,
    uint32_t *pSparseMemoryRequirementCount,
-   UNUSED VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+   VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
 {
+   struct vn_device *dev = vn_device_from_handle(device);
+
    /* see vn_GetPhysicalDeviceSparseImageFormatProperties2 */
-   *pSparseMemoryRequirementCount = 0;
+   if (dev->physical_device->sparse_binding_disabled) {
+      *pSparseMemoryRequirementCount = 0;
+      return;
+   }
+
+   /* TODO local or per-device cache */
+   vn_call_vkGetImageSparseMemoryRequirements2(dev->instance, device, pInfo,
+                                               pSparseMemoryRequirementCount,
+                                               pSparseMemoryRequirements);
 }
 
 static void
@@ -856,11 +866,21 @@ vn_GetDeviceImageMemoryRequirements(
 
 void
 vn_GetDeviceImageSparseMemoryRequirements(
-   UNUSED VkDevice device,
-   UNUSED const VkDeviceImageMemoryRequirements *pInfo,
+   VkDevice device,
+   const VkDeviceImageMemoryRequirements *pInfo,
    uint32_t *pSparseMemoryRequirementCount,
-   UNUSED VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+   VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
 {
+   struct vn_device *dev = vn_device_from_handle(device);
+
    /* see vn_GetPhysicalDeviceSparseImageFormatProperties2 */
-   *pSparseMemoryRequirementCount = 0;
+   if (dev->physical_device->sparse_binding_disabled) {
+      *pSparseMemoryRequirementCount = 0;
+      return;
+   }
+
+   /* TODO per-device cache */
+   vn_call_vkGetDeviceImageSparseMemoryRequirements(
+      dev->instance, device, pInfo, pSparseMemoryRequirementCount,
+      pSparseMemoryRequirements);
 }

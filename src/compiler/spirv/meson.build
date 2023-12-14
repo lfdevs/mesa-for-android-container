@@ -81,7 +81,9 @@ idep_vtn = declare_dependency(
 
 spirv2nir = executable(
   'spirv2nir',
-  files('spirv2nir.c'),
+  files('spirv2nir.c') + [
+   vtn_generator_ids_h,
+  ],
   dependencies : [dep_m, idep_vtn, idep_mesautil],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa],
   c_args : [c_msvc_compat_args, no_override_init_args],

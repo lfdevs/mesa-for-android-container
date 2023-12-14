@@ -125,12 +125,13 @@ SfnTrace::SfnTrace(SfnLog::LogFlag flag, const char *msg):
     m_flag(flag),
     m_msg(msg)
 {
-   sfn_log << m_flag << std::string(" ", 2 * m_indention++) << "BEGIN: " << m_msg << "\n";
+   sfn_log << m_flag << std::string( 2 * m_indention++, ' ') << "BEGIN: " << m_msg << "\n";
 }
 
 SfnTrace::~SfnTrace()
 {
-   sfn_log << m_flag << std::string(" ", 2 * m_indention--) << "END:   " << m_msg << "\n";
+   assert(m_indention > 0);
+   sfn_log << m_flag << std::string( 2 * m_indention--, ' ') << "END:   " << m_msg << "\n";
 }
 
 int SfnTrace::m_indention = 0;

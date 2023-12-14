@@ -1146,6 +1146,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
             int buffer_fds[4];
             int strides[4];
             int offsets[4];
+            unsigned error;
 
             if (!dri2_dpy->image->queryImage(linear_copy_display_gpu_image,
                                              __DRI_IMAGE_ATTRIB_NUM_PLANES,
@@ -1185,12 +1186,17 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
             /* The linear buffer was created in the display GPU's vram, so we
              * need to make it visible to render GPU
              */
-            dri2_surf->back->linear_copy = dri2_dpy->image->createImageFromFds(
-               dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
-               dri2_surf->base.Height,
-               loader_image_format_to_fourcc(linear_dri_image_format),
-               &buffer_fds[0], num_planes, &strides[0], &offsets[0],
-               dri2_surf->back);
+            dri2_surf->back->linear_copy =
+               dri2_dpy->image->createImageFromDmaBufs3(
+                  dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
+                  dri2_surf->base.Height,
+                  loader_image_format_to_fourcc(linear_dri_image_format),
+                  linear_mod, &buffer_fds[0], num_planes, &strides[0],
+                  &offsets[0], __DRI_YUV_COLOR_SPACE_UNDEFINED,
+                  __DRI_YUV_RANGE_UNDEFINED, __DRI_YUV_CHROMA_SITING_UNDEFINED,
+                  __DRI_YUV_CHROMA_SITING_UNDEFINED, 0, &error,
+                  dri2_surf->back);
+
             for (i = 0; i < num_planes; ++i) {
                if (buffer_fds[i] != -1)
                   close(buffer_fds[i]);

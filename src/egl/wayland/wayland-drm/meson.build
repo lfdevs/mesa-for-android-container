@@ -67,13 +67,13 @@ wp_files = {}
 foreach name, xml : wp_protos
   code = custom_target(
     name + '-protocol.c',
-    input : join_paths(wp_dir, xml),
+    input : files(join_paths(wp_dir, xml)),
     output : name + '-protocol.c',
     command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
   )
   header = custom_target(
     name + '-client-protocol.h',
-    input : join_paths(wp_dir, xml),
+    input : files(join_paths(wp_dir, xml)),
     output : name + '-client-protocol.h',
     command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
   )

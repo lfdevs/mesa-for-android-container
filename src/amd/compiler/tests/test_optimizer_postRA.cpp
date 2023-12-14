@@ -571,6 +571,12 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
          //! buffer_store_dword %c:v[2], 0, %d:v[3], 0 offen
          bld.mubuf(aco_opcode::buffer_store_dword, c, Operand::zero(), d, Operand::zero(), 0, true);
 
+         //! v1: %res10:v[12] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
+         //! p_unit_test 10, %res10:v[12]
+         Temp result =
+            bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v12), Operand(dpp_tmp, reg_v12), b);
+         writeout(10, Operand(result, reg_v12));
+
          //! p_logical_end
          //! s2: %0:vcc = p_branch BB3
 
@@ -604,12 +610,6 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
    //! BB6
    //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
    //! s2: %0:exec = p_parallelcopy %saved_exec:s[84-85]
-
-   //! v1: %res10:v[12] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
-   //! p_unit_test 10, %res10:v[12]
-   Temp result =
-      bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v12), Operand(dpp_tmp, reg_v12), b);
-   writeout(10, Operand(result, reg_v12));
 
    finish_optimizer_postRA_test();
 END_TEST

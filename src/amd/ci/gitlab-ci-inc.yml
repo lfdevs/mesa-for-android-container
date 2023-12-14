@@ -84,7 +84,7 @@
   stage: amd
   rules:
     - !reference [.valve-farm-manual-rules, rules]
-    - !reference [.vulkan-manual-rules, rules]
+    - !reference [.gl-manual-rules, rules]
     - changes:
         *radeonsi_file_list
       when: manual

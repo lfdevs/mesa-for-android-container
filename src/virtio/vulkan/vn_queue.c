@@ -547,7 +547,7 @@ vn_combine_query_feedback_batches_and_record(
                    (vn_query_pool_to_handle(batch_clone->query_pool) ==
                     vn_query_pool_to_handle(batch->query_pool)) &&
                    batch_clone->query >= batch->query &&
-                   batch_clone->query <= batch->query + batch->query_count) {
+                   batch_clone->query < batch->query + batch->query_count) {
                   simple_mtx_lock(&feedback_cmd_pool->mutex);
                   list_move_to(&batch_clone->head,
                                &cmd_pool->free_query_batches);

@@ -59,6 +59,23 @@ i915_gem_create(struct anv_device *device,
       if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CREATE, &gem_create))
          return 0;
 
+      if (alloc_flags & ANV_BO_ALLOC_SNOOPED) {
+         /* We don't want to change these defaults if it's going to be shared
+          * with another process.
+          */
+         assert(!(alloc_flags & ANV_BO_ALLOC_EXTERNAL));
+
+         /* Regular objects are created I915_CACHING_CACHED on LLC platforms and
+          * I915_CACHING_NONE on non-LLC platforms.  For many internal state
+          * objects, we'd rather take the snooping overhead than risk forgetting
+          * a CLFLUSH somewhere.  Userptr objects are always created as
+          * I915_CACHING_CACHED, which on non-LLC means snooped so there's no
+          * need to do this there.
+          */
+         if (device->info->has_caching_uapi && !device->info->has_llc)
+            i915_gem_set_caching(device, gem_create.handle, I915_CACHING_CACHED);
+      }
+
       *actual_size = gem_create.size;
       return gem_create.handle;
    }

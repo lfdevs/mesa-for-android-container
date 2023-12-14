@@ -64,6 +64,15 @@ lookup_bo(struct hash_table *tbl, uint32_t key)
        * checking for refcnt==0 (ie. 1 after p_atomic_inc_return).
        */
       if (p_atomic_inc_return(&bo->refcnt) == 1) {
+         /* Restore the zombified reference count, so if another thread
+          * that ends up calling lookup_bo() gets the table_lock before
+          * the thread deleting the bo does, it doesn't mistakenly see
+          * that the BO is live.
+          *
+          * We are holding the table_lock here so we can't be racing
+          * with another caller of lookup_bo()
+          */
+         p_atomic_dec(&bo->refcnt);
          return &zombie;
       }
 

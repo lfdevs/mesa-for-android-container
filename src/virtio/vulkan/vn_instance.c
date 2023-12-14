@@ -137,6 +137,9 @@ vn_instance_init_ring(struct vn_instance *instance)
    ring->monitor.report_period_us = 3000000;
    mtx_init(&ring->monitor.mutex, mtx_plain);
 
+   /* ring monitor should be alive at all time */
+   ring->monitor.alive = true;
+
    const struct VkRingMonitorInfoMESA monitor_info = {
       .sType = VK_STRUCTURE_TYPE_RING_MONITOR_INFO_MESA,
       .maxReportingPeriodMicroseconds = ring->monitor.report_period_us,

@@ -470,6 +470,7 @@ panfrost_create_compute_state(struct pipe_context *pctx,
    /* The NIR becomes invalid after this. For compute kernels, we never
     * need to access it again. Don't keep a dangling pointer around.
     */
+   ralloc_free((void *)so->nir);
    so->nir = NULL;
 
    return so;

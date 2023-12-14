@@ -9891,6 +9891,7 @@ radv_dgc_before_dispatch(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_compute_pipeline *pipeline = cmd_buffer->state.compute_pipeline;
    struct radv_shader *compute_shader = cmd_buffer->state.shaders[MESA_SHADER_COMPUTE];
+   bool pipeline_is_dirty = pipeline != cmd_buffer->state.emitted_compute_pipeline;
 
    /* We will have run the DGC patch shaders before, so we can assume that there is something to
     * flush. Otherwise, we just split radv_dispatch in two. One pre-dispatch and another one
@@ -9903,6 +9904,17 @@ radv_dgc_before_dispatch(struct radv_cmd_buffer *cmd_buffer)
    si_emit_cache_flush(cmd_buffer);
 
    radv_upload_compute_shader_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE);
+
+   if (pipeline_is_dirty) {
+      /* Raytracing uses compute shaders but has separate bind points and pipelines.
+       * So if we set compute userdata & shader registers we should dirty the raytracing
+       * ones and the other way around.
+       *
+       * We only need to do this when the pipeline is dirty because when we switch between
+       * the two we always need to switch pipelines.
+       */
+      radv_mark_descriptor_sets_dirty(cmd_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+   }
 }
 
 static void
@@ -9915,17 +9927,6 @@ radv_dgc_after_dispatch(struct radv_cmd_buffer *cmd_buffer)
 
    if (has_prefetch && pipeline_is_dirty) {
       radv_emit_shader_prefetch(cmd_buffer, compute_shader);
-   }
-
-   if (pipeline_is_dirty) {
-      /* Raytracing uses compute shaders but has separate bind points and pipelines.
-       * So if we set compute userdata & shader registers we should dirty the raytracing
-       * ones and the other way around.
-       *
-       * We only need to do this when the pipeline is dirty because when we switch between
-       * the two we always need to switch pipelines.
-       */
-      radv_mark_descriptor_sets_dirty(cmd_buffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
    }
 
    if (compute_shader->info.cs.regalloc_hang_bug)

@@ -110,12 +110,23 @@ intel_aux_map_get_entry(struct intel_aux_map_context *ctx,
                         uint64_t *aux_entry_address);
 
 /* Fails if a mapping is attempted that would conflict with an existing one.
+ * This increase the refcount of the mapped region if already mapped, sets it
+ * to 1 otherwise.
  */
 bool
 intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
                           uint64_t aux_address, uint64_t main_size_B,
                           uint64_t format_bits);
 
+/* Decrease the refcount of a mapped region. When the refcount reaches 0, the
+ * region is unmapped.
+ */
+void
+intel_aux_map_del_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
+                          uint64_t size);
+
+/* Unmaps a region, refcount is reset to 0.
+ */
 void
 intel_aux_map_unmap_range(struct intel_aux_map_context *ctx, uint64_t main_address,
                           uint64_t size);

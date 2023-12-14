@@ -540,15 +540,8 @@ panfrost_emit_surface(const struct pan_image_view *iview, unsigned level,
                       unsigned layer, unsigned face, unsigned sample,
                       enum pipe_format format, void **payload)
 {
-   const struct pan_image *base_image = pan_image_view_get_plane(iview, 0);
    ASSERTED const struct util_format_description *desc =
       util_format_description(format);
-   mali_ptr base = base_image->data.bo->ptr.gpu + base_image->data.offset;
-
-   if (iview->buf.size) {
-      assert(iview->dim == MALI_TEXTURE_DIMENSION_1D);
-      base += iview->buf.offset;
-   }
 
    const struct pan_image_layout *layouts[MAX_IMAGE_PLANES] = {0};
    mali_ptr plane_ptrs[MAX_IMAGE_PLANES] = {0};
@@ -556,10 +549,19 @@ panfrost_emit_surface(const struct pan_image_view *iview, unsigned level,
    int32_t surface_strides[MAX_IMAGE_PLANES] = {0};
 
    for (int i = 0; i < MAX_IMAGE_PLANES; i++) {
-      if (!pan_image_view_get_plane(iview, i)) {
+      const struct pan_image *base_image = pan_image_view_get_plane(iview, i);
+
+      if (!base_image) {
          /* Every texture should have at least one plane. */
          assert(i > 0);
          break;
+      }
+
+      mali_ptr base = base_image->data.bo->ptr.gpu + base_image->data.offset;
+
+      if (iview->buf.size) {
+         assert(iview->dim == MALI_TEXTURE_DIMENSION_1D);
+         base += iview->buf.offset;
       }
 
       layouts[i] = &pan_image_view_get_plane(iview, i)->layout;
@@ -741,6 +743,11 @@ GENX(panfrost_new_texture)(const struct panfrost_device *dev,
       assert(iview->last_layer % 6 == 5);
       array_size /= 6;
    }
+
+   /* Multiplanar YUV textures require 2 surface descriptors. */
+   if (panfrost_is_yuv(desc->layout) && PAN_ARCH >= 9 &&
+       pan_image_view_get_plane(iview, 1) != NULL)
+      array_size *= 2;
 
    unsigned width;
 

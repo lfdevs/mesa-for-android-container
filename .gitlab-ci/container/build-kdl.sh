@@ -5,12 +5,12 @@ set -ex
 
 KDL_REVISION="5056f71b100a68b72b285c6fc845a66a2ed25985"
 
-git clone \
-    https://gitlab.freedesktop.org/gfx-ci/ci-kdl.git \
-    --depth 1 \
-    ci-kdl.git
+mkdir ci-kdl.git
 pushd ci-kdl.git
-git checkout ${KDL_REVISION}
+git init
+git remote add origin https://gitlab.freedesktop.org/gfx-ci/ci-kdl.git
+git fetch --depth 1 origin ${KDL_REVISION}
+git checkout FETCH_HEAD
 popd
 
 python3 -m venv ci-kdl.venv

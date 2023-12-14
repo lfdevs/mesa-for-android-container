@@ -375,7 +375,11 @@ CopyPropFwdVisitor::visit(AluInstr *instr)
 
    auto mov_block_id = instr->block_id();
 
-   while(ii != ie) {
+   /** libc++ seems to invalidate the end iterator too if a std::set is
+    *  made empty by an erase operation,
+    *  https://gitlab.freedesktop.org/mesa/mesa/-/issues/7931
+    */
+   while(ii != ie && !dest->uses().empty()) {
       auto i = *ii;
       auto target_block_id = i->block_id();
 

@@ -1050,6 +1050,10 @@ calculate_iterations(nir_def *basis, nir_def *limit_basis,
              induction_base_type);
    }
 
+   if (cond.def->num_components != 1 || basis->num_components != 1 ||
+       limit_basis->num_components != 1)
+      return -1;
+
    /* do-while loops can increment the starting value before the condition is
     * checked. e.g.
     *

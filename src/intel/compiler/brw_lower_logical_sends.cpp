@@ -2727,17 +2727,17 @@ lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
    unsigned mode;
    switch (inst->opcode) {
    case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
-      assert(inst->src[0].file == BAD_FILE);
+      assert(inst->src[INTERP_SRC_OFFSET].file == BAD_FILE);
       mode = GFX7_PIXEL_INTERPOLATOR_LOC_SAMPLE;
       break;
 
    case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
-      assert(inst->src[0].file == BAD_FILE);
+      assert(inst->src[INTERP_SRC_OFFSET].file == BAD_FILE);
       mode = GFX7_PIXEL_INTERPOLATOR_LOC_SHARED_OFFSET;
       break;
 
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
-      payload = inst->src[0];
+      payload = inst->src[INTERP_SRC_OFFSET];
       mlen = 2 * inst->exec_size / 8;
       mode = GFX7_PIXEL_INTERPOLATOR_LOC_PER_SLOT_OFFSET;
       break;
@@ -2747,10 +2747,9 @@ lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
    }
 
    const bool dynamic_mode =
-      inst->opcode == FS_OPCODE_INTERPOLATE_AT_SAMPLE &&
-      wm_prog_key->multisample_fbo == BRW_SOMETIMES;
+      inst->src[INTERP_SRC_DYNAMIC_MODE].file != BAD_FILE;
 
-   fs_reg desc = inst->src[1];
+   fs_reg desc = inst->src[INTERP_SRC_MSG_DESC];
    uint32_t desc_imm =
       brw_pixel_interp_desc(devinfo,
                             /* Leave the mode at 0 if persample_dispatch is
@@ -2799,8 +2798,10 @@ lower_interpolator_logical_send(const fs_builder &bld, fs_inst *inst,
       const fs_builder &ubld = bld.exec_all().group(8, 0);
       desc = ubld.vgrf(BRW_REGISTER_TYPE_UD);
 
-      check_dynamic_msaa_flag(ubld, wm_prog_data,
-                              BRW_WM_MSAA_FLAG_MULTISAMPLE_FBO);
+      /* The predicate should have been built in brw_fs_nir.cpp when emitting
+       * NIR code. This guarantees that we do not have incorrect interactions
+       * with the flag register holding the predication result.
+       */
       if (orig_desc.file == IMM) {
          /* Not using SEL here because we would generate an instruction with 2
           * immediate sources which is not supported by HW.

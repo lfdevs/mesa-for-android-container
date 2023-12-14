@@ -219,14 +219,9 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
       is_divergent = false;
       break;
 
-   case nir_intrinsic_load_reg:
-   case nir_intrinsic_load_reg_indirect: {
-      nir_intrinsic_instr *decl = nir_reg_get_decl(instr->src[0].ssa);
-      is_divergent = nir_intrinsic_divergent(decl);
-      if (instr->intrinsic == nir_intrinsic_load_reg_indirect)
-         is_divergent |= instr->src[1].ssa->divergent;
+   case nir_intrinsic_decl_reg:
+      is_divergent = nir_intrinsic_divergent(instr);
       break;
-   }
 
    /* Intrinsics with divergence depending on shader stage and hardware */
    case nir_intrinsic_load_shader_record_ptr:
@@ -463,7 +458,9 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_desc_set_dynamic_index_intel:
    case nir_intrinsic_load_global_constant_bounded:
    case nir_intrinsic_load_global_constant_offset:
-   case nir_intrinsic_resource_intel: {
+   case nir_intrinsic_resource_intel:
+   case nir_intrinsic_load_reg:
+   case nir_intrinsic_load_reg_indirect: {
       unsigned num_srcs = nir_intrinsic_infos[instr->intrinsic].num_srcs;
       for (unsigned i = 0; i < num_srcs; i++) {
          if (instr->src[i].ssa->divergent) {

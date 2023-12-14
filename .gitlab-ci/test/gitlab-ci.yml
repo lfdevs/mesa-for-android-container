@@ -23,11 +23,6 @@
   stage: lint
   extends:
     - .use-debian/x86_64_build
-  rules:
-    # in merge pipeline, don't touch the default settings
-    - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_COMMIT_BRANCH == null
-    # in other pipelines, formatting checks are allowed to fail
-    - allow_failure: true
   variables:
     GIT_STRATEGY: fetch
   timeout: 10m

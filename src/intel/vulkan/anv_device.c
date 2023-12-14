@@ -880,11 +880,6 @@ anv_compute_sys_heap_size(struct anv_physical_device *device,
    else
       available_ram = total_ram * 3 / 4;
 
-   /* We also want to leave some padding for things we allocate in the driver,
-    * so don't go over 3/4 of the GTT either.
-    */
-   available_ram = MIN2(available_ram, device->gtt_size * 3 / 4);
-
    return available_ram;
 }
 
@@ -2765,7 +2760,7 @@ anv_get_memory_budget(VkPhysicalDevice physicalDevice,
          }
       } else {
          total_heaps_size = total_sys_heaps_size;
-         mem_available = device->sys.available;
+         mem_available = MIN2(device->sys.available, total_heaps_size);
       }
 
       double heap_proportion = (double) heap_size / total_heaps_size;

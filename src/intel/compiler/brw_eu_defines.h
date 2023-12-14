@@ -986,6 +986,17 @@ enum urb_logical_srcs {
    URB_LOGICAL_NUM_SRCS
 };
 
+enum interpolator_logical_srcs {
+   /** Interpolation offset */
+   INTERP_SRC_OFFSET,
+   /** Message data  */
+   INTERP_SRC_MSG_DESC,
+   /** Flag register for dynamic mode */
+   INTERP_SRC_DYNAMIC_MODE,
+
+   INTERP_NUM_SRCS
+};
+
 
 #ifdef __cplusplus
 /**

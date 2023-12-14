@@ -649,7 +649,8 @@ nvk_CmdBeginTransformFeedbackEXT(VkCommandBuffer commandBuffer,
          struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
          P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
          P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_XFB_COUNTER_LOAD));
-         P_INLINE_DATA(p, cb_idx);
+         /* The STREAM_OUT_BUFFER_LOAD_WRITE_POINTER registers are 8 dword stride */
+         P_INLINE_DATA(p, cb_idx * 8);
          P_INLINE_DATA(p, cb_addr >> 32);
          P_INLINE_DATA(p, cb_addr);
       } else {
@@ -658,7 +659,8 @@ nvk_CmdBeginTransformFeedbackEXT(VkCommandBuffer commandBuffer,
          __push_immd(p, SUBC_NV9097, NV906F_SET_REFERENCE, 0);
 
          P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_XFB_COUNTER_LOAD));
-         P_INLINE_DATA(p, cb_idx);
+         /* The STREAM_OUT_BUFFER_LOAD_WRITE_POINTER registers are 8 dword stride */
+         P_INLINE_DATA(p, cb_idx * 8);
          nv_push_update_count(p, 1);
          nvk_cmd_buffer_push_indirect_buffer(cmd, buffer, offset, 4);
       }

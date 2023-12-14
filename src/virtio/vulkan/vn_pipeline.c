@@ -1432,9 +1432,9 @@ vn_CreateComputePipelines(VkDevice device,
       if (result != VK_SUCCESS)
          vn_destroy_failed_pipelines(dev, createInfoCount, pPipelines, alloc);
    } else {
-      vn_call_vkCreateComputePipelines(dev->instance, device, pipelineCache,
-                                       createInfoCount, pCreateInfos, NULL,
-                                       pPipelines);
+      vn_async_vkCreateComputePipelines(dev->instance, device, pipelineCache,
+                                        createInfoCount, pCreateInfos, NULL,
+                                        pPipelines);
       result = VK_SUCCESS;
    }
 

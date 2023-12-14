@@ -682,12 +682,15 @@ nvk_nir_lower_descriptors(nir_shader *nir,
     * are left and lowers them to slightly less efficient but variable-
     * pointers-correct versions.
     */
-   return nir_shader_instructions_pass(nir, try_lower_descriptors_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
-                                       (void *)&ctx) |
-          nir_shader_instructions_pass(nir, lower_ssbo_descriptor_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
-                                       (void *)&ctx);
+   bool pass_lower_descriptors =
+      nir_shader_instructions_pass(nir, try_lower_descriptors_instr,
+                                   nir_metadata_block_index |
+                                   nir_metadata_dominance,
+                                   (void *)&ctx);
+   bool pass_lower_ssbo =
+      nir_shader_instructions_pass(nir, lower_ssbo_descriptor_instr,
+                                   nir_metadata_block_index |
+                                   nir_metadata_dominance,
+                                   (void *)&ctx);
+   return pass_lower_descriptors || pass_lower_ssbo;
 }

@@ -1,3 +1,11 @@
+mesa (23.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Drop upstreamed zink patch.
+  * patches: Disable zink fallback loading, breaks gtk4 build/tests.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 14 Dec 2023 13:17:25 +0200
+
 mesa (23.3.0-2) experimental; urgency=medium
 
   * control: Add libvulkan1 to libgl1-mesa-dri Depends where zink is

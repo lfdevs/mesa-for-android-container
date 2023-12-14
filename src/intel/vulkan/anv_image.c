@@ -1704,6 +1704,25 @@ anv_image_finish(struct anv_image *image)
    if (anv_image_is_sparse(image))
       anv_image_finish_sparse_bindings(image);
 
+   /* Unmap a CCS so that if the bound region of the image is rebound to
+    * another image, the AUX tables will be cleared to allow for a new
+    * mapping.
+    */
+   for (int p = 0; p < image->n_planes; ++p) {
+      if (!image->planes[p].aux_ccs_mapped)
+         continue;
+
+      const struct anv_address main_addr =
+         anv_image_address(image,
+                           &image->planes[p].primary_surface.memory_range);
+      const struct isl_surf *surf =
+         &image->planes[p].primary_surface.isl;
+
+      intel_aux_map_del_mapping(device->aux_map_ctx,
+                                anv_address_physical(main_addr),
+                                surf->size_B);
+   }
+
    if (image->from_gralloc) {
       assert(!image->disjoint);
       assert(image->n_planes == 1);
@@ -1900,32 +1919,17 @@ anv_image_get_memory_requirements(struct anv_device *device,
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *requirements = (void *)ext;
-         if (image->vk.wsi_legacy_scanout || image->from_ahb) {
-            /* If we need to set the tiling for external consumers, we need a
-             * dedicated allocation.
+         if (image->vk.wsi_legacy_scanout ||
+             image->from_ahb ||
+             (isl_drm_modifier_has_aux(image->vk.drm_format_mod) &&
+              anv_image_uses_aux_map(device, image))) {
+            /* If we need to set the tiling for external consumers or the
+             * modifier involves AUX tables, we need a dedicated allocation.
              *
              * See also anv_AllocateMemory.
              */
             requirements->prefersDedicatedAllocation = true;
             requirements->requiresDedicatedAllocation = true;
-         } else if (anv_image_uses_aux_map(device, image)) {
-            /* We request a dedicated allocation to guarantee that the BO will
-             * be aux-map compatible (see anv_bo_vma_alloc_or_close and
-             * anv_bo_allows_aux_map).
-             *
-             * TODO: This is an untested heuristic. It's not known if this
-             *       guarantee is worth losing suballocation.
-             *
-             * If we don't have an aux-map compatible BO at the time we bind
-             * this image to device memory, we'll change the aux usage.
-             *
-             * It may be possible to handle an image using a modifier in the
-             * same way. However, we choose to keep things simple and require
-             * a dedicated allocation for that case.
-             */
-            requirements->prefersDedicatedAllocation = true;
-            requirements->requiresDedicatedAllocation =
-               isl_drm_modifier_has_aux(image->vk.drm_format_mod);
          } else {
             requirements->prefersDedicatedAllocation = false;
             requirements->requiresDedicatedAllocation = false;
@@ -2302,10 +2306,9 @@ VkResult anv_BindImageMemory2(
             continue;
 
          /* Add the plane to the aux map when applicable. */
-         if (anv_bo_allows_aux_map(device, bo)) {
-            const struct anv_address main_addr =
-               anv_image_address(image,
-                 &image->planes[p].primary_surface.memory_range);
+         const struct anv_address main_addr = anv_image_address(
+            image, &image->planes[p].primary_surface.memory_range);
+         if (anv_address_allows_aux_map(device, main_addr)) {
             const struct anv_address aux_addr =
                anv_image_address(image,
                  &image->planes[p].compr_ctrl_memory_range);
@@ -2313,12 +2316,12 @@ VkResult anv_BindImageMemory2(
                &image->planes[p].primary_surface.isl;
             const uint64_t format_bits =
                intel_aux_map_format_bits_for_isl_surf(surf);
-            const bool mapped =
+            image->planes[p].aux_ccs_mapped =
                intel_aux_map_add_mapping(device->aux_map_ctx,
                                          anv_address_physical(main_addr),
                                          anv_address_physical(aux_addr),
                                          surf->size_B, format_bits);
-            if (mapped)
+            if (image->planes[p].aux_ccs_mapped)
                continue;
          }
 

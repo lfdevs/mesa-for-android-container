@@ -7,10 +7,10 @@ set -ex
 
 cd /
 
-mount -t proc none /proc
-mount -t sysfs none /sys
+findmnt --mountpoint /proc || mount -t proc none /proc
+findmnt --mountpoint /sys || mount -t sysfs none /sys
 mount -t debugfs none /sys/kernel/debug
-mount -t devtmpfs none /dev || echo possibly already mounted
+findmnt --mountpoint /dev || mount -t devtmpfs none /dev
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
 mkdir /dev/shm

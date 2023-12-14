@@ -325,7 +325,7 @@ def update_release_notes_index(version: str) -> None:
             first_list = False
             new_relnotes.append(f'-  :doc:`{version} release notes <relnotes/{version}>`\n')
         if (not first_list and second_list and
-            re.match('   \d+.\d+(.\d+)? <relnotes/\d+.\d+(.\d+)?>', line)):
+            re.match(r'   \d+.\d+(.\d+)? <relnotes/\d+.\d+(.\d+)?>', line)):
             second_list = False
             new_relnotes.append(f'   {version} <relnotes/{version}>\n')
         new_relnotes.append(line)

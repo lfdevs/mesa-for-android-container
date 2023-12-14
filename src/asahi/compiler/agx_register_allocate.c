@@ -4,6 +4,7 @@
  */
 
 #include "util/u_dynarray.h"
+#include "util/u_qsort.h"
 #include "agx_builder.h"
 #include "agx_compiler.h"
 #include "agx_debug.h"
@@ -564,7 +565,7 @@ insert_copies_for_clobbered_killed(struct ra_ctx *rctx, unsigned reg,
       return;
 
    /* Sort by descending alignment so they are packed with natural alignment */
-   qsort_r(vars, nr_vars, sizeof(vars[0]), sort_by_size, rctx->sizes);
+   util_qsort_r(vars, nr_vars, sizeof(vars[0]), sort_by_size, rctx->sizes);
 
    /* Reassign in the destination region */
    unsigned base = reg;

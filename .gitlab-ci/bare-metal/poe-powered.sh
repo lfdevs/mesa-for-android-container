@@ -70,11 +70,6 @@ if [ -z "$BM_CMDLINE" ]; then
   exit 1
 fi
 
-if [ -z "$BM_BOOTCONFIG" ]; then
-  echo "Must set BM_BOOTCONFIG to your board's required boot configuration arguments"
-  exit 1
-fi
-
 set -ex
 
 date +'%F %T'
@@ -154,8 +149,10 @@ date +'%F %T'
 
 echo "$BM_CMDLINE" > /tftp/cmdline.txt
 
-# Add some required options in config.txt
-printf "$BM_BOOTCONFIG" >> /tftp/config.txt
+# Add some options in config.txt, if defined
+if [ -n "$BM_BOOTCONFIG" ]; then
+  printf "$BM_BOOTCONFIG" >> /tftp/config.txt
+fi
 
 set +e
 ATTEMPTS=3

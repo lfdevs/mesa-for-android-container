@@ -55,6 +55,13 @@ ok_ubwc_format(struct pipe_screen *pscreen, enum pipe_format pfmt)
       return info->a6xx.has_z24uint_s8uint;
 
    case PIPE_FORMAT_R8_G8B8_420_UNORM:
+      /* The difference between NV12 and R8_G8B8_420_UNORM is only where the
+       * conversion to RGB happens, with the latter it happens _after_ the
+       * texture samp instruction.  But dri2_get_mapping_by_fourcc() doesn't
+       * know this, so it asks for NV12 when it really meant to ask for
+       * R8_G8B8_420_UNORM.  Just treat them the same here to work around it:
+       */
+   case PIPE_FORMAT_NV12:
       return true;
 
    default:

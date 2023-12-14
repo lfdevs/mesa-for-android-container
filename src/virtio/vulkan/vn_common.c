@@ -168,10 +168,8 @@ vn_relax_init(struct vn_ring *ring, const char *reason)
              ring->monitor.report_period_us);
 #endif
 
-      if (vn_ring_monitor_acquire(ring)) {
-         ring->monitor.alive = true;
+      if (vn_ring_monitor_acquire(ring))
          vn_ring_unset_status_bits(ring, VK_RING_STATUS_ALIVE_BIT_MESA);
-      }
    }
 
    return (struct vn_relax_state){

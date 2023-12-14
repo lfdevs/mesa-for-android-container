@@ -145,13 +145,21 @@ nir_lower_vars_to_scratch(nir_shader *shader,
       return false;
    }
 
+   bool progress = false;
+
    nir_foreach_function_impl(impl, shader) {
       nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
+         nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_deref)
                continue;
 
             nir_deref_instr *deref = nir_instr_as_deref(instr);
+
+            if (nir_deref_instr_remove_if_unused(deref)) {
+               progress = true;
+               continue;
+            }
+
             if (deref->deref_type != nir_deref_type_var)
                continue;
 
@@ -178,7 +186,6 @@ nir_lower_vars_to_scratch(nir_shader *shader,
       var->data.location = INT_MAX;
    }
 
-   bool progress = false;
    nir_foreach_function_impl(impl, shader) {
       nir_builder build = nir_builder_create(impl);
 
