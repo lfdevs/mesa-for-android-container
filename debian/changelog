@@ -1,3 +1,9 @@
+mesa (23.3.1-2) unstable; urgency=medium
+
+  * llvmpipe-add-orcjit.diff: Add support for ORCJIT. (Closes: #1058759)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 15 Dec 2023 20:59:48 +0200
+
 mesa (23.3.1-1) unstable; urgency=medium
 
   * New upstream release.
