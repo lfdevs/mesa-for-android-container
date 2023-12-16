@@ -1606,11 +1606,11 @@ index 8e5e8ced3fe9d..d77da467efd61 100644
  
 -#if LLVM_VERSION_MAJOR == 15
 +#if GALLIVM_USE_ORCJIT
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(llvmpipe->context), false);
 +#endif
 +#else
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
     LLVMContextSetOpaquePointers(llvmpipe->context, false);
 +#endif
  #endif
@@ -1895,7 +1895,7 @@ index fd8489f8358b0..abd93a2754282 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
@@ -2004,7 +2004,7 @@ index 7851bf29dd63f..8c30a7d33a1c0 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
@@ -2101,7 +2101,7 @@ index 9fb64486f1131..b8c58cd9a07b7 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
@@ -2170,7 +2170,7 @@ index 6d3a60bd8dba0..23d69c78fec52 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
@@ -2228,7 +2228,7 @@ index 6d3a60bd8dba0..23d69c78fec52 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
@@ -2373,12 +2373,12 @@ index 0000000000000..1f59d555ec59f
 +
 +#if GALLIVM_USE_ORCJIT
 +   LLVMOrcThreadSafeContextRef context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
 +   LLVMContextRef context = LLVMContextCreate();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(context, false);
 +#endif
 +#endif
@@ -2499,7 +2499,7 @@ index 7e53aa519280e..1f9f3b1383044 100644
  
 +#if GALLIVM_USE_ORCJIT
 +   context = LLVMOrcCreateNewThreadSafeContext();
-+#if LLVM_VERSION_MAJOR >= 15
++#if LLVM_VERSION_MAJOR == 15
 +   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
 +#endif
 +#else
