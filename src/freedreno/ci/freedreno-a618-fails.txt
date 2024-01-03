@@ -91,6 +91,7 @@ spec@arb_sample_shading@samplemask 4@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4@sample mask_in_one,Fail
 
 # Same results w/ zink-on-tu as with freedreno:
+spec@arb_post_depth_coverage@arb_post_depth_coverage-multisampling,Fail
 spec@arb_sample_shading@samplemask 2 all@noms partition,Fail
 spec@arb_sample_shading@samplemask 2@noms partition,Fail
 spec@arb_sample_shading@samplemask 4 all@noms partition,Fail
@@ -109,8 +110,6 @@ spec@arb_tessellation_shader@execution@tcs-input-read-mat,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@vs-output-array-dvec4-index-wr-before-tcs,Crash
 
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
-
-spec@arb_timer_query@timestamp-get,Fail
 
 spec@arb_vertex_type_2_10_10_10_rev@attrib-p-type-size-match,Fail
 

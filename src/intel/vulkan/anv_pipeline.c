@@ -771,7 +771,7 @@ anv_pipeline_hash_graphics(struct anv_graphics_base_pipeline *pipeline,
    }
 
    if (stages[MESA_SHADER_MESH].info || stages[MESA_SHADER_TASK].info) {
-      const bool afs = device->physical->instance->assume_full_subgroups;
+      const uint8_t afs = device->physical->instance->assume_full_subgroups;
       _mesa_sha1_update(&ctx, &afs, sizeof(afs));
    }
 
@@ -789,7 +789,7 @@ anv_pipeline_hash_compute(struct anv_compute_pipeline *pipeline,
 
    anv_pipeline_hash_common(&ctx, &pipeline->base);
 
-   const bool afs = device->physical->instance->assume_full_subgroups;
+   const uint8_t afs = device->physical->instance->assume_full_subgroups;
    _mesa_sha1_update(&ctx, &afs, sizeof(afs));
 
    _mesa_sha1_update(&ctx, stage->shader_sha1,
@@ -1991,7 +1991,9 @@ anv_fixup_subgroup_size(struct anv_device *device, struct shader_info *info)
     * a size.
     */
    if (info->subgroup_size == SUBGROUP_SIZE_FULL_SUBGROUPS)
-      info->subgroup_size = BRW_SUBGROUP_SIZE;
+      info->subgroup_size =
+         device->physical->instance->assume_full_subgroups != 0 ?
+         device->physical->instance->assume_full_subgroups : BRW_SUBGROUP_SIZE;
 }
 
 static void

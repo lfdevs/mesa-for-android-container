@@ -1,3 +1,14 @@
+mesa (23.3.2-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * patches: Refreshed, and dropped an upstreamed patch.
+
+  [ Tao Chen ]
+  * Add Loongarch support
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 03 Jan 2024 15:19:43 +0200
+
 mesa (23.3.1-4) unstable; urgency=medium
 
   * patches: Fix a regression in crocus. (Closes: #1059015)

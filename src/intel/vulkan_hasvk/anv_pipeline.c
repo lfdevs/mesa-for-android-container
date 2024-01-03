@@ -472,7 +472,7 @@ anv_pipeline_hash_compute(struct anv_compute_pipeline *pipeline,
    const bool rba = device->vk.enabled_features.robustBufferAccess;
    _mesa_sha1_update(&ctx, &rba, sizeof(rba));
 
-   const bool afs = device->physical->instance->assume_full_subgroups;
+   const uint8_t afs = device->physical->instance->assume_full_subgroups;
    _mesa_sha1_update(&ctx, &afs, sizeof(afs));
 
    _mesa_sha1_update(&ctx, stage->shader_sha1,
@@ -1581,7 +1581,9 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
        * a size.
        */
       if (stage.nir->info.subgroup_size == SUBGROUP_SIZE_FULL_SUBGROUPS)
-         stage.nir->info.subgroup_size = BRW_SUBGROUP_SIZE;
+         stage.nir->info.subgroup_size =
+            device->physical->instance->assume_full_subgroups != 0 ?
+            device->physical->instance->assume_full_subgroups : BRW_SUBGROUP_SIZE;
 
       stage.num_stats = 1;
 

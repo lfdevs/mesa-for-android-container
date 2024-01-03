@@ -326,7 +326,7 @@ driGetConfigAttribIndex(const __DRIconfig *config,
          * for the X server's sake, and EGL will expect us to handle it because
          * it iterates all __DRI_ATTRIBs.
          */
-        *value = __DRI_ATTRIB_SWAP_EXCHANGE;
+        *value = __DRI_ATTRIB_SWAP_UNDEFINED;
         break;
     case __DRI_ATTRIB_MAX_SWAP_INTERVAL:
         *value = INT_MAX;

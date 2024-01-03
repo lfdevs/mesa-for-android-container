@@ -208,7 +208,6 @@ spec@arb_separate_shader_objects@400 combinations by location,Fail
 spec@arb_separate_shader_objects@400 combinations by name,Fail
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@arb_timer_query@query gl_timestamp,Fail
-spec@arb_timer_query@timestamp-get,Fail
 spec@arb_transform_feedback3@gl_skipcomponents1-1,Fail
 spec@arb_transform_feedback3@gl_skipcomponents1-2,Fail
 spec@arb_transform_feedback3@gl_skipcomponents1-3,Fail

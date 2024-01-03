@@ -687,6 +687,32 @@ clone_function(clone_state *state, const nir_function *fxn, nir_shader *ns)
    return nfxn;
 }
 
+static u_printf_info *
+clone_printf_info(void *mem_ctx, const nir_shader *s)
+{
+   u_printf_info *infos = ralloc_array(mem_ctx, u_printf_info, s->printf_info_count);
+
+   for (unsigned i = 0; i < s->printf_info_count; i++) {
+      const u_printf_info *src_info = &s->printf_info[i];
+
+      infos[i].num_args = src_info->num_args;
+      infos[i].arg_sizes = ralloc_size(mem_ctx,
+                                       sizeof(infos[i].arg_sizes[0]) *
+                                       src_info->num_args);
+      memcpy(infos[i].arg_sizes, src_info->arg_sizes,
+             sizeof(infos[i].arg_sizes[0]) * src_info->num_args);
+
+
+      infos[i].string_size = src_info->string_size;
+      infos[i].strings = ralloc_size(mem_ctx,
+                                     src_info->string_size);
+      memcpy(infos[i].strings, src_info->strings,
+             src_info->string_size);
+   }
+
+   return infos;
+}
+
 nir_shader *
 nir_shader_clone(void *mem_ctx, const nir_shader *s)
 {
@@ -732,6 +758,11 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
       size_t size = nir_xfb_info_size(s->xfb_info->output_count);
       ns->xfb_info = ralloc_size(ns, size);
       memcpy(ns->xfb_info, s->xfb_info, size);
+   }
+
+   if (s->printf_info_count > 0) {
+      ns->printf_info = clone_printf_info(ns, s);
+      ns->printf_info_count = s->printf_info_count;
    }
 
    free_clone_state(&state);

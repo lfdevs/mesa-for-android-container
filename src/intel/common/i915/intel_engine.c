@@ -25,7 +25,7 @@
 
 #include <stdlib.h>
 
-#include "intel_gem.h"
+#include "i915/intel_gem.h"
 
 static enum intel_engine_class
 i915_engine_class_to_intel(enum drm_i915_gem_engine_class i915)

@@ -796,6 +796,7 @@ if with_gallium_rusticl
   endif
 
   add_languages('rust', required: true)
+  rustc = meson.get_compiler('rust')
 
   with_clc = true
 endif

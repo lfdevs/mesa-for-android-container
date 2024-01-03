@@ -4,4 +4,3 @@ src_glx_dri_common.h.diff
 0001-Revert-egl-add-automatic-zink-fallback-loading-betwe.patch
 0002-Revert-glx-add-automatic-zink-fallback-loading-betwe.patch
 llvmpipe-add-orcjit.diff
-0001-intel-compiler-move-gen5-final-pass-to-actually-be-f.patch

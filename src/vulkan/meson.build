@@ -92,6 +92,7 @@ endif
 
 idep_vulkan_wsi_defines = declare_dependency(
   compile_args : vulkan_wsi_list,
+  dependencies : vulkan_wsi_deps,
 )
 vulkan_wsi_deps += idep_vulkan_wsi_defines
 

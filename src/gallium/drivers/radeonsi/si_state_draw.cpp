@@ -370,9 +370,8 @@ static bool si_update_shaders(struct si_context *sctx)
 
                   struct si_pm4_state *pm4 = &shader->pm4;
 
-                  uint32_t va_low = (pipeline->bo->gpu_address + pipeline->offset[i]) >> 8;
-                  assert(PKT3_IT_OPCODE_G(pm4->pm4[pm4->reg_va_low_idx - 2]) == PKT3_SET_SH_REG);
-                  uint32_t reg = (pm4->pm4[pm4->reg_va_low_idx - 1] << 2) + SI_SH_REG_OFFSET;
+                  uint64_t va_low = (pipeline->bo->gpu_address + pipeline->offset[i]) >> 8;
+                  uint32_t reg = pm4->spi_shader_pgm_lo_reg;
                   si_pm4_set_reg(&pipeline->pm4, reg, va_low);
                }
             }

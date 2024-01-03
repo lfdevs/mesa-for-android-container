@@ -173,6 +173,12 @@ void genX(cmd_buffer_dispatch_kernel)(struct anv_cmd_buffer *cmd_buffer,
 void genX(blorp_exec)(struct blorp_batch *batch,
                       const struct blorp_params *params);
 
+void genX(batch_emit_secondary_call)(struct anv_batch *batch,
+                                     struct anv_address secondary_addr,
+                                     struct anv_address secondary_return_addr);
+
+void *genX(batch_emit_return)(struct anv_batch *batch);
+
 void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_device *device,
                               struct anv_address addr,

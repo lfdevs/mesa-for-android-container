@@ -153,7 +153,7 @@ d3d12_video_bitstream_builder_av1::write_temporal_delimiter_obu(std::vector<uint
       write_obu_header(&bitstream_full_obu, OBU_TEMPORAL_DELIMITER, obu_extension_flag, temporal_id, spatial_id);
 
       // Write the data size
-      const size_t obu_size_in_bytes = 0;
+      const uint64_t obu_size_in_bytes = 0;
       debug_printf("obu_size: %" PRIu64 " (temporal_delimiter_obu() has empty payload as per AV1 codec spec)\n",
                    obu_size_in_bytes);
       pack_obu_header_size(&bitstream_full_obu, obu_size_in_bytes);
@@ -197,7 +197,7 @@ d3d12_video_bitstream_builder_av1::write_sequence_header(const av1_seq_header_t 
       write_obu_header(&bitstream_full_obu, OBU_SEQUENCE_HEADER, obu_extension_flag, temporal_id, spatial_id);
 
       // Write the data size
-      const size_t obu_size_in_bytes = static_cast<size_t>(bitstream_seq.get_byte_count());
+      const uint64_t obu_size_in_bytes = bitstream_seq.get_byte_count();
       debug_printf("obu_size: %" PRIu64 "\n", obu_size_in_bytes);
       pack_obu_header_size(&bitstream_full_obu, obu_size_in_bytes);
 
@@ -802,7 +802,7 @@ d3d12_video_bitstream_builder_av1::write_frame_header(const av1_seq_header_t *pS
       debug_printf("frame_header_obu() bytes (without OBU_FRAME nor OBU_FRAME_HEADER alignment padding): %" PRId32 "\n",
                    bitstream_pic.get_byte_count());   // May be bit unaligned at this point (see padding below)
       debug_printf("extra_obu_size_bytes (ie. tile_group_obu_size if writing OBU_FRAME ): %" PRIu64 "\n",
-                   extra_obu_size_bytes);
+                   static_cast<uint64_t>(extra_obu_size_bytes));
 
       // Write the obu_header
       constexpr uint32_t obu_extension_flag = 0;
@@ -825,7 +825,7 @@ d3d12_video_bitstream_builder_av1::write_frame_header(const av1_seq_header_t *pS
       bitstream_pic.flush();
 
       // Write the obu_size element
-      const size_t obu_size_in_bytes = bitstream_pic.get_byte_count() + extra_obu_size_bytes;
+      const uint64_t obu_size_in_bytes = bitstream_pic.get_byte_count() + extra_obu_size_bytes;
       debug_printf("obu_size: %" PRIu64 "\n", obu_size_in_bytes);
       pack_obu_header_size(&bitstream_full_obu, obu_size_in_bytes);
 
@@ -913,7 +913,7 @@ d3d12_video_bitstream_builder_av1::write_obu_tile_group_header(size_t tile_group
 
    // Write the obu_size element
    pack_obu_header_size(&bitstream_full_obu, tile_group_obu_size);
-   debug_printf("obu_size: %" PRIu64 "\n", tile_group_obu_size);
+   debug_printf("obu_size: %" PRIu64 "\n", static_cast<uint64_t>(tile_group_obu_size));
 
    bitstream_full_obu.flush();
 

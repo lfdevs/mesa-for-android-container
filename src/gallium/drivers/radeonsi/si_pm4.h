@@ -45,7 +45,7 @@ struct si_pm4_state {
    uint16_t max_dw;
 
    /* Used by SQTT to override the shader address */
-   uint16_t reg_va_low_idx;
+   uint32_t spi_shader_pgm_lo_reg;
 
    /* This must be the last field because the array can continue after the structure. */
    uint32_t pm4[64];

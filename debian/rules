@@ -42,8 +42,8 @@ confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA = -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 
-LLVM_ARCHS     = amd64 arm64 armel armhf i386 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
-RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 mips64el powerpc ppc64 ppc64el riscv64 s390x x32
+LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
+RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32
 VALGRIND_ARCHS = amd64 arm64 armhf i386 mips64el powerpc ppc64 ppc64el s390x
 WINE_ARCHS     = amd64 arm64 armel armhf i386
 
@@ -76,7 +76,7 @@ else
 	VULKAN_DRIVERS += broadcom freedreno
   endif
 
-  ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64 riscv64))
+  ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64 loong64 riscv64))
 	GALLIUM_DRIVERS += lima
   endif
 

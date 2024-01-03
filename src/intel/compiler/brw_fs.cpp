@@ -2788,6 +2788,29 @@ fs_visitor::opt_algebraic()
          if (brw_reg_type_is_floating_point(inst->src[1].type))
             break;
 
+         /* From the BDW PRM, Vol 2a, "mul - Multiply":
+          *
+          *    "When multiplying integer datatypes, if src0 is DW and src1
+          *    is W, irrespective of the destination datatype, the
+          *    accumulator maintains full 48-bit precision."
+          *    ...
+          *    "When multiplying integer data types, if one of the sources
+          *    is a DW, the resulting full precision data is stored in
+          *    the accumulator."
+          *
+          * There are also similar notes in earlier PRMs.
+          *
+          * The MOV instruction can copy the bits of the source, but it
+          * does not clear the higher bits of the accumulator. So, because
+          * we might use the full accumulator in the MUL/MACH macro, we
+          * shouldn't replace such MULs with MOVs.
+          */
+         if ((brw_reg_type_to_size(inst->src[0].type) == 4 ||
+              brw_reg_type_to_size(inst->src[1].type) == 4) &&
+             (inst->dst.is_accumulator() ||
+              inst->writes_accumulator_implicitly(devinfo)))
+            break;
+
          /* a * 1.0 = a */
          if (inst->src[1].is_one()) {
             inst->opcode = BRW_OPCODE_MOV;

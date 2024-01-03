@@ -285,6 +285,7 @@ COMPARE_REVERSE(ishl)
 
 INOT_COMPARE(ilt_rev)
 INOT_COMPARE(ine)
+INOT_COMPARE(uge_rev)
 
 #define KNOWN_COUNT_TEST(_init_value, _cond_value, _incr_value, cond, incr, count) \
    TEST_F(nir_loop_analyze_test, incr ## _ ## cond ## _known_count_ ## count)    \
@@ -566,6 +567,16 @@ KNOWN_COUNT_TEST_INVERT(0x00000000, 0x00000001, 0x00000006, ige, iadd, 5)
  *    }
  */
 KNOWN_COUNT_TEST(0x0000000a, 0x00000005, 0xffffffff, inot_ilt_rev, iadd, 5)
+
+/*    uint i = 0;
+ *    while (true) {
+ *       if (!(0 >= i))
+ *          break;
+ *
+ *       i += 1;
+ *    }
+ */
+KNOWN_COUNT_TEST(0x00000000, 0x00000000, 0x00000001, inot_uge_rev, iadd, 1)
 
 /*    uint i = 0;
  *    while (true) {

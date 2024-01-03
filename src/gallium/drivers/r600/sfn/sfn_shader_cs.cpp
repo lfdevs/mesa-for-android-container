@@ -52,7 +52,9 @@ ComputeShader::do_allocate_reserved_registers()
 
    for (int i = 0; i < 3; ++i) {
       m_local_invocation_id[i] = vf.allocate_pinned_register(thread_id_sel, i);
+      m_local_invocation_id[i]->set_flag(Register::pin_end);
       m_workgroup_id[i] = vf.allocate_pinned_register(wg_id_sel, i);
+      m_workgroup_id[i]->set_flag(Register::pin_end);
    }
    return 2;
 }

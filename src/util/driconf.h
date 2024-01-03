@@ -674,6 +674,10 @@
    DRI_CONF_OPT_B(radv_tex_non_uniform, def, \
                   "Always mark texture sample operations as non-uniform.")
 
+#define DRI_CONF_RADV_SSBO_NON_UNIFORM(def) \
+   DRI_CONF_OPT_B(radv_ssbo_non_uniform, def, \
+                  "Always mark SSBO operations as non-uniform.")
+
 #define DRI_CONF_RADV_FLUSH_BEFORE_TIMESTAMP_WRITE(def) \
    DRI_CONF_OPT_B(radv_flush_before_timestamp_write, def, \
                   "Wait for previous commands to finish before writing timestamps")
@@ -689,8 +693,8 @@
  */
 
 #define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(def) \
-   DRI_CONF_OPT_B(anv_assume_full_subgroups, def, \
-                  "Allow assuming full subgroups requirement even when it's not specified explicitly")
+   DRI_CONF_OPT_I(anv_assume_full_subgroups, def, 0, 32, \
+                  "Allow assuming full subgroups requirement even when it's not specified explicitly and set the given size")
 
 #define DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(def) \
    DRI_CONF_OPT_B(anv_sample_mask_out_opengl_behaviour, def, \

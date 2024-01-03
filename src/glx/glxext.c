@@ -563,12 +563,11 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
       case GLX_SAMPLES_SGIS:
          config->samples = *bp++;
          break;
-#ifdef GLX_USE_APPLEGL
       case IGNORE_GLX_SWAP_METHOD_OML:
          /* We ignore this tag.  See the comment above this function. */
          ++bp;
          break;
-#else
+#ifndef GLX_USE_APPLEGL
       case GLX_BIND_TO_TEXTURE_RGB_EXT:
          config->bindToTextureRgb = *bp++;
          break;

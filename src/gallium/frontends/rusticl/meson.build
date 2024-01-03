@@ -91,6 +91,13 @@ rusticl_args = [
   '-Aclippy::type_complexity',
 ]
 
+if rustc.version().version_compare('>=1.72')
+  rusticl_args += [
+    # Needs to be fixed
+    '-Aclippy::arc-with-non-send-sync'
+  ]
+endif
+
 rusticl_gen_args = [
   # can't do anything about it anyway
   '-Aclippy::all',

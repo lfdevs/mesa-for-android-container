@@ -2338,7 +2338,7 @@ vk_common_CmdSetRasterizationStreamEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
    struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
 
-   SET_DYN_VALUE(dyn, RS_PROVOKING_VERTEX,
+   SET_DYN_VALUE(dyn, RS_RASTERIZATION_STREAM,
                  rs.rasterization_stream, rasterizationStream);
 }
 

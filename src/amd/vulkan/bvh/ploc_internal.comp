@@ -249,7 +249,8 @@ main(void)
          total_bounds.min = vec3(INFINITY);
          total_bounds.max = vec3(-INFINITY);
 
-         for (uint32_t i = 0; i < DEREF(args.header).active_leaf_count; i++) {
+         uint32_t i = 0;
+         for (; i < DEREF(args.header).active_leaf_count; i++) {
             uint32_t child_id = DEREF(INDEX(key_id_pair, src_ids, i)).id;
 
             if (child_id != RADV_BVH_INVALID_NODE) {
@@ -263,6 +264,8 @@ main(void)
 
             DEREF(dst_node).children[i] = child_id;
          }
+         for (; i < 2; i++)
+            DEREF(dst_node).children[i] = RADV_BVH_INVALID_NODE;
 
          DEREF(dst_node).base.aabb = total_bounds;
          DEREF(dst_node).bvh_offset = RADV_UNKNOWN_BVH_OFFSET;

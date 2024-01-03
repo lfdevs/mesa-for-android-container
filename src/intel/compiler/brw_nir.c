@@ -1753,14 +1753,6 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    if (OPT(nir_opt_rematerialize_compares))
       OPT(nir_opt_dce);
 
-   /* This is the last pass we run before we start emitting stuff.  It
-    * determines when we need to insert boolean resolves on Gen <= 5.  We
-    * run it last because it stashes data in instr->pass_flags and we don't
-    * want that to be squashed by other NIR passes.
-    */
-   if (devinfo->ver <= 5)
-      brw_nir_analyze_boolean_resolves(nir);
-
    OPT(nir_opt_dce);
 
    /* The mesh stages require this pass to be called at the last minute,
@@ -1773,6 +1765,15 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       brw_nir_adjust_payload(nir, compiler);
 
    nir_trivialize_registers(nir);
+
+   /* This is the last pass we run before we start emitting stuff.  It
+    * determines when we need to insert boolean resolves on Gen <= 5.  We
+    * run it last because it stashes data in instr->pass_flags and we don't
+    * want that to be squashed by other NIR passes.
+    */
+   if (devinfo->ver <= 5)
+      brw_nir_analyze_boolean_resolves(nir);
+
    nir_sweep(nir);
 
    if (unlikely(debug_enabled)) {

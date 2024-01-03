@@ -278,6 +278,9 @@ find_exec_index(struct iris_batch *batch, struct iris_bo *bo)
 {
    unsigned index = READ_ONCE(bo->index);
 
+   if (index == -1)
+      return -1;
+
    if (index < batch->exec_count && batch->exec_bos[index] == bo)
       return index;
 

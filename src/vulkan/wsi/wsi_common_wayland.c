@@ -2215,6 +2215,8 @@ wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
       pthread_mutex_destroy(&chain->present_ids.lock);
    }
 
+   vk_free(pAllocator, (void *)chain->drm_modifiers);
+
    wsi_swapchain_finish(&chain->base);
 }
 
@@ -2370,7 +2372,16 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       chain->shm_format = wl_shm_format_for_vk_format(chain->vk_format, alpha);
    }
    chain->num_drm_modifiers = num_drm_modifiers;
-   chain->drm_modifiers = drm_modifiers;
+   if (num_drm_modifiers) {
+      uint64_t *drm_modifiers_copy =
+         vk_alloc(pAllocator, sizeof(*drm_modifiers) * num_drm_modifiers, 8,
+                  VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!drm_modifiers_copy)
+         goto fail;
+
+      typed_memcpy(drm_modifiers_copy, drm_modifiers, num_drm_modifiers);
+      chain->drm_modifiers = drm_modifiers_copy;
+   }
 
    if (chain->wsi_wl_surface->display->wp_presentation_notwrapped) {
       if (!wsi_init_pthread_cond_monotonic(&chain->present_ids.list_advanced))

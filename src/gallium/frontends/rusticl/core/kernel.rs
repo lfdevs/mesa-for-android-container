@@ -734,6 +734,10 @@ pub(super) fn convert_spirv_to_nir(
          */
         nir.preserve_fp16_denorms();
 
+        // Set to rtne for now until drivers are able to report their prefered rounding mode, that
+        // also matches what we report via the API.
+        nir.set_fp_rounding_mode_rtne();
+
         let (args, internal_args) = lower_and_optimize_nir(dev, &mut nir, args, &dev.lib_clc);
 
         if let Some(cache) = cache {
