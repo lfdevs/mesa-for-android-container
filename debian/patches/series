@@ -4,3 +4,5 @@ src_glx_dri_common.h.diff
 0001-Revert-egl-add-automatic-zink-fallback-loading-betwe.patch
 0002-Revert-glx-add-automatic-zink-fallback-loading-betwe.patch
 llvmpipe-add-orcjit.diff
+0001-Revert-d3d12-Only-destroy-the-winsys-during-screen-d.patch
+0002-Revert-d3d12-Fix-screen-winsys-leak-in-d3d12_screen.patch

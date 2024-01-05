@@ -1,0 +1,45 @@
+From 2382dca2c51423e2e50e23a1a8443d57321467e1 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Wed, 3 Jan 2024 09:22:52 -0500
+Subject: [PATCH 1/2] Revert "d3d12: Only destroy the winsys during screen
+ destruction, not reset"
+
+This reverts commit 325fb6e26b62326c86514d263ffedd241fd36865.
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10371
+Fixes: 325fb6e26b6 ("d3d12: Only destroy the winsys during screen destruction, not reset")
+Cc: mesa-stable
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/26872>
+(cherry picked from commit 97cc7ea5a591ed7afaddd00370de3ca62d55cbb4)
+---
+ .pick_status.json                          | 2 +-
+ src/gallium/drivers/d3d12/d3d12_screen.cpp | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_screen.cpp b/src/gallium/drivers/d3d12/d3d12_screen.cpp
+index 9b0233fb9d9..ee74cf2b064 100644
+--- a/src/gallium/drivers/d3d12/d3d12_screen.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_screen.cpp
+@@ -735,15 +735,15 @@ d3d12_deinit_screen(struct d3d12_screen *screen)
+       screen->dev->Release();
+       screen->dev = nullptr;
+    }
++   if (screen->winsys) {
++      screen->winsys->destroy(screen->winsys);
++      screen->winsys = nullptr;
++   }
+ }
+ 
+ void
+ d3d12_destroy_screen(struct d3d12_screen *screen)
+ {
+-   if (screen->winsys) {
+-      screen->winsys->destroy(screen->winsys);
+-      screen->winsys = nullptr;
+-   }
+    slab_destroy_parent(&screen->transfer_pool);
+    mtx_destroy(&screen->submit_mutex);
+    mtx_destroy(&screen->descriptor_pool_mutex);
+-- 
+2.40.1
+
