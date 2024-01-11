@@ -2548,19 +2548,42 @@ isl_calc_base_alignment(const struct isl_device *dev,
       if (tile_info->tiling == ISL_TILING_GFX12_CCS)
          base_alignment_B = MAX(base_alignment_B, 4096);
 
-      /* Platforms using an aux map require that images be granularity-aligned
-       * if they're going to used with CCS. This is because the Aux
-       * translation table maps main surface addresses to aux addresses at a
-       * granularity in the main surface. Because we don't know for sure in
-       * ISL if a surface will use CCS, we have to guess based on the
-       * DISABLE_AUX usage bit. The one thing we do know is that we haven't
-       * enable CCS on linear images yet so we can avoid the extra alignment
-       * there.
-       */
       if (dev->info->has_aux_map &&
           !(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
+         /* Wa_22015614752:
+          *
+          * Due to L3 cache being tagged with (engineID, vaID) and the CCS
+          * block/cacheline being 256 bytes, 2 engines accessing a 64Kb range
+          * with compression will generate 2 different CCS cacheline entries
+          * in L3, this will lead to corruptions. To avoid this, we need to
+          * ensure 2 images do not share a 256 bytes CCS cacheline. With a
+          * ratio of compression of 1/256, this is 64Kb alignment (even for
+          * Tile4...)
+          *
+          * ATS-M PRMS, Vol 2a: Command Reference: Instructions,
+          * XY_CTRL_SURF_COPY_BLT, "Size of Control Surface Copy" field, the
+          * CCS blocks are 256 bytes :
+          *
+          *    "This field indicates size of the Control Surface or CCS copy.
+          *     It is expressed in terms of number of 256B block of CCS, where
+          *     each 256B block of CCS corresponds to 64KB of main surface."
+          */
+         if (intel_needs_workaround(dev->info, 22015614752)) {
+            base_alignment_B = MAX(base_alignment_B,
+                                   256 /* cacheline */ * 256 /* AUX ratio */);
+         }
+
+         /* Platforms using an aux map require that images be
+          * granularity-aligned if they're going to used with CCS. This is
+          * because the Aux translation table maps main surface addresses to
+          * aux addresses at a granularity in the main surface. Because we
+          * don't know for sure in ISL if a surface will use CCS, we have to
+          * guess based on the DISABLE_AUX usage bit. The one thing we do know
+          * is that we haven't enable CCS on linear images yet so we can avoid
+          * the extra alignment there.
+          */
          base_alignment_B = MAX(base_alignment_B, dev->info->verx10 >= 125 ?
-               1024 * 1024 : 64 * 1024);
+                                1024 * 1024 : 64 * 1024);
       }
    }
 

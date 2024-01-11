@@ -1842,7 +1842,7 @@ radv_initialise_vrs_surface(struct radv_image *image, struct radv_buffer *htile_
 
 void
 radv_initialise_ds_surface(const struct radv_device *device, struct radv_ds_buffer_info *ds,
-                           struct radv_image_view *iview)
+                           struct radv_image_view *iview, VkImageAspectFlags ds_aspects)
 {
    unsigned level = iview->vk.base_mip_level;
    unsigned format, stencil_format;
@@ -1859,7 +1859,9 @@ radv_initialise_ds_surface(const struct radv_device *device, struct radv_ds_buff
    stencil_format = surf->has_stencil ? V_028044_STENCIL_8 : V_028044_STENCIL_INVALID;
 
    uint32_t max_slice = radv_surface_max_layer_count(iview) - 1;
-   ds->db_depth_view = S_028008_SLICE_START(iview->vk.base_array_layer) | S_028008_SLICE_MAX(max_slice);
+   ds->db_depth_view = S_028008_SLICE_START(iview->vk.base_array_layer) | S_028008_SLICE_MAX(max_slice) |
+                       S_028008_Z_READ_ONLY(!(ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) |
+                       S_028008_STENCIL_READ_ONLY(!(ds_aspects & VK_IMAGE_ASPECT_STENCIL_BIT));
    if (device->physical_device->rad_info.gfx_level >= GFX10) {
       ds->db_depth_view |=
          S_028008_SLICE_START_HI(iview->vk.base_array_layer >> 11) | S_028008_SLICE_MAX_HI(max_slice >> 11);

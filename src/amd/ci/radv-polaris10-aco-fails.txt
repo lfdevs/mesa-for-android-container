@@ -20,4 +20,3 @@ dEQP-VK.texture.mipmap.cubemap.image_view_min_lod.base_level.nearest_nearest,Fai
 
 # New CTS failures in 1.3.7.0.
 dEQP-VK.api.version_check.unavailable_entry_points,Fail
-dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.partial_binding_depth_stencil,Fail

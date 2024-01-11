@@ -1440,7 +1440,7 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
             instr->operands[i].setTemp(info.temp);
          } else if (info.is_neg() && can_use_mod && mod_bitsize_compat &&
                     can_eliminate_fcanonicalize(ctx, instr, info.temp, i)) {
-            if (!instr->isDPP() && !instr->isSDWA())
+            if (!instr->isDPP16() && can_use_VOP3(ctx, instr))
                instr->format = asVOP3(instr->format);
             instr->operands[i].setTemp(info.temp);
             if (!instr->valu().abs[i])
@@ -1448,7 +1448,7 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
          }
          if (info.is_abs() && can_use_mod && mod_bitsize_compat &&
              can_eliminate_fcanonicalize(ctx, instr, info.temp, i)) {
-            if (!instr->isDPP() && !instr->isSDWA())
+            if (!instr->isDPP16() && can_use_VOP3(ctx, instr))
                instr->format = asVOP3(instr->format);
             instr->operands[i] = Operand(info.temp);
             instr->valu().abs[i] = true;

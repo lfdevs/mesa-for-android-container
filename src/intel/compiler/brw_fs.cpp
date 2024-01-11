@@ -6834,7 +6834,7 @@ save_instruction_order(const struct cfg_t *cfg)
 static void
 restore_instruction_order(struct cfg_t *cfg, fs_inst **inst_arr)
 {
-   int num_insts = cfg->last_block()->end_ip + 1;
+   ASSERTED int num_insts = cfg->last_block()->end_ip + 1;
 
    int ip = 0;
    foreach_block (block, cfg) {
@@ -7599,7 +7599,17 @@ computed_depth_mode(const nir_shader *shader)
       case FRAG_DEPTH_LAYOUT_LESS:
          return BRW_PSCDEPTH_ON_LE;
       case FRAG_DEPTH_LAYOUT_UNCHANGED:
-         return BRW_PSCDEPTH_OFF;
+         /* We initially set this to OFF, but having the shader write the
+          * depth means we allocate register space in the SEND message. The
+          * difference between the SEND register count and the OFF state
+          * programming makes the HW hang.
+          *
+          * Removing the depth writes also leads to test failures. So use
+          * LesserThanOrEqual, which fits writing the same value
+          * (unchanged/equal).
+          *
+          */
+         return BRW_PSCDEPTH_ON_LE;
       }
    }
    return BRW_PSCDEPTH_OFF;

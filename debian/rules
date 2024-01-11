@@ -105,7 +105,15 @@ else
   # It's also required for building OpenCL support.
   ifneq (,$(filter $(DEB_HOST_ARCH), $(LLVM_ARCHS)))
 	GALLIUM_DRIVERS += radeonsi zink
-	VULKAN_DRIVERS += amd swrast virtio
+
+	# Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
+	ifneq (,$(filter $(DEB_HOST_ARCH), riscv64))
+		VULKAN_DRIVERS += amd
+		confflags_GALLIUM += -Ddraw-use-llvm=false
+	else
+		VULKAN_DRIVERS += amd swrast virtio
+	endif
+
 	VULKAN_LAYERS += device-select intel-nullhw overlay
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd

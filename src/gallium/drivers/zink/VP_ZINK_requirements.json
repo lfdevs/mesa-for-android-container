@@ -1,5 +1,5 @@
 {
-    "$schema": "https://schema.khronos.org/vulkan/profiles-0.8.1-251.json",
+    "$schema": "https://schema.khronos.org/vulkan/profiles-0.8.2-271.json",
     "capabilities": {
         "vulkan10requirements": {
             "features": {
@@ -164,7 +164,7 @@
                 "VkPhysicalDeviceMaintenance4Features": {
                     "maintenance4": true
                 },
-                "VkPhysicalDeviceMaintenance5Features": {
+                "VkPhysicalDeviceMaintenance5FeaturesKHR": {
                     "maintenance5": true
                 }
             },

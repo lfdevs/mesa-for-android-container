@@ -1527,7 +1527,7 @@ struct radv_ds_buffer_info {
 void radv_initialise_color_surface(struct radv_device *device, struct radv_color_buffer_info *cb,
                                    struct radv_image_view *iview);
 void radv_initialise_ds_surface(const struct radv_device *device, struct radv_ds_buffer_info *ds,
-                                struct radv_image_view *iview);
+                                struct radv_image_view *iview, VkImageAspectFlags ds_aspects);
 void radv_initialise_vrs_surface(struct radv_image *image, struct radv_buffer *htile_buffer,
                                  struct radv_ds_buffer_info *ds);
 
@@ -1569,6 +1569,7 @@ struct radv_rendering_state {
    uint32_t color_att_count;
    struct radv_attachment color_att[MAX_RTS];
    struct radv_attachment ds_att;
+   VkImageAspectFlags ds_att_aspects;
    struct radv_attachment vrs_att;
    VkExtent2D vrs_texel_size;
 };
