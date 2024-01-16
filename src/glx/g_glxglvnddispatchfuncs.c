@@ -333,7 +333,7 @@ static int dispatch_GLInteropExportObjectMESA(Display *dpy, GLXContext ctx,
 static int dispatch_GLInteropFlushObjectsMESA(Display *dpy, GLXContext ctx,
                                               unsigned count,
                                               struct mesa_glinterop_export_in *resources,
-                                              GLsync *sync)
+                                              struct mesa_glinterop_flush_out *out)
 {
     PFNMESAGLINTEROPGLXFLUSHOBJECTSPROC pGLInteropFlushObjectsMESA;
     __GLXvendorInfo *dd;
@@ -346,7 +346,7 @@ static int dispatch_GLInteropFlushObjectsMESA(Display *dpy, GLXContext ctx,
     if (pGLInteropFlushObjectsMESA == NULL)
         return 0;
 
-    return pGLInteropFlushObjectsMESA(dpy, ctx, count, resources, sync);
+    return pGLInteropFlushObjectsMESA(dpy, ctx, count, resources, out);
 }
 
 

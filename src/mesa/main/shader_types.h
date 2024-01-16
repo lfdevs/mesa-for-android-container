@@ -509,9 +509,6 @@ struct gl_program
    void *driver_cache_blob;
    size_t driver_cache_blob_size;
 
-   /** Is this program written to on disk shader cache */
-   bool program_written_to_cache;
-
    /** whether to skip VARYING_SLOT_PSIZ in st_translate_stream_output_info() */
    bool skip_pointsize_xfb;
 

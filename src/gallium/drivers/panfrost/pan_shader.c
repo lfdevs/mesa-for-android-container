@@ -84,11 +84,11 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
     * happens at CSO create time regardless.
     */
    if (gl_shader_stage_is_compute(s->info.stage))
-      pan_shader_preprocess(s, dev->gpu_id);
+      pan_shader_preprocess(s, panfrost_device_gpu_id(dev));
 
    struct panfrost_compile_inputs inputs = {
       .debug = dbg,
-      .gpu_id = dev->gpu_id,
+      .gpu_id = panfrost_device_gpu_id(dev),
    };
 
    /* Lower this early so the backends don't have to worry about it */
@@ -130,7 +130,7 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
    if (dev->arch <= 5 && s->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS_V(s, pan_lower_framebuffer, key->fs.rt_formats,
                  pan_raw_format_mask_midgard(key->fs.rt_formats), 0,
-                 dev->gpu_id < 0x700);
+                 panfrost_device_gpu_id(dev) < 0x700);
    }
 
    NIR_PASS_V(s, panfrost_nir_lower_sysvals, &out->sysvals);
@@ -375,7 +375,7 @@ panfrost_create_shader_state(struct pipe_context *pctx,
 
    /* Then run the suite of lowering and optimization, including I/O lowering */
    struct panfrost_device *dev = pan_device(pctx->screen);
-   pan_shader_preprocess(nir, dev->gpu_id);
+   pan_shader_preprocess(nir, panfrost_device_gpu_id(dev));
 
    /* If this shader uses transform feedback, compile the transform
     * feedback program. This is a special shader variant.

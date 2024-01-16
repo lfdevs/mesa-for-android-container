@@ -263,6 +263,67 @@ static VAStatus vlVaVidEngineBlit(vlVaDriver *drv, vlVaContext *context,
       }
    }
 
+   // Output background color
+   context->desc.vidproc.background_color = param->output_background_color;
+
+   // Input surface color standard
+   context->desc.vidproc.in_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_NONE;
+   if (param->surface_color_standard == VAProcColorStandardBT601)
+      context->desc.vidproc.in_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT601;
+   else if (param->surface_color_standard == VAProcColorStandardBT709)
+      context->desc.vidproc.in_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT709;
+   else if (param->surface_color_standard == VAProcColorStandardBT2020)
+      context->desc.vidproc.in_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT2020;
+
+   // Input surface color range
+   context->desc.vidproc.in_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_NONE;
+   if (param->input_color_properties.color_range == VA_SOURCE_RANGE_REDUCED)
+      context->desc.vidproc.in_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED;
+   else if (param->input_color_properties.color_range == VA_SOURCE_RANGE_FULL)
+      context->desc.vidproc.in_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_FULL;
+
+   // Input surface chroma sample location
+   context->desc.vidproc.in_chroma_siting = PIPE_VIDEO_VPP_CHROMA_SITING_NONE;
+   if (param->input_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_TOP)
+      context->desc.vidproc.in_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_TOP;
+   else if (param->input_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_CENTER)
+      context->desc.vidproc.in_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_CENTER;
+   else if (param->input_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_BOTTOM)
+      context->desc.vidproc.in_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_BOTTOM;
+   if (param->input_color_properties.chroma_sample_location & VA_CHROMA_SITING_HORIZONTAL_LEFT)
+      context->desc.vidproc.in_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_HORIZONTAL_LEFT;
+   else if (param->input_color_properties.chroma_sample_location & VA_CHROMA_SITING_HORIZONTAL_CENTER)
+      context->desc.vidproc.in_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_HORIZONTAL_CENTER;
+
+   // Output surface color standard
+   context->desc.vidproc.out_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_NONE;
+   if (param->output_color_standard == VAProcColorStandardBT601)
+      context->desc.vidproc.out_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT601;
+   else if (param->output_color_standard == VAProcColorStandardBT709)
+      context->desc.vidproc.out_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT709;
+   else if (param->output_color_standard == VAProcColorStandardBT2020)
+      context->desc.vidproc.out_colors_standard = PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT2020;
+
+   // Output surface color range
+   context->desc.vidproc.out_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_NONE;
+   if (param->output_color_properties.color_range == VA_SOURCE_RANGE_REDUCED)
+      context->desc.vidproc.out_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED;
+   else if (param->output_color_properties.color_range == VA_SOURCE_RANGE_FULL)
+      context->desc.vidproc.out_color_range = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_FULL;
+
+   // Output surface chroma sample location
+   context->desc.vidproc.out_chroma_siting = PIPE_VIDEO_VPP_CHROMA_SITING_NONE;
+   if (param->output_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_TOP)
+      context->desc.vidproc.out_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_TOP;
+   else if (param->output_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_CENTER)
+      context->desc.vidproc.out_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_CENTER;
+   else if (param->output_color_properties.chroma_sample_location & VA_CHROMA_SITING_VERTICAL_BOTTOM)
+      context->desc.vidproc.out_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_VERTICAL_BOTTOM;
+   if (param->output_color_properties.chroma_sample_location & VA_CHROMA_SITING_HORIZONTAL_LEFT)
+      context->desc.vidproc.out_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_HORIZONTAL_LEFT;
+   else if (param->output_color_properties.chroma_sample_location & VA_CHROMA_SITING_HORIZONTAL_CENTER)
+      context->desc.vidproc.out_chroma_siting |= PIPE_VIDEO_VPP_CHROMA_SITING_HORIZONTAL_CENTER;
+
    if (context->needs_begin_frame) {
       context->decoder->begin_frame(context->decoder, dst,
                                     &context->desc.base);
@@ -432,7 +493,8 @@ vlVaApplyDeint(vlVaDriver *drv, vlVaContext *context,
       return current;
 
    if (context->deint && (context->deint->video_width != current->width ||
-       context->deint->video_height != current->height)) {
+       context->deint->video_height != current->height ||
+       context->deint->interleaved != !current->interlaced)) {
       vl_deint_filter_cleanup(context->deint);
       FREE(context->deint);
       context->deint = NULL;
@@ -441,7 +503,7 @@ vlVaApplyDeint(vlVaDriver *drv, vlVaContext *context,
    if (!context->deint) {
       context->deint = MALLOC(sizeof(struct vl_deint_filter));
       if (!vl_deint_filter_init(context->deint, drv->pipe, current->width,
-                                current->height, false, false)) {
+                                current->height, false, false, !current->interlaced)) {
          FREE(context->deint);
          context->deint = NULL;
          return current;

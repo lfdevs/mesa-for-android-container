@@ -704,7 +704,7 @@ def main():
     s = State(isa)
 
     try:
-        with open(args.out_h, 'w') as f:
+        with open(args.out_h, 'w', encoding='utf-8') as f:
             encode_bitset = Template(encode_bitset_template)
             f.write(Template(template).render(s=s, encode_bitset=encode_bitset))
 

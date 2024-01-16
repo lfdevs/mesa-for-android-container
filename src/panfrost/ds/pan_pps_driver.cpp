@@ -180,4 +180,11 @@ PanfrostDriver::gpu_timestamp() const
    return perfetto::base::GetBootTimeNs().count();
 }
 
+bool
+PanfrostDriver::cpu_gpu_timestamp(uint64_t &, uint64_t &) const
+{
+   /* Not supported */
+   return false;
+}
+
 } // namespace pps

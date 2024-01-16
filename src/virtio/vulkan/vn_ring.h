@@ -8,6 +8,8 @@
 
 #include "vn_common.h"
 
+#include "vn_cs.h"
+
 /**
  * A ring is a single-producer and single-consumer circular buffer.  The data
  * in the buffer are produced and consumed in order.  An externally-defined
@@ -37,73 +39,20 @@ struct vn_ring_layout {
    size_t shmem_size;
 };
 
-static_assert(ATOMIC_INT_LOCK_FREE == 2 && sizeof(atomic_uint) == 4,
-              "vn_ring_shared requires lock-free 32-bit atomic_uint");
-
-/* pointers to a ring in a BO */
-struct vn_ring_shared {
-   const volatile atomic_uint *head;
-   volatile atomic_uint *tail;
-   volatile atomic_uint *status;
-   void *buffer;
-   void *extra;
-};
-
-struct vn_ring_submit {
-   uint32_t seqno;
-
-   struct list_head head;
-
-   /* BOs to keep alive (TODO make sure shmems are pinned) */
-   uint32_t shmem_count;
-   struct vn_renderer_shmem *shmems[];
-};
-
-struct vn_ring {
-   struct vn_renderer *renderer;
-
-   uint32_t buffer_size;
-   uint32_t buffer_mask;
-
-   struct vn_ring_shared shared;
-   uint32_t cur;
-
-   struct list_head submits;
-   struct list_head free_submits;
-
-   /* Only one "waiting" thread may fulfill the "monitor" role at a time.
-    * Every "report_period_us" or longer, the waiting "monitor" thread tests
-    * the ring's ALIVE status, updates the "alive" atomic, and resets the
-    * ALIVE status for the next cycle. Waiting non-"monitor" threads, just
-    * check the "alive" atomic. The "monitor" role may be released and
-    * acquired by another waiting thread dynamically.
-    */
-   struct {
-      mtx_t mutex;
-      atomic_int threadid;
-      atomic_bool alive;
-
-      /* constant and non-zero after ring init, if monitoring is enabled */
-      uint32_t report_period_us;
-   } monitor;
-};
-
 void
 vn_ring_get_layout(size_t buf_size,
                    size_t extra_size,
                    struct vn_ring_layout *layout);
 
-void
-vn_ring_init(struct vn_ring *ring,
-             struct vn_renderer *renderer,
-             const struct vn_ring_layout *layout,
-             void *shared);
+struct vn_ring *
+vn_ring_create(struct vn_instance *instance,
+               const struct vn_ring_layout *layout);
 
 void
-vn_ring_fini(struct vn_ring *ring);
+vn_ring_destroy(struct vn_ring *ring);
 
-struct vn_ring_submit *
-vn_ring_get_submit(struct vn_ring *ring, uint32_t shmem_count);
+uint64_t
+vn_ring_get_id(struct vn_ring *ring);
 
 uint32_t
 vn_ring_load_status(const struct vn_ring *ring);
@@ -112,12 +61,60 @@ void
 vn_ring_unset_status_bits(struct vn_ring *ring, uint32_t mask);
 
 bool
-vn_ring_submit(struct vn_ring *ring,
-               struct vn_ring_submit *submit,
-               const struct vn_cs_encoder *cs,
-               uint32_t *seqno);
+vn_ring_get_seqno_status(struct vn_ring *ring, uint32_t seqno);
 
 void
-vn_ring_wait(struct vn_ring *ring, uint32_t seqno);
+vn_ring_wait_all(struct vn_ring *ring);
+
+struct vn_ring_submit_command {
+   /* empty command implies errors */
+   struct vn_cs_encoder command;
+   struct vn_cs_encoder_buffer buffer;
+   /* non-zero implies waiting */
+   size_t reply_size;
+
+   /* when reply_size is non-zero, NULL can be returned on errors */
+   struct vn_renderer_shmem *reply_shmem;
+   struct vn_cs_decoder reply;
+
+   /* valid when instance ring submission succeeds */
+   bool ring_seqno_valid;
+   uint32_t ring_seqno;
+};
+
+static inline struct vn_cs_encoder *
+vn_ring_submit_command_init(struct vn_ring *ring,
+                            struct vn_ring_submit_command *submit,
+                            void *cmd_data,
+                            size_t cmd_size,
+                            size_t reply_size)
+{
+   submit->buffer = VN_CS_ENCODER_BUFFER_INITIALIZER(cmd_data);
+   submit->command = VN_CS_ENCODER_INITIALIZER(&submit->buffer, cmd_size);
+
+   submit->reply_size = reply_size;
+   submit->reply_shmem = NULL;
+
+   return &submit->command;
+}
+
+static inline struct vn_cs_decoder *
+vn_ring_get_command_reply(struct vn_ring *ring,
+                          struct vn_ring_submit_command *submit)
+{
+   return submit->reply_shmem ? &submit->reply : NULL;
+}
+
+void
+vn_ring_free_command_reply(struct vn_ring *ring,
+                           struct vn_ring_submit_command *submit);
+
+void
+vn_ring_submit_command(struct vn_ring *ring,
+                       struct vn_ring_submit_command *submit);
+
+VkResult
+vn_ring_submit_command_simple(struct vn_ring *ring,
+                              const struct vn_cs_encoder *cs);
 
 #endif /* VN_RING_H */

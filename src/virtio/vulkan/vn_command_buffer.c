@@ -684,8 +684,10 @@ vn_CreateCommandPool(VkDevice device,
    list_inithead(&pool->free_query_feedback_cmds);
 
    VkCommandPool pool_handle = vn_command_pool_to_handle(pool);
-   vn_async_vkCreateCommandPool(dev->instance, device, pCreateInfo, NULL,
+   vn_async_vkCreateCommandPool(dev->primary_ring, device, pCreateInfo, NULL,
                                 &pool_handle);
+
+   vn_tls_set_async_pipeline_create();
 
    *pCommandPool = pool_handle;
 
@@ -722,7 +724,8 @@ vn_DestroyCommandPool(VkDevice device,
     * object ids while they still refer to the command buffers in the
     * renderer.
     */
-   vn_async_vkDestroyCommandPool(dev->instance, device, commandPool, NULL);
+   vn_async_vkDestroyCommandPool(dev->primary_ring, device, commandPool,
+                                 NULL);
 
    list_for_each_entry_safe(struct vn_command_buffer, cmd,
                             &pool->command_buffers, head) {
@@ -789,7 +792,7 @@ vn_ResetCommandPool(VkDevice device,
                             &pool->command_buffers, head)
       vn_cmd_reset(cmd);
 
-   vn_async_vkResetCommandPool(dev->instance, device, commandPool, flags);
+   vn_async_vkResetCommandPool(dev->primary_ring, device, commandPool, flags);
 
    return VK_SUCCESS;
 }
@@ -802,7 +805,7 @@ vn_TrimCommandPool(VkDevice device,
    VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
 
-   vn_async_vkTrimCommandPool(dev->instance, device, commandPool, flags);
+   vn_async_vkTrimCommandPool(dev->primary_ring, device, commandPool, flags);
 }
 
 /* command buffer commands */
@@ -851,7 +854,7 @@ vn_AllocateCommandBuffers(VkDevice device,
       pCommandBuffers[i] = cmd_handle;
    }
 
-   vn_async_vkAllocateCommandBuffers(dev->instance, device, pAllocateInfo,
+   vn_async_vkAllocateCommandBuffers(dev->primary_ring, device, pAllocateInfo,
                                      pCommandBuffers);
 
    return VK_SUCCESS;
@@ -868,7 +871,7 @@ vn_FreeCommandBuffers(VkDevice device,
    struct vn_command_pool *pool = vn_command_pool_from_handle(commandPool);
    const VkAllocationCallbacks *alloc = &pool->allocator;
 
-   vn_async_vkFreeCommandBuffers(dev->instance, device, commandPool,
+   vn_async_vkFreeCommandBuffers(dev->primary_ring, device, commandPool,
                                  commandBufferCount, pCommandBuffers);
 
    for (uint32_t i = 0; i < commandBufferCount; i++) {
@@ -903,11 +906,11 @@ vn_ResetCommandBuffer(VkCommandBuffer commandBuffer,
    VN_TRACE_FUNC();
    struct vn_command_buffer *cmd =
       vn_command_buffer_from_handle(commandBuffer);
-   struct vn_instance *instance = cmd->pool->device->instance;
+   struct vn_ring *ring = cmd->pool->device->primary_ring;
 
    vn_cmd_reset(cmd);
 
-   vn_async_vkResetCommandBuffer(instance, commandBuffer, flags);
+   vn_async_vkResetCommandBuffer(ring, commandBuffer, flags);
 
    return VK_SUCCESS;
 }
@@ -1069,7 +1072,7 @@ vn_BeginCommandBuffer(VkCommandBuffer commandBuffer,
 static void
 vn_cmd_submit(struct vn_command_buffer *cmd)
 {
-   struct vn_instance *instance = cmd->pool->device->instance;
+   struct vn_ring *ring = cmd->pool->device->primary_ring;
 
    if (cmd->state != VN_COMMAND_BUFFER_STATE_RECORDING)
       return;
@@ -1081,7 +1084,7 @@ vn_cmd_submit(struct vn_command_buffer *cmd)
       return;
    }
 
-   if (vn_instance_ring_submit(instance, &cmd->cs) != VK_SUCCESS) {
+   if (vn_ring_submit_command_simple(ring, &cmd->cs) != VK_SUCCESS) {
       cmd->state = VN_COMMAND_BUFFER_STATE_INVALID;
       return;
    }
@@ -2349,4 +2352,181 @@ vn_CmdSetVertexInputEXT(
                   vertexBindingDescriptionCount, pVertexBindingDescriptions,
                   vertexAttributeDescriptionCount,
                   pVertexAttributeDescriptions);
+}
+
+void
+vn_CmdSetAlphaToCoverageEnableEXT(VkCommandBuffer commandBuffer,
+                                  VkBool32 alphaToCoverageEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetAlphaToCoverageEnableEXT, commandBuffer,
+                  alphaToCoverageEnable);
+}
+
+void
+vn_CmdSetAlphaToOneEnableEXT(VkCommandBuffer commandBuffer,
+                             VkBool32 alphaToOneEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetAlphaToOneEnableEXT, commandBuffer,
+                  alphaToOneEnable);
+}
+
+void
+vn_CmdSetColorBlendAdvancedEXT(
+   VkCommandBuffer commandBuffer,
+   uint32_t firstAttachment,
+   uint32_t attachmentCount,
+   const VkColorBlendAdvancedEXT *pColorBlendAdvanced)
+{
+   VN_CMD_ENQUEUE(vkCmdSetColorBlendAdvancedEXT, commandBuffer,
+                  firstAttachment, attachmentCount, pColorBlendAdvanced);
+}
+
+void
+vn_CmdSetColorBlendEnableEXT(VkCommandBuffer commandBuffer,
+                             uint32_t firstAttachment,
+                             uint32_t attachmentCount,
+                             const VkBool32 *pColorBlendEnables)
+{
+   VN_CMD_ENQUEUE(vkCmdSetColorBlendEnableEXT, commandBuffer, firstAttachment,
+                  attachmentCount, pColorBlendEnables);
+}
+
+void
+vn_CmdSetColorBlendEquationEXT(
+   VkCommandBuffer commandBuffer,
+   uint32_t firstAttachment,
+   uint32_t attachmentCount,
+   const VkColorBlendEquationEXT *pColorBlendEquations)
+{
+   VN_CMD_ENQUEUE(vkCmdSetColorBlendEquationEXT, commandBuffer,
+                  firstAttachment, attachmentCount, pColorBlendEquations);
+}
+
+void
+vn_CmdSetColorWriteMaskEXT(VkCommandBuffer commandBuffer,
+                           uint32_t firstAttachment,
+                           uint32_t attachmentCount,
+                           const VkColorComponentFlags *pColorWriteMasks)
+{
+   VN_CMD_ENQUEUE(vkCmdSetColorWriteMaskEXT, commandBuffer, firstAttachment,
+                  attachmentCount, pColorWriteMasks);
+}
+
+void
+vn_CmdSetConservativeRasterizationModeEXT(
+   VkCommandBuffer commandBuffer,
+   VkConservativeRasterizationModeEXT conservativeRasterizationMode)
+{
+   VN_CMD_ENQUEUE(vkCmdSetConservativeRasterizationModeEXT, commandBuffer,
+                  conservativeRasterizationMode);
+}
+
+void
+vn_CmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer,
+                             VkBool32 depthClampEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetDepthClampEnableEXT, commandBuffer,
+                  depthClampEnable);
+}
+
+void
+vn_CmdSetDepthClipEnableEXT(VkCommandBuffer commandBuffer,
+                            VkBool32 depthClipEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetDepthClipEnableEXT, commandBuffer, depthClipEnable);
+}
+
+void
+vn_CmdSetDepthClipNegativeOneToOneEXT(VkCommandBuffer commandBuffer,
+                                      VkBool32 negativeOneToOne)
+{
+   VN_CMD_ENQUEUE(vkCmdSetDepthClipNegativeOneToOneEXT, commandBuffer,
+                  negativeOneToOne);
+}
+
+void
+vn_CmdSetExtraPrimitiveOverestimationSizeEXT(
+   VkCommandBuffer commandBuffer, float extraPrimitiveOverestimationSize)
+{
+   VN_CMD_ENQUEUE(vkCmdSetExtraPrimitiveOverestimationSizeEXT, commandBuffer,
+                  extraPrimitiveOverestimationSize);
+}
+
+void
+vn_CmdSetLineRasterizationModeEXT(
+   VkCommandBuffer commandBuffer,
+   VkLineRasterizationModeEXT lineRasterizationMode)
+{
+   VN_CMD_ENQUEUE(vkCmdSetLineRasterizationModeEXT, commandBuffer,
+                  lineRasterizationMode);
+}
+
+void
+vn_CmdSetLineStippleEnableEXT(VkCommandBuffer commandBuffer,
+                              VkBool32 stippledLineEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetLineStippleEnableEXT, commandBuffer,
+                  stippledLineEnable);
+}
+
+void
+vn_CmdSetLogicOpEnableEXT(VkCommandBuffer commandBuffer,
+                          VkBool32 logicOpEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetLogicOpEnableEXT, commandBuffer, logicOpEnable);
+}
+
+void
+vn_CmdSetPolygonModeEXT(VkCommandBuffer commandBuffer,
+                        VkPolygonMode polygonMode)
+{
+   VN_CMD_ENQUEUE(vkCmdSetPolygonModeEXT, commandBuffer, polygonMode);
+}
+
+void
+vn_CmdSetProvokingVertexModeEXT(VkCommandBuffer commandBuffer,
+                                VkProvokingVertexModeEXT provokingVertexMode)
+{
+   VN_CMD_ENQUEUE(vkCmdSetProvokingVertexModeEXT, commandBuffer,
+                  provokingVertexMode);
+}
+
+void
+vn_CmdSetRasterizationSamplesEXT(VkCommandBuffer commandBuffer,
+                                 VkSampleCountFlagBits rasterizationSamples)
+{
+   VN_CMD_ENQUEUE(vkCmdSetRasterizationSamplesEXT, commandBuffer,
+                  rasterizationSamples);
+}
+
+void
+vn_CmdSetRasterizationStreamEXT(VkCommandBuffer commandBuffer,
+                                uint32_t rasterizationStream)
+{
+   VN_CMD_ENQUEUE(vkCmdSetRasterizationStreamEXT, commandBuffer,
+                  rasterizationStream);
+}
+
+void
+vn_CmdSetSampleLocationsEnableEXT(VkCommandBuffer commandBuffer,
+                                  VkBool32 sampleLocationsEnable)
+{
+   VN_CMD_ENQUEUE(vkCmdSetSampleLocationsEnableEXT, commandBuffer,
+                  sampleLocationsEnable);
+}
+
+void
+vn_CmdSetSampleMaskEXT(VkCommandBuffer commandBuffer,
+                       VkSampleCountFlagBits samples,
+                       const VkSampleMask *pSampleMask)
+{
+   VN_CMD_ENQUEUE(vkCmdSetSampleMaskEXT, commandBuffer, samples, pSampleMask);
+}
+
+void
+vn_CmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
+                                     VkTessellationDomainOrigin domainOrigin)
+{
+   VN_CMD_ENQUEUE(vkCmdSetTessellationDomainOriginEXT, commandBuffer,
+                  domainOrigin);
 }

@@ -300,7 +300,7 @@ advance_current_pos(struct intel_aux_map_context *ctx, uint32_t size)
 
 static bool
 align_and_verify_space(struct intel_aux_map_context *ctx, uint32_t size,
-                       uint32_t align)
+                       uint32_t alignment)
 {
    if (ctx->tail_remaining < size)
       return false;
@@ -308,7 +308,7 @@ align_and_verify_space(struct intel_aux_map_context *ctx, uint32_t size,
    struct aux_map_buffer *tail =
       list_last_entry(&ctx->buffers, struct aux_map_buffer, link);
    uint64_t gpu = tail->buffer->gpu + ctx->tail_offset;
-   uint64_t aligned = align64(gpu, align);
+   uint64_t aligned = align64(gpu, alignment);
 
    if ((aligned - gpu) + size > ctx->tail_remaining) {
       return false;

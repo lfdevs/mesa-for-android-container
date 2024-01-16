@@ -319,6 +319,7 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
    nir_opt_preamble_options options = {
       .drawid_uniform = true,
       .subgroup_size_uniform = true,
+      .load_workgroup_size_allowed = true,
       .def_size = def_size,
       .preamble_storage_size = max_size,
       .instr_cost_cb = instr_cost,
@@ -439,8 +440,9 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
     * ...
     */
 
-   b->cursor = nir_before_impl(main);
-   
+   /* @decl_regs need to stay in the first block. */
+   b->cursor = nir_after_reg_decls(main);
+
    nir_if *outer_if = nir_push_if(b, nir_preamble_start_ir3(b, 1));
    {
       nir_if *inner_if = nir_push_if(b, nir_elect(b, 1));

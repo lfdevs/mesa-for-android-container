@@ -101,4 +101,48 @@ struct pan_decomposed_swizzle
    GENX(pan_decompose_swizzle)(enum mali_rgb_component_order order);
 #endif
 
+#define MALI_SRGB_L (0)
+#define MALI_SRGB_S (1)
+
+#if PAN_ARCH <= 6
+
+#define MALI_V6_0000 PAN_V6_SWIZZLE(0, 0, 0, 0)
+#define MALI_V6_000R PAN_V6_SWIZZLE(0, 0, 0, R)
+#define MALI_V6_0R00 PAN_V6_SWIZZLE(0, R, 0, 0)
+#define MALI_V6_0A00 PAN_V6_SWIZZLE(0, A, 0, 0)
+#define MALI_V6_AAAA PAN_V6_SWIZZLE(A, A, A, A)
+#define MALI_V6_A001 PAN_V6_SWIZZLE(A, 0, 0, 1)
+#define MALI_V6_ABG1 PAN_V6_SWIZZLE(A, B, G, 1)
+#define MALI_V6_ABGR PAN_V6_SWIZZLE(A, B, G, R)
+#define MALI_V6_BGR1 PAN_V6_SWIZZLE(B, G, R, 1)
+#define MALI_V6_BGRA PAN_V6_SWIZZLE(B, G, R, A)
+#define MALI_V6_GBA1 PAN_V6_SWIZZLE(G, B, A, 1)
+#define MALI_V6_GBAR PAN_V6_SWIZZLE(G, B, A, R)
+#define MALI_V6_R000 PAN_V6_SWIZZLE(R, 0, 0, 0)
+#define MALI_V6_R001 PAN_V6_SWIZZLE(R, 0, 0, 1)
+#define MALI_V6_RG01 PAN_V6_SWIZZLE(R, G, 0, 1)
+#define MALI_V6_RGB1 PAN_V6_SWIZZLE(R, G, B, 1)
+#define MALI_V6_RGBA PAN_V6_SWIZZLE(R, G, B, A)
+#define MALI_V6_RRR1 PAN_V6_SWIZZLE(R, R, R, 1)
+#define MALI_V6_RRRG PAN_V6_SWIZZLE(R, R, R, G)
+#define MALI_V6_RRRR PAN_V6_SWIZZLE(R, R, R, R)
+#define MALI_V6_GGGG PAN_V6_SWIZZLE(G, G, G, G)
+
+#define MALI_PACK_FMT(mali, swizzle, srgb)                                     \
+   (MALI_V6_##swizzle) | ((MALI_##mali) << 12) | (((MALI_SRGB_##srgb)) << 20)
+
+#else
+
+#define MALI_RGB_COMPONENT_ORDER_R001 MALI_RGB_COMPONENT_ORDER_RGB1
+#define MALI_RGB_COMPONENT_ORDER_RG01 MALI_RGB_COMPONENT_ORDER_RGB1
+#define MALI_RGB_COMPONENT_ORDER_GBAR MALI_RGB_COMPONENT_ORDER_ARGB
+#define MALI_RGB_COMPONENT_ORDER_GBA1 MALI_RGB_COMPONENT_ORDER_1RGB
+#define MALI_RGB_COMPONENT_ORDER_ABG1 MALI_RGB_COMPONENT_ORDER_1BGR
+
+#define MALI_PACK_FMT(mali, swizzle, srgb)                                     \
+   (MALI_RGB_COMPONENT_ORDER_##swizzle) | ((MALI_##mali) << 12) |              \
+      (((MALI_SRGB_##srgb)) << 20)
+
+#endif
+
 #endif

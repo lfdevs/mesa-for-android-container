@@ -294,12 +294,28 @@ astc_emu_flush_denorm_slice(struct anv_cmd_buffer *cmd_buffer,
 
    anv_CmdBindPipeline(cmd_buffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
                        astc_emu->pipeline);
-   anv_CmdPushConstants(cmd_buffer_, astc_emu->pipeline_layout,
-                        VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                        sizeof(push_const), push_const);
-   anv_CmdBindDescriptorSets(cmd_buffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
-                             astc_emu->pipeline_layout, 0, 1, &set,
-                             0, NULL);
+
+   VkPushConstantsInfoKHR push_info = {
+      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+      .layout = astc_emu->pipeline_layout,
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(push_const),
+      .pValues = push_const,
+   };
+   anv_CmdPushConstants2KHR(cmd_buffer_, &push_info);
+
+   VkBindDescriptorSetsInfoKHR bind_info = {
+      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .layout = astc_emu->pipeline_layout,
+      .firstSet = 0,
+      .descriptorSetCount = 1,
+      .pDescriptorSets = &set,
+      .dynamicOffsetCount = 0,
+      .pDynamicOffsets = NULL,
+   };
+   anv_CmdBindDescriptorSets2KHR(cmd_buffer_, &bind_info);
 
    /* each workgroup processes 8x8 texel blocks */
    rect.extent.width = DIV_ROUND_UP(rect.extent.width, 8);
@@ -348,9 +364,18 @@ astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
                                      writes.descriptor_set);
 
    VkDescriptorSet set = anv_descriptor_set_to_handle(&push_set.set);
-   anv_CmdBindDescriptorSets(cmd_buffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
-                             astc_emu->texcompress->p_layout, 0, 1, &set,
-                             0, NULL);
+
+   VkBindDescriptorSetsInfoKHR bind_info = {
+      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .layout = astc_emu->texcompress->p_layout,
+      .firstSet = 0,
+      .descriptorSetCount = 1,
+      .pDescriptorSets = &set,
+      .dynamicOffsetCount = 0,
+      .pDynamicOffsets = NULL,
+   };
+   anv_CmdBindDescriptorSets2KHR(cmd_buffer_, &bind_info);
 
    const uint32_t push_const[] = {
       rect.offset.x,
@@ -361,9 +386,15 @@ astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
          vk_format_get_blockheight(astc_format),
       false, /* we don't use VK_IMAGE_VIEW_TYPE_3D */
    };
-   anv_CmdPushConstants(cmd_buffer_, astc_emu->texcompress->p_layout,
-                        VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                        sizeof(push_const), push_const);
+   VkPushConstantsInfoKHR push_info = {
+      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+      .layout = astc_emu->texcompress->p_layout,
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(push_const),
+      .pValues = push_const,
+   };
+   anv_CmdPushConstants2KHR(cmd_buffer_, &push_info);
 
    /* each workgroup processes 2x2 texel blocks */
    rect.extent.width = DIV_ROUND_UP(rect.extent.width, 2);

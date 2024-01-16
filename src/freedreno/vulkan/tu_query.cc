@@ -847,11 +847,16 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
-   if (CHIP == A6XX) {
+   if (!cmdbuf->device->physical_device->info->a7xx.has_event_write_sample_count) {
       tu_cs_emit_regs(cs,
                         A6XX_RB_SAMPLE_COUNT_ADDR(.qword = begin_iova));
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
       tu_cs_emit(cs, ZPASS_DONE);
+      if (CHIP == A7XX) {
+         /* Copied from blob's cmdstream, not sure why it is done. */
+         tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
+         tu_cs_emit(cs, CCU_CLEAN_DEPTH);
+      }
    } else {
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
       tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
@@ -1154,11 +1159,16 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
-   if (CHIP == A6XX) {
+   if (!cmdbuf->device->physical_device->info->a7xx.has_event_write_sample_count) {
       tu_cs_emit_regs(cs,
                         A6XX_RB_SAMPLE_COUNT_ADDR(.qword = end_iova));
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
       tu_cs_emit(cs, ZPASS_DONE);
+      if (CHIP == A7XX) {
+         /* Copied from blob's cmdstream, not sure why it is done. */
+         tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
+         tu_cs_emit(cs, CCU_CLEAN_DEPTH);
+      }
    } else {
       /* A7XX TODO: Calculate (end - begin) via ZPASS_DONE. */
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 3);

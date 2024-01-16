@@ -37,8 +37,8 @@
 
 /* XXX comment these out to really use kernel uapi */
 #define SIMULATE_BO_SIZE_FIX 1
-#define SIMULATE_SYNCOBJ 1
-#define SIMULATE_SUBMIT 1
+#define SIMULATE_SYNCOBJ     1
+#define SIMULATE_SUBMIT      1
 
 #define VIRTGPU_PCI_VENDOR_ID 0x1af4
 #define VIRTGPU_PCI_DEVICE_ID 0x1050
@@ -1395,6 +1395,10 @@ virtgpu_init_renderer_info(struct virtgpu *gpu)
    info->max_timeline_count = gpu->max_timeline_count;
 
    if (gpu->bo_blob_mem == VIRTGPU_BLOB_MEM_GUEST_VRAM)
+      info->has_guest_vram = true;
+
+   /* Use guest blob allocations from dedicated heap (Host visible memory) */
+   if (gpu->bo_blob_mem == VIRTGPU_BLOB_MEM_HOST3D && capset->use_guest_vram)
       info->has_guest_vram = true;
 }
 

@@ -24,6 +24,8 @@
 #ifndef D3D12_COMPILER_H
 #define D3D12_COMPILER_H
 
+#include "d3d12_common.h"
+
 #include "dxil_nir_lower_int_samplers.h"
 
 #include "pipe/p_defines.h"
@@ -54,6 +56,7 @@ enum d3d12_state_var {
 
    D3D12_STATE_VAR_NUM_WORKGROUPS = 0,
    D3D12_STATE_VAR_TRANSFORM_GENERIC0,
+   D3D12_STATE_VAR_TRANSFORM_GENERIC1,
    D3D12_MAX_COMPUTE_STATE_VARS,
 
    D3D12_MAX_STATE_VARS = MAX2(D3D12_MAX_GRAPHICS_STATE_VARS, D3D12_MAX_COMPUTE_STATE_VARS)
@@ -77,7 +80,7 @@ d3d12_varying_cache_destroy(struct d3d12_screen *ctx);
 struct d3d12_varying_info {
    struct {
       const struct glsl_type *types[4];
-      uint8_t location_frac_mask:2;
+      uint8_t location_frac_mask:4;
       uint8_t patch:1;
       struct {
          unsigned interpolation:3;   // INTERP_MODE_COUNT = 5

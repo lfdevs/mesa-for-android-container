@@ -219,7 +219,7 @@ try_pbo_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
    fb.width = surface->width;
    fb.height = surface->height;
    fb.samples = 1;
-   fb.layers = 1;
+   fb.layers = addr.depth;
    cso_set_framebuffer(cso, &fb);
 
    /* Any blend state would do. Set this just to prevent drivers having

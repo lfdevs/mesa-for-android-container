@@ -116,6 +116,8 @@ avoid_instr(const nir_instr *instr, const void *data)
 static const nir_opt_preamble_options preamble_options = {
    .drawid_uniform = true,
    .subgroup_size_uniform = true,
+   /* not supported in hardware */
+   .load_workgroup_size_allowed = false,
    .def_size = def_size,
    .instr_cost_cb = instr_cost,
    .rewrite_cost_cb = rewrite_cost,

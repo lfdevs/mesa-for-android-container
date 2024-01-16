@@ -80,6 +80,8 @@
 #define RING_PS_ATTR             10
 #define RING_PS_SAMPLE_POSITIONS 11
 
+#define SI_GS_PER_ES 128
+
 /* max number of descriptor sets */
 #define MAX_SETS 32
 
@@ -121,7 +123,8 @@
 /* The spec requires this to be 32. */
 #define RADV_RT_HANDLE_SIZE 32
 
-#define RADV_MAX_HIT_ATTRIB_SIZE 32
+#define RADV_MAX_HIT_ATTRIB_SIZE   32
+#define RADV_MAX_HIT_ATTRIB_DWORDS (RADV_MAX_HIT_ATTRIB_SIZE / 4)
 
 #define RADV_SHADER_ALLOC_ALIGNMENT      256
 #define RADV_SHADER_ALLOC_MIN_ARENA_SIZE (256 * 1024)
@@ -165,5 +168,10 @@
 
 /* Number of samples for line smooth lowering (hw requirement). */
 #define RADV_NUM_SMOOTH_AA_SAMPLES 4
+
+/* Size of the temporary buffer allocated for transfer queue copy command workarounds.
+ * The size is chosen so that it can fit two lines of (1 << 14) blocks at 16 bpp.
+ */
+#define RADV_SDMA_TRANSFER_TEMP_BYTES (2 * (1 << 14) * 16)
 
 #endif /* RADV_CONSTANTS_H */

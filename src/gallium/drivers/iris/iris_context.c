@@ -376,6 +376,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    screen->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);
    screen->vtbl.init_compute_context(&ice->batches[IRIS_BATCH_COMPUTE]);
+   screen->vtbl.init_copy_context(&ice->batches[IRIS_BATCH_BLITTER]);
 
    if (!(flags & PIPE_CONTEXT_PREFER_THREADED))
       return ctx;

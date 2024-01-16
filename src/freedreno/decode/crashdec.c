@@ -771,7 +771,7 @@ decode(void)
                    &core, &major, &minor, &patchid);
 
          options.dev_id.chip_id = (core << 24) | (major << 16) | (minor << 8) | patchid;
-         options.info = fd_dev_info(&options.dev_id);
+         options.info = fd_dev_info_raw(&options.dev_id);
          if (!options.info) {
             printf("Unsupported device\n");
             break;

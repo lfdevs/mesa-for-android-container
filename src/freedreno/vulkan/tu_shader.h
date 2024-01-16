@@ -13,6 +13,7 @@
 #include "tu_common.h"
 #include "tu_cs.h"
 #include "tu_suballoc.h"
+#include "tu_descriptor_set.h"
 
 struct tu_inline_ubo
 {
@@ -68,6 +69,13 @@ struct tu_shader
    struct tu_const_state const_state;
    uint32_t view_mask;
    uint8_t active_desc_sets;
+
+   /* The dynamic buffer descriptor size for descriptor sets that we know
+    * about. This is used when linking to piece together the sizes and from
+    * there calculate the offsets. It's -1 if we don't know because the
+    * descriptor set layout is NULL.
+    */
+   int dynamic_descriptor_sizes[MAX_SETS];
 
    union {
       struct {
@@ -144,6 +152,26 @@ tu_shader_create(struct tu_device *dev,
                  size_t key_size,
                  struct tu_pipeline_layout *layout,
                  bool executable_info);
+
+void
+tu_shader_key_subgroup_size(struct tu_shader_key *key,
+                            bool allow_varying_subgroup_size,
+                            bool require_full_subgroups,
+                            const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *subgroup_info,
+                            struct tu_device *dev);
+
+VkResult
+tu_compile_shaders(struct tu_device *device,
+                   const VkPipelineShaderStageCreateInfo **stage_infos,
+                   nir_shader **nir,
+                   const struct tu_shader_key *keys,
+                   struct tu_pipeline_layout *layout,
+                   const unsigned char *pipeline_sha1,
+                   struct tu_shader **shaders,
+                   char **nir_initial_disasm,
+                   void *nir_initial_disasm_mem_ctx,
+                   nir_shader **nir_out,
+                   VkPipelineCreationFeedback *stage_feedbacks);
 
 VkResult
 tu_init_empty_shaders(struct tu_device *device);

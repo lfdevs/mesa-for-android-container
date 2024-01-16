@@ -99,7 +99,7 @@ libzink = static_library(
   link_args : [ld_args_build_id],
   dependencies: [
     idep_nir_headers, idep_mesautil, idep_vulkan_util_headers,
-    idep_vulkan_wsi_defines, idep_vulkan_util, dep_libdrm
+    idep_vulkan_wsi_defines, idep_vulkan_util, dep_libdrm, vulkan_wsi_deps
   ],
   c_args: zink_c_args,
 )

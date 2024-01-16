@@ -96,8 +96,8 @@ tar -xvf $XORGMACROS_VERSION.tar.bz2 && rm $XORGMACROS_VERSION.tar.bz2
 cd $XORGMACROS_VERSION; ./configure; make install; cd ..
 rm -rf $XORGMACROS_VERSION
 
-# We need at least 1.2 for Rust's `debug_assertions`
-pip install meson==1.2.0
+# We need at least 1.3.1 for rusticl
+pip install meson==1.3.1
 
 . .gitlab-ci/container/build-mold.sh
 

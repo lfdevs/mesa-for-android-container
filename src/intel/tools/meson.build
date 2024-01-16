@@ -72,6 +72,28 @@ error2aub = executable(
   install : true
 )
 
+error2hangdump = executable(
+  'intel_error2hangdump',
+  files('error2hangdump.c'),
+  dependencies : [dep_zlib, dep_dl, dep_thread, dep_m],
+  include_directories : [inc_include, inc_src, inc_intel],
+  link_with : [libintel_dev],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
+  install : true
+)
+
+intel_hang_replay = executable(
+  'intel_hang_replay',
+  files('intel_hang_replay.c'),
+  dependencies : [idep_intel_dev, idep_libintel_common, dep_libdrm, dep_dl, dep_thread, dep_m],
+  include_directories : [inc_include, inc_src, inc_intel],
+  link_with : [libintel_dev, libintel_compiler],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
+  install : true
+)
+
 sanitize_data = configuration_data()
 sanitize_data.set(
   'install_libexecdir',
@@ -157,6 +179,18 @@ if with_tools.contains('intel-ui')
     cpp_args : ['-fpermissive', '-Wno-parentheses'],
     install : true
   )
+
+  intel_hang_viewer = executable(
+    'intel_hang_viewer',
+    files('intel_hang_viewer.cpp', 'aubinator_viewer_decoder.cpp'),
+    dependencies : [idep_mesautil, dep_zlib, dep_dl, dep_thread, dep_m, libintel_imgui_gtk_dep],
+    include_directories : [inc_include, inc_src, inc_intel],
+    link_with : [libintel_common, libintel_compiler, libintel_dev],
+    c_args : [no_override_init_args],
+    gnu_symbol_visibility : 'hidden',
+    cpp_args : ['-fpermissive', '-Wno-parentheses'],
+    install : true
+  )
 endif
 
 bison_command = []
@@ -207,13 +241,16 @@ asm_testcases = [
   ['bdw', 'gfx8'],
   ['skl', 'gfx9'],
   ['icl', 'gfx11'],
+  ['tgl', 'gfx12'],
+  ['dg2', 'gfx12.5'],
 ]
 
 test_runner = find_program('tests/run-test.py')
 foreach testcase : asm_testcases
   _gen_name = testcase[0]
   _gen_num = testcase[1]
-  _gen_folder = join_paths(meson.current_source_dir(), 'tests', _gen_num)
+  _gen_folder = join_paths(meson.current_source_dir(), 'tests',
+                           _gen_num.replace('gfx', 'gen'))
   test(
     'i965_asm_' + _gen_num, test_runner,
     args : [

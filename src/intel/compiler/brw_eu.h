@@ -197,12 +197,16 @@ const struct brw_shader_reloc *brw_get_shader_relocs(struct brw_codegen *p,
                                                      unsigned *num_relocs);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
 
+bool brw_should_dump_shader_bin(void);
+void brw_dump_shader_bin(void *assembly, int start_offset, int end_offset,
+                         const char *identifier);
+
 bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
                                const char *identifier);
 
-void brw_realign(struct brw_codegen *p, unsigned align);
+void brw_realign(struct brw_codegen *p, unsigned alignment);
 int brw_append_data(struct brw_codegen *p, void *data,
-                    unsigned size, unsigned align);
+                    unsigned size, unsigned alignment);
 brw_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
 void brw_add_reloc(struct brw_codegen *p, uint32_t id,
                    enum brw_shader_reloc_type type,
@@ -1907,6 +1911,10 @@ void brw_CMPN(struct brw_codegen *p,
               unsigned conditional,
               struct brw_reg src0,
               struct brw_reg src1);
+
+brw_inst *brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
+                   unsigned rcount, struct brw_reg dest, struct brw_reg src0,
+                   struct brw_reg src1, struct brw_reg src2);
 
 void
 brw_untyped_atomic(struct brw_codegen *p,

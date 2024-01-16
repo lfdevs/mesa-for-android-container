@@ -587,7 +587,8 @@ ir3_screen_init(struct pipe_screen *pscreen)
    if (screen->gen >= 6) {
       options.lower_base_vertex = true;
    }
-   screen->compiler = ir3_compiler_create(screen->dev, screen->dev_id, &options);
+   screen->compiler =
+      ir3_compiler_create(screen->dev, screen->dev_id, screen->info, &options);
 
    /* TODO do we want to limit things to # of fast cores, or just limit
     * based on total # of both big and little cores.  The little cores

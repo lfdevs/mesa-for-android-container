@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdint.h>
 #include "compiler/agx_internal_formats.h"
 #include "compiler/glsl_types.h"
+#include "util/format/u_format.h"
 #include "util/macros.h"
 #include "agx_nir_format_helpers.h"
 #include "agx_pack.h"
@@ -57,6 +59,32 @@ store_tilebuffer(nir_builder *b, struct agx_tilebuffer_layout *tib,
          value = nir_f2f32(b, value);
    }
 
+   /* Pure integer formatss need to be clamped in software, at least in some
+    * cases. We do so on store. Piglit gl-3.0-render-integer checks this, as
+    * does KHR-GL33.packed_pixels.*.
+    */
+   const struct util_format_description *desc =
+      util_format_description(logical_format);
+   unsigned c = util_format_get_first_non_void_channel(logical_format);
+
+   if (desc->channel[c].size <= 16 &&
+       util_format_is_pure_integer(logical_format)) {
+
+      unsigned bits[4] = {
+         desc->channel[0].size,
+         desc->channel[1].size,
+         desc->channel[2].size,
+         desc->channel[3].size,
+      };
+
+      if (util_format_is_pure_sint(logical_format))
+         value = nir_format_clamp_sint(b, value, bits);
+      else
+         value = nir_format_clamp_uint(b, value, bits);
+
+      value = nir_u2u16(b, value);
+   }
+
    uint8_t offset_B = agx_tilebuffer_offset_B(tib, rt);
    nir_store_local_pixel_agx(b, value, nir_imm_intN_t(b, ALL_SAMPLES, 16),
                              .base = offset_B, .write_mask = write_mask,
@@ -97,10 +125,6 @@ load_tilebuffer(nir_builder *b, struct agx_tilebuffer_layout *tib,
  *
  * Note that this lower happens after driver bindings are lowered, so the
  * bindless handle is in the AGX-specific format.
- *
- * Assumes that texture states are mapped to a bindless table is in u0_u1 and
- * texture/PBE descriptors are alternated for each render target. This is
- * ABI. If we need to make this more flexible for Vulkan later, we can.
  */
 static nir_def *
 handle_for_rt(nir_builder *b, unsigned base, unsigned rt, bool pbe,
@@ -109,13 +133,10 @@ handle_for_rt(nir_builder *b, unsigned base, unsigned rt, bool pbe,
    unsigned index = base + (2 * rt) + (pbe ? 1 : 0);
    *bindless = (*bindless) || (index >= AGX_NUM_TEXTURE_STATE_REGS);
 
-   if (*bindless) {
-      unsigned table = 0 * 2;
-      unsigned offset_B = index * AGX_TEXTURE_LENGTH;
-      return nir_imm_ivec2(b, table, offset_B);
-   } else {
+   if (*bindless)
+      return nir_load_texture_handle_agx(b, nir_imm_int(b, index));
+   else
       return nir_imm_intN_t(b, index, 16);
-   }
 }
 
 static enum glsl_sampler_dim
@@ -172,11 +193,11 @@ store_memory(nir_builder *b, unsigned bindless_base, unsigned nr_samples,
 
    if (bindless) {
       nir_bindless_image_store(b, image, coords, sample, value, lod,
-                               .image_dim = dim, .image_array = !!layer_id,
+                               .image_dim = dim, .image_array = true,
                                .format = format);
    } else {
       nir_image_store(b, image, coords, sample, value, lod, .image_dim = dim,
-                      .image_array = !!layer_id, .format = format);
+                      .image_array = true, .format = format);
    }
 
    if (nr_samples > 1)
@@ -203,12 +224,12 @@ load_memory(nir_builder *b, unsigned bindless_base, unsigned nr_samples,
    nir_begin_invocation_interlock(b);
 
    if (bindless) {
-      return nir_bindless_image_load(
-         b, comps, bit_size, image, coords, sample, lod, .image_dim = dim,
-         .image_array = !!layer_id, .format = format);
+      return nir_bindless_image_load(b, comps, bit_size, image, coords, sample,
+                                     lod, .image_dim = dim, .image_array = true,
+                                     .format = format);
    } else {
       return nir_image_load(b, comps, bit_size, image, coords, sample, lod,
-                            .image_dim = dim, .image_array = !!layer_id,
+                            .image_dim = dim, .image_array = true,
                             .format = format);
    }
 }
@@ -225,10 +246,7 @@ agx_internal_layer_id(nir_builder *b)
 static nir_def *
 tib_layer_id(nir_builder *b, struct ctx *ctx)
 {
-   if (!ctx->tib->layered) {
-      /* If we're not layered, there's no explicit layer ID */
-      return NULL;
-   } else if (ctx->layer_id_sr) {
+   if (ctx->layer_id_sr) {
       return agx_internal_layer_id(b);
    } else {
       /* Otherwise, the layer ID is loaded as a flat varying. */

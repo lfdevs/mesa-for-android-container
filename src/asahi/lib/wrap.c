@@ -110,19 +110,22 @@ wrap_Method(mach_port_t connection, uint32_t selector, const uint64_t *input,
 
    case AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS:
       assert(output == NULL && outputStruct == NULL);
-      assert(inputStructCnt == sizeof(struct agx_submit_cmdbuf_req));
       assert(inputCnt == 1);
 
       printf("%X: SUBMIT_COMMAND_BUFFERS command queue id:%llx %p\n",
              connection, input[0], inputStruct);
 
-      const struct agx_submit_cmdbuf_req *req = inputStruct;
+      const struct IOAccelCommandQueueSubmitArgs_Header *hdr = inputStruct;
+      const struct IOAccelCommandQueueSubmitArgs_Command *cmds =
+         (void *)(hdr + 1);
 
-      agxdecode_cmdstream(req->command_buffer_shmem_id,
-                          req->segment_list_shmem_id, true);
-
-      if (getenv("ASAHI_DUMP"))
-         agxdecode_dump_mappings(req->segment_list_shmem_id);
+      for (unsigned i = 0; i < hdr->count; ++i) {
+         const struct IOAccelCommandQueueSubmitArgs_Command *req = &cmds[i];
+         agxdecode_cmdstream(req->command_buffer_shmem_id,
+                             req->segment_list_shmem_id, true);
+         if (getenv("ASAHI_DUMP"))
+            agxdecode_dump_mappings(req->segment_list_shmem_id);
+      }
 
       agxdecode_next_frame();
       FALLTHROUGH;

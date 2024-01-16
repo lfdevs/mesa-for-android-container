@@ -132,6 +132,46 @@ TEST_F(nir_opt_algebraic_test, irem_pow2_src2)
    test_2src_op(nir_op_irem, INT32_MIN, -4);
 }
 
+TEST_F(nir_opt_algebraic_test, msad)
+{
+   options.lower_bitfield_extract = true;
+   options.has_bfe = true;
+   options.has_msad = true;
+
+   nir_def *src0 = nir_load_var(b, nir_local_variable_create(b->impl, glsl_int_type(), "src0"));
+   nir_def *src1 = nir_load_var(b, nir_local_variable_create(b->impl, glsl_int_type(), "src1"));
+
+   /* This mimics the sequence created by vkd3d-proton. */
+   nir_def *res = NULL;
+   for (unsigned i = 0; i < 4; i++) {
+      nir_def *ref = nir_ubitfield_extract(b, src0, nir_imm_int(b, i * 8), nir_imm_int(b, 8));
+      nir_def *src = nir_ubitfield_extract(b, src1, nir_imm_int(b, i * 8), nir_imm_int(b, 8));
+      nir_def *is_ref_zero = nir_ieq_imm(b, ref, 0);
+      nir_def *abs_diff = nir_iabs(b, nir_isub(b, ref, src));
+      nir_def *masked_diff = nir_bcsel(b, is_ref_zero, nir_imm_int(b, 0), abs_diff);
+      if (res)
+         res = nir_iadd(b, res, masked_diff);
+      else
+         res = masked_diff;
+   }
+
+   nir_store_var(b, res_var, res, 0x1);
+
+   while (nir_opt_algebraic(b->shader)) {
+      nir_opt_constant_folding(b->shader);
+      nir_opt_dce(b->shader);
+   }
+
+   unsigned count = 0;
+   nir_foreach_instr(instr, nir_start_block(b->impl)) {
+      if (instr->type == nir_instr_type_alu) {
+         ASSERT_TRUE(nir_instr_as_alu(instr)->op == nir_op_msad_4x8);
+         ASSERT_EQ(count, 0);
+         count++;
+      }
+   }
+}
+
 TEST_F(nir_opt_idiv_const_test, umod)
 {
    for (uint32_t d : {16u, 17u, 0u, UINT32_MAX}) {

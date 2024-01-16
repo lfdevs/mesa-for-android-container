@@ -48,6 +48,7 @@ load_clc_shader(struct brw_compiler *compiler, struct disk_cache *disk_cache,
       p_atomic_cmpxchg(&compiler->clc_shader, NULL, nir);
    if (old_nir == NULL) {
       /* We won the race */
+      ralloc_steal(compiler, nir);
       return nir;
    } else {
       /* Someone else built the shader first */

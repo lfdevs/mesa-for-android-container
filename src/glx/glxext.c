@@ -877,12 +877,16 @@ __glXInitialize(Display * dpy)
 
    dpyPriv->glXDrawHash = __glxHashCreate();
 
+   Bool zink = False;
+   Bool try_zink = False;
+
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
    Bool glx_accel = !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
    const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
-   Bool zink = env && !strcmp(env, "zink");
-   Bool try_zink = False;
+
+   zink = env && !strcmp(env, "zink");
+   try_zink = False;
 
    dpyPriv->drawHash = __glxHashCreate();
 
@@ -927,12 +931,14 @@ __glXInitialize(Display * dpy)
 
    if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, zink | try_zink)) {
       Bool fail = True;
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
       if (try_zink) {
          free(dpyPriv->screens);
          dpyPriv->driswDisplay->destroyDisplay(dpyPriv->driswDisplay);
          dpyPriv->driswDisplay = driswCreateDisplay(dpy, false);
          fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False);
       }
+#endif
       if (fail) {
          free(dpyPriv);
          return NULL;

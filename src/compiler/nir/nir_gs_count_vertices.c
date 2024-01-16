@@ -56,12 +56,14 @@ void
 nir_gs_count_vertices_and_primitives(const nir_shader *shader,
                                      int *out_vtxcnt,
                                      int *out_prmcnt,
+                                     int *out_decomposed_prmcnt,
                                      unsigned num_streams)
 {
    assert(num_streams);
 
    int vtxcnt_arr[4] = { -1, -1, -1, -1 };
    int prmcnt_arr[4] = { -1, -1, -1, -1 };
+   int decomposed_prmcnt_arr[4] = { -1, -1, -1, -1 };
    bool cnt_found[4] = { false, false, false, false };
 
    nir_foreach_function_impl(impl, shader) {
@@ -82,6 +84,7 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
 
             int vtxcnt = -1;
             int prmcnt = -1;
+            int decomposed_prmcnt = -1;
 
             /* If the number of vertices/primitives is compile-time known, we use that,
              * otherwise we leave it at -1 which means that it's unknown.
@@ -90,6 +93,8 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
                vtxcnt = nir_src_as_int(intrin->src[0]);
             if (nir_src_is_const(intrin->src[1]))
                prmcnt = nir_src_as_int(intrin->src[1]);
+            if (nir_src_is_const(intrin->src[2]))
+               decomposed_prmcnt = nir_src_as_int(intrin->src[2]);
 
             /* We've found contradictory set_vertex_and_primitive_count intrinsics.
              * This can happen if there are early-returns in main() and
@@ -99,9 +104,12 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
                vtxcnt = -1;
             if (cnt_found[stream] && prmcnt != prmcnt_arr[stream])
                prmcnt = -1;
+            if (cnt_found[stream] && decomposed_prmcnt != decomposed_prmcnt_arr[stream])
+               decomposed_prmcnt = -1;
 
             vtxcnt_arr[stream] = vtxcnt;
             prmcnt_arr[stream] = prmcnt;
+            decomposed_prmcnt_arr[stream] = decomposed_prmcnt;
             cnt_found[stream] = true;
          }
       }
@@ -111,4 +119,6 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
       memcpy(out_vtxcnt, vtxcnt_arr, num_streams * sizeof(int));
    if (out_prmcnt)
       memcpy(out_prmcnt, prmcnt_arr, num_streams * sizeof(int));
+   if (out_decomposed_prmcnt)
+      memcpy(out_decomposed_prmcnt, decomposed_prmcnt_arr, num_streams * sizeof(int));
 }

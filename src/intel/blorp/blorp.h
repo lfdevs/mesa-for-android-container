@@ -57,6 +57,7 @@ struct blorp_params;
 
 struct blorp_config {
    bool use_mesh_shading;
+   bool use_unrestricted_depth_range;
 };
 
 struct blorp_context {
@@ -65,6 +66,8 @@ struct blorp_context {
    const struct isl_device *isl_dev;
 
    const struct brw_compiler *compiler;
+
+   bool enable_tbimr;
 
    bool (*lookup_shader)(struct blorp_batch *batch,
                          const void *key, uint32_t key_size,
@@ -109,9 +112,6 @@ enum blorp_batch_flags {
 
    /** Use the hardware blitter to perform any operations in this batch */
    BLORP_BATCH_USE_BLITTER = (1 << 4),
-
-   /** Need a PSS Stall Sync, Wa_18019816803. */
-   BLORP_BATCH_NEED_PSS_STALL_SYNC = (1 << 5),
 };
 
 struct blorp_batch {

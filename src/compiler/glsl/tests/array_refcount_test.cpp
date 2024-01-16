@@ -102,13 +102,13 @@ array_refcount_test::SetUp()
 
    /* The type of vec4 x[3][4][5]; */
    const glsl_type *const array_5_of_vec4 =
-      glsl_type::get_array_instance(glsl_type::vec4_type, 5);
+      glsl_array_type(&glsl_type_builtin_vec4, 5, 0);
    const glsl_type *const array_4_of_array_5_of_vec4 =
-      glsl_type::get_array_instance(array_5_of_vec4, 4);
+      glsl_array_type(array_5_of_vec4, 4, 0);
    array_3_of_array_4_of_array_5_of_vec4 =
-      glsl_type::get_array_instance(array_4_of_array_5_of_vec4, 3);
+      glsl_array_type(array_4_of_array_5_of_vec4, 3, 0);
 
-   array_3_of_int = glsl_type::get_array_instance(glsl_type::int_type, 3);
+   array_3_of_int = glsl_array_type(&glsl_type_builtin_int, 3, 0);
 }
 
 void
@@ -210,7 +210,7 @@ validate_variables_in_hash_table(struct hash_table *ht,
 TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_scalar)
 {
    ir_variable *const var =
-      new(mem_ctx) ir_variable(glsl_type::int_type, "a", ir_var_auto);
+      new(mem_ctx) ir_variable(&glsl_type_builtin_int, "a", ir_var_auto);
 
    ir_array_refcount_entry entry(var);
 
@@ -224,7 +224,7 @@ TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_scalar)
 TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_vector)
 {
    ir_variable *const var =
-      new(mem_ctx) ir_variable(glsl_type::vec4_type, "a", ir_var_auto);
+      new(mem_ctx) ir_variable(&glsl_type_builtin_vec4, "a", ir_var_auto);
 
    ir_array_refcount_entry entry(var);
 
@@ -238,7 +238,7 @@ TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_vector)
 TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_matrix)
 {
    ir_variable *const var =
-      new(mem_ctx) ir_variable(glsl_type::mat4_type, "a", ir_var_auto);
+      new(mem_ctx) ir_variable(&glsl_type_builtin_mat4, "a", ir_var_auto);
 
    ir_array_refcount_entry entry(var);
 
@@ -255,7 +255,7 @@ TEST_F(array_refcount_test, ir_array_refcount_entry_initial_state_for_array)
       new(mem_ctx) ir_variable(array_3_of_array_4_of_array_5_of_vec4,
                                "a",
                                ir_var_auto);
-   const unsigned total_elements = var->type->arrays_of_arrays_size();
+   const unsigned total_elements = glsl_get_aoa_size(var->type);
 
    ir_array_refcount_entry entry(var);
 
@@ -274,7 +274,7 @@ TEST_F(array_refcount_test, mark_array_elements_referenced_simple)
       new(mem_ctx) ir_variable(array_3_of_array_4_of_array_5_of_vec4,
                                "a",
                                ir_var_auto);
-   const unsigned total_elements = var->type->arrays_of_arrays_size();
+   const unsigned total_elements = glsl_get_aoa_size(var->type);
 
    ir_array_refcount_entry entry(var);
 
@@ -412,13 +412,13 @@ TEST_F(array_refcount_test, do_not_process_vector_indexing)
     * arrays.  The visitor should not try to track per-element accesses to
     * these types.
     */
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::float_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_float,
                                                  "a",
                                                  ir_var_auto);
-   ir_variable *var_b = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_b = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "b",
                                                  ir_var_auto);
-   ir_variable *var_c = new(mem_ctx) ir_variable(glsl_type::vec4_type,
+   ir_variable *var_c = new(mem_ctx) ir_variable(&glsl_type_builtin_vec4,
                                                  "c",
                                                  ir_var_auto);
 
@@ -447,13 +447,13 @@ TEST_F(array_refcount_test, do_not_process_matrix_indexing)
     * arrays.  The visitor should not try to track per-element accesses to
     * these types.
     */
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::vec4_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_vec4,
                                                  "a",
                                                  ir_var_auto);
-   ir_variable *var_b = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_b = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "b",
                                                  ir_var_auto);
-   ir_variable *var_c = new(mem_ctx) ir_variable(glsl_type::mat4_type,
+   ir_variable *var_c = new(mem_ctx) ir_variable(&glsl_type_builtin_mat4,
                                                  "c",
                                                  ir_var_auto);
 
@@ -486,9 +486,9 @@ TEST_F(array_refcount_test, do_not_process_array_inside_structure)
    };
 
    const glsl_type *const record_of_array_3_of_int =
-      glsl_type::get_struct_instance(fields, ARRAY_SIZE(fields), "S");
+      glsl_struct_type(fields, ARRAY_SIZE(fields), "S", false /* packed */);
 
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "a",
                                                  ir_var_auto);
 
@@ -520,7 +520,7 @@ TEST_F(array_refcount_test, do_not_process_array_inside_structure)
 
 TEST_F(array_refcount_test, visit_simple_indexing)
 {
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::vec4_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_vec4,
                                                  "a",
                                                  ir_var_auto);
    ir_variable *var_b = new(mem_ctx) ir_variable(array_3_of_array_4_of_array_5_of_vec4,
@@ -541,7 +541,7 @@ TEST_F(array_refcount_test, visit_simple_indexing)
 
    const unsigned accessed_element = 0 + (1 * 5) + (2 * 4 * 5);
    ir_array_refcount_entry *entry_b = v.get_variable_entry(var_b);
-   const unsigned total_elements = var_b->type->arrays_of_arrays_size();
+   const unsigned total_elements = glsl_get_aoa_size(var_b->type);
 
    for (unsigned i = 0; i < total_elements; i++)
       EXPECT_EQ(i == accessed_element, entry_b->is_linearized_index_referenced(i)) <<
@@ -552,13 +552,13 @@ TEST_F(array_refcount_test, visit_simple_indexing)
 
 TEST_F(array_refcount_test, visit_whole_second_array_indexing)
 {
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::vec4_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_vec4,
                                                  "a",
                                                  ir_var_auto);
    ir_variable *var_b = new(mem_ctx) ir_variable(array_3_of_array_4_of_array_5_of_vec4,
                                                  "b",
                                                  ir_var_auto);
-   ir_variable *var_i = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_i = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "i",
                                                  ir_var_auto);
 
@@ -593,7 +593,7 @@ TEST_F(array_refcount_test, visit_whole_second_array_indexing)
 
 TEST_F(array_refcount_test, visit_array_indexing_an_array)
 {
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::vec4_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_vec4,
                                                  "a",
                                                  ir_var_auto);
    ir_variable *var_b = new(mem_ctx) ir_variable(array_3_of_array_4_of_array_5_of_vec4,
@@ -602,7 +602,7 @@ TEST_F(array_refcount_test, visit_array_indexing_an_array)
    ir_variable *var_c = new(mem_ctx) ir_variable(array_3_of_int,
                                                  "c",
                                                  ir_var_auto);
-   ir_variable *var_i = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_i = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "i",
                                                  ir_var_auto);
 
@@ -636,7 +636,7 @@ TEST_F(array_refcount_test, visit_array_indexing_an_array)
 
    ir_array_refcount_entry *const entry_c = v.get_variable_entry(var_c);
 
-   for (int i = 0; i < var_c->type->array_size(); i++) {
+   for (int i = 0; i < glsl_array_size(var_c->type); i++) {
       EXPECT_EQ(true, entry_c->is_linearized_index_referenced(i)) <<
          "array c, i = " << i;
    }
@@ -647,12 +647,12 @@ TEST_F(array_refcount_test, visit_array_indexing_an_array)
 TEST_F(array_refcount_test, visit_array_indexing_with_itself)
 {
    const glsl_type *const array_2_of_array_3_of_int =
-      glsl_type::get_array_instance(array_3_of_int, 2);
+      glsl_array_type(array_3_of_int, 2, 0);
 
    const glsl_type *const array_2_of_array_2_of_array_3_of_int =
-      glsl_type::get_array_instance(array_2_of_array_3_of_int, 2);
+      glsl_array_type(array_2_of_array_3_of_int, 2, 0);
 
-   ir_variable *var_a = new(mem_ctx) ir_variable(glsl_type::int_type,
+   ir_variable *var_a = new(mem_ctx) ir_variable(&glsl_type_builtin_int,
                                                  "a",
                                                  ir_var_auto);
    ir_variable *var_b = new(mem_ctx) ir_variable(array_2_of_array_2_of_array_3_of_int,

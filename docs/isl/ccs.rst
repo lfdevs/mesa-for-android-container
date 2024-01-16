@@ -14,9 +14,9 @@ powerful Sky Lake form.
 The documentation for Ivy Bridge through Broadwell overloads the term MCS for
 referring both to the *multisample control surface* used for multisample
 compression and the control surface used for fast-clears. In ISL, the
-:cpp:enumerator:`isl_aux_usage::ISL_AUX_USAGE_MCS` enum always refers to
+:c:enumerator:`isl_aux_usage.ISL_AUX_USAGE_MCS` enum always refers to
 multisample color compression while the
-:cpp:enumerator:`isl_aux_usage::ISL_AUX_USAGE_CCS_` enums always refer to
+:c:enumerator:`isl_aux_usage.ISL_AUX_USAGE_CCS_` enums always refer to
 single-sampled color compression. Throughout this chapter and the rest of the
 ISL documentation, we will use the term "color control surface", abbreviated
 CCS, to denote the control surface used for both fast-clears and color
@@ -143,10 +143,10 @@ itself.  The way ISL does CCS layout calculations is by a very careful  and
 subtle application of its normal surface layout code.
 
 Above, we described the CCS data layout as mapping of address bits. In
-ISL, this is represented by :cpp:enumerator:`isl_tiling::ISL_TILING_CCS`.  The
+ISL, this is represented by :c:enumerator:`isl_tiling.ISL_TILING_CCS`.  The
 logical and physical tile dimensions corresponding to the above mapping.
 
-We also have special :cpp:enum:`isl_format` enums for CCS.  These formats are 1
+We also have special :c:enum:`isl_format` enums for CCS.  These formats are 1
 bit-per-pixel on Ivy Bridge through Broadwell and 2 bits-per-pixel on Skylake
 and above to correspond to the 1 and 2-bit values represented in the CCS data.
 They have a block size (similar to a block compressed format such as BC or
@@ -154,10 +154,10 @@ ASTC) which says what area (in surface elements) in the main surface is covered
 by a single CCS element (1 or 2-bit).  Because this depends on the main surface
 tiling and format, we have several different CCS formats.
 
-Once the appropriate :cpp:enum:`isl_format` has been selected, computing the
+Once the appropriate :c:enum:`isl_format` has been selected, computing the
 size and layout of a CCS surface is as simple as passing the same surface
-creation parameters to :cpp:func:`isl_surf_init_s` as were used to create the
-primary surface only with :cpp:enumerator:`isl_tiling::ISL_TILING_CCS` and the
+creation parameters to :c:func:`isl_surf_init_s` as were used to create the
+primary surface only with :c:enumerator:`isl_tiling.ISL_TILING_CCS` and the
 correct CCS format.  This not only results in a correctly sized surface but
 most other ISL helpers for things such as computing offsets into surfaces work
 correctly as well.

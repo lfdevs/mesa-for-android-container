@@ -42,21 +42,15 @@
 #include "virglrenderer_hw.h"
 #include "msm_proto.h"
 
+#include "vdrm.h"
+
 struct virtio_device {
    struct fd_device base;
 
-   struct fd_bo *shmem_bo;
-   struct msm_shmem *shmem;
-   uint8_t *rsp_mem;
-   uint32_t rsp_mem_len;
-   uint32_t next_rsp_off;
-   simple_mtx_t rsp_lock;
-   simple_mtx_t eb_lock;
+   struct vdrm_device *vdrm;
 
    uint32_t next_blob_id;
-   uint32_t next_seqno;
-
-   struct virgl_renderer_capset_drm caps;
+   struct msm_shmem *shmem;
 
    /*
     * Notes on address space allocation:
@@ -78,18 +72,8 @@ struct virtio_device {
     */
    struct util_vma_heap address_space;
    simple_mtx_t address_space_lock;
-
-   uint32_t reqbuf_len;
-   uint32_t reqbuf_cnt;
-   uint8_t reqbuf[0x4000];
 };
 FD_DEFINE_CAST(fd_device, virtio_device);
-
-#define virtio_ioctl(fd, name, args) ({                              \
-      MESA_TRACE_SCOPE(#name);                                       \
-      int ret = drmIoctl((fd), DRM_IOCTL_ ## name, (args));          \
-      ret;                                                           \
-   })
 
 struct fd_device *virtio_device_new(int fd, drmVersionPtr version);
 
@@ -177,14 +161,6 @@ struct fd_bo *virtio_bo_from_handle(struct fd_device *dev, uint32_t size,
 /*
  * Internal helpers:
  */
-void *virtio_alloc_rsp(struct fd_device *dev, struct msm_ccmd_req *hdr, uint32_t sz);
-int virtio_execbuf_fenced(struct fd_device *dev, struct msm_ccmd_req *req,
-                          uint32_t *handles, uint32_t num_handles,
-                          int in_fence_fd, int *out_fence_fd, int ring_idx);
-int virtio_execbuf_flush(struct fd_device *dev);
-int virtio_execbuf_flush_locked(struct fd_device *dev);
-int virtio_execbuf(struct fd_device *dev, struct msm_ccmd_req *req, bool sync);
-void virtio_host_sync(struct fd_device *dev, const struct msm_ccmd_req *req);
 int virtio_simple_ioctl(struct fd_device *dev, unsigned cmd, void *req);
 
 #endif /* VIRTIO_PRIV_H_ */

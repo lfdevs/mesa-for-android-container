@@ -392,11 +392,11 @@ def main():
     s = State(isa)
 
     try:
-        with open(args.out_c, 'w') as f:
+        with open(args.out_c, 'w', encoding='utf-8') as f:
             out_h_basename = os.path.basename(args.out_h)
             f.write(Template(template).render(isa=isa, s=s, header=out_h_basename))
 
-        with open(args.out_h, 'w') as f:
+        with open(args.out_h, 'w', encoding='utf-8') as f:
             f.write(Template(header).render(isa=isa, guard=guard(args.out_h)))
 
     except Exception:

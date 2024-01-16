@@ -250,16 +250,17 @@ fs_live_variables::fs_live_variables(const backend_shader *s)
    : devinfo(s->devinfo), cfg(s->cfg)
 {
    mem_ctx = ralloc_context(NULL);
+   linear_ctx *lin_ctx = linear_context(mem_ctx);
 
    num_vgrfs = s->alloc.count;
    num_vars = 0;
-   var_from_vgrf = rzalloc_array(mem_ctx, int, num_vgrfs);
+   var_from_vgrf = linear_zalloc_array(lin_ctx, int, num_vgrfs);
    for (int i = 0; i < num_vgrfs; i++) {
       var_from_vgrf[i] = num_vars;
       num_vars += s->alloc.sizes[i];
    }
 
-   vgrf_from_var = rzalloc_array(mem_ctx, int, num_vars);
+   vgrf_from_var = linear_zalloc_array(lin_ctx, int, num_vars);
    for (int i = 0; i < num_vgrfs; i++) {
       for (unsigned j = 0; j < s->alloc.sizes[i]; j++) {
          vgrf_from_var[var_from_vgrf[i] + j] = i;
@@ -267,7 +268,7 @@ fs_live_variables::fs_live_variables(const backend_shader *s)
    }
 
    start = ralloc_array(mem_ctx, int, num_vars);
-   end = rzalloc_array(mem_ctx, int, num_vars);
+   end = linear_zalloc_array(lin_ctx, int, num_vars);
    for (int i = 0; i < num_vars; i++) {
       start[i] = MAX_INSTRUCTION;
       end[i] = -1;
@@ -280,16 +281,16 @@ fs_live_variables::fs_live_variables(const backend_shader *s)
       vgrf_end[i] = -1;
    }
 
-   block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
+   block_data = linear_zalloc_array(lin_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {
-      block_data[i].def = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      block_data[i].use = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      block_data[i].livein = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      block_data[i].liveout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      block_data[i].defin = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      block_data[i].defout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].def = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      block_data[i].use = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      block_data[i].livein = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      block_data[i].liveout = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      block_data[i].defin = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      block_data[i].defout = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
 
       block_data[i].flag_def[0] = 0;
       block_data[i].flag_use[0] = 0;

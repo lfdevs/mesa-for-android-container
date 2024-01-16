@@ -150,7 +150,7 @@ blorp_alloc_general_state(struct blorp_batch *blorp_batch,
    return blorp_alloc_dynamic_state(blorp_batch, size, alignment, offset);
 }
 
-static void
+static bool
 blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
                           unsigned num_entries,
                           unsigned state_size,
@@ -181,6 +181,8 @@ blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
    iris_use_pinned_bo(batch, binder->bo, false, IRIS_DOMAIN_NONE);
 
    batch->screen->vtbl.update_binder_address(batch, binder);
+
+   return true;
 }
 
 static uint32_t
@@ -285,6 +287,7 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
 {
    struct iris_context *ice = blorp_batch->blorp->driver_ctx;
    struct iris_batch *batch = blorp_batch->driver_batch;
+   uint32_t pc_flags = 0;
 
 #if GFX_VER >= 11
    /* The PIPE_CONTROL command description says:
@@ -295,10 +298,8 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
     *     is set due to new association of BTI, PS Scoreboard Stall bit must
     *     be set in this packet."
     */
-   iris_emit_pipe_control_flush(batch,
-                                "workaround: RT BTI change [blorp]",
-                                PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                PIPE_CONTROL_STALL_AT_SCOREBOARD);
+   pc_flags = PIPE_CONTROL_RENDER_TARGET_FLUSH |
+              PIPE_CONTROL_STALL_AT_SCOREBOARD;
 #endif
 
    /* Check if blorp ds state matches ours. */
@@ -306,9 +307,15 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
       const bool blorp_ds_state =
          params->depth.enabled || params->stencil.enabled;
       if (ice->state.ds_write_state != blorp_ds_state) {
-         blorp_batch->flags |= BLORP_BATCH_NEED_PSS_STALL_SYNC;
+         pc_flags |= PIPE_CONTROL_PSS_STALL_SYNC;
          ice->state.ds_write_state = blorp_ds_state;
       }
+   }
+
+   if (pc_flags != 0) {
+      iris_emit_pipe_control_flush(batch,
+                                   "workaround: prior to [blorp]",
+                                   pc_flags);
    }
 
    if (params->depth.enabled &&
@@ -498,18 +505,24 @@ genX(init_blorp)(struct iris_context *ice)
    ice->blorp.lookup_shader = iris_blorp_lookup_shader;
    ice->blorp.upload_shader = iris_blorp_upload_shader;
    ice->blorp.exec = iris_blorp_exec;
+   ice->blorp.enable_tbimr = screen->driconf.enable_tbimr;
 }
 
 static void
-blorp_emit_breakpoint_pre_draw(struct blorp_batch *blorp_batch)
+blorp_emit_pre_draw(struct blorp_batch *blorp_batch, const struct blorp_params *params)
 {
    struct iris_batch *batch = blorp_batch->driver_batch;
+   blorp_measure_start(blorp_batch, params);
    genX(maybe_emit_breakpoint)(batch, true);
 }
 
 static void
-blorp_emit_breakpoint_post_draw(struct blorp_batch *blorp_batch)
+blorp_emit_post_draw(struct blorp_batch *blorp_batch, const struct blorp_params *params)
 {
    struct iris_batch *batch = blorp_batch->driver_batch;
+
+   // A _3DPRIM_RECTLIST is a MESA_PRIM_QUAD_STRIP with a implied vertex
+   genX(emit_3dprimitive_was)(batch, NULL, MESA_PRIM_QUAD_STRIP, 3);
    genX(maybe_emit_breakpoint)(batch, false);
+   blorp_measure_end(blorp_batch, params);
 }

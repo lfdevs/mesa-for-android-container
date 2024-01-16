@@ -113,22 +113,28 @@ struct radeon_info {
    bool has_export_conflict_bug;
    bool has_vrs_ds_export_bug;
    bool has_taskmesh_indirect0_bug;
-   bool has_set_pairs_packets;
    bool sdma_supports_sparse;      /* Whether SDMA can safely access sparse resources. */
    bool sdma_supports_compression; /* Whether SDMA supports DCC and HTILE. */
-
+   bool has_set_context_pairs_packed;
+   bool has_set_sh_pairs_packed;
 
    /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
     *
     * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, coordinate truncation is the same as gfx10 and older.
-    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, coordinate truncation is adjusted to be conformant
-    * if you also set TRUNC_COORD.
     *
-    * Behavior:
-    *    truncate_coord_xy = TRUNC_COORD &&
-    *                        ((xy_filter == Point && !gather) || !TA_CNTL2.TRUNCATE_COORD_MODE);
-    *    truncate_coord_z = TRUNC_COORD && (z_filter == Point || !TA_CNTL2.TRUNCATE_COORD_MODE);
-    *    truncate_coord_layer = TRUNC_COORD && !TA_CNTL2.TRUNCATE_COORD_MODE;
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, coordinate truncation is adjusted to be D3D9/GL/Vulkan
+    * conformant if you also set TRUNC_COORD. Coordinate truncation uses D3D10+ behaviour if
+    * TRUNC_COORD is unset.
+    *
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 1:
+    *    truncate_coord_xy = TRUNC_COORD && (xy_filter == Point && !gather);
+    *    truncate_coord_z = TRUNC_COORD && (z_filter == Point);
+    *    truncate_coord_layer = false;
+    *
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 0:
+    *    truncate_coord_xy = TRUNC_COORD;
+    *    truncate_coord_z = TRUNC_COORD;
+    *    truncate_coord_layer = TRUNC_COORD;
     *
     * AnisoPoint is treated as Point.
     */
@@ -188,6 +194,7 @@ struct radeon_info {
    } dec_caps, enc_caps;
 
    enum vcn_version vcn_ip_version;
+   enum sdma_version sdma_ip_version;
 
    /* Kernel & winsys capabilities. */
    uint32_t drm_major; /* version */
@@ -236,7 +243,7 @@ struct radeon_info {
    uint32_t max_se;             /* number of shader engines incl. disabled ones */
    uint32_t max_sa_per_se;      /* shader arrays per shader engine */
    uint32_t num_cu_per_sh;
-   uint32_t max_wave64_per_simd;
+   uint32_t max_waves_per_simd;
    uint32_t num_physical_sgprs_per_simd;
    uint32_t num_physical_wave64_vgprs_per_simd;
    uint32_t num_simd_per_compute_unit;

@@ -523,6 +523,7 @@ static const char *const sync_function[16] = {
    [TGL_SYNC_NOP] = "nop",
    [TGL_SYNC_ALLRD] = "allrd",
    [TGL_SYNC_ALLWR] = "allwr",
+   [TGL_SYNC_FENCE] = "fence",
    [TGL_SYNC_BAR] = "bar",
    [TGL_SYNC_HOST] = "host",
 };
@@ -752,6 +753,37 @@ static const char* const lsc_cache_store[] = {
    [LSC_CACHE_STORE_L1S_L3UC]        = "L1S_L3UC",
    [LSC_CACHE_STORE_L1S_L3WB]        = "L1S_L3WB",
    [LSC_CACHE_STORE_L1WB_L3WB]       = "L1WB_L3WB",
+};
+
+static const char* const xe2_lsc_cache_load[] = {
+   [XE2_LSC_CACHE_LOAD_L1STATE_L3MOCS]   = "L1STATE_L3MOCS",
+   [XE2_LSC_CACHE_LOAD_L1UC_L3UC]        = "L1UC_L3UC",
+   [XE2_LSC_CACHE_LOAD_L1UC_L3C]         = "L1UC_L3C",
+   [XE2_LSC_CACHE_LOAD_L1UC_L3CC]        = "L1UC_L3CC",
+   [XE2_LSC_CACHE_LOAD_L1C_L3UC]         = "L1C_L3UC",
+   [XE2_LSC_CACHE_LOAD_L1C_L3C]          = "L1C_L3C",
+   [XE2_LSC_CACHE_LOAD_L1C_L3CC]         = "L1C_L3CC",
+   [XE2_LSC_CACHE_LOAD_L1S_L3UC]         = "L1S_L3UC",
+   [XE2_LSC_CACHE_LOAD_L1S_L3C]          = "L1S_L3C",
+   [XE2_LSC_CACHE_LOAD_L1IAR_L3IAR]      = "L1IAR_L3IAR",
+};
+
+static const char* const xe2_lsc_cache_store[] = {
+   [XE2_LSC_CACHE_STORE_L1STATE_L3MOCS]  = "L1STATE_L3MOCS",
+   [XE2_LSC_CACHE_STORE_L1UC_L3UC]       = "L1UC_L3UC",
+   [XE2_LSC_CACHE_STORE_L1UC_L3WB]       = "L1UC_L3WB",
+   [XE2_LSC_CACHE_STORE_L1WT_L3UC]       = "L1WT_L3UC",
+   [XE2_LSC_CACHE_STORE_L1WT_L3WB]       = "L1WT_L3WB",
+   [XE2_LSC_CACHE_STORE_L1S_L3UC]        = "L1S_L3UC",
+   [XE2_LSC_CACHE_STORE_L1S_L3WB]        = "L1S_L3WB",
+   [XE2_LSC_CACHE_STORE_L1WB_L3WB]       = "L1WB_L3WB",
+};
+
+static const char* const dpas_systolic_depth[4] = {
+   [0] = "16",
+   [1] = "2",
+   [2] = "4",
+   [3] = "8"
 };
 
 static int column;
@@ -1014,6 +1046,28 @@ dest_3src(FILE *file, const struct intel_device_info *devinfo,
       err |= control(file, "writemask", writemask,
                      brw_inst_3src_a16_dst_writemask(devinfo, inst), NULL);
    }
+   string(file, brw_reg_type_to_letters(type));
+
+   return 0;
+}
+
+static int
+dest_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
+               const brw_inst *inst)
+{
+   uint32_t reg_file =
+      reg_file = brw_inst_dpas_3src_dst_reg_file(devinfo, inst);
+
+   if (reg(file, reg_file, brw_inst_dpas_3src_dst_reg_nr(devinfo, inst)) == -1)
+      return 0;
+
+   enum brw_reg_type type = brw_inst_dpas_3src_dst_type(devinfo, inst);
+   unsigned subreg_nr = brw_inst_dpas_3src_dst_subreg_nr(devinfo, inst);
+
+   if (subreg_nr)
+      format(file, ".%u", subreg_nr);
+   string(file, "<1>");
+
    string(file, brw_reg_type_to_letters(type));
 
    return 0;
@@ -1494,6 +1548,72 @@ src2_3src(FILE *file, const struct intel_device_info *devinfo,
 }
 
 static int
+src0_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
+               const brw_inst *inst)
+{
+   uint32_t reg_file =
+      reg_file = brw_inst_dpas_3src_src0_reg_file(devinfo, inst);
+
+   if (reg(file, reg_file, brw_inst_dpas_3src_src0_reg_nr(devinfo, inst)) == -1)
+      return 0;
+
+   unsigned subreg_nr = brw_inst_dpas_3src_src0_subreg_nr(devinfo, inst);
+   enum brw_reg_type type = brw_inst_dpas_3src_src0_type(devinfo, inst);
+
+   if (subreg_nr)
+      format(file, ".%d", subreg_nr);
+   src_align1_region(file, 1, 1, 0);
+
+   string(file, brw_reg_type_to_letters(type));
+
+   return 0;
+}
+
+static int
+src1_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
+               const brw_inst *inst)
+{
+   uint32_t reg_file =
+      reg_file = brw_inst_dpas_3src_src1_reg_file(devinfo, inst);
+
+   if (reg(file, reg_file, brw_inst_dpas_3src_src1_reg_nr(devinfo, inst)) == -1)
+      return 0;
+
+   unsigned subreg_nr = brw_inst_dpas_3src_src1_subreg_nr(devinfo, inst);
+   enum brw_reg_type type = brw_inst_dpas_3src_src1_type(devinfo, inst);
+
+   if (subreg_nr)
+      format(file, ".%d", subreg_nr);
+   src_align1_region(file, 1, 1, 0);
+
+   string(file, brw_reg_type_to_letters(type));
+
+   return 0;
+}
+
+static int
+src2_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
+               const brw_inst *inst)
+{
+   uint32_t reg_file =
+      reg_file = brw_inst_dpas_3src_src2_reg_file(devinfo, inst);
+
+   if (reg(file, reg_file, brw_inst_dpas_3src_src2_reg_nr(devinfo, inst)) == -1)
+      return 0;
+
+   unsigned subreg_nr = brw_inst_dpas_3src_src2_subreg_nr(devinfo, inst);
+   enum brw_reg_type type = brw_inst_dpas_3src_src2_type(devinfo, inst);
+
+   if (subreg_nr)
+      format(file, ".%d", subreg_nr);
+   src_align1_region(file, 1, 1, 0);
+
+   string(file, brw_reg_type_to_letters(type));
+
+   return 0;
+}
+
+static int
 imm(FILE *file, const struct brw_isa_info *isa, enum brw_reg_type type,
     const brw_inst *inst)
 {
@@ -1553,7 +1673,11 @@ imm(FILE *file, const struct brw_isa_info *isa, enum brw_reg_type type,
       format(file, "/* %-gDF */", brw_inst_imm_df(devinfo, inst));
       break;
    case BRW_REGISTER_TYPE_HF:
-      string(file, "Half Float IMM");
+      format(file, "0x%04xHF",
+             (uint16_t) brw_inst_imm_ud(devinfo, inst));
+      pad(file, 48);
+      format(file, "/* %-gHF */",
+             _mesa_half_to_float((uint16_t) brw_inst_imm_ud(devinfo, inst)));
       break;
    case BRW_REGISTER_TYPE_NF:
    case BRW_REGISTER_TYPE_UB:
@@ -1763,7 +1887,7 @@ qtr_ctrl(FILE *file, const struct intel_device_info *devinfo,
 {
    int qtr_ctl = brw_inst_qtr_control(devinfo, inst);
    int exec_size = 1 << brw_inst_exec_size(devinfo, inst);
-   const unsigned nib_ctl = devinfo->ver < 7 ? 0 :
+   const unsigned nib_ctl = devinfo->ver < 7 || devinfo->ver >= 20 ? 0 :
                             brw_inst_nib_control(devinfo, inst);
 
    if (exec_size < 8 || nib_ctl) {
@@ -1823,10 +1947,10 @@ swsb(FILE *file, const struct brw_isa_info *isa, const brw_inst *inst)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
    const enum opcode opcode = brw_inst_opcode(isa, inst);
-   const uint8_t x = brw_inst_swsb(devinfo, inst);
+   const uint32_t x = brw_inst_swsb(devinfo, inst);
    const bool is_unordered =
       opcode == BRW_OPCODE_SEND || opcode == BRW_OPCODE_SENDC ||
-      opcode == BRW_OPCODE_MATH ||
+      opcode == BRW_OPCODE_MATH || opcode == BRW_OPCODE_DPAS ||
       (devinfo->has_64bit_float_via_math_pipe &&
        inst_has_type(isa, inst, BRW_REGISTER_TYPE_DF));
    const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, is_unordered, x);
@@ -1964,6 +2088,15 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
       err |= control(file, "function", sync_function,
                      brw_inst_cond_modifier(devinfo, inst), NULL);
 
+   } else if (opcode == BRW_OPCODE_DPAS) {
+      string(file, ".");
+
+      err |= control(file, "systolic depth", dpas_systolic_depth,
+                     brw_inst_dpas_3src_sdepth(devinfo, inst), NULL);
+
+      const unsigned rcount = brw_inst_dpas_3src_rcount(devinfo, inst) + 1;
+
+      format(file, "x%d", rcount);
    } else if (!is_send(opcode) &&
               (devinfo->ver < 12 ||
                brw_inst_src0_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE ||
@@ -2035,6 +2168,19 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
    } else if (opcode == BRW_OPCODE_JMPI) {
       pad(file, 16);
       err |= src1(file, isa, inst);
+   } else if (opcode == BRW_OPCODE_DPAS) {
+      pad(file, 16);
+      err |= dest_dpas_3src(file, devinfo, inst);
+
+      pad(file, 32);
+      err |= src0_dpas_3src(file, devinfo, inst);
+
+      pad(file, 48);
+      err |= src1_dpas_3src(file, devinfo, inst);
+
+      pad(file, 64);
+      err |= src2_dpas_3src(file, devinfo, inst);
+
    } else if (desc && desc->nsrc == 3) {
       pad(file, 16);
       err |= dest_3src(file, devinfo, inst);
@@ -2373,6 +2519,8 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
                case LSC_OP_LOAD:
                   format(file, ",");
                   err |= control(file, "cache_load",
+                                 devinfo->ver >= 20 ?
+                                 xe2_lsc_cache_load :
                                  lsc_cache_load,
                                  lsc_msg_desc_cache_ctrl(devinfo, imm_desc),
                                  &space);
@@ -2380,6 +2528,8 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
                default:
                   format(file, ",");
                   err |= control(file, "cache_store",
+                                 devinfo->ver >= 20 ?
+                                 xe2_lsc_cache_store :
                                  lsc_cache_store,
                                  lsc_msg_desc_cache_ctrl(devinfo, imm_desc),
                                  &space);
@@ -2388,7 +2538,11 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
             }
             format(file, " dst_len = %u,", lsc_msg_desc_dest_len(devinfo, imm_desc));
             format(file, " src0_len = %u,", lsc_msg_desc_src0_len(devinfo, imm_desc));
-            format(file, " src1_len = %d", brw_message_ex_desc_ex_mlen(devinfo, imm_ex_desc));
+
+            if (!brw_inst_send_sel_reg32_ex_desc(devinfo, inst))
+               format(file, " src1_len = %d",
+                      brw_message_ex_desc_ex_mlen(devinfo, imm_ex_desc));
+
             err |= control(file, "address_type", lsc_addr_surface_type,
                            lsc_msg_desc_addr_type(devinfo, imm_desc), &space);
             format(file, " )");
@@ -2523,8 +2677,14 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
          if (space)
             string(file, " ");
       }
-      if (devinfo->verx10 >= 125 && brw_inst_send_ex_bso(devinfo, inst))
+      if (devinfo->verx10 >= 125 &&
+          brw_inst_send_sel_reg32_ex_desc(devinfo, inst) &&
+          brw_inst_send_ex_bso(devinfo, inst)) {
+         format(file, " src1_len = %u",
+                (unsigned) brw_inst_send_src1_len(devinfo, inst));
+
          format(file, " ex_bso");
+      }
       if (brw_sfid_is_lsc(sfid)) {
             lsc_disassemble_ex_desc(devinfo, imm_desc, imm_ex_desc, file);
       } else {
@@ -2583,7 +2743,7 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
       if (has_branch_ctrl(devinfo, opcode)) {
          err |= control(file, "branch ctrl", branch_ctrl,
                         brw_inst_branch_control(devinfo, inst), &space);
-      } else if (devinfo->ver >= 6) {
+      } else if (devinfo->ver >= 6 && devinfo->ver < 20) {
          err |= control(file, "acc write control", accwr,
                         brw_inst_acc_wr_control(devinfo, inst), &space);
       }

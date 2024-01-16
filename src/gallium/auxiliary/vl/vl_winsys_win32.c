@@ -28,6 +28,7 @@
 
 #include "gallium/winsys/sw/gdi/gdi_sw_winsys.h"
 #include "gallium/drivers/d3d12/d3d12_public.h"
+#include <unknwn.h>
 
 struct vl_win32_screen
 {
@@ -77,6 +78,38 @@ vl_win32_screen_create(LUID *adapter)
    return &vscreen->base;
 
 release_pipe:
+   if(winsys)
+      winsys->destroy(winsys);
+   vl_win32_screen_destroy(&vscreen->base);
+   return NULL;
+}
+
+struct vl_screen *
+vl_win32_screen_create_from_d3d12_device(IUnknown* d3d12_device)
+{
+   struct vl_win32_screen *vscreen = CALLOC_STRUCT(vl_win32_screen);
+   if (!vscreen)
+      return NULL;
+
+   struct sw_winsys* winsys = gdi_create_sw_winsys();
+   if (!winsys)
+      goto release_pipe;
+
+   vscreen->base.pscreen = d3d12_create_dxcore_screen_from_d3d12_device(winsys, d3d12_device, &vscreen->adapter_luid);
+
+   if (!vscreen->base.pscreen)
+      goto release_pipe;
+
+   vscreen->base.destroy = vl_win32_screen_destroy;
+   vscreen->base.get_private = NULL;
+   vscreen->base.texture_from_drawable = NULL;
+   vscreen->base.get_dirty_area = NULL;
+
+   return &vscreen->base;
+
+release_pipe:
+   if(winsys)
+      winsys->destroy(winsys);
    vl_win32_screen_destroy(&vscreen->base);
    return NULL;
 }

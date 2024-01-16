@@ -68,17 +68,20 @@ emit_udiv(nir_builder *bld, nir_def *numer, nir_def *denom, bool modulo)
 static nir_def *
 emit_idiv(nir_builder *bld, nir_def *numer, nir_def *denom, nir_op op)
 {
-   nir_def *lh_sign = nir_ilt_imm(bld, numer, 0);
-   nir_def *rh_sign = nir_ilt_imm(bld, denom, 0);
-
    nir_def *lhs = nir_iabs(bld, numer);
    nir_def *rhs = nir_iabs(bld, denom);
 
    if (op == nir_op_idiv) {
-      nir_def *d_sign = nir_ixor(bld, lh_sign, rh_sign);
+      /* We want (numer < 0) ^ (denom < 0). This is the XOR of the sign bits,
+       * and since XOR is bitwise, that's the sign bit of the XOR.
+       */
+      nir_def *d_sign = nir_ilt_imm(bld, nir_ixor(bld, numer, denom), 0);
       nir_def *res = emit_udiv(bld, lhs, rhs, false);
       return nir_bcsel(bld, d_sign, nir_ineg(bld, res), res);
    } else {
+      nir_def *lh_sign = nir_ilt_imm(bld, numer, 0);
+      nir_def *rh_sign = nir_ilt_imm(bld, denom, 0);
+
       nir_def *res = emit_udiv(bld, lhs, rhs, true);
       res = nir_bcsel(bld, lh_sign, nir_ineg(bld, res), res);
       if (op == nir_op_imod) {

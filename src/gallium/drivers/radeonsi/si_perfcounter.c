@@ -70,7 +70,7 @@ static void si_pc_emit_instance(struct si_context *sctx, int se, int instance)
 void si_pc_emit_shaders(struct radeon_cmdbuf *cs, unsigned shaders)
 {
    radeon_begin(cs);
-   radeon_set_uconfig_reg_seq(R_036780_SQ_PERFCOUNTER_CTRL, 2, false);
+   radeon_set_uconfig_reg_seq(R_036780_SQ_PERFCOUNTER_CTRL, 2);
    radeon_emit(shaders & 0x7f);
    radeon_emit(0xffffffff);
    radeon_end();
@@ -92,12 +92,12 @@ static void si_pc_emit_select(struct si_context *sctx, struct ac_pc_block *block
    radeon_begin(cs);
 
    for (idx = 0; idx < count; ++idx) {
-      radeon_set_uconfig_reg_seq(regs->select0[idx], 1, false);
+      radeon_set_uconfig_reg_seq(regs->select0[idx], 1);
       radeon_emit(selectors[idx] | regs->select_or);
    }
 
    for (idx = 0; idx < regs->num_spm_counters; idx++) {
-      radeon_set_uconfig_reg_seq(regs->select1[idx], 1, false);
+      radeon_set_uconfig_reg_seq(regs->select1[idx], 1);
       radeon_emit(0);
    }
 
@@ -748,7 +748,7 @@ si_emit_spm_counters(struct si_context *sctx, struct radeon_cmdbuf *cs)
          const struct ac_spm_counter_select *cntr_sel = &spm->sqg[instance].counters[b];
          uint32_t reg_base = R_036700_SQ_PERFCOUNTER0_SELECT;
 
-         radeon_set_uconfig_reg_seq(reg_base + b * 4, 1, false);
+         radeon_set_uconfig_reg_seq(reg_base + b * 4, 1);
          radeon_emit(cntr_sel->sel0 | S_036700_SQC_BANK_MASK(0xf)); /* SQC_BANK_MASK only gfx10 */
       }
    }
@@ -768,10 +768,10 @@ si_emit_spm_counters(struct si_context *sctx, struct radeon_cmdbuf *cs)
             if (!cntr_sel->active)
                continue;
 
-            radeon_set_uconfig_reg_seq(regs->select0[c], 1, false);
+            radeon_set_uconfig_reg_seq(regs->select0[c], 1);
             radeon_emit(cntr_sel->sel0);
 
-            radeon_set_uconfig_reg_seq(regs->select1[c], 1, false);
+            radeon_set_uconfig_reg_seq(regs->select1[c], 1);
             radeon_emit(cntr_sel->sel1);
          }
       }
@@ -899,7 +899,7 @@ si_spm_init(struct si_context *sctx)
 void
 si_spm_finish(struct si_context *sctx)
 {
-   struct pb_buffer *bo = sctx->spm.bo;
+   struct pb_buffer_lean *bo = sctx->spm.bo;
    radeon_bo_reference(sctx->screen->ws, &bo, NULL);
 
    ac_destroy_spm(&sctx->spm);

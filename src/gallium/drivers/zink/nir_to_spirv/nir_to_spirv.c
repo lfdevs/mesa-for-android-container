@@ -2539,6 +2539,7 @@ emit_load_push_const(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 static void
 emit_load_global(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
+   bool coherent = ctx->sinfo->have_vulkan_memory_model && nir_intrinsic_access(intr) & ACCESS_COHERENT;
    spirv_builder_emit_cap(&ctx->builder, SpvCapabilityPhysicalStorageBufferAddresses);
    SpvId dest_type = get_def_type(ctx, &intr->def, nir_type_uint);
    SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
@@ -2546,13 +2547,14 @@ emit_load_global(struct ntv_context *ctx, nir_intrinsic_instr *intr)
                                                    dest_type);
    nir_alu_type atype;
    SpvId ptr = emit_bitcast(ctx, pointer_type, get_src(ctx, &intr->src[0], &atype));
-   SpvId result = spirv_builder_emit_load_aligned(&ctx->builder, dest_type, ptr, intr->def.bit_size / 8);
+   SpvId result = spirv_builder_emit_load_aligned(&ctx->builder, dest_type, ptr, intr->def.bit_size / 8, coherent);
    store_def(ctx, &intr->def, result, nir_type_uint);
 }
 
 static void
 emit_store_global(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
+   bool coherent = ctx->sinfo->have_vulkan_memory_model && nir_intrinsic_access(intr) & ACCESS_COHERENT;
    spirv_builder_emit_cap(&ctx->builder, SpvCapabilityPhysicalStorageBufferAddresses);
    unsigned bit_size = nir_src_bit_size(intr->src[0]);
    SpvId dest_type = get_uvec_type(ctx, bit_size, 1);
@@ -2564,7 +2566,7 @@ emit_store_global(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    if (atype != nir_type_uint)
       param = emit_bitcast(ctx, dest_type, param);
    SpvId ptr = emit_bitcast(ctx, pointer_type, get_src(ctx, &intr->src[1], &atype));
-   spirv_builder_emit_store_aligned(&ctx->builder, ptr, param, bit_size / 8);
+   spirv_builder_emit_store_aligned(&ctx->builder, ptr, param, bit_size / 8, coherent);
 }
 
 static void
@@ -4547,6 +4549,73 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
          emit_image(&ctx, var, get_bare_image_type(&ctx, var, true));
       else if (glsl_type_is_image(type))
          emit_image(&ctx, var, get_bare_image_type(&ctx, var, false));
+   }
+
+   if (sinfo->float_controls.flush_denorms) {
+      unsigned execution_mode = s->info.float_controls_execution_mode;
+      bool flush_16_bit = nir_is_denorm_flush_to_zero(execution_mode, 16);
+      bool flush_32_bit = nir_is_denorm_flush_to_zero(execution_mode, 32);
+      bool flush_64_bit = nir_is_denorm_flush_to_zero(execution_mode, 64);
+      bool preserve_16_bit = nir_is_denorm_preserve(execution_mode, 16);
+      bool preserve_32_bit = nir_is_denorm_preserve(execution_mode, 32);
+      bool preserve_64_bit = nir_is_denorm_preserve(execution_mode, 64);
+      bool emit_cap_flush = false;
+      bool emit_cap_preserve = false;
+
+      if (!sinfo->float_controls.denorms_all_independence) {
+         bool flush = flush_16_bit && flush_64_bit;
+         bool preserve = preserve_16_bit && preserve_64_bit;
+
+         if (!sinfo->float_controls.denorms_32_bit_independence) {
+            flush = flush && flush_32_bit;
+            preserve = preserve && preserve_32_bit;
+
+            flush_32_bit = flush;
+            preserve_32_bit = preserve;
+         }
+
+         flush_16_bit = flush;
+         flush_64_bit = flush;
+         preserve_16_bit = preserve;
+         preserve_64_bit = preserve;
+      }
+
+      if (flush_16_bit && sinfo->float_controls.flush_denorms & BITFIELD_BIT(0)) {
+         emit_cap_flush = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormFlushToZero, 16);
+      }
+      if (flush_32_bit && sinfo->float_controls.flush_denorms & BITFIELD_BIT(1)) {
+         emit_cap_flush = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormFlushToZero, 32);
+      }
+      if (flush_64_bit && sinfo->float_controls.flush_denorms & BITFIELD_BIT(2)) {
+         emit_cap_flush = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormFlushToZero, 64);
+      }
+
+      if (preserve_16_bit && sinfo->float_controls.preserve_denorms & BITFIELD_BIT(0)) {
+         emit_cap_preserve = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormPreserve, 16);
+      }
+      if (preserve_32_bit && sinfo->float_controls.preserve_denorms & BITFIELD_BIT(1)) {
+         emit_cap_preserve = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormPreserve, 32);
+      }
+      if (preserve_64_bit && sinfo->float_controls.preserve_denorms & BITFIELD_BIT(2)) {
+         emit_cap_preserve = true;
+         spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
+                                              SpvExecutionModeDenormPreserve, 64);
+      }
+
+      if (emit_cap_flush)
+         spirv_builder_emit_cap(&ctx.builder, SpvCapabilityDenormFlushToZero);
+      if (emit_cap_preserve)
+         spirv_builder_emit_cap(&ctx.builder, SpvCapabilityDenormPreserve);
    }
 
    switch (s->info.stage) {

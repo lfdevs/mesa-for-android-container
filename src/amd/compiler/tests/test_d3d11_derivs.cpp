@@ -398,10 +398,10 @@ BEGIN_TEST(d3d11_derivs._1d_array_gfx9)
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
    //>> v_interp_p2_f32_e32 v#rl_tmp, v#_, attr0.y                   ; $_
-   //>> v_rndne_f32_e32 v#rl, v#rl_tmp                               ; $_
    //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                   ; $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                 ; $_
+   //>> v_rndne_f32_e32 v#rl, v#rl_tmp                               ; $_
    //>> v_mov_b32_e32 v#ry, 0.5                                      ; $_
+   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                 ; $_
    //>> BB1:
    //; success = rx+1 == ry and rx+2 == rl
    //>> image_sample v[#_:#_], v#rx, s[#_:#_], s[#_:#_] dmask:0xf da ; $_ $_

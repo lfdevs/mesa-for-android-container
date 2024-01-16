@@ -51,26 +51,13 @@
 #if V3D_VERSION == 71
 #include "libs/core/v3d/registers/7.1.6.0/v3d.h"
 #else
-#if V3D_VERSION == 41 || V3D_VERSION == 42
+#if V3D_VERSION == 42
 #include "libs/core/v3d/registers/4.2.14.0/v3d.h"
-#else
-#include "libs/core/v3d/registers/3.3.0.0/v3d.h"
 #endif
 #endif
 
 #define V3D_WRITE(reg, val) v3d_hw_write_reg(v3d, reg, val)
 #define V3D_READ(reg) v3d_hw_read_reg(v3d, reg)
-
-static void
-v3d_invalidate_l3(struct v3d_hw *v3d)
-{
-#if V3D_VERSION < 40
-        uint32_t gca_ctrl = V3D_READ(V3D_GCA_CACHE_CTRL);
-
-        V3D_WRITE(V3D_GCA_CACHE_CTRL, gca_ctrl | V3D_GCA_CACHE_CTRL_FLUSH_SET);
-        V3D_WRITE(V3D_GCA_CACHE_CTRL, gca_ctrl & ~V3D_GCA_CACHE_CTRL_FLUSH_SET);
-#endif
-}
 
 /* Invalidates the L2C cache.  This is a read-only cache for uniforms and instructions. */
 static void
@@ -156,7 +143,6 @@ v3d_invalidate_slices(struct v3d_hw *v3d)
 static void
 v3d_invalidate_caches(struct v3d_hw *v3d)
 {
-        v3d_invalidate_l3(v3d);
         v3d_invalidate_l2c(v3d);
         v3d_invalidate_l2t(v3d);
         v3d_invalidate_slices(v3d);
@@ -225,7 +211,7 @@ v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
                                  struct drm_v3d_submit_csd *args,
                                  uint32_t gmp_ofs)
 {
-#if V3D_VERSION >= 41
+#if V3D_VERSION >= 42
         int last_completed_jobs = (V3D_READ(V3D_CSD_0_STATUS) &
                                    V3D_CSD_0_STATUS_NUM_COMPLETED_JOBS_SET);
         g_gmp_ofs = gmp_ofs;
@@ -282,17 +268,20 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                 args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_CSD:
-                args->value = V3D_VERSION >= 41;
+                args->value = V3D_VERSION >= 42;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH:
                 args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_PERFMON:
-                args->value = V3D_VERSION >= 41;
+                args->value = V3D_VERSION >= 42;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT:
                 args->value = 1;
                 return 0;
+	case DRM_V3D_PARAM_SUPPORTS_CPU_QUEUE:
+		args->value = 1;
+		return 0;
         }
 
         if (args->param < ARRAY_SIZE(reg_map) && reg_map[args->param]) {
@@ -359,8 +348,7 @@ handle_mmu_interruptions(struct v3d_hw *v3d,
         uint32_t axi_id = V3D_READ(V3D_MMU_VIO_ID);
         uint32_t va_width = 30;
 
-#if V3D_VERSION >= 41
-        static const char *const v3d41_axi_ids[] = {
+        static const char *const v3d42_axi_ids[] = {
                 "L2T",
                 "PTB",
                 "PSE",
@@ -372,14 +360,14 @@ handle_mmu_interruptions(struct v3d_hw *v3d,
         };
 
         axi_id = axi_id >> 5;
-        if (axi_id < ARRAY_SIZE(v3d41_axi_ids))
-                client = v3d41_axi_ids[axi_id];
+        if (axi_id < ARRAY_SIZE(v3d42_axi_ids))
+                client = v3d42_axi_ids[axi_id];
 
         uint32_t mmu_debug = V3D_READ(V3D_MMU_DEBUG_INFO);
 
         va_width += ((mmu_debug & V3D_MMU_DEBUG_INFO_VA_WIDTH_SET)
                      >> V3D_MMU_DEBUG_INFO_VA_WIDTH_LSB);
-#endif
+
         /* Only the top bits (final number depends on the gen) of the virtual
          * address are reported in the MMU VIO_ADDR register.
          */
@@ -454,18 +442,6 @@ v3d_isr(uint32_t hub_status)
 void
 v3dX(simulator_init_regs)(struct v3d_hw *v3d)
 {
-#if V3D_VERSION == 33
-        /* Set OVRTMUOUT to match kernel behavior.
-         *
-         * This means that the texture sampler uniform configuration's tmu
-         * output type field is used, instead of using the hardware default
-         * behavior based on the texture type.  If you want the default
-         * behavior, you can still put "2" in the indirect texture state's
-         * output_type field.
-         */
-        V3D_WRITE(V3D_CTL_0_MISCCFG, V3D_CTL_1_MISCCFG_OVRTMUOUT_SET);
-#endif
-
         /* FIXME: the kernel captures some additional core interrupts here,
          * for tracing. Perhaps we should evaluate to do the same here and add
          * some debug options.
@@ -514,13 +490,11 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
                 V3D_WRITE(V3D_CLE_0_CT0QMA, submit->qma);
                 V3D_WRITE(V3D_CLE_0_CT0QMS, submit->qms);
         }
-#if V3D_VERSION >= 41
         if (submit->qts) {
                 V3D_WRITE(V3D_CLE_0_CT0QTS,
                           V3D_CLE_0_CT0QTS_CTQTSEN_SET |
                           submit->qts);
         }
-#endif
         V3D_WRITE(V3D_CLE_0_CT0QBA, submit->bcl_start);
         V3D_WRITE(V3D_CLE_0_CT0QEA, submit->bcl_end);
 
@@ -544,21 +518,18 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
         }
 }
 
-#if V3D_VERSION >= 41
 #define V3D_PCTR_0_PCTR_N(x) (V3D_PCTR_0_PCTR0 + 4 * (x))
 #define V3D_PCTR_0_SRC_N(x) (V3D_PCTR_0_SRC_0_3 + 4 * (x))
 #define V3D_PCTR_0_SRC_N_SHIFT(x) ((x) * 8)
 #define V3D_PCTR_0_SRC_N_MASK(x) (BITFIELD_RANGE(V3D_PCTR_0_SRC_N_SHIFT(x), \
                                                  V3D_PCTR_0_SRC_N_SHIFT(x) + \
                                                  V3D_PCTR_0_SRC_0_3_PCTRS0_MSB))
-#endif
 
 void
 v3dX(simulator_perfmon_start)(struct v3d_hw *v3d,
                               uint32_t ncounters,
                               uint8_t *events)
 {
-#if V3D_VERSION >= 41
         int i, j;
         uint32_t source;
         uint32_t mask = BITFIELD_RANGE(0, ncounters);
@@ -573,21 +544,18 @@ v3dX(simulator_perfmon_start)(struct v3d_hw *v3d,
         V3D_WRITE(V3D_PCTR_0_CLR, mask);
         V3D_WRITE(V3D_PCTR_0_OVERFLOW, mask);
         V3D_WRITE(V3D_PCTR_0_EN, mask);
-#endif
 }
 
 void v3dX(simulator_perfmon_stop)(struct v3d_hw *v3d,
                                   uint32_t ncounters,
                                   uint64_t *values)
 {
-#if V3D_VERSION >= 41
         int i;
 
         for (i = 0; i < ncounters; i++)
                 values[i] += V3D_READ(V3D_PCTR_0_PCTR_N(i));
 
         V3D_WRITE(V3D_PCTR_0_EN, 0);
-#endif
 }
 
 void v3dX(simulator_get_perfcnt_total)(uint32_t *count)

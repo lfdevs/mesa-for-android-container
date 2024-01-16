@@ -38,6 +38,9 @@ msm_device_destroy(struct fd_device *dev)
 static const struct fd_device_funcs funcs = {
    .bo_new = msm_bo_new,
    .bo_from_handle = msm_bo_from_handle,
+   .handle_from_dmabuf = fd_handle_from_dmabuf_drm,
+   .bo_from_dmabuf = fd_bo_from_dmabuf_drm,
+   .bo_close_handle = fd_bo_close_handle_drm,
    .pipe_new = msm_pipe_new,
    .destroy = msm_device_destroy,
 };

@@ -38,6 +38,7 @@
 #include "brw_gfx_ver_enum.h"
 #include "dev/intel_debug.h"
 
+#include "util/u_debug.h"
 #include "util/ralloc.h"
 
 /* Returns a conditional modifier that negates the condition. */
@@ -371,6 +372,50 @@ brw_get_shader_relocs(struct brw_codegen *p, unsigned *num_relocs)
    return p->relocs;
 }
 
+DEBUG_GET_ONCE_OPTION(shader_bin_dump_path, "INTEL_SHADER_BIN_DUMP_PATH", NULL);
+
+bool brw_should_dump_shader_bin(void)
+{
+   return debug_get_option_shader_bin_dump_path() != NULL;
+}
+
+void brw_dump_shader_bin(void *assembly, int start_offset, int end_offset,
+                         const char *identifier)
+{
+   char *name = ralloc_asprintf(NULL, "%s/%s.bin",
+                                debug_get_option_shader_bin_dump_path(),
+                                identifier);
+
+   int fd = open(name, O_CREAT | O_WRONLY, 0777);
+   ralloc_free(name);
+
+   if (fd < 0)
+      return;
+
+   struct stat sb;
+   if (fstat(fd, &sb) != 0 || (!S_ISREG(sb.st_mode))) {
+      close(fd);
+      return;
+   }
+
+   size_t to_write = end_offset - start_offset;
+   void *write_ptr = assembly + start_offset;
+
+   while (to_write) {
+      ssize_t ret = write(fd, write_ptr, to_write);
+
+      if (ret <= 0) {
+         close(fd);
+         return;
+      }
+
+      to_write -= ret;
+      write_ptr += ret;
+   }
+
+   close(fd);
+}
+
 bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
                                const char *identifier)
 {
@@ -696,6 +741,7 @@ static const struct opcode_desc opcode_descs[] = {
    { BRW_OPCODE_DP2,      87,  "dp2",     2,    1,    GFX_LT(GFX11) },
    { BRW_OPCODE_DP4A,     88,  "dp4a",    3,    1,    GFX_GE(GFX12) },
    { BRW_OPCODE_LINE,     89,  "line",    2,    1,    GFX_LE(GFX10) },
+   { BRW_OPCODE_DPAS,     89,  "dpas",    3,    1,    GFX_GE(GFX125) },
    { BRW_OPCODE_PLN,      90,  "pln",     2,    1,    GFX_GE(GFX45) & GFX_LE(GFX10) },
    { BRW_OPCODE_MAD,      91,  "mad",     3,    1,    GFX_GE(GFX6) },
    { BRW_OPCODE_LRP,      92,  "lrp",     3,    1,    GFX_GE(GFX6) & GFX_LE(GFX10) },

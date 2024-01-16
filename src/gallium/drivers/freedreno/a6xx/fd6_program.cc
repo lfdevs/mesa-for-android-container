@@ -1101,45 +1101,42 @@ setup_stateobj(struct fd_ringbuffer *ring, const struct program_builder *b)
    }
 
    if (b->hs) {
+      uint32_t patch_control_points = b->key->patch_vertices;
+
+      uint32_t patch_local_mem_size_16b =
+         patch_control_points * b->vs->output_size / 4;
+
+      /* Total attribute slots in HS incoming patch. */
+      OUT_PKT4(ring, REG_A6XX_PC_HS_INPUT_SIZE, 1);
+      OUT_RING(ring, patch_local_mem_size_16b);
+
+      const uint32_t wavesize = 64;
+      const uint32_t vs_hs_local_mem_size = 16384;
+
+      uint32_t max_patches_per_wave;
       if (b->ctx->screen->info->a6xx.tess_use_shared) {
-         unsigned hs_input_size = 6 + (3 * (b->vs->output_size - 1));
-         unsigned wave_input_size =
-               MIN2(64, DIV_ROUND_UP(hs_input_size * 4,
-                                     b->hs->tess.tcs_vertices_out));
-
-         OUT_PKT4(ring, REG_A6XX_PC_HS_INPUT_SIZE, 1);
-         OUT_RING(ring, hs_input_size);
-
-         OUT_PKT4(ring, REG_A6XX_SP_HS_WAVE_INPUT_SIZE, 1);
-         OUT_RING(ring, wave_input_size);
+         /* HS invocations for a patch are always within the same wave,
+         * making barriers less expensive. VS can't have barriers so we
+         * don't care about VS invocations being in the same wave.
+         */
+         max_patches_per_wave = wavesize / b->hs->tess.tcs_vertices_out;
       } else {
-         uint32_t hs_input_size =
-               b->hs->tess.tcs_vertices_out * b->vs->output_size / 4;
-
-         /* Total attribute slots in HS incoming patch. */
-         OUT_PKT4(ring, REG_A6XX_PC_HS_INPUT_SIZE, 1);
-         OUT_RING(ring, hs_input_size);
-
-         const uint32_t wavesize = 64;
-         const uint32_t max_wave_input_size = 64;
-         const uint32_t patch_control_points = b->hs->tess.tcs_vertices_out;
-
-         /* note: if HS is really just the VS extended, then this
-          * should be by MAX2(patch_control_points, hs_info->tess.tcs_vertices_out)
-          * however that doesn't match the blob, and fails some dEQP tests.
-          */
-         uint32_t prims_per_wave = wavesize / b->hs->tess.tcs_vertices_out;
-         uint32_t max_prims_per_wave = max_wave_input_size * wavesize /
-               (b->vs->output_size * patch_control_points);
-         prims_per_wave = MIN2(prims_per_wave, max_prims_per_wave);
-
-         uint32_t total_size =
-               b->vs->output_size * patch_control_points * prims_per_wave;
-         uint32_t wave_input_size = DIV_ROUND_UP(total_size, wavesize);
-
-         OUT_PKT4(ring, REG_A6XX_SP_HS_WAVE_INPUT_SIZE, 1);
-         OUT_RING(ring, wave_input_size);
+      /* VS is also in the same wave */
+         max_patches_per_wave =
+            wavesize / MAX2(patch_control_points,
+                            b->hs->tess.tcs_vertices_out);
       }
+
+
+      uint32_t patches_per_wave =
+         MIN2(vs_hs_local_mem_size / (patch_local_mem_size_16b * 16),
+              max_patches_per_wave);
+
+      uint32_t wave_input_size = DIV_ROUND_UP(
+         patches_per_wave * patch_local_mem_size_16b * 16, 256);
+
+      OUT_PKT4(ring, REG_A6XX_SP_HS_WAVE_INPUT_SIZE, 1);
+      OUT_RING(ring, wave_input_size);
 
       enum a6xx_tess_output output;
       if (b->ds->tess.point_mode)

@@ -431,7 +431,7 @@ static void ac_sqtt_fill_asic_info(const struct radeon_info *rad_info,
    chunk->shader_engines = rad_info->max_se;
    chunk->compute_unit_per_shader_engine = rad_info->min_good_cu_per_sa * rad_info->max_sa_per_se;
    chunk->simd_per_compute_unit = rad_info->num_simd_per_compute_unit;
-   chunk->wavefronts_per_simd = rad_info->max_wave64_per_simd;
+   chunk->wavefronts_per_simd = rad_info->max_waves_per_simd;
 
    chunk->minimum_vgpr_alloc = rad_info->min_wave64_vgpr_alloc;
    chunk->vgpr_alloc_granularity = rad_info->wave64_vgpr_alloc_granularity * (has_wave32 ? 2 : 1);
@@ -1105,7 +1105,30 @@ ac_sqtt_dump_data(const struct radeon_info *rad_info, struct ac_sqtt_trace *sqtt
       /* Queue event. */
       list_for_each_entry_safe(struct rgp_queue_event_record, record,
                                &rgp_queue_event->record, list) {
-         fwrite(record, sizeof(struct sqtt_queue_event_record), 1, output);
+         struct sqtt_queue_event_record queue_event = {
+            .event_type = record->event_type,
+            .sqtt_cb_id = record->sqtt_cb_id,
+            .frame_index = record->frame_index,
+            .queue_info_index = record->queue_info_index,
+            .submit_sub_index = record->submit_sub_index,
+            .api_id = record->api_id,
+            .cpu_timestamp = record->cpu_timestamp,
+         };
+
+         switch (queue_event.event_type)
+         case SQTT_QUEUE_TIMING_EVENT_CMDBUF_SUBMIT: {
+            queue_event.gpu_timestamps[0] = *record->gpu_timestamps[0];
+            queue_event.gpu_timestamps[1] = *record->gpu_timestamps[1];
+            break;
+         case SQTT_QUEUE_TIMING_EVENT_PRESENT:
+            queue_event.gpu_timestamps[0] = *record->gpu_timestamps[0];
+            break;
+         default:
+            /* GPU timestamps are ignored for other queue events. */
+            break;
+         }
+
+         fwrite(&queue_event, sizeof(struct sqtt_queue_event_record), 1, output);
       }
       file_offset += (rgp_queue_event->record_count *
                       sizeof(struct sqtt_queue_event_record));

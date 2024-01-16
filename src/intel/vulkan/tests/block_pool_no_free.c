@@ -43,11 +43,14 @@ static void *alloc_blocks(void *_job)
    struct job *job = _job;
    uint32_t job_id = job - jobs;
    uint32_t block_size = 16 * ((job_id % 4) + 1);
-   int32_t block, *data;
+   int64_t block;
+   int32_t *data;
 
    for (unsigned i = 0; i < BLOCKS_PER_THREAD; i++) {
       UNUSED uint32_t padding;
-      block = anv_block_pool_alloc(job->pool, block_size, &padding);
+      VkResult result = anv_block_pool_alloc(job->pool, block_size,
+                                             &block, &padding);
+      ASSERT(result == VK_SUCCESS);
       data = anv_block_pool_map(job->pool, block, block_size);
       *data = block;
       ASSERT(block >= 0);
@@ -103,13 +106,14 @@ static void run_test()
    struct anv_physical_device physical_device = {};
    struct anv_device device = {};
    struct anv_block_pool pool;
+   const uint32_t _1Gb = 1024 * 1024 * 1024;
 
    test_device_info_init(&physical_device.info);
    anv_device_set_physical(&device, &physical_device);
    device.kmd_backend = anv_kmd_backend_get(INTEL_KMD_TYPE_STUB);
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache, &device);
-   anv_block_pool_init(&pool, &device, "test", 4096, 4096);
+   anv_block_pool_init(&pool, &device, "test", 4096, 4096, _1Gb);
 
    for (unsigned i = 0; i < NUM_THREADS; i++) {
       jobs[i].pool = &pool;

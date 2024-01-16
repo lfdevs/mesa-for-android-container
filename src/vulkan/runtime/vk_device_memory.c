@@ -215,6 +215,6 @@ vk_common_GetMemoryAndroidHardwareBufferANDROID(
       return VK_SUCCESS;
    }
 
-   return VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+   return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 #endif

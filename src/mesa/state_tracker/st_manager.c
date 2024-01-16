@@ -351,7 +351,6 @@ st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, bool sw)
    }
 
    _mesa_init_renderbuffer(rb, 0);
-   rb->ClassID = 0x4242; /* just a unique value */
    rb->NumSamples = samples;
    rb->NumStorageSamples = samples;
    rb->Format = st_pipe_format_to_mesa_format(format);

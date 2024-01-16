@@ -129,6 +129,14 @@ struct brw_compiler {
    bool use_bindless_sampler_offset;
 
    /**
+    * Should DPAS instructions be lowered?
+    *
+    * This will be set for all platforms before Gfx12.5. It may also be set
+    * platforms that support DPAS for testing purposes.
+    */
+   bool lower_dpas;
+
+   /**
     * Calling the ra_allocate function after each register spill can take
     * several minutes. This option speeds up shader compilation by spilling
     * more registers after the ra_allocate failure. Required for
@@ -968,8 +976,20 @@ struct brw_wm_prog_data {
 
    uint8_t color_outputs_written;
    uint8_t computed_depth_mode;
-   bool computed_stencil;
 
+   /**
+    * Number of polygons handled in parallel by the multi-polygon PS
+    * kernel.
+    */
+   uint8_t max_polygons;
+
+   /**
+    * Dispatch width of the multi-polygon PS kernel, or 0 if no
+    * multi-polygon kernel was built.
+    */
+   uint8_t dispatch_multi;
+
+   bool computed_stencil;
    bool early_fragment_tests;
    bool post_depth_coverage;
    bool inner_coverage;
@@ -1062,6 +1082,41 @@ struct brw_wm_prog_data {
    uint8_t urb_setup_attribs_count;
 };
 
+#ifdef GFX_VERx10
+
+#if GFX_VERx10 >= 200
+
+/** Returns the SIMD width corresponding to a given KSP index
+ *
+ * The "Variable Pixel Dispatch" table in the PRM (which can be found, for
+ * example in Vol. 7 of the SKL PRM) has a mapping from dispatch widths to
+ * kernel start pointer (KSP) indices that is based on what dispatch widths
+ * are enabled.  This function provides, effectively, the reverse mapping.
+ *
+ * If the given KSP is enabled, a SIMD width of 8, 16, or 32 is
+ * returned.  Note that for a multipolygon dispatch kernel 8 is always
+ * returned, since multipolygon kernels use the "_8" fields from
+ * brw_wm_prog_data regardless of their SIMD width.  If the KSP is
+ * invalid, 0 is returned.
+ */
+static inline unsigned
+brw_fs_simd_width_for_ksp(unsigned ksp_idx, bool enabled, unsigned width_sel)
+{
+   assert(ksp_idx < 2);
+   return !enabled ? 0 :
+          width_sel ? 32 :
+          16;
+}
+
+#define brw_wm_state_simd_width_for_ksp(wm_state, ksp_idx)              \
+        (ksp_idx == 0 && (wm_state).Kernel0MaximumPolysperThread ? 8 :  \
+         ksp_idx == 0 ? brw_fs_simd_width_for_ksp(ksp_idx, (wm_state).Kernel0Enable, \
+                                                  (wm_state).Kernel0SIMDWidth): \
+         brw_fs_simd_width_for_ksp(ksp_idx, (wm_state).Kernel1Enable,   \
+                                   (wm_state).Kernel1SIMDWidth))
+
+#else
+
 /** Returns the SIMD width corresponding to a given KSP index
  *
  * The "Variable Pixel Dispatch" table in the PRM (which can be found, for
@@ -1091,10 +1146,14 @@ brw_fs_simd_width_for_ksp(unsigned ksp_idx, bool simd8_enabled,
    }
 }
 
-#define brw_wm_state_simd_width_for_ksp(wm_state, ksp_idx) \
+#define brw_wm_state_simd_width_for_ksp(wm_state, ksp_idx)              \
    brw_fs_simd_width_for_ksp((ksp_idx), (wm_state)._8PixelDispatchEnable, \
                              (wm_state)._16PixelDispatchEnable, \
                              (wm_state)._32PixelDispatchEnable)
+
+#endif
+
+#endif
 
 #define brw_wm_state_has_ksp(wm_state, ksp_idx) \
    (brw_wm_state_simd_width_for_ksp((wm_state), (ksp_idx)) != 0)
@@ -1284,6 +1343,7 @@ struct brw_cs_prog_data {
    bool uses_num_work_groups;
    bool uses_inline_data;
    bool uses_btd_stack_ids;
+   bool uses_systolic;
 
    struct {
       struct brw_push_const_block cross_thread;
@@ -1770,6 +1830,7 @@ DEFINE_PROG_DATA_DOWNCAST(sf,    true)
 
 struct brw_compile_stats {
    uint32_t dispatch_width; /**< 0 for vec4 */
+   uint32_t max_polygons;
    uint32_t max_dispatch_width;
    uint32_t instructions;
    uint32_t sends;
@@ -1977,6 +2038,7 @@ struct brw_compile_fs_params {
 
    bool allow_spilling;
    bool use_rep_send;
+   uint8_t max_polygons;
 };
 
 /**
@@ -2139,7 +2201,7 @@ brw_cs_get_dispatch_info(const struct intel_device_info *devinfo,
  */
 static inline bool
 brw_stage_has_packed_dispatch(ASSERTED const struct intel_device_info *devinfo,
-                              gl_shader_stage stage,
+                              gl_shader_stage stage, unsigned max_polygons,
                               const struct brw_stage_prog_data *prog_data)
 {
    /* The code below makes assumptions about the hardware's thread dispatch
@@ -2163,7 +2225,8 @@ brw_stage_has_packed_dispatch(ASSERTED const struct intel_device_info *devinfo,
          (const struct brw_wm_prog_data *)prog_data;
       return devinfo->verx10 < 125 &&
              !wm_prog_data->persample_dispatch &&
-             wm_prog_data->uses_vmask;
+             wm_prog_data->uses_vmask &&
+             max_polygons < 2;
    }
    case MESA_SHADER_COMPUTE:
       /* Compute shaders will be spawned with either a fully enabled dispatch

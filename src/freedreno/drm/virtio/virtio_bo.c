@@ -25,73 +25,33 @@
 
 #include "virtio_priv.h"
 
-static int
-bo_allocate(struct virtio_bo *virtio_bo)
+static void *
+virtio_bo_mmap(struct fd_bo *bo)
 {
-   struct fd_bo *bo = &virtio_bo->base;
-   if (!virtio_bo->offset) {
-      struct drm_virtgpu_map req = {
-         .handle = bo->handle,
-      };
-      int ret;
-
-      ret = virtio_ioctl(bo->dev->fd, VIRTGPU_MAP, &req);
-      if (ret) {
-         ERROR_MSG("alloc failed: %s", strerror(errno));
-         return ret;
-      }
-
-      virtio_bo->offset = req.offset;
-   }
-
-   return 0;
-}
-
-static int
-virtio_bo_offset(struct fd_bo *bo, uint64_t *offset)
-{
+   struct vdrm_device *vdrm = to_virtio_device(bo->dev)->vdrm;
    struct virtio_bo *virtio_bo = to_virtio_bo(bo);
-   int ret = bo_allocate(virtio_bo);
-
-   if (ret)
-      return ret;
 
    /* If we have uploaded, we need to wait for host to handle that
     * before we can allow guest-side CPU access:
     */
    if (virtio_bo->has_upload_seqno) {
+
       virtio_bo->has_upload_seqno = false;
-      virtio_execbuf_flush(bo->dev);
-      virtio_host_sync(bo->dev, &(struct msm_ccmd_req) {
+
+      vdrm_flush(vdrm);
+      vdrm_host_sync(vdrm, &(struct vdrm_ccmd_req) {
          .seqno = virtio_bo->upload_seqno,
       });
    }
 
-   *offset = virtio_bo->offset;
-
-   return 0;
-}
-
-static int
-virtio_bo_cpu_prep_guest(struct fd_bo *bo)
-{
-   struct drm_virtgpu_3d_wait args = {
-         .handle = bo->handle,
-   };
-   int ret;
-
-   /* Side note, this ioctl is defined as IO_WR but should be IO_W: */
-   ret = virtio_ioctl(bo->dev->fd, VIRTGPU_WAIT, &args);
-   if (ret && errno == EBUSY)
-      return -EBUSY;
-
-   return 0;
+   return vdrm_bo_map(vdrm, bo->handle, bo->size);
 }
 
 static int
 virtio_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
 {
    MESA_TRACE_FUNC();
+   struct vdrm_device *vdrm = to_virtio_device(bo->dev)->vdrm;
    int ret;
 
    /*
@@ -101,7 +61,7 @@ virtio_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
     * know about usage of the bo in the host (or other guests).
     */
 
-   ret = virtio_bo_cpu_prep_guest(bo);
+   ret = vdrm_bo_wait(vdrm, bo->handle);
    if (ret)
       goto out;
 
@@ -120,9 +80,9 @@ virtio_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
 
    /* We can't do a blocking wait in the host, so we have to poll: */
    do {
-      rsp = virtio_alloc_rsp(bo->dev, &req.hdr, sizeof(*rsp));
+      rsp = vdrm_alloc_rsp(vdrm, &req.hdr, sizeof(*rsp));
 
-      ret = virtio_execbuf(bo->dev, &req.hdr, true);
+      ret = vdrm_send_req(vdrm, &req.hdr, true);
       if (ret)
          goto out;
 
@@ -182,7 +142,15 @@ virtio_bo_set_name(struct fd_bo *bo, const char *fmt, va_list ap)
 
    memcpy(req->payload, name, sz);
 
-   virtio_execbuf(bo->dev, &req->hdr, false);
+   vdrm_send_req(to_virtio_device(bo->dev)->vdrm, &req->hdr, false);
+}
+
+static int
+virtio_bo_dmabuf(struct fd_bo *bo)
+{
+   struct virtio_device *virtio_dev = to_virtio_device(bo->dev);
+
+   return vdrm_bo_export_dmabuf(virtio_dev->vdrm, bo->handle);
 }
 
 static void
@@ -203,7 +171,7 @@ bo_upload(struct fd_bo *bo, unsigned off, void *src, unsigned len)
 
    memcpy(req->payload, src, len);
 
-   virtio_execbuf(bo->dev, &req->hdr, false);
+   vdrm_send_req(to_virtio_device(bo->dev)->vdrm, &req->hdr, false);
 
    virtio_bo->upload_seqno = req->hdr.seqno;
    virtio_bo->has_upload_seqno = true;
@@ -257,7 +225,7 @@ set_iova(struct fd_bo *bo, uint64_t iova)
          .iova = iova,
    };
 
-   virtio_execbuf(bo->dev, &req.hdr, false);
+   vdrm_send_req(to_virtio_device(bo->dev)->vdrm, &req.hdr, false);
 }
 
 static void
@@ -272,11 +240,12 @@ virtio_bo_finalize(struct fd_bo *bo)
 }
 
 static const struct fd_bo_funcs funcs = {
-   .offset = virtio_bo_offset,
+   .map = virtio_bo_mmap,
    .cpu_prep = virtio_bo_cpu_prep,
    .madvise = virtio_bo_madvise,
    .iova = virtio_bo_iova,
    .set_name = virtio_bo_set_name,
+   .dmabuf = virtio_bo_dmabuf,
    .upload = virtio_bo_upload,
    .prefer_upload = virtio_bo_prefer_upload,
    .finalize = virtio_bo_finalize,
@@ -286,6 +255,7 @@ static const struct fd_bo_funcs funcs = {
 static struct fd_bo *
 bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
 {
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
    struct virtio_bo *virtio_bo;
    struct fd_bo *bo;
 
@@ -310,19 +280,7 @@ bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
    /* Don't assume we can mmap an imported bo: */
    bo->alloc_flags = FD_BO_NOMAP;
 
-   struct drm_virtgpu_resource_info args = {
-         .bo_handle = handle,
-   };
-   int ret;
-
-   ret = virtio_ioctl(dev->fd, VIRTGPU_RESOURCE_INFO, &args);
-   if (ret) {
-      INFO_MSG("failed to get resource info: %s", strerror(errno));
-      free(virtio_bo);
-      return NULL;
-   }
-
-   virtio_bo->res_id = args.res_handle;
+   virtio_bo->res_id = vdrm_handle_to_res_id(virtio_dev->vdrm, handle);
 
    fd_bo_init_common(bo, dev);
 
@@ -357,15 +315,10 @@ struct fd_bo *
 virtio_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags)
 {
    struct virtio_device *virtio_dev = to_virtio_device(dev);
-   struct drm_virtgpu_resource_create_blob args = {
-         .blob_mem   = VIRTGPU_BLOB_MEM_HOST3D,
-         .size       = size,
-   };
    struct msm_ccmd_gem_new_req req = {
          .hdr = MSM_CCMD(GEM_NEW, sizeof(req)),
          .size = size,
    };
-   int ret;
 
    if (flags & FD_BO_SCANOUT)
       req.flags |= MSM_BO_SCANOUT;
@@ -379,56 +332,42 @@ virtio_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags)
       req.flags |= MSM_BO_WC;
    }
 
-   if (flags & _FD_BO_VIRTIO_SHM) {
-      args.blob_id = 0;
-      args.blob_flags = VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
-   } else {
-      if (flags & (FD_BO_SHARED | FD_BO_SCANOUT)) {
-         args.blob_flags = VIRTGPU_BLOB_FLAG_USE_CROSS_DEVICE |
-               VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
-      }
-
-      if (!(flags & FD_BO_NOMAP)) {
-         args.blob_flags |= VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
-      }
-
-      args.blob_id = p_atomic_inc_return(&virtio_dev->next_blob_id);
-      args.cmd = VOID2U64(&req);
-      args.cmd_size = sizeof(req);
-
-      /* tunneled cmds are processed separately on host side,
-       * before the renderer->get_blob() callback.. the blob_id
-       * is used to like the created bo to the get_blob() call
-       */
-      req.blob_id = args.blob_id;
-      req.iova = virtio_dev_alloc_iova(dev, size);
-      if (!req.iova) {
-         ret = -ENOMEM;
-         goto fail;
-      }
+   uint32_t blob_flags = 0;
+   if (flags & (FD_BO_SHARED | FD_BO_SCANOUT)) {
+      blob_flags = VIRTGPU_BLOB_FLAG_USE_CROSS_DEVICE |
+            VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
    }
 
-   simple_mtx_lock(&virtio_dev->eb_lock);
-   if (args.cmd) {
-      virtio_execbuf_flush_locked(dev);
-      req.hdr.seqno = ++virtio_dev->next_seqno;
+   if (!(flags & FD_BO_NOMAP)) {
+      blob_flags |= VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
    }
-   ret = virtio_ioctl(dev->fd, VIRTGPU_RESOURCE_CREATE_BLOB, &args);
-   simple_mtx_unlock(&virtio_dev->eb_lock);
-   if (ret)
+
+   uint32_t blob_id = p_atomic_inc_return(&virtio_dev->next_blob_id);
+
+   /* tunneled cmds are processed separately on host side,
+    * before the renderer->get_blob() callback.. the blob_id
+    * is used to link the created bo to the get_blob() call
+    */
+   req.blob_id = blob_id;
+   req.iova = virtio_dev_alloc_iova(dev, size);
+   if (!req.iova)
       goto fail;
 
-   struct fd_bo *bo = bo_from_handle(dev, size, args.bo_handle);
+   uint32_t handle =
+      vdrm_bo_create(virtio_dev->vdrm, size, blob_flags, blob_id, &req.hdr);
+   if (!handle)
+      goto fail;
+
+   struct fd_bo *bo = bo_from_handle(dev, size, handle);
    struct virtio_bo *virtio_bo = to_virtio_bo(bo);
 
-   virtio_bo->blob_id = args.blob_id;
+   virtio_bo->blob_id = blob_id;
    bo->iova = req.iova;
 
    return bo;
 
 fail:
-   if (req.iova) {
+   if (req.iova)
       virtio_dev_free_iova(dev, req.iova, size);
-   }
    return NULL;
 }

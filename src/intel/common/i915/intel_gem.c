@@ -253,10 +253,12 @@ i915_gem_supports_protected_context(int fd)
    bool ret;
 
    errno = 0;
-   if (!i915_gem_get_param(fd, I915_PARAM_PXP_STATUS, &val) && (errno == ENODEV))
-      return false;
-   else
+   if (!i915_gem_get_param(fd, I915_PARAM_PXP_STATUS, &val)) {
+      if (errno == ENODEV)
+         return false;
+   } else {
       return (val > 0);
+   }
 
    /* failed without ENODEV, so older kernels require a creation test */
    ret = i915_gem_create_context_ext(fd,

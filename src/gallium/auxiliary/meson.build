@@ -567,7 +567,7 @@ libgalliumvl = static_library(
   cpp_args : [cpp_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_gallium, inc_include, inc_src],
-  dependencies : idep_mesautil,
+  dependencies : [idep_nir, idep_mesautil],
   build_by_default : false,
 )
 

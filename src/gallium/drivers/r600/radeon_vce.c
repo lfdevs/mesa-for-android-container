@@ -352,7 +352,8 @@ static void rvce_end_frame(struct pipe_video_codec *encoder,
 }
 
 static void rvce_get_feedback(struct pipe_video_codec *encoder,
-			      void *feedback, unsigned *size)
+			      void *feedback, unsigned *size,
+				  struct pipe_enc_feedback_metadata* metadata)
 {
 	struct rvce_encoder *enc = (struct rvce_encoder*)encoder;
 	struct rvid_buffer *fb = feedback;
@@ -512,7 +513,7 @@ bool rvce_is_fw_version_supported(struct r600_common_screen *rscreen)
 /**
  * Add the buffer as relocation to the current command submission
  */
-void rvce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
+void rvce_add_buffer(struct rvce_encoder *enc, struct pb_buffer_lean *buf,
                      unsigned usage, enum radeon_bo_domain domain,
                      signed offset)
 {

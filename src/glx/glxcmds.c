@@ -596,7 +596,7 @@ glXCopyContext(Display * dpy, GLXContext source_user,
                              mask, &errorcode, &x11error)) {
       __glXSendError(dpy, errorcode, 0, X_GLXCopyContext, x11error);
    }
-   
+
 #else
    xGLXCopyContextReq *req;
    struct glx_context *gc = __glXGetCurrentContext();
@@ -1756,7 +1756,7 @@ glXWaitVideoSyncSGI(int divisor, int remainder, unsigned int *count)
 
 /*
 ** GLX_SGIX_fbconfig
-** Many of these functions are aliased to GLX 1.3 entry points in the 
+** Many of these functions are aliased to GLX 1.3 entry points in the
 ** GLX_functions table.
 */
 
@@ -2458,7 +2458,7 @@ PUBLIC int
 MesaGLInteropGLXFlushObjects(Display *dpy, GLXContext context,
                              unsigned count,
                              struct mesa_glinterop_export_in *resources,
-                             GLsync *sync)
+                             struct mesa_glinterop_flush_out *out)
 {
    struct glx_context *gc = (struct glx_context*)context;
    int ret;
@@ -2475,7 +2475,7 @@ MesaGLInteropGLXFlushObjects(Display *dpy, GLXContext context,
       return MESA_GLINTEROP_UNSUPPORTED;
    }
 
-   ret = gc->vtable->interop_flush_objects(gc, count, resources, sync);
+   ret = gc->vtable->interop_flush_objects(gc, count, resources, out);
    __glXUnlock();
    return ret;
 }

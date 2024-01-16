@@ -48,6 +48,8 @@ enum intel_l3_partition {
    INTEL_L3P_C,
    /** Texture cache. */
    INTEL_L3P_T,
+   /** Unified tile cache. */
+   INTEL_L3P_TC,
    /** Number of supported L3 partitions. */
    INTEL_NUM_L3P
 };
@@ -89,6 +91,11 @@ intel_get_l3_config(const struct intel_device_info *devinfo,
 unsigned
 intel_get_l3_config_urb_size(const struct intel_device_info *devinfo,
                              const struct intel_l3_config *cfg);
+
+unsigned
+intel_get_l3_partition_size(const struct intel_device_info *devinfo,
+                            const struct intel_l3_config *cfg,
+                            enum intel_l3_partition i);
 
 void intel_dump_l3_config(const struct intel_l3_config *cfg, FILE *fp);
 

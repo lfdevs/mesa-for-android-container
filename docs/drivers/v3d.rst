@@ -5,22 +5,25 @@ Mesa's V3D graphics driver stack includes a `conformant GLES3.1
 driver
 <https://www.khronos.org/conformance/adopters/conformant-products/opengles#submission_882>`__
 called V3D and a Vulkan graphics driver called V3DV, notably
-used on the Raspberry Pi 4.
+used on the Raspberry Pi 4 and Raspberry Pi 5.
 
 The V3D Mesa drivers communicate directly with the `V3D
 <https://www.kernel.org/doc/html/latest/gpu/v3d.html>`__ kernel DRM
 driver for scheduling GPU commands.  Additionally, on the Raspberry Pi
-4, the kernel uses the VC4 DRM driver for display support, so Mesa
+4 and 5, the kernel uses the VC4 DRM driver for display support, so Mesa
 exposes a ``vc4_dri.so`` using the kmsro helpers to do
 behind-the-scenes buffer management between the two kernel drivers,
 while executing rendering on the V3D kernel module.
 
 Initial development work was done on the Broadcom 7268 (V3D 3.3) and
-7278 (V3D 4.1).  Development since then has been on V3D 4.2, and
-though the 3.3 and 4.1 support continues to remain in tree, it is not
-tested any more.  Broadcom's reference software platforms do not make
-use of the open source V3D stack, but porting a particular hardware
-implementation to use it would still be possible.
+7278 (V3D 4.1). Development since then has been on V3D 4.2 (Raspberry
+Pi 4), and V3D 7.1 (Raspberry Pi 5). When the support for V3D 7.1
+landed, the support for 3.3 and 4.1 was dropped as it was not tested
+anymore (see `MR#25851
+<https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25851>`__)
+Broadcom's reference software platforms do not make use of the open
+source V3D stack, but porting a particular hardware implementation to
+use it would still be possible.
 
 Hardware Documentation
 ----------------------

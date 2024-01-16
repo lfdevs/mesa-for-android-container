@@ -1126,27 +1126,16 @@ if (bits == 0) {
 }
 """)
 
-# Sum of absolute differences with accumulation.
-# (Equivalent to AMD's v_sad_u8 instruction.)
-# The first two sources contain packed 8-bit unsigned integers, the instruction
-# will calculate the absolute difference of these, and then add them together.
-# There is also a third source which is a 32-bit unsigned integer and added to the result.
-triop_horiz("sad_u8x4", 1, 1, 1, 1, """
-uint8_t s0_b0 = (src0.x & 0x000000ff) >> 0;
-uint8_t s0_b1 = (src0.x & 0x0000ff00) >> 8;
-uint8_t s0_b2 = (src0.x & 0x00ff0000) >> 16;
-uint8_t s0_b3 = (src0.x & 0xff000000) >> 24;
+triop("msad_4x8", tuint32, "", """
+dst = msad(src0, src1, src2);
+""", description = """
+Masked sum of absolute differences with accumulation. Equivalent to AMD's v_msad_u8
+instruction and DXIL's MSAD.
 
-uint8_t s1_b0 = (src1.x & 0x000000ff) >> 0;
-uint8_t s1_b1 = (src1.x & 0x0000ff00) >> 8;
-uint8_t s1_b2 = (src1.x & 0x00ff0000) >> 16;
-uint8_t s1_b3 = (src1.x & 0xff000000) >> 24;
-
-dst.x = src2.x +
-        (s0_b0 > s1_b0 ? (s0_b0 - s1_b0) : (s1_b0 - s0_b0)) +
-        (s0_b1 > s1_b1 ? (s0_b1 - s1_b1) : (s1_b1 - s0_b1)) +
-        (s0_b2 > s1_b2 ? (s0_b2 - s1_b2) : (s1_b2 - s0_b2)) +
-        (s0_b3 > s1_b3 ? (s0_b3 - s1_b3) : (s1_b3 - s0_b3));
+The first two sources contain packed 8-bit unsigned integers, the instruction
+will calculate the absolute difference of integers when src0's is non-zero, and
+then add them together. There is also a third source which is a 32-bit unsigned
+integer and added to the result.
 """)
 
 # Combines the first component of each input to make a 3-component vector.
@@ -1412,6 +1401,58 @@ for (int i = 0; i < 32; i += 8) {
    dst |= ((src0_chan * src1_chan) / 255) << i;
 }
 """)
+
+# v3d-specific opcodes
+
+# v3d-specific (v71) instruction that packs bits of 2 2x16 floating point into
+# r11g11b10 bits, rounding to nearest even, so
+#  dst[10:0]  = float16_to_float11 (src0[15:0])
+#  dst[21:11] = float16_to_float11 (src0[31:16])
+#  dst[31:22] = float16_to_float10 (src1[15:0])
+binop_convert("pack_32_to_r11g11b10_v3d", tuint32, tuint32, "",
+              "pack_32_to_r11g11b10_v3d(src0, src1)")
+
+# v3d-specific (v71) instruction that packs 2x32 bit to 2x16 bit integer. The
+# difference with pack_32_2x16_split is that the sources are 32bit too. So it
+# receives 2 32-bit integer, and packs the lower halfword as 2x16 on a 32-bit
+# integer.
+binop_horiz("pack_2x32_to_2x16_v3d", 1, tuint32, 1, tuint32, 1, tuint32,
+            "(src0.x & 0xffff) | (src1.x << 16)")
+
+# v3d-specific (v71) instruction that packs bits of 2 2x16 integers into
+# r10g10b10a2:
+#   dst[9:0]   = src0[9:0]
+#   dst[19:10] = src0[25:16]
+#   dst[29:20] = src1[9:0]
+#   dst[31:30] = src1[17:16]
+binop_convert("pack_uint_32_to_r10g10b10a2_v3d", tuint32, tuint32, "",
+              "(src0 & 0x3ff) | ((src0 >> 16) & 0x3ff) << 10 | (src1 & 0x3ff) << 20 | ((src1 >> 16) & 0x3ff) << 30")
+
+# v3d-specific (v71) instruction that packs 2 2x16 bit integers into 4x8 bits:
+#   dst[7:0]   = src0[7:0]
+#   dst[15:8]  = src0[23:16]
+#   dst[23:16] = src1[7:0]
+#   dst[31:24] = src1[23:16]
+opcode("pack_4x16_to_4x8_v3d", 0, tuint32, [0, 0], [tuint32, tuint32],
+       False, "",
+       "(src0 & 0x000000ff) | (src0 & 0x00ff0000) >> 8 | (src1 & 0x000000ff) << 16 | (src1 & 0x00ff0000) << 8")
+
+# v3d-specific (v71) instructions to convert 2x16 floating point to 2x8 bit unorm/snorm
+unop("pack_2x16_to_unorm_2x8_v3d", tuint32,
+     "_mesa_half_to_unorm(src0 & 0xffff, 8) | (_mesa_half_to_unorm(src0 >> 16, 8) << 16)")
+unop("pack_2x16_to_snorm_2x8_v3d", tuint32,
+     "_mesa_half_to_snorm(src0 & 0xffff, 8) | (_mesa_half_to_snorm(src0 >> 16, 8) << 16)")
+
+# v3d-specific (v71) instructions to convert 32-bit floating point to 16 bit unorm/snorm
+unop("f2unorm_16_v3d", tuint32, "_mesa_float_to_unorm16(src0)")
+unop("f2snorm_16_v3d", tuint32, "_mesa_float_to_snorm16(src0)")
+
+# v3d-specific (v71) instructions to convert 2x16 bit floating points to 2x10 bit unorm
+unop("pack_2x16_to_unorm_2x10_v3d", tuint32, "pack_2x16_to_unorm_2x10(src0)")
+
+# v3d-specific (v71) instructions to convert 2x16 bit floating points to one 2-bit
+# and one 10 bit unorm
+unop("pack_2x16_to_unorm_10_2_v3d", tuint32, "pack_2x16_to_unorm_10_2(src0)")
 
 # Mali-specific opcodes
 unop("fsat_signed_mali", tfloat, ("fmin(fmax(src0, -1.0), 1.0)"))

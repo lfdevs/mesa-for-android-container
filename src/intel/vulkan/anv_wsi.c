@@ -113,12 +113,6 @@ VkResult anv_QueuePresentKHR(
 
    if (device->debug_frame_desc) {
       device->debug_frame_desc->frame_id++;
-#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
-      if (device->physical->memory.need_flush) {
-         intel_flush_range(device->debug_frame_desc,
-                           sizeof(*device->debug_frame_desc));
-      }
-#endif
    }
 
    if (u_trace_should_process(&device->ds.trace_context))

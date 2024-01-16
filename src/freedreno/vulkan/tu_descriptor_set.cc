@@ -333,7 +333,7 @@ tu_GetDescriptorSetLayoutSupport(
          DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
    VkDescriptorSetVariableDescriptorCountLayoutSupport *variable_count =
       vk_find_struct(
-         (void *) pCreateInfo->pNext,
+         pSupport->pNext,
          DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT);
    const VkMutableDescriptorTypeCreateInfoEXT *mutable_info =
       vk_find_struct_const(
@@ -488,39 +488,15 @@ sha1_update_descriptor_set_layout(struct mesa_sha1 *ctx,
 void
 tu_pipeline_layout_init(struct tu_pipeline_layout *layout)
 {
-   unsigned dynamic_offset_size = 0;
-
-   for (uint32_t set = 0; set < layout->num_sets; set++) {
-      layout->set[set].dynamic_offset_start = dynamic_offset_size;
-
-      if (layout->set[set].layout)
-         dynamic_offset_size += layout->set[set].layout->dynamic_offset_size;
-   }
-
-   layout->dynamic_offset_size = dynamic_offset_size;
-
-   /* We only care about INDEPENDENT_SETS for dynamic-offset descriptors,
-    * where all the descriptors from all the sets are combined into one set
-    * and we have to provide the dynamic_offset_start dynamically with fast
-    * linking.
-    */
-   if (dynamic_offset_size == 0) {
-      layout->independent_sets = false;
-   }
-
    struct mesa_sha1 ctx;
    _mesa_sha1_init(&ctx);
    for (unsigned s = 0; s < layout->num_sets; s++) {
       if (layout->set[s].layout)
          sha1_update_descriptor_set_layout(&ctx, layout->set[s].layout);
-      _mesa_sha1_update(&ctx, &layout->set[s].dynamic_offset_start,
-                        sizeof(layout->set[s].dynamic_offset_start));
    }
    _mesa_sha1_update(&ctx, &layout->num_sets, sizeof(layout->num_sets));
    _mesa_sha1_update(&ctx, &layout->push_constant_size,
                      sizeof(layout->push_constant_size));
-   _mesa_sha1_update(&ctx, &layout->independent_sets,
-                     sizeof(layout->independent_sets));
    _mesa_sha1_final(&ctx, layout->sha1);
 }
 
@@ -562,8 +538,6 @@ tu_CreatePipelineLayout(VkDevice _device,
    }
 
    layout->push_constant_size = align(layout->push_constant_size, 16);
-   layout->independent_sets =
-      pCreateInfo->flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT;
 
    tu_pipeline_layout_init(layout);
 

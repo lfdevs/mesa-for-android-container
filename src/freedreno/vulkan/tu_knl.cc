@@ -65,6 +65,24 @@ void tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
    dev->instance->knl->bo_allow_dump(dev, bo);
 }
 
+void
+tu_bo_set_metadata(struct tu_device *dev, struct tu_bo *bo,
+                   void *metadata, uint32_t metadata_size)
+{
+   if (!dev->instance->knl->bo_set_metadata)
+      return;
+   dev->instance->knl->bo_set_metadata(dev, bo, metadata, metadata_size);
+}
+
+int
+tu_bo_get_metadata(struct tu_device *dev, struct tu_bo *bo,
+                   void *metadata, uint32_t metadata_size)
+{
+   if (!dev->instance->knl->bo_get_metadata)
+      return -ENOSYS;
+   return dev->instance->knl->bo_get_metadata(dev, bo, metadata, metadata_size);
+}
+
 VkResult
 tu_drm_device_init(struct tu_device *dev)
 {

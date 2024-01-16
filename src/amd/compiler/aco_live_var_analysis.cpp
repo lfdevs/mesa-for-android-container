@@ -464,8 +464,7 @@ update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
          get_vgpr_alloc(program, new_demand.vgpr) + program->config->num_shared_vgprs / 2;
       program->num_waves =
          std::min<uint16_t>(program->num_waves, program->dev.physical_vgprs / vgpr_demand);
-      uint16_t max_waves = program->dev.max_wave64_per_simd * (64 / program->wave_size);
-      program->num_waves = std::min(program->num_waves, max_waves);
+      program->num_waves = std::min(program->num_waves, program->dev.max_waves_per_simd);
 
       /* Adjust for LDS and workgroup multiples and calculate max_reg_demand */
       program->num_waves = max_suitable_waves(program, program->num_waves);

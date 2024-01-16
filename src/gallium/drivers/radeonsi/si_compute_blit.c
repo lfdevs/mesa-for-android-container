@@ -395,7 +395,7 @@ static void si_compute_do_clear_or_copy(struct si_context *sctx, struct pipe_res
 
       if (!sctx->cs_copy_buffer) {
          sctx->cs_copy_buffer = si_create_dma_compute_shader(
-            &sctx->b, SI_COMPUTE_COPY_DW_PER_THREAD, shader_dst_stream_policy, true);
+            sctx, SI_COMPUTE_COPY_DW_PER_THREAD, shader_dst_stream_policy, true);
       }
 
       si_launch_grid_internal_ssbos(sctx, &info, sctx->cs_copy_buffer, flags, coher,
@@ -409,7 +409,7 @@ static void si_compute_do_clear_or_copy(struct si_context *sctx, struct pipe_res
 
       if (!sctx->cs_clear_buffer) {
          sctx->cs_clear_buffer = si_create_dma_compute_shader(
-            &sctx->b, SI_COMPUTE_CLEAR_DW_PER_THREAD, shader_dst_stream_policy, false);
+            sctx, SI_COMPUTE_CLEAR_DW_PER_THREAD, shader_dst_stream_policy, false);
       }
 
       si_launch_grid_internal_ssbos(sctx, &info, sctx->cs_clear_buffer, flags, coher,
@@ -492,15 +492,6 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
    }
 }
 
-void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst, uint64_t offset,
-                            uint64_t size, unsigned value, unsigned flags)
-{
-   struct si_context *ctx = si_get_aux_context(&sscreen->aux_context.general);
-   si_clear_buffer(ctx, dst, offset, size, &value, 4, flags,
-                   SI_COHERENCY_SHADER, SI_AUTO_SELECT_CLEAR_METHOD);
-   si_put_aux_context_flush(&sscreen->aux_context.general);
-}
-
 static void si_pipe_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
                                  unsigned offset, unsigned size, const void *clear_value,
                                  int clear_value_size)
@@ -533,6 +524,41 @@ void si_copy_buffer(struct si_context *sctx, struct pipe_resource *dst, struct p
       si_cp_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset, size,
                             flags, coher, cache_policy);
    }
+}
+
+void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
+                                     uint64_t dst_offset, uint64_t src_offset, unsigned size, unsigned flags)
+{
+   if (!size)
+      return;
+
+   if (!sctx->cs_ubyte_to_ushort)
+      sctx->cs_ubyte_to_ushort = si_create_ubyte_to_ushort_compute_shader(sctx);
+
+   enum si_coherency coher = SI_COHERENCY_SHADER;
+
+   si_improve_sync_flags(sctx, dst, src, &flags);
+
+   struct pipe_grid_info info = {};
+   info.block[0] = si_determine_wave_size(sctx->screen, NULL);
+   info.block[1] = 1;
+   info.block[2] = 1;
+   info.grid[0] = DIV_ROUND_UP(size, info.block[0]);
+   info.grid[1] = 1;
+   info.grid[2] = 1;
+   info.last_block[0] = size % info.block[0];
+
+   struct pipe_shader_buffer sb[2] = {};
+   sb[0].buffer = dst;
+   sb[0].buffer_offset = dst_offset;
+   sb[0].buffer_size = dst->width0;
+
+   sb[1].buffer = src;
+   sb[1].buffer_offset = src_offset;
+   sb[1].buffer_size = src->width0;
+
+   si_launch_grid_internal_ssbos(sctx, &info, sctx->cs_ubyte_to_ushort, flags, coher,
+                                 2, sb, 0x1);
 }
 
 static unsigned
@@ -911,7 +937,7 @@ void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex
    /* Bind the shader. */
    void **shader = &sctx->cs_fmask_expand[log_samples - 1][is_array];
    if (!*shader)
-      *shader = si_create_fmask_expand_cs(ctx, tex->nr_samples, is_array);
+      *shader = si_create_fmask_expand_cs(sctx, tex->nr_samples, is_array);
 
    /* Dispatch compute. */
    struct pipe_grid_info info = {0};

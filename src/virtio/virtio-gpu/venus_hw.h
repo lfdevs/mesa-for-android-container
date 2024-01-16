@@ -64,6 +64,12 @@ struct virgl_renderer_capset_venus {
     * the associated renderer submission.
     */
    uint32_t supports_multiple_timelines;
+
+   /* This flag indicates to the guest that hypervisor does not support memory
+    * pages injections and blob allocations must be done by guest from the
+    * dedicated heap (Host visible memory).
+    */
+   uint32_t use_guest_vram;
 };
 #endif
 

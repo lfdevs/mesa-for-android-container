@@ -75,7 +75,7 @@ ${extension_table('device', device_extensions)}
 struct ${driver}_physical_device;
 
 %if driver == 'vk':
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
 extern const struct vk_instance_extension_table vk_android_allowed_instance_extensions;
 extern const struct vk_device_extension_table vk_android_allowed_device_extensions;
 #endif
@@ -111,7 +111,7 @@ const VkExtensionProperties ${driver}_device_extensions[${driver.upper()}_DEVICE
 %endfor
 };
 
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
 const struct vk_instance_extension_table vk_android_allowed_instance_extensions = {
 %for ext in instance_extensions:
    .${ext.name[3:]} = ${ext.c_android_condition()},
@@ -219,11 +219,11 @@ def gen_extensions(driver, xml_files, api_versions, max_api_version,
     }
 
     if out_h:
-        with open(out_h, 'w') as f:
+        with open(out_h, 'w', encoding='utf-8') as f:
             f.write(_TEMPLATE_H.render(**template_env))
 
     if out_c:
-        with open(out_c, 'w') as f:
+        with open(out_c, 'w', encoding='utf-8') as f:
             f.write(_TEMPLATE_C.render(**template_env))
 
 

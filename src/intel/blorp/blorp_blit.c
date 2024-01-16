@@ -2451,6 +2451,7 @@ blorp_blitter_supports_aux(const struct intel_device_info *devinfo,
       return true;
    case ISL_AUX_USAGE_CCS_E:
    case ISL_AUX_USAGE_FCV_CCS_E:
+   case ISL_AUX_USAGE_STC_CCS:
       return devinfo->verx10 >= 125;
    default:
       return false;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2009-2014, Haiku, Inc. All Rights Reserved.
+ * Copyright 2009-2023, Haiku, Inc. All Rights Reserved.
  * Distributed under the terms of the MIT License.
  *
  * Authors:
@@ -15,6 +15,21 @@
 #include "postprocess/filters.h"
 
 #include "frontend/api.h"
+
+// visual options
+#define HGL_RGB			0
+#define HGL_INDEX		1
+#define HGL_SINGLE		0
+#define HGL_DOUBLE		2
+#define HGL_DIRECT		0
+#define HGL_INDIRECT		4
+#define HGL_ACCUM		8
+#define HGL_ALPHA		16
+#define HGL_DEPTH		32
+#define HGL_OVERLAY		64
+#define HGL_UNDERLAY		128
+#define HGL_STENCIL		512
+#define HGL_SHARE_CONTEXT	1024
 
 
 #ifdef __cplusplus

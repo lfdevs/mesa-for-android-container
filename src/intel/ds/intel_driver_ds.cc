@@ -130,10 +130,17 @@ static void
 sync_timestamp(IntelRenderpassDataSource::TraceContext &ctx,
                struct intel_ds_device *device)
 {
-   uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
-   uint64_t gpu_ts;
-   intel_gem_read_render_timestamp(device->fd, device->info.kmd_type,
-                                   &gpu_ts);
+   uint64_t cpu_ts, gpu_ts;
+
+   if (!intel_gem_read_correlate_cpu_gpu_timestamp(device->fd,
+                                                   device->info.kmd_type,
+                                                   INTEL_ENGINE_CLASS_RENDER, 0,
+                                                   CLOCK_BOOTTIME,
+                                                   &cpu_ts, &gpu_ts, NULL)) {
+      cpu_ts = perfetto::base::GetBootTimeNs().count();
+      intel_gem_read_render_timestamp(device->fd, device->info.kmd_type,
+                                      &gpu_ts);
+   }
    gpu_ts = intel_device_info_timebase_scale(&device->info, gpu_ts);
 
    if (cpu_ts < device->next_clock_sync_ns)
@@ -420,6 +427,7 @@ CREATE_DUAL_EVENT_CALLBACK(query_clear_blorp, INTEL_DS_QUEUE_STAGE_INTERNAL_OPS)
 CREATE_DUAL_EVENT_CALLBACK(query_clear_cs, INTEL_DS_QUEUE_STAGE_INTERNAL_OPS)
 CREATE_DUAL_EVENT_CALLBACK(query_copy_cs, INTEL_DS_QUEUE_STAGE_INTERNAL_OPS)
 CREATE_DUAL_EVENT_CALLBACK(query_copy_shader, INTEL_DS_QUEUE_STAGE_INTERNAL_OPS)
+CREATE_DUAL_EVENT_CALLBACK(write_buffer_marker, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
 CREATE_DUAL_EVENT_CALLBACK(rays, INTEL_DS_QUEUE_STAGE_RT)
 CREATE_DUAL_EVENT_CALLBACK(as_build, INTEL_DS_QUEUE_STAGE_AS)
 

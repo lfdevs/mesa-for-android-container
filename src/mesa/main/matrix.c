@@ -568,15 +568,10 @@ _mesa_MatrixLoadfEXT( GLenum matrixMode, const GLfloat *m )
 static void
 matrix_mult(struct gl_matrix_stack *stack, const GLfloat *m, const char* caller)
 {
-   static float identity[16] = {
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1,
-   };
-
    GET_CURRENT_CONTEXT(ctx);
-   if (!m || !memcmp(m, identity, sizeof(identity)))
+
+   /* glthread filters out identity matrices, so don't do it again. */
+   if (!m || (!ctx->GLThread.enabled && _mesa_matrix_is_identity(m)))
       return;
 
    if (MESA_VERBOSE & VERBOSE_API)

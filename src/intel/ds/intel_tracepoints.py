@@ -118,6 +118,10 @@ def define_tracepoints(args):
                           Arg(type='enum isl_format', name='src_fmt', var='src_fmt', c_format='%s', to_prim_type='isl_format_get_short_name({})'),
                           ])
 
+    # vkCmdWriteBufferMarker*, only for Anv
+    begin_end_tp('write_buffer_marker',
+                 end_pipelined=False)
+
     # Indirect draw generation, only for Anv
     begin_end_tp('generate_draws')
 

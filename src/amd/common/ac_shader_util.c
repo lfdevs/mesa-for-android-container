@@ -620,10 +620,10 @@ enum ac_image_dim ac_get_image_dim(enum amd_gfx_level gfx_level, enum glsl_sampl
 }
 
 unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
-                                  uint8_t *num_pos_inputs)
+                                  uint8_t *num_fragcoord_components)
 {
    unsigned num_input_vgprs = 0;
-   unsigned pos_inputs = 0;
+   unsigned fragcoord_components = 0;
 
    if (G_0286CC_PERSP_SAMPLE_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 2;
@@ -643,19 +643,19 @@ unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
       num_input_vgprs += 1;
    if (G_0286CC_POS_X_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
-      pos_inputs++;
+      fragcoord_components++;
    }
    if (G_0286CC_POS_Y_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
-      pos_inputs++;
+      fragcoord_components++;
    }
    if (G_0286CC_POS_Z_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
-      pos_inputs++;
+      fragcoord_components++;
    }
    if (G_0286CC_POS_W_FLOAT_ENA(config->spi_ps_input_addr)) {
       num_input_vgprs += 1;
-      pos_inputs++;
+      fragcoord_components++;
    }
    if (G_0286CC_FRONT_FACE_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 1;
@@ -666,8 +666,8 @@ unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
    if (G_0286CC_POS_FIXED_PT_ENA(config->spi_ps_input_addr))
       num_input_vgprs += 1;
 
-   if (num_pos_inputs)
-      *num_pos_inputs = pos_inputs;
+   if (num_fragcoord_components)
+      *num_fragcoord_components = fragcoord_components;
 
    return num_input_vgprs;
 }

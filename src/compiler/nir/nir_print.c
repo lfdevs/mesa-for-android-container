@@ -752,9 +752,6 @@ get_location_str(unsigned location, gl_shader_stage stage,
       break;
    case MESA_SHADER_TESS_CTRL:
    case MESA_SHADER_TESS_EVAL:
-      if (location >= VARYING_SLOT_MAX)
-         break;
-      FALLTHROUGH;
    case MESA_SHADER_TASK:
    case MESA_SHADER_MESH:
    case MESA_SHADER_GEOMETRY:
@@ -2224,9 +2221,13 @@ print_function(nir_function *function, print_state *state)
 {
    FILE *fp = state->fp;
 
-   fprintf(fp, "decl_function %s (%d params) %s", function->name,
-           function->num_params, function->dont_inline ? "(noinline)" :
-           function->should_inline ? "(inline)" : "");
+   /* clang-format off */
+   fprintf(fp, "decl_function %s (%d params)%s%s", function->name,
+           function->num_params,
+           function->dont_inline ? " (noinline)" :
+           function->should_inline ? " (inline)" : "",
+           function->is_exported ? " (exported)" : "");
+   /* clang-format on */
 
    fprintf(fp, "\n");
 
@@ -2275,6 +2276,8 @@ primitive_name(unsigned primitive)
       PRIM(QUADS);
       PRIM(QUAD_STRIP);
       PRIM(POLYGON);
+      PRIM(LINES_ADJACENCY);
+      PRIM(TRIANGLES_ADJACENCY);
    default:
       return "UNKNOWN";
    }
@@ -2529,8 +2532,8 @@ print_shader_info(const struct shader_info *info, FILE *fp)
       print_nz_bool(fp, "uses_fbfetch_output", info->fs.uses_fbfetch_output);
       print_nz_bool(fp, "color_is_dual_source", info->fs.color_is_dual_source);
 
+      print_nz_bool(fp, "require_full_quads", info->fs.require_full_quads);
       print_nz_bool(fp, "needs_quad_helper_invocations", info->fs.needs_quad_helper_invocations);
-      print_nz_bool(fp, "needs_all_helper_invocations", info->fs.needs_all_helper_invocations);
       print_nz_bool(fp, "uses_sample_qualifier", info->fs.uses_sample_qualifier);
       print_nz_bool(fp, "uses_sample_shading", info->fs.uses_sample_shading);
       print_nz_bool(fp, "early_fragment_tests", info->fs.early_fragment_tests);

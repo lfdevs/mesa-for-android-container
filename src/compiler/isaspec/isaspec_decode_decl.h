@@ -102,6 +102,7 @@ struct isa_field {
 		TYPE_UOFFSET,  /* Like UINT but formated with + or omitted if ==0 */
 		TYPE_FLOAT,
 		TYPE_BOOL,
+		TYPE_BOOL_INV, /* Like BOOL but inverted */
 		TYPE_ENUM,
 
 		/* For fields that must be printed via a user-provided callback */

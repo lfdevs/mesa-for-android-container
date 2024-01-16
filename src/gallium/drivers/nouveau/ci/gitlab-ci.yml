@@ -10,3 +10,5 @@ gk20a-gles:
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     DEQP_SUITE: nouveau-gk20a
+    FARM : anholt
+    DEVICE_TYPE: anholt-jetson

@@ -103,91 +103,12 @@ class PrintCode(gl_XML.gl_print_base):
         out('')
         out('')
 
-    def get_type_size(self, str):
-        if str.find('*') != -1:
-            return 8;
-
-        mapping = {
-            'GLboolean': 1,
-            'GLbyte': 1,
-            'GLubyte': 1,
-            'GLenum': 2, # uses GLenum16, clamped to 0xffff (invalid enum)
-            'GLshort': 2,
-            'GLushort': 2,
-            'GLhalfNV': 2,
-            'GLint': 4,
-            'GLuint': 4,
-            'GLbitfield': 4,
-            'GLsizei': 4,
-            'GLfloat': 4,
-            'GLclampf': 4,
-            'GLfixed': 4,
-            'GLclampx': 4,
-            'GLhandleARB': 4,
-            'int': 4,
-            'float': 4,
-            'GLdouble': 8,
-            'GLclampd': 8,
-            'GLintptr': 8,
-            'GLsizeiptr': 8,
-            'GLint64': 8,
-            'GLuint64': 8,
-            'GLuint64EXT': 8,
-            'GLsync': 8,
-        }
-        val = mapping.get(str, 9999)
-        if val == 9999:
-            print('Unhandled type in gl_marshal.py.get_type_size: ' + str, file=sys.stderr)
-            assert False
-        return val
-
     def print_async_body(self, func):
-        # We want glthread to ignore variable-sized parameters if the only thing
-        # we want is to pass the pointer parameter as-is, e.g. when a PBO is bound.
-        # Making it conditional on marshal_sync is kinda hacky, but it's the easiest
-        # path towards handling PBOs in glthread, which use marshal_sync to check whether
-        # a PBO is bound.
-        if func.marshal_sync:
-            fixed_params = func.fixed_params + func.variable_params
-            variable_params = []
-        else:
-            fixed_params = func.fixed_params
-            variable_params = func.variable_params
+        fixed_params = func.get_fixed_params()
+        variable_params = func.get_variable_params()
 
         out('/* {0}: marshalled asynchronously */'.format(func.name))
-        out('struct marshal_cmd_{0}'.format(func.name))
-        out('{')
-        with indent():
-            out('struct marshal_cmd_base cmd_base;')
-
-            # Sort the parameters according to their size to pack the structure optimally
-            for p in sorted(fixed_params, key=lambda p: self.get_type_size(p.type_string())):
-                if p.count:
-                    out('{0} {1}[{2}];'.format(
-                            p.get_base_type_string(), p.name, p.count))
-                else:
-                    type = p.type_string()
-                    if type == 'GLenum':
-                        type = 'GLenum16'
-                    out('{0} {1};'.format(type, p.name))
-
-            for p in variable_params:
-                if p.img_null_flag:
-                    out('bool {0}_null; /* If set, no data follows '
-                        'for "{0}" */'.format(p.name))
-
-            for p in variable_params:
-                if p.count_scale != 1:
-                    out(('/* Next {0} bytes are '
-                         '{1} {2}[{3}][{4}] */').format(
-                            p.size_string(marshal=1), p.get_base_type_string(),
-                            p.name, p.counter, p.count_scale))
-                else:
-                    out(('/* Next {0} bytes are '
-                         '{1} {2}[{3}] */').format(
-                            p.size_string(marshal=1), p.get_base_type_string(),
-                            p.name, p.counter))
-        out('};')
+        func.print_struct()
 
         out('uint32_t')
         out(('_mesa_unmarshal_{0}(struct gl_context *ctx, '
@@ -200,7 +121,7 @@ class PrintCode(gl_XML.gl_print_base):
                             p.get_base_type_string(), p.name)
                 else:
                     p_decl = '{0} {1} = cmd->{1};'.format(
-                            p.type_string(), p.name)
+                            marshal_XML.get_marshal_type(func.name, p), p.name)
 
                 if not p_decl.startswith('const ') and p.count:
                     # Declare all local function variables as const, even if
@@ -299,11 +220,15 @@ class PrintCode(gl_XML.gl_print_base):
                 'DISPATCH_CMD_{0}, cmd_size);'.format(func.name))
 
             for p in fixed_params:
+                type = marshal_XML.get_marshal_type(func.name, p)
+
                 if p.count:
                     out('memcpy(cmd->{0}, {0}, {1});'.format(
                             p.name, p.size_string()))
-                elif p.type_string() == 'GLenum':
+                elif type == 'GLenum16':
                     out('cmd->{0} = MIN2({0}, 0xffff); /* clamped to 0xffff (invalid enum) */'.format(p.name))
+                elif type == 'int16_t':
+                    out('cmd->{0} = CLAMP({0}, INT16_MIN, INT16_MAX);'.format(p.name))
                 else:
                     out('cmd->{0} = {0};'.format(p.name))
             if variable_params:

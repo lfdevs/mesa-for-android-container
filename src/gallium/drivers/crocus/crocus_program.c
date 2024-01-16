@@ -1202,7 +1202,7 @@ crocus_compile_vs(struct crocus_context *ice,
                               num_system_values, num_cbufs, &key->base.tex);
 
    if (can_push_ubo(devinfo))
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    uint64_t outputs_written =
       crocus_vs_outputs_written(ice, key, nir->info.outputs_written);
@@ -1411,7 +1411,7 @@ crocus_compile_tcs(struct crocus_context *ice,
    crocus_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
                               num_system_values, num_cbufs, &key->base.tex);
    if (can_push_ubo(devinfo))
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_tcs_prog_key key_clean = *key;
    crocus_sanitize_tex_key(&key_clean.base.tex);
@@ -1551,7 +1551,7 @@ crocus_compile_tes(struct crocus_context *ice,
                               num_system_values, num_cbufs, &key->base.tex);
 
    if (can_push_ubo(devinfo))
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_vue_map input_vue_map;
    brw_compute_tess_vue_map(&input_vue_map, key->inputs_read,
@@ -1694,7 +1694,7 @@ crocus_compile_gs(struct crocus_context *ice,
                               num_system_values, num_cbufs, &key->base.tex);
 
    if (can_push_ubo(devinfo))
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    brw_compute_vue_map(devinfo,
                        &vue_prog_data->vue_map, nir->info.outputs_written,
@@ -1836,7 +1836,7 @@ crocus_compile_fs(struct crocus_context *ice,
                               &key->base.tex);
 
    if (can_push_ubo(devinfo))
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_wm_prog_key key_clean = *key;
    crocus_sanitize_tex_key(&key_clean.base.tex);
@@ -1851,6 +1851,7 @@ crocus_compile_fs(struct crocus_context *ice,
       .prog_data = fs_prog_data,
 
       .allow_spilling = true,
+      .max_polygons = 1,
       .vue_map = vue_map,
    };
    const unsigned *program =

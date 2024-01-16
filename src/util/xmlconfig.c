@@ -1165,14 +1165,6 @@ initOptionCache(driOptionCache *cache, const driOptionCache *info)
    }
 }
 
-#ifndef SYSCONFDIR
-#define SYSCONFDIR "/etc"
-#endif
-
-#ifndef DATADIR
-#define DATADIR "/usr/share"
-#endif
-
 static const char *execname;
 
 void

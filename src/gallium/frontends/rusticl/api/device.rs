@@ -127,13 +127,16 @@ impl CLInfo<cl_device_info> for cl_device_id {
                     let sdot = dev.sdot_4x8_supported() && pack;
                     let udot = dev.udot_4x8_supported() && pack;
                     let sudot = dev.sudot_4x8_supported() && pack;
+                    let sdot_sat = dev.sdot_4x8_sat_supported() && pack;
+                    let udot_sat = dev.udot_4x8_sat_supported() && pack;
+                    let sudot_sat = dev.sudot_4x8_sat_supported() && pack;
                     IdpAccelProps::new(
                         sdot.into(),
                         udot.into(),
                         sudot.into(),
-                        sdot.into(),
-                        udot.into(),
-                        sudot.into(),
+                        sdot_sat.into(),
+                        udot_sat.into(),
+                        sudot_sat.into(),
                     )
                 })
             }
@@ -143,9 +146,9 @@ impl CLInfo<cl_device_info> for cl_device_id {
                         dev.sdot_4x8_supported().into(),
                         dev.udot_4x8_supported().into(),
                         dev.sudot_4x8_supported().into(),
-                        dev.sdot_4x8_supported().into(),
-                        dev.udot_4x8_supported().into(),
-                        dev.sudot_4x8_supported().into(),
+                        dev.sdot_4x8_sat_supported().into(),
+                        dev.udot_4x8_sat_supported().into(),
+                        dev.sudot_4x8_sat_supported().into(),
                     )
                 })
             }

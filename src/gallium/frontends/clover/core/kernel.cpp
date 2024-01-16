@@ -335,7 +335,7 @@ namespace {
    ///
    template<typename T>
    void
-   align(T &v, size_t n) {
+   align_vector(T &v, size_t n) {
       v.resize(util_align_npot(v.size(), n));
    }
 
@@ -451,7 +451,7 @@ kernel::scalar_argument::bind(exec_context &ctx,
 
    extend(w, barg.ext_type, barg.target_size);
    byteswap(w, ctx.q->device().endianness());
-   align(ctx.input, barg.target_align);
+   align_vector(ctx.input, barg.target_align);
    insert(ctx.input, w);
 }
 
@@ -482,7 +482,7 @@ kernel::global_argument::set_svm(const void *value) {
 void
 kernel::global_argument::bind(exec_context &ctx,
                               const binary::argument &barg) {
-   align(ctx.input, barg.target_align);
+   align_vector(ctx.input, barg.target_align);
 
    if (buf) {
       const resource &r = buf->resource_in(*ctx.q);
@@ -536,7 +536,7 @@ kernel::local_argument::bind(exec_context &ctx,
 
    extend(v, binary::argument::zero_ext, barg.target_size);
    byteswap(v, ctx.q->device().endianness());
-   align(ctx.input, ctx.q->device().address_bits() / 8);
+   align_vector(ctx.input, ctx.q->device().address_bits() / 8);
    insert(ctx.input, v);
 
    ctx.mem_local += _storage;
@@ -561,7 +561,7 @@ kernel::constant_argument::set(size_t size, const void *value) {
 void
 kernel::constant_argument::bind(exec_context &ctx,
                                 const binary::argument &barg) {
-   align(ctx.input, barg.target_align);
+   align_vector(ctx.input, barg.target_align);
 
    if (buf) {
       resource &r = buf->resource_in(*ctx.q);
@@ -607,7 +607,7 @@ kernel::image_rd_argument::bind(exec_context &ctx,
 
    extend(v, binary::argument::zero_ext, barg.target_size);
    byteswap(v, ctx.q->device().endianness());
-   align(ctx.input, barg.target_align);
+   align_vector(ctx.input, barg.target_align);
    insert(ctx.input, v);
 
    st = img->resource_in(*ctx.q).bind_sampler_view(*ctx.q);
@@ -638,7 +638,7 @@ kernel::image_wr_argument::bind(exec_context &ctx,
 
    extend(v, binary::argument::zero_ext, barg.target_size);
    byteswap(v, ctx.q->device().endianness());
-   align(ctx.input, barg.target_align);
+   align_vector(ctx.input, barg.target_align);
    insert(ctx.input, v);
    ctx.iviews.push_back(img->resource_in(*ctx.q).create_image_view(*ctx.q));
 }

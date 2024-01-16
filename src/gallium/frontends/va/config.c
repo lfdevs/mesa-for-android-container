@@ -221,6 +221,23 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
                                              PIPE_VIDEO_CAP_MAX_HEIGHT);
             value = value ? value : VA_ATTRIB_NOT_SUPPORTED;
          } break;
+#if VA_CHECK_VERSION(1, 21, 0)
+         case VAConfigAttribDecJPEG:
+         {
+            VAConfigAttribValDecJPEG attr_jpeg = { .value = 0 };
+            /* Check if ROI Decode is supported */
+            int supportsCropDec =
+                  pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                           PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                           PIPE_VIDEO_CAP_ROI_CROP_DEC);
+            if (supportsCropDec <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else {
+               attr_jpeg.bits.crop = 1;
+               value = attr_jpeg.value;
+            }
+         } break;
+#endif
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
             break;
@@ -516,6 +533,28 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
                value = max_tile_cols;
          } break;
 #endif
+         case VAConfigAttribEncIntraRefresh:
+         {
+            int ir_support = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_INTRA_REFRESH);
+            if (ir_support <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else
+               value = ir_support;
+         } break;
+
+         case VAConfigAttribEncROI:
+         {
+            int roi_support = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_ROI);
+            if (roi_support <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else
+               value = roi_support;
+         } break;
+
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
             break;

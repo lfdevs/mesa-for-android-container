@@ -1,6 +1,9 @@
 .softpipe-rules:
   stage: software-renderer
   rules:
+    - !reference [.test, rules]
+    - if: $FORCE_KERNEL_TAG != null
+      when: never
     - !reference [.gl-rules, rules]
     - changes: &softpipe_file_list
       - src/gallium/drivers/softpipe/**/*

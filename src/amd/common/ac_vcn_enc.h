@@ -532,6 +532,7 @@ typedef struct rvcn_enc_cmd_s {
    uint32_t input_format;
    uint32_t output_format;
    uint32_t enc_statistics;
+   uint32_t enc_qp_map;
 } rvcn_enc_cmd_t;
 
 typedef struct rvcn_enc_quality_modes_s
@@ -621,5 +622,29 @@ typedef struct rvcn_enc_av1_recon_slot_s
    bool in_use;
    bool is_orphaned;
 } rvcn_enc_av1_recon_slot_t;
+
+#define RENCODE_QP_MAP_TYPE_NONE               0
+#define RENCODE_QP_MAP_TYPE_DELTA              1
+#define RENCODE_QP_MAP_TYPE_MAP_PA             4
+#define RENCODE_QP_MAP_MAX_REGIONS             32
+
+struct rvcn_enc_qp_map_region
+{
+   bool     is_valid;
+   int32_t  qp_delta;
+   uint32_t x_in_unit;
+   uint32_t y_in_unit;
+   uint32_t width_in_unit;
+   uint32_t height_in_unit;
+};
+
+typedef struct rvcn_enc_qp_map_s
+{
+   uint32_t qp_map_type;
+   uint32_t qp_map_buffer_address_hi;
+   uint32_t qp_map_buffer_address_lo;
+   uint32_t qp_map_pitch;
+   struct rvcn_enc_qp_map_region map[RENCODE_QP_MAP_MAX_REGIONS];
+}rvcn_enc_qp_map_t;
 
 #endif

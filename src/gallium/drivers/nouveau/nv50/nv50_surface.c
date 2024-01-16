@@ -25,6 +25,7 @@
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
 
+#include "nir/pipe_nir.h"
 #include "pipe/p_defines.h"
 
 #include "util/u_inlines.h"
@@ -992,9 +993,7 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
    /* return shader */
    NIR_PASS_V(b.shader, nir_lower_samplers);
 
-   struct pipe_shader_state state;
-   pipe_shader_state_from_nir(&state, b.shader);
-   return pipe->create_fs_state(pipe, &state);
+   return pipe_shader_from_nir(pipe, b.shader);
 }
 
 static void

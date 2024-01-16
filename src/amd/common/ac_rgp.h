@@ -153,7 +153,7 @@ struct rgp_queue_event_record {
    uint32_t submit_sub_index;
    uint64_t api_id;
    uint64_t cpu_timestamp;
-   uint64_t gpu_timestamps[2];
+   uint64_t *gpu_timestamps[2];
    struct list_head list;
 };
 

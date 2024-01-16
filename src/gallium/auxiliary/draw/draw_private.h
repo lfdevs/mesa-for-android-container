@@ -47,7 +47,7 @@
 
 #include "draw_vertex_header.h"
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 struct gallivm_state;
 #endif
 

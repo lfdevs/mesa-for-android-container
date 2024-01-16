@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_DESCRIPTOR_SET_H
 #define VN_PROTOCOL_DRIVER_DESCRIPTOR_SET_H
 
-#include "vn_instance.h"
+#include "vn_ring.h"
 #include "vn_protocol_driver_structs.h"
 
 /*
@@ -481,7 +481,7 @@ static inline void vn_decode_vkUpdateDescriptorSets_reply(struct vn_cs_decoder *
     /* skip pDescriptorCopies */
 }
 
-static inline void vn_submit_vkAllocateDescriptorSets(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkAllocateDescriptorSets(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -493,16 +493,16 @@ static inline void vn_submit_vkAllocateDescriptorSets(struct vn_instance *vn_ins
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkAllocateDescriptorSets_reply(device, pAllocateInfo, pDescriptorSets) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkAllocateDescriptorSets(enc, cmd_flags, device, pAllocateInfo, pDescriptorSets);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkFreeDescriptorSets(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkFreeDescriptorSets(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -514,16 +514,16 @@ static inline void vn_submit_vkFreeDescriptorSets(struct vn_instance *vn_instanc
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkFreeDescriptorSets_reply(device, descriptorPool, descriptorSetCount, pDescriptorSets) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkFreeDescriptorSets(enc, cmd_flags, device, descriptorPool, descriptorSetCount, pDescriptorSets);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkUpdateDescriptorSets(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkUpdateDescriptorSets(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -535,76 +535,76 @@ static inline void vn_submit_vkUpdateDescriptorSets(struct vn_instance *vn_insta
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkUpdateDescriptorSets_reply(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkUpdateDescriptorSets(enc, cmd_flags, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline VkResult vn_call_vkAllocateDescriptorSets(struct vn_instance *vn_instance, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
+static inline VkResult vn_call_vkAllocateDescriptorSets(struct vn_ring *vn_ring, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkAllocateDescriptorSets(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pAllocateInfo, pDescriptorSets, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkAllocateDescriptorSets(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pAllocateInfo, pDescriptorSets, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkAllocateDescriptorSets_reply(dec, device, pAllocateInfo, pDescriptorSets);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkAllocateDescriptorSets(struct vn_instance *vn_instance, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
+static inline void vn_async_vkAllocateDescriptorSets(struct vn_ring *vn_ring, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkAllocateDescriptorSets(vn_instance, 0, device, pAllocateInfo, pDescriptorSets, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkAllocateDescriptorSets(vn_ring, 0, device, pAllocateInfo, pDescriptorSets, &submit);
 }
 
-static inline VkResult vn_call_vkFreeDescriptorSets(struct vn_instance *vn_instance, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets)
+static inline VkResult vn_call_vkFreeDescriptorSets(struct vn_ring *vn_ring, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkFreeDescriptorSets(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, descriptorPool, descriptorSetCount, pDescriptorSets, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkFreeDescriptorSets(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, descriptorPool, descriptorSetCount, pDescriptorSets, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkFreeDescriptorSets_reply(dec, device, descriptorPool, descriptorSetCount, pDescriptorSets);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkFreeDescriptorSets(struct vn_instance *vn_instance, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets)
+static inline void vn_async_vkFreeDescriptorSets(struct vn_ring *vn_ring, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkFreeDescriptorSets(vn_instance, 0, device, descriptorPool, descriptorSetCount, pDescriptorSets, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkFreeDescriptorSets(vn_ring, 0, device, descriptorPool, descriptorSetCount, pDescriptorSets, &submit);
 }
 
-static inline void vn_call_vkUpdateDescriptorSets(struct vn_instance *vn_instance, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies)
+static inline void vn_call_vkUpdateDescriptorSets(struct vn_ring *vn_ring, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkUpdateDescriptorSets(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkUpdateDescriptorSets(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkUpdateDescriptorSets_reply(dec, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkUpdateDescriptorSets(struct vn_instance *vn_instance, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies)
+static inline void vn_async_vkUpdateDescriptorSets(struct vn_ring *vn_ring, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkUpdateDescriptorSets(vn_instance, 0, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkUpdateDescriptorSets(vn_ring, 0, device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies, &submit);
 }
 
 #endif /* VN_PROTOCOL_DRIVER_DESCRIPTOR_SET_H */

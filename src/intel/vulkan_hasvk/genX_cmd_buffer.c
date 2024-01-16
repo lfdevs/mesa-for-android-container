@@ -870,8 +870,8 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
                         uint32_t base_layer, uint32_t layer_count,
                         VkImageLayout initial_layout,
                         VkImageLayout final_layout,
-                        uint64_t src_queue_family,
-                        uint64_t dst_queue_family,
+                        uint32_t src_queue_family,
+                        uint32_t dst_queue_family,
                         bool will_full_fast_clear)
 {
    struct anv_device *device = cmd_buffer->device;

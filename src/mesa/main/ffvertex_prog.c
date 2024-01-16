@@ -296,10 +296,10 @@ struct tnl_program {
 
 static nir_variable *
 register_state_var(struct tnl_program *p,
-                   gl_state_index s0,
-                   gl_state_index s1,
-                   gl_state_index s2,
-                   gl_state_index s3,
+                   gl_state_index16 s0,
+                   gl_state_index16 s1,
+                   gl_state_index16 s2,
+                   gl_state_index16 s3,
                    const struct glsl_type *type)
 {
    gl_state_index16 tokens[STATE_LENGTH];
@@ -319,10 +319,10 @@ register_state_var(struct tnl_program *p,
 
 static nir_def *
 load_state_var(struct tnl_program *p,
-               gl_state_index s0,
-               gl_state_index s1,
-               gl_state_index s2,
-               gl_state_index s3,
+               gl_state_index16 s0,
+               gl_state_index16 s1,
+               gl_state_index16 s2,
+               gl_state_index16 s3,
                const struct glsl_type *type)
 {
    nir_variable *var = register_state_var(p, s0, s1, s2, s3, type);
@@ -331,10 +331,10 @@ load_state_var(struct tnl_program *p,
 
 static nir_def *
 load_state_vec4(struct tnl_program *p,
-                gl_state_index s0,
-                gl_state_index s1,
-                gl_state_index s2,
-                gl_state_index s3)
+                gl_state_index16 s0,
+                gl_state_index16 s1,
+                gl_state_index16 s2,
+                gl_state_index16 s3)
 {
    return load_state_var(p, s0, s1, s2, s3, glsl_vec4_type());
 }
@@ -1065,8 +1065,7 @@ static void build_fog( struct tnl_program *p )
       fog = load_input(p, VERT_ATTRIB_FOG, glsl_float_type());
       break;
    default:
-      assert(!"Bad fog mode in build_fog()");
-      break;
+      unreachable("Bad fog mode in build_fog()");
    }
 
    store_output_float(p, VARYING_SLOT_FOGC, fog);

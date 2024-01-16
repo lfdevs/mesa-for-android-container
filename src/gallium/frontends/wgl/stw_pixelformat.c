@@ -531,7 +531,6 @@ stw_pixelformat_choose(HDC hdc, CONST PIXELFORMATDESCRIPTOR *ppfd)
       * - Giving no more bits than requested is given lowest priority.
       */
 
-      /* FIXME: Take in account individual channel bits */
       if (ppfd->cColorBits && !pfi->pfd.cColorBits)
          delta += 10000;
       else if (ppfd->cColorBits > pfi->pfd.cColorBits)
@@ -558,6 +557,27 @@ stw_pixelformat_choose(HDC hdc, CONST PIXELFORMATDESCRIPTOR *ppfd)
       else if (ppfd->cAlphaBits > pfi->pfd.cAlphaBits)
          delta += 100;
       else if (ppfd->cAlphaBits < pfi->pfd.cAlphaBits)
+         delta++;
+
+      if (ppfd->cRedBits && !pfi->pfd.cRedBits)
+         delta += 10000;
+      else if (ppfd->cRedBits > pfi->pfd.cRedBits)
+         delta += 100;
+      else if (ppfd->cRedBits < pfi->pfd.cRedBits)
+         delta++;
+
+      if (ppfd->cGreenBits && !pfi->pfd.cGreenBits)
+         delta += 10000;
+      else if (ppfd->cGreenBits > pfi->pfd.cGreenBits)
+         delta += 100;
+      else if (ppfd->cGreenBits < pfi->pfd.cGreenBits)
+         delta++;
+
+      if (ppfd->cBlueBits && !pfi->pfd.cBlueBits)
+         delta += 10000;
+      else if (ppfd->cBlueBits > pfi->pfd.cBlueBits)
+         delta += 100;
+      else if (ppfd->cBlueBits < pfi->pfd.cBlueBits)
          delta++;
 
       if (delta < bestdelta) {

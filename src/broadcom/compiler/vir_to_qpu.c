@@ -108,7 +108,7 @@ v3d71_set_src(struct v3d_qpu_instr *instr, uint8_t *raddr, struct qpu_reg src)
  * fields of the instruction.
  */
 static void
-v3d33_set_src(struct v3d_qpu_instr *instr, enum v3d_qpu_mux *mux, struct qpu_reg src)
+v3d42_set_src(struct v3d_qpu_instr *instr, enum v3d_qpu_mux *mux, struct qpu_reg src)
 {
         if (src.smimm) {
                 assert(instr->sig.small_imm_b);
@@ -158,13 +158,13 @@ set_src(struct v3d_qpu_instr *instr,
         const struct v3d_device_info *devinfo)
 {
         if (devinfo->ver < 71)
-                return v3d33_set_src(instr, mux, src);
+                return v3d42_set_src(instr, mux, src);
         else
                 return v3d71_set_src(instr, raddr, src);
 }
 
 static bool
-v3d33_mov_src_and_dst_equal(struct qinst *qinst)
+v3d42_mov_src_and_dst_equal(struct qinst *qinst)
 {
         enum v3d_qpu_waddr waddr = qinst->qpu.alu.mul.waddr;
         if (qinst->qpu.alu.mul.magic_write) {
@@ -216,7 +216,7 @@ mov_src_and_dst_equal(struct qinst *qinst,
                       const struct v3d_device_info *devinfo)
 {
         if (devinfo->ver < 71)
-                return v3d33_mov_src_and_dst_equal(qinst);
+                return v3d42_mov_src_and_dst_equal(qinst);
         else
                 return v3d71_mov_src_and_dst_equal(qinst);
 }
@@ -262,16 +262,12 @@ v3d_generate_code_block(struct v3d_compile *c,
                         struct qblock *block,
                         struct qpu_reg *temp_registers)
 {
-        int last_vpm_read_index = -1;
-
         vir_for_each_inst_safe(qinst, block) {
 #if 0
                 fprintf(stderr, "translating qinst to qpu: ");
                 vir_dump_inst(c, qinst);
                 fprintf(stderr, "\n");
 #endif
-
-                struct qinst *temp;
 
                 if (vir_has_uniform(qinst))
                         c->num_uniforms++;
@@ -303,19 +299,6 @@ v3d_generate_code_block(struct v3d_compile *c,
                         case QFILE_SMALL_IMM:
                                 src[i].smimm = true;
                                 break;
-
-                        case QFILE_VPM:
-                                assert(c->devinfo->ver < 40);
-                                assert((int)qinst->src[i].index >=
-                                       last_vpm_read_index);
-                                (void)last_vpm_read_index;
-                                last_vpm_read_index = qinst->src[i].index;
-
-                                temp = new_qpu_nop_before(qinst);
-                                temp->qpu.sig.ldvpm = true;
-
-                                src[i] = qpu_magic(V3D_QPU_WADDR_R3);
-                                break;
                         }
                 }
 
@@ -335,10 +318,6 @@ v3d_generate_code_block(struct v3d_compile *c,
 
                 case QFILE_TEMP:
                         dst = temp_registers[qinst->dst.index];
-                        break;
-
-                case QFILE_VPM:
-                        dst = qpu_magic(V3D_QPU_WADDR_VPM);
                         break;
 
                 case QFILE_SMALL_IMM:
@@ -361,8 +340,6 @@ v3d_generate_code_block(struct v3d_compile *c,
                                 }
 
                                 if (use_rf) {
-                                        assert(c->devinfo->ver >= 40);
-
                                         if (qinst->qpu.sig.ldunif) {
                                            qinst->qpu.sig.ldunif = false;
                                            qinst->qpu.sig.ldunifrf = true;
@@ -470,11 +447,7 @@ v3d_dump_qpu(struct v3d_compile *c)
                 const char *str = v3d_qpu_disasm(c->devinfo, c->qpu_insts[i]);
                 fprintf(stderr, "0x%016"PRIx64" %s", c->qpu_insts[i], str);
 
-                /* We can only do this on 4.x, because we're not tracking TMU
-                 * implicit uniforms here on 3.x.
-                 */
-                if (c->devinfo->ver >= 40 &&
-                    reads_uniform(c->devinfo, c->qpu_insts[i])) {
+                if (reads_uniform(c->devinfo, c->qpu_insts[i])) {
                         fprintf(stderr, " (");
                         vir_dump_uniform(c->uniform_contents[next_uniform],
                                          c->uniform_data[next_uniform]);
@@ -486,8 +459,7 @@ v3d_dump_qpu(struct v3d_compile *c)
         }
 
         /* Make sure our dumping lined up. */
-        if (c->devinfo->ver >= 40)
-                assert(next_uniform == c->num_uniforms);
+        assert(next_uniform == c->num_uniforms);
 
         fprintf(stderr, "\n");
 }

@@ -28,7 +28,7 @@ if with_android_stub
   inc_include += [include_directories('android_stub')]
 endif
 
-if not with_glvnd
+if not with_glvnd and host_machine.system() != 'windows'
   if with_gles1 or with_gles2 or with_opengl or with_egl
     install_headers('KHR/khrplatform.h', subdir : 'KHR')
   endif

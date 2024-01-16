@@ -90,7 +90,7 @@ struct bblock_t {
                         enum bblock_link_kind kind) const;
    bool can_combine_with(const bblock_t *that) const;
    void combine_with(bblock_t *that);
-   void dump() const;
+   void dump(FILE *file = stderr) const;
 
    backend_instruction *start();
    const backend_instruction *start() const;
@@ -107,6 +107,23 @@ struct bblock_t {
 
    backend_instruction *first_non_control_flow_inst();
    backend_instruction *last_non_control_flow_inst();
+
+private:
+   /**
+    * \sa unlink_parents, unlink_children
+    */
+   void unlink_list(exec_list *);
+
+public:
+   void unlink_parents()
+   {
+      unlink_list(&parents);
+   }
+
+   void unlink_children()
+   {
+      unlink_list(&children);
+   }
 #endif
 
    struct exec_node link;
@@ -322,8 +339,14 @@ struct cfg_t {
    void set_next_block(bblock_t **cur, bblock_t *block, int ip);
    void make_block_array();
 
-   void dump();
+   void dump(FILE *file = stderr);
    void dump_cfg();
+
+#ifdef NDEBUG
+   void validate(UNUSED const char *stage_abbrev) { }
+#else
+   void validate(const char *stage_abbrev);
+#endif
 
    /**
     * Propagate bblock_t::end_ip_delta data through the CFG.

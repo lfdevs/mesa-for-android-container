@@ -106,6 +106,21 @@ emu_set_control_reg(struct emu *emu, unsigned n, uint32_t val)
    }
 }
 
+uint32_t
+emu_get_sqe_reg(struct emu *emu, unsigned n)
+{
+   assert(n < ARRAY_SIZE(emu->sqe_regs.val));
+   return emu->sqe_regs.val[n];
+}
+
+void
+emu_set_sqe_reg(struct emu *emu, unsigned n, uint32_t val)
+{
+   assert(n < ARRAY_SIZE(emu->sqe_regs.val));
+   BITSET_SET(emu->sqe_regs.written, n);
+   emu->sqe_regs.val[n] = val;
+}
+
 static uint32_t
 emu_get_pipe_reg(struct emu *emu, unsigned n)
 {
@@ -335,6 +350,12 @@ const struct emu_reg_accessor emu_control_accessor = {
       .get_offset = afuc_control_reg,
       .get = emu_get_control_reg,
       .set = emu_set_control_reg,
+};
+
+const struct emu_reg_accessor emu_sqe_accessor = {
+      .get_offset = afuc_sqe_reg,
+      .get = emu_get_sqe_reg,
+      .set = emu_set_sqe_reg,
 };
 
 const struct emu_reg_accessor emu_pipe_accessor = {

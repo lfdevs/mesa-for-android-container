@@ -480,7 +480,7 @@ write_uniforms(struct blob *metadata, struct gl_shader_program *prog)
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
       if (has_uniform_storage(prog, i)) {
          unsigned vec_size =
-            prog->data->UniformStorage[i].type->component_slots() *
+            glsl_get_component_slots(prog->data->UniformStorage[i].type) *
             MAX2(prog->data->UniformStorage[i].array_elements, 1);
          unsigned slot =
             prog->data->UniformStorage[i].storage -
@@ -550,7 +550,7 @@ read_uniforms(struct blob_reader *metadata, struct gl_shader_program *prog)
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
       if (has_uniform_storage(prog, i)) {
          unsigned vec_size =
-            prog->data->UniformStorage[i].type->component_slots() *
+            glsl_get_component_slots(prog->data->UniformStorage[i].type) *
             MAX2(prog->data->UniformStorage[i].array_elements, 1);
          unsigned slot =
             prog->data->UniformStorage[i].storage -

@@ -24,40 +24,6 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-static void
-build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
-                         nir_def *value, unsigned component)
-{
-   assert(value->num_components == 1);
-   unsigned num_components = glsl_get_components(vec_deref->type);
-   assert(num_components > 1 && num_components <= NIR_MAX_VEC_COMPONENTS);
-
-   nir_def *u = nir_undef(b, 1, value->bit_size);
-   nir_def *comps[NIR_MAX_VEC_COMPONENTS];
-   for (unsigned i = 0; i < num_components; i++)
-      comps[i] = (i == component) ? value : u;
-
-   nir_def *vec = nir_vec(b, comps, num_components);
-   nir_store_deref(b, vec_deref, vec, (1u << component));
-}
-
-static void
-build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
-                          nir_def *value, nir_def *index,
-                          unsigned start, unsigned end)
-{
-   if (start == end - 1) {
-      build_write_masked_store(b, vec_deref, value, start);
-   } else {
-      unsigned mid = start + (end - start) / 2;
-      nir_push_if(b, nir_ilt_imm(b, index, mid));
-      build_write_masked_stores(b, vec_deref, value, index, start, mid);
-      nir_push_else(b, NULL);
-      build_write_masked_stores(b, vec_deref, value, index, mid, end);
-      nir_pop_if(b, NULL);
-   }
-}
-
 static bool
 nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
                                   nir_variable_mode modes,
@@ -117,14 +83,14 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
                 * replace it with anything.
                 */
                if (index < num_components)
-                  build_write_masked_store(&b, vec_deref, value, index);
+                  nir_build_write_masked_store(&b, vec_deref, value, index);
             } else {
                if (!(options & nir_lower_indirect_array_deref_of_vec_store))
                   continue;
 
                nir_def *index = deref->arr.index.ssa;
-               build_write_masked_stores(&b, vec_deref, value, index,
-                                         0, num_components);
+               nir_build_write_masked_stores(&b, vec_deref, value, index,
+                                             0, num_components);
             }
             nir_instr_remove(&intrin->instr);
 

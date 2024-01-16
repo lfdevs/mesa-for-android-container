@@ -281,7 +281,7 @@ def main():
     # This generator opens and writes the file itself, and it does so in bytes
     # mode. This solves the locale problem: Unicode can be rendered even
     # if the shell calling this script doesn't.
-    with open(args.out, 'w') as f:
+    with open(args.out, 'w', encoding='utf-8') as f:
         formats = [Format(l) for l in reader(args.csv)]
         try:
             # This basically does lazy evaluation and initialization, which

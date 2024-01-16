@@ -6,9 +6,12 @@ inc_asahi = include_directories([
    '.', 'layout', 'lib', 'compiler'
 ])
 
-subdir('layout')
-subdir('lib')
-subdir('compiler')
+if with_gallium_asahi
+   subdir('layout')
+   subdir('clc')
+   subdir('lib')
+   subdir('compiler')
+endif
 
 if with_tools.contains('drm-shim')
   subdir('drm-shim')

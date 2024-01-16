@@ -88,7 +88,7 @@ stw_interop_export_object(struct stw_context *ctx,
 int
 wglMesaGLInteropFlushObjects(HDC dpy, HGLRC context,
                              unsigned count, struct mesa_glinterop_export_in *resources,
-                             GLsync *sync)
+                             struct mesa_glinterop_flush_out *out)
 {
    DHGLRC dhglrc = 0;
 
@@ -104,14 +104,14 @@ wglMesaGLInteropFlushObjects(HDC dpy, HGLRC context,
    if (!ctx)
       return MESA_GLINTEROP_INVALID_CONTEXT;
 
-   return stw_interop_flush_objects(ctx, count, resources, sync);
+   return stw_interop_flush_objects(ctx, count, resources, out);
 }
 
 int
 stw_interop_flush_objects(struct stw_context *ctx,
                           unsigned count, struct mesa_glinterop_export_in *objects,
-                          GLsync *sync)
+                          struct mesa_glinterop_flush_out *out)
 {
-   return st_interop_flush_objects(ctx->st, count, objects, sync);
+   return st_interop_flush_objects(ctx->st, count, objects, out);
 }
 

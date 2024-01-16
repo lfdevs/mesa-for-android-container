@@ -106,6 +106,7 @@ def register_filter(gfx_level, name, offset, already_added):
                name.startswith('SQ_THREAD') or
                name.startswith('GRBM_STATUS') or
                name.startswith('CP_CP'))) or
+             name.startswith('GCVM_L2_PROTECTION_FAULT_STATUS') or
              # Add registers in the 0x9000 range
              (group == 0x9 and
               (name in ['TA_CS_BC_BASE_ADDR', 'GB_ADDR_CONFIG', 'SPI_CONFIG_CNTL'] or

@@ -300,7 +300,7 @@ vec4_visitor::fix_3src_operand(const src_reg &src)
    if (src.file == UNIFORM && brw_is_single_value_swizzle(src.swizzle))
       return src;
 
-   dst_reg expanded = dst_reg(this, glsl_type::vec4_type);
+   dst_reg expanded = dst_reg(this, glsl_vec4_type());
    expanded.type = src.type;
    emit(VEC4_OPCODE_UNPACK_UNIFORM, expanded, src);
    return src_reg(expanded);
@@ -326,7 +326,7 @@ vec4_visitor::fix_math_operand(const src_reg &src)
    if (devinfo->ver == 7 && src.file != IMM)
       return src;
 
-   dst_reg expanded = dst_reg(this, glsl_type::vec4_type);
+   dst_reg expanded = dst_reg(this, glsl_vec4_type());
    expanded.type = src.type;
    emit(MOV(expanded, src));
    return src_reg(expanded);
@@ -342,7 +342,7 @@ vec4_visitor::emit_math(enum opcode opcode,
 
    if (devinfo->ver == 6 && dst.writemask != WRITEMASK_XYZW) {
       /* MATH on Gfx6 must be align1, so we can't do writemasks. */
-      math->dst = dst_reg(this, glsl_type::vec4_type);
+      math->dst = dst_reg(this, glsl_vec4_type());
       math->dst.type = dst.type;
       math = emit(MOV(dst, src_reg(math->dst)));
    } else if (devinfo->ver < 6) {
@@ -390,7 +390,7 @@ vec4_visitor::emit_pack_half_2x16(dst_reg dst, src_reg src0)
     * in that the upper word of each destination channel is cleared to 0.
     */
 
-   dst_reg tmp_dst(this, glsl_type::uvec2_type);
+   dst_reg tmp_dst(this, glsl_uvec2_type());
    src_reg tmp_src(tmp_dst);
 
 #if 0
@@ -455,7 +455,7 @@ vec4_visitor::emit_unpack_half_2x16(dst_reg dst, src_reg src0)
     * emit f16to32 in align16 mode with UD as source data type.
     */
 
-   dst_reg tmp_dst(this, glsl_type::uvec2_type);
+   dst_reg tmp_dst(this, glsl_uvec2_type());
    src_reg tmp_src(tmp_dst);
 
    tmp_dst.writemask = WRITEMASK_X;
@@ -476,15 +476,15 @@ vec4_visitor::emit_unpack_unorm_4x8(const dst_reg &dst, src_reg src0)
     * is not suitable to generate the shift values, but we can use the packed
     * vector float and a type-converting MOV.
     */
-   dst_reg shift(this, glsl_type::uvec4_type);
+   dst_reg shift(this, glsl_uvec4_type());
    emit(MOV(shift, brw_imm_vf4(0x00, 0x60, 0x70, 0x78)));
 
-   dst_reg shifted(this, glsl_type::uvec4_type);
+   dst_reg shifted(this, glsl_uvec4_type());
    src0.swizzle = BRW_SWIZZLE_XXXX;
    emit(SHR(shifted, src0, src_reg(shift)));
 
    shifted.type = BRW_REGISTER_TYPE_UB;
-   dst_reg f(this, glsl_type::vec4_type);
+   dst_reg f(this, glsl_vec4_type());
    emit(VEC4_OPCODE_MOV_BYTES, f, src_reg(shifted));
 
    emit(MUL(dst, src_reg(f), brw_imm_f(1.0f / 255.0f)));
@@ -498,21 +498,21 @@ vec4_visitor::emit_unpack_snorm_4x8(const dst_reg &dst, src_reg src0)
     * is not suitable to generate the shift values, but we can use the packed
     * vector float and a type-converting MOV.
     */
-   dst_reg shift(this, glsl_type::uvec4_type);
+   dst_reg shift(this, glsl_uvec4_type());
    emit(MOV(shift, brw_imm_vf4(0x00, 0x60, 0x70, 0x78)));
 
-   dst_reg shifted(this, glsl_type::uvec4_type);
+   dst_reg shifted(this, glsl_uvec4_type());
    src0.swizzle = BRW_SWIZZLE_XXXX;
    emit(SHR(shifted, src0, src_reg(shift)));
 
    shifted.type = BRW_REGISTER_TYPE_B;
-   dst_reg f(this, glsl_type::vec4_type);
+   dst_reg f(this, glsl_vec4_type());
    emit(VEC4_OPCODE_MOV_BYTES, f, src_reg(shifted));
 
-   dst_reg scaled(this, glsl_type::vec4_type);
+   dst_reg scaled(this, glsl_vec4_type());
    emit(MUL(scaled, src_reg(f), brw_imm_f(1.0f / 127.0f)));
 
-   dst_reg max(this, glsl_type::vec4_type);
+   dst_reg max(this, glsl_vec4_type());
    emit_minmax(BRW_CONDITIONAL_GE, max, src_reg(scaled), brw_imm_f(-1.0f));
    emit_minmax(BRW_CONDITIONAL_L, dst, src_reg(max), brw_imm_f(1.0f));
 }
@@ -520,17 +520,17 @@ vec4_visitor::emit_unpack_snorm_4x8(const dst_reg &dst, src_reg src0)
 void
 vec4_visitor::emit_pack_unorm_4x8(const dst_reg &dst, const src_reg &src0)
 {
-   dst_reg saturated(this, glsl_type::vec4_type);
+   dst_reg saturated(this, glsl_vec4_type());
    vec4_instruction *inst = emit(MOV(saturated, src0));
    inst->saturate = true;
 
-   dst_reg scaled(this, glsl_type::vec4_type);
+   dst_reg scaled(this, glsl_vec4_type());
    emit(MUL(scaled, src_reg(saturated), brw_imm_f(255.0f)));
 
-   dst_reg rounded(this, glsl_type::vec4_type);
+   dst_reg rounded(this, glsl_vec4_type());
    emit(RNDE(rounded, src_reg(scaled)));
 
-   dst_reg u(this, glsl_type::uvec4_type);
+   dst_reg u(this, glsl_uvec4_type());
    emit(MOV(u, src_reg(rounded)));
 
    src_reg bytes(u);
@@ -540,19 +540,19 @@ vec4_visitor::emit_pack_unorm_4x8(const dst_reg &dst, const src_reg &src0)
 void
 vec4_visitor::emit_pack_snorm_4x8(const dst_reg &dst, const src_reg &src0)
 {
-   dst_reg max(this, glsl_type::vec4_type);
+   dst_reg max(this, glsl_vec4_type());
    emit_minmax(BRW_CONDITIONAL_GE, max, src0, brw_imm_f(-1.0f));
 
-   dst_reg min(this, glsl_type::vec4_type);
+   dst_reg min(this, glsl_vec4_type());
    emit_minmax(BRW_CONDITIONAL_L, min, src_reg(max), brw_imm_f(1.0f));
 
-   dst_reg scaled(this, glsl_type::vec4_type);
+   dst_reg scaled(this, glsl_vec4_type());
    emit(MUL(scaled, src_reg(min), brw_imm_f(127.0f)));
 
-   dst_reg rounded(this, glsl_type::vec4_type);
+   dst_reg rounded(this, glsl_vec4_type());
    emit(RNDE(rounded, src_reg(scaled)));
 
-   dst_reg i(this, glsl_type::ivec4_type);
+   dst_reg i(this, glsl_ivec4_type());
    emit(MOV(i, src_reg(rounded)));
 
    src_reg bytes(i);
@@ -582,10 +582,10 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4, bool bindless)
    case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
-      if (type->is_matrix()) {
-         const glsl_type *col_type = type->column_type();
+      if (glsl_type_is_matrix(type)) {
+         const glsl_type *col_type = glsl_get_column_type(type);
          unsigned col_slots =
-            (as_vec4 && col_type->is_dual_slot()) ? 2 : 1;
+            (as_vec4 && glsl_type_is_dual_slot(col_type)) ? 2 : 1;
          return type->matrix_columns * col_slots;
       } else {
          /* Regardless of size of vector, it gets a vec4. This is bad
@@ -593,7 +593,7 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4, bool bindless)
           * mess.  Hopefully a later pass over the code can pack scalars
           * down if appropriate.
           */
-         return (as_vec4 && type->is_dual_slot()) ? 2 : 1;
+         return (as_vec4 && glsl_type_is_dual_slot(type)) ? 2 : 1;
       }
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
@@ -677,7 +677,7 @@ src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type)
    this->file = VGRF;
    this->nr = v->alloc.allocate(type_size_vec4(type, false));
 
-   if (type->is_array() || type->is_struct()) {
+   if (glsl_type_is_array(type) || glsl_type_is_struct(type)) {
       this->swizzle = BRW_SWIZZLE_NOOP;
    } else {
       this->swizzle = brw_swizzle_for_size(type->vector_elements);
@@ -707,7 +707,7 @@ dst_reg::dst_reg(class vec4_visitor *v, const struct glsl_type *type)
    this->file = VGRF;
    this->nr = v->alloc.allocate(type_size_vec4(type, false));
 
-   if (type->is_array() || type->is_struct()) {
+   if (glsl_type_is_array(type) || glsl_type_is_struct(type)) {
       this->writemask = WRITEMASK_XYZW;
    } else {
       this->writemask = (1 << type->vector_elements) - 1;
@@ -743,7 +743,7 @@ vec4_visitor::emit_pull_constant_load_reg(dst_reg dst,
    vec4_instruction *pull;
 
    if (devinfo->ver >= 7) {
-      dst_reg grf_offset = dst_reg(this, glsl_type::uint_type);
+      dst_reg grf_offset = dst_reg(this, glsl_uint_type());
 
       grf_offset.type = offset_reg.type;
 
@@ -777,8 +777,8 @@ vec4_visitor::emit_pull_constant_load_reg(dst_reg dst,
 src_reg
 vec4_visitor::emit_uniformize(const src_reg &src)
 {
-   const src_reg chan_index(this, glsl_type::uint_type);
-   const dst_reg dst = retype(dst_reg(this, glsl_type::uint_type),
+   const src_reg chan_index(this, glsl_uint_type());
+   const dst_reg dst = retype(dst_reg(this, glsl_uint_type()),
                               src.type);
 
    emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, dst_reg(chan_index))
@@ -811,7 +811,7 @@ vec4_visitor::emit_ndc_computation()
    src_reg pos = src_reg(output_reg[VARYING_SLOT_POS][0]);
 
    /* Build ndc coords, which are (x/w, y/w, z/w, 1/w) */
-   dst_reg ndc = dst_reg(this, glsl_type::vec4_type);
+   dst_reg ndc = dst_reg(this, glsl_vec4_type());
    output_reg[BRW_VARYING_SLOT_NDC][0] = ndc;
    output_num_components[BRW_VARYING_SLOT_NDC][0] = 4;
 
@@ -835,7 +835,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
        ((prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) ||
         output_reg[VARYING_SLOT_CLIP_DIST0][0].file != BAD_FILE ||
         devinfo->has_negative_rhw_bug)) {
-      dst_reg header1 = dst_reg(this, glsl_type::uvec4_type);
+      dst_reg header1 = dst_reg(this, glsl_uvec4_type());
       dst_reg header1_w = header1;
       header1_w.writemask = WRITEMASK_W;
 
@@ -851,7 +851,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
 
       if (output_reg[VARYING_SLOT_CLIP_DIST0][0].file != BAD_FILE) {
          current_annotation = "Clipping flags";
-         dst_reg flags0 = dst_reg(this, glsl_type::uint_type);
+         dst_reg flags0 = dst_reg(this, glsl_uint_type());
 
          emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST0][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags0, brw_imm_d(0));
@@ -859,7 +859,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
       }
 
       if (output_reg[VARYING_SLOT_CLIP_DIST1][0].file != BAD_FILE) {
-         dst_reg flags1 = dst_reg(this, glsl_type::uint_type);
+         dst_reg flags1 = dst_reg(this, glsl_uint_type());
          emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST1][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags1, brw_imm_d(0));
          emit(SHL(flags1, src_reg(flags1), brw_imm_d(4)));
@@ -1087,7 +1087,7 @@ vec4_visitor::get_scratch_offset(bblock_t *block, vec4_instruction *inst,
        * is in units of 16 bytes and is used to select the low/high 16-byte
        * chunk of a full dvec4, so we don't want to multiply that part.
        */
-      src_reg index = src_reg(this, glsl_type::int_type);
+      src_reg index = src_reg(this, glsl_int_type());
       if (type_sz(inst->dst.type) < 8) {
          emit_before(block, inst, ADD(dst_reg(index), *reladdr,
                                       brw_imm_d(reg_offset)));
@@ -1124,7 +1124,7 @@ vec4_visitor::emit_scratch_read(bblock_t *block, vec4_instruction *inst,
    if (type_sz(orig_src.type) < 8) {
       emit_before(block, inst, SCRATCH_READ(temp, index));
    } else {
-      dst_reg shuffled = dst_reg(this, glsl_type::dvec4_type);
+      dst_reg shuffled = dst_reg(this, glsl_dvec4_type());
       dst_reg shuffled_float = retype(shuffled, BRW_REGISTER_TYPE_F);
       emit_before(block, inst, SCRATCH_READ(shuffled_float, index));
       index = get_scratch_offset(block, inst, orig_src.reladdr, reg_offset + 1);
@@ -1159,7 +1159,7 @@ vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
     */
    bool is_64bit = type_sz(inst->dst.type) == 8;
    const glsl_type *alloc_type =
-      is_64bit ? glsl_type::dvec4_type : glsl_type::vec4_type;
+      is_64bit ? glsl_dvec4_type() : glsl_vec4_type();
    const src_reg temp = swizzle(retype(src_reg(this, alloc_type),
                                        inst->dst.type),
                                 brw_swizzle_for_mask(inst->dst.writemask));
@@ -1245,7 +1245,7 @@ vec4_visitor::emit_resolve_reladdr(int scratch_loc[], bblock_t *block,
    /* Now handle scratch access on src */
    if (src.file == VGRF && scratch_loc[src.nr] != -1) {
       dst_reg temp = dst_reg(this, type_sz(src.type) == 8 ?
-         glsl_type::dvec4_type : glsl_type::vec4_type);
+         glsl_dvec4_type() : glsl_vec4_type());
       emit_scratch_read(block, inst, temp, src, scratch_loc[src.nr]);
       src.nr = temp.nr;
       src.offset %= REG_SIZE;
@@ -1342,7 +1342,7 @@ vec4_visitor::resolve_ud_negate(src_reg *reg)
        !reg->negate)
       return;
 
-   src_reg temp = src_reg(this, glsl_type::uvec4_type);
+   src_reg temp = src_reg(this, glsl_uvec4_type());
    emit(BRW_OPCODE_MOV, dst_reg(temp), *reg);
    *reg = temp;
 }

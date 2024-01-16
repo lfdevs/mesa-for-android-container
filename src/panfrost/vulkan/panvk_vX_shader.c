@@ -254,7 +254,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev, gl_shader_stage stage,
               true, true);
 
    struct panfrost_compile_inputs inputs = {
-      .gpu_id = pdev->gpu_id,
+      .gpu_id = panfrost_device_gpu_id(pdev),
       .no_ubo_to_push = true,
       .no_idvs = true, /* TODO */
    };
@@ -264,7 +264,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev, gl_shader_stage stage,
 
    NIR_PASS_V(nir, nir_opt_copy_prop_vars);
    NIR_PASS_V(nir, nir_opt_combine_stores, nir_var_all);
-   NIR_PASS_V(nir, nir_opt_trivial_continues);
+   NIR_PASS_V(nir, nir_opt_loop);
 
    /* Do texture lowering here.  Yes, it's a duplication of the texture
     * lowering in bifrost_compile.  However, we need to lower texture stuff

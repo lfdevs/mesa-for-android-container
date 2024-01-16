@@ -44,8 +44,8 @@ enum vk_queue_submit_mode {
    /** Submits happen immediately
     *
     * `vkQueueSubmit()` and `vkQueueBindSparse()` call
-    * `vk_queue::driver_submit` directly for all submits and the last call to
-    * `vk_queue::driver_submit` will have completed by the time
+    * ``vk_queue::driver_submit`` directly for all submits and the last call to
+    * ``vk_queue::driver_submit`` will have completed by the time
     * `vkQueueSubmit()` or `vkQueueBindSparse()` return.
     */
    VK_QUEUE_SUBMIT_MODE_IMMEDIATE,
@@ -73,7 +73,7 @@ enum vk_queue_submit_mode {
     *       semaphores after waiting on them.
     *
     *    3. All vk_sync types used as permanent payloads of semaphores support
-    *       `vk_sync_type::move` so that it can move the pending signal into a
+    *       ``vk_sync_type::move`` so that it can move the pending signal into a
     *       temporary vk_sync and reset the semaphore.
     *
     * This is requied for shared timeline semaphores where we need to handle
@@ -156,7 +156,7 @@ struct vk_device {
    /** Checks the status of this device
     *
     * This is expected to return either VK_SUCCESS or VK_ERROR_DEVICE_LOST.
-    * It is called before vk_queue::driver_submit and after every non-trivial
+    * It is called before ``vk_queue::driver_submit`` and after every non-trivial
     * wait operation to ensure the device is still around.  This gives the
     * driver a hook to ask the kernel if its device is still valid.  If the
     * kernel says the device has been lost, it MUST call vk_device_set_lost().
@@ -173,10 +173,10 @@ struct vk_device {
     * anyway.
     *
     * If `signal_memory` is set, the resulting vk_sync will be used to signal
-    * the memory object from a queue via vk_queue_submit::signals.  The common
+    * the memory object from a queue ``via vk_queue_submit::signals``.  The common
     * code guarantees that, by the time vkQueueSubmit() returns, the signal
     * operation has been submitted to the kernel via the driver's
-    * vk_queue::driver_submit hook.  This means that any vkQueueSubmit() call
+    * ``vk_queue::driver_submit`` hook.  This means that any vkQueueSubmit() call
     * which needs implicit synchronization may block.
     *
     * If `signal_memory` is not set, it can be assumed that memory object
@@ -269,20 +269,20 @@ VK_DEFINE_HANDLE_CASTS(vk_device, base, VkDevice,
  *
  * Along with initializing the data structures in `vk_device`, this function
  * checks that every extension specified by
- * `VkInstanceCreateInfo::ppEnabledExtensionNames` is actually supported by
+ * ``VkInstanceCreateInfo::ppEnabledExtensionNames`` is actually supported by
  * the physical device and returns `VK_ERROR_EXTENSION_NOT_PRESENT` if an
  * unsupported extension is requested.  It also checks all the feature struct
  * chained into the `pCreateInfo->pNext` chain against the features returned
  * by `vkGetPhysicalDeviceFeatures2` and returns
  * `VK_ERROR_FEATURE_NOT_PRESENT` if an unsupported feature is requested.
  *
- * @param[out] device               The device to initialize
- * @param[in]  physical_device      The physical device
- * @param[in]  dispatch_table       Device-level dispatch table
- * @param[in]  pCreateInfo          VkDeviceCreateInfo pointer passed to
- *                                  `vkCreateDevice()`
- * @param[in]  alloc                Allocation callbacks passed to
- *                                  `vkCreateDevice()`
+ * :param device:               |out| The device to initialize
+ * :param physical_device:      |in|  The physical device
+ * :param dispatch_table:       |in|  Device-level dispatch table
+ * :param pCreateInfo:          |in|  VkDeviceCreateInfo pointer passed to
+ *                                    `vkCreateDevice()`
+ * :param alloc:                |in|  Allocation callbacks passed to
+ *                                    `vkCreateDevice()`
  */
 VkResult MUST_CHECK
 vk_device_init(struct vk_device *device,
@@ -299,7 +299,7 @@ vk_device_set_drm_fd(struct vk_device *device, int drm_fd)
 
 /** Tears down a vk_device
  *
- * @param[out] device               The device to tear down
+ * :param device:       |out| The device to tear down
  */
 void
 vk_device_finish(struct vk_device *device);

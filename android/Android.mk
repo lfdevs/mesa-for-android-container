@@ -62,8 +62,11 @@ MESON_GEN_PKGCONFIGS += libdrm_intel:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(filter radeonsi,$(BOARD_MESA3D_GALLIUM_DRIVERS)),)
-MESON_GEN_LLVM_STUB := true
+ifneq ($(MESON_GEN_LLVM_STUB),)
 LOCAL_CFLAGS += -DFORCE_BUILD_AMDGPU   # instructs LLVM to declare LLVMInitializeAMDGPU* functions
+# The flag is required for the Android-x86 LLVM port that follows the AOSP LLVM porting rules
+# https://osdn.net/projects/android-x86/scm/git/external-llvm-project
+endif
 endif
 
 ifneq ($(filter radeonsi amd,$(BOARD_MESA3D_GALLIUM_DRIVERS) $(BOARD_MESA3D_VULKAN_DRIVERS)),)

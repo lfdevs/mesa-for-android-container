@@ -313,8 +313,22 @@ v3dv_CreateQueryPool(VkDevice _device,
       assert(pool->perfmon.nperfmons <= V3DV_MAX_PERFMONS);
       break;
    }
-   case VK_QUERY_TYPE_TIMESTAMP:
+   case VK_QUERY_TYPE_TIMESTAMP: {
+      /* 8 bytes per query used for the timestamp value. We have all
+       * timestamps tightly packed first in the buffer.
+       */
+      const uint32_t bo_size = pool->query_count * 8;
+      pool->timestamp.bo = v3dv_bo_alloc(device, bo_size, "query:t", true);
+      if (!pool->timestamp.bo) {
+         result = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         goto fail;
+      }
+      if (!v3dv_bo_map(device, pool->timestamp.bo, bo_size)) {
+         result = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         goto fail;
+      }
       break;
+   }
    default:
       unreachable("Unsupported query type");
    }
@@ -330,7 +344,12 @@ v3dv_CreateQueryPool(VkDevice _device,
          break;
          }
       case VK_QUERY_TYPE_TIMESTAMP:
-         pool->queries[query_idx].value = 0;
+         pool->queries[query_idx].timestamp.offset = query_idx * 8;
+         result = vk_sync_create(&device->vk,
+                                 &device->pdevice->drm_syncobj_type, 0, 0,
+                                 &pool->queries[query_idx].timestamp.sync);
+         if (result != VK_SUCCESS)
+            goto fail;
          break;
       case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR: {
          result = vk_sync_create(&device->vk,
@@ -339,8 +358,7 @@ v3dv_CreateQueryPool(VkDevice _device,
          if (result != VK_SUCCESS)
             goto fail;
 
-         for (uint32_t j = 0; j < pool->perfmon.nperfmons; j++)
-            pool->queries[query_idx].perf.kperfmon_ids[j] = 0;
+         kperfmon_create(device, pool, query_idx);
          break;
          }
       default:
@@ -358,6 +376,11 @@ v3dv_CreateQueryPool(VkDevice _device,
    return VK_SUCCESS;
 
 fail:
+   if (pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+      for (uint32_t j = 0; j < query_idx; j++)
+         vk_sync_destroy(&device->vk, pool->queries[j].timestamp.sync);
+   }
+
    if (pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR) {
       for (uint32_t j = 0; j < query_idx; j++)
          vk_sync_destroy(&device->vk, pool->queries[j].perf.last_job_sync);
@@ -365,6 +388,8 @@ fail:
 
    if (pool->occlusion.bo)
       v3dv_bo_free(device, pool->occlusion.bo);
+   if (pool->timestamp.bo)
+      v3dv_bo_free(device, pool->timestamp.bo);
    if (pool->queries)
       vk_free2(&device->vk.alloc, pAllocator, pool->queries);
    pool_destroy_meta_resources(device, pool);
@@ -386,6 +411,14 @@ v3dv_DestroyQueryPool(VkDevice _device,
 
    if (pool->occlusion.bo)
       v3dv_bo_free(device, pool->occlusion.bo);
+
+   if (pool->timestamp.bo)
+      v3dv_bo_free(device, pool->timestamp.bo);
+
+   if (pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+      for (uint32_t i = 0; i < pool->query_count; i++)
+         vk_sync_destroy(&device->vk, pool->queries[i].timestamp.sync);
+   }
 
    if (pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR) {
       for (uint32_t i = 0; i < pool->query_count; i++) {
@@ -421,9 +454,9 @@ query_wait_available(struct v3dv_device *device,
                      uint32_t query_idx)
 {
    /* For occlusion queries we prefer to poll the availability BO in a loop
-    * to waiting on the occlusion query results BO, because the latter would
-    * make us wait for any job running occlusion queries, even if those queries
-    * do not involve the one we want to wait on.
+    * to waiting on the query results BO, because the latter would
+    * make us wait for any job running queries from the pool, even if those
+    * queries do not involve the one we want to wait on.
     */
    if (pool->query_type == VK_QUERY_TYPE_OCCLUSION) {
       uint8_t *q_addr = ((uint8_t *) pool->occlusion.bo->map) +
@@ -433,12 +466,19 @@ query_wait_available(struct v3dv_device *device,
       return VK_SUCCESS;
    }
 
-   /* For other queries we need to wait for the queue to signal that
+   if (pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+      if (vk_sync_wait(&device->vk, q->timestamp.sync,
+                       0, VK_SYNC_WAIT_COMPLETE, UINT64_MAX) != VK_SUCCESS) {
+         return vk_device_set_lost(&device->vk, "Query job wait failed");
+      }
+      return VK_SUCCESS;
+   }
+
+   assert(pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR);
+
+   /* For performance queries we need to wait for the queue to signal that
     * the query has been submitted for execution before anything else.
     */
-   assert(pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR ||
-          pool->query_type == VK_QUERY_TYPE_TIMESTAMP);
-
    VkResult result = VK_SUCCESS;
    if (!q->maybe_available) {
       struct timespec timeout;
@@ -485,18 +525,28 @@ query_check_available(struct v3dv_device *device,
                       struct v3dv_query *q,
                       uint32_t query_idx)
 {
-   /* For occlusion and performance queries we check the availability BO */
+   /* For occlusion we check the availability BO */
    if (pool->query_type == VK_QUERY_TYPE_OCCLUSION) {
       const uint8_t *q_addr = ((uint8_t *) pool->occlusion.bo->map) +
                               pool->occlusion.avail_offset + query_idx;
       return (*q_addr != 0) ? VK_SUCCESS : VK_NOT_READY;
    }
 
+   /* For timestamp queries, we need to check if the relevant job
+    * has completed.
+    */
+   if (pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+      if (vk_sync_wait(&device->vk, q->timestamp.sync,
+                       0, VK_SYNC_WAIT_COMPLETE, 0) != VK_SUCCESS) {
+         return VK_NOT_READY;
+      }
+      return VK_SUCCESS;
+   }
+
    /* For other queries we need to check if the queue has submitted the query
     * for execution at all.
     */
-   assert(pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR ||
-          pool->query_type == VK_QUERY_TYPE_TIMESTAMP);
+   assert(pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR);
    if (!q->maybe_available)
       return VK_NOT_READY;
 
@@ -520,9 +570,6 @@ query_is_available(struct v3dv_device *device,
                    bool *available)
 {
    struct v3dv_query *q = &pool->queries[query];
-
-   assert(pool->query_type != VK_QUERY_TYPE_OCCLUSION ||
-          (pool->occlusion.bo && pool->occlusion.bo->map));
 
    if (do_wait) {
       VkResult result = query_wait_available(device, pool, q, query);
@@ -575,7 +622,10 @@ write_timestamp_query_result(struct v3dv_device *device,
 
    struct v3dv_query *q = &pool->queries[query];
 
-   write_to_buffer(data, slot, do_64bit, q->value);
+   const uint8_t *query_addr =
+      ((uint8_t *) pool->timestamp.bo->map) + q->timestamp.offset;
+
+   write_to_buffer(data, slot, do_64bit, *((uint64_t *)query_addr));
    return VK_SUCCESS;
 }
 
@@ -1227,6 +1277,24 @@ v3dv_reset_query_pool_cpu(struct v3dv_device *device,
 {
    mtx_lock(&device->query_mutex);
 
+   if (pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+      assert(first + count <= pool->query_count);
+
+      /* Reset timestamp */
+      uint8_t *base_addr;
+      base_addr  = ((uint8_t *) pool->timestamp.bo->map) +
+                    pool->queries[first].timestamp.offset;
+      memset(base_addr, 0, 8 * count);
+
+      for (uint32_t i = first; i < first + count; i++) {
+         if (vk_sync_reset(&device->vk, pool->queries[i].timestamp.sync) != VK_SUCCESS)
+            fprintf(stderr, "Failed to reset sync");
+      }
+
+      mtx_unlock(&device->query_mutex);
+      return;
+   }
+
    for (uint32_t i = first; i < first + count; i++) {
       assert(i < pool->query_count);
       struct v3dv_query *q = &pool->queries[i];
@@ -1245,9 +1313,6 @@ v3dv_reset_query_pool_cpu(struct v3dv_device *device,
          *counter = 0;
          break;
       }
-      case VK_QUERY_TYPE_TIMESTAMP:
-         q->value = 0;
-         break;
       case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
          kperfmon_destroy(device, pool, i);
          kperfmon_create(device, pool, i);

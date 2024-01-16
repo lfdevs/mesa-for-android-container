@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_DEVICE_H
 #define VN_PROTOCOL_DRIVER_DEVICE_H
 
-#include "vn_instance.h"
+#include "vn_ring.h"
 #include "vn_protocol_driver_structs.h"
 
 /*
@@ -7665,6 +7665,287 @@ vn_encode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_partial(struct vn_cs_
     vn_encode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self_partial(enc, val);
 }
 
+/* struct VkPhysicalDeviceExtendedDynamicState3FeaturesEXT chain */
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3TessellationDomainOrigin);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3DepthClampEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3PolygonMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3RasterizationSamples);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3SampleMask);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3AlphaToCoverageEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3AlphaToOneEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3LogicOpEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ColorBlendEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ColorBlendEquation);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ColorWriteMask);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3RasterizationStream);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ConservativeRasterizationMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ExtraPrimitiveOverestimationSize);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3DepthClipEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3SampleLocationsEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ColorBlendAdvanced);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ProvokingVertexMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3LineRasterizationMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3LineStippleEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3DepthClipNegativeOneToOne);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ViewportWScalingEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ViewportSwizzle);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageToColorEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageToColorLocation);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageModulationMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageModulationTableEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageModulationTable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3CoverageReductionMode);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3RepresentativeFragmentTestEnable);
+    size += vn_sizeof_VkBool32(&val->extendedDynamicState3ShadingRateImageEnable);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT(const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(val->pNext);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3TessellationDomainOrigin);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3DepthClampEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3PolygonMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3RasterizationSamples);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3SampleMask);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3AlphaToCoverageEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3AlphaToOneEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3LogicOpEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ColorBlendEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ColorBlendEquation);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ColorWriteMask);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3RasterizationStream);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ConservativeRasterizationMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ExtraPrimitiveOverestimationSize);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3DepthClipEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3SampleLocationsEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ColorBlendAdvanced);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ProvokingVertexMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3LineRasterizationMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3LineStippleEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3DepthClipNegativeOneToOne);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ViewportWScalingEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ViewportSwizzle);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageToColorEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageToColorLocation);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageModulationMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageModulationTableEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageModulationTable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3CoverageReductionMode);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3RepresentativeFragmentTestEnable);
+    vn_encode_VkBool32(enc, &val->extendedDynamicState3ShadingRateImageEnable);
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT });
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(enc, val->pNext);
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(enc, val);
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(struct vn_cs_decoder *dec, const void *val)
+{
+    /* no known/supported struct */
+    if (vn_decode_simple_pointer(dec))
+        assert(false);
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(struct vn_cs_decoder *dec, VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3TessellationDomainOrigin);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3DepthClampEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3PolygonMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3RasterizationSamples);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3SampleMask);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3AlphaToCoverageEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3AlphaToOneEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3LogicOpEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ColorBlendEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ColorBlendEquation);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ColorWriteMask);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3RasterizationStream);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ConservativeRasterizationMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ExtraPrimitiveOverestimationSize);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3DepthClipEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3SampleLocationsEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ColorBlendAdvanced);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ProvokingVertexMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3LineRasterizationMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3LineStippleEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3DepthClipNegativeOneToOne);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ViewportWScalingEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ViewportSwizzle);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageToColorEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageToColorLocation);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageModulationMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageModulationTableEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageModulationTable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3CoverageReductionMode);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3RepresentativeFragmentTestEnable);
+    vn_decode_VkBool32(dec, &val->extendedDynamicState3ShadingRateImageEnable);
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT(struct vn_cs_decoder *dec, VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    VkStructureType stype;
+    vn_decode_VkStructureType(dec, &stype);
+    assert(stype == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT);
+
+    assert(val->sType == stype);
+    vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext(dec, val->pNext);
+    vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(dec, val);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext_partial(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial(const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    /* skip val->extendedDynamicState3TessellationDomainOrigin */
+    /* skip val->extendedDynamicState3DepthClampEnable */
+    /* skip val->extendedDynamicState3PolygonMode */
+    /* skip val->extendedDynamicState3RasterizationSamples */
+    /* skip val->extendedDynamicState3SampleMask */
+    /* skip val->extendedDynamicState3AlphaToCoverageEnable */
+    /* skip val->extendedDynamicState3AlphaToOneEnable */
+    /* skip val->extendedDynamicState3LogicOpEnable */
+    /* skip val->extendedDynamicState3ColorBlendEnable */
+    /* skip val->extendedDynamicState3ColorBlendEquation */
+    /* skip val->extendedDynamicState3ColorWriteMask */
+    /* skip val->extendedDynamicState3RasterizationStream */
+    /* skip val->extendedDynamicState3ConservativeRasterizationMode */
+    /* skip val->extendedDynamicState3ExtraPrimitiveOverestimationSize */
+    /* skip val->extendedDynamicState3DepthClipEnable */
+    /* skip val->extendedDynamicState3SampleLocationsEnable */
+    /* skip val->extendedDynamicState3ColorBlendAdvanced */
+    /* skip val->extendedDynamicState3ProvokingVertexMode */
+    /* skip val->extendedDynamicState3LineRasterizationMode */
+    /* skip val->extendedDynamicState3LineStippleEnable */
+    /* skip val->extendedDynamicState3DepthClipNegativeOneToOne */
+    /* skip val->extendedDynamicState3ViewportWScalingEnable */
+    /* skip val->extendedDynamicState3ViewportSwizzle */
+    /* skip val->extendedDynamicState3CoverageToColorEnable */
+    /* skip val->extendedDynamicState3CoverageToColorLocation */
+    /* skip val->extendedDynamicState3CoverageModulationMode */
+    /* skip val->extendedDynamicState3CoverageModulationTableEnable */
+    /* skip val->extendedDynamicState3CoverageModulationTable */
+    /* skip val->extendedDynamicState3CoverageReductionMode */
+    /* skip val->extendedDynamicState3RepresentativeFragmentTestEnable */
+    /* skip val->extendedDynamicState3ShadingRateImageEnable */
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_partial(const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext_partial(val->pNext);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext_partial(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    /* skip val->extendedDynamicState3TessellationDomainOrigin */
+    /* skip val->extendedDynamicState3DepthClampEnable */
+    /* skip val->extendedDynamicState3PolygonMode */
+    /* skip val->extendedDynamicState3RasterizationSamples */
+    /* skip val->extendedDynamicState3SampleMask */
+    /* skip val->extendedDynamicState3AlphaToCoverageEnable */
+    /* skip val->extendedDynamicState3AlphaToOneEnable */
+    /* skip val->extendedDynamicState3LogicOpEnable */
+    /* skip val->extendedDynamicState3ColorBlendEnable */
+    /* skip val->extendedDynamicState3ColorBlendEquation */
+    /* skip val->extendedDynamicState3ColorWriteMask */
+    /* skip val->extendedDynamicState3RasterizationStream */
+    /* skip val->extendedDynamicState3ConservativeRasterizationMode */
+    /* skip val->extendedDynamicState3ExtraPrimitiveOverestimationSize */
+    /* skip val->extendedDynamicState3DepthClipEnable */
+    /* skip val->extendedDynamicState3SampleLocationsEnable */
+    /* skip val->extendedDynamicState3ColorBlendAdvanced */
+    /* skip val->extendedDynamicState3ProvokingVertexMode */
+    /* skip val->extendedDynamicState3LineRasterizationMode */
+    /* skip val->extendedDynamicState3LineStippleEnable */
+    /* skip val->extendedDynamicState3DepthClipNegativeOneToOne */
+    /* skip val->extendedDynamicState3ViewportWScalingEnable */
+    /* skip val->extendedDynamicState3ViewportSwizzle */
+    /* skip val->extendedDynamicState3CoverageToColorEnable */
+    /* skip val->extendedDynamicState3CoverageToColorLocation */
+    /* skip val->extendedDynamicState3CoverageModulationMode */
+    /* skip val->extendedDynamicState3CoverageModulationTableEnable */
+    /* skip val->extendedDynamicState3CoverageModulationTable */
+    /* skip val->extendedDynamicState3CoverageReductionMode */
+    /* skip val->extendedDynamicState3RepresentativeFragmentTestEnable */
+    /* skip val->extendedDynamicState3ShadingRateImageEnable */
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_partial(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT });
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_pnext_partial(enc, val->pNext);
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial(enc, val);
+}
+
 /* struct VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures chain */
 
 static inline size_t
@@ -10781,6 +11062,14 @@ vn_sizeof_VkPhysicalDeviceFeatures2_pnext(const void *val)
             size += vn_sizeof_VkPhysicalDeviceFeatures2_pnext(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self((const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
             return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceFeatures2_pnext(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self((const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
+            return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
                 break;
@@ -11297,6 +11586,14 @@ vn_encode_VkPhysicalDeviceFeatures2_pnext(struct vn_cs_encoder *enc, const void 
             vn_encode_VkPhysicalDeviceFeatures2_pnext(enc, pnext->pNext);
             vn_encode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self(enc, (const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
             return;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkPhysicalDeviceFeatures2_pnext(enc, pnext->pNext);
+            vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(enc, (const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
+            return;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
                 break;
@@ -11685,6 +11982,10 @@ vn_decode_VkPhysicalDeviceFeatures2_pnext(struct vn_cs_decoder *dec, const void 
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT:
         vn_decode_VkPhysicalDeviceFeatures2_pnext(dec, pnext->pNext);
         vn_decode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self(dec, (VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
+        break;
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+        vn_decode_VkPhysicalDeviceFeatures2_pnext(dec, pnext->pNext);
+        vn_decode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(dec, (VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
         break;
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
         vn_decode_VkPhysicalDeviceFeatures2_pnext(dec, pnext->pNext);
@@ -12112,6 +12413,14 @@ vn_sizeof_VkPhysicalDeviceFeatures2_pnext_partial(const void *val)
             size += vn_sizeof_VkStructureType(&pnext->sType);
             size += vn_sizeof_VkPhysicalDeviceFeatures2_pnext_partial(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self_partial((const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
+            return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceFeatures2_pnext_partial(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial((const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
             return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
@@ -12628,6 +12937,14 @@ vn_encode_VkPhysicalDeviceFeatures2_pnext_partial(struct vn_cs_encoder *enc, con
             vn_encode_VkStructureType(enc, &pnext->sType);
             vn_encode_VkPhysicalDeviceFeatures2_pnext_partial(enc, pnext->pNext);
             vn_encode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self_partial(enc, (const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
+            return;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkPhysicalDeviceFeatures2_pnext_partial(enc, pnext->pNext);
+            vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self_partial(enc, (const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
             return;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
@@ -13230,6 +13547,14 @@ vn_sizeof_VkDeviceCreateInfo_pnext(const void *val)
             size += vn_sizeof_VkDeviceCreateInfo_pnext(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self((const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
             return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkDeviceCreateInfo_pnext(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self((const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
+            return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
                 break;
@@ -13798,6 +14123,14 @@ vn_encode_VkDeviceCreateInfo_pnext(struct vn_cs_encoder *enc, const void *val)
             vn_encode_VkStructureType(enc, &pnext->sType);
             vn_encode_VkDeviceCreateInfo_pnext(enc, pnext->pNext);
             vn_encode_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT_self(enc, (const VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *)pnext);
+            return;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkDeviceCreateInfo_pnext(enc, pnext->pNext);
+            vn_encode_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT_self(enc, (const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *)pnext);
             return;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
             if (!vn_cs_renderer_protocol_has_extension(326 /* VK_KHR_zero_initialize_workgroup_memory */))
@@ -17795,6 +18128,114 @@ vn_encode_VkPhysicalDeviceCustomBorderColorPropertiesEXT_partial(struct vn_cs_en
     vn_encode_VkPhysicalDeviceCustomBorderColorPropertiesEXT_self_partial(enc, val);
 }
 
+/* struct VkPhysicalDeviceExtendedDynamicState3PropertiesEXT chain */
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self(const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_VkBool32(&val->dynamicPrimitiveTopologyUnrestricted);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT(const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext(val->pNext);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext(struct vn_cs_decoder *dec, const void *val)
+{
+    /* no known/supported struct */
+    if (vn_decode_simple_pointer(dec))
+        assert(false);
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self(struct vn_cs_decoder *dec, VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_decode_VkBool32(dec, &val->dynamicPrimitiveTopologyUnrestricted);
+}
+
+static inline void
+vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT(struct vn_cs_decoder *dec, VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    VkStructureType stype;
+    vn_decode_VkStructureType(dec, &stype);
+    assert(stype == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT);
+
+    assert(val->sType == stype);
+    vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext(dec, val->pNext);
+    vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self(dec, val);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext_partial(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial(const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    /* skip val->dynamicPrimitiveTopologyUnrestricted */
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_partial(const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext_partial(val->pNext);
+    size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext_partial(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    /* skip val->dynamicPrimitiveTopologyUnrestricted */
+}
+
+static inline void
+vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_partial(struct vn_cs_encoder *enc, const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT });
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_pnext_partial(enc, val->pNext);
+    vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial(enc, val);
+}
+
 /* struct VkPhysicalDeviceRobustness2PropertiesEXT chain */
 
 static inline size_t
@@ -18553,6 +18994,14 @@ vn_sizeof_VkPhysicalDeviceProperties2_pnext(const void *val)
             size += vn_sizeof_VkPhysicalDeviceProperties2_pnext(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceCustomBorderColorPropertiesEXT_self((const VkPhysicalDeviceCustomBorderColorPropertiesEXT *)pnext);
             return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceProperties2_pnext(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self((const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *)pnext);
+            return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
             if (!vn_cs_renderer_protocol_has_extension(287 /* VK_EXT_robustness2 */))
                 break;
@@ -18742,6 +19191,10 @@ vn_decode_VkPhysicalDeviceProperties2_pnext(struct vn_cs_decoder *dec, const voi
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT:
         vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
         vn_decode_VkPhysicalDeviceCustomBorderColorPropertiesEXT_self(dec, (VkPhysicalDeviceCustomBorderColorPropertiesEXT *)pnext);
+        break;
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
+        vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
+        vn_decode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self(dec, (VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *)pnext);
         break;
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
         vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
@@ -18979,6 +19432,14 @@ vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(const void *val)
             size += vn_sizeof_VkStructureType(&pnext->sType);
             size += vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceCustomBorderColorPropertiesEXT_self_partial((const VkPhysicalDeviceCustomBorderColorPropertiesEXT *)pnext);
+            return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial((const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *)pnext);
             return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
             if (!vn_cs_renderer_protocol_has_extension(287 /* VK_EXT_robustness2 */))
@@ -19237,6 +19698,14 @@ vn_encode_VkPhysicalDeviceProperties2_pnext_partial(struct vn_cs_encoder *enc, c
             vn_encode_VkStructureType(enc, &pnext->sType);
             vn_encode_VkPhysicalDeviceProperties2_pnext_partial(enc, pnext->pNext);
             vn_encode_VkPhysicalDeviceCustomBorderColorPropertiesEXT_self_partial(enc, (const VkPhysicalDeviceCustomBorderColorPropertiesEXT *)pnext);
+            return;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(456 /* VK_EXT_extended_dynamic_state3 */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkPhysicalDeviceProperties2_pnext_partial(enc, pnext->pNext);
+            vn_encode_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT_self_partial(enc, (const VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *)pnext);
             return;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
             if (!vn_cs_renderer_protocol_has_extension(287 /* VK_EXT_robustness2 */))
@@ -24376,7 +24845,7 @@ static inline VkResult vn_decode_vkGetPhysicalDeviceToolProperties_reply(struct 
     return ret;
 }
 
-static inline void vn_submit_vkEnumeratePhysicalDevices(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkEnumeratePhysicalDevices(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24388,16 +24857,16 @@ static inline void vn_submit_vkEnumeratePhysicalDevices(struct vn_instance *vn_i
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkEnumeratePhysicalDevices_reply(instance, pPhysicalDeviceCount, pPhysicalDevices) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkEnumeratePhysicalDevices(enc, cmd_flags, instance, pPhysicalDeviceCount, pPhysicalDevices);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24409,16 +24878,16 @@ static inline void vn_submit_vkGetPhysicalDeviceProperties(struct vn_instance *v
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceProperties_reply(physicalDevice, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceProperties(enc, cmd_flags, physicalDevice, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24430,16 +24899,16 @@ static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties_reply(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceQueueFamilyProperties(enc, cmd_flags, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24451,16 +24920,16 @@ static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties(struct vn_insta
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceMemoryProperties_reply(physicalDevice, pMemoryProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceMemoryProperties(enc, cmd_flags, physicalDevice, pMemoryProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceFeatures(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24472,16 +24941,16 @@ static inline void vn_submit_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceFeatures_reply(physicalDevice, pFeatures) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceFeatures(enc, cmd_flags, physicalDevice, pFeatures);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceFormatProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceFormatProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24493,16 +24962,16 @@ static inline void vn_submit_vkGetPhysicalDeviceFormatProperties(struct vn_insta
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceFormatProperties_reply(physicalDevice, format, pFormatProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceFormatProperties(enc, cmd_flags, physicalDevice, format, pFormatProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24514,16 +24983,16 @@ static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties(struct vn_
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceImageFormatProperties_reply(physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceImageFormatProperties(enc, cmd_flags, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkCreateDevice(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkCreateDevice(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24535,16 +25004,16 @@ static inline void vn_submit_vkCreateDevice(struct vn_instance *vn_instance, VkC
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCreateDevice_reply(physicalDevice, pCreateInfo, pAllocator, pDevice) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkCreateDevice(enc, cmd_flags, physicalDevice, pCreateInfo, pAllocator, pDevice);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkDestroyDevice(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkAllocationCallbacks* pAllocator, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkDestroyDevice(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkAllocationCallbacks* pAllocator, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24556,16 +25025,16 @@ static inline void vn_submit_vkDestroyDevice(struct vn_instance *vn_instance, Vk
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkDestroyDevice_reply(device, pAllocator) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkDestroyDevice(enc, cmd_flags, device, pAllocator);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkEnumerateDeviceLayerProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkEnumerateDeviceLayerProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24577,16 +25046,16 @@ static inline void vn_submit_vkEnumerateDeviceLayerProperties(struct vn_instance
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkEnumerateDeviceLayerProperties_reply(physicalDevice, pPropertyCount, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkEnumerateDeviceLayerProperties(enc, cmd_flags, physicalDevice, pPropertyCount, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkEnumerateDeviceExtensionProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkEnumerateDeviceExtensionProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24598,16 +25067,16 @@ static inline void vn_submit_vkEnumerateDeviceExtensionProperties(struct vn_inst
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkEnumerateDeviceExtensionProperties_reply(physicalDevice, pLayerName, pPropertyCount, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkEnumerateDeviceExtensionProperties(enc, cmd_flags, physicalDevice, pLayerName, pPropertyCount, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetDeviceQueue(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetDeviceQueue(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24619,16 +25088,16 @@ static inline void vn_submit_vkGetDeviceQueue(struct vn_instance *vn_instance, V
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetDeviceQueue_reply(device, queueFamilyIndex, queueIndex, pQueue) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetDeviceQueue(enc, cmd_flags, device, queueFamilyIndex, queueIndex, pQueue);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkDeviceWaitIdle(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkDeviceWaitIdle(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24640,16 +25109,16 @@ static inline void vn_submit_vkDeviceWaitIdle(struct vn_instance *vn_instance, V
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkDeviceWaitIdle_reply(device) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkDeviceWaitIdle(enc, cmd_flags, device);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24661,16 +25130,16 @@ static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(stru
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties_reply(physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceSparseImageFormatProperties(enc, cmd_flags, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceFeatures2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24682,16 +25151,16 @@ static inline void vn_submit_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceFeatures2_reply(physicalDevice, pFeatures) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceFeatures2(enc, cmd_flags, physicalDevice, pFeatures);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24703,16 +25172,16 @@ static inline void vn_submit_vkGetPhysicalDeviceProperties2(struct vn_instance *
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceProperties2_reply(physicalDevice, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceProperties2(enc, cmd_flags, physicalDevice, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceFormatProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceFormatProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24724,16 +25193,16 @@ static inline void vn_submit_vkGetPhysicalDeviceFormatProperties2(struct vn_inst
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceFormatProperties2_reply(physicalDevice, format, pFormatProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceFormatProperties2(enc, cmd_flags, physicalDevice, format, pFormatProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24745,16 +25214,16 @@ static inline void vn_submit_vkGetPhysicalDeviceImageFormatProperties2(struct vn
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceImageFormatProperties2_reply(physicalDevice, pImageFormatInfo, pImageFormatProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceImageFormatProperties2(enc, cmd_flags, physicalDevice, pImageFormatInfo, pImageFormatProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24766,16 +25235,16 @@ static inline void vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties2_reply(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceQueueFamilyProperties2(enc, cmd_flags, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24787,16 +25256,16 @@ static inline void vn_submit_vkGetPhysicalDeviceMemoryProperties2(struct vn_inst
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceMemoryProperties2_reply(physicalDevice, pMemoryProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceMemoryProperties2(enc, cmd_flags, physicalDevice, pMemoryProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24808,16 +25277,16 @@ static inline void vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(str
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties2_reply(physicalDevice, pFormatInfo, pPropertyCount, pProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceSparseImageFormatProperties2(enc, cmd_flags, physicalDevice, pFormatInfo, pPropertyCount, pProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceExternalBufferProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceExternalBufferProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24829,16 +25298,16 @@ static inline void vn_submit_vkGetPhysicalDeviceExternalBufferProperties(struct 
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceExternalBufferProperties_reply(physicalDevice, pExternalBufferInfo, pExternalBufferProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceExternalBufferProperties(enc, cmd_flags, physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24850,16 +25319,16 @@ static inline void vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(stru
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceExternalSemaphoreProperties_reply(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceExternalSemaphoreProperties(enc, cmd_flags, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceExternalFenceProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceExternalFenceProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24871,16 +25340,16 @@ static inline void vn_submit_vkGetPhysicalDeviceExternalFenceProperties(struct v
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceExternalFenceProperties_reply(physicalDevice, pExternalFenceInfo, pExternalFenceProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceExternalFenceProperties(enc, cmd_flags, physicalDevice, pExternalFenceInfo, pExternalFenceProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkEnumeratePhysicalDeviceGroups(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkEnumeratePhysicalDeviceGroups(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24892,16 +25361,16 @@ static inline void vn_submit_vkEnumeratePhysicalDeviceGroups(struct vn_instance 
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkEnumeratePhysicalDeviceGroups_reply(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkEnumeratePhysicalDeviceGroups(enc, cmd_flags, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetDeviceGroupPeerMemoryFeatures(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24913,16 +25382,16 @@ static inline void vn_submit_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instan
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetDeviceGroupPeerMemoryFeatures_reply(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetDeviceGroupPeerMemoryFeatures(enc, cmd_flags, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetDeviceQueue2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetDeviceQueue2(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24934,16 +25403,16 @@ static inline void vn_submit_vkGetDeviceQueue2(struct vn_instance *vn_instance, 
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetDeviceQueue2_reply(device, pQueueInfo, pQueue) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetDeviceQueue2(enc, cmd_flags, device, pQueueInfo, pQueue);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24955,16 +25424,16 @@ static inline void vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(stru
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT_reply(physicalDevice, pTimeDomainCount, pTimeDomains) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(enc, cmd_flags, physicalDevice, pTimeDomainCount, pTimeDomains);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetCalibratedTimestampsEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetCalibratedTimestampsEXT(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24976,16 +25445,16 @@ static inline void vn_submit_vkGetCalibratedTimestampsEXT(struct vn_instance *vn
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetCalibratedTimestampsEXT_reply(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetCalibratedTimestampsEXT(enc, cmd_flags, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline void vn_submit_vkGetPhysicalDeviceToolProperties(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties, struct vn_instance_submit_command *submit)
+static inline void vn_submit_vkGetPhysicalDeviceToolProperties(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
     void *cmd_data = local_cmd_data;
@@ -24997,616 +25466,616 @@ static inline void vn_submit_vkGetPhysicalDeviceToolProperties(struct vn_instanc
     }
     const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkGetPhysicalDeviceToolProperties_reply(physicalDevice, pToolCount, pToolProperties) : 0;
 
-    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkGetPhysicalDeviceToolProperties(enc, cmd_flags, physicalDevice, pToolCount, pToolProperties);
-        vn_instance_submit_command(vn_instance, submit);
+        vn_ring_submit_command(vn_ring, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
     }
 }
 
-static inline VkResult vn_call_vkEnumeratePhysicalDevices(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
+static inline VkResult vn_call_vkEnumeratePhysicalDevices(struct vn_ring *vn_ring, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumeratePhysicalDevices(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceCount, pPhysicalDevices, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumeratePhysicalDevices(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceCount, pPhysicalDevices, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkEnumeratePhysicalDevices_reply(dec, instance, pPhysicalDeviceCount, pPhysicalDevices);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkEnumeratePhysicalDevices(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
+static inline void vn_async_vkEnumeratePhysicalDevices(struct vn_ring *vn_ring, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumeratePhysicalDevices(vn_instance, 0, instance, pPhysicalDeviceCount, pPhysicalDevices, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumeratePhysicalDevices(vn_ring, 0, instance, pPhysicalDeviceCount, pPhysicalDevices, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
+static inline void vn_call_vkGetPhysicalDeviceProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceProperties_reply(dec, physicalDevice, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
+static inline void vn_async_vkGetPhysicalDeviceProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceProperties(vn_instance, 0, physicalDevice, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceProperties(vn_ring, 0, physicalDevice, pProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
+static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceQueueFamilyProperties_reply(dec, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
+static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(vn_instance, 0, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(vn_ring, 0, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceMemoryProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
+static inline void vn_call_vkGetPhysicalDeviceMemoryProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceMemoryProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceMemoryProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceMemoryProperties_reply(dec, physicalDevice, pMemoryProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceMemoryProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
+static inline void vn_async_vkGetPhysicalDeviceMemoryProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceMemoryProperties(vn_instance, 0, physicalDevice, pMemoryProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceMemoryProperties(vn_ring, 0, physicalDevice, pMemoryProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
+static inline void vn_call_vkGetPhysicalDeviceFeatures(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFeatures(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFeatures(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceFeatures_reply(dec, physicalDevice, pFeatures);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
+static inline void vn_async_vkGetPhysicalDeviceFeatures(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFeatures(vn_instance, 0, physicalDevice, pFeatures, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFeatures(vn_ring, 0, physicalDevice, pFeatures, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
+static inline void vn_call_vkGetPhysicalDeviceFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFormatProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceFormatProperties_reply(dec, physicalDevice, format, pFormatProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
+static inline void vn_async_vkGetPhysicalDeviceFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFormatProperties(vn_instance, 0, physicalDevice, format, pFormatProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFormatProperties(vn_ring, 0, physicalDevice, format, pFormatProperties, &submit);
 }
 
-static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
+static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceImageFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceImageFormatProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkGetPhysicalDeviceImageFormatProperties_reply(dec, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
+static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceImageFormatProperties(vn_instance, 0, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceImageFormatProperties(vn_ring, 0, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties, &submit);
 }
 
-static inline VkResult vn_call_vkCreateDevice(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
+static inline VkResult vn_call_vkCreateDevice(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkCreateDevice(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pCreateInfo, pAllocator, pDevice, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkCreateDevice(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pCreateInfo, pAllocator, pDevice, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkCreateDevice_reply(dec, physicalDevice, pCreateInfo, pAllocator, pDevice);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkCreateDevice(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
+static inline void vn_async_vkCreateDevice(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkCreateDevice(vn_instance, 0, physicalDevice, pCreateInfo, pAllocator, pDevice, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkCreateDevice(vn_ring, 0, physicalDevice, pCreateInfo, pAllocator, pDevice, &submit);
 }
 
-static inline void vn_call_vkDestroyDevice(struct vn_instance *vn_instance, VkDevice device, const VkAllocationCallbacks* pAllocator)
+static inline void vn_call_vkDestroyDevice(struct vn_ring *vn_ring, VkDevice device, const VkAllocationCallbacks* pAllocator)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkDestroyDevice(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pAllocator, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkDestroyDevice(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pAllocator, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkDestroyDevice_reply(dec, device, pAllocator);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkDestroyDevice(struct vn_instance *vn_instance, VkDevice device, const VkAllocationCallbacks* pAllocator)
+static inline void vn_async_vkDestroyDevice(struct vn_ring *vn_ring, VkDevice device, const VkAllocationCallbacks* pAllocator)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkDestroyDevice(vn_instance, 0, device, pAllocator, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkDestroyDevice(vn_ring, 0, device, pAllocator, &submit);
 }
 
-static inline VkResult vn_call_vkEnumerateDeviceLayerProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
+static inline VkResult vn_call_vkEnumerateDeviceLayerProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumerateDeviceLayerProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pPropertyCount, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumerateDeviceLayerProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pPropertyCount, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkEnumerateDeviceLayerProperties_reply(dec, physicalDevice, pPropertyCount, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkEnumerateDeviceLayerProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
+static inline void vn_async_vkEnumerateDeviceLayerProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumerateDeviceLayerProperties(vn_instance, 0, physicalDevice, pPropertyCount, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumerateDeviceLayerProperties(vn_ring, 0, physicalDevice, pPropertyCount, pProperties, &submit);
 }
 
-static inline VkResult vn_call_vkEnumerateDeviceExtensionProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
+static inline VkResult vn_call_vkEnumerateDeviceExtensionProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumerateDeviceExtensionProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pLayerName, pPropertyCount, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumerateDeviceExtensionProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pLayerName, pPropertyCount, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkEnumerateDeviceExtensionProperties_reply(dec, physicalDevice, pLayerName, pPropertyCount, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkEnumerateDeviceExtensionProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
+static inline void vn_async_vkEnumerateDeviceExtensionProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumerateDeviceExtensionProperties(vn_instance, 0, physicalDevice, pLayerName, pPropertyCount, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumerateDeviceExtensionProperties(vn_ring, 0, physicalDevice, pLayerName, pPropertyCount, pProperties, &submit);
 }
 
-static inline void vn_call_vkGetDeviceQueue(struct vn_instance *vn_instance, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
+static inline void vn_call_vkGetDeviceQueue(struct vn_ring *vn_ring, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceQueue(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, queueFamilyIndex, queueIndex, pQueue, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceQueue(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, queueFamilyIndex, queueIndex, pQueue, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetDeviceQueue_reply(dec, device, queueFamilyIndex, queueIndex, pQueue);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetDeviceQueue(struct vn_instance *vn_instance, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
+static inline void vn_async_vkGetDeviceQueue(struct vn_ring *vn_ring, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceQueue(vn_instance, 0, device, queueFamilyIndex, queueIndex, pQueue, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceQueue(vn_ring, 0, device, queueFamilyIndex, queueIndex, pQueue, &submit);
 }
 
-static inline VkResult vn_call_vkDeviceWaitIdle(struct vn_instance *vn_instance, VkDevice device)
+static inline VkResult vn_call_vkDeviceWaitIdle(struct vn_ring *vn_ring, VkDevice device)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkDeviceWaitIdle(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkDeviceWaitIdle(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkDeviceWaitIdle_reply(dec, device);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkDeviceWaitIdle(struct vn_instance *vn_instance, VkDevice device)
+static inline void vn_async_vkDeviceWaitIdle(struct vn_ring *vn_ring, VkDevice device)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkDeviceWaitIdle(vn_instance, 0, device, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkDeviceWaitIdle(vn_ring, 0, device, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties)
+static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceSparseImageFormatProperties_reply(dec, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties)
+static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(vn_instance, 0, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(vn_ring, 0, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures)
+static inline void vn_call_vkGetPhysicalDeviceFeatures2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFeatures2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFeatures2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceFeatures2_reply(dec, physicalDevice, pFeatures);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures)
+static inline void vn_async_vkGetPhysicalDeviceFeatures2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFeatures2(vn_instance, 0, physicalDevice, pFeatures, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFeatures2(vn_ring, 0, physicalDevice, pFeatures, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties)
+static inline void vn_call_vkGetPhysicalDeviceProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceProperties2_reply(dec, physicalDevice, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties)
+static inline void vn_async_vkGetPhysicalDeviceProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceProperties2(vn_instance, 0, physicalDevice, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceProperties2(vn_ring, 0, physicalDevice, pProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties)
+static inline void vn_call_vkGetPhysicalDeviceFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFormatProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceFormatProperties2_reply(dec, physicalDevice, format, pFormatProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties)
+static inline void vn_async_vkGetPhysicalDeviceFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceFormatProperties2(vn_instance, 0, physicalDevice, format, pFormatProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceFormatProperties2(vn_ring, 0, physicalDevice, format, pFormatProperties, &submit);
 }
 
-static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties)
+static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceImageFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pImageFormatInfo, pImageFormatProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceImageFormatProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pImageFormatInfo, pImageFormatProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkGetPhysicalDeviceImageFormatProperties2_reply(dec, physicalDevice, pImageFormatInfo, pImageFormatProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties)
+static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceImageFormatProperties2(vn_instance, 0, physicalDevice, pImageFormatInfo, pImageFormatProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceImageFormatProperties2(vn_ring, 0, physicalDevice, pImageFormatInfo, pImageFormatProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties)
+static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceQueueFamilyProperties2_reply(dec, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties)
+static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(vn_instance, 0, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(vn_ring, 0, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceMemoryProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties)
+static inline void vn_call_vkGetPhysicalDeviceMemoryProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceMemoryProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceMemoryProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceMemoryProperties2_reply(dec, physicalDevice, pMemoryProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceMemoryProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties)
+static inline void vn_async_vkGetPhysicalDeviceMemoryProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceMemoryProperties2(vn_instance, 0, physicalDevice, pMemoryProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceMemoryProperties2(vn_ring, 0, physicalDevice, pMemoryProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties)
+static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFormatInfo, pPropertyCount, pProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFormatInfo, pPropertyCount, pProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceSparseImageFormatProperties2_reply(dec, physicalDevice, pFormatInfo, pPropertyCount, pProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties)
+static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(vn_instance, 0, physicalDevice, pFormatInfo, pPropertyCount, pProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(vn_ring, 0, physicalDevice, pFormatInfo, pPropertyCount, pProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceExternalBufferProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties)
+static inline void vn_call_vkGetPhysicalDeviceExternalBufferProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalBufferProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalBufferInfo, pExternalBufferProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalBufferProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalBufferInfo, pExternalBufferProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceExternalBufferProperties_reply(dec, physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceExternalBufferProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties)
+static inline void vn_async_vkGetPhysicalDeviceExternalBufferProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalBufferProperties(vn_instance, 0, physicalDevice, pExternalBufferInfo, pExternalBufferProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalBufferProperties(vn_ring, 0, physicalDevice, pExternalBufferInfo, pExternalBufferProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties)
+static inline void vn_call_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceExternalSemaphoreProperties_reply(dec, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties)
+static inline void vn_async_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(vn_instance, 0, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(vn_ring, 0, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties, &submit);
 }
 
-static inline void vn_call_vkGetPhysicalDeviceExternalFenceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties)
+static inline void vn_call_vkGetPhysicalDeviceExternalFenceProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalFenceProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalFenceInfo, pExternalFenceProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalFenceProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalFenceInfo, pExternalFenceProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetPhysicalDeviceExternalFenceProperties_reply(dec, physicalDevice, pExternalFenceInfo, pExternalFenceProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceExternalFenceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties)
+static inline void vn_async_vkGetPhysicalDeviceExternalFenceProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceExternalFenceProperties(vn_instance, 0, physicalDevice, pExternalFenceInfo, pExternalFenceProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceExternalFenceProperties(vn_ring, 0, physicalDevice, pExternalFenceInfo, pExternalFenceProperties, &submit);
 }
 
-static inline VkResult vn_call_vkEnumeratePhysicalDeviceGroups(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties)
+static inline VkResult vn_call_vkEnumeratePhysicalDeviceGroups(struct vn_ring *vn_ring, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumeratePhysicalDeviceGroups(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumeratePhysicalDeviceGroups(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkEnumeratePhysicalDeviceGroups_reply(dec, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkEnumeratePhysicalDeviceGroups(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties)
+static inline void vn_async_vkEnumeratePhysicalDeviceGroups(struct vn_ring *vn_ring, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkEnumeratePhysicalDeviceGroups(vn_instance, 0, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkEnumeratePhysicalDeviceGroups(vn_ring, 0, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties, &submit);
 }
 
-static inline void vn_call_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instance *vn_instance, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures)
+static inline void vn_call_vkGetDeviceGroupPeerMemoryFeatures(struct vn_ring *vn_ring, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceGroupPeerMemoryFeatures(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceGroupPeerMemoryFeatures(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetDeviceGroupPeerMemoryFeatures_reply(dec, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instance *vn_instance, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures)
+static inline void vn_async_vkGetDeviceGroupPeerMemoryFeatures(struct vn_ring *vn_ring, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceGroupPeerMemoryFeatures(vn_instance, 0, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceGroupPeerMemoryFeatures(vn_ring, 0, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures, &submit);
 }
 
-static inline void vn_call_vkGetDeviceQueue2(struct vn_instance *vn_instance, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
+static inline void vn_call_vkGetDeviceQueue2(struct vn_ring *vn_ring, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceQueue2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pQueueInfo, pQueue, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceQueue2(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pQueueInfo, pQueue, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         vn_decode_vkGetDeviceQueue2_reply(dec, device, pQueueInfo, pQueue);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
     }
 }
 
-static inline void vn_async_vkGetDeviceQueue2(struct vn_instance *vn_instance, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
+static inline void vn_async_vkGetDeviceQueue2(struct vn_ring *vn_ring, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetDeviceQueue2(vn_instance, 0, device, pQueueInfo, pQueue, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetDeviceQueue2(vn_ring, 0, device, pQueueInfo, pQueue, &submit);
 }
 
-static inline VkResult vn_call_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains)
+static inline VkResult vn_call_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pTimeDomainCount, pTimeDomains, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pTimeDomainCount, pTimeDomains, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT_reply(dec, physicalDevice, pTimeDomainCount, pTimeDomains);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains)
+static inline void vn_async_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainEXT* pTimeDomains)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vn_instance, 0, physicalDevice, pTimeDomainCount, pTimeDomains, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vn_ring, 0, physicalDevice, pTimeDomainCount, pTimeDomains, &submit);
 }
 
-static inline VkResult vn_call_vkGetCalibratedTimestampsEXT(struct vn_instance *vn_instance, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation)
+static inline VkResult vn_call_vkGetCalibratedTimestampsEXT(struct vn_ring *vn_ring, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetCalibratedTimestampsEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetCalibratedTimestampsEXT(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkGetCalibratedTimestampsEXT_reply(dec, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkGetCalibratedTimestampsEXT(struct vn_instance *vn_instance, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation)
+static inline void vn_async_vkGetCalibratedTimestampsEXT(struct vn_ring *vn_ring, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoEXT* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetCalibratedTimestampsEXT(vn_instance, 0, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetCalibratedTimestampsEXT(vn_ring, 0, device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation, &submit);
 }
 
-static inline VkResult vn_call_vkGetPhysicalDeviceToolProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties)
+static inline VkResult vn_call_vkGetPhysicalDeviceToolProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties)
 {
     VN_TRACE_FUNC();
 
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceToolProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pToolCount, pToolProperties, &submit);
-    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceToolProperties(vn_ring, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pToolCount, pToolProperties, &submit);
+    struct vn_cs_decoder *dec = vn_ring_get_command_reply(vn_ring, &submit);
     if (dec) {
         const VkResult ret = vn_decode_vkGetPhysicalDeviceToolProperties_reply(dec, physicalDevice, pToolCount, pToolProperties);
-        vn_instance_free_command_reply(vn_instance, &submit);
+        vn_ring_free_command_reply(vn_ring, &submit);
         return ret;
     } else {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 }
 
-static inline void vn_async_vkGetPhysicalDeviceToolProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties)
+static inline void vn_async_vkGetPhysicalDeviceToolProperties(struct vn_ring *vn_ring, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties)
 {
-    struct vn_instance_submit_command submit;
-    vn_submit_vkGetPhysicalDeviceToolProperties(vn_instance, 0, physicalDevice, pToolCount, pToolProperties, &submit);
+    struct vn_ring_submit_command submit;
+    vn_submit_vkGetPhysicalDeviceToolProperties(vn_ring, 0, physicalDevice, pToolCount, pToolProperties, &submit);
 }
 
 #endif /* VN_PROTOCOL_DRIVER_DEVICE_H */

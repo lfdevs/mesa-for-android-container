@@ -100,10 +100,8 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
    assert(thread_index < ARRAY_SIZE(sscreen->compiler));
    compiler = &sscreen->compiler[thread_index];
 
-   if (!*compiler) {
-      *compiler = CALLOC_STRUCT(ac_llvm_compiler);
-      si_init_compiler(sscreen, *compiler);
-   }
+   if (!sscreen->use_aco && !*compiler)
+      *compiler = si_create_llvm_compiler(sscreen);
 
    assert(program->ir_type == PIPE_SHADER_IR_NIR);
    si_nir_scan_shader(sscreen, sel->nir, &sel->info);
@@ -501,24 +499,24 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
    radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, shader->bo,
                              RADEON_USAGE_READ | RADEON_PRIO_SHADER_BINARY);
 
-   if (sctx->screen->info.has_set_pairs_packets) {
-      radeon_push_compute_sh_reg(R_00B830_COMPUTE_PGM_LO, shader_va >> 8);
-      radeon_opt_push_compute_sh_reg(R_00B848_COMPUTE_PGM_RSRC1,
-                                     SI_TRACKED_COMPUTE_PGM_RSRC1, config->rsrc1);
-      radeon_opt_push_compute_sh_reg(R_00B84C_COMPUTE_PGM_RSRC2,
-                                     SI_TRACKED_COMPUTE_PGM_RSRC2, rsrc2);
-      radeon_opt_push_compute_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3,
-                                     SI_TRACKED_COMPUTE_PGM_RSRC3,
-                                     S_00B8A0_INST_PREF_SIZE(si_get_shader_prefetch_size(shader)));
-      radeon_opt_push_compute_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE,
-                                     SI_TRACKED_COMPUTE_TMPRING_SIZE, tmpring_size);
+   if (sctx->screen->info.has_set_sh_pairs_packed) {
+      gfx11_push_compute_sh_reg(R_00B830_COMPUTE_PGM_LO, shader_va >> 8);
+      gfx11_opt_push_compute_sh_reg(R_00B848_COMPUTE_PGM_RSRC1,
+                                    SI_TRACKED_COMPUTE_PGM_RSRC1, config->rsrc1);
+      gfx11_opt_push_compute_sh_reg(R_00B84C_COMPUTE_PGM_RSRC2,
+                                    SI_TRACKED_COMPUTE_PGM_RSRC2, rsrc2);
+      gfx11_opt_push_compute_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3,
+                                    SI_TRACKED_COMPUTE_PGM_RSRC3,
+                                    S_00B8A0_INST_PREF_SIZE(si_get_shader_prefetch_size(shader)));
+      gfx11_opt_push_compute_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE,
+                                    SI_TRACKED_COMPUTE_TMPRING_SIZE, tmpring_size);
       if (shader->scratch_bo) {
-         radeon_opt_push_compute_sh_reg(R_00B840_COMPUTE_DISPATCH_SCRATCH_BASE_LO,
-                                        SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_LO,
-                                        sctx->compute_scratch_buffer->gpu_address >> 8);
-         radeon_opt_push_compute_sh_reg(R_00B844_COMPUTE_DISPATCH_SCRATCH_BASE_HI,
-                                        SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_HI,
-                                        sctx->compute_scratch_buffer->gpu_address >> 40);
+         gfx11_opt_push_compute_sh_reg(R_00B840_COMPUTE_DISPATCH_SCRATCH_BASE_LO,
+                                       SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_LO,
+                                       sctx->compute_scratch_buffer->gpu_address >> 8);
+         gfx11_opt_push_compute_sh_reg(R_00B844_COMPUTE_DISPATCH_SCRATCH_BASE_HI,
+                                       SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_HI,
+                                       sctx->compute_scratch_buffer->gpu_address >> 40);
       }
    } else {
       radeon_begin(cs);
@@ -729,54 +727,53 @@ static void si_setup_nir_user_data(struct si_context *sctx, const struct pipe_gr
                              12 * sel->info.uses_grid_size;
    unsigned cs_user_data_reg = block_size_reg + 4 * program->sel.info.uses_variable_block_size;
 
-   radeon_begin(cs);
-
-   if (sel->info.uses_grid_size) {
-      if (info->indirect) {
-         radeon_end();
-
-         for (unsigned i = 0; i < 3; ++i) {
-            si_cp_copy_data(sctx, &sctx->gfx_cs, COPY_DATA_REG, NULL, (grid_size_reg >> 2) + i,
-                            COPY_DATA_SRC_MEM, si_resource(info->indirect),
-                            info->indirect_offset + 4 * i);
-         }
-         radeon_begin_again(cs);
-      } else {
-         if (sctx->screen->info.has_set_pairs_packets) {
-            radeon_push_compute_sh_reg(grid_size_reg, info->grid[0]);
-            radeon_push_compute_sh_reg(grid_size_reg + 4, info->grid[1]);
-            radeon_push_compute_sh_reg(grid_size_reg + 8, info->grid[2]);
-         } else {
-            radeon_set_sh_reg_seq(grid_size_reg, 3);
-            radeon_emit(info->grid[0]);
-            radeon_emit(info->grid[1]);
-            radeon_emit(info->grid[2]);
-         }
+   if (sel->info.uses_grid_size && info->indirect) {
+      for (unsigned i = 0; i < 3; ++i) {
+         si_cp_copy_data(sctx, &sctx->gfx_cs, COPY_DATA_REG, NULL, (grid_size_reg >> 2) + i,
+                         COPY_DATA_SRC_MEM, si_resource(info->indirect),
+                         info->indirect_offset + 4 * i);
       }
    }
 
-   if (sel->info.uses_variable_block_size) {
-      uint32_t value = info->block[0] | (info->block[1] << 10) | (info->block[2] << 20);
+   if (sctx->screen->info.has_set_sh_pairs_packed) {
+      if (sel->info.uses_grid_size && !info->indirect) {
+         gfx11_push_compute_sh_reg(grid_size_reg, info->grid[0]);
+         gfx11_push_compute_sh_reg(grid_size_reg + 4, info->grid[1]);
+         gfx11_push_compute_sh_reg(grid_size_reg + 8, info->grid[2]);
+      }
 
-      if (sctx->screen->info.has_set_pairs_packets) {
-         radeon_push_compute_sh_reg(block_size_reg, value);
-      } else {
+      if (sel->info.uses_variable_block_size) {
+         uint32_t value = info->block[0] | (info->block[1] << 10) | (info->block[2] << 20);
+         gfx11_push_compute_sh_reg(block_size_reg, value);
+      }
+
+      if (sel->info.base.cs.user_data_components_amd) {
+         unsigned num = sel->info.base.cs.user_data_components_amd;
+         for (unsigned i = 0; i < num; i++)
+            gfx11_push_compute_sh_reg(cs_user_data_reg + i * 4, sctx->cs_user_data[i]);
+      }
+   } else {
+      radeon_begin(cs);
+
+      if (sel->info.uses_grid_size && !info->indirect) {
+         radeon_set_sh_reg_seq(grid_size_reg, 3);
+         radeon_emit(info->grid[0]);
+         radeon_emit(info->grid[1]);
+         radeon_emit(info->grid[2]);
+      }
+
+      if (sel->info.uses_variable_block_size) {
+         uint32_t value = info->block[0] | (info->block[1] << 10) | (info->block[2] << 20);
          radeon_set_sh_reg(block_size_reg, value);
       }
-   }
 
-   if (sel->info.base.cs.user_data_components_amd) {
-      unsigned num = sel->info.base.cs.user_data_components_amd;
-
-      if (sctx->screen->info.has_set_pairs_packets) {
-         for (unsigned i = 0; i < num; i++)
-            radeon_push_compute_sh_reg(cs_user_data_reg + i * 4, sctx->cs_user_data[i]);
-      } else {
+      if (sel->info.base.cs.user_data_components_amd) {
+         unsigned num = sel->info.base.cs.user_data_components_amd;
          radeon_set_sh_reg_seq(cs_user_data_reg, num);
          radeon_emit_array(sctx->cs_user_data, num);
       }
+      radeon_end();
    }
-   radeon_end();
 }
 
 static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_grid_info *info)
@@ -793,9 +790,15 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
       threadgroups_per_cu = 2;
 
    if (unlikely(sctx->sqtt_enabled)) {
-      si_write_event_with_dims_marker(sctx, &sctx->gfx_cs,
-                                      info->indirect ? EventCmdDispatchIndirect : EventCmdDispatch,
-                                      info->grid[0], info->grid[1], info->grid[2]);
+      if (info->indirect) {
+         si_sqtt_write_event_marker(sctx, &sctx->gfx_cs,
+                                    EventCmdDispatchIndirect,
+                                    UINT_MAX, UINT_MAX, UINT_MAX);
+      } else {
+         si_write_event_with_dims_marker(sctx, &sctx->gfx_cs,
+                                         EventCmdDispatch,
+                                         info->grid[0], info->grid[1], info->grid[2]);
+      }
    }
 
    radeon_begin(cs);
@@ -804,10 +807,10 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
                                      sctx->cs_max_waves_per_sh,
                                      threadgroups_per_cu);
 
-   if (sctx->screen->info.has_set_pairs_packets) {
-      radeon_opt_push_compute_sh_reg(R_00B854_COMPUTE_RESOURCE_LIMITS,
-                                     SI_TRACKED_COMPUTE_RESOURCE_LIMITS,
-                                     compute_resource_limits);
+   if (sctx->screen->info.has_set_sh_pairs_packed) {
+      gfx11_opt_push_compute_sh_reg(R_00B854_COMPUTE_RESOURCE_LIMITS,
+                                    SI_TRACKED_COMPUTE_RESOURCE_LIMITS,
+                                    compute_resource_limits);
    } else {
       radeon_opt_set_sh_reg(sctx, R_00B854_COMPUTE_RESOURCE_LIMITS,
                             SI_TRACKED_COMPUTE_RESOURCE_LIMITS,
@@ -827,6 +830,10 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
    bool partial_block_en = last_block[0] || last_block[1] || last_block[2];
    uint32_t num_threads[3];
 
+   num_threads[0] = S_00B81C_NUM_THREAD_FULL(info->block[0]);
+   num_threads[1] = S_00B820_NUM_THREAD_FULL(info->block[1]);
+   num_threads[2] = S_00B824_NUM_THREAD_FULL(info->block[2]);
+
    if (partial_block_en) {
       unsigned partial[3];
 
@@ -835,27 +842,20 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
       partial[1] = last_block[1] ? last_block[1] : info->block[1];
       partial[2] = last_block[2] ? last_block[2] : info->block[2];
 
-      num_threads[0] = S_00B81C_NUM_THREAD_FULL(info->block[0]) |
-                       S_00B81C_NUM_THREAD_PARTIAL(partial[0]);
-      num_threads[1] = S_00B820_NUM_THREAD_FULL(info->block[1]) |
-                       S_00B820_NUM_THREAD_PARTIAL(partial[1]);
-      num_threads[2] = S_00B824_NUM_THREAD_FULL(info->block[2]) |
-                       S_00B824_NUM_THREAD_PARTIAL(partial[2]);
+      num_threads[0] |= S_00B81C_NUM_THREAD_PARTIAL(partial[0]);
+      num_threads[1] |= S_00B820_NUM_THREAD_PARTIAL(partial[1]);
+      num_threads[2] |= S_00B824_NUM_THREAD_PARTIAL(partial[2]);
 
       dispatch_initiator |= S_00B800_PARTIAL_TG_EN(1);
-   } else {
-      num_threads[0] = S_00B81C_NUM_THREAD_FULL(info->block[0]);
-      num_threads[1] = S_00B820_NUM_THREAD_FULL(info->block[1]);
-      num_threads[2] = S_00B824_NUM_THREAD_FULL(info->block[2]);
    }
 
-   if (sctx->screen->info.has_set_pairs_packets) {
-      radeon_opt_push_compute_sh_reg(R_00B81C_COMPUTE_NUM_THREAD_X,
-                                     SI_TRACKED_COMPUTE_NUM_THREAD_X, num_threads[0]);
-      radeon_opt_push_compute_sh_reg(R_00B820_COMPUTE_NUM_THREAD_Y,
-                                     SI_TRACKED_COMPUTE_NUM_THREAD_Y, num_threads[1]);
-      radeon_opt_push_compute_sh_reg(R_00B824_COMPUTE_NUM_THREAD_Z,
-                                     SI_TRACKED_COMPUTE_NUM_THREAD_Z, num_threads[2]);
+   if (sctx->screen->info.has_set_sh_pairs_packed) {
+      gfx11_opt_push_compute_sh_reg(R_00B81C_COMPUTE_NUM_THREAD_X,
+                                    SI_TRACKED_COMPUTE_NUM_THREAD_X, num_threads[0]);
+      gfx11_opt_push_compute_sh_reg(R_00B820_COMPUTE_NUM_THREAD_Y,
+                                    SI_TRACKED_COMPUTE_NUM_THREAD_Y, num_threads[1]);
+      gfx11_opt_push_compute_sh_reg(R_00B824_COMPUTE_NUM_THREAD_Z,
+                                    SI_TRACKED_COMPUTE_NUM_THREAD_Z, num_threads[2]);
    } else {
       radeon_opt_set_sh_reg3(sctx, R_00B81C_COMPUTE_NUM_THREAD_X,
                              SI_TRACKED_COMPUTE_NUM_THREAD_X,
@@ -864,7 +864,7 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
 
    if (sctx->gfx_level >= GFX11) {
       radeon_end();
-      gfx11_emit_buffered_compute_sh_regs(sctx);
+      si_emit_buffered_compute_sh_regs(sctx);
       radeon_begin_again(cs);
    }
 
@@ -1005,8 +1005,10 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
       si_compute_resources_add_all_to_bo_list(sctx);
 
    /* Skipping setting redundant registers on compute queues breaks compute. */
-   if (!sctx->has_graphics)
-      sctx->tracked_regs.other_reg_saved_mask = 0;
+   if (!sctx->has_graphics) {
+      BITSET_CLEAR_RANGE(sctx->tracked_regs.reg_saved_mask,
+                         SI_FIRST_TRACKED_OTHER_REG, SI_NUM_ALL_TRACKED_REGS - 1);
+   }
 
    /* First emit registers. */
    bool prefetch;

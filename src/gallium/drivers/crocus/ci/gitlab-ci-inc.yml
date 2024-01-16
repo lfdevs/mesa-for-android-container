@@ -2,7 +2,6 @@
 .anholt-g41-test:
   extends:
     - .crocus-manual-rules
-    - .test-gl
   tags:
     - anholt-g41
   variables:
@@ -11,8 +10,6 @@
 
 # Manual test rules for using anholt's shared hsw.
 .anholt-hsw-test:
-  extends:
-    - .test-gl
   tags:
     - anholt-hsw
   variables:
@@ -22,6 +19,7 @@
 .crocus-g41:
   extends:
     - .anholt-g41-test
+    - .test-gl
     - .deqp-test
   variables:
     DEQP_SUITE: crocus-g41
@@ -30,8 +28,9 @@
 .crocus-g41-traces:
   extends:
     - .anholt-g41-test
+    - .test-gl
     - .piglit-traces-test
   variables:
     EGL_PLATFORM: "surfaceless"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-crocus.yml"
+    PIGLIT_TRACES_FILE: traces-crocus.yml
     PIGLIT_REPLAY_DEVICE_NAME: "crocus-g41"

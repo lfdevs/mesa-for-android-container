@@ -23,7 +23,7 @@ pub struct PipeScreen {
     screen: *mut pipe_screen,
 }
 
-const UUID_SIZE: usize = PIPE_UUID_SIZE as usize;
+pub const UUID_SIZE: usize = PIPE_UUID_SIZE as usize;
 const LUID_SIZE: usize = PIPE_LUID_SIZE as usize;
 
 // until we have a better solution
@@ -73,15 +73,20 @@ impl ComputeParam<Vec<u64>> for PipeScreen {
 pub enum ResourceType {
     Normal,
     Staging,
+    Cb0,
 }
 
 impl ResourceType {
-    fn apply(&self, tmpl: &mut pipe_resource) {
+    fn apply(&self, tmpl: &mut pipe_resource, screen: &PipeScreen) {
         match self {
             Self::Staging => {
                 tmpl.set_usage(pipe_resource_usage::PIPE_USAGE_STAGING.0);
                 tmpl.flags |= PIPE_RESOURCE_FLAG_MAP_PERSISTENT | PIPE_RESOURCE_FLAG_MAP_COHERENT;
                 tmpl.bind |= PIPE_BIND_LINEAR;
+            }
+            Self::Cb0 => {
+                tmpl.flags |= screen.param(pipe_cap::PIPE_CAP_CONSTBUF0_FLAGS) as u32;
+                tmpl.bind |= PIPE_BIND_CONSTANT_BUFFER;
             }
             Self::Normal => {}
         }
@@ -89,12 +94,12 @@ impl ResourceType {
 }
 
 impl PipeScreen {
-    pub(super) fn new(ldev: PipeLoaderDevice, screen: *mut pipe_screen) -> Option<Arc<Self>> {
+    pub(super) fn new(ldev: PipeLoaderDevice, screen: *mut pipe_screen) -> Option<Self> {
         if screen.is_null() || !has_required_cbs(screen) {
             return None;
         }
 
-        Some(Arc::new(Self { ldev, screen }))
+        Some(Self { ldev, screen })
     }
 
     pub fn create_context(self: &Arc<Self>) -> Option<PipeContext> {
@@ -135,6 +140,7 @@ impl PipeScreen {
         &self,
         size: u32,
         res_type: ResourceType,
+        pipe_bind: u32,
     ) -> Option<PipeResource> {
         let mut tmpl = pipe_resource::default();
 
@@ -143,9 +149,9 @@ impl PipeScreen {
         tmpl.height0 = 1;
         tmpl.depth0 = 1;
         tmpl.array_size = 1;
-        tmpl.bind = PIPE_BIND_GLOBAL;
+        tmpl.bind = pipe_bind;
 
-        res_type.apply(&mut tmpl);
+        res_type.apply(&mut tmpl, self);
 
         self.resource_create(&tmpl)
     }
@@ -154,6 +160,7 @@ impl PipeScreen {
         &self,
         size: u32,
         mem: *mut c_void,
+        pipe_bind: u32,
     ) -> Option<PipeResource> {
         let mut tmpl = pipe_resource::default();
 
@@ -162,7 +169,7 @@ impl PipeScreen {
         tmpl.height0 = 1;
         tmpl.depth0 = 1;
         tmpl.array_size = 1;
-        tmpl.bind = PIPE_BIND_GLOBAL;
+        tmpl.bind = pipe_bind;
 
         self.resource_create_from_user(&tmpl, mem)
     }
@@ -192,7 +199,7 @@ impl PipeScreen {
             tmpl.bind |= PIPE_BIND_SHADER_IMAGE;
         }
 
-        res_type.apply(&mut tmpl);
+        res_type.apply(&mut tmpl, self);
 
         self.resource_create(&tmpl)
     }
@@ -223,6 +230,43 @@ impl PipeScreen {
         }
 
         self.resource_create_from_user(&tmpl, mem)
+    }
+
+    pub fn resource_import_dmabuf(
+        &self,
+        handle: u32,
+        modifier: u64,
+        target: pipe_texture_target,
+        format: pipe_format,
+        stride: u32,
+        width: u32,
+        height: u16,
+        depth: u16,
+        array_size: u16,
+    ) -> Option<PipeResource> {
+        let mut tmpl = pipe_resource::default();
+        let mut handle = winsys_handle {
+            type_: WINSYS_HANDLE_TYPE_FD,
+            handle: handle,
+            modifier: modifier,
+            format: format as u64,
+            stride: stride,
+            ..Default::default()
+        };
+
+        tmpl.set_target(target);
+        tmpl.set_format(format);
+        tmpl.width0 = width;
+        tmpl.height0 = height;
+        tmpl.depth0 = depth;
+        tmpl.array_size = array_size;
+
+        unsafe {
+            PipeResource::new(
+                (*self.screen).resource_from_handle.unwrap()(self.screen, &tmpl, &mut handle, 0),
+                false,
+            )
+        }
     }
 
     pub fn param(&self, cap: pipe_cap) -> i32 {
@@ -325,6 +369,13 @@ impl PipeScreen {
             (*self.screen)
                 .get_timestamp
                 .expect("get_timestamp should be required")(self.screen)
+        }
+    }
+
+    pub fn is_res_handle_supported(&self) -> bool {
+        unsafe {
+            (*self.screen).resource_from_handle.is_some()
+                && (*self.screen).resource_get_handle.is_some()
         }
     }
 

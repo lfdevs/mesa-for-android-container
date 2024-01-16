@@ -22,7 +22,6 @@
  */
 
 #include "nir.h"
-#include "nir_gl_types.h"
 #include "nir_deref.h"
 #include "gl_nir_linker.h"
 #include "compiler/glsl/ir_uniform.h" /* for gl_uniform_storage */

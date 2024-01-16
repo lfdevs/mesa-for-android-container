@@ -14,7 +14,8 @@
 #define NVK_MAX_PUSH_SIZE 128
 #define NVK_MAX_DYNAMIC_BUFFERS 64
 #define NVK_MAX_RTS 8
-#define NVK_MIN_SSBO_ALIGNMENT 64
+#define NVK_MIN_SSBO_ALIGNMENT 16
+#define NVK_MIN_TEXEL_BUFFER_ALIGNMENT 16
 #define NVK_MIN_UBO_ALIGNMENT 64
 #define NVK_MAX_VIEWPORTS 16
 #define NVK_MAX_DESCRIPTOR_SIZE 16
@@ -28,6 +29,9 @@
 
 #define NVK_SPARSE_ADDR_SPACE_SIZE (1ull << 39)
 #define NVK_MAX_BUFFER_SIZE (1ull << 31)
+
+/* Max size of a bound cbuf */
+#define NVK_MAX_CBUF_SIZE (1u << 16)
 
 struct nvk_addr_range {
    uint64_t addr;

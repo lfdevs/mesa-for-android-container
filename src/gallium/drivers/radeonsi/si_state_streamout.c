@@ -63,10 +63,12 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
    struct si_context *sctx = (struct si_context *)ctx;
    unsigned old_num_targets = sctx->streamout.num_targets;
    unsigned i;
-   bool wait_now = false;
 
    /* We are going to unbind the buffers. Mark which caches need to be flushed. */
-   if (sctx->streamout.num_targets && sctx->streamout.begin_emitted) {
+   if (old_num_targets && sctx->streamout.begin_emitted) {
+      /* Stop streamout. */
+      si_emit_streamout_end(sctx);
+
       /* Since streamout uses vector writes which go through TC L2
        * and most other clients can use TC L2 as well, we don't need
        * to flush it.
@@ -76,7 +78,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
        * cases. Thus, flag the TC L2 dirtiness in the resource and
        * handle it at draw call time.
        */
-      for (i = 0; i < sctx->streamout.num_targets; i++)
+      for (i = 0; i < old_num_targets; i++)
          if (sctx->streamout.targets[i])
             si_resource(sctx->streamout.targets[i]->b.buffer)->TC_L2_dirty = true;
 
@@ -90,53 +92,33 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
        * VS_PARTIAL_FLUSH is required if the buffers are going to be
        * used as an input immediately.
        */
-      sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE;
-
-      if (sctx->gfx_level >= GFX11) {
-         sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
-
-         /* Wait now. This is needed to make sure that GDS is not
-          * busy at the end of IBs.
-          *
-          * Also, the next streamout operation will overwrite GDS,
-          * so we need to make sure that it's idle.
-          */
-         wait_now = true;
-      } else {
-         sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
-      }
-   }
-
-   /* All readers of the streamout targets need to be finished before we can
-    * start writing to the targets.
-    */
-   if (num_targets) {
-      sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_CS_PARTIAL_FLUSH |
-                     SI_CONTEXT_PFP_SYNC_ME;
-   }
-
-   if (sctx->flags)
+      sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE |
+                     SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
       si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+   }
+
+   /* TODO: This is a hack that fixes these failures. It shouldn't be necessary.
+    *    spec@ext_transform_feedback@immediate-reuse
+    *    spec@ext_transform_feedback@immediate-reuse-index-buffer
+    *    spec@ext_transform_feedback@immediate-reuse-uniform-buffer
+    *    .. and some dEQP-GLES[23].functional.fragment_ops.random.*
+    */
+   if (sctx->gfx_level >= GFX11)
+      si_flush_gfx_cs(sctx, 0, NULL);
 
    /* Streamout buffers must be bound in 2 places:
     * 1) in VGT by setting the VGT_STRMOUT registers
     * 2) as shader resources
     */
-
-   /* Stop streamout. */
-   if (sctx->streamout.num_targets && sctx->streamout.begin_emitted)
-      si_emit_streamout_end(sctx);
-
-   /* TODO: This is a hack that fixes streamout failures. It shouldn't be necessary. */
-   if (sctx->gfx_level >= GFX11 && !wait_now)
-      si_flush_gfx_cs(sctx, 0, NULL);
-
-   /* Set the new targets. */
    unsigned enabled_mask = 0, append_bitmask = 0;
+
    for (i = 0; i < num_targets; i++) {
       si_so_target_reference(&sctx->streamout.targets[i], targets[i]);
-      if (!targets[i])
+
+      if (!targets[i]) {
+         si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, NULL);
          continue;
+      }
 
       enabled_mask |= 1 << i;
 
@@ -151,52 +133,48 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
                               &t->buf_filled_size_offset,
                               (struct pipe_resource **)&t->buf_filled_size);
       }
-   }
 
-   for (; i < sctx->streamout.num_targets; i++)
+      /* Bind it to the shader. */
+      struct pipe_shader_buffer sbuf;
+      sbuf.buffer = targets[i]->buffer;
+
+      if (sctx->gfx_level >= GFX11) {
+         sbuf.buffer_offset = targets[i]->buffer_offset;
+         sbuf.buffer_size = targets[i]->buffer_size;
+      } else {
+         sbuf.buffer_offset = 0;
+         sbuf.buffer_size = targets[i]->buffer_offset + targets[i]->buffer_size;
+      }
+
+      si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, &sbuf);
+      si_resource(targets[i]->buffer)->bind_history |= SI_BIND_STREAMOUT_BUFFER;
+   }
+   for (; i < old_num_targets; i++) {
       si_so_target_reference(&sctx->streamout.targets[i], NULL);
-
-   if (!!sctx->streamout.enabled_mask != !!enabled_mask) {
-      sctx->streamout.enabled_mask = enabled_mask;
-      sctx->do_update_shaders = true; /* to keep/remove streamout shader code as an optimization */
+      si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, NULL);
    }
+
+   if (!!sctx->streamout.enabled_mask != !!enabled_mask)
+      sctx->do_update_shaders = true; /* to keep/remove streamout shader code as an optimization */
 
    sctx->streamout.num_targets = num_targets;
+   sctx->streamout.enabled_mask = enabled_mask;
    sctx->streamout.append_bitmask = append_bitmask;
 
    /* Update dirty state bits. */
    if (num_targets) {
       si_streamout_buffers_dirty(sctx);
+
+      /* All readers of the streamout targets need to be finished before we can
+       * start writing to them.
+       */
+      sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_CS_PARTIAL_FLUSH |
+                     SI_CONTEXT_PFP_SYNC_ME;
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
    } else {
       si_set_atom_dirty(sctx, &sctx->atoms.s.streamout_begin, false);
       si_set_streamout_enable(sctx, false);
    }
-
-   /* Set the shader resources.*/
-   for (i = 0; i < num_targets; i++) {
-      if (targets[i]) {
-         struct pipe_shader_buffer sbuf;
-         sbuf.buffer = targets[i]->buffer;
-
-         if (sctx->gfx_level >= GFX11) {
-            sbuf.buffer_offset = targets[i]->buffer_offset;
-            sbuf.buffer_size = targets[i]->buffer_size;
-         } else {
-            sbuf.buffer_offset = 0;
-            sbuf.buffer_size = targets[i]->buffer_offset + targets[i]->buffer_size;
-         }
-
-         si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, &sbuf);
-         si_resource(targets[i]->buffer)->bind_history |= SI_BIND_STREAMOUT_BUFFER;
-      } else {
-         si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, NULL);
-      }
-   }
-   for (; i < old_num_targets; i++)
-      si_set_internal_shader_buffer(sctx, SI_VS_STREAMOUT_BUF0 + i, NULL);
-
-   if (wait_now)
-      si_emit_cache_flush_direct(sctx);
 }
 
 static void si_flush_vgt_streamout(struct si_context *sctx)
@@ -321,8 +299,6 @@ void si_emit_streamout_end(struct si_context *sctx)
       if (!t[i])
          continue;
 
-      uint64_t va = t[i]->buf_filled_size->gpu_address + t[i]->buf_filled_size_offset;
-
       if (sctx->gfx_level >= GFX11) {
          si_cp_copy_data(sctx, &sctx->gfx_cs, COPY_DATA_DST_MEM,
                          t[i]->buf_filled_size, t[i]->buf_filled_size_offset,
@@ -331,6 +307,8 @@ void si_emit_streamout_end(struct si_context *sctx)
          sctx->flags |= SI_CONTEXT_PFP_SYNC_ME;
          si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
       } else {
+         uint64_t va = t[i]->buf_filled_size->gpu_address + t[i]->buf_filled_size_offset;
+
          radeon_begin(cs);
          radeon_emit(PKT3(PKT3_STRMOUT_BUFFER_UPDATE, 4, 0));
          radeon_emit(STRMOUT_SELECT_BUFFER(i) | STRMOUT_OFFSET_SOURCE(STRMOUT_OFFSET_NONE) |
@@ -381,6 +359,9 @@ static void si_emit_streamout_enable(struct si_context *sctx, unsigned index)
 
 static void si_set_streamout_enable(struct si_context *sctx, bool enable)
 {
+   if (sctx->gfx_level >= GFX11)
+      return;
+
    bool old_strmout_en = si_get_strmout_en(sctx);
    unsigned old_hw_enabled_mask = sctx->streamout.hw_enabled_mask;
 
@@ -390,9 +371,8 @@ static void si_set_streamout_enable(struct si_context *sctx, bool enable)
       sctx->streamout.enabled_mask | (sctx->streamout.enabled_mask << 4) |
       (sctx->streamout.enabled_mask << 8) | (sctx->streamout.enabled_mask << 12);
 
-   if (sctx->gfx_level < GFX11 &&
-       ((old_strmout_en != si_get_strmout_en(sctx)) ||
-        (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask)))
+   if ((old_strmout_en != si_get_strmout_en(sctx)) ||
+       (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask))
       si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
 }
 

@@ -4,7 +4,6 @@ use mesa_rust_gen::*;
 use mesa_rust_util::string::c_string_to_string;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::{env, ptr};
 
 #[derive(PartialEq)]
@@ -20,7 +19,7 @@ impl PipeLoaderDevice {
         Some(Self { ldev })
     }
 
-    fn load_screen(self) -> Option<Arc<PipeScreen>> {
+    fn load_screen(self) -> Option<PipeScreen> {
         let s = unsafe { pipe_loader_create_screen(self.ldev) };
         PipeScreen::new(self, s)
     }
@@ -38,17 +37,14 @@ impl Drop for PipeLoaderDevice {
     }
 }
 
-fn load_devs() -> Vec<PipeLoaderDevice> {
+fn load_devs() -> impl Iterator<Item = PipeLoaderDevice> {
     let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0, true) };
     let mut devices: Vec<*mut pipe_loader_device> = vec![ptr::null_mut(); n as usize];
     unsafe {
         pipe_loader_probe(devices.as_mut_ptr(), n, true);
     }
 
-    devices
-        .into_iter()
-        .filter_map(PipeLoaderDevice::new)
-        .collect()
+    devices.into_iter().filter_map(PipeLoaderDevice::new)
 }
 
 fn get_enabled_devs() -> HashMap<String, u32> {
@@ -79,6 +75,7 @@ fn get_enabled_devs() -> HashMap<String, u32> {
 
                 let driver_str = match driver_str[0] {
                     "llvmpipe" | "lp" => "swrast",
+                    "freedreno" => "msm",
                     a => a,
                 };
 
@@ -91,23 +88,21 @@ fn get_enabled_devs() -> HashMap<String, u32> {
     res
 }
 
-pub fn load_screens() -> Vec<Arc<PipeScreen>> {
+pub fn load_screens() -> impl Iterator<Item = PipeScreen> {
     let devs = load_devs();
     let mut enabled_devs = get_enabled_devs();
 
-    devs.into_iter()
-        .filter(|dev| {
-            let driver_name = unsafe { c_string_to_string(dev.ldev.as_ref().unwrap().driver_name) };
+    devs.filter(move |dev| {
+        let driver_name = unsafe { c_string_to_string(dev.ldev.as_ref().unwrap().driver_name) };
 
-            if let Some(enabled_devs) = enabled_devs.get_mut(&driver_name) {
-                let res = (*enabled_devs & 1) == 1;
-                *enabled_devs >>= 1;
+        if let Some(enabled_devs) = enabled_devs.get_mut(&driver_name) {
+            let res = (*enabled_devs & 1) == 1;
+            *enabled_devs >>= 1;
 
-                res
-            } else {
-                false
-            }
-        })
-        .filter_map(PipeLoaderDevice::load_screen)
-        .collect()
+            res
+        } else {
+            false
+        }
+    })
+    .filter_map(PipeLoaderDevice::load_screen)
 }

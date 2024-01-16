@@ -77,18 +77,20 @@ enum intel_workaround_id {
    INTEL_WA_NUM
 };
 
-/* These defines are used to identify when a workaround potentially applies
- * in genxml code.  They should not be used directly. intel_needs_workaround()
- * checks these definitions to eliminate bitset tests at compile time.
+/* These defines apply workarounds to a subset of platforms within a graphics
+ * generation.  They must be used in conjunction with intel_needs_workaround()
+ * to check platform details.  Use these macros to compile out genxml code on
+ * generations where it can never execute.  Whenever possible, prefer use of
+ * INTEL_NEEDS_WA_{num} instead of INTEL_WA_{num}_GFX_VER
  */
 % for a in wa_def:
 #define INTEL_WA_${a}_GFX_VER ${wa_macro[a]}
 % endfor
 
-/* These defines are suitable for use to compile out genxml code using #if
- * guards.  Workarounds that apply to part of a generation must use a
- * combination of run time checks and INTEL_WA_{NUM}_GFX_VER macros.  Those
- * workarounds are 'poisoned' below.
+/* These defines may be used to compile out genxml workaround implementations
+ * using #if guards.  If a definition has been 'poisoned' below, then it applies to a
+ * subset of a graphics generation.  In that case, use INTEL_WA_{NUM}_GFX_VER macros
+ * in conjunction with calls to intel_needs_workaround().
  */
 % for a in partial_gens:
     % if partial_gens[a]:
@@ -201,8 +203,8 @@ _PLATFORM_GFXVERS = {"INTEL_PLATFORM_BDW" : 80,
                      "INTEL_PLATFORM_DG2_G10" : 125,
                      "INTEL_PLATFORM_DG2_G11" : 125,
                      "INTEL_PLATFORM_DG2_G12" : 125,
-                     "INTEL_PLATFORM_MTL_M" : 125,
-                     "INTEL_PLATFORM_MTL_P" : 125,
+                     "INTEL_PLATFORM_MTL_U" : 125,
+                     "INTEL_PLATFORM_MTL_H" : 125,
                      }
 
 def macro_versions(wa_def):
@@ -247,8 +249,9 @@ def partial_gens(wa_def):
 
         # eliminate each platform specifically indicated by the WA, to see if
         # are left over.
-        for platform in bug["mesa_platforms"]:
-            wa_required_for_completeness.remove(platform)
+        for platform, desc in bug["mesa_platforms"].items():
+            if desc["steppings"] == "all":
+                wa_required_for_completeness.remove(platform)
 
         # if any platform remains in the required set, then this wa *partially*
         # applies to one of the gfxvers.
@@ -305,6 +308,18 @@ def main():
     wa_def = {}
     with open(args.wa_file, encoding='utf8') as wa_fh:
         wa_def = json.load(wa_fh)
+
+    # detect unknown platforms
+    unknown_platforms = set()
+    for wa in wa_def.values():
+        for p in wa['mesa_platforms']:
+            if p not in _PLATFORM_GFXVERS:
+                unknown_platforms.add(p)
+    if unknown_platforms:
+        abbrev = map(lambda s: s.replace('INTEL_PLATFORM_', ''),
+                     unknown_platforms)
+        raise Exception(f'warning: unknown platforms in {args.wa_file}: '
+                        f'{", ".join(abbrev)}')
 
     steppings = stepping_enums(wa_def)
     with open(args.header_file, 'w', encoding='utf8') as header:

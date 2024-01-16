@@ -36,6 +36,7 @@ radv_entrypoints_gen_command += [
   # Application layer entrypoints
   '--device-prefix', 'metro_exodus',
   '--device-prefix', 'rage2',
+  '--device-prefix', 'quantic_dream',
 ]
 
 radv_entrypoints = custom_target(
@@ -50,6 +51,7 @@ libradv_files = files(
   'bvh/bvh.h',
   'layers/radv_metro_exodus.c',
   'layers/radv_rage2.c',
+  'layers/radv_quantic_dream.c',
   'layers/radv_rmv_layer.c',
   'layers/radv_rra_layer.c',
   'layers/radv_sqtt_layer.c',
@@ -79,6 +81,7 @@ libradv_files = files(
   'nir/radv_nir_lower_cooperative_matrix.c',
   'nir/radv_nir_lower_fs_barycentric.c',
   'nir/radv_nir_lower_fs_intrinsics.c',
+  'nir/radv_nir_lower_hit_attrib_derefs.c',
   'nir/radv_nir_lower_intrinsics_early.c',
   'nir/radv_nir_lower_io.c',
   'nir/radv_nir_lower_poly_line_smooth.c',
@@ -87,6 +90,8 @@ libradv_files = files(
   'nir/radv_nir_lower_view_index.c',
   'nir/radv_nir_lower_viewport_to_zero.c',
   'nir/radv_nir_lower_vs_inputs.c',
+  'nir/radv_nir_rt_common.c',
+  'nir/radv_nir_rt_shader.c',
   'winsys/null/radv_null_bo.c',
   'winsys/null/radv_null_bo.h',
   'winsys/null/radv_null_cs.c',
@@ -96,6 +101,7 @@ libradv_files = files(
   'radv_acceleration_structure.c',
   'radv_android.c',
   'radv_buffer.c',
+  'radv_buffer_view.c',
   'radv_cmd_buffer.c',
   'radv_cp_reg_shadowing.c',
   'radv_cs.h',
@@ -109,6 +115,7 @@ libradv_files = files(
   'radv_event.c',
   'radv_formats.c',
   'radv_image.c',
+  'radv_image_view.c',
   'radv_instance.c',
   'radv_perfcounter.c',
   'radv_physical_device.c',
@@ -122,10 +129,9 @@ libradv_files = files(
   'radv_radeon_winsys.h',
   'radv_rmv.c',
   'radv_rra.c',
-  'radv_rt_common.c',
-  'radv_rt_shader.c',
   'radv_sampler.c',
   'radv_sdma.c',
+  'radv_sdma.h',
   'radv_shader.c',
   'radv_shader.h',
   'radv_shader_args.c',
@@ -276,3 +282,34 @@ _dev_icd = custom_target(
 )
 
 devenv.append('VK_ICD_FILENAMES', _dev_icd.full_path())
+
+if with_tests
+  test(
+    'radv_tests',
+    executable(
+      'radv_tests',
+      files(
+        'nir/radv_nir_lower_hit_attrib_derefs.c',
+        'tests/radv_nir_lower_hit_attrib_derefs_tests.cpp',
+      ),
+      cpp_args : [cpp_msvc_compat_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [
+        inc_include,
+        inc_src,
+        inc_mapi,
+        inc_mesa,
+        inc_gallium,
+        inc_gallium_aux,
+        inc_amd,
+        inc_amd_common,
+        inc_compiler,
+        inc_util,
+        include_directories('.'),
+      ],
+      dependencies : [dep_thread, idep_gtest, idep_nir, idep_mesautil],
+    ),
+    suite : ['compiler', 'nir'],
+    protocol : 'gtest',
+  )
+endif

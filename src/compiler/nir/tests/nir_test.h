@@ -17,7 +17,6 @@ class nir_test : public ::testing::Test {
    {
       glsl_type_singleton_init_or_ref();
 
-      static const nir_shader_compiler_options options = {};
       _b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &options, "%s", name);
       b = &_b;
    }
@@ -34,6 +33,7 @@ class nir_test : public ::testing::Test {
       glsl_type_singleton_decref();
    }
 
+   nir_shader_compiler_options options = {};
    nir_builder _b;
    nir_builder *b;
 };

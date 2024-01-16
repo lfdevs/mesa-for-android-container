@@ -288,7 +288,7 @@ zink_get_cmdbuf(struct zink_context *ctx, struct zink_resource *src, struct zink
    if (unordered_exec) {
       ctx->batch.state->has_barriers = true;
       ctx->batch.has_work = true;
-      return ctx->batch.state->barrier_cmdbuf;
+      return ctx->batch.state->reordered_cmdbuf;
    }
    return ctx->batch.state->cmdbuf;
 }
@@ -320,7 +320,7 @@ resource_check_defer_image_barrier(struct zink_context *ctx, struct zink_resourc
       _mesa_set_add(ctx->need_barriers[is_compute], res);
 }
 
-template <bool HAS_SYNC2>
+template <bool HAS_SYNC2, bool UNSYNCHRONIZED>
 void
 zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline)
 {
@@ -341,11 +341,18 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
       res->obj->unordered_write = true;
       if (is_write || zink_resource_usage_check_completion_fast(zink_screen(ctx->base.screen), res, ZINK_RESOURCE_ACCESS_RW))
          res->obj->unordered_read = true;
+   } else {
+      assert(!UNSYNCHRONIZED);
    }
-   /* if current batch usage exists with ordered non-transfer access, never promote
-    * this avoids layout dsync
-    */
-   if (zink_resource_usage_matches(res, ctx->batch.state) && !ctx->unordered_blitting &&
+   if (UNSYNCHRONIZED) {
+      cmdbuf = ctx->batch.state->unsynchronized_cmdbuf;
+      res->obj->unordered_write = true;
+      res->obj->unordered_read = true;
+      ctx->batch.state->has_unsync = true;
+   } else if (zink_resource_usage_matches(res, ctx->batch.state) && !ctx->unordered_blitting &&
+      /* if current batch usage exists with ordered non-transfer access, never promote
+      * this avoids layout dsync
+      */
        (!res->obj->unordered_read || !res->obj->unordered_write)) {
       cmdbuf = ctx->batch.state->cmdbuf;
       res->obj->unordered_write = false;
@@ -357,7 +364,7 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    } else {
       cmdbuf = is_write ? zink_get_cmdbuf(ctx, NULL, res) : zink_get_cmdbuf(ctx, res, NULL);
       /* force subsequent barriers to be ordered to avoid layout desync */
-      if (cmdbuf != ctx->batch.state->barrier_cmdbuf) {
+      if (cmdbuf != ctx->batch.state->reordered_cmdbuf) {
          res->obj->unordered_write = false;
          res->obj->unordered_read = false;
       }
@@ -417,7 +424,8 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    }
    zink_cmd_debug_marker_end(ctx, cmdbuf, marker);
 
-   resource_check_defer_image_barrier(ctx, res, new_layout, pipeline);
+   if (!UNSYNCHRONIZED)
+      resource_check_defer_image_barrier(ctx, res, new_layout, pipeline);
 
    if (is_write)
       res->obj->last_write = flags;
@@ -425,6 +433,8 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    res->obj->access = flags;
    res->obj->access_stage = pipeline;
    res->layout = new_layout;
+   if (res->obj->exportable)
+      simple_mtx_lock(&ctx->batch.state->exportable_lock);
    if (res->obj->dt) {
       struct kopper_displaytarget *cdt = res->obj->dt;
       if (cdt->swapchain->num_acquires && res->obj->dt_idx != UINT32_MAX) {
@@ -441,12 +451,14 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    if (new_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
       zink_resource_copies_reset(res);
    if (res->obj->exportable && queue_import) {
-      for (; res; res = zink_resource(res->base.b.next)) {
-         VkSemaphore sem = zink_screen_export_dmabuf_semaphore(zink_screen(ctx->base.screen), res);
+      for (struct zink_resource *r = res; r; r = zink_resource(r->base.b.next)) {
+         VkSemaphore sem = zink_screen_export_dmabuf_semaphore(zink_screen(ctx->base.screen), r);
          if (sem)
             util_dynarray_append(&ctx->batch.state->fd_wait_semaphores, VkSemaphore, sem);
       }
    }
+   if (res->obj->exportable)
+      simple_mtx_unlock(&ctx->batch.state->exportable_lock);
 }
 
 bool
@@ -466,7 +478,7 @@ zink_check_valid_buffer_src_access(struct zink_context *ctx, struct zink_resourc
 }
 
 void
-zink_resource_image_transfer_dst_barrier(struct zink_context *ctx, struct zink_resource *res, unsigned level, const struct pipe_box *box)
+zink_resource_image_transfer_dst_barrier(struct zink_context *ctx, struct zink_resource *res, unsigned level, const struct pipe_box *box, bool unsync)
 {
    if (res->obj->copies_need_reset)
       zink_resource_copies_reset(res);
@@ -474,7 +486,10 @@ zink_resource_image_transfer_dst_barrier(struct zink_context *ctx, struct zink_r
    if (res->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
        zink_screen(ctx->base.screen)->driver_workarounds.broken_cache_semantics ||
        zink_check_unordered_transfer_access(res, level, box)) {
-      zink_screen(ctx->base.screen)->image_barrier(ctx, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      if (unsync)
+         zink_screen(ctx->base.screen)->image_barrier_unsync(ctx, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      else
+         zink_screen(ctx->base.screen)->image_barrier(ctx, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
    } else {
       res->obj->access = VK_ACCESS_TRANSFER_WRITE_BIT;
       res->obj->last_write = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -699,9 +714,11 @@ zink_synchronization_init(struct zink_screen *screen)
 {
    if (screen->info.have_vulkan13 || screen->info.have_KHR_synchronization2) {
       screen->buffer_barrier = zink_resource_buffer_barrier<true>;
-      screen->image_barrier = zink_resource_image_barrier<true>;
+      screen->image_barrier = zink_resource_image_barrier<true, false>;
+      screen->image_barrier_unsync = zink_resource_image_barrier<true, true>;
    } else {
       screen->buffer_barrier = zink_resource_buffer_barrier<false>;
-      screen->image_barrier = zink_resource_image_barrier<false>;
+      screen->image_barrier = zink_resource_image_barrier<false, false>;
+      screen->image_barrier_unsync = zink_resource_image_barrier<false, true>;
    }
 }

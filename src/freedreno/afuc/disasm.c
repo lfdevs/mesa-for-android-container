@@ -89,6 +89,18 @@ print_control_reg(uint32_t id)
 }
 
 void
+print_sqe_reg(uint32_t id)
+{
+   char *name = afuc_sqe_reg_name(id);
+   if (name) {
+      printf("@%s", name);
+      free(name);
+   } else {
+      printf("0x%03x", id);
+   }
+}
+
+void
 print_pipe_reg(uint32_t id)
 {
    char *name = afuc_pipe_reg_name(id);
@@ -114,6 +126,14 @@ field_print_cb(struct isa_print_state *state, const char *field_name, uint64_t v
       char *name = afuc_control_reg_name(val);
       if (name) {
          isa_print(state, "@%s", name);
+         free(name);
+      } else {
+         isa_print(state, "0x%03x", (unsigned)val);
+      }
+   } else if (!strcmp(field_name, "SQEREG")) {
+      char *name = afuc_sqe_reg_name(val);
+      if (name) {
+         isa_print(state, "%%%s", name);
          free(name);
       } else {
          isa_print(state, "0x%03x", (unsigned)val);
@@ -449,6 +469,8 @@ main(int argc, char **argv)
       char *str = strstr(file, "a5");
       if (!str)
          str = strstr(file, "a6");
+      if (!str)
+         str = strstr(file, "a7");
       if (str)
          gpu_id = atoi(str + 1);
    }

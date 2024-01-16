@@ -102,11 +102,11 @@ lower_instructions(exec_list *instructions,bool have_gpu_shader5)
 void
 lower_instructions_visitor::double_dot_to_fma(ir_expression *ir)
 {
-   ir_variable *temp = new(ir) ir_variable(ir->operands[0]->type->get_base_type(), "dot_res",
+   ir_variable *temp = new(ir) ir_variable(glsl_get_base_glsl_type(ir->operands[0]->type), "dot_res",
 					   ir_var_temporary);
    this->base_ir->insert_before(temp);
 
-   int nc = ir->operands[0]->type->components();
+   int nc = glsl_get_components(ir->operands[0]->type);
    for (int i = nc - 1; i >= 1; i--) {
       ir_assignment *assig;
       if (i == (nc - 1)) {
@@ -168,13 +168,13 @@ lower_instructions_visitor::find_lsb_to_float_cast(ir_expression *ir)
    ir_constant *c23 = new(ir) ir_constant(int(23), elements);
    ir_constant *c7F = new(ir) ir_constant(int(0x7F), elements);
    ir_variable *temp =
-      new(ir) ir_variable(glsl_type::ivec(elements), "temp", ir_var_temporary);
+      new(ir) ir_variable(glsl_ivec_type(elements), "temp", ir_var_temporary);
    ir_variable *lsb_only =
-      new(ir) ir_variable(glsl_type::uvec(elements), "lsb_only", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "lsb_only", ir_var_temporary);
    ir_variable *as_float =
-      new(ir) ir_variable(glsl_type::vec(elements), "as_float", ir_var_temporary);
+      new(ir) ir_variable(glsl_vec_type(elements), "as_float", ir_var_temporary);
    ir_variable *lsb =
-      new(ir) ir_variable(glsl_type::ivec(elements), "lsb", ir_var_temporary);
+      new(ir) ir_variable(glsl_ivec_type(elements), "lsb", ir_var_temporary);
 
    ir_instruction &i = *base_ir;
 
@@ -251,11 +251,11 @@ lower_instructions_visitor::find_msb_to_float_cast(ir_expression *ir)
    ir_constant *c000000FF = new(ir) ir_constant(0x000000FFu, elements);
    ir_constant *cFFFFFF00 = new(ir) ir_constant(0xFFFFFF00u, elements);
    ir_variable *temp =
-      new(ir) ir_variable(glsl_type::uvec(elements), "temp", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "temp", ir_var_temporary);
    ir_variable *as_float =
-      new(ir) ir_variable(glsl_type::vec(elements), "as_float", ir_var_temporary);
+      new(ir) ir_variable(glsl_vec_type(elements), "as_float", ir_var_temporary);
    ir_variable *msb =
-      new(ir) ir_variable(glsl_type::ivec(elements), "msb", ir_var_temporary);
+      new(ir) ir_variable(glsl_ivec_type(elements), "msb", ir_var_temporary);
 
    ir_instruction &i = *base_ir;
 
@@ -283,7 +283,7 @@ lower_instructions_visitor::find_msb_to_float_cast(ir_expression *ir)
        * logical-not can be achieved in two instructions.
        */
       ir_variable *as_int =
-         new(ir) ir_variable(glsl_type::ivec(elements), "as_int", ir_var_temporary);
+         new(ir) ir_variable(glsl_ivec_type(elements), "as_int", ir_var_temporary);
       ir_constant *c31 = new(ir) ir_constant(int(31), elements);
 
       i.insert_before(as_int);
@@ -372,25 +372,25 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
     */
    const unsigned elements = ir->operands[0]->type->vector_elements;
    ir_variable *src1 =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src1", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src1", ir_var_temporary);
    ir_variable *src1h =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src1h", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src1h", ir_var_temporary);
    ir_variable *src1l =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src1l", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src1l", ir_var_temporary);
    ir_variable *src2 =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src2", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src2", ir_var_temporary);
    ir_variable *src2h =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src2h", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src2h", ir_var_temporary);
    ir_variable *src2l =
-      new(ir) ir_variable(glsl_type::uvec(elements), "src2l", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "src2l", ir_var_temporary);
    ir_variable *t1 =
-      new(ir) ir_variable(glsl_type::uvec(elements), "t1", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "t1", ir_var_temporary);
    ir_variable *t2 =
-      new(ir) ir_variable(glsl_type::uvec(elements), "t2", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "t2", ir_var_temporary);
    ir_variable *lo =
-      new(ir) ir_variable(glsl_type::uvec(elements), "lo", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "lo", ir_var_temporary);
    ir_variable *hi =
-      new(ir) ir_variable(glsl_type::uvec(elements), "hi", ir_var_temporary);
+      new(ir) ir_variable(glsl_uvec_type(elements), "hi", ir_var_temporary);
    ir_variable *different_signs = NULL;
    ir_constant *c0000FFFF = new(ir) ir_constant(0x0000FFFFu, elements);
    ir_constant *c16 = new(ir) ir_constant(16u, elements);
@@ -411,9 +411,9 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
       assert(ir->operands[0]->type->base_type == GLSL_TYPE_INT);
 
       ir_variable *itmp1 =
-         new(ir) ir_variable(glsl_type::ivec(elements), "itmp1", ir_var_temporary);
+         new(ir) ir_variable(glsl_ivec_type(elements), "itmp1", ir_var_temporary);
       ir_variable *itmp2 =
-         new(ir) ir_variable(glsl_type::ivec(elements), "itmp2", ir_var_temporary);
+         new(ir) ir_variable(glsl_ivec_type(elements), "itmp2", ir_var_temporary);
       ir_constant *c0 = new(ir) ir_constant(int(0), elements);
 
       i.insert_before(itmp1);
@@ -422,7 +422,7 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
       i.insert_before(assign(itmp2, ir->operands[1]));
 
       different_signs =
-         new(ir) ir_variable(glsl_type::bvec(elements), "different_signs",
+         new(ir) ir_variable(glsl_bvec_type(elements), "different_signs",
                              ir_var_temporary);
 
       i.insert_before(different_signs);
@@ -474,7 +474,7 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
        * -1, not -0!  Recall -x == ~x + 1.
        */
       ir_variable *neg_hi =
-         new(ir) ir_variable(glsl_type::ivec(elements), "neg_hi", ir_var_temporary);
+         new(ir) ir_variable(glsl_ivec_type(elements), "neg_hi", ir_var_temporary);
       ir_constant *c1 = new(ir) ir_constant(1u, elements);
 
       i.insert_before(neg_hi);
@@ -494,11 +494,11 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
 {
    switch (ir->operation) {
    case ir_binop_dot:
-      if (ir->operands[0]->type->is_double())
+      if (glsl_type_is_double(ir->operands[0]->type))
          double_dot_to_fma(ir);
       break;
    case ir_triop_lrp:
-      if (ir->operands[0]->type->is_double())
+      if (glsl_type_is_double(ir->operands[0]->type))
          double_lrp(ir);
       break;
 

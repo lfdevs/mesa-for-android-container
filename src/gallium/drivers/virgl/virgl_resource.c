@@ -809,6 +809,28 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
    return &res->b;
 }
 
+static bool
+virgl_resource_get_param(struct pipe_screen *screen,
+                         struct pipe_context *context,
+                         struct pipe_resource *resource,
+                         unsigned plane,
+                         unsigned layer,
+                         unsigned level,
+                         enum pipe_resource_param param,
+                         unsigned handle_usage,
+                         uint64_t *value)
+{
+   struct virgl_resource *res = virgl_resource(resource);
+
+   switch(param) {
+   case PIPE_RESOURCE_PARAM_MODIFIER:
+      *value = res->metadata.modifier;
+      return true;
+   default:
+      return false;
+   }
+}
+
 void virgl_init_screen_resource_functions(struct pipe_screen *screen)
 {
     screen->resource_create_front = virgl_resource_create_front;
@@ -816,6 +838,7 @@ void virgl_init_screen_resource_functions(struct pipe_screen *screen)
     screen->resource_from_handle = virgl_resource_from_handle;
     screen->resource_get_handle = virgl_resource_get_handle;
     screen->resource_destroy = virgl_resource_destroy;
+    screen->resource_get_param = virgl_resource_get_param;
 }
 
 static void virgl_buffer_subdata(struct pipe_context *pipe,

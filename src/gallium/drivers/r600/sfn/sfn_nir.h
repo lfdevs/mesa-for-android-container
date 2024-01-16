@@ -27,6 +27,9 @@
 #ifndef SFN_NIR_H
 #define SFN_NIR_H
 
+#include "gallium/include/pipe/p_state.h"
+
+#include "amd_family.h"
 #include "nir.h"
 #include "nir_builder.h"
 
@@ -111,6 +114,11 @@ r600_append_tcs_TF_emission(nir_shader *shader, enum mesa_prim prim_type);
 bool
 r600_legalize_image_load_store(nir_shader *shader);
 
+void
+r600_finalize_and_optimize_shader(r600::Shader *shader);
+r600::Shader *
+r600_schedule_shader(r600::Shader *shader);
+
 #else
 #include "gallium/drivers/r600/r600_shader.h"
 #endif
@@ -125,13 +133,14 @@ r600_vectorize_vs_inputs(nir_shader *shader);
 bool
 r600_lower_to_scalar_instr_filter(const nir_instr *instr, const void *);
 
-int
-r600_shader_from_nir(struct r600_context *rctx,
-                     struct r600_pipe_shader *pipeshader,
-                     union r600_shader_key *key);
+void
+r600_lower_and_optimize_nir(nir_shader *sh,
+                            const union r600_shader_key *key,
+                            enum amd_gfx_level gfx_level,
+                            struct pipe_stream_output_info *so_info);
 
-char *
-r600_finalize_nir(struct pipe_screen *screen, void *shader);
+void
+r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level);
 
 #ifdef __cplusplus
 }

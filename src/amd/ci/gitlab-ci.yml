@@ -45,7 +45,9 @@ radeonsi-stoney-traces:x86_64:
     - .radeonsi-stoney-test:x86_64
   variables:
     EGL_PLATFORM: surfaceless
+    PIGLIT_TRACES_FILE: traces-amd.yml
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
 radv-raven-vkcts:x86_64:
   extends:
@@ -92,7 +94,7 @@ radeonsi-raven-piglit-quick_shader:x86_64:
     PIGLIT_PROFILES: quick_shader
     PIGLIT_FRACTION: 2
 
-radeonsi-raven-va:x86_64:
+.radeonsi-raven-va:x86_64:
   extends:
     - .lava-test-deqp:x86_64
     - .radeonsi-raven-test:x86_64
@@ -115,7 +117,7 @@ radeonsi-raven-va:x86_64:
 
 radeonsi-raven-va-full:x86_64:
   extends:
-    - radeonsi-raven-va:x86_64
+    - .radeonsi-raven-va:x86_64
     - .radeonsi-vaapi-manual-rules
   variables:
     JOB_TIMEOUT: 60
@@ -155,6 +157,7 @@ radeonsi-raven-va-full:x86_64:
     B2C_TIMEOUT_OVERALL_MINUTES: 240
     B2C_TIMEOUT_BOOT_RETRIES: 0
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:STONEY
 
 vkcts-polaris10-valve:
@@ -205,6 +208,7 @@ vkcts-navi21-valve:
   extends:
     - .vkcts-test-valve
     - .navi21-test-valve
+    - .radv-valve-rules
   variables:
     GPU_VERSION: radv-navi21-aco
     B2C_TIMEOUT_BOOT_MINUTES: 30
@@ -248,6 +252,7 @@ vkcts-navi31-valve:
     - .radv-valve-manual-rules
   variables:
     GPU_VERSION: radv-navi31-aco
+    RADV_DEBUG: nomeshshader # Disable mesh shaders until task shaders stop hanging
 
 ############### Fossilize
 radv-fossils:

@@ -322,19 +322,31 @@ nv9097_nil_image_fill_tic(const struct nil_image *image,
    /* There's no base layer field in the texture header */
    const uint64_t layer_address =
       base_address + view->base_array_layer * image->array_stride_B;
-   assert((layer_address & BITFIELD_MASK(9)) == 0);
    TH_NV9097_SET_U(th, 1, OFFSET_LOWER, layer_address & 0xffffffff);
    TH_NV9097_SET_U(th, 2, OFFSET_UPPER, layer_address >> 32);
 
-   TH_NV9097_SET_E(th, 2, MEMORY_LAYOUT, BLOCKLINEAR);
-
    const struct nil_tiling *tiling = &image->levels[0].tiling;
-   assert(tiling->is_tiled);
-   assert(tiling->gob_height_8);
+   if (tiling->is_tiled) {
+      TH_NV9097_SET_E(th, 2, MEMORY_LAYOUT, BLOCKLINEAR);
 
-   TH_NV9097_SET_E(th, 2, GOBS_PER_BLOCK_WIDTH, ONE_GOB);
-   TH_NV9097_SET_U(th, 2, GOBS_PER_BLOCK_HEIGHT, tiling->y_log2);
-   TH_NV9097_SET_U(th, 2, GOBS_PER_BLOCK_DEPTH, tiling->z_log2);
+      assert(tiling->gob_height_8);
+      TH_NV9097_SET_E(th, 2, GOBS_PER_BLOCK_WIDTH, ONE_GOB);
+      TH_NV9097_SET_U(th, 2, GOBS_PER_BLOCK_HEIGHT, tiling->y_log2);
+      TH_NV9097_SET_U(th, 2, GOBS_PER_BLOCK_DEPTH, tiling->z_log2);
+
+      TH_NV9097_SET_U(th, 2, TEXTURE_TYPE, pipe_to_nv_texture_type(view->type));
+   } else {
+      TH_NV9097_SET_E(th, 2, MEMORY_LAYOUT, PITCH);
+
+      uint32_t pitch = image->levels[0].row_stride_B;
+      TH_NV9097_SET_U(th, 3, PITCH, pitch);
+
+      assert(view->type == NIL_VIEW_TYPE_2D ||
+             view->type == NIL_VIEW_TYPE_2D_ARRAY);
+      assert(image->sample_layout == NIL_SAMPLE_LAYOUT_1X1);
+      assert(view->num_levels == 1);
+      TH_NV9097_SET_E(th, 2, TEXTURE_TYPE, TWO_D_NO_MIPMAP);
+   }
 
    TH_NV9097_SET_E(th, 3, LOD_ANISO_QUALITY, LOD_QUALITY_HIGH);
    TH_NV9097_SET_E(th, 3, LOD_ISO_QUALITY, LOD_QUALITY_HIGH);
@@ -346,8 +358,6 @@ nv9097_nil_image_fill_tic(const struct nil_image *image,
    TH_NV9097_SET_U(th, 5, DEPTH, extent.depth);
 
    TH_NV9097_SET_U(th, 5, MAX_MIP_LEVEL, nil_max_mip_level(image, view));
-
-   TH_NV9097_SET_U(th, 2, TEXTURE_TYPE, pipe_to_nv_texture_type(view->type));
 
    TH_NV9097_SET_B(th, 2, S_R_G_B_CONVERSION,
                    util_format_is_srgb(view->format));
@@ -398,18 +408,40 @@ nvb097_nil_image_fill_tic(const struct nil_image *image,
    /* There's no base layer field in the texture header */
    const uint64_t layer_address =
       base_address + view->base_array_layer * image->array_stride_B;
-   assert((layer_address & BITFIELD_MASK(9)) == 0);
-   TH_NVB097_SET_U(th, BL, ADDRESS_BITS31TO9, (uint32_t)layer_address >> 9);
-   TH_NVB097_SET_U(th, BL, ADDRESS_BITS47TO32, layer_address >> 32);
-
-   TH_NVB097_SET_E(th, BL, HEADER_VERSION, SELECT_BLOCKLINEAR);
-
    const struct nil_tiling *tiling = &image->levels[0].tiling;
-   assert(tiling->is_tiled);
-   assert(tiling->gob_height_8);
-   TH_NVB097_SET_E(th, BL, GOBS_PER_BLOCK_WIDTH, ONE_GOB);
-   TH_NVB097_SET_U(th, BL, GOBS_PER_BLOCK_HEIGHT, tiling->y_log2);
-   TH_NVB097_SET_U(th, BL, GOBS_PER_BLOCK_DEPTH, tiling->z_log2);
+
+   if (tiling->is_tiled) {
+      TH_NVB097_SET_E(th, BL, HEADER_VERSION, SELECT_BLOCKLINEAR);
+      
+      assert((layer_address & BITFIELD_MASK(9)) == 0);
+      TH_NVB097_SET_U(th, BL, ADDRESS_BITS31TO9, (uint32_t)layer_address >> 9);
+      TH_NVB097_SET_U(th, BL, ADDRESS_BITS47TO32, layer_address >> 32);
+
+      assert(tiling->gob_height_8);
+      TH_NVB097_SET_E(th, BL, GOBS_PER_BLOCK_WIDTH, ONE_GOB);
+      TH_NVB097_SET_U(th, BL, GOBS_PER_BLOCK_HEIGHT, tiling->y_log2);
+      TH_NVB097_SET_U(th, BL, GOBS_PER_BLOCK_DEPTH, tiling->z_log2);
+
+      TH_NVB097_SET_U(th, BL, TEXTURE_TYPE, pipe_to_nv_texture_type(view->type));
+   } else {
+      TH_NVB097_SET_E(th, PITCH, HEADER_VERSION, SELECT_PITCH);
+      
+      assert((layer_address & BITFIELD_MASK(5)) == 0);
+      TH_NVB097_SET_U(th, PITCH, ADDRESS_BITS31TO5,
+                      (uint32_t)layer_address >> 5);
+      TH_NVB097_SET_U(th, PITCH, ADDRESS_BITS47TO32,
+                      layer_address >> 32);
+
+      uint32_t pitch = image->levels[0].row_stride_B;
+      assert((pitch & BITFIELD_MASK(5)) == 0);
+      TH_NVB097_SET_U(th, PITCH, PITCH_BITS20TO5, pitch >> 5);
+
+      assert(view->type == NIL_VIEW_TYPE_2D ||
+             view->type == NIL_VIEW_TYPE_2D_ARRAY);
+      assert(image->sample_layout == NIL_SAMPLE_LAYOUT_1X1);
+      assert(view->num_levels == 1);
+      TH_NVB097_SET_E(th, PITCH, TEXTURE_TYPE, TWO_D_NO_MIPMAP);
+   }
 
    TH_NVB097_SET_B(th, BL, LOD_ANISO_QUALITY2, true);
    TH_NVB097_SET_E(th, BL, LOD_ANISO_QUALITY, LOD_QUALITY_HIGH);
@@ -422,8 +454,6 @@ nvb097_nil_image_fill_tic(const struct nil_image *image,
    TH_NVB097_SET_U(th, BL, DEPTH_MINUS_ONE, extent.depth - 1);
 
    TH_NVB097_SET_U(th, BL, MAX_MIP_LEVEL, nil_max_mip_level(image, view));
-
-   TH_NVB097_SET_U(th, BL, TEXTURE_TYPE, pipe_to_nv_texture_type(view->type));
 
    TH_NVB097_SET_B(th, BL, S_R_G_B_CONVERSION,
                    util_format_is_srgb(view->format));

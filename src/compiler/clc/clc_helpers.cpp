@@ -80,6 +80,9 @@ using ::llvm::raw_string_ostream;
 using ::clang::driver::Driver;
 
 static void
+clc_dump_llvm(const llvm::Module *mod, FILE *f);
+
+static void
 llvm_log_handler(const ::llvm::DiagnosticInfo &di, void *data) {
    const clc_logger *logger = static_cast<clc_logger *>(data);
 
@@ -674,7 +677,7 @@ clc_spirv_get_kernels_info(const struct clc_binary *spvbin,
                            unsigned *num_spec_constants,
                            const struct clc_logger *logger)
 {
-   struct clc_kernel_info *kernels;
+   struct clc_kernel_info *kernels = NULL;
    struct clc_parsed_spec_constant *spec_constants = NULL;
 
    SPIRVKernelParser parser;
@@ -684,35 +687,34 @@ clc_spirv_get_kernels_info(const struct clc_binary *spvbin,
 
    *num_kernels = parser.kernels.size();
    *num_spec_constants = parser.specConstants.size();
-   if (!*num_kernels)
-      return false;
+   if (*num_kernels) {
+      kernels = reinterpret_cast<struct clc_kernel_info *>(calloc(*num_kernels,
+                                                                  sizeof(*kernels)));
+      assert(kernels);
+      for (unsigned i = 0; i < parser.kernels.size(); i++) {
+         kernels[i].name = strdup(parser.kernels[i].name.c_str());
+         kernels[i].num_args = parser.kernels[i].args.size();
+         kernels[i].vec_hint_size = parser.kernels[i].vecHint >> 16;
+         kernels[i].vec_hint_type = (enum clc_vec_hint_type)(parser.kernels[i].vecHint & 0xFFFF);
+         memcpy(kernels[i].local_size, parser.kernels[i].localSize, sizeof(kernels[i].local_size));
+         memcpy(kernels[i].local_size_hint, parser.kernels[i].localSizeHint, sizeof(kernels[i].local_size_hint));
+         if (!kernels[i].num_args)
+            continue;
 
-   kernels = reinterpret_cast<struct clc_kernel_info *>(calloc(*num_kernels,
-                                                               sizeof(*kernels)));
-   assert(kernels);
-   for (unsigned i = 0; i < parser.kernels.size(); i++) {
-      kernels[i].name = strdup(parser.kernels[i].name.c_str());
-      kernels[i].num_args = parser.kernels[i].args.size();
-      kernels[i].vec_hint_size = parser.kernels[i].vecHint >> 16;
-      kernels[i].vec_hint_type = (enum clc_vec_hint_type)(parser.kernels[i].vecHint & 0xFFFF);
-      memcpy(kernels[i].local_size, parser.kernels[i].localSize, sizeof(kernels[i].local_size));
-      memcpy(kernels[i].local_size_hint, parser.kernels[i].localSizeHint, sizeof(kernels[i].local_size_hint));
-      if (!kernels[i].num_args)
-         continue;
+         struct clc_kernel_arg *args;
 
-      struct clc_kernel_arg *args;
-
-      args = reinterpret_cast<struct clc_kernel_arg *>(calloc(kernels[i].num_args,
-                                                       sizeof(*kernels->args)));
-      kernels[i].args = args;
-      assert(args);
-      for (unsigned j = 0; j < kernels[i].num_args; j++) {
-         if (!parser.kernels[i].args[j].name.empty())
-            args[j].name = strdup(parser.kernels[i].args[j].name.c_str());
-         args[j].type_name = strdup(parser.kernels[i].args[j].typeName.c_str());
-         args[j].address_qualifier = parser.kernels[i].args[j].addrQualifier;
-         args[j].type_qualifier = parser.kernels[i].args[j].typeQualifier;
-         args[j].access_qualifier = parser.kernels[i].args[j].accessQualifier;
+         args = reinterpret_cast<struct clc_kernel_arg *>(calloc(kernels[i].num_args,
+                                                                 sizeof(*kernels->args)));
+         kernels[i].args = args;
+         assert(args);
+         for (unsigned j = 0; j < kernels[i].num_args; j++) {
+            if (!parser.kernels[i].args[j].name.empty())
+               args[j].name = strdup(parser.kernels[i].args[j].name.c_str());
+            args[j].type_name = strdup(parser.kernels[i].args[j].typeName.c_str());
+            args[j].address_qualifier = parser.kernels[i].args[j].addrQualifier;
+            args[j].type_qualifier = parser.kernels[i].args[j].typeQualifier;
+            args[j].access_qualifier = parser.kernels[i].args[j].accessQualifier;
+         }
       }
    }
 
@@ -797,31 +799,14 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
       "-O0",
       // Ensure inline functions are actually emitted
       "-fgnu89-inline",
-      // Undefine clang added SPIR(V) defines so we don't magically enable extensions
-      "-U__SPIR__",
-      "-U__SPIRV__",
    };
-
-   // llvm handles these extensions differently so we have to pass this flag instead to expose the clc functions
-
-   clang_opts.push_back("-Dcl_khr_expect_assume=1");
-   if (args->features.integer_dot_product) {
-      clang_opts.push_back("-Dcl_khr_integer_dot_product=1");
-      clang_opts.push_back("-D__opencl_c_integer_dot_product_input_4x8bit_packed=1");
-      clang_opts.push_back("-D__opencl_c_integer_dot_product_input_4x8bit=1");
-   }
 
    // We assume there's appropriate defines for __OPENCL_VERSION__ and __IMAGE_SUPPORT__
    // being provided by the caller here.
    clang_opts.insert(clang_opts.end(), args->args, args->args + args->num_args);
 
    if (!clang::CompilerInvocation::CreateFromArgs(c->getInvocation(),
-#if LLVM_VERSION_MAJOR >= 10
                                                   clang_opts,
-#else
-                                                  clang_opts.data(),
-                                                  clang_opts.data() + clang_opts.size(),
-#endif
                                                   diag)) {
       clc_error(logger, "Couldn't create Clang invocation.\n");
       return {};
@@ -899,6 +884,16 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
 #endif
 #endif
 
+   // Undefine clang added SPIR(V) defines so we don't magically enable extensions
+   c->getPreprocessorOpts().addMacroUndef("__SPIR__");
+   c->getPreprocessorOpts().addMacroUndef("__SPIRV__");
+
+   // clang defines those unconditionally, we need to fix that.
+   if (!args->features.int64)
+      c->getPreprocessorOpts().addMacroUndef("__opencl_c_int64");
+   if (!args->features.images)
+      c->getPreprocessorOpts().addMacroUndef("__IMAGE_SUPPORT__");
+
 #if LLVM_VERSION_MAJOR >= 14
    c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-all");
    c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("+cl_khr_byte_addressable_store");
@@ -939,6 +934,22 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    }
 #endif
 
+   // llvm handles these extensions differently so we have to pass those flags instead to expose the clc functions
+   c->getPreprocessorOpts().addMacroDef("cl_khr_expect_assume=1");
+   if (args->features.integer_dot_product) {
+      c->getPreprocessorOpts().addMacroDef("cl_khr_integer_dot_product=1");
+      c->getPreprocessorOpts().addMacroDef("__opencl_c_integer_dot_product_input_4x8bit_packed=1");
+      c->getPreprocessorOpts().addMacroDef("__opencl_c_integer_dot_product_input_4x8bit=1");
+   }
+   if (args->features.subgroups) {
+      if (args->features.subgroups_shuffle) {
+         c->getPreprocessorOpts().addMacroDef("cl_khr_subgroup_shuffle=1");
+      }
+      if (args->features.subgroups_shuffle_relative) {
+         c->getPreprocessorOpts().addMacroDef("cl_khr_subgroup_shuffle_relative=1");
+      }
+   }
+
    if (args->num_headers) {
       ::llvm::SmallString<128> tmp_header_path;
       ::llvm::sys::path::system_temp_directory(true, tmp_header_path);
@@ -968,7 +979,12 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
       return {};
    }
 
-   return act.takeModule();
+   auto mod = act.takeModule();
+
+   if (clc_debug_flags() & CLC_DEBUG_DUMP_LLVM)
+      clc_dump_llvm(mod.get(), stdout);
+
+   return mod;
 }
 
 static SPIRV::VersionNumber
@@ -1250,6 +1266,18 @@ clc_spirv_specialize(const struct clc_binary *in_spirv,
    out_spirv->data = malloc(out_spirv->size);
    memcpy(out_spirv->data, result.data(), out_spirv->size);
    return true;
+}
+
+static void
+clc_dump_llvm(const llvm::Module *mod, FILE *f)
+{
+   std::string out;
+   raw_string_ostream os(out);
+
+   mod->print(os, nullptr);
+   os.flush();
+
+   fwrite(out.c_str(), out.size(), 1, f);
 }
 
 void

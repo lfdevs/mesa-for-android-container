@@ -177,9 +177,9 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
       }
 
       progress |= OPT(s, nir_opt_dead_cf);
-      if (OPT(s, nir_opt_trivial_continues)) {
+      if (OPT(s, nir_opt_loop)) {
          progress |= true;
-         /* If nir_opt_trivial_continues makes progress, then we need to clean
+         /* If nir_opt_loop makes progress, then we need to clean
           * things up if we want any hope of nir_opt_if or nir_opt_loop_unroll
           * to make progress.
           */
@@ -560,6 +560,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
             .ballot_components = max_subgroup_size / 32,
             .lower_to_scalar = true,
             .lower_vote_eq = true,
+            .lower_vote_bool_eq = true,
             .lower_subgroup_masks = true,
             .lower_read_invocation_to_cond = true,
             .lower_shuffle = true,
@@ -720,6 +721,13 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 
    /* Lower scratch writemasks */
    progress |= OPT(s, nir_lower_wrmasks, should_split_wrmask, s);
+
+   if (OPT(s, nir_lower_locals_to_regs, 1)) {
+      progress = true;
+
+      /* Split 64b registers into two 32b ones. */
+      OPT_V(s, ir3_nir_lower_64b_regs);
+   }
 
    progress |= OPT(s, ir3_nir_lower_wide_load_store);
    progress |= OPT(s, ir3_nir_lower_64b_global);

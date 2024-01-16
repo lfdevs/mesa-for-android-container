@@ -1142,7 +1142,7 @@ vk_queue_finish(struct vk_queue *queue)
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-vk_common_QueueSubmit2KHR(VkQueue _queue,
+vk_common_QueueSubmit2(VkQueue _queue,
                           uint32_t submitCount,
                           const VkSubmitInfo2 *pSubmits,
                           VkFence _fence)

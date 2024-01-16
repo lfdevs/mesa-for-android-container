@@ -397,7 +397,7 @@ needs_point_sprite_lowering(struct d3d12_context *ctx, const struct pipe_draw_in
 
    if (gs != NULL && !gs->is_variant) {
       /* There is an user GS; Check if it outputs points with PSIZE */
-      return (gs->initial->info.gs.output_primitive == GL_POINTS &&
+      return (gs->initial->info.gs.output_primitive == MESA_PRIM_POINTS &&
               (gs->initial->info.outputs_written & VARYING_BIT_PSIZ ||
                  ctx->gfx_pipeline_state.rast->base.point_size > 1.0) &&
               (gs->initial->info.gs.active_stream_mask == 1 ||
@@ -437,11 +437,6 @@ get_provoking_vertex(struct d3d12_selection_context *sel_ctx, bool *alternate, c
    struct d3d12_shader_selector *vs = sel_ctx->ctx->gfx_stages[PIPE_SHADER_VERTEX];
    struct d3d12_shader_selector *gs = sel_ctx->ctx->gfx_stages[PIPE_SHADER_GEOMETRY];
    struct d3d12_shader_selector *last_vertex_stage = gs && !gs->is_variant ? gs : vs;
-
-   /* Make sure GL prims match Gallium prims */
-   STATIC_ASSERT(GL_POINTS == MESA_PRIM_POINTS);
-   STATIC_ASSERT(GL_LINES == MESA_PRIM_LINES);
-   STATIC_ASSERT(GL_LINE_STRIP == MESA_PRIM_LINE_STRIP);
 
    enum mesa_prim mode;
    switch (last_vertex_stage->stage) {
@@ -1113,9 +1108,10 @@ d3d12_fill_shader_key(struct d3d12_selection_context *sel_ctx,
          if (wrap_state.is_int_sampler) {
             memcpy(&key->tex_wrap_states[i], &wrap_state, sizeof(wrap_state));
             key->swizzle_state[i] = sel_ctx->ctx->tex_swizzle_state[stage][i];
-         }
-         else
+         } else {
             memset(&key->tex_wrap_states[i], 0, sizeof(key->tex_wrap_states[i]));
+            key->swizzle_state[i] = { PIPE_SWIZZLE_X,  PIPE_SWIZZLE_Y,  PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W };
+         }
       }
    }
 
@@ -1551,14 +1547,21 @@ d3d12_create_shader(struct d3d12_context *ctx,
    d3d12_shader_selector *next = get_next_shader(ctx, sel->stage);
 
    NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
-   NIR_PASS_V(nir, d3d12_split_multistream_varyings);
+   NIR_PASS_V(nir, d3d12_split_needed_varyings);
 
-   if (nir->info.stage != MESA_SHADER_VERTEX)
+   if (nir->info.stage != MESA_SHADER_VERTEX) {
       nir->info.inputs_read =
-            dxil_reassign_driver_locations(nir, nir_var_shader_in,
-                                            prev ? prev->current->nir->info.outputs_written : 0);
-   else
+      dxil_reassign_driver_locations(nir, nir_var_shader_in,
+                                     prev ? prev->current->nir->info.outputs_written : 0);
+   } else {
       nir->info.inputs_read = dxil_sort_by_driver_location(nir, nir_var_shader_in);
+
+      uint32_t driver_loc = 0;
+      nir_foreach_variable_with_modes(var, nir, nir_var_shader_in) {
+         var->data.driver_location = driver_loc;
+         driver_loc += glsl_count_attribute_slots(var->type, false);
+      }
+   }
 
    if (nir->info.stage != MESA_SHADER_FRAGMENT) {
       nir->info.outputs_written =

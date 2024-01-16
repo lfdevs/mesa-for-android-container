@@ -1144,7 +1144,8 @@ static void virgl_video_flush(struct pipe_video_codec *codec)
 
 static void virgl_video_get_feedback(struct pipe_video_codec *codec,
                                      void *feedback,
-                                     unsigned *size)
+                                     unsigned *size,
+                                     struct pipe_enc_feedback_metadata* metadata)
 {
     struct virgl_video_codec *vcdc = virgl_video_codec(codec);
     struct virgl_context *vctx = vcdc->vctx;

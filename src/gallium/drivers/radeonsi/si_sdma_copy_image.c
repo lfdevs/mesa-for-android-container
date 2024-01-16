@@ -82,8 +82,8 @@ static bool si_sdma_v4_v5_copy_texture(struct si_context *sctx, struct si_textur
       radeon_begin(cs);
       for (int i = 0; i < chunk_count; i++) {
          uint32_t size = MIN2(chunk_size, bytes);
-         radeon_emit(CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
-                                     CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
+         radeon_emit(SDMA_PACKET(SDMA_OPCODE_COPY,
+                                     SDMA_COPY_SUB_OPCODE_LINEAR,
                                      (tmz ? 4 : 0)));
          radeon_emit(size - 1);
          radeon_emit(0);
@@ -125,8 +125,8 @@ static bool si_sdma_v4_v5_copy_texture(struct si_context *sctx, struct si_textur
 
       radeon_begin(cs);
       radeon_emit(
-         CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
-                         CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW,
+         SDMA_PACKET(SDMA_OPCODE_COPY,
+                     SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW,
                          (tmz ? 4 : 0)) |
          dcc << 19 |
          (is_v5 ? 0 : tiled->buffer.b.b.last_level) << 20 |
@@ -216,7 +216,7 @@ bool cik_sdma_copy_texture(struct si_context *sctx, struct si_texture *sdst, str
       struct radeon_cmdbuf *cs = sctx->sdma_cs;
 
       radeon_begin(cs);
-      radeon_emit(CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW, 0) |
+      radeon_emit(SDMA_PACKET(SDMA_OPCODE_COPY, SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW, 0) |
                   (util_logbase2(bpp) << 29));
       radeon_emit(src_address);
       radeon_emit(src_address >> 32);
@@ -338,8 +338,8 @@ bool cik_sdma_copy_texture(struct si_context *sctx, struct si_texture *sdst, str
          uint32_t direction = linear == sdst ? 1u << 31 : 0;
 
          radeon_begin(cs);
-         radeon_emit(CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
-                                     CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, 0) |
+         radeon_emit(SDMA_PACKET(SDMA_OPCODE_COPY,
+                                 SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, 0) |
                      direction);
          radeon_emit(tiled_address);
          radeon_emit(tiled_address >> 32);

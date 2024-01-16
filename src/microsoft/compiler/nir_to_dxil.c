@@ -111,7 +111,6 @@ nir_options = {
    .lower_insert_word = true,
    .lower_insert_byte = true,
    .lower_all_io_to_elements = true,
-   .lower_all_io_to_temps = true,
    .lower_hadd = true,
    .lower_uadd_sat = true,
    .lower_usub_sat = true,
@@ -6188,7 +6187,7 @@ lower_mem_access_bit_sizes_cb(nir_intrinsic_op intrin,
       /* Unaligned load/store, use the minimum bit size, up to 4 components */
       unsigned ideal_num_components = intrin == nir_intrinsic_load_ssbo ?
          DIV_ROUND_UP(bytes * 8, min_bit_size) :
-         (bytes * 8 / min_bit_size);
+         (32 / min_bit_size);
       return (nir_mem_access_size_align) {
          .align = min_bit_size / 8,
          .bit_size = min_bit_size,
@@ -6205,10 +6204,13 @@ lower_mem_access_bit_sizes_cb(nir_intrinsic_op intrin,
       bit_size *= 2;
 
    /* This is the best we can do */
+   unsigned num_components = intrin == nir_intrinsic_load_ssbo ?
+      DIV_ROUND_UP(bytes * 8, bit_size) :
+      MAX2(1, (bytes * 8 / bit_size));
    return (nir_mem_access_size_align) {
       .align = bit_size / 8,
       .bit_size = bit_size,
-      .num_components = MIN2(4, DIV_ROUND_UP(bytes * 8, bit_size)),
+      .num_components = MIN2(4, num_components),
    };
 }
 
@@ -6229,7 +6231,8 @@ optimize_nir(struct nir_shader *s, const struct nir_to_dxil_options *opts)
          NIR_PASS(progress, s, dxil_nir_lower_16bit_conv);
       NIR_PASS(progress, s, nir_opt_remove_phis);
       NIR_PASS(progress, s, nir_opt_dce);
-      NIR_PASS(progress, s, nir_opt_if, nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
+      NIR_PASS(progress, s, nir_opt_if,
+               nir_opt_if_optimize_phi_true_false | nir_opt_if_avoid_64bit_phis);
       NIR_PASS(progress, s, nir_opt_dead_cf);
       NIR_PASS(progress, s, nir_opt_cse);
       NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);

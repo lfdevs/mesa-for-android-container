@@ -1,5 +1,3 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 path_max.diff
 src_glx_dri_common.h.diff
-0001-Revert-egl-add-automatic-zink-fallback-loading-betwe.patch
-0002-Revert-glx-add-automatic-zink-fallback-loading-betwe.patch

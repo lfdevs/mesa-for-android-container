@@ -36,56 +36,32 @@
 #include "util/u_vbuf.h"
 #include "util/u_viewport.h"
 
+#include "decode.h"
+
 #include "genxml/gen_macros.h"
 
 #include "pan_afbc_cso.h"
 #include "pan_blend.h"
 #include "pan_blitter.h"
 #include "pan_bo.h"
+#include "pan_cmdstream.h"
 #include "pan_context.h"
 #include "pan_indirect_dispatch.h"
+#include "pan_jm.h"
 #include "pan_job.h"
 #include "pan_pool.h"
+#include "pan_resource.h"
 #include "pan_shader.h"
 #include "pan_texture.h"
 #include "pan_util.h"
 
-#define PAN_GPU_INDIRECTS (PAN_ARCH == 7)
-
-struct panfrost_rasterizer {
-   struct pipe_rasterizer_state base;
-
-#if PAN_ARCH <= 7
-   /* Partially packed RSD words */
-   struct mali_multisample_misc_packed multisample;
-   struct mali_stencil_mask_misc_packed stencil_misc;
-#endif
-};
-
-struct panfrost_zsa_state {
-   struct pipe_depth_stencil_alpha_state base;
-
-   /* Is any depth, stencil, or alpha testing enabled? */
-   bool enabled;
-
-   /* Does the depth and stencil tests always pass? This ignores write
-    * masks, we are only interested in whether pixels may be killed.
-    */
-   bool zs_always_passes;
-
-   /* Are depth or stencil writes possible? */
-   bool writes_zs;
-
-#if PAN_ARCH <= 7
-   /* Prepacked words from the RSD */
-   struct mali_multisample_misc_packed rsd_depth;
-   struct mali_stencil_mask_misc_packed rsd_stencil;
-   struct mali_stencil_packed stencil_front, stencil_back;
+/* JOBX() is used to select the job backend helpers to call from generic
+ * functions. */
+#if PAN_ARCH <= 9
+#define JOBX(__suffix) GENX(jm_##__suffix)
 #else
-   /* Depth/stencil descriptor template */
-   struct mali_depth_stencil_packed desc;
+#error "Unsupported arch"
 #endif
-};
 
 struct panfrost_sampler_state {
    struct pipe_sampler_state base;
@@ -106,25 +82,6 @@ struct panfrost_sampler_view {
     * shader images on Valhall.
     */
    struct panfrost_pool *pool;
-};
-
-struct panfrost_vertex_state {
-   unsigned num_elements;
-   struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
-   uint16_t strides[PIPE_MAX_ATTRIBS];
-
-#if PAN_ARCH >= 9
-   /* Packed attribute descriptors */
-   struct mali_attribute_packed attributes[PIPE_MAX_ATTRIBS];
-#else
-   /* buffers corresponds to attribute buffer, element_buffers corresponds
-    * to an index in buffers for each vertex element */
-   struct pan_vertex_buffer buffers[PIPE_MAX_ATTRIBS];
-   unsigned element_buffer[PIPE_MAX_ATTRIBS];
-   unsigned nr_bufs;
-
-   unsigned formats[PIPE_MAX_ATTRIBS];
-#endif
 };
 
 /* Statically assert that PIPE_* enums match the hardware enums.
@@ -287,35 +244,6 @@ panfrost_create_sampler_state(struct pipe_context *pctx,
    return so;
 }
 
-static bool
-panfrost_fs_required(struct panfrost_compiled_shader *fs,
-                     struct panfrost_blend_state *blend,
-                     struct pipe_framebuffer_state *state,
-                     const struct panfrost_zsa_state *zsa)
-{
-   /* If we generally have side effects. This inclues use of discard,
-    * which can affect the results of an occlusion query. */
-   if (fs->info.fs.sidefx)
-      return true;
-
-   /* Using an empty FS requires early-z to be enabled, but alpha test
-    * needs it disabled. Alpha test is only native on Midgard, so only
-    * check there.
-    */
-   if (PAN_ARCH <= 5 && zsa->base.alpha_func != PIPE_FUNC_ALWAYS)
-      return true;
-
-   /* If colour is written we need to execute */
-   for (unsigned i = 0; i < state->nr_cbufs; ++i) {
-      if (state->cbufs[i] && blend->info[i].enabled)
-         return true;
-   }
-
-   /* If depth is written and not implied we need to execute.
-    * TODO: Predicate on Z/S writes being enabled */
-   return (fs->info.fs.writes_depth || fs->info.fs.writes_stencil);
-}
-
 /* Get pointers to the blend shaders bound to each active render target. Used
  * to emit the blend descriptors, as well as the fragment renderer state
  * descriptor.
@@ -353,34 +281,6 @@ pack_blend_constant(enum pipe_format format, float cons)
    uint16_t unorm = (cons * ((1 << chan_size) - 1));
    return unorm << (16 - chan_size);
 }
-
-/*
- * Determine whether to set the respective overdraw alpha flag.
- *
- * The overdraw alpha=1 flag should be set when alpha=1 implies full overdraw,
- * equivalently, all enabled render targets have alpha_one_store set. Likewise,
- * overdraw alpha=0 should be set when alpha=0 implies no overdraw,
- * equivalently, all enabled render targets have alpha_zero_nop set.
- */
-#if PAN_ARCH >= 6
-static bool
-panfrost_overdraw_alpha(const struct panfrost_context *ctx, bool zero)
-{
-   const struct panfrost_blend_state *so = ctx->blend;
-
-   for (unsigned i = 0; i < ctx->pipe_framebuffer.nr_cbufs; ++i) {
-      const struct pan_blend_info info = so->info[i];
-
-      bool enabled = ctx->pipe_framebuffer.cbufs[i] && !info.enabled;
-      bool flag = zero ? info.alpha_zero_nop : info.alpha_one_store;
-
-      if (enabled && !flag)
-         return false;
-   }
-
-   return true;
-}
-#endif
 
 static void
 panfrost_emit_blend(struct panfrost_batch *batch, void *rts,
@@ -494,23 +394,6 @@ panfrost_emit_blend(struct panfrost_batch *batch, void *rts,
    }
 }
 #endif
-
-static inline bool
-pan_allow_forward_pixel_to_kill(struct panfrost_context *ctx,
-                                struct panfrost_compiled_shader *fs)
-{
-   /* Track if any colour buffer is reused across draws, either
-    * from reading it directly, or from failing to write it
-    */
-   unsigned rt_mask = ctx->fb_rt_mask;
-   uint64_t rt_written = (fs->info.outputs_written >> FRAG_RESULT_DATA0) &
-                         ctx->blend->enabled_mask;
-   bool blend_reads_dest = (ctx->blend->load_dest_mask & rt_mask);
-   bool alpha_to_coverage = ctx->blend->base.alpha_to_coverage;
-
-   return fs->info.fs.can_fpk && !(rt_mask & ~rt_written) &&
-          !alpha_to_coverage && !blend_reads_dest;
-}
 
 static mali_ptr
 panfrost_emit_compute_shader_meta(struct panfrost_batch *batch,
@@ -1704,8 +1587,7 @@ panfrost_emit_null_texture(struct mali_texture_packed *out)
       cfg.height = 1;
       cfg.depth = 1;
       cfg.array_size = 1;
-      cfg.format = PAN_ARCH >= 7 ? panfrost_pipe_format_v7[PIPE_FORMAT_NONE].hw
-                                 : panfrost_pipe_format_v6[PIPE_FORMAT_NONE].hw;
+      cfg.format = MALI_PACK_FMT(CONSTANT, 0000, L);
 #if PAN_ARCH <= 7
       cfg.texel_ordering = MALI_TEXTURE_LAYOUT_LINEAR;
 #endif
@@ -1888,7 +1770,7 @@ emit_image_bufs(struct panfrost_batch *batch, enum pipe_shader_type shader,
          cfg.type = pan_modifier_to_attr_type(rsrc->image.layout.modifier);
          cfg.pointer = rsrc->image.data.bo->ptr.gpu + offset;
          cfg.stride = util_format_get_blocksize(image->format);
-         cfg.size = rsrc->image.data.bo->size - offset;
+         cfg.size = panfrost_bo_size(rsrc->image.data.bo) - offset;
       }
 
       if (is_buffer) {
@@ -2469,16 +2351,16 @@ pan_emit_special_input(struct mali_attribute_buffer_packed *out,
 
 static void
 panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
-                                 unsigned vertex_count, mali_ptr *vs_attribs,
-                                 mali_ptr *fs_attribs, mali_ptr *buffers,
-                                 unsigned *buffer_count, mali_ptr *position,
-                                 mali_ptr *psiz, bool point_coord_replace)
+                                 unsigned vertex_count,
+                                 bool point_coord_replace)
 {
    struct panfrost_context *ctx = batch->ctx;
    struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
    struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
 
    uint16_t point_coord_mask = 0;
+
+   memset(&batch->varyings, 0, sizeof(batch->varyings));
 
 #if PAN_ARCH <= 5
    struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
@@ -2510,8 +2392,7 @@ panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
    struct mali_attribute_buffer_packed *varyings =
       (struct mali_attribute_buffer_packed *)T.cpu;
 
-   if (buffer_count)
-      *buffer_count = count;
+   batch->varyings.nr_bufs = count;
 
 #if PAN_ARCH >= 6
    /* Suppress prefetch on Bifrost */
@@ -2530,12 +2411,12 @@ panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
    }
 
    /* fp32 vec4 gl_Position */
-   *position = panfrost_emit_varyings(
+   batch->varyings.pos = panfrost_emit_varyings(
       batch, &varyings[pan_varying_index(present, PAN_VARY_POSITION)],
       sizeof(float) * 4, vertex_count);
 
    if (present & BITFIELD_BIT(PAN_VARY_PSIZ)) {
-      *psiz = panfrost_emit_varyings(
+      batch->varyings.psiz = panfrost_emit_varyings(
          batch, &varyings[pan_varying_index(present, PAN_VARY_PSIZ)], 2,
          vertex_count);
    }
@@ -2552,27 +2433,9 @@ panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
                           MALI_ATTRIBUTE_SPECIAL_FRAG_COORD);
 #endif
 
-   *buffers = T.gpu;
-   *vs_attribs = linkage->producer;
-   *fs_attribs = linkage->consumer;
-}
-
-/*
- * Emit jobs required for the rasterization pipeline. If there are side effects
- * from the vertex shader, these are handled ahead-of-time with a compute
- * shader. This function should not be called if rasterization is skipped.
- */
-static void
-panfrost_emit_vertex_tiler_jobs(struct panfrost_batch *batch,
-                                const struct panfrost_ptr *vertex_job,
-                                const struct panfrost_ptr *tiler_job)
-{
-   unsigned vertex = panfrost_add_job(&batch->pool.base, &batch->scoreboard,
-                                      MALI_JOB_TYPE_VERTEX, false, false, 0, 0,
-                                      vertex_job, false);
-
-   panfrost_add_job(&batch->pool.base, &batch->scoreboard, MALI_JOB_TYPE_TILER,
-                    false, false, vertex, 0, tiler_job, false);
+   batch->varyings.bufs = T.gpu;
+   batch->varyings.vs = linkage->producer;
+   batch->varyings.fs = linkage->consumer;
 }
 #endif
 
@@ -2638,7 +2501,7 @@ panfrost_initialize_surface(struct panfrost_batch *batch,
 /* Generate a fragment job. This should be called once per frame. (Usually,
  * this corresponds to eglSwapBuffers or one of glFlush, glFinish)
  */
-static mali_ptr
+static void
 emit_fragment_job(struct panfrost_batch *batch, const struct pan_fb_info *pfb)
 {
    /* Mark the affected buffers as initialized, since we're writing to it.
@@ -2671,41 +2534,8 @@ emit_fragment_job(struct panfrost_batch *batch, const struct pan_fb_info *pfb)
    assert(batch->maxx > batch->minx);
    assert(batch->maxy > batch->miny);
 
-   struct panfrost_ptr transfer =
-      pan_pool_alloc_desc(&batch->pool.base, FRAGMENT_JOB);
-
-   GENX(pan_emit_fragment_job)(pfb, batch->framebuffer.gpu, transfer.cpu);
-
-   return transfer.gpu;
+   JOBX(emit_fragment_job)(batch, pfb);
 }
-
-#define DEFINE_CASE(c)                                                         \
-   case MESA_PRIM_##c:                                                         \
-      return MALI_DRAW_MODE_##c;
-
-static uint8_t
-pan_draw_mode(enum mesa_prim mode)
-{
-   switch (mode) {
-      DEFINE_CASE(POINTS);
-      DEFINE_CASE(LINES);
-      DEFINE_CASE(LINE_LOOP);
-      DEFINE_CASE(LINE_STRIP);
-      DEFINE_CASE(TRIANGLES);
-      DEFINE_CASE(TRIANGLE_STRIP);
-      DEFINE_CASE(TRIANGLE_FAN);
-      DEFINE_CASE(QUADS);
-      DEFINE_CASE(POLYGON);
-#if PAN_ARCH <= 6
-      DEFINE_CASE(QUAD_STRIP);
-#endif
-
-   default:
-      unreachable("Invalid draw mode");
-   }
-}
-
-#undef DEFINE_CASE
 
 /* Count generated primitives (when there is no geom/tess shaders) for
  * transform feedback */
@@ -2740,92 +2570,6 @@ panfrost_update_streamout_offsets(struct panfrost_context *ctx)
 
       pan_so_target(ctx->streamout.targets[i])->offset += count;
    }
-}
-
-static inline enum mali_index_type
-panfrost_translate_index_size(unsigned size)
-{
-   STATIC_ASSERT(MALI_INDEX_TYPE_NONE == 0);
-   STATIC_ASSERT(MALI_INDEX_TYPE_UINT8 == 1);
-   STATIC_ASSERT(MALI_INDEX_TYPE_UINT16 == 2);
-
-   return (size == 4) ? MALI_INDEX_TYPE_UINT32 : size;
-}
-
-#if PAN_ARCH <= 7
-static inline void
-pan_emit_draw_descs(struct panfrost_batch *batch, struct MALI_DRAW *d,
-                    enum pipe_shader_type st)
-{
-   d->offset_start = batch->ctx->offset_start;
-   d->instance_size =
-      batch->ctx->instance_count > 1 ? batch->ctx->padded_count : 1;
-
-   d->uniform_buffers = batch->uniform_buffers[st];
-   d->push_uniforms = batch->push_uniforms[st];
-   d->textures = batch->textures[st];
-   d->samplers = batch->samplers[st];
-}
-
-static void
-panfrost_draw_emit_vertex_section(struct panfrost_batch *batch,
-                                  mali_ptr vs_vary, mali_ptr varyings,
-                                  mali_ptr attribs, mali_ptr attrib_bufs,
-                                  void *section)
-{
-   pan_pack(section, DRAW, cfg) {
-      cfg.state = batch->rsd[PIPE_SHADER_VERTEX];
-      cfg.attributes = attribs;
-      cfg.attribute_buffers = attrib_bufs;
-      cfg.varyings = vs_vary;
-      cfg.varying_buffers = vs_vary ? varyings : 0;
-      cfg.thread_storage = batch->tls.gpu;
-      pan_emit_draw_descs(batch, &cfg, PIPE_SHADER_VERTEX);
-   }
-}
-
-static void
-panfrost_draw_emit_vertex(struct panfrost_batch *batch,
-                          const struct pipe_draw_info *info,
-                          void *invocation_template, mali_ptr vs_vary,
-                          mali_ptr varyings, mali_ptr attribs,
-                          mali_ptr attrib_bufs, void *job)
-{
-   void *section = pan_section_ptr(job, COMPUTE_JOB, INVOCATION);
-   memcpy(section, invocation_template, pan_size(INVOCATION));
-
-   pan_section_pack(job, COMPUTE_JOB, PARAMETERS, cfg) {
-      cfg.job_task_split = 5;
-   }
-
-   section = pan_section_ptr(job, COMPUTE_JOB, DRAW);
-   panfrost_draw_emit_vertex_section(batch, vs_vary, varyings, attribs,
-                                     attrib_bufs, section);
-}
-#endif
-
-static void
-panfrost_emit_primitive_size(struct panfrost_context *ctx, bool points,
-                             mali_ptr size_array, void *prim_size)
-{
-   struct panfrost_rasterizer *rast = ctx->rasterizer;
-
-   pan_pack(prim_size, PRIMITIVE_SIZE, cfg) {
-      if (panfrost_writes_point_size(ctx)) {
-         cfg.size_array = size_array;
-      } else {
-         cfg.constant = points ? rast->base.point_size : rast->base.line_width;
-      }
-   }
-}
-
-static bool
-panfrost_is_implicit_prim_restart(const struct pipe_draw_info *info)
-{
-   /* As a reminder primitive_restart should always be checked before any
-      access to restart_index. */
-   return info->primitive_restart &&
-          info->restart_index == (unsigned)BITFIELD_MASK(info->index_size * 8);
 }
 
 /* On Bifrost and older, the Renderer State Descriptor aggregates many pieces of
@@ -2895,7 +2639,10 @@ panfrost_update_shader_state(struct panfrost_batch *batch,
       batch->rsd[st] = panfrost_emit_frag_shader_meta(batch);
    }
 
-   if (frag && (dirty & PAN_DIRTY_STAGE_IMAGE)) {
+   /* Vertex shaders need to mix vertex data and image descriptors in the
+    * attribute array. This is taken care of in panfrost_update_state_3d().
+    */
+   if (st != PIPE_SHADER_VERTEX && (dirty & PAN_DIRTY_STAGE_IMAGE)) {
       batch->attribs[st] =
          panfrost_emit_image_attribs(batch, &batch->attrib_bufs[st], st);
    }
@@ -2931,467 +2678,25 @@ panfrost_update_state_3d(struct panfrost_batch *batch)
       batch->attrib_bufs[PIPE_SHADER_VERTEX] =
          panfrost_emit_vertex_buffers(batch);
    }
-#endif
-}
-
-#if PAN_ARCH >= 6
-static mali_ptr
-panfrost_batch_get_bifrost_tiler(struct panfrost_batch *batch,
-                                 unsigned vertex_count)
-{
-   struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
-
-   if (!vertex_count)
-      return 0;
-
-   if (batch->tiler_ctx.bifrost)
-      return batch->tiler_ctx.bifrost;
-
-   struct panfrost_ptr t = pan_pool_alloc_desc(&batch->pool.base, TILER_HEAP);
-
-   GENX(pan_emit_tiler_heap)(dev, t.cpu);
-
-   mali_ptr heap = t.gpu;
-
-   t = pan_pool_alloc_desc(&batch->pool.base, TILER_CONTEXT);
-   GENX(pan_emit_tiler_ctx)
-   (dev, batch->key.width, batch->key.height,
-    util_framebuffer_get_num_samples(&batch->key),
-    pan_tristate_get(batch->first_provoking_vertex), heap, t.cpu);
-
-   batch->tiler_ctx.bifrost = t.gpu;
-   return batch->tiler_ctx.bifrost;
-}
-#endif
-
-/* Packs a primitive descriptor, mostly common between Midgard/Bifrost tiler
- * jobs and Valhall IDVS jobs
- */
-static void
-panfrost_emit_primitive(struct panfrost_context *ctx,
-                        const struct pipe_draw_info *info,
-                        const struct pipe_draw_start_count_bias *draw,
-                        mali_ptr indices, bool secondary_shader, void *out)
-{
-   UNUSED struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
-
-   bool lines =
-      (info->mode == MESA_PRIM_LINES || info->mode == MESA_PRIM_LINE_LOOP ||
-       info->mode == MESA_PRIM_LINE_STRIP);
-
-   pan_pack(out, PRIMITIVE, cfg) {
-      cfg.draw_mode = pan_draw_mode(info->mode);
-      if (panfrost_writes_point_size(ctx))
-         cfg.point_size_array_format = MALI_POINT_SIZE_ARRAY_FORMAT_FP16;
-
-#if PAN_ARCH <= 8
-      /* For line primitives, PRIMITIVE.first_provoking_vertex must
-       * be set to true and the provoking vertex is selected with
-       * DRAW.flat_shading_vertex.
-       */
-      if (lines)
-         cfg.first_provoking_vertex = true;
-      else
-         cfg.first_provoking_vertex = rast->flatshade_first;
-
-      if (panfrost_is_implicit_prim_restart(info)) {
-         cfg.primitive_restart = MALI_PRIMITIVE_RESTART_IMPLICIT;
-      } else if (info->primitive_restart) {
-         cfg.primitive_restart = MALI_PRIMITIVE_RESTART_EXPLICIT;
-         cfg.primitive_restart_index = info->restart_index;
-      }
-
-      cfg.job_task_split = 6;
 #else
-      struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
+   unsigned vt_shader_dirty = ctx->dirty_shader[PIPE_SHADER_VERTEX];
 
-      cfg.allow_rotating_primitives =
-         !(lines || fs->info.bifrost.uses_flat_shading);
-      cfg.primitive_restart = info->primitive_restart;
-
-      /* Non-fixed restart indices should have been lowered */
-      assert(!cfg.primitive_restart || panfrost_is_implicit_prim_restart(info));
-#endif
-
-      cfg.index_count = draw->count;
-      cfg.index_type = panfrost_translate_index_size(info->index_size);
-
-      if (PAN_ARCH >= 9) {
-         /* Base vertex offset on Valhall is used for both
-          * indexed and non-indexed draws, in a simple way for
-          * either. Handle both cases.
-          */
-         if (cfg.index_type)
-            cfg.base_vertex_offset = draw->index_bias;
-         else
-            cfg.base_vertex_offset = draw->start;
-
-         /* Indices are moved outside the primitive descriptor
-          * on Valhall, so we don't need to set that here
-          */
-      } else if (cfg.index_type) {
-         cfg.base_vertex_offset = draw->index_bias - ctx->offset_start;
-
-#if PAN_ARCH <= 7
-         cfg.indices = indices;
-#endif
-      }
-
-#if PAN_ARCH >= 6
-      cfg.secondary_shader = secondary_shader;
-#endif
+   /* Vertex data, vertex shader and images accessed by the vertex shader have
+    * an impact on the attributes array, we need to re-emit anytime one of these
+    * parameters changes. */
+   if ((dirty & PAN_DIRTY_VERTEX) ||
+       (vt_shader_dirty & (PAN_DIRTY_STAGE_IMAGE | PAN_DIRTY_STAGE_SHADER))) {
+      batch->attribs[PIPE_SHADER_VERTEX] = panfrost_emit_vertex_data(
+         batch, &batch->attrib_bufs[PIPE_SHADER_VERTEX]);
    }
+#endif
 }
-
-#if PAN_ARCH >= 9
-static mali_ptr
-panfrost_emit_resources(struct panfrost_batch *batch,
-                        enum pipe_shader_type stage)
-{
-   struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_ptr T;
-   unsigned nr_tables = 12;
-
-   /* Although individual resources need only 16 byte alignment, the
-    * resource table as a whole must be 64-byte aligned.
-    */
-   T = pan_pool_alloc_aligned(&batch->pool.base, nr_tables * pan_size(RESOURCE),
-                              64);
-   memset(T.cpu, 0, nr_tables * pan_size(RESOURCE));
-
-   panfrost_make_resource_table(T, PAN_TABLE_UBO, batch->uniform_buffers[stage],
-                                batch->nr_uniform_buffers[stage]);
-
-   panfrost_make_resource_table(T, PAN_TABLE_TEXTURE, batch->textures[stage],
-                                ctx->sampler_view_count[stage]);
-
-   /* We always need at least 1 sampler for txf to work */
-   panfrost_make_resource_table(T, PAN_TABLE_SAMPLER, batch->samplers[stage],
-                                MAX2(ctx->sampler_count[stage], 1));
-
-   panfrost_make_resource_table(T, PAN_TABLE_IMAGE, batch->images[stage],
-                                util_last_bit(ctx->image_mask[stage]));
-
-   if (stage == PIPE_SHADER_VERTEX) {
-      panfrost_make_resource_table(T, PAN_TABLE_ATTRIBUTE,
-                                   batch->attribs[stage],
-                                   ctx->vertex->num_elements);
-
-      panfrost_make_resource_table(T, PAN_TABLE_ATTRIBUTE_BUFFER,
-                                   batch->attrib_bufs[stage],
-                                   util_last_bit(ctx->vb_mask));
-   }
-
-   return T.gpu | nr_tables;
-}
-
-static void
-panfrost_emit_shader(struct panfrost_batch *batch,
-                     struct MALI_SHADER_ENVIRONMENT *cfg,
-                     enum pipe_shader_type stage, mali_ptr shader_ptr,
-                     mali_ptr thread_storage)
-{
-   cfg->resources = panfrost_emit_resources(batch, stage);
-   cfg->thread_storage = thread_storage;
-   cfg->shader = shader_ptr;
-
-   /* Each entry of FAU is 64-bits */
-   cfg->fau = batch->push_uniforms[stage];
-   cfg->fau_count = DIV_ROUND_UP(batch->nr_push_uniforms[stage], 2);
-}
-#endif
-
-static void
-panfrost_emit_draw(void *out, struct panfrost_batch *batch, bool fs_required,
-                   enum mesa_prim prim, mali_ptr pos, mali_ptr fs_vary,
-                   mali_ptr varyings)
-{
-   struct panfrost_context *ctx = batch->ctx;
-   struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
-   bool polygon = (prim == MESA_PRIM_TRIANGLES);
-
-   pan_pack(out, DRAW, cfg) {
-      /*
-       * From the Gallium documentation,
-       * pipe_rasterizer_state::cull_face "indicates which faces of
-       * polygons to cull". Points and lines are not considered
-       * polygons and should be drawn even if all faces are culled.
-       * The hardware does not take primitive type into account when
-       * culling, so we need to do that check ourselves.
-       */
-      cfg.cull_front_face = polygon && (rast->cull_face & PIPE_FACE_FRONT);
-      cfg.cull_back_face = polygon && (rast->cull_face & PIPE_FACE_BACK);
-      cfg.front_face_ccw = rast->front_ccw;
-
-      if (ctx->occlusion_query && ctx->active_queries) {
-         if (ctx->occlusion_query->type == PIPE_QUERY_OCCLUSION_COUNTER)
-            cfg.occlusion_query = MALI_OCCLUSION_MODE_COUNTER;
-         else
-            cfg.occlusion_query = MALI_OCCLUSION_MODE_PREDICATE;
-
-         struct panfrost_resource *rsrc =
-            pan_resource(ctx->occlusion_query->rsrc);
-         cfg.occlusion = rsrc->image.data.bo->ptr.gpu;
-         panfrost_batch_write_rsrc(ctx->batch, rsrc, PIPE_SHADER_FRAGMENT);
-      }
-
-#if PAN_ARCH >= 9
-      struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
-
-      cfg.multisample_enable = rast->multisample;
-      cfg.sample_mask = rast->multisample ? ctx->sample_mask : 0xFFFF;
-
-      /* Use per-sample shading if required by API Also use it when a
-       * blend shader is used with multisampling, as this is handled
-       * by a single ST_TILE in the blend shader with the current
-       * sample ID, requiring per-sample shading.
-       */
-      cfg.evaluate_per_sample =
-         (rast->multisample &&
-          ((ctx->min_samples > 1) || ctx->valhall_has_blend_shader));
-
-      cfg.single_sampled_lines = !rast->multisample;
-
-      cfg.vertex_array.packet = true;
-
-      cfg.minimum_z = batch->minimum_z;
-      cfg.maximum_z = batch->maximum_z;
-
-      cfg.depth_stencil = batch->depth_stencil;
-
-      if (fs_required) {
-         bool has_oq = ctx->occlusion_query && ctx->active_queries;
-
-         struct pan_earlyzs_state earlyzs = pan_earlyzs_get(
-            fs->earlyzs, ctx->depth_stencil->writes_zs || has_oq,
-            ctx->blend->base.alpha_to_coverage,
-            ctx->depth_stencil->zs_always_passes);
-
-         cfg.pixel_kill_operation = earlyzs.kill;
-         cfg.zs_update_operation = earlyzs.update;
-
-         cfg.allow_forward_pixel_to_kill =
-            pan_allow_forward_pixel_to_kill(ctx, fs);
-         cfg.allow_forward_pixel_to_be_killed = !fs->info.writes_global;
-
-         /* Mask of render targets that may be written. A render
-          * target may be written if the fragment shader writes
-          * to it AND it actually exists. If the render target
-          * doesn't actually exist, the blend descriptor will be
-          * OFF so it may be omitted from the mask.
-          *
-          * Only set when there is a fragment shader, since
-          * otherwise no colour updates are possible.
-          */
-         cfg.render_target_mask =
-            (fs->info.outputs_written >> FRAG_RESULT_DATA0) & ctx->fb_rt_mask;
-
-         /* Also use per-sample shading if required by the shader
-          */
-         cfg.evaluate_per_sample |= fs->info.fs.sample_shading;
-
-         /* Unlike Bifrost, alpha-to-coverage must be included in
-          * this identically-named flag. Confusing, isn't it?
-          */
-         cfg.shader_modifies_coverage = fs->info.fs.writes_coverage ||
-                                        fs->info.fs.can_discard ||
-                                        ctx->blend->base.alpha_to_coverage;
-
-         /* Blend descriptors are only accessed by a BLEND
-          * instruction on Valhall. It follows that if the
-          * fragment shader is omitted, we may also emit the
-          * blend descriptors.
-          */
-         cfg.blend = batch->blend;
-         cfg.blend_count = MAX2(batch->key.nr_cbufs, 1);
-         cfg.alpha_to_coverage = ctx->blend->base.alpha_to_coverage;
-
-         cfg.overdraw_alpha0 = panfrost_overdraw_alpha(ctx, 0);
-         cfg.overdraw_alpha1 = panfrost_overdraw_alpha(ctx, 1);
-
-         panfrost_emit_shader(batch, &cfg.shader, PIPE_SHADER_FRAGMENT,
-                              batch->rsd[PIPE_SHADER_FRAGMENT], batch->tls.gpu);
-      } else {
-         /* These operations need to be FORCE to benefit from the
-          * depth-only pass optimizations.
-          */
-         cfg.pixel_kill_operation = MALI_PIXEL_KILL_FORCE_EARLY;
-         cfg.zs_update_operation = MALI_PIXEL_KILL_FORCE_EARLY;
-
-         /* No shader and no blend => no shader or blend
-          * reasons to disable FPK. The only FPK-related state
-          * not covered is alpha-to-coverage which we don't set
-          * without blend.
-          */
-         cfg.allow_forward_pixel_to_kill = true;
-
-         /* No shader => no shader side effects */
-         cfg.allow_forward_pixel_to_be_killed = true;
-
-         /* Alpha isn't written so these are vacuous */
-         cfg.overdraw_alpha0 = true;
-         cfg.overdraw_alpha1 = true;
-      }
-#else
-      cfg.position = pos;
-      cfg.state = batch->rsd[PIPE_SHADER_FRAGMENT];
-      cfg.attributes = batch->attribs[PIPE_SHADER_FRAGMENT];
-      cfg.attribute_buffers = batch->attrib_bufs[PIPE_SHADER_FRAGMENT];
-      cfg.viewport = batch->viewport;
-      cfg.varyings = fs_vary;
-      cfg.varying_buffers = fs_vary ? varyings : 0;
-      cfg.thread_storage = batch->tls.gpu;
-
-      /* For all primitives but lines DRAW.flat_shading_vertex must
-       * be set to 0 and the provoking vertex is selected with the
-       * PRIMITIVE.first_provoking_vertex field.
-       */
-      if (prim == MESA_PRIM_LINES) {
-         /* The logic is inverted across arches. */
-         cfg.flat_shading_vertex = rast->flatshade_first ^ (PAN_ARCH <= 5);
-      }
-
-      pan_emit_draw_descs(batch, &cfg, PIPE_SHADER_FRAGMENT);
-#endif
-   }
-}
-
-#if PAN_ARCH >= 9
-static void
-panfrost_emit_malloc_vertex(struct panfrost_batch *batch,
-                            const struct pipe_draw_info *info,
-                            const struct pipe_draw_start_count_bias *draw,
-                            mali_ptr indices, bool secondary_shader, void *job)
-{
-   struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
-   struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
-
-   bool fs_required = panfrost_fs_required(
-      fs, ctx->blend, &ctx->pipe_framebuffer, ctx->depth_stencil);
-
-   /* Varying shaders only feed data to the fragment shader, so if we omit
-    * the fragment shader, we should omit the varying shader too.
-    */
-   secondary_shader &= fs_required;
-
-   panfrost_emit_primitive(ctx, info, draw, 0, secondary_shader,
-                           pan_section_ptr(job, MALLOC_VERTEX_JOB, PRIMITIVE));
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, INSTANCE_COUNT, cfg) {
-      cfg.count = info->instance_count;
-   }
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, ALLOCATION, cfg) {
-      if (secondary_shader) {
-         unsigned v = vs->info.varyings.output_count;
-         unsigned f = fs->info.varyings.input_count;
-         unsigned slots = MAX2(v, f);
-         slots += util_bitcount(fs->key.fs.fixed_varying_mask);
-         unsigned size = slots * 16;
-
-         /* Assumes 16 byte slots. We could do better. */
-         cfg.vertex_packet_stride = size + 16;
-         cfg.vertex_attribute_stride = size;
-      } else {
-         /* Hardware requirement for "no varyings" */
-         cfg.vertex_packet_stride = 16;
-         cfg.vertex_attribute_stride = 0;
-      }
-   }
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, TILER, cfg) {
-      cfg.address = panfrost_batch_get_bifrost_tiler(batch, ~0);
-   }
-
-   STATIC_ASSERT(sizeof(batch->scissor) == pan_size(SCISSOR));
-   memcpy(pan_section_ptr(job, MALLOC_VERTEX_JOB, SCISSOR), &batch->scissor,
-          pan_size(SCISSOR));
-
-   panfrost_emit_primitive_size(
-      ctx, info->mode == MESA_PRIM_POINTS, 0,
-      pan_section_ptr(job, MALLOC_VERTEX_JOB, PRIMITIVE_SIZE));
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, INDICES, cfg) {
-      cfg.address = indices;
-   }
-
-   panfrost_emit_draw(pan_section_ptr(job, MALLOC_VERTEX_JOB, DRAW), batch,
-                      fs_required, u_reduced_prim(info->mode), 0, 0, 0);
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, POSITION, cfg) {
-      /* IDVS/points vertex shader */
-      mali_ptr vs_ptr = batch->rsd[PIPE_SHADER_VERTEX];
-
-      /* IDVS/triangle vertex shader */
-      if (vs_ptr && info->mode != MESA_PRIM_POINTS)
-         vs_ptr += pan_size(SHADER_PROGRAM);
-
-      panfrost_emit_shader(batch, &cfg, PIPE_SHADER_VERTEX, vs_ptr,
-                           batch->tls.gpu);
-   }
-
-   pan_section_pack(job, MALLOC_VERTEX_JOB, VARYING, cfg) {
-      /* If a varying shader is used, we configure it with the same
-       * state as the position shader for backwards compatible
-       * behaviour with Bifrost. This could be optimized.
-       */
-      if (!secondary_shader)
-         continue;
-
-      mali_ptr ptr =
-         batch->rsd[PIPE_SHADER_VERTEX] + (2 * pan_size(SHADER_PROGRAM));
-
-      panfrost_emit_shader(batch, &cfg, PIPE_SHADER_VERTEX, ptr,
-                           batch->tls.gpu);
-   }
-}
-#endif
-
-#if PAN_ARCH <= 7
-static void
-panfrost_draw_emit_tiler(struct panfrost_batch *batch,
-                         const struct pipe_draw_info *info,
-                         const struct pipe_draw_start_count_bias *draw,
-                         void *invocation_template, mali_ptr indices,
-                         mali_ptr fs_vary, mali_ptr varyings, mali_ptr pos,
-                         mali_ptr psiz, bool secondary_shader, void *job)
-{
-   struct panfrost_context *ctx = batch->ctx;
-
-   void *section = pan_section_ptr(job, TILER_JOB, INVOCATION);
-   memcpy(section, invocation_template, pan_size(INVOCATION));
-
-   panfrost_emit_primitive(ctx, info, draw, indices, secondary_shader,
-                           pan_section_ptr(job, TILER_JOB, PRIMITIVE));
-
-   void *prim_size = pan_section_ptr(job, TILER_JOB, PRIMITIVE_SIZE);
-   enum mesa_prim prim = u_reduced_prim(info->mode);
-
-#if PAN_ARCH >= 6
-   pan_section_pack(job, TILER_JOB, TILER, cfg) {
-      cfg.address = panfrost_batch_get_bifrost_tiler(batch, ~0);
-   }
-
-   pan_section_pack(job, TILER_JOB, PADDING, cfg)
-      ;
-#endif
-
-   panfrost_emit_draw(pan_section_ptr(job, TILER_JOB, DRAW), batch, true, prim,
-                      pos, fs_vary, varyings);
-
-   panfrost_emit_primitive_size(ctx, prim == MESA_PRIM_POINTS, psiz, prim_size);
-}
-#endif
 
 static void
 panfrost_launch_xfb(struct panfrost_batch *batch,
-                    const struct pipe_draw_info *info, mali_ptr attribs,
-                    mali_ptr attrib_bufs, unsigned count)
+                    const struct pipe_draw_info *info, unsigned count)
 {
    struct panfrost_context *ctx = batch->ctx;
-
-   struct panfrost_ptr t = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
 
    /* Nothing to do */
    if (batch->ctx->streamout.num_targets == 0)
@@ -3428,45 +2733,8 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
                               &batch->push_uniforms[PIPE_SHADER_VERTEX],
                               &batch->nr_push_uniforms[PIPE_SHADER_VERTEX]);
 
-#if PAN_ARCH >= 9
-   pan_section_pack(t.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
-      cfg.workgroup_size_x = 1;
-      cfg.workgroup_size_y = 1;
-      cfg.workgroup_size_z = 1;
-
-      cfg.workgroup_count_x = count;
-      cfg.workgroup_count_y = info->instance_count;
-      cfg.workgroup_count_z = 1;
-
-      panfrost_emit_shader(batch, &cfg.compute, PIPE_SHADER_VERTEX,
-                           batch->rsd[PIPE_SHADER_VERTEX], batch->tls.gpu);
-
-      /* TODO: Indexing. Also, this is a legacy feature... */
-      cfg.compute.attribute_offset = batch->ctx->offset_start;
-
-      /* Transform feedback shaders do not use barriers or shared
-       * memory, so we may merge workgroups.
-       */
-      cfg.allow_merging_workgroups = true;
-      cfg.task_increment = 1;
-      cfg.task_axis = MALI_TASK_AXIS_Z;
-   }
-#else
-   struct mali_invocation_packed invocation;
-
-   panfrost_pack_work_groups_compute(&invocation, 1, count,
-                                     info->instance_count, 1, 1, 1,
-                                     PAN_ARCH <= 5, false);
-
-   panfrost_draw_emit_vertex(batch, info, &invocation, 0, 0, attribs,
-                             attrib_bufs, t.cpu);
-#endif
-   enum mali_job_type job_type = MALI_JOB_TYPE_COMPUTE;
-#if PAN_ARCH <= 5
-   job_type = MALI_JOB_TYPE_VERTEX;
-#endif
-   panfrost_add_job(&batch->pool.base, &batch->scoreboard, job_type, true,
-                    false, 0, 0, &t, false);
+   JOBX(launch_xfb)(batch, info, count);
+   batch->compute_count++;
 
    ctx->uncompiled[PIPE_SHADER_VERTEX] = vs_uncompiled;
    ctx->prog[PIPE_SHADER_VERTEX] = vs;
@@ -3491,21 +2759,16 @@ panfrost_increase_vertex_count(struct panfrost_batch *batch, uint32_t increment)
       batch->tiler_ctx.vertex_count = UINT32_MAX;
 }
 
+/*
+ * If we change whether we're drawing points, or whether point sprites are
+ * enabled (specified in the rasterizer), we may need to rebind shaders
+ * accordingly. This implicitly covers the case of rebinding framebuffers,
+ * because all dirty flags are set there.
+ */
 static void
-panfrost_direct_draw(struct panfrost_batch *batch,
-                     const struct pipe_draw_info *info, unsigned drawid_offset,
-                     const struct pipe_draw_start_count_bias *draw)
+panfrost_update_point_sprite_shader(struct panfrost_context *ctx,
+                                    const struct pipe_draw_info *info)
 {
-   if (!draw->count || !info->instance_count)
-      return;
-
-   struct panfrost_context *ctx = batch->ctx;
-
-   /* If we change whether we're drawing points, or whether point sprites
-    * are enabled (specified in the rasterizer), we may need to rebind
-    * shaders accordingly. This implicitly covers the case of rebinding
-    * framebuffers, because all dirty flags are set there.
-    */
    if ((ctx->dirty & PAN_DIRTY_RASTERIZER) ||
        ((ctx->active_prim == MESA_PRIM_POINTS) ^
         (info->mode == MESA_PRIM_POINTS))) {
@@ -3513,49 +2776,27 @@ panfrost_direct_draw(struct panfrost_batch *batch,
       ctx->active_prim = info->mode;
       panfrost_update_shader_variant(ctx, PIPE_SHADER_FRAGMENT);
    }
+}
 
-   /* Take into account a negative bias */
-   ctx->vertex_count =
-      draw->count + (info->index_size ? abs(draw->index_bias) : 0);
-   ctx->instance_count = info->instance_count;
-   ctx->base_vertex = info->index_size ? draw->index_bias : 0;
-   ctx->base_instance = info->start_instance;
-   ctx->active_prim = info->mode;
-   ctx->drawid = drawid_offset;
-
-   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
-
-   bool idvs = vs->info.vs.idvs;
-   bool secondary_shader = vs->info.vs.secondary_enable;
-
-   UNUSED struct panfrost_ptr tiler, vertex;
-
-   if (idvs) {
-#if PAN_ARCH >= 9
-      tiler = pan_pool_alloc_desc(&batch->pool.base, MALLOC_VERTEX_JOB);
-#elif PAN_ARCH >= 6
-      tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
-#else
-      unreachable("IDVS is unsupported on Midgard");
-#endif
-   } else {
-      vertex = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
-      tiler = pan_pool_alloc_desc(&batch->pool.base, TILER_JOB);
-   }
-
+static unsigned
+panfrost_draw_get_vertex_count(struct panfrost_batch *batch,
+                               const struct pipe_draw_info *info,
+                               const struct pipe_draw_start_count_bias *draw,
+                               bool idvs)
+{
+   struct panfrost_context *ctx = batch->ctx;
    unsigned vertex_count = ctx->vertex_count;
-
    unsigned min_index = 0, max_index = 0;
-   mali_ptr indices = 0;
 
+   batch->indices = 0;
    if (info->index_size && PAN_ARCH >= 9) {
-      indices = panfrost_get_index_buffer(batch, info, draw);
+      batch->indices = panfrost_get_index_buffer(batch, info, draw);
 
       /* Use index count to estimate vertex count */
       panfrost_increase_vertex_count(batch, draw->count);
    } else if (info->index_size) {
-      indices = panfrost_get_index_buffer_bounded(batch, info, draw, &min_index,
-                                                  &max_index);
+      batch->indices = panfrost_get_index_buffer_bounded(
+         batch, info, draw, &min_index, &max_index);
 
       /* Use the corresponding values */
       vertex_count = max_index - min_index + 1;
@@ -3578,39 +2819,41 @@ panfrost_direct_draw(struct panfrost_batch *batch,
          count = ALIGN_POT(count, 4);
 
       ctx->padded_count = panfrost_padded_vertex_count(count);
-   } else
-      ctx->padded_count = vertex_count;
-
-   panfrost_statistics_record(ctx, info, draw);
-
-#if PAN_ARCH <= 7
-   struct mali_invocation_packed invocation;
-   if (info->instance_count > 1) {
-      panfrost_pack_work_groups_compute(&invocation, 1, vertex_count,
-                                        info->instance_count, 1, 1, 1, true,
-                                        false);
    } else {
-      pan_pack(&invocation, INVOCATION, cfg) {
-         cfg.invocations = vertex_count - 1;
-         cfg.size_y_shift = 0;
-         cfg.size_z_shift = 0;
-         cfg.workgroups_x_shift = 0;
-         cfg.workgroups_y_shift = 0;
-         cfg.workgroups_z_shift = 32;
-         cfg.thread_group_split = MALI_SPLIT_MIN_EFFICIENT;
-      }
+      ctx->padded_count = vertex_count;
    }
 
-   /* Emit all sort of descriptors. */
-   mali_ptr varyings = 0, vs_vary = 0, fs_vary = 0, pos = 0, psiz = 0;
+   return vertex_count;
+}
 
-   panfrost_emit_varying_descriptor(
-      batch, ctx->padded_count * ctx->instance_count, &vs_vary, &fs_vary,
-      &varyings, NULL, &pos, &psiz, info->mode == MESA_PRIM_POINTS);
+static void
+panfrost_direct_draw(struct panfrost_batch *batch,
+                     const struct pipe_draw_info *info, unsigned drawid_offset,
+                     const struct pipe_draw_start_count_bias *draw)
+{
+   if (!draw->count || !info->instance_count)
+      return;
 
-   mali_ptr attribs, attrib_bufs;
-   attribs = panfrost_emit_vertex_data(batch, &attrib_bufs);
-#endif
+   struct panfrost_context *ctx = batch->ctx;
+
+   panfrost_update_point_sprite_shader(ctx, info);
+
+   /* Take into account a negative bias */
+   ctx->vertex_count =
+      draw->count + (info->index_size ? abs(draw->index_bias) : 0);
+   ctx->instance_count = info->instance_count;
+   ctx->base_vertex = info->index_size ? draw->index_bias : 0;
+   ctx->base_instance = info->start_instance;
+   ctx->active_prim = info->mode;
+   ctx->drawid = drawid_offset;
+
+   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
+   bool idvs = vs->info.vs.idvs;
+
+   UNUSED unsigned vertex_count =
+      panfrost_draw_get_vertex_count(batch, info, draw, idvs);
+
+   panfrost_statistics_record(ctx, info, draw);
 
    panfrost_update_state_3d(batch);
    panfrost_update_shader_state(batch, PIPE_SHADER_VERTEX);
@@ -3618,10 +2861,7 @@ panfrost_direct_draw(struct panfrost_batch *batch,
    panfrost_clean_state_3d(ctx);
 
    if (ctx->uncompiled[PIPE_SHADER_VERTEX]->xfb) {
-#if PAN_ARCH >= 9
-      mali_ptr attribs = 0, attrib_bufs = 0;
-#endif
-      panfrost_launch_xfb(batch, info, attribs, attrib_bufs, draw->count);
+      panfrost_launch_xfb(batch, info, draw->count);
    }
 
    /* Increment transform feedback offsets */
@@ -3633,35 +2873,15 @@ panfrost_direct_draw(struct panfrost_batch *batch,
    if (panfrost_batch_skip_rasterization(batch))
       return;
 
-#if PAN_ARCH >= 9
-   assert(idvs && "Memory allocated IDVS required on Valhall");
-
-   panfrost_emit_malloc_vertex(batch, info, draw, indices, secondary_shader,
-                               tiler.cpu);
-
-   panfrost_add_job(&batch->pool.base, &batch->scoreboard,
-                    MALI_JOB_TYPE_MALLOC_VERTEX, false, false, 0, 0, &tiler,
-                    false);
-#else
-   /* Fire off the draw itself */
-   panfrost_draw_emit_tiler(batch, info, draw, &invocation, indices, fs_vary,
-                            varyings, pos, psiz, secondary_shader, tiler.cpu);
-   if (idvs) {
-#if PAN_ARCH >= 6
-      panfrost_draw_emit_vertex_section(
-         batch, vs_vary, varyings, attribs, attrib_bufs,
-         pan_section_ptr(tiler.cpu, INDEXED_VERTEX_JOB, VERTEX_DRAW));
-
-      panfrost_add_job(&batch->pool.base, &batch->scoreboard,
-                       MALI_JOB_TYPE_INDEXED_VERTEX, false, false, 0, 0, &tiler,
-                       false);
+#if PAN_ARCH <= 7
+   /* Emit all sort of descriptors. */
+   panfrost_emit_varying_descriptor(batch,
+                                    ctx->padded_count * ctx->instance_count,
+                                    info->mode == MESA_PRIM_POINTS);
 #endif
-   } else {
-      panfrost_draw_emit_vertex(batch, info, &invocation, vs_vary, varyings,
-                                attribs, attrib_bufs, vertex.cpu);
-      panfrost_emit_vertex_tiler_jobs(batch, &vertex, &tiler);
-   }
-#endif
+
+   JOBX(launch_draw)(batch, info, drawid_offset, draw, vertex_count);
+   batch->draw_count++;
 }
 
 static bool
@@ -3712,10 +2932,13 @@ panfrost_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /* Do some common setup */
    struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
 
-   /* Don't add too many jobs to a single batch. Hardware has a hard limit
-    * of 65536 jobs, but we choose a smaller soft limit (arbitrary) to
-    * avoid the risk of timeouts. This might not be a good idea. */
-   if (unlikely(batch->scoreboard.job_index > 10000))
+   /* Don't add too many jobs to a single batch. Job manager hardware has a
+    * hard limit of 65536 jobs per job chain. Given a draw issues a maximum
+    * of 3 jobs (a vertex, a tiler and a compute job is XFB is enabled), we
+    * could use 65536 / 3 as a limit, but we choose a smaller soft limit
+    * (arbitrary) to avoid the risk of timeouts. This might not be a good
+    * idea. */
+   if (unlikely(batch->draw_count > 10000))
       batch = panfrost_get_fresh_batch_for_fbo(ctx, "Too many draws");
 
    bool points = (info->mode == MESA_PRIM_POINTS);
@@ -3786,95 +3009,21 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
 
    ctx->compute_grid = info;
 
-   struct panfrost_ptr t = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
-
-   /* Invoke according to the grid info */
-
-   unsigned num_wg[3] = {info->grid[0], info->grid[1], info->grid[2]};
-
-   if (info->indirect)
-      num_wg[0] = num_wg[1] = num_wg[2] = 1;
-
    /* Conservatively assume workgroup size changes every launch */
    ctx->dirty |= PAN_DIRTY_PARAMS;
 
    panfrost_update_shader_state(batch, PIPE_SHADER_COMPUTE);
 
-#if PAN_ARCH <= 7
-   panfrost_pack_work_groups_compute(
-      pan_section_ptr(t.cpu, COMPUTE_JOB, INVOCATION), num_wg[0], num_wg[1],
-      num_wg[2], info->block[0], info->block[1], info->block[2], false,
-      info->indirect != NULL);
+   /* We want our compute thread descriptor to be per job.
+    * Save the global one, and restore it when we're done emitting
+    * the job.
+    */
+   mali_ptr saved_tls = batch->tls.gpu;
+   batch->tls.gpu = panfrost_emit_shared_memory(batch, info);
 
-   pan_section_pack(t.cpu, COMPUTE_JOB, PARAMETERS, cfg) {
-      cfg.job_task_split = util_logbase2_ceil(info->block[0] + 1) +
-                           util_logbase2_ceil(info->block[1] + 1) +
-                           util_logbase2_ceil(info->block[2] + 1);
-   }
-
-   pan_section_pack(t.cpu, COMPUTE_JOB, DRAW, cfg) {
-      cfg.state = batch->rsd[PIPE_SHADER_COMPUTE];
-      cfg.attributes = panfrost_emit_image_attribs(
-         batch, &cfg.attribute_buffers, PIPE_SHADER_COMPUTE);
-      cfg.thread_storage = panfrost_emit_shared_memory(batch, info);
-      cfg.uniform_buffers = batch->uniform_buffers[PIPE_SHADER_COMPUTE];
-      cfg.push_uniforms = batch->push_uniforms[PIPE_SHADER_COMPUTE];
-      cfg.textures = batch->textures[PIPE_SHADER_COMPUTE];
-      cfg.samplers = batch->samplers[PIPE_SHADER_COMPUTE];
-   }
-#else
-   struct panfrost_compiled_shader *cs = ctx->prog[PIPE_SHADER_COMPUTE];
-
-   pan_section_pack(t.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
-      cfg.workgroup_size_x = info->block[0];
-      cfg.workgroup_size_y = info->block[1];
-      cfg.workgroup_size_z = info->block[2];
-
-      cfg.workgroup_count_x = num_wg[0];
-      cfg.workgroup_count_y = num_wg[1];
-      cfg.workgroup_count_z = num_wg[2];
-
-      panfrost_emit_shader(batch, &cfg.compute, PIPE_SHADER_COMPUTE,
-                           batch->rsd[PIPE_SHADER_COMPUTE],
-                           panfrost_emit_shared_memory(batch, info));
-
-      /* Workgroups may be merged if the shader does not use barriers
-       * or shared memory. This condition is checked against the
-       * static shared_size at compile-time. We need to check the
-       * variable shared size at launch_grid time, because the
-       * compiler doesn't know about that.
-       */
-      cfg.allow_merging_workgroups = cs->info.cs.allow_merging_workgroups &&
-                                     (info->variable_shared_mem == 0);
-
-      cfg.task_increment = 1;
-      cfg.task_axis = MALI_TASK_AXIS_Z;
-   }
-#endif
-
-   unsigned indirect_dep = 0;
-#if PAN_GPU_INDIRECTS
-   if (info->indirect) {
-      struct pan_indirect_dispatch_info indirect = {
-         .job = t.gpu,
-         .indirect_dim = pan_resource(info->indirect)->image.data.bo->ptr.gpu +
-                         info->indirect_offset,
-         .num_wg_sysval =
-            {
-               batch->num_wg_sysval[0],
-               batch->num_wg_sysval[1],
-               batch->num_wg_sysval[2],
-            },
-      };
-
-      indirect_dep = GENX(pan_indirect_dispatch_emit)(
-         &batch->pool.base, &batch->scoreboard, &indirect);
-   }
-#endif
-
-   panfrost_add_job(&batch->pool.base, &batch->scoreboard,
-                    MALI_JOB_TYPE_COMPUTE, true, false, indirect_dep, 0, &t,
-                    false);
+   JOBX(launch_grid)(batch, info);
+   batch->compute_count++;
+   batch->tls.gpu = saved_tls;
 }
 
 static void
@@ -4400,7 +3549,12 @@ prepare_shader(struct panfrost_compiled_shader *state,
    /* Generic, or IDVS/points */
    pan_pack(ptr.cpu, SHADER_PROGRAM, cfg) {
       cfg.stage = pan_shader_stage(&state->info);
-      cfg.primary_shader = true;
+
+      if (cfg.stage == MALI_SHADER_STAGE_FRAGMENT)
+         cfg.fragment_coverage_bitmask_type = MALI_COVERAGE_BITMASK_TYPE_GL;
+      else if (vs)
+         cfg.vertex_warp_limit = MALI_WARP_LIMIT_HALF;
+
       cfg.register_allocation =
          pan_register_allocation(state->info.work_reg_count);
       cfg.binary = state->bin.gpu;
@@ -4417,7 +3571,7 @@ prepare_shader(struct panfrost_compiled_shader *state,
    /* IDVS/triangles */
    pan_pack(ptr.cpu + pan_size(SHADER_PROGRAM), SHADER_PROGRAM, cfg) {
       cfg.stage = pan_shader_stage(&state->info);
-      cfg.primary_shader = true;
+      cfg.vertex_warp_limit = MALI_WARP_LIMIT_HALF;
       cfg.register_allocation =
          pan_register_allocation(state->info.work_reg_count);
       cfg.binary = state->bin.gpu + state->info.vs.no_psiz_offset;
@@ -4432,7 +3586,7 @@ prepare_shader(struct panfrost_compiled_shader *state,
       unsigned work_count = state->info.vs.secondary_work_reg_count;
 
       cfg.stage = pan_shader_stage(&state->info);
-      cfg.primary_shader = false;
+      cfg.vertex_warp_limit = MALI_WARP_LIMIT_FULL;
       cfg.register_allocation = pan_register_allocation(work_count);
       cfg.binary = state->bin.gpu + state->info.vs.secondary_offset;
       cfg.preload.r48_r63 = (state->info.vs.secondary_preload >> 48);
@@ -4452,46 +3606,6 @@ screen_destroy(struct pipe_screen *pscreen)
 }
 
 static void
-preload(struct panfrost_batch *batch, struct pan_fb_info *fb)
-{
-   GENX(pan_preload_fb)
-   (&batch->pool.base, &batch->scoreboard, fb, batch->tls.gpu,
-    PAN_ARCH >= 6 ? batch->tiler_ctx.bifrost : 0, NULL);
-}
-
-static void
-init_batch(struct panfrost_batch *batch)
-{
-   /* Reserve the framebuffer and local storage descriptors */
-   batch->framebuffer =
-#if PAN_ARCH == 4
-      pan_pool_alloc_desc(&batch->pool.base, FRAMEBUFFER);
-#else
-      pan_pool_alloc_desc_aggregate(
-         &batch->pool.base, PAN_DESC(FRAMEBUFFER), PAN_DESC(ZS_CRC_EXTENSION),
-         PAN_DESC_ARRAY(MAX2(batch->key.nr_cbufs, 1), RENDER_TARGET));
-#endif
-
-#if PAN_ARCH >= 6
-   batch->tls = pan_pool_alloc_desc(&batch->pool.base, LOCAL_STORAGE);
-#else
-   /* On Midgard, the TLS is embedded in the FB descriptor */
-   batch->tls = batch->framebuffer;
-
-#if PAN_ARCH == 5
-   struct mali_framebuffer_pointer_packed ptr;
-
-   pan_pack(ptr.opaque, FRAMEBUFFER_POINTER, cfg) {
-      cfg.pointer = batch->framebuffer.gpu;
-      cfg.render_target_count = 1; /* a necessary lie */
-   }
-
-   batch->tls.gpu = ptr.opaque[0];
-#endif
-#endif
-}
-
-static void
 panfrost_sampler_view_destroy(struct pipe_context *pctx,
                               struct pipe_sampler_view *pview)
 {
@@ -4503,7 +3617,7 @@ panfrost_sampler_view_destroy(struct pipe_context *pctx,
 }
 
 static void
-context_init(struct pipe_context *pipe)
+context_populate_vtbl(struct pipe_context *pipe)
 {
    pipe->draw_vbo = panfrost_draw_vbo;
    pipe->launch_grid = panfrost_launch_grid;
@@ -4531,7 +3645,7 @@ batch_get_polygon_list(struct panfrost_batch *batch)
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
    if (!batch->tiler_ctx.midgard.polygon_list) {
-      bool has_draws = batch->scoreboard.first_tiler != NULL;
+      bool has_draws = batch->draw_count > 0;
       unsigned size = panfrost_tiler_get_polygon_list_size(
          dev, batch->key.width, batch->key.height,
          batch->tiler_ctx.vertex_count);
@@ -4573,9 +3687,28 @@ init_polygon_list(struct panfrost_batch *batch)
 {
 #if PAN_ARCH <= 5
    mali_ptr polygon_list = batch_get_polygon_list(batch);
-   panfrost_scoreboard_initialize_tiler(&batch->pool.base, &batch->scoreboard,
-                                        polygon_list);
+   pan_jc_initialize_tiler(&batch->pool.base, &batch->jm.jobs.vtc_jc,
+                           polygon_list);
 #endif
+}
+
+static int
+submit_batch(struct panfrost_batch *batch, struct pan_fb_info *fb)
+{
+   JOBX(preload_fb)(batch, fb);
+   init_polygon_list(batch);
+
+   /* Now that all draws are in, we can finally prepare the
+    * FBD for the batch (if there is one). */
+
+   emit_tls(batch);
+
+   if (panfrost_has_fragment_job(batch)) {
+      emit_fbd(batch, fb);
+      emit_fragment_job(batch, fb);
+   }
+
+   return JOBX(submit_batch)(batch);
 }
 
 void
@@ -4584,15 +3717,11 @@ GENX(panfrost_cmdstream_screen_init)(struct panfrost_screen *screen)
    struct panfrost_device *dev = &screen->dev;
 
    screen->vtbl.prepare_shader = prepare_shader;
-   screen->vtbl.emit_tls = emit_tls;
-   screen->vtbl.emit_fbd = emit_fbd;
-   screen->vtbl.emit_fragment_job = emit_fragment_job;
    screen->vtbl.screen_destroy = screen_destroy;
-   screen->vtbl.preload = preload;
-   screen->vtbl.context_init = context_init;
-   screen->vtbl.init_batch = init_batch;
+   screen->vtbl.context_populate_vtbl = context_populate_vtbl;
+   screen->vtbl.init_batch = JOBX(init_batch);
+   screen->vtbl.submit_batch = submit_batch;
    screen->vtbl.get_blend_shader = GENX(pan_blend_get_shader_locked);
-   screen->vtbl.init_polygon_list = init_polygon_list;
    screen->vtbl.get_compiler_options = GENX(pan_shader_get_compiler_options);
    screen->vtbl.compile_shader = GENX(pan_shader_compile);
    screen->vtbl.afbc_size = panfrost_afbc_size;

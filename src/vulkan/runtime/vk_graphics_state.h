@@ -113,13 +113,14 @@ enum mesa_vk_dynamic_graphics_state {
  * This function maps a VkPipelineDynamicStateCreateInfo to a bitset indexed
  * by mesa_vk_dynamic_graphics_state enumerants.
  *
- * @param[out] dynamic  Bitset to populate
- * @param[in]  info     VkPipelineDynamicStateCreateInfo or NULL
+ * :param dynamic:      |out| Bitset to populate
+ * :param info:         |in|  VkPipelineDynamicStateCreateInfo or NULL
  */
 void
 vk_get_dynamic_graphics_states(BITSET_WORD *dynamic,
                                const VkPipelineDynamicStateCreateInfo *info);
 
+/***/
 struct vk_vertex_binding_state {
    /** VkVertexInputBindingDescription::stride */
    uint16_t stride;
@@ -127,10 +128,11 @@ struct vk_vertex_binding_state {
    /** VkVertexInputBindingDescription::inputRate */
    uint16_t input_rate;
 
-   /** VkVertexInputBindingDivisorDescriptionEXT::divisor or 1 */
+   /** VkVertexInputBindingDivisorDescriptionKHR::divisor or 1 */
    uint32_t divisor;
 };
 
+/***/
 struct vk_vertex_attribute_state {
    /** VkVertexInputAttributeDescription::binding */
    uint32_t binding;
@@ -142,6 +144,7 @@ struct vk_vertex_attribute_state {
    uint32_t offset;
 };
 
+/***/
 struct vk_vertex_input_state {
    /** Bitset of which bindings are valid, indexed by binding */
    uint32_t bindings_valid;
@@ -152,6 +155,7 @@ struct vk_vertex_input_state {
    struct vk_vertex_attribute_state attributes[MESA_VK_MAX_VERTEX_ATTRIBUTES];
 };
 
+/***/
 struct vk_input_assembly_state {
    /** VkPipelineInputAssemblyStateCreateInfo::topology
      *
@@ -166,6 +170,7 @@ struct vk_input_assembly_state {
    bool primitive_restart_enable;
 };
 
+/***/
 struct vk_tessellation_state {
    /** VkPipelineTessellationStateCreateInfo::patchControlPoints
     *
@@ -180,6 +185,7 @@ struct vk_tessellation_state {
    uint8_t domain_origin;
 };
 
+/***/
 struct vk_viewport_state {
    /** VkPipelineViewportDepthClipControlCreateInfoEXT::negativeOneToOne
     */
@@ -210,6 +216,7 @@ struct vk_viewport_state {
    VkRect2D scissors[MESA_VK_MAX_SCISSORS];
 };
 
+/***/
 struct vk_discard_rectangles_state {
    /** VkPipelineDiscardRectangleStateCreateInfoEXT::discardRectangleMode */
    VkDiscardRectangleModeEXT mode;
@@ -232,6 +239,7 @@ enum ENUM_PACKED vk_mesa_depth_clip_enable {
    VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP,
 };
 
+/***/
 struct vk_rasterization_state {
    /** VkPipelineRasterizationStateCreateInfo::rasterizerDiscardEnable
     *
@@ -385,6 +393,7 @@ vk_rasterization_state_depth_clip_enable(const struct vk_rasterization_state *rs
    unreachable("Invalid depth clip enable");
 }
 
+/***/
 struct vk_fragment_shading_rate_state {
    /** VkPipelineFragmentShadingRateStateCreateInfoKHR::fragmentSize
     *
@@ -399,6 +408,7 @@ struct vk_fragment_shading_rate_state {
    VkFragmentShadingRateCombinerOpKHR combiner_ops[2];
 };
 
+/***/
 struct vk_sample_locations_state {
    /** VkSampleLocationsInfoEXT::sampleLocationsPerPixel */
    VkSampleCountFlagBits per_pixel;
@@ -410,6 +420,7 @@ struct vk_sample_locations_state {
    VkSampleLocationEXT locations[MESA_VK_MAX_SAMPLE_LOCATIONS];
 };
 
+/***/
 struct vk_multisample_state {
    /** VkPipelineMultisampleStateCreateInfo::rasterizationSamples */
    VkSampleCountFlagBits rasterization_samples;
@@ -480,6 +491,7 @@ struct vk_stencil_test_face_state {
    uint8_t reference;
 };
 
+/***/
 struct vk_depth_stencil_state {
    struct {
       /** VkPipelineDepthStencilStateCreateInfo::depthTestEnable
@@ -550,12 +562,12 @@ struct vk_depth_stencil_state {
  * hit.  This function attempts to optimize the depth stencil state and
  * disable writes and sometimes even testing whenever possible.
  *
- * @param[inout]  ds                   The depth stencil state to optimize
- * @param[in]     ds_aspects           Which image aspects are present in the
- *                                     render pass.
- * @param[in]     consider_write_mask  If true, the write mask will be taken
- *                                     into account when optimizing.  If
- *                                     false, it will be ignored.
+ * :param ds:                   |inout| The depth stencil state to optimize
+ * :param ds_aspects:           |in|    Which image aspects are present in the
+ *                                      render pass.
+ * :param consider_write_mask:  |in|    If true, the write mask will be taken
+ *                                      into account when optimizing.  If
+ *                                      false, it will be ignored.
  */
 void vk_optimize_depth_stencil_state(struct vk_depth_stencil_state *ds,
                                      VkImageAspectFlags ds_aspects,
@@ -613,6 +625,7 @@ struct vk_color_blend_attachment_state {
    VkBlendOp alpha_blend_op;
 };
 
+/***/
 struct vk_color_blend_state {
    /** VkPipelineColorBlendStateCreateInfo::logicOpEnable
     *
@@ -650,6 +663,7 @@ struct vk_color_blend_state {
    float blend_constants[4];
 };
 
+/***/
 struct vk_render_pass_state {
    /** Set of image aspects bound as color/depth/stencil attachments
     *
@@ -658,24 +672,8 @@ struct vk_render_pass_state {
     */
    VkImageAspectFlags attachment_aspects;
 
-   /** VkGraphicsPipelineCreateInfo::renderPass */
-   VkRenderPass render_pass;
-
-   /** VkGraphicsPipelineCreateInfo::subpass */
-   uint32_t subpass;
-
    /** VkPipelineRenderingCreateInfo::viewMask */
    uint32_t view_mask;
-
-   /** Render pass flags from VkGraphicsPipelineCreateInfo::flags
-    *
-    * For drivers which use vk_render_pass, this will also include flags
-    * generated based on subpass self-dependencies and fragment density map.
-    */
-   VkPipelineCreateFlags pipeline_flags;
-
-   /* True if any feedback loops only involve input attachments. */
-   bool feedback_loop_input_only;
 
    /** VkPipelineRenderingCreateInfo::colorAttachmentCount */
    uint8_t color_attachment_count;
@@ -695,6 +693,19 @@ struct vk_render_pass_state {
    /** VkAttachmentSampleCountInfoAMD::depthStencilAttachmentSamples */
    uint8_t depth_stencil_attachment_samples;
 };
+
+static inline VkImageAspectFlags
+vk_pipeline_flags_feedback_loops(VkPipelineCreateFlags2KHR flags)
+{
+   VkImageAspectFlags feedback_loops = 0;
+   if (flags &
+       VK_PIPELINE_CREATE_2_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)
+      feedback_loops |= VK_IMAGE_ASPECT_COLOR_BIT;
+   if (flags &
+       VK_PIPELINE_CREATE_2_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)
+      feedback_loops |= VK_IMAGE_ASPECT_DEPTH_BIT;
+   return feedback_loops;
+}
 
 /** Struct representing all dynamic graphics state
  *
@@ -820,6 +831,9 @@ struct vk_dynamic_graphics_state {
    /** Color blend state */
    struct vk_color_blend_state cb;
 
+   /** MESA_VK_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE */
+   VkImageAspectFlags feedback_loops;
+
    /** For pipelines, which bits of dynamic state are set */
    BITSET_DECLARE(set, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX);
 
@@ -827,6 +841,7 @@ struct vk_dynamic_graphics_state {
    BITSET_DECLARE(dirty, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX);
 };
 
+/***/
 struct vk_graphics_pipeline_all_state {
    struct vk_vertex_input_state vi;
    struct vk_input_assembly_state ia;
@@ -842,11 +857,29 @@ struct vk_graphics_pipeline_all_state {
    struct vk_render_pass_state rp;
 };
 
+/***/
 struct vk_graphics_pipeline_state {
    /** Bitset of which states are dynamic */
    BITSET_DECLARE(dynamic, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX);
 
    VkShaderStageFlags shader_stages;
+
+   /** Flags from VkGraphicsPipelineCreateInfo::flags that are considered part
+    * of a stage and need to be merged when linking libraries.
+    *
+    * For drivers which use vk_render_pass, this will also include flags
+    * generated based on subpass self-dependencies and fragment density map.
+    */
+   VkPipelineCreateFlags2KHR pipeline_flags;
+
+   /* True if there are feedback loops that do not involve input attachments
+    * managed by the driver. This is set to true by the runtime if there
+    * are loops indicated by a pipeline flag (which may involve any image
+    * rather than only input attachments under the control of the driver) or
+    * there was no driver-provided render pass info struct (because input
+    * attachments for emulated renderpasses cannot be managed by the driver).
+    */
+   bool feedback_loop_not_input_only;
 
    /** Vertex input state */
    const struct vk_vertex_input_state *vi;
@@ -905,30 +938,35 @@ struct vk_graphics_pipeline_state {
  * to this new blob of memory is returned via `alloc_ptr_out` and must
  * eventually be freed by the driver.
  *
- * @param[in]  device         The Vulkan device
- * @param[out] state          The graphics pipeline state to populate
- * @param[in]  info           The pCreateInfo from vkCreateGraphicsPipelines
- * @param[in]  driver_rp      Renderpass state if the driver implements render
+ * :param device:       |in|  The Vulkan device
+ * :param state:        |out| The graphics pipeline state to populate
+ * :param info:         |in|  The pCreateInfo from vkCreateGraphicsPipelines
+ * :param driver_rp:    |in|  Renderpass state if the driver implements render
  *                            passes itself.  This should be NULL for drivers
  *                            that use the common render pass infrastructure
  *                            built on top of dynamic rendering.
- * @param[in]  all            The vk_graphics_pipeline_all_state to use to
+ * :param driver_rp_flags: |in| Pipeline create flags implied by the
+ *                              renderpass or subpass if the driver implements
+ *                              render passes itself.  This is only used if
+ *                              driver_rp is non-NULL.
+ * :param  all:         |in|  The vk_graphics_pipeline_all_state to use to
  *                            back any newly needed states.  If NULL, newly
  *                            needed states will be dynamically allocated
  *                            instead.
- * @param[in]  alloc          Allocation callbacks for dynamically allocating
+ * :param alloc:        |in|  Allocation callbacks for dynamically allocating
  *                            new state memory.
- * @param[in]  scope          Allocation scope for dynamically allocating new
+ * :param scope:        |in|  Allocation scope for dynamically allocating new
  *                            state memory.
- * @param[out] alloc_ptr_out  Will be populated with a pointer to any newly
- *                            allocated state.  The driver is responsible for
- *                            freeing this pointer.
+ * :param alloc_ptr_out: |out| Will be populated with a pointer to any newly
+ *                             allocated state.  The driver is responsible for
+ *                             freeing this pointer.
  */
 VkResult
 vk_graphics_pipeline_state_fill(const struct vk_device *device,
                                 struct vk_graphics_pipeline_state *state,
                                 const VkGraphicsPipelineCreateInfo *info,
-                                const struct vk_render_pass_state *rp_info,
+                                const struct vk_render_pass_state *driver_rp,
+                                VkPipelineCreateFlags2KHR driver_rp_flags,
                                 struct vk_graphics_pipeline_all_state *all,
                                 const VkAllocationCallbacks *alloc,
                                 VkSystemAllocationScope scope,
@@ -968,16 +1006,16 @@ vk_graphics_pipeline_state_fill(const struct vk_device *device,
  *
  * In this case we will avoid allocating memory for `library->state.foo`.
  *
- * @param[in]  device         The Vulkan device
- * @param[out] state          The graphics pipeline state to populate
- * @param[in]  old_state      The graphics pipeline state to copy from
- * @param[in]  alloc          Allocation callbacks for dynamically allocating
+ * :param device:       |in|  The Vulkan device
+ * :param state:        |out| The graphics pipeline state to populate
+ * :param old_state:    |in|  The graphics pipeline state to copy from
+ * :param alloc:        |in|  Allocation callbacks for dynamically allocating
  *                            new state memory.
- * @param[in]  scope          Allocation scope for dynamically allocating new
+ * :param scope:        |in|  Allocation scope for dynamically allocating new
  *                            state memory.
- * @param[out] alloc_ptr_out  Will be populated with a pointer to any newly
- *                            allocated state.  The driver is responsible for
- *                            freeing this pointer.
+ * :param alloc_ptr_out: |out| Will be populated with a pointer to any newly
+ *                             allocated state.  The driver is responsible for
+ *                             freeing this pointer.
  */
 VkResult
 vk_graphics_pipeline_state_copy(const struct vk_device *device,
@@ -995,9 +1033,9 @@ vk_graphics_pipeline_state_copy(const struct vk_device *device,
  * The only exception here is render pass state which may be only partially
  * defined in which case the fully defined one (if any) is used.
  *
- * @param[out] dst   The destination state.  When the function returns, this
- *                   will be the union of the original dst and src.
- * @param[in]  src   The source state
+ * :param dst:          |out| The destination state.  When the function returns, this
+ *                            will be the union of the original dst and src.
+ * :param src:          |in|  The source state
  */
 void
 vk_graphics_pipeline_state_merge(struct vk_graphics_pipeline_state *dst,
@@ -1015,24 +1053,24 @@ extern const struct vk_dynamic_graphics_state vk_default_dynamic_graphics_state;
 
 /** Initialize a vk_dynamic_graphics_state with defaults
  *
- * @param[out] dyn         Dynamic graphics state to initizlie
+ * :param dyn:          |out| Dynamic graphics state to initizlie
  */
 void
 vk_dynamic_graphics_state_init(struct vk_dynamic_graphics_state *dyn);
 
 /** Clear a vk_dynamic_graphics_state to defaults
  *
- * @param[out] dyn         Dynamic graphics state to initizlie
+ * :param dyn:          |out| Dynamic graphics state to initizlie
  */
 void
 vk_dynamic_graphics_state_clear(struct vk_dynamic_graphics_state *dyn);
 
 /** Initialize a vk_dynamic_graphics_state for a pipeline
  *
- * @param[out] dyn         Dynamic graphics state to initizlie
- * @param[in]  supported   Bitset of all dynamic state supported by the driver.
- * @param[in]  p           The pipeline state from which to initialize the
- *                         dynamic state.
+ * :param dyn:          |out| Dynamic graphics state to initizlie
+ * :param supported:    |in|  Bitset of all dynamic state supported by the driver.
+ * :param p:            |in|  The pipeline state from which to initialize the
+ *                            dynamic state.
  */
 void
 vk_dynamic_graphics_state_fill(struct vk_dynamic_graphics_state *dyn,
@@ -1040,7 +1078,7 @@ vk_dynamic_graphics_state_fill(struct vk_dynamic_graphics_state *dyn,
 
 /** Mark all states in the given vk_dynamic_graphics_state dirty
  *
- * @param[out] d  Dynamic graphics state struct
+ * :param d:    |out| Dynamic graphics state struct
  */
 static inline void
 vk_dynamic_graphics_state_dirty_all(struct vk_dynamic_graphics_state *d)
@@ -1050,7 +1088,7 @@ vk_dynamic_graphics_state_dirty_all(struct vk_dynamic_graphics_state *d)
 
 /** Mark all states in the given vk_dynamic_graphics_state not dirty
  *
- * @param[out] d  Dynamic graphics state struct
+ * :param d:    |out| Dynamic graphics state struct
  */
 static inline void
 vk_dynamic_graphics_state_clear_dirty(struct vk_dynamic_graphics_state *d)
@@ -1060,8 +1098,8 @@ vk_dynamic_graphics_state_clear_dirty(struct vk_dynamic_graphics_state *d)
 
 /** Test if any states in the given vk_dynamic_graphics_state are dirty
  *
- * @param[in]  d  Dynamic graphics state struct to test
- * @returns       true if any state is dirty
+ * :param d:    |in|  Dynamic graphics state struct to test
+ * :returns:          true if any state is dirty
  */
 static inline bool
 vk_dynamic_graphics_state_any_dirty(const struct vk_dynamic_graphics_state *d)
@@ -1076,8 +1114,8 @@ vk_dynamic_graphics_state_any_dirty(const struct vk_dynamic_graphics_state *d)
  * structs.  Anything not set in src, as indicated by src->set, is ignored and
  * those bits of dst are left untouched.
  *
- * @param[out] dst   Copy destination
- * @param[in]  src   Copy source
+ * :param dst:  |out| Copy destination
+ * :param src:  |in|  Copy source
  */
 void
 vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
@@ -1088,8 +1126,8 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
  * Anything not set, as indicated by src->set, is ignored and those states in
  * the command buffer are left untouched.
  *
- * @param[inout]  cmd   Command buffer to update
- * @param[in]     src   State to set
+ * :param cmd:  |inout| Command buffer to update
+ * :param src:  |in|    State to set
  */
 void
 vk_cmd_set_dynamic_graphics_state(struct vk_command_buffer *cmd,
@@ -1099,10 +1137,10 @@ vk_cmd_set_dynamic_graphics_state(struct vk_command_buffer *cmd,
  *
  * This is the dynamic state part of vkCmdBindVertexBuffers2().
  *
- * @param[inout]  cmd            Command buffer to update
- * @param[in]     first_binding  First binding to update
- * @param[in]     binding_count  Number of bindings to update
- * @param[in]     strides        binding_count many stride values to set
+ * :param cmd:            |inout|  Command buffer to update
+ * :param first_binding:  |in|     First binding to update
+ * :param binding_count:  |in|     Number of bindings to update
+ * :param strides:        |in|     binding_count many stride values to set
  */
 void
 vk_cmd_set_vertex_binding_strides(struct vk_command_buffer *cmd,

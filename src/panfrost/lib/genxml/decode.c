@@ -434,6 +434,8 @@ GENX(pandecode_resource_tables)(struct pandecode_context *ctx, mali_ptr addr,
    const uint8_t *cl =
       pandecode_fetch_gpu_mem(ctx, addr, MALI_RESOURCE_LENGTH * count);
 
+   pandecode_log(ctx, "%s resource table @%" PRIx64 "\n", label, addr);
+   ctx->indent += 2;
    for (unsigned i = 0; i < count; ++i) {
       pan_unpack(cl + i * MALI_RESOURCE_LENGTH, RESOURCE, entry);
       DUMP_UNPACKED(ctx, RESOURCE, entry, "Entry %u @%" PRIx64 ":\n", i,
@@ -444,6 +446,7 @@ GENX(pandecode_resource_tables)(struct pandecode_context *ctx, mali_ptr addr,
          pandecode_resources(ctx, entry.address, entry.size);
       ctx->indent -= 2;
    }
+   ctx->indent -= 2;
 }
 
 void

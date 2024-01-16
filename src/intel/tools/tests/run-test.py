@@ -31,6 +31,11 @@ if wrapper is not None:
 else:
     i965_asm = [args.i965_asm]
 
+if not args.gen_folder.is_dir():
+    print('Test files path does not exist or is not a directory.',
+          file=sys.stderr)
+    exit(99)
+
 success = True
 
 for asm_file in args.gen_folder.glob('*.asm'):

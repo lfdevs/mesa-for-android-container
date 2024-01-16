@@ -47,6 +47,7 @@ struct vl_deint_filter
 
    unsigned video_width, video_height;
    bool skip_chroma;
+   bool interleaved;
 
    struct pipe_video_buffer *video_buffer;
 };
@@ -54,7 +55,7 @@ struct vl_deint_filter
 bool
 vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
                      unsigned video_width, unsigned video_height,
-                     bool skip_chroma, bool spatial_filter);
+                     bool skip_chroma, bool spatial_filter, bool interleaved);
 
 void
 vl_deint_filter_cleanup(struct vl_deint_filter *filter);

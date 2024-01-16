@@ -56,6 +56,10 @@ class LDSAtomicInstr;
 class LDSReadInstr;
 class RatInstr;
 
+bool
+int_from_string_with_prefix_optional(const std::string& str,
+                                     const std::string& prefix,
+                                     int& value);
 int
 int_from_string_with_prefix(const std::string& str, const std::string& prefix);
 int

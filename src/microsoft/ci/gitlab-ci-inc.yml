@@ -17,6 +17,7 @@
 # rules duplication manually
 .windows-build-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.zink-common-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -38,6 +39,7 @@
 
 .glon12-test-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.gl-rules, rules]
     - changes: *d3d12_file_list
@@ -48,6 +50,7 @@
 
 .spirv2dxil-test-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.core-rules, rules]
     - changes: &spirv2dxil_file_list
@@ -58,6 +61,7 @@
 
 .dozen-test-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
     - changes:

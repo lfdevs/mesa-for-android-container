@@ -206,9 +206,11 @@ try_opt_quad_vote(nir_builder *b, nir_alu_instr *alu, bool block_has_discard)
    if (lanes_read != 0xffff)
       return NULL;
 
-   /* Create reduction. */
-   return nir_reduce(b, quad_broadcasts[0]->src[0].ssa, .reduction_op = alu->op, .cluster_size = 4,
-                     .include_helpers = true);
+   /* Create quad vote. */
+   if (alu->op == nir_op_iand)
+      return nir_quad_vote_all(b, 1, quad_broadcasts[0]->src[0].ssa);
+   else
+      return nir_quad_vote_any(b, 1, quad_broadcasts[0]->src[0].ssa);
 }
 
 static bool

@@ -189,30 +189,30 @@ wrap_mirror_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_def *size)
 }
 
 static wrap_result_t
-wrap_coords(nir_builder *b, nir_def *coords, enum pipe_tex_wrap wrap,
+wrap_coords(nir_builder *b, nir_def *coords, enum dxil_tex_wrap wrap,
             nir_def *size)
 {
    wrap_result_t result = {coords, nir_imm_false(b)};
 
    switch (wrap) {
-   case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
+   case DXIL_TEX_WRAP_CLAMP_TO_EDGE:
       wrap_clamp_to_edge(b, &result, size);
       break;
-   case PIPE_TEX_WRAP_REPEAT:
+   case DXIL_TEX_WRAP_REPEAT:
       wrap_repeat(b, &result, size);
       break;
-   case PIPE_TEX_WRAP_MIRROR_REPEAT:
+   case DXIL_TEX_WRAP_MIRROR_REPEAT:
       wrap_mirror_repeat(b, &result, size);
       break;
-   case PIPE_TEX_WRAP_MIRROR_CLAMP:
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
+   case DXIL_TEX_WRAP_MIRROR_CLAMP:
+   case DXIL_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
       wrap_mirror_clamp_to_edge(b, &result, size);
       break;
-   case PIPE_TEX_WRAP_CLAMP:
-   case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
+   case DXIL_TEX_WRAP_CLAMP:
+   case DXIL_TEX_WRAP_CLAMP_TO_BORDER:
       wrap_clamp(b, &result, size);
       break;
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
+   case DXIL_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
       wrap_mirror_clamp(b, &result, size);
       break;
    }
@@ -522,7 +522,7 @@ lower_sample_to_txf_for_integer_tex_impl(nir_builder *b, nir_instr *instr,
       if (tex->is_array)
          params.wrap[params.ncoord_comp] =
                wrap_coords(b, coord_help[params.ncoord_comp],
-                           PIPE_TEX_WRAP_CLAMP_TO_EDGE,
+                           DXIL_TEX_WRAP_CLAMP_TO_EDGE,
                            nir_i2f32(b, nir_channel(b, size0, params.ncoord_comp)));
    } else {
       /* When we emulate a cube map by using a texture array, the coordinates are always

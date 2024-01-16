@@ -35,6 +35,11 @@ pvr_entrypoints = custom_target(
 
 pvr_files = files(
   'winsys/powervr/pvr_drm.c',
+  'winsys/powervr/pvr_drm_bo.c',
+  'winsys/powervr/pvr_drm_job_compute.c',
+  'winsys/powervr/pvr_drm_job_null.c',
+  'winsys/powervr/pvr_drm_job_render.c',
+  'winsys/powervr/pvr_drm_job_transfer.c',
   'winsys/pvr_winsys.c',
   'winsys/pvr_winsys_helper.c',
   'pvr_blit.c',

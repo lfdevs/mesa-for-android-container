@@ -75,7 +75,7 @@ int u_thread_create(thrd_t *thrd, int (*routine)(void *), void *param)
 void u_thread_setname( const char *name )
 {
 #if defined(HAVE_PTHREAD)
-#if DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || defined(__GLIBC__)
+#if DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || defined(__GLIBC__) || DETECT_OS_MANAGARM
    int ret = pthread_setname_np(pthread_self(), name);
    if (ret == ERANGE) {
       char buf[16];
@@ -154,7 +154,7 @@ util_set_thread_affinity(thrd_t thread,
 int64_t
 util_thread_get_time_nano(thrd_t thread)
 {
-#if defined(HAVE_PTHREAD) && !defined(__APPLE__) && !defined(__HAIKU__)
+#if defined(HAVE_PTHREAD) && !defined(__APPLE__) && !defined(__HAIKU__) && !defined(__managarm__)
    struct timespec ts;
    clockid_t cid;
 

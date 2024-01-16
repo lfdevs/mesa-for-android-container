@@ -73,6 +73,9 @@ si_fill_aco_shader_info(struct si_shader *shader, struct aco_shader_info *info,
    if (!info->workgroup_size)
       info->workgroup_size = info->wave_size;
 
+   info->merged_shader_compiled_separately = !shader->is_gs_copy_shader &&
+      si_is_multi_part_shader(shader) && !shader->is_monolithic;
+
    info->image_2d_view_of_3d = gfx_level == GFX9;
    info->hw_stage = si_select_hw_stage(stage, key, gfx_level);
 

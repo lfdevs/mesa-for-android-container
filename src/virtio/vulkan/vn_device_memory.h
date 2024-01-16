@@ -20,12 +20,7 @@ struct vn_device_memory_pool {
 };
 
 struct vn_device_memory {
-   struct vn_object_base base;
-
-   VkDeviceSize size;
-   VkMemoryType type;
-   bool is_external;
-   bool is_import;
+   struct vn_device_memory_base base;
 
    /* non-NULL when suballocated */
    struct vn_device_memory *base_memory;
@@ -63,12 +58,9 @@ struct vn_device_memory {
    VkDeviceSize base_offset;
 
    VkDeviceSize map_end;
-
-   /* non-NULL when backed by AHB */
-   struct AHardwareBuffer *ahb;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_device_memory,
-                               base.base,
+                               base.base.base,
                                VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)
 

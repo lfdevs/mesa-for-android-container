@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "broadcom/common/v3d_csd.h"
 #include "v3dv_private.h"
 #include "util/u_pack_color.h"
 #include "vk_util.h"
@@ -916,7 +917,7 @@ cmd_buffer_emit_resolve(struct v3dv_cmd_buffer *cmd_buffer,
    };
 
    VkCommandBuffer cmd_buffer_handle = v3dv_cmd_buffer_to_handle(cmd_buffer);
-   v3dv_CmdResolveImage2KHR(cmd_buffer_handle, &resolve_info);
+   v3dv_CmdResolveImage2(cmd_buffer_handle, &resolve_info);
 }
 
 static void
@@ -2336,6 +2337,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
    const bool has_new_push_constants = dirty_uniform_state & V3DV_CMD_DIRTY_PUSH_CONSTANTS;
    const bool has_new_descriptors = dirty_uniform_state & V3DV_CMD_DIRTY_DESCRIPTOR_SETS;
    const bool has_new_view_index = dirty_uniform_state & V3DV_CMD_DIRTY_VIEW_INDEX;
+   const bool has_new_draw_id = dirty_uniform_state & V3DV_CMD_DIRTY_DRAW_ID;
 
    /* VK_SHADER_STAGE_FRAGMENT_BIT */
    const bool has_new_descriptors_fs =
@@ -2403,6 +2405,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
 
    const bool needs_vs_update = has_new_viewport ||
                                 has_new_view_index ||
+                                has_new_draw_id ||
                                 has_new_pipeline ||
                                 has_new_push_constants_vs ||
                                 has_new_descriptors_vs;
@@ -2422,6 +2425,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_VIEW_INDEX;
+   cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_DRAW_ID;
 }
 
 /* This stores command buffer state that we might be about to stomp for
@@ -2913,7 +2917,8 @@ v3dv_cmd_buffer_emit_pre_draw(struct v3dv_cmd_buffer *cmd_buffer,
                 V3DV_CMD_DIRTY_PUSH_CONSTANTS |
                 V3DV_CMD_DIRTY_DESCRIPTOR_SETS |
                 V3DV_CMD_DIRTY_VIEWPORT |
-                V3DV_CMD_DIRTY_VIEW_INDEX);
+                V3DV_CMD_DIRTY_VIEW_INDEX |
+                V3DV_CMD_DIRTY_DRAW_ID);
 
    if (dirty_uniform_state)
       update_gfx_uniform_state(cmd_buffer, dirty_uniform_state);
@@ -3031,6 +3036,35 @@ v3dv_CmdDraw(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+v3dv_CmdDrawMultiEXT(VkCommandBuffer commandBuffer,
+                     uint32_t drawCount,
+                     const VkMultiDrawInfoEXT *pVertexInfo,
+                     uint32_t instanceCount,
+                     uint32_t firstInstance,
+                     uint32_t stride)
+
+{
+   if (drawCount == 0 || instanceCount == 0)
+      return;
+
+   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   uint32_t i = 0;
+   vk_foreach_multi_draw(draw, i, pVertexInfo, drawCount, stride) {
+      cmd_buffer->state.draw_id = i;
+      cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_DRAW_ID;
+
+      struct v3dv_draw_info info = {};
+      info.vertex_count = draw->vertexCount;
+      info.instance_count = instanceCount;
+      info.first_instance = firstInstance;
+      info.first_vertex = draw->firstVertex;
+
+      cmd_buffer_draw(cmd_buffer, &info);
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
 v3dv_CmdDrawIndexed(VkCommandBuffer commandBuffer,
                     uint32_t indexCount,
                     uint32_t instanceCount,
@@ -3061,6 +3095,48 @@ v3dv_CmdDrawIndexed(VkCommandBuffer commandBuffer,
       v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
          (cmd_buffer, indexCount, instanceCount,
           firstIndex, vertexOffset, firstInstance);
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+v3dv_CmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer,
+                            uint32_t drawCount,
+                            const VkMultiDrawIndexedInfoEXT *pIndexInfo,
+                            uint32_t instanceCount,
+                            uint32_t firstInstance,
+                            uint32_t stride,
+                            const int32_t *pVertexOffset)
+{
+   if (drawCount == 0 || instanceCount == 0)
+      return;
+
+   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   uint32_t i = 0;
+   vk_foreach_multi_draw_indexed(draw, i, pIndexInfo, drawCount, stride) {
+      uint32_t vertex_count = draw->indexCount * instanceCount;
+      int32_t vertexOffset = pVertexOffset ? *pVertexOffset : draw->vertexOffset;
+
+      cmd_buffer->state.draw_id = i;
+      cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_DRAW_ID;
+
+      struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+      if (likely(!pass->multiview_enabled)) {
+         v3dv_cmd_buffer_emit_pre_draw(cmd_buffer, true, false, vertex_count);
+         v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
+            (cmd_buffer, draw->indexCount, instanceCount,
+             draw->firstIndex, vertexOffset, firstInstance);
+         continue;
+      }
+
+      uint32_t view_mask = pass->subpasses[cmd_buffer->state.subpass_idx].view_mask;
+      while (view_mask) {
+         cmd_buffer_set_view_index(cmd_buffer, u_bit_scan(&view_mask));
+         v3dv_cmd_buffer_emit_pre_draw(cmd_buffer, true, false, vertex_count);
+         v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
+            (cmd_buffer, draw->indexCount, instanceCount,
+             draw->firstIndex, vertexOffset, firstInstance);
+      }
    }
 }
 
@@ -3147,7 +3223,6 @@ handle_barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask,
       src_mask |= V3DV_BARRIER_COMPUTE_BIT;
 
    const VkPipelineStageFlags2 transfer_mask =
-      VK_PIPELINE_STAGE_2_TRANSFER_BIT |
       VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT |
       VK_PIPELINE_STAGE_2_COPY_BIT |
       VK_PIPELINE_STAGE_2_BLIT_BIT |
@@ -3197,7 +3272,7 @@ handle_barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask,
 
 void
 v3dv_cmd_buffer_emit_pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
-                                      const VkDependencyInfoKHR *info)
+                                      const VkDependencyInfo *info)
 {
    uint32_t imageBarrierCount = info->imageMemoryBarrierCount;
    const VkImageMemoryBarrier2 *pImageBarriers = info->pImageMemoryBarriers;
@@ -3259,7 +3334,7 @@ v3dv_cmd_buffer_emit_pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
 
 VKAPI_ATTR void VKAPI_CALL
 v3dv_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
-                         const VkDependencyInfoKHR *pDependencyInfo)
+                         const VkDependencyInfo *pDependencyInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
    v3dv_cmd_buffer_emit_pipeline_barrier(cmd_buffer, pDependencyInfo);
@@ -4106,22 +4181,6 @@ cmd_buffer_emit_pre_dispatch(struct v3dv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.dirty_push_constants_stages &= ~VK_SHADER_STAGE_COMPUTE_BIT;
 }
 
-#define V3D_CSD_CFG012_WG_COUNT_SHIFT 16
-#define V3D_CSD_CFG012_WG_OFFSET_SHIFT 0
-/* Allow this dispatch to start while the last one is still running. */
-#define V3D_CSD_CFG3_OVERLAP_WITH_PREV (1 << 26)
-/* Maximum supergroup ID.  6 bits. */
-#define V3D_CSD_CFG3_MAX_SG_ID_SHIFT 20
-/* Batches per supergroup minus 1.  8 bits. */
-#define V3D_CSD_CFG3_BATCHES_PER_SG_M1_SHIFT 12
-/* Workgroups per supergroup, 0 means 16 */
-#define V3D_CSD_CFG3_WGS_PER_SG_SHIFT 8
-#define V3D_CSD_CFG3_WG_SIZE_SHIFT 0
-
-#define V3D_CSD_CFG5_PROPAGATE_NANS (1 << 2)
-#define V3D_CSD_CFG5_SINGLE_SEG (1 << 1)
-#define V3D_CSD_CFG5_THREADING (1 << 0)
-
 void
 v3dv_cmd_buffer_rewrite_indirect_csd_job(
    struct v3dv_device *device,
@@ -4380,7 +4439,16 @@ cmd_buffer_dispatch_indirect(struct v3dv_cmd_buffer *cmd_buffer,
       job->cpu.csd_indirect.wg_uniform_offsets[2];
 
    list_addtail(&job->list_link, &cmd_buffer->jobs);
-   list_addtail(&csd_job->list_link, &cmd_buffer->jobs);
+
+   /* If we have a CPU queue we submit the CPU job directly to the
+    * queue and the CSD job will be dispatched from within the kernel
+    * queue, otherwise we will have to dispatch the CSD job manually
+    * right after the CPU job by adding it to the list of jobs in the
+    * command buffer.
+    */
+   if (!cmd_buffer->device->pdevice->caps.cpu_queue)
+      list_addtail(&csd_job->list_link, &cmd_buffer->jobs);
+
    cmd_buffer->state.job = NULL;
 }
 

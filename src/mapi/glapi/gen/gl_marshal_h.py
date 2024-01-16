@@ -66,9 +66,11 @@ class PrintCode(gl_XML.gl_print_base):
         print('')
 
         for func in api.functionIterateAll():
+            func.print_struct(is_header=True)
+
             flavor = func.marshal_flavor()
+
             if flavor in ('custom', 'async'):
-                print('struct marshal_cmd_{0};'.format(func.name))
                 print(('uint32_t _mesa_unmarshal_{0}(struct gl_context *ctx, '
                        'const struct marshal_cmd_{0} *restrict cmd);').format(func.name))
 

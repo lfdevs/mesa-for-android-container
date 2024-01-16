@@ -137,9 +137,9 @@ copy_propagation(vec4_visitor *v)
 
 TEST_F(copy_propagation_vec4_test, test_swizzle_swizzle)
 {
-   dst_reg a = dst_reg(v, glsl_type::vec4_type);
-   dst_reg b = dst_reg(v, glsl_type::vec4_type);
-   dst_reg c = dst_reg(v, glsl_type::vec4_type);
+   dst_reg a = dst_reg(v, glsl_vec4_type());
+   dst_reg b = dst_reg(v, glsl_vec4_type());
+   dst_reg c = dst_reg(v, glsl_vec4_type());
 
    v->emit(v->ADD(a, src_reg(a), src_reg(a)));
 
@@ -166,9 +166,9 @@ TEST_F(copy_propagation_vec4_test, test_swizzle_swizzle)
 
 TEST_F(copy_propagation_vec4_test, test_swizzle_writemask)
 {
-   dst_reg a = dst_reg(v, glsl_type::vec4_type);
-   dst_reg b = dst_reg(v, glsl_type::vec4_type);
-   dst_reg c = dst_reg(v, glsl_type::vec4_type);
+   dst_reg a = dst_reg(v, glsl_vec4_type());
+   dst_reg b = dst_reg(v, glsl_vec4_type());
+   dst_reg c = dst_reg(v, glsl_vec4_type());
 
    v->emit(v->MOV(b, swizzle(src_reg(a), BRW_SWIZZLE4(BRW_SWIZZLE_X,
                                                       BRW_SWIZZLE_Y,

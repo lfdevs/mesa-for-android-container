@@ -2464,6 +2464,24 @@ vn_decode_VkImageLayout(struct vn_cs_decoder *dec, VkImageLayout *val)
     vn_decode_int32_t(dec, (int32_t *)val);
 }
 
+static inline size_t
+vn_sizeof_VkImageLayout_array(const VkImageLayout *val, uint32_t count)
+{
+    return vn_sizeof_int32_t_array((const int32_t *)val, count);
+}
+
+static inline void
+vn_encode_VkImageLayout_array(struct vn_cs_encoder *enc, const VkImageLayout *val, uint32_t count)
+{
+    vn_encode_int32_t_array(enc, (const int32_t *)val, count);
+}
+
+static inline void
+vn_decode_VkImageLayout_array(struct vn_cs_decoder *dec, VkImageLayout *val, uint32_t count)
+{
+    vn_decode_int32_t_array(dec, (int32_t *)val, count);
+}
+
 /* enum VkImageTiling */
 
 static inline size_t
@@ -3204,6 +3222,27 @@ vn_encode_VkSamplerReductionMode(struct vn_cs_encoder *enc, const VkSamplerReduc
 
 static inline void
 vn_decode_VkSamplerReductionMode(struct vn_cs_decoder *dec, VkSamplerReductionMode *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+/* enum VkBlendOverlapEXT */
+
+static inline size_t
+vn_sizeof_VkBlendOverlapEXT(const VkBlendOverlapEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkBlendOverlapEXT(struct vn_cs_encoder *enc, const VkBlendOverlapEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkBlendOverlapEXT(struct vn_cs_decoder *dec, VkBlendOverlapEXT *val)
 {
     vn_decode_int32_t(dec, (int32_t *)val);
 }

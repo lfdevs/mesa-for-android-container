@@ -526,6 +526,7 @@ compile_size_function(struct llvmpipe_context *ctx, struct lp_static_texture_sta
       .resources_type = cs.jit_resources_type,
       .is_sviewinfo = true,
       .samples_only = samples,
+      .ms = samples,
    };
 
    if (params.target == PIPE_TEXTURE_1D)

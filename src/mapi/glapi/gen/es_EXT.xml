@@ -320,7 +320,7 @@
 
     <function name="PointSizePointerOES" es1="1.0" desktop="false"
               no_error="true" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POINT_SIZE, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, pointer);">
+              marshal_call_after="_mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POINT_SIZE, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="pointer" type="const GLvoid *"/>

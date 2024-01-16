@@ -27,6 +27,7 @@
 #include "util/bitset.h"
 #include "util/glheader.h"
 #include "compiler/glsl/list.h"
+#include "compiler/glsl_types.h"
 
 struct gl_constants;
 struct gl_shader_program;
@@ -39,6 +40,12 @@ static inline bool
 is_gl_identifier(const char *s)
 {
    return s && s[0] == 'g' && s[1] == 'l' && s[2] == '_';
+}
+
+static inline GLenum
+glsl_get_gl_type(const struct glsl_type *t)
+{
+   return t->gl_type;
 }
 
 #ifdef __cplusplus

@@ -635,79 +635,70 @@ VKAPI_ATTR void VKAPI_CALL
 nvk_CmdFillBuffer(VkCommandBuffer commandBuffer,
                   VkBuffer dstBuffer,
                   VkDeviceSize dstOffset,
-                  VkDeviceSize fillSize,
+                  VkDeviceSize size,
                   uint32_t data)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   VK_FROM_HANDLE(nvk_buffer, dst, dstBuffer);
+   VK_FROM_HANDLE(nvk_buffer, dst_buffer, dstBuffer);
 
-   fillSize = vk_buffer_range(&dst->vk, dstOffset, fillSize);
+   uint64_t dst_addr = nvk_buffer_address(dst_buffer, dstOffset);
+   size = vk_buffer_range(&dst_buffer->vk, dstOffset, size);
 
-   VkDeviceSize dst_addr = nvk_buffer_address(dst, 0);
-   VkDeviceSize start = dstOffset / 4;
-   VkDeviceSize end = start + fillSize / 4;
+   uint32_t max_dim = 1 << 15;
 
-   /* Pascal could do 1 << 19, but previous gens need lower pitches */
-   uint32_t pitch = 1 << 18;
-   uint32_t line = pitch / 4;
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 33);
+   P_IMMD(p, NV90B5, SET_REMAP_CONST_A, data);
+   P_IMMD(p, NV90B5, SET_REMAP_COMPONENTS, {
+      .dst_x = DST_X_CONST_A,
+      .dst_y = DST_Y_CONST_A,
+      .dst_z = DST_Z_CONST_A,
+      .dst_w = DST_W_CONST_A,
+      .component_size = COMPONENT_SIZE_FOUR,
+      .num_src_components = NUM_SRC_COMPONENTS_ONE,
+      .num_dst_components = NUM_DST_COMPONENTS_ONE,
+   });
 
-   P_IMMD(p, NV902D, SET_OPERATION, V_SRCCOPY);
+   P_MTHD(p, NV90B5, PITCH_IN);
+   P_NV90B5_PITCH_IN(p, max_dim * 4);
+   P_NV90B5_PITCH_OUT(p, max_dim * 4);
 
-   P_MTHD(p, NV902D, SET_DST_FORMAT);
-   P_NV902D_SET_DST_FORMAT(p, V_A8B8G8R8);
-   P_NV902D_SET_DST_MEMORY_LAYOUT(p, V_PITCH);
+   while (size >= 4) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
 
-   P_MTHD(p, NV902D, SET_DST_PITCH);
-   P_NV902D_SET_DST_PITCH(p, pitch);
+      P_MTHD(p, NV90B5, OFFSET_OUT_UPPER);
+      P_NV90B5_OFFSET_OUT_UPPER(p, dst_addr >> 32);
+      P_NV90B5_OFFSET_OUT_LOWER(p, dst_addr & 0xffffffff);
 
-   P_MTHD(p, NV902D, SET_DST_OFFSET_UPPER);
-   P_NV902D_SET_DST_OFFSET_UPPER(p, dst_addr >> 32);
-   P_NV902D_SET_DST_OFFSET_LOWER(p, dst_addr & 0xffffffff);
+      uint64_t width, height;
+      if (size >= (uint64_t)max_dim * (uint64_t)max_dim * 4) {
+         width = height = max_dim;
+      } else if (size >= max_dim * 4) {
+         width = max_dim;
+         height = size / (max_dim * 4);
+      } else {
+         width = size / 4;
+         height = 1;
+      }
 
-   P_MTHD(p, NV902D, RENDER_SOLID_PRIM_MODE);
-   P_NV902D_RENDER_SOLID_PRIM_MODE(p, V_LINES);
-   P_NV902D_SET_RENDER_SOLID_PRIM_COLOR_FORMAT(p, V_A8B8G8R8);
-   P_NV902D_SET_RENDER_SOLID_PRIM_COLOR(p, data);
+      uint64_t dma_size = (uint64_t)width * (uint64_t)height * 4;
+      assert(dma_size <= size);
 
-   /*
-    * In order to support CPU efficient fills, we'll draw up to three primitives:
-    *   1. rest of the first line
-    *   2. a rect filling up the space between the start and end
-    *   3. begining of last line
-    */
+      P_MTHD(p, NV90B5, LINE_LENGTH_IN);
+      P_NV90B5_LINE_LENGTH_IN(p, width);
+      P_NV90B5_LINE_COUNT(p, height);
 
-   uint32_t y_0 = start / line;
-   uint32_t y_1 = end / line;
+      P_IMMD(p, NV90B5, LAUNCH_DMA, {
+         .data_transfer_type = DATA_TRANSFER_TYPE_NON_PIPELINED,
+         .multi_line_enable = height > 1,
+         .flush_enable = FLUSH_ENABLE_TRUE,
+         .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
+         .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
+         .remap_enable = REMAP_ENABLE_TRUE,
+      });
 
-   uint32_t x_0 = start % line;
-   uint32_t x_1 = end % line;
-
-   P_MTHD(p, NV902D, RENDER_SOLID_PRIM_POINT_SET_X(0));
-   P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 0, x_0);
-   P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 0, y_0);
-   P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 1, y_0 == y_1 ? x_1 : line);
-   P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 1, y_0);
-
-   if (y_0 + 1 < y_1) {
-      P_IMMD(p, NV902D, RENDER_SOLID_PRIM_MODE, V_RECTS);
-
-      P_MTHD(p, NV902D, RENDER_SOLID_PRIM_POINT_SET_X(0));
-      P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 0, 0);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 0, y_0 + 1);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 1, line);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 1, y_1);
-
-      P_IMMD(p, NV902D, RENDER_SOLID_PRIM_MODE, V_LINES);
-   }
-
-   if (y_0 < y_1) {
-      P_MTHD(p, NV902D, RENDER_SOLID_PRIM_POINT_SET_X(0));
-      P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 0, 0);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 0, y_1);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_SET_X(p, 1, x_1);
-      P_NV902D_RENDER_SOLID_PRIM_POINT_Y(p, 1, y_1);
+      dst_addr += dma_size;
+      size -= dma_size;
    }
 }
 

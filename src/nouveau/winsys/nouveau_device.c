@@ -128,9 +128,11 @@ nouveau_ws_device_set_dbg_flags(struct nouveau_ws_device *dev)
 {
    const struct debug_control flags[] = {
       { "push_dump", NVK_DEBUG_PUSH_DUMP },
+      { "push", NVK_DEBUG_PUSH_DUMP },
       { "push_sync", NVK_DEBUG_PUSH_SYNC },
       { "zero_memory", NVK_DEBUG_ZERO_MEMORY },
       { "vm", NVK_DEBUG_VM },
+      { "no_cbuf", NVK_DEBUG_NO_CBUF },
       { NULL, 0 },
    };
 
@@ -269,13 +271,15 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    if (version < 0x01000301)
       goto out_err;
 
-   const uint64_t TOP = 1ull << 40;
+   const uint64_t BDA = 1ull << 38;
    const uint64_t KERN = 1ull << 39;
-   struct drm_nouveau_vm_init vminit = { TOP-KERN, KERN };
+   const uint64_t TOP = 1ull << 40;
+   struct drm_nouveau_vm_init vminit = { KERN, TOP-KERN };
    int ret = drmCommandWrite(fd, DRM_NOUVEAU_VM_INIT, &vminit, sizeof(vminit));
    if (ret == 0) {
       device->has_vm_bind = true;
-      util_vma_heap_init(&device->vma_heap, 4096, (TOP - KERN) - 4096);
+      util_vma_heap_init(&device->vma_heap, 4096, BDA - 4096);
+      util_vma_heap_init(&device->bda_heap, BDA, KERN - BDA);
       simple_mtx_init(&device->vma_mutex, mtx_plain);
    }
 

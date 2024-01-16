@@ -28,6 +28,7 @@
 #define SFN_SHADER_H
 
 #include "amd_family.h"
+#include "compiler/shader_enums.h"
 #include "gallium/drivers/r600/r600_shader.h"
 #include "sfn_instr.h"
 #include "sfn_instr_controlflow.h"
@@ -49,58 +50,66 @@ namespace r600 {
 
 class ShaderIO {
 public:
-   void set_sid(int sid);
-   void override_spi_sid(int spi_sid);
    void print(std::ostream& os) const;
 
-   int spi_sid() const { return m_spi_sid; }
-   unsigned sid() const { return m_sid; }
-
    int location() const { return m_location; }
-   unsigned name() const { return m_name; }
+   void set_location(int location) { m_location = location; }
 
-   int pos() const { return m_pos; }
-   void set_pos(int pos) { m_pos = pos; }
+   gl_varying_slot varying_slot() const { return m_varying_slot; }
+   void set_varying_slot(gl_varying_slot varying_slot) { m_varying_slot = varying_slot; }
 
-   bool is_param() const { return m_is_param; }
-   void set_is_param(bool val) { m_is_param = val; }
+   bool no_varying() const { return m_no_varying; }
+   void set_no_varying(bool no_varying) { m_no_varying = no_varying; }
+
+   int spi_sid() const;
 
    void set_gpr(int gpr) { m_gpr = gpr; }
    int gpr() const { return m_gpr; }
 
 protected:
-   ShaderIO(const char *type, int loc, int name);
+   ShaderIO(const char *type, int loc, gl_varying_slot varying_slot = NUM_TOTAL_VARYING_SLOTS);
 
 private:
    virtual void do_print(std::ostream& os) const = 0;
 
    const char *m_type;
    int m_location{-1};
-   int m_name{-1};
-   int m_sid{0};
-   int m_spi_sid{0};
-   int m_pos{0};
-   int m_is_param{false};
+   gl_varying_slot m_varying_slot{NUM_TOTAL_VARYING_SLOTS};
+   bool m_no_varying{false};
    int m_gpr{0};
 };
 
 class ShaderOutput : public ShaderIO {
 public:
    ShaderOutput();
-   ShaderOutput(int location, int name, int writemask);
+   ShaderOutput(int location, int writemask,
+                gl_varying_slot varying_slot = NUM_TOTAL_VARYING_SLOTS);
+
+   gl_frag_result frag_result() const { return m_frag_result; }
+   void set_frag_result(gl_frag_result frag_result) { m_frag_result = frag_result; }
 
    int writemask() const { return m_writemask; }
+   void set_writemask(int writemask) { m_writemask = writemask; }
+
+   int export_param() const { return m_export_param; }
+   void set_export_param(int export_param) { m_export_param = export_param; }
 
 private:
    void do_print(std::ostream& os) const override;
 
+   gl_frag_result m_frag_result{static_cast<gl_frag_result>(FRAG_RESULT_MAX)};
    int m_writemask{0};
+   int m_export_param{-1};
 };
 
 class ShaderInput : public ShaderIO {
 public:
    ShaderInput();
-   ShaderInput(int location, int name);
+   ShaderInput(int location, gl_varying_slot varying_slot = NUM_TOTAL_VARYING_SLOTS);
+
+   gl_system_value system_value() const { return m_system_value; }
+   void set_system_value(gl_system_value system_value) { m_system_value = system_value; }
+
    void set_interpolator(int interp, int interp_loc, bool uses_interpolate_at_centroid);
    void set_uses_interpolate_at_centroid();
    void set_need_lds_pos() { m_need_lds_pos = true; }
@@ -119,6 +128,7 @@ public:
 private:
    void do_print(std::ostream& os) const override;
 
+   gl_system_value m_system_value{SYSTEM_VALUE_MAX};
    int m_interpolator{0};
    int m_interpolate_loc{0};
    int m_ij_index{0};
@@ -139,12 +149,16 @@ public:
 
    virtual ~Shader() {}
 
+   auto shader_id() const {return m_shader_id;}
+   // Needed for testing
+   void reset_shader_id() {m_shader_id = 0;}
+
    bool add_info_from_string(std::istream& is);
 
    static Shader *translate_from_nir(nir_shader *nir,
                                      const pipe_stream_output_info *so_info,
                                      r600_shader *gs_shader,
-                                     r600_shader_key& key,
+                                     const r600_shader_key& key,
                                      r600_chip_class chip_class,
                                      radeon_family family);
 
@@ -368,6 +382,9 @@ private:
    uint32_t m_nloops{0};
    uint32_t m_required_registers{0};
 
+   int64_t m_shader_id;
+   static int64_t s_next_shader_id;
+
    class InstructionChain : public InstrVisitor {
    public:
       void visit(AluGroup *instr) override { (void)instr; }
@@ -404,11 +421,7 @@ private:
    std::list<Instr *, Allocator<Instr *>> m_loops;
    int m_control_flow_depth{0};
    std::list<nir_intrinsic_instr*> m_register_allocations;
-
 };
-
-std::pair<unsigned, unsigned>
-r600_get_varying_semantic(unsigned varying_location);
 
 } // namespace r600
 

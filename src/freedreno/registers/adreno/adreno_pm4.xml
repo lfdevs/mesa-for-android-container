@@ -1942,6 +1942,7 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 
 		<bitfield name="BV" pos="25" variants="THREAD_MODE" type="boolean"/>
 		<bitfield name="BR" pos="26" variants="THREAD_MODE" type="boolean"/>
+		<bitfield name="LPAC" pos="27" variants="THREAD_MODE" type="boolean"/>
 
 		<bitfield name="MODE" low="28" high="31" type="compare_mode" addvariant="yes"/>
 	</reg32>

@@ -150,9 +150,8 @@ glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
    batch->used = 0;
 
    unsigned batch_index = batch - ctx->GLThread.batches;
-   /* Atomically set this to -1 if it's equal to batch_index. */
-   p_atomic_cmpxchg(&ctx->GLThread.LastProgramChangeBatch, batch_index, -1);
-   p_atomic_cmpxchg(&ctx->GLThread.LastDListChangeBatchIndex, batch_index, -1);
+   _mesa_glthread_signal_call(&ctx->GLThread.LastProgramChangeBatch, batch_index);
+   _mesa_glthread_signal_call(&ctx->GLThread.LastDListChangeBatchIndex, batch_index);
 
    p_atomic_inc(&ctx->GLThread.stats.num_batches);
 }
@@ -222,7 +221,8 @@ _mesa_glthread_init(struct gl_context *ctx)
    glthread->used = 0;
    glthread->stats.queue = &glthread->queue;
 
-   glthread->LastDListChangeBatchIndex = -1;
+   _mesa_glthread_init_call_fence(&glthread->LastProgramChangeBatch);
+   _mesa_glthread_init_call_fence(&glthread->LastDListChangeBatchIndex);
 
    /* glthread takes over all L3 pinning */
    ctx->st->pin_thread_counter = ST_L3_PINNING_DISABLED;
@@ -340,6 +340,11 @@ _mesa_glthread_flush_batch(struct gl_context *ctx)
 
    struct glthread_batch *next = glthread->next_batch;
 
+   /* Mark the end of the batch, but don't increment "used". */
+   struct marshal_cmd_base *last =
+      (struct marshal_cmd_base *)&next->buffer[glthread->used];
+   last->cmd_id = NUM_DISPATCH_CMD;
+
    p_atomic_add(&glthread->stats.num_offloaded_items, glthread->used);
    next->used = glthread->used;
 
@@ -385,6 +390,11 @@ _mesa_glthread_finish(struct gl_context *ctx)
    }
 
    if (glthread->used) {
+      /* Mark the end of the batch, but don't increment "used". */
+      struct marshal_cmd_base *last =
+         (struct marshal_cmd_base *)&next->buffer[glthread->used];
+      last->cmd_id = NUM_DISPATCH_CMD;
+
       p_atomic_add(&glthread->stats.num_direct_items, glthread->used);
       next->used = glthread->used;
       glthread->used = 0;

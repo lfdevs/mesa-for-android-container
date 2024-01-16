@@ -41,8 +41,8 @@ dt.sig {
 
 dl > .sig.c {
   background-color: var(--bs-secondary-bg);
-  color: var(--bs-secondary);
   padding: 0.25rem 0.5rem;
+  margin-bottom: 0.5rem;
   border-radius: var(--bs-border-radius-sm);
 }
 

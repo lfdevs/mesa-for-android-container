@@ -62,7 +62,7 @@
     <value name="Line loop" value="5"/>
     <value name="Triangles" value="6"/>
     <value name="Triangle strip" value="9"/>
-    <value name="Triangle fan" value="10"/>
+    <value name="Triangle fan" value="11"/>
     <value name="Quads" value="14"/>
     <value name="Quad strip" value="15"/>
   </enum>
@@ -72,6 +72,7 @@
     <value name="Line" value="1"/>
     <value name="Point sprite UV=10" value="2"/>
     <value name="Point sprite UV=01" value="4"/>
+    <!-- Line-filled tri. Point-filled tri. UV. Rect. Match RGX. -->
   </enum>
 
   <enum name="Layout">
@@ -164,17 +165,24 @@
   <enum name="Shade model">
     <value name="Flat vertex 0" value="0"/>
     <value name="Flat vertex 2" value="2"/>
-    <value name="Gouraud" value="3"/>
+    <value name="Linear" value="3"/>
+    <value name="Flat vertex 1" value="6"/>
+    <value name="Perspective" value="7"/>
+  </enum>
+
+  <enum name="Coefficient source">
+    <value name="Varying" value="0"/>
+    <value name="Fragcoord Z" value="1"/>
+    <value name="Point coord" value="2"/>
+    <value name="Primitive ID" value="3"/> 
+    <!-- Vec2 only -->
+    <value name="Barycentric coord" value="5"/>
   </enum>
 
   <struct name="CF binding" size="4">
     <field name="Components" size="2" start="0" type="uint" modifier="minus(1)"/>
-    <field name="Shade model" size="2" start="2" type="Shade model"/>
-    <field name="Perspective" size="1" start="4" type="bool"/>
-    <field name="Fragcoord Z" size="1" start="5" type="bool"/>
-    <field name="Point sprite" size="1" start="6" type="bool"/>
-    <!-- Set with fragcoord Z for a vec2 of bary coords -->
-    <field name="Barycentric coordinates" size="1" start="7" type="bool"/>
+    <field name="Shade model" size="3" start="2" type="Shade model"/>
+    <field name="Source" size="3" start="5" type="Coefficient source"/>
     <field name="Base slot" size="8" start="8" type="uint"/>
     <field name="Base coefficient register" size="8" start="16" type="uint"/>
   </struct>
@@ -314,6 +322,9 @@
     <!-- If layout is linear, stride has the minus 1 encoded -->
     <field name="Depth (linear)" size="11" start="128" type="uint" modifier="minus(1)" default="1"/>
     <field name="Layer stride (linear)" size="27" start="139" type="uint" modifier="shr(7)"/>
+
+    <!-- Buffer texture size -->
+    <field name="Software-defined" size="64" start="128" type="hex"/>
   </struct>
 
   <enum name="Wrap">
@@ -338,12 +349,18 @@
     <value name="Custom" value="3"/>
   </enum>
 
+  <enum name="Filter">
+    <value name="Nearest" value="0"/>
+    <value name="Linear" value="1"/>
+    <value name="Bicubic" value="2"/>
+  </enum>
+
   <struct name="Sampler" size="8">
     <field name="Minimum LOD" size="10" start="0" type="lod" default="0.0"/>
     <field name="Maximum LOD" size="10" start="10" type="lod" default="INFINITY"/>
     <field name="Maximum anisotropy" size="3" start="20" type="uint" default="1" modifier="log2"/>
-    <field name="Magnify linear" size="1" start="23" type="bool"/>
-    <field name="Minify linear" size="1" start="25" type="bool"/>
+    <field name="Magnify" size="2" start="23" type="Filter"/>
+    <field name="Minify" size="2" start="25" type="Filter"/>
     <field name="Mip filter" size="2" start="27" type="Mip filter"/>
     <field name="Wrap S" size="3" start="29" type="Wrap"/>
     <field name="Wrap T" size="3" start="32" type="Wrap"/>
@@ -413,6 +430,7 @@
     <field name="Depth bias/scissor" size="1" start="8" type="bool"/>
     <field name="Region clip" size="1" start="10" type="bool"/>
     <field name="Viewport" size="1" start="11" type="bool"/>
+    <field name="Viewport count" size="4" start="12" type="uint" default="1" modifier="minus(1)"/>
     <field name="W clamp" size="1" start="16" type="bool"/>
     <field name="Output select" size="1" start="17" type="bool"/>
     <field name="Varying counts 32" size="1" start="18" type="bool"/>
@@ -428,12 +446,17 @@
   </struct>
 
   <!-- Acts like a scissor at 32x32 tile boundaries, ignored unless clip tile is set -->
-  <struct name="Region clip" size="12">
+  <struct name="Region clip" size="8">
     <field name="Max X" size="9" start="0" type="uint" modifier="minus(1)"/>
     <field name="Min X" size="9" start="16" type="uint"/>
     <field name="Enable" size="1" start="31" type="bool"/>
     <field name="Max Y" size="9" start="32" type="uint" modifier="minus(1)"/>
     <field name="Min Y" size="9" start="48" type="uint"/>
+  </struct>
+
+  <struct name="Viewport control" size="4">
+     <!-- so far only seen zeroes, but it stands to reason this is meant as a
+          control word for the viewports -->
   </struct>
 
   <!-- Used to convert clip space coordinates to NDC, does not clip -->
@@ -519,6 +542,7 @@
 
   <enum name="PPP Vertex">
     <value name="0" value="1"/>
+    <value name="1" value="2"/>
     <value name="2" value="3"/>
   </enum>
 
@@ -535,6 +559,7 @@
   <struct name="Cull 2" size="4">
     <field name="Unknown 2" size="8" start="0" type="hex" default="0xa0"/>
     <field name="Draw clipped edges" size="1" start="9" type="bool"/>
+    <field name="Needs Primitive ID" size="1" start="12" type="bool"/>
     <field name="Primitive MSAA" size="1" start="15" type="bool"/>
     <field name="Rasterizer discard" size="1" start="17" type="bool"/>
   </struct>
@@ -718,6 +743,7 @@
     <value name="VDM State Update" value="2"/>
     <value name="Index List" value="3"/>
     <value name="Stream Link" value="4"/>
+    <value name="Tessellate" value="5"/>
     <value name="Stream terminate" value="6"/>
   </enum>
 
@@ -753,7 +779,9 @@
     <field name="Vertex shader word 0 present" size="1" start="1" type="bool"/>
     <field name="Vertex shader word 1 present" size="1" start="2" type="bool"/>
     <field name="Vertex outputs present" size="1" start="3" type="bool"/>
+    <field name="Tessellation present" size="1" start="4" type="bool"/>
     <field name="Vertex unknown present" size="1" start="5" type="bool"/>
+    <field name="Tessellation scale present" size="1" start="7" type="bool"/>
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="VDM State Update"/>
   </struct>
 
@@ -781,13 +809,61 @@
 
   <enum name="VDM Vertex">
     <value name="0" value="0"/>
+    <value name="1" value="1"/>
     <value name="2" value="2"/>
   </enum>
+
+  <enum name="Partition mode">
+    <value name="Pow 2" value="0"/>
+    <value name="Integer" value="1"/>
+    <value name="Fractional odd" value="2"/>
+    <value name="Fractional even" value="3"/>
+  </enum>
+
+  <enum name="Step function">
+    <value name="Constant" value="0"/>
+    <value name="Per patch" value="1"/>
+    <value name="Per instance" value="2"/>
+    <value name="Per patch and per instance" value="3"/>
+  </enum>
+
+  <enum name="Patch type">
+    <value name="Triangles" value="0"/>
+    <value name="Quads" value="1"/>
+  </enum>
+
+  <enum name="Factor type">
+    <value name="FP16" value="0"/>
+    <value name="FP32" value="1"/>
+  </enum>
+
+  <struct name="VDM State Tessellation" size="4">
+    <field name="Unknown" size="17" start="0" type="hex"/> <!-- 0 -->
+    <field name="Step function" size="2" start="17" type="Step function"/>
+    <!-- Not yet hardware tested, firm guess from stuffing values -->
+    <field name="Factor type" size="1" start="19" type="Factor type"/>
+    <!-- XXX: Possibly unknown 3 is part of the patch type, with points &
+    isolines also supported? would be a natural encoding. Needs testing to see
+    if implemeneted in hw. -->
+    <field name="Patch type" size="1" start="20" type="Patch type"/>
+    <field name="Unknown 3" size="2" start="21" type="hex"/> <!-- 1 -->
+
+    <!-- Subtract 1 for fractional odd -->
+    <field name="Max tess factor" size="6" start="23" type="uint" modifier="minus(1)"/>
+    <field name="Counterclockwise winding" size="1" start="29" type="bool"/>
+    <field name="Partition mode" size="2" start="30" type="Partition mode"/>
+  </struct>
+
+  <struct name="VDM State Tessellation Scale" size="4">
+    <!-- Always applied. Set to 1.0 to "disable" -->
+    <field name="Scale" size="16" start="0" type="half"/>
+  </struct>
 
   <struct name="VDM State Vertex Unknown" size="4">
     <field name="Flat shading control" start="0" size="2" type="VDM Vertex"/>
     <field name="Unknown 4" size="1" start="4" type="bool"/>
     <field name="Unknown 5" size="1" start="5" type="bool"/>
+    <field name="Generate primitive ID" size="1" start="6" type="bool"/>
   </struct>
 
   <!--- Command to issue a direct non-indexed draw -->
@@ -852,7 +928,75 @@
     <field name="Target lo" size="32" start="32" type="hex"/>
   </struct>
 
-  <struct name="VDM Stream Terminate" size="8">
+  <struct name="VDM Tessellate" size="4">
+    <field name="Factor buffer hi" size="8" start="0" type="hex"/>
+    <field name="Unknown 0" size="12" start="8" type="hex"/> <!-- 0xc -->
+
+    <!-- Set for both indirect and direct -->
+    <field name="Unknown 2" size="1" start="20" type="bool"/>
+
+    <!-- Present for both indirect and direct -->
+    <!-- XXX: Order is an (educated) guess -->
+    <field name="Factor buffer present" size="1" start="21" type="bool"/>
+
+    <!-- XXX: out of bits???? not set for indirect??? -->
+    <field name="Patch count present" size="1" start="22" type="bool"/>
+
+    <!-- These four are omitted for indirect draws -->
+    <!-- XXX: Order is an (educated) guess -->
+    <field name="Instance count present" size="1" start="22" type="bool"/>
+    <field name="Base patch present" size="1" start="23" type="bool"/>
+    <field name="Base instance present" size="1" start="25" type="bool"/>
+    <!-- XXX: Out of bits!!! -->
+    <field name="Instance stride present" size="1" start="25" type="bool"/>
+
+    <field name="Indirect present" size="1" start="26" type="bool"/>
+    <!-- Present for both indirect and direct -->
+    <field name="Unknown present" size="1" start="28" type="bool"/>
+
+    <field name="Unknown 1" size="1" start="28" type="hex"/> <!-- 1 -->
+    <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Tessellate"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Factor buffer" size="4">
+    <field name="Factor buffer lo" size="32" start="0" type="hex"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Patch count" size="4">
+    <field name="Patch count" size="32" start="0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Instance count" size="4">
+    <field name="Instance count" size="32" start="0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Base patch" size="4">
+    <field name="Base patch" size="32" start="0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Base instance" size="4">
+    <field name="Base instance" size="32" start="0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Instance stride" size="4">
+    <!-- Divided by 4 for QUADS -->
+    <field name="Instance stride" size="32" start="0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Indirect" size="12">
+    <!-- Address of the indirect buffer, format presumably matches Metal -->
+    <field name="Address hi" size="8" start="0:0" type="hex"/>
+    <field name="Address lo" size="32" start="1:0" type="hex"/>
+
+    <!-- # of bytes in the buffer, presumably for hw bounds checking -->
+    <field name="Size" size="32" start="2:0" type="uint"/>
+  </struct>
+
+  <struct name="VDM Tessellate: Unknown" size="4">
+    <field name="Unknown 7" size="32" start="0" type="hex"/> <!-- 3F -->
+  </struct>
+
+  <struct name="VDM Stream Terminate" size="32">
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Stream Terminate"/>
   </struct>
 
@@ -860,10 +1004,10 @@
 
   <!-- CDM commands start -->
   <enum name="CDM Block Type">
-    <value name="Header" value="0"/>
+    <value name="Launch" value="0"/>
     <value name="Stream Link" value="1"/>
     <value name="Stream Terminate" value="2"/>
-    <value name="Launch" value="3"/>
+    <value name="Barrier" value="3"/>
   </enum>
 
   <enum name="CDM Mode">
@@ -881,13 +1025,13 @@
     <value name="Indirect local" value="2"/>
   </enum>
 
-  <struct name="CDM Header" size="8">
+  <struct name="CDM Launch" size="8">
     <field name="Uniform register count" size="3" start="1" type="uint" modifier="groups(64)"/>
     <field name="Texture state register count" size="5" start="4" type="uint" modifier="groups(8)"/>
     <field name="Sampler state register count" size="3" start="9" type="Sampler states"/>
     <field name="Preshader register count" size="4" start="12" type="uint" modifier="groups(16)"/>
     <field name="Mode" size="2" start="27" type="CDM Mode"/>
-    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Header"/>
+    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Launch"/>
     <field name="Pipeline" size="26" start="1:6" type="address" modifier="shr(6)"/>
   </struct>
 
@@ -912,9 +1056,32 @@
     <field name="Z" size="32" start="2:0" type="uint"/>
   </struct>
 
-  <struct name="CDM Launch" size="4">
-    <field name="Unknown" size="12" start="0" type="hex" default="0x160"/>
-    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Launch"/>
+  <struct name="CDM Barrier" size="4">
+    <field name="Unk 0" size="1" start="0" type="bool" default="false"/>
+    <field name="Unk 1" size="1" start="1" type="bool" default="false"/>
+    <field name="Unk 2" size="1" start="2" type="bool" default="false"/>
+    <field name="USC cache inval" size="1" start="3" type="bool" default="false"/>
+    <field name="Unk 4" size="1" start="4" type="bool" default="false"/>
+    <field name="Unk 5" size="1" start="5" type="bool" default="false"/>
+    <field name="Unk 6" size="1" start="6" type="bool" default="false"/>
+    <field name="Unk 7" size="1" start="7" type="bool" default="false"/>
+    <field name="Unk 8" size="1" start="8" type="bool" default="false"/>
+    <field name="Unk 9" size="1" start="9" type="bool" default="false"/>
+    <field name="Unk 10" size="1" start="10" type="bool" default="false"/>
+    <field name="Unk 11" size="1" start="11" type="bool" default="false"/>
+    <field name="Unk 12" size="1" start="12" type="bool" default="false"/>
+    <field name="Unk 13" size="1" start="13" type="bool" default="false"/>
+    <field name="Unk 14" size="1" start="14" type="bool" default="false"/>
+    <field name="Unk 15" size="1" start="15" type="bool" default="false"/>
+    <field name="Unk 16" size="1" start="16" type="bool" default="false"/>
+    <field name="Unk 17" size="1" start="17" type="bool" default="false"/>
+    <field name="Unk 18" size="1" start="18" type="bool" default="false"/>
+    <field name="Unk 19" size="1" start="19" type="bool" default="false"/>
+    <field name="Unk 20" size="1" start="20" type="bool" default="false"/>
+    <field name="Unk 24" size="1" start="24" type="bool" default="false"/>
+    <field name="Unk 26" size="1" start="26" type="bool" default="false"/>
+    <field name="Returns" size="1" start="27" type="bool" default="false"/>
+    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Barrier"/>
   </struct>
 
   <struct name="CDM Stream Link" size="8">

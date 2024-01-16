@@ -237,6 +237,6 @@ args = parser.parse_args()
 xml = args.drirc
 dst = args.header
 
-with open(dst, 'wb') as f:
-    f.write(Template(template, output_encoding='utf-8').render(driconf=DriConf(xml)))
+with open(dst, 'w', encoding='utf-8') as f:
+    f.write(Template(template).render(driconf=DriConf(xml)))
 

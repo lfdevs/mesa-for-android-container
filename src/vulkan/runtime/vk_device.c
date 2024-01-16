@@ -127,7 +127,7 @@ vk_device_init(struct vk_device *device,
                           "%s not supported",
                           pCreateInfo->ppEnabledExtensionNames[i]);
 
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
       if (!vk_android_allowed_device_extensions.extensions[idx])
          return vk_errorf(physical_device, VK_ERROR_EXTENSION_NOT_PRESENT,
                           "%s not supported",

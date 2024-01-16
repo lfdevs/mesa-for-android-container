@@ -11,13 +11,15 @@
 
 typedef struct {
    nir_def *handle;
-   nir_def *indirect; /** < NULL for no indirect offset */
+   /** NULL for no indirect offset */
+   nir_def *indirect;
    unsigned base_offset;
 } nir_reg_src;
 
 typedef struct {
    nir_def *handle;
-   nir_def *indirect; /** < NULL for no indirect offset */
+   /** NULL for no indirect offset */
+   nir_def *indirect;
    unsigned base_offset;
 } nir_reg_dest;
 

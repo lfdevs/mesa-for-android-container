@@ -23,15 +23,16 @@
 
 #include <gtest/gtest.h>
 #include "brw_fs.h"
+#include "brw_fs_builder.h"
 #include "brw_cfg.h"
 
 using namespace brw;
 
 class saturate_propagation_test : public ::testing::Test {
-   virtual void SetUp();
-   virtual void TearDown();
+protected:
+   saturate_propagation_test();
+   ~saturate_propagation_test() override;
 
-public:
    struct brw_compiler *compiler;
    struct brw_compile_params params;
    struct intel_device_info *devinfo;
@@ -39,6 +40,7 @@ public:
    struct brw_wm_prog_data *prog_data;
    struct gl_shader_program *shader_prog;
    fs_visitor *v;
+   fs_builder bld;
 };
 
 class saturate_propagation_fs_visitor : public fs_visitor
@@ -53,7 +55,8 @@ public:
 };
 
 
-void saturate_propagation_test::SetUp()
+saturate_propagation_test::saturate_propagation_test()
+   : bld(NULL, 0)
 {
    ctx = ralloc_context(NULL);
    compiler = rzalloc(ctx, struct brw_compiler);
@@ -69,11 +72,13 @@ void saturate_propagation_test::SetUp()
 
    v = new saturate_propagation_fs_visitor(compiler, &params, prog_data, shader);
 
+   bld = fs_builder(v).at_end();
+
    devinfo->ver = 6;
    devinfo->verx10 = devinfo->ver * 10;
 }
 
-void saturate_propagation_test::TearDown()
+saturate_propagation_test::~saturate_propagation_test()
 {
    delete v;
    v = NULL;
@@ -115,11 +120,10 @@ saturate_propagation(fs_visitor *v)
 
 TEST_F(saturate_propagation_test, basic)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    set_saturate(true, bld.MOV(dst1, dst0));
 
@@ -150,12 +154,11 @@ TEST_F(saturate_propagation_test, basic)
 
 TEST_F(saturate_propagation_test, other_non_saturated_use)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    set_saturate(true, bld.MOV(dst1, dst0));
    bld.ADD(dst2, dst0, src0);
@@ -188,11 +191,10 @@ TEST_F(saturate_propagation_test, other_non_saturated_use)
 
 TEST_F(saturate_propagation_test, predicated_instruction)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1)
       ->predicate = BRW_PREDICATE_NORMAL;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -223,10 +225,9 @@ TEST_F(saturate_propagation_test, predicated_instruction)
 
 TEST_F(saturate_propagation_test, neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
    bld.RNDU(dst0, src0);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -257,11 +258,10 @@ TEST_F(saturate_propagation_test, neg_mov_sat)
 
 TEST_F(saturate_propagation_test, add_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -295,10 +295,9 @@ TEST_F(saturate_propagation_test, add_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, add_imm_float_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
    fs_reg src1 = brw_imm_f(1.0f);
    bld.ADD(dst0, src0, src1);
    dst0.negate = true;
@@ -333,11 +332,10 @@ TEST_F(saturate_propagation_test, add_imm_float_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, mul_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.MUL(dst0, src0, src1);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -371,12 +369,11 @@ TEST_F(saturate_propagation_test, mul_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, mad_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
-   fs_reg src2 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
+   fs_reg src2 = v->vgrf(glsl_float_type());
    bld.MAD(dst0, src0, src1, src2);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -412,12 +409,11 @@ TEST_F(saturate_propagation_test, mad_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, mad_imm_float_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
    fs_reg src0 = brw_imm_f(1.0f);
    fs_reg src1 = brw_imm_f(-2.0f);
-   fs_reg src2 = v->vgrf(glsl_type::float_type);
+   fs_reg src2 = v->vgrf(glsl_float_type());
    /* The builder for MAD tries to be helpful and not put immediates as direct
     * sources. We want to test specifically that case.
     */
@@ -457,12 +453,11 @@ TEST_F(saturate_propagation_test, mad_imm_float_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, mul_mov_sat_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.MUL(dst0, src0, src1);
    set_saturate(true, bld.MOV(dst1, dst0));
    dst0.negate = true;
@@ -499,12 +494,11 @@ TEST_F(saturate_propagation_test, mul_mov_sat_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, mul_neg_mov_sat_neg_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.MUL(dst0, src0, src1);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -542,11 +536,10 @@ TEST_F(saturate_propagation_test, mul_neg_mov_sat_neg_mov_sat)
 
 TEST_F(saturate_propagation_test, abs_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    dst0.abs = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -577,12 +570,11 @@ TEST_F(saturate_propagation_test, abs_mov_sat)
 
 TEST_F(saturate_propagation_test, producer_saturates)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    set_saturate(true, bld.ADD(dst0, src0, src1));
    set_saturate(true, bld.MOV(dst1, dst0));
    bld.MOV(dst2, dst0);
@@ -616,12 +608,11 @@ TEST_F(saturate_propagation_test, producer_saturates)
 
 TEST_F(saturate_propagation_test, intervening_saturating_copy)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    set_saturate(true, bld.MOV(dst1, dst0));
    set_saturate(true, bld.MOV(dst2, dst0));
@@ -657,12 +648,11 @@ TEST_F(saturate_propagation_test, intervening_saturating_copy)
 
 TEST_F(saturate_propagation_test, intervening_dest_write)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::vec4_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
-   fs_reg src2 = v->vgrf(glsl_type::vec2_type);
+   fs_reg dst0 = v->vgrf(glsl_vec4_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
+   fs_reg src2 = v->vgrf(glsl_vec2_type());
    bld.ADD(offset(dst0, bld, 2), src0, src1);
    bld.emit(SHADER_OPCODE_TEX, dst0, src2)
       ->size_written = 8 * REG_SIZE;
@@ -697,12 +687,11 @@ TEST_F(saturate_propagation_test, intervening_dest_write)
 
 TEST_F(saturate_propagation_test, mul_neg_mov_sat_mov_sat)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.MUL(dst0, src0, src1);
    dst0.negate = true;
    set_saturate(true, bld.MOV(dst1, dst0));
@@ -740,11 +729,10 @@ TEST_F(saturate_propagation_test, mul_neg_mov_sat_mov_sat)
 
 TEST_F(saturate_propagation_test, smaller_exec_size_consumer)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.ADD(dst0, src0, src1);
    set_saturate(true, bld.group(8, 0).MOV(dst1, dst0));
 
@@ -774,11 +762,10 @@ TEST_F(saturate_propagation_test, smaller_exec_size_consumer)
 
 TEST_F(saturate_propagation_test, larger_exec_size_consumer)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.group(8, 0).ADD(dst0, src0, src1);
    set_saturate(true, bld.MOV(dst1, dst0));
 
@@ -808,12 +795,11 @@ TEST_F(saturate_propagation_test, larger_exec_size_consumer)
 
 TEST_F(saturate_propagation_test, offset_source_barrier)
 {
-   const fs_builder &bld = v->bld;
-   fs_reg dst0 = v->vgrf(glsl_type::float_type);
-   fs_reg dst1 = v->vgrf(glsl_type::float_type);
-   fs_reg dst2 = v->vgrf(glsl_type::float_type);
-   fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst0 = v->vgrf(glsl_float_type());
+   fs_reg dst1 = v->vgrf(glsl_float_type());
+   fs_reg dst2 = v->vgrf(glsl_float_type());
+   fs_reg src0 = v->vgrf(glsl_float_type());
+   fs_reg src1 = v->vgrf(glsl_float_type());
    bld.group(16, 0).ADD(dst0, src0, src1);
    bld.group(1, 0).ADD(dst1, component(dst0, 8), brw_imm_f(1.0f));
    set_saturate(true, bld.group(16, 0).MOV(dst2, dst0));

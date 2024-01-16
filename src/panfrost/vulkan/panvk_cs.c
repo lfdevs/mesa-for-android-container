@@ -24,7 +24,7 @@
 #include "compiler/shader_enums.h"
 #include "util/macros.h"
 
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "pan_pool.h"
 
 #include "panvk_cs.h"

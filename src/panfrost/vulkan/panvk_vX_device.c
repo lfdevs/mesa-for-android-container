@@ -57,28 +57,30 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
       }
    }
 
-   if (batch->scoreboard.first_job) {
+   if (batch->jc.first_job) {
       struct drm_panfrost_submit submit = {
          .bo_handles = (uintptr_t)bos,
          .bo_handle_count = nr_bos,
          .in_syncs = (uintptr_t)in_fences,
          .in_sync_count = nr_in_fences,
          .out_sync = queue->sync,
-         .jc = batch->scoreboard.first_job,
+         .jc = batch->jc.first_job,
       };
 
-      ret = drmIoctl(pdev->fd, DRM_IOCTL_PANFROST_SUBMIT, &submit);
+      ret =
+         drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_PANFROST_SUBMIT, &submit);
       assert(!ret);
 
       if (debug & (PANVK_DEBUG_TRACE | PANVK_DEBUG_SYNC)) {
-         ret =
-            drmSyncobjWait(pdev->fd, &submit.out_sync, 1, INT64_MAX, 0, NULL);
+         ret = drmSyncobjWait(panfrost_device_fd(pdev), &submit.out_sync, 1,
+                              INT64_MAX, 0, NULL);
          assert(!ret);
       }
 
-      if (debug & PANVK_DEBUG_TRACE)
-         pandecode_jc(pdev->decode_ctx, batch->scoreboard.first_job,
-                      pdev->gpu_id);
+      if (debug & PANVK_DEBUG_TRACE) {
+         pandecode_jc(pdev->decode_ctx, batch->jc.first_job,
+                      panfrost_device_gpu_id(pdev));
+      }
 
       if (debug & PANVK_DEBUG_DUMP)
          pandecode_dump_mappings(pdev->decode_ctx);
@@ -93,7 +95,7 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
          .requirements = PANFROST_JD_REQ_FS,
       };
 
-      if (batch->scoreboard.first_job) {
+      if (batch->jc.first_job) {
          submit.in_syncs = (uintptr_t)(&queue->sync);
          submit.in_sync_count = 1;
       } else {
@@ -101,16 +103,18 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
          submit.in_sync_count = nr_in_fences;
       }
 
-      ret = drmIoctl(pdev->fd, DRM_IOCTL_PANFROST_SUBMIT, &submit);
+      ret =
+         drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_PANFROST_SUBMIT, &submit);
       assert(!ret);
       if (debug & (PANVK_DEBUG_TRACE | PANVK_DEBUG_SYNC)) {
-         ret =
-            drmSyncobjWait(pdev->fd, &submit.out_sync, 1, INT64_MAX, 0, NULL);
+         ret = drmSyncobjWait(panfrost_device_fd(pdev), &submit.out_sync, 1,
+                              INT64_MAX, 0, NULL);
          assert(!ret);
       }
 
       if (debug & PANVK_DEBUG_TRACE)
-         pandecode_jc(pdev->decode_ctx, batch->fragment_job, pdev->gpu_id);
+         pandecode_jc(pdev->decode_ctx, batch->fragment_job,
+                      panfrost_device_gpu_id(pdev));
 
       if (debug & PANVK_DEBUG_DUMP)
          pandecode_dump_mappings(pdev->decode_ctx);
@@ -134,12 +138,14 @@ panvk_queue_transfer_sync(struct panvk_queue *queue, uint32_t syncobj)
       .fd = -1,
    };
 
-   ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &handle);
+   ret = drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD,
+                  &handle);
    assert(!ret);
    assert(handle.fd >= 0);
 
    handle.handle = syncobj;
-   ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &handle);
+   ret = drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE,
+                  &handle);
    assert(!ret);
 
    close(handle.fd);
@@ -185,7 +191,8 @@ panvk_signal_event_syncobjs(struct panvk_queue *queue,
             .handles = (uint64_t)(uintptr_t)&event->syncobj,
             .count_handles = 1};
 
-         int ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_RESET, &objs);
+         int ret =
+            drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_RESET, &objs);
          assert(!ret);
          break;
       }
@@ -229,7 +236,7 @@ panvk_per_arch(queue_submit)(struct vk_queue *vk_queue,
             panvk_pool_num_bos(&cmdbuf->tls_pool) +
             (batch->fb.info ? batch->fb.info->attachment_count : 0) +
             (batch->blit.src ? 1 : 0) + (batch->blit.dst ? 1 : 0) +
-            (batch->scoreboard.first_tiler ? 1 : 0) + 1;
+            (batch->jc.first_tiler ? 1 : 0) + 1;
          unsigned bo_idx = 0;
          uint32_t bos[nr_bos];
 
@@ -246,20 +253,20 @@ panvk_per_arch(queue_submit)(struct vk_queue *vk_queue,
             for (unsigned i = 0; i < batch->fb.info->attachment_count; i++) {
                const struct pan_image *image = pan_image_view_get_plane(
                   &batch->fb.info->attachments[i].iview->pview, 0);
-               bos[bo_idx++] = image->data.bo->gem_handle;
+               bos[bo_idx++] = panfrost_bo_handle(image->data.bo);
             }
          }
 
          if (batch->blit.src)
-            bos[bo_idx++] = batch->blit.src->gem_handle;
+            bos[bo_idx++] = panfrost_bo_handle(batch->blit.src);
 
          if (batch->blit.dst)
-            bos[bo_idx++] = batch->blit.dst->gem_handle;
+            bos[bo_idx++] = panfrost_bo_handle(batch->blit.dst);
 
-         if (batch->scoreboard.first_tiler)
-            bos[bo_idx++] = pdev->tiler_heap->gem_handle;
+         if (batch->jc.first_tiler)
+            bos[bo_idx++] = panfrost_bo_handle(pdev->tiler_heap);
 
-         bos[bo_idx++] = pdev->sample_positions->gem_handle;
+         bos[bo_idx++] = panfrost_bo_handle(pdev->sample_positions);
          assert(bo_idx == nr_bos);
 
          /* Merge identical BO entries. */

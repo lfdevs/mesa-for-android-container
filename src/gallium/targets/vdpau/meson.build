@@ -26,9 +26,11 @@ vdpau_link_args = []
 vdpau_link_depends = []
 vdpau_drivers = []
 
+vdpau_sym = configure_file(input : 'vdpau.sym.in', output : 'vdpau.sym', configuration : sym_config)
+
 if with_ld_version_script
-  vdpau_link_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vdpau.sym')]
-  vdpau_link_depends += files('vdpau.sym')
+  vdpau_link_args += ['-Wl,--version-script', join_paths(meson.current_build_dir(), 'vdpau.sym')]
+  vdpau_link_depends += vdpau_sym
 endif
 if with_ld_dynamic_list
   vdpau_link_args += ['-Wl,--dynamic-list', join_paths(meson.current_source_dir(), '../dri.dyn')]

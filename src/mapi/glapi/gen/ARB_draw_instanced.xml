@@ -15,12 +15,13 @@
     <param name="primcount" type="GLsizei"/>
   </function>
 
-  <function name="DrawElementsInstanced" marshal="custom" exec="dlist" es2="2.0">
+  <function name="DrawElementsInstanced" marshal="custom" exec="dlist" es2="2.0"
+            marshal_struct="public">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>
     <param name="indices" type="const GLvoid *"/>
-    <param name="primcount" type="GLsizei"/>
+    <param name="instance_count" type="GLsizei"/>
   </function>
 
 </category>

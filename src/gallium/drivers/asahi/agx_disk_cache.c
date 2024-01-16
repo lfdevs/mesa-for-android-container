@@ -35,6 +35,8 @@ agx_disk_cache_compute_key(struct disk_cache *cache,
    int key_size;
    if (uncompiled->type == PIPE_SHADER_VERTEX)
       key_size = sizeof(shader_key->vs);
+   else if (uncompiled->type == PIPE_SHADER_GEOMETRY)
+      key_size = sizeof(shader_key->gs);
    else if (uncompiled->type == PIPE_SHADER_FRAGMENT)
       key_size = sizeof(shader_key->fs);
    else if (uncompiled->type == PIPE_SHADER_COMPUTE)
@@ -64,6 +66,10 @@ agx_disk_cache_store(struct disk_cache *cache,
 {
 #ifdef ENABLE_SHADER_CACHE
    if (!cache)
+      return;
+
+   /* TODO: Support caching GS */
+   if (uncompiled->type == PIPE_SHADER_GEOMETRY)
       return;
 
    assert(binary->bo->ptr.cpu != NULL && "shaders must be CPU mapped");
@@ -98,6 +104,10 @@ agx_disk_cache_retrieve(struct agx_screen *screen,
 #ifdef ENABLE_SHADER_CACHE
    struct disk_cache *cache = screen->disk_cache;
    if (!cache)
+      return NULL;
+
+   /* TODO: Support caching GS */
+   if (uncompiled->type == PIPE_SHADER_GEOMETRY)
       return NULL;
 
    cache_key cache_key;

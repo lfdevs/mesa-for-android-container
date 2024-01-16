@@ -150,13 +150,13 @@ get_parameter_match_type(const ir_variable *param,
    if (from_type == to_type)
       return PARAMETER_EXACT_MATCH;
 
-   if (to_type->is_double()) {
-      if (from_type->is_float())
+   if (glsl_type_is_double(to_type)) {
+      if (glsl_type_is_float(from_type))
          return PARAMETER_FLOAT_TO_DOUBLE;
       return PARAMETER_INT_TO_DOUBLE;
    }
 
-   if (to_type->is_float())
+   if (glsl_type_is_float(to_type))
       return PARAMETER_INT_TO_FLOAT;
 
    /* int -> uint and any other oddball conversions */

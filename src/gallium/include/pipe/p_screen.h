@@ -426,6 +426,15 @@ struct pipe_screen {
                        struct pipe_fence_handle *fence);
 
    /**
+    * Retrieves the Win32 shared handle from the fence.
+    * Note that Windows fences are pretty much all timeline semaphores,
+    * so a value is needed to denote the specific point on the timeline.
+    */
+   void* (*fence_get_win32_handle)(struct pipe_screen *screen,
+                                   struct pipe_fence_handle *fence,
+                                   uint64_t *fence_value);
+
+   /**
     * Create a fence from an Win32 handle.
     *
     * This is used for importing a foreign/external fence handle.

@@ -50,36 +50,66 @@ if with_gallium_d3d12_video
   files_libd3d12 += [
     'd3d12_video_dec.cpp',
     'd3d12_video_dec_references_mgr.cpp',
-    'd3d12_video_dec_h264.cpp',
     'd3d12_video_buffer.cpp',
     'd3d12_video_enc.cpp',
-    'd3d12_video_enc_h264.cpp',
-    'd3d12_video_encoder_references_manager_h264.cpp',
-    'd3d12_video_encoder_nalu_writer_h264.cpp',
-    'd3d12_video_encoder_bitstream_builder_h264.cpp',
     'd3d12_video_encoder_bitstream.cpp',
     'd3d12_video_texture_array_dpb_manager.cpp',
     'd3d12_video_array_of_textures_dpb_manager.cpp',
     'd3d12_video_screen.cpp',
     'd3d12_video_proc.cpp',
+  ]
+
+if _codecs.contains('h264dec')
+  files_libd3d12 += [
+    'd3d12_video_dec_h264.cpp',
+  ]
+endif
+
+if _codecs.contains('h265dec')
+  files_libd3d12 += [
     'd3d12_video_dec_hevc.cpp',
+  ]
+endif
+
+if _codecs.contains('av1dec')
+  files_libd3d12 += [
+    'd3d12_video_dec_av1.cpp',
+  ]
+endif
+
+if _codecs.contains('vp9dec')
+  files_libd3d12 += [
+    'd3d12_video_dec_vp9.cpp',
+  ]
+endif
+
+if _codecs.contains('h264enc')
+  files_libd3d12 += [
+    'd3d12_video_enc_h264.cpp',
+    'd3d12_video_encoder_references_manager_h264.cpp',
+    'd3d12_video_encoder_nalu_writer_h264.cpp',
+    'd3d12_video_encoder_bitstream_builder_h264.cpp',
+  ]
+endif
+
+if _codecs.contains('h265enc')
+  files_libd3d12 += [
     'd3d12_video_enc_hevc.cpp',
     'd3d12_video_encoder_bitstream_builder_hevc.cpp',
     'd3d12_video_encoder_nalu_writer_hevc.cpp',
     'd3d12_video_encoder_references_manager_hevc.cpp',
-    'd3d12_video_dec_av1.cpp',
-    'd3d12_video_dec_vp9.cpp',
   ]
+endif
 
-  if (dep_dxheaders.version().version_compare('>= 1.611.0') and dep_dxheaders.version().version_compare('< 1.700.0')) or dep_dxheaders.version().version_compare('>= 1.712.0')
+if _codecs.contains('av1enc')
   files_libd3d12 += [
     'd3d12_video_enc_av1.cpp',
     'd3d12_video_encoder_references_manager_av1.cpp',
     'd3d12_video_encoder_bitstream_builder_av1.cpp',
   ]
-  endif
-
 endif
+
+endif # with_gallium_d3d12_video
 
 is_xbox = target_machine.system().startswith('Gaming.Xbox')
 if host_machine.system() == 'windows'

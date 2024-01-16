@@ -287,6 +287,30 @@ INOT_COMPARE(ilt_rev)
 INOT_COMPARE(ine)
 INOT_COMPARE(uge_rev)
 
+#define CMP_MIN(cmp, min)                                               \
+   static nir_def *nir_##cmp##_##min(nir_builder *b, nir_def *counter, nir_def *limit) \
+   {                                                                    \
+      nir_def *unk = nir_load_vertex_id(b);                             \
+      return nir_##cmp(b, counter, nir_##min(b, limit, unk));           \
+   }
+
+#define CMP_MIN_REV(cmp, min)                                           \
+   static nir_def *nir_##cmp##_##min##_rev(nir_builder *b, nir_def *counter, nir_def *limit) \
+   {                                                                    \
+      nir_def *unk = nir_load_vertex_id(b);                             \
+      return nir_##cmp(b, nir_##min(b, limit, unk), counter);           \
+   }
+
+CMP_MIN(ige, imin)
+CMP_MIN_REV(ige, imin)
+CMP_MIN(uge, umin)
+CMP_MIN(ige, fmin)
+CMP_MIN(uge, imin)
+CMP_MIN(ilt, imin)
+CMP_MIN(ilt, imax)
+CMP_MIN_REV(ilt, imin)
+INOT_COMPARE(ilt_imin_rev)
+
 #define KNOWN_COUNT_TEST(_init_value, _cond_value, _incr_value, cond, incr, count) \
    TEST_F(nir_loop_analyze_test, incr ## _ ## cond ## _known_count_ ## count)    \
    {                                                                    \
@@ -305,6 +329,40 @@ INOT_COMPARE(uge_rev)
       EXPECT_NE((void *)0, loop->info->limiting_terminator);            \
       EXPECT_EQ(count, loop->info->max_trip_count);                     \
       EXPECT_TRUE(loop->info->exact_trip_count_known);                  \
+                                                                        \
+      EXPECT_EQ(2, loop->info->num_induction_vars);                     \
+      ASSERT_NE((void *)0, loop->info->induction_vars);                 \
+                                                                        \
+      const nir_loop_induction_variable *const ivars =                  \
+         loop->info->induction_vars;                                    \
+                                                                        \
+      for (unsigned i = 0; i < loop->info->num_induction_vars; i++) {   \
+         EXPECT_NE((void *)0, ivars[i].def);                            \
+         ASSERT_NE((void *)0, ivars[i].init_src);                       \
+         EXPECT_TRUE(nir_src_is_const(*ivars[i].init_src));             \
+         ASSERT_NE((void *)0, ivars[i].update_src);                     \
+         EXPECT_TRUE(nir_src_is_const(ivars[i].update_src->src));       \
+      }                                                                 \
+   }
+
+#define INEXACT_COUNT_TEST(_init_value, _cond_value, _incr_value, cond, incr, count) \
+   TEST_F(nir_loop_analyze_test, incr ## _ ## cond ## _inexact_count_ ## count)    \
+   {                                                                    \
+      nir_loop *loop =                                                  \
+         loop_builder(&b, {.init_value = _init_value,                   \
+                           .cond_value = _cond_value,                   \
+                           .incr_value = _incr_value,                   \
+                           .cond_instr = nir_ ## cond,                  \
+                           .incr_instr = nir_ ## incr});                \
+                                                                        \
+      nir_validate_shader(b.shader, "input");                           \
+                                                                        \
+      nir_loop_analyze_impl(b.impl, nir_var_all, false);                \
+                                                                        \
+      ASSERT_NE((void *)0, loop->info);                                 \
+      EXPECT_NE((void *)0, loop->info->limiting_terminator);            \
+      EXPECT_EQ(count, loop->info->max_trip_count);                     \
+      EXPECT_FALSE(loop->info->exact_trip_count_known);                 \
                                                                         \
       EXPECT_EQ(2, loop->info->num_induction_vars);                     \
       ASSERT_NE((void *)0, loop->info->induction_vars);                 \
@@ -567,6 +625,16 @@ KNOWN_COUNT_TEST_INVERT(0x00000000, 0x00000001, 0x00000006, ige, iadd, 5)
  *    }
  */
 KNOWN_COUNT_TEST(0x0000000a, 0x00000005, 0xffffffff, inot_ilt_rev, iadd, 5)
+
+/*    int i = 10;
+ *    while (true) {
+ *       if (!(imin(vertex_id, 5) < i))
+ *          break;
+ *
+ *       i += -1;
+ *    }
+ */
+UNKNOWN_COUNT_TEST(0x0000000a, 0x00000005, 0xffffffff, inot_ilt_imin_rev, iadd)
 
 /*    uint i = 0;
  *    while (true) {
@@ -1470,3 +1538,101 @@ KNOWN_COUNT_TEST_INVERT(0x0000007f, 0x00000003, 0x00000001, ilt, imul, 16)
  *    }
  */
 KNOWN_COUNT_TEST_INVERT(0xffff7fff, 0x0000000f, 0x34cce9b0, ige, imul, 4)
+
+/*    int i = 0;
+ *    while (true) {
+ *       if (i >= imin(vertex_id, 4))
+ *          break;
+ *
+ *       i++;
+ *    }
+ */
+INEXACT_COUNT_TEST(0x00000000, 0x00000004, 0x00000001, ige_imin, iadd, 4)
+
+/* This fmin is the wrong type to be useful.
+ *
+ *    int i = 0;
+ *    while (true) {
+ *       if (i >= fmin(vertex_id, 4))
+ *          break;
+ *
+ *       i++;
+ *    }
+ */
+UNKNOWN_COUNT_TEST(0x00000000, 0x00000004, 0x00000001, ige_fmin, iadd)
+
+/* The comparison is unsigned, so this isn't safe if vertex_id is negative.
+ *
+ *    uint i = 0;
+ *    while (true) {
+ *       if (i >= imin(vertex_id, 4))
+ *          break;
+ *
+ *       i++;
+ *    }
+ */
+UNKNOWN_COUNT_TEST(0x00000000, 0x00000004, 0x00000001, uge_imin, iadd)
+
+/*    int i = 8;
+ *    while (true) {
+ *       if (4 >= i)
+ *          break;
+ *
+ *       i += -1;
+ *    }
+ */
+KNOWN_COUNT_TEST(0x00000008, 0x00000004, 0xffffffff, ige_rev, iadd, 4)
+
+/*    int i = 8;
+ *    while (true) {
+ *       if (i < 4)
+ *          break;
+ *
+ *       i += -1;
+ *    }
+ */
+KNOWN_COUNT_TEST(0x00000008, 0x00000004, 0xffffffff, ilt, iadd, 5)
+
+/* This imin can increase the iteration count, not limit it.
+ *
+ *    int i = 8;
+ *    while (true) {
+ *       if (imin(vertex_id, 4) >= i)
+ *          break;
+ *
+ *       i += -1;
+ *    }
+ */
+UNKNOWN_COUNT_TEST(0x00000008, 0x00000004, 0xffffffff, ige_imin_rev, iadd)
+
+/* This imin can increase the iteration count, not limit it.
+ *
+ *    int i = 8;
+ *    while (true) {
+ *       if (i < imin(vertex_id, 4))
+ *          break;
+ *
+ *       i += -1;
+ *    }
+ */
+UNKNOWN_COUNT_TEST(0x00000008, 0x00000004, 0xffffffff, ilt_imin, iadd)
+
+/*    int i = 8;
+ *    while (true) {
+ *       if (i < imax(vertex_id, 4))
+ *          break;
+ *
+ *       i--;
+ *    }
+ */
+INEXACT_COUNT_TEST(0x00000008, 0x00000004, 0xffffffff, ilt_imax, iadd, 5)
+
+/*    uint i = 0x00000001;
+ *    while (true) {
+ *       if (i >= umin(vertex_id, 0x00000100))
+ *          break;
+ *
+ *       i <<= 1;
+ *    }
+ */
+INEXACT_COUNT_TEST(0x00000001, 0x00000100, 0x00000001, uge_umin, ishl, 8)

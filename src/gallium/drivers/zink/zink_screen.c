@@ -386,7 +386,7 @@ cache_get_job(void *data, void *gdata, int thread_index)
    VkPipelineCacheCreateInfo pcci;
    pcci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
    pcci.pNext = NULL;
-   pcci.flags = screen->info.have_EXT_pipeline_creation_cache_control ? VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT_EXT : 0;
+   pcci.flags = screen->info.have_EXT_pipeline_creation_cache_control ? VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT : 0;
    pcci.initialDataSize = 0;
    pcci.pInitialData = NULL;
 
@@ -1151,7 +1151,9 @@ zink_get_shader_param(struct pipe_screen *pscreen,
           * with what we need for GL, so we can still force a conformant value here
           */
          if (screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA ||
-             screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS)
+             screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS ||
+             (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_VENUS
+              && screen->info.props.vendorID == 0x8086))
             return 32;
          max = screen->info.props.limits.maxFragmentInputComponents / 4;
          break;
@@ -3256,10 +3258,10 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    {
       uint64_t biggest_vis_vram = 0;
       for (unsigned i = 0; i < screen->heap_count[ZINK_HEAP_DEVICE_LOCAL_VISIBLE]; i++)
-         biggest_vis_vram = MAX2(biggest_vis_vram, screen->info.mem_props.memoryHeaps[screen->info.mem_props.memoryTypes[i].heapIndex].size);
+         biggest_vis_vram = MAX2(biggest_vis_vram, screen->info.mem_props.memoryHeaps[screen->info.mem_props.memoryTypes[screen->heap_map[ZINK_HEAP_DEVICE_LOCAL_VISIBLE][i]].heapIndex].size);
       uint64_t biggest_vram = 0;
       for (unsigned i = 0; i < screen->heap_count[ZINK_HEAP_DEVICE_LOCAL]; i++)
-         biggest_vram = MAX2(biggest_vis_vram, screen->info.mem_props.memoryHeaps[screen->info.mem_props.memoryTypes[i].heapIndex].size);
+         biggest_vram = MAX2(biggest_vram, screen->info.mem_props.memoryHeaps[screen->info.mem_props.memoryTypes[screen->heap_map[ZINK_HEAP_DEVICE_LOCAL][i]].heapIndex].size);
       /* determine if vis vram is roughly equal to total vram */
       if (biggest_vis_vram > biggest_vram * 0.9)
          screen->resizable_bar = true;

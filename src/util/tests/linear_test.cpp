@@ -70,3 +70,22 @@ TEST(LinearAlloc, AvoidWasteAfterLargeAlloc)
 
    ralloc_free(ctx);
 }
+
+TEST(LinearAlloc, Options)
+{
+   void *ctx = ralloc_context(NULL);
+
+   linear_opts opts = {};
+   opts.min_buffer_size = 8192;
+
+   linear_ctx *lin_ctx = linear_context_with_opts(ctx, &opts);
+
+   /* Assert allocations spanning the first 8192 bytes are contiguous. */
+   char *first = (char *)linear_alloc_child(lin_ctx, 1024);
+   for (int i = 1; i < 8; i++) {
+      char *ptr = (char *)linear_alloc_child(lin_ctx, 1024);
+      EXPECT_EQ(ptr - first, 1024 * i);
+   }
+
+   ralloc_free(ctx);
+}

@@ -31,10 +31,10 @@
 #include "compiler/nir/nir_builder.h"
 #include "util/u_math.h"
 #include "pan_blend.h"
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "pan_encoder.h"
+#include "pan_jc.h"
 #include "pan_pool.h"
-#include "pan_scoreboard.h"
 #include "pan_shader.h"
 #include "pan_texture.h"
 
@@ -606,7 +606,7 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
    }
 
    struct panfrost_compile_inputs inputs = {
-      .gpu_id = dev->gpu_id,
+      .gpu_id = panfrost_device_gpu_id(dev),
       .is_blit = true,
       .no_idvs = true,
    };
@@ -1170,7 +1170,7 @@ pan_preload_emit_dcd(struct pan_pool *pool, struct pan_fb_info *fb, bool zs,
    struct panfrost_ptr spd = pan_pool_alloc_desc(pool, SHADER_PROGRAM);
    pan_pack(spd.cpu, SHADER_PROGRAM, cfg) {
       cfg.stage = MALI_SHADER_STAGE_FRAGMENT;
-      cfg.primary_shader = true;
+      cfg.fragment_coverage_bitmask_type = MALI_COVERAGE_BITMASK_TYPE_GL;
       cfg.register_allocation = MALI_SHADER_REGISTER_ALLOCATION_32_PER_THREAD;
       cfg.binary = blit_shader->address;
       cfg.preload.r48_r63 = blit_shader->info.preload >> 48;
@@ -1216,9 +1216,8 @@ pan_preload_emit_dcd(struct pan_pool *pool, struct pan_fb_info *fb, bool zs,
 
 #if PAN_ARCH <= 7
 static void *
-pan_blit_emit_tiler_job(struct pan_pool *pool,
-                        struct pan_scoreboard *scoreboard, mali_ptr tiler,
-                        struct panfrost_ptr *job)
+pan_blit_emit_tiler_job(struct pan_pool *pool, struct pan_jc *jc,
+                        mali_ptr tiler, struct panfrost_ptr *job)
 {
    *job = pan_pool_alloc_desc(pool, TILER_JOB);
 
@@ -1243,8 +1242,8 @@ pan_blit_emit_tiler_job(struct pan_pool *pool,
    }
 #endif
 
-   panfrost_add_job(pool, scoreboard, MALI_JOB_TYPE_TILER, false, false, 0, 0,
-                    job, false);
+   pan_jc_add_job(pool, jc, MALI_JOB_TYPE_TILER, false, false, 0, 0, job,
+                  false);
    return pan_section_ptr(job->cpu, TILER_JOB, DRAW);
 }
 #endif
@@ -1326,8 +1325,7 @@ pan_preload_emit_pre_frame_dcd(struct pan_pool *desc_pool,
 }
 #else
 static struct panfrost_ptr
-pan_preload_emit_tiler_job(struct pan_pool *desc_pool,
-                           struct pan_scoreboard *scoreboard,
+pan_preload_emit_tiler_job(struct pan_pool *desc_pool, struct pan_jc *jc,
                            struct pan_fb_info *fb, bool zs, mali_ptr coords,
                            mali_ptr tsd)
 {
@@ -1349,14 +1347,14 @@ pan_preload_emit_tiler_job(struct pan_pool *desc_pool,
    void *invoc = pan_section_ptr(job.cpu, TILER_JOB, INVOCATION);
    panfrost_pack_work_groups_compute(invoc, 1, 4, 1, 1, 1, 1, true, false);
 
-   panfrost_add_job(desc_pool, scoreboard, MALI_JOB_TYPE_TILER, false, false, 0,
-                    0, &job, true);
+   pan_jc_add_job(desc_pool, jc, MALI_JOB_TYPE_TILER, false, false, 0, 0, &job,
+                  true);
    return job;
 }
 #endif
 
 static struct panfrost_ptr
-pan_preload_fb_part(struct pan_pool *pool, struct pan_scoreboard *scoreboard,
+pan_preload_fb_part(struct pan_pool *pool, struct pan_jc *jc,
                     struct pan_fb_info *fb, bool zs, mali_ptr coords,
                     mali_ptr tsd, mali_ptr tiler)
 {
@@ -1365,13 +1363,13 @@ pan_preload_fb_part(struct pan_pool *pool, struct pan_scoreboard *scoreboard,
 #if PAN_ARCH >= 6
    pan_preload_emit_pre_frame_dcd(pool, fb, zs, coords, tsd);
 #else
-   job = pan_preload_emit_tiler_job(pool, scoreboard, fb, zs, coords, tsd);
+   job = pan_preload_emit_tiler_job(pool, jc, fb, zs, coords, tsd);
 #endif
    return job;
 }
 
 unsigned
-GENX(pan_preload_fb)(struct pan_pool *pool, struct pan_scoreboard *scoreboard,
+GENX(pan_preload_fb)(struct pan_pool *pool, struct pan_jc *jc,
                      struct pan_fb_info *fb, mali_ptr tsd, mali_ptr tiler,
                      struct panfrost_ptr *jobs)
 {
@@ -1392,14 +1390,14 @@ GENX(pan_preload_fb)(struct pan_pool *pool, struct pan_scoreboard *scoreboard,
    unsigned njobs = 0;
    if (preload_zs) {
       struct panfrost_ptr job =
-         pan_preload_fb_part(pool, scoreboard, fb, true, coords, tsd, tiler);
+         pan_preload_fb_part(pool, jc, fb, true, coords, tsd, tiler);
       if (jobs && job.cpu)
          jobs[njobs++] = job;
    }
 
    if (preload_rts) {
       struct panfrost_ptr job =
-         pan_preload_fb_part(pool, scoreboard, fb, false, coords, tsd, tiler);
+         pan_preload_fb_part(pool, jc, fb, false, coords, tsd, tiler);
       if (jobs && job.cpu)
          jobs[njobs++] = job;
    }
@@ -1561,7 +1559,7 @@ GENX(pan_blit_ctx_init)(struct panfrost_device *dev,
 
 struct panfrost_ptr
 GENX(pan_blit)(struct pan_blit_context *ctx, struct pan_pool *pool,
-               struct pan_scoreboard *scoreboard, mali_ptr tsd, mali_ptr tiler)
+               struct pan_jc *jc, mali_ptr tsd, mali_ptr tiler)
 {
    if (ctx->dst.cur_layer < 0 ||
        (ctx->dst.last_layer >= ctx->dst.layer_offset &&
@@ -1588,7 +1586,7 @@ GENX(pan_blit)(struct pan_blit_context *ctx, struct pan_pool *pool,
       pan_pool_upload_aligned(pool, src_rect, sizeof(src_rect), 64);
 
    struct panfrost_ptr job = {0};
-   void *dcd = pan_blit_emit_tiler_job(pool, scoreboard, tiler, &job);
+   void *dcd = pan_blit_emit_tiler_job(pool, jc, tiler, &job);
 
    pan_pack(dcd, DRAW, cfg) {
       cfg.thread_storage = tsd;

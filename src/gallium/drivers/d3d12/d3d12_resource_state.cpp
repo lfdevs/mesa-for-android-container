@@ -70,17 +70,20 @@ update_subresource_state(D3D12_RESOURCE_STATES *existing_state, D3D12_RESOURCE_S
 }
 
 static void
-set_desired_resource_state(d3d12_desired_resource_state *state_obj, D3D12_RESOURCE_STATES state)
+set_desired_resource_state(d3d12_desired_resource_state *state_obj, D3D12_RESOURCE_STATES state, bool pending_memory_barrier)
 {
    state_obj->homogenous = true;
+   state_obj->pending_memory_barrier |= pending_memory_barrier;
    update_subresource_state(&state_obj->subresource_states[0], state);
 }
 
 static void
 set_desired_subresource_state(d3d12_desired_resource_state *state_obj,
-                                    uint32_t subresource,
-                                    D3D12_RESOURCE_STATES state)
+                              uint32_t subresource,
+                              D3D12_RESOURCE_STATES state,
+                              bool pending_memory_barrier)
 {
+   state_obj->pending_memory_barrier |= pending_memory_barrier;
    if (state_obj->homogenous && state_obj->num_subresources > 1) {
       for (unsigned i = 1; i < state_obj->num_subresources; ++i) {
          state_obj->subresource_states[i] = state_obj->subresource_states[0];
@@ -94,7 +97,8 @@ set_desired_subresource_state(d3d12_desired_resource_state *state_obj,
 static void
 reset_desired_resource_state(d3d12_desired_resource_state *state_obj)
 {
-   set_desired_resource_state(state_obj, UNKNOWN_RESOURCE_STATE);
+   set_desired_resource_state(state_obj, UNKNOWN_RESOURCE_STATE, false);
+   state_obj->pending_memory_barrier = false;
 }
 
 bool
@@ -153,12 +157,7 @@ resource_state_if_promoted(D3D12_RESOURCE_STATES desired_state,
                            bool simultaneous_access,
                            const d3d12_subresource_state *current_state)
 {
-   const D3D12_RESOURCE_STATES promotable_states = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
-                                                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
-                                                   D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST;
-
-   if (simultaneous_access ||
-       (desired_state & promotable_states) != D3D12_RESOURCE_STATE_COMMON) {
+   if (simultaneous_access) {
       // If the current state is COMMON...
       if (current_state->state == D3D12_RESOURCE_STATE_COMMON)
          // ...then promotion is allowed
@@ -394,7 +393,8 @@ append_barrier(struct d3d12_context *ctx,
                d3d12_context_state_table_entry *state_entry,
                D3D12_RESOURCE_STATES after,
                UINT subresource,
-               bool is_implicit_dispatch)
+               bool is_implicit_dispatch,
+               bool pending_memory_barrier)
 {
    uint64_t offset;
    ID3D12Resource *res = d3d12_bo_get_base(bo, &offset)->res;
@@ -405,13 +405,18 @@ append_barrier(struct d3d12_context *ctx,
    transition_desc.Transition.Subresource = subresource;
 
    // This is a transition into a state that is both write and non-write.
-   // This is invalid according to D3D12. We're venturing into undefined behavior
-   // land, but let's just pick the write state.
+   // This is invalid according to D3D12. If there's a pending memory barrier that
+   // indicates we'll be reading from such a resource, then let the read state win.
+   // Otherwise, pick the write state.
    if (d3d12_is_write_state(after) && (after & ~RESOURCE_STATE_ALL_WRITE_BITS) != 0) {
-      after &= RESOURCE_STATE_ALL_WRITE_BITS;
+      if (pending_memory_barrier) {
+         after &= ~RESOURCE_STATE_ALL_WRITE_BITS;
+      } else {
+         after &= RESOURCE_STATE_ALL_WRITE_BITS;
 
-      // For now, this is the only way I've seen where this can happen.
-      assert(after == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+         // For now, this is the only way I've seen where this can happen.
+         assert(after == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      }
    }
 
    assert((subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES && current_state->homogenous) ||
@@ -471,8 +476,9 @@ d3d12_transition_resource_state(struct d3d12_context *ctx,
       d3d12_invalidate_context_bindings(ctx, res);
 
    d3d12_context_state_table_entry *state_entry = find_or_create_state_entry(ctx, res->bo);
+   bool pending_memory_barrier = (flags & D3D12_TRANSITION_FLAG_PENDING_MEMORY_BARRIER) != 0;
    if (flags & D3D12_TRANSITION_FLAG_ACCUMULATE_STATE) {
-      set_desired_resource_state(&state_entry->desired, state);
+      set_desired_resource_state(&state_entry->desired, state, pending_memory_barrier);
 
       if (ctx->id != D3D12_CONTEXT_NO_ID) {
          if ((res->bo->local_needs_resolve_state & (1 << ctx->id)) == 0) {
@@ -484,10 +490,10 @@ d3d12_transition_resource_state(struct d3d12_context *ctx,
          _mesa_set_add(ctx->pending_barriers_bos, res->bo);
 
    } else if (state_entry->batch_end.homogenous) {
-      append_barrier(ctx, res->bo, state_entry, state, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, false);
+      append_barrier(ctx, res->bo, state_entry, state, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, false, pending_memory_barrier);
    } else {
       for (unsigned i = 0; i < state_entry->batch_end.num_subresources; ++i) {
-         append_barrier(ctx, res->bo, state_entry, state, i, false);
+         append_barrier(ctx, res->bo, state_entry, state, i, false, pending_memory_barrier);
       }
    }
 }
@@ -507,11 +513,12 @@ d3d12_transition_subresources_state(struct d3d12_context *ctx,
    d3d12_context_state_table_entry *state_entry = find_or_create_state_entry(ctx, res->bo);
    bool is_whole_resource = num_levels * num_layers * num_planes == state_entry->batch_end.num_subresources;
    bool is_accumulate = (flags & D3D12_TRANSITION_FLAG_ACCUMULATE_STATE) != 0;
+   bool pending_memory_barrier = (flags & D3D12_TRANSITION_FLAG_PENDING_MEMORY_BARRIER) != 0;
 
    if (is_whole_resource && is_accumulate) {
-      set_desired_resource_state(&state_entry->desired, state);
+      set_desired_resource_state(&state_entry->desired, state, pending_memory_barrier);
    } else if (is_whole_resource && state_entry->batch_end.homogenous) {
-      append_barrier(ctx, res->bo, state_entry, state, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, false);
+      append_barrier(ctx, res->bo, state_entry, state, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, false, pending_memory_barrier);
    } else {
       for (uint32_t l = 0; l < num_levels; l++) {
          const uint32_t level = start_level + l;
@@ -523,9 +530,9 @@ d3d12_transition_subresources_state(struct d3d12_context *ctx,
                   level + (layer * res->mip_levels) + plane * (res->mip_levels * res->base.b.array_size);
                assert(subres_id < state_entry->desired.num_subresources);
                if (is_accumulate)
-                  set_desired_subresource_state(&state_entry->desired, subres_id, state);
+                  set_desired_subresource_state(&state_entry->desired, subres_id, state, pending_memory_barrier);
                else
-                  append_barrier(ctx, res->bo, state_entry, state, subres_id, false);
+                  append_barrier(ctx, res->bo, state_entry, state, subres_id, false, pending_memory_barrier);
             }
          }
       }
@@ -563,7 +570,7 @@ static void apply_resource_state(struct d3d12_context *ctx, bool is_implicit_dis
          continue;
       }
 
-      append_barrier(ctx, bo, state_entry, after, subresource, is_implicit_dispatch);
+      append_barrier(ctx, bo, state_entry, after, subresource, is_implicit_dispatch, state_entry->desired.pending_memory_barrier);
    }
 
    // Update destination states.

@@ -3,7 +3,7 @@ Surface Formats
 
 A surface format describes the encoding of color information into the actual
 data stored in memory.  Surface formats in isl are specified via the
-:cpp:enum:`isl_format` enum.  A complete list of surface formats is included at
+:c:enum:`isl_format` enum.  A complete list of surface formats is included at
 the end of this chapter.
 
 In general, a surface format definition consists of two parts: encoding and
@@ -19,9 +19,11 @@ data is unsigned normalized where the range of an unsigned integer of a
 particular size is mapped linearly onto the interval [0, 1]. While normalized
 is certainly the most common representation for color data, not all data is
 color data, and not all values are nicely bounded.  The possible data encodings
-are specified by :cpp:enum:`isl_base_type`:
+are specified by :c:enum:`isl_base_type`:
 
-.. doxygenenum:: isl_base_type
+.. c:autoenum:: isl_base_type
+   :file: src/intel/isl/isl.h
+   :members:
 
 Data Layout
 -----------
@@ -170,27 +172,27 @@ target.
 Surface Format Introspection API
 --------------------------------
 
-ISL provides an API for introspecting the :cpp:enum:`isl_format` enum and
+ISL provides an API for introspecting the :c:enum:`isl_format` enum and
 getting various bits of information about a format.  ISL provides helpers for
-introspecting both the data layout of an :cpp:enum:`isl_format` and the
+introspecting both the data layout of an :c:enum:`isl_format` and the
 capabilities of that format for a particular piece of Intel hardware.
 
 Format Layout Introspection
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To get the layout of a given :cpp:enum:`isl_format`, call
-:cpp:func:`isl_format_get_layout`:
+To get the layout of a given :c:enum:`isl_format`, call
+:c:func:`isl_format_get_layout`:
 
-.. doxygenfunction:: isl_format_get_layout
+.. c:autofunction:: isl_format_get_layout
 
-.. doxygenstruct:: isl_format_layout
+.. c:autostruct:: isl_format_layout
    :members:
 
-.. doxygenstruct:: isl_channel_layout
+.. c:autostruct:: isl_channel_layout
    :members:
 
 There are also quite a few helpers for many of the common cases that allow you
-to avoid using :cpp:struct:`isl_format_layout` manually.  There are a lot of
+to avoid using :c:struct:`isl_format_layout` manually.  There are a lot of
 them so we won't include a full list here.  Look at isl.h for more details.
 
 Hardware Format Support Introspection
@@ -202,27 +204,39 @@ formats.  However, for the purposes of code cleanliness, the table is not
 exposed directly and, instead, hardware support information is exposed via
 a set of helper functions:
 
-.. doxygenfunction:: isl_format_supports_rendering
-.. doxygenfunction:: isl_format_supports_alpha_blending
-.. doxygenfunction:: isl_format_supports_sampling
-.. doxygenfunction:: isl_format_supports_filtering
-.. doxygenfunction:: isl_format_supports_vertex_fetch
-.. doxygenfunction:: isl_format_supports_typed_writes
-.. doxygenfunction:: isl_format_supports_typed_reads
-.. doxygenfunction:: isl_format_supports_ccs_d
-.. doxygenfunction:: isl_format_supports_ccs_e
-.. doxygenfunction:: isl_format_supports_multisampling
-.. doxygenfunction:: isl_formats_are_ccs_e_compatible
+.. c:autofunction:: isl_format_supports_rendering
+
+.. c:autofunction:: isl_format_supports_alpha_blending
+
+.. c:autofunction:: isl_format_supports_sampling
+
+.. c:autofunction:: isl_format_supports_filtering
+
+.. c:autofunction:: isl_format_supports_vertex_fetch
+
+.. c:autofunction:: isl_format_supports_typed_writes
+   :file: src/intel/isl/isl_format.c
+
+.. c:autofunction:: isl_format_supports_typed_reads
+
+.. c:autofunction:: isl_format_supports_ccs_d
+
+.. c:autofunction:: isl_format_supports_ccs_e
+
+.. c:autofunction:: isl_format_supports_multisampling
+
+.. c:autofunction:: isl_formats_are_ccs_e_compatible
 
 Surface Format Enums
 --------------------
 
-Everything in ISL is done in terms of the :cpp:enum:`isl_format` enum. However,
+Everything in ISL is done in terms of the :c:enum:`isl_format` enum. However,
 for the sake of interacting with other parts of Mesa, we provide a helper for
-converting a :cpp:enum:`pipe_format` to an :cpp:enum:`isl_format`:
+converting a :c:enum:`pipe_format` to an :c:enum:`isl_format`:
 
-.. doxygenfunction:: isl_format_for_pipe_format
+.. c:autofunction:: isl_format_for_pipe_format
 
-The :cpp:enum:`isl_format` enum is as follows:
+The :c:enum:`isl_format` enum is as follows:
 
-.. doxygenenum:: isl_format
+.. c:autoenum:: isl_format
+   :members:

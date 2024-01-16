@@ -159,7 +159,7 @@ typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderS
 
 static void begin_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id)
 {
-   PERFETTO_LOG("begin event called - ts_ns=%lu", ts_ns);
+   PERFETTO_LOG("begin event called - ts_ns=%" PRIu64, ts_ns);
    uint32_t level = queue->stages[stage_id].level;
    /* If we haven't managed to calibrate the alignment between GPU and CPU
     * timestamps yet, then skip this trace, otherwise perfetto won't know
@@ -181,7 +181,7 @@ static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queu
                       uint32_t submission_id, const char *app_event, const void* payload = nullptr,
                       trace_payload_as_extra_func payload_as_extra = nullptr)
 {
-   PERFETTO_LOG("end event called - ts_ns=%lu", ts_ns);
+   PERFETTO_LOG("end event called - ts_ns=%" PRIu64, ts_ns);
    struct si_ds_device *device = queue->device;
 
    /* If we haven't managed to calibrate the alignment between GPU and CPU
@@ -197,7 +197,7 @@ static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queu
    uint32_t level = --queue->stages[stage_id].level;
    struct si_ds_stage *stage = &queue->stages[stage_id];
    uint64_t start_ns = stage->start_ns[level];
-   PERFETTO_LOG("end event called - start_ns=%lu ts_ns=%lu", start_ns, ts_ns);
+   PERFETTO_LOG("end event called - start_ns=%" PRIu64 " ts_ns=%" PRIu64, start_ns, ts_ns);
    if (!start_ns || start_ns > ts_ns)
       return;
 

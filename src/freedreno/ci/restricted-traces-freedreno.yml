@@ -22,9 +22,7 @@ traces:
       checksum: d65b15a48cc7488020a1d4ae3d5dd583
   Antichamber/antichamber-f240-v2.trace:
     freedreno-a630:
-      label: [crash]
       checksum: 2df47f6dffc78e01ba94ff6600e54bfa
-      text: "https://gitlab.freedesktop.org/mesa/mesa/-/issues/7628"
   ICEDarkness/ICEDarkness-f230-v2.trace:
     freedreno-a630:
       checksum: 64ac14b2a04d510e470fb2e06b039b42

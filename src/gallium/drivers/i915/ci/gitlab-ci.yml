@@ -24,5 +24,5 @@
     - .piglit-traces-test
   variables:
     EGL_PLATFORM: "surfaceless"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-i915.yml"
+    PIGLIT_TRACES_FILE: traces-i915.yml
     PIGLIT_REPLAY_DEVICE_NAME: "i915-g33"

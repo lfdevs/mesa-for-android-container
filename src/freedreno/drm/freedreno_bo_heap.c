@@ -123,7 +123,10 @@ sa_release(struct fd_bo *bo)
 
    simple_mtx_assert_locked(&s->heap->lock);
 
-   VG_BO_FREE(bo);
+   /*
+    * We don't track heap allocs in valgrind
+    * VG_BO_FREE(bo);
+    */
 
    fd_bo_fini_fences(bo);
 
@@ -176,6 +179,7 @@ sa_destroy(struct fd_bo *bo)
 static struct fd_bo_funcs heap_bo_funcs = {
       .madvise = sa_madvise,
       .iova = sa_iova,
+      .map = fd_bo_map_os_mmap,
       .set_name = sa_set_name,
       .destroy = sa_destroy,
 };
@@ -210,10 +214,6 @@ fd_bo_heap_alloc(struct fd_bo_heap *heap, uint32_t size)
 {
    heap_clean(heap, true);
 
-   struct sa_bo *s = calloc(1, sizeof(*s));
-
-   s->heap = heap;
-
    /* util_vma does not like zero byte allocations, which we get, for
     * ex, with the initial query buffer allocation on pre-a5xx:
     */
@@ -228,7 +228,17 @@ fd_bo_heap_alloc(struct fd_bo_heap *heap, uint32_t size)
     * (The 8k threshold is just a random guess, but seems to work ok)
     */
    heap->heap.alloc_high = (size <= 8 * 1024);
-   s->offset = util_vma_heap_alloc(&heap->heap, size, SUBALLOC_ALIGNMENT);
+   uint64_t offset = util_vma_heap_alloc(&heap->heap, size, SUBALLOC_ALIGNMENT);
+   if (!offset) {
+      simple_mtx_unlock(&heap->lock);
+      return NULL;
+   }
+
+   struct sa_bo *s = calloc(1, sizeof(*s));
+
+   s->heap = heap;
+   s->offset = offset;
+
    assert((s->offset / FD_BO_HEAP_BLOCK_SIZE) == (s->offset + size - 1) / FD_BO_HEAP_BLOCK_SIZE);
    unsigned idx = block_idx(s);
    if (HEAP_DEBUG)
@@ -251,12 +261,12 @@ fd_bo_heap_alloc(struct fd_bo_heap *heap, uint32_t size)
    bo->handle = 1; /* dummy handle to make fd_bo_init_common() happy */
    bo->alloc_flags = heap->flags;
 
+   /* Pre-initialize mmap ptr, to avoid trying to os_mmap() */
+   bo->map = ((uint8_t *)fd_bo_map(heap->blocks[idx])) + block_offset(s);
+
    fd_bo_init_common(bo, heap->dev);
 
    bo->handle = FD_BO_SUBALLOC_HANDLE;
-
-   /* Pre-initialize mmap ptr, to avoid trying to os_mmap() */
-   bo->map = ((uint8_t *)fd_bo_map(heap->blocks[idx])) + block_offset(s);
 
    return bo;
 }

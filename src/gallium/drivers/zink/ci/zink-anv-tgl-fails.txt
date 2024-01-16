@@ -685,3 +685,10 @@ spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-gs-getuniformdv,Crash
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-getuniformdv,Crash
 
 spec@arb_fragment_layer_viewport@layer-no-gs,Fail
+
+# sparse_backing_alloc: Assertion `bo->u.sparse.num_backing_pages < DIV_ROUND_UP(bo->base.size, ZINK_SPARSE_BUFFER_PAGE_SIZE)' failed
+KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Crash
+
+# Assertion `size % ZINK_SPARSE_BUFFER_PAGE_SIZE == 0 || offset + size == bo->base.size' failed.
+spec@arb_sparse_buffer@basic,Crash
+spec@arb_sparse_buffer@buffer-data,Crash

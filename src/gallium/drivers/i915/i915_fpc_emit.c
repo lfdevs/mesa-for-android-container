@@ -155,8 +155,7 @@ i915_emit_arith(struct i915_fp_compile *p, uint32_t op, uint32_t dest,
       *(p->csr++) = (op | A0_DEST(dest) | mask | saturate | A0_SRC0(src0));
       *(p->csr++) = (A1_SRC0(src0) | A1_SRC1(src1));
       *(p->csr++) = (A2_SRC1(src1) | A2_SRC2(src2));
-   } else
-      i915_program_error(p, "Out of instructions");
+   }
 
    if (GET_UREG_TYPE(dest) == REG_TYPE_R)
       p->register_phases[GET_UREG_NR(dest)] = p->nr_tex_indirect;
@@ -239,8 +238,7 @@ i915_emit_texld(struct i915_fp_compile *p, uint32_t dest, uint32_t destmask,
 
          *(p->csr++) = T1_ADDRESS_REG(coord);
          *(p->csr++) = T2_MBZ;
-      } else
-         i915_program_error(p, "Out of instructions");
+      }
 
       if (GET_UREG_TYPE(dest) == REG_TYPE_R)
          p->register_phases[GET_UREG_NR(dest)] = p->nr_tex_indirect;

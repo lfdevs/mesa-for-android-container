@@ -61,7 +61,7 @@ void genX(grl_get_cl_kernel)(struct brw_kernel *kernel, enum grl_cl_kernel id);
 #endif
 
 #endif /* INTEL_GRL_H */
-""", output_encoding='utf-8')
+""")
 
 TEMPLATE_C = Template(COPYRIGHT + """
 /* This file generated from ${filename}, don't edit directly. */
@@ -108,7 +108,7 @@ ${prefix}_grl_get_cl_kernel(struct brw_kernel *kernel, enum grl_cl_kernel id)
         unreachable("Invalid GRL kernel enum");
     }
 }
-""", output_encoding='utf-8')
+""")
 
 def get_libraries_files(kernel_module):
     lib_files = []
@@ -201,12 +201,12 @@ def main():
 
     try:
         if args.out_h:
-            with open(args.out_h, 'wb') as f:
+            with open(args.out_h, 'w', encoding='utf-8') as f:
                 f.write(TEMPLATE_H.render(kernels=kernel_c_names,
                                           filename=os.path.basename(__file__)))
 
         if args.out_c:
-            with open(args.out_c, 'wb') as f:
+            with open(args.out_c, 'w', encoding='utf-8') as f:
                 f.write(TEMPLATE_C.render(kernels=kernel_c_names,
                                           prefix=args.prefix,
                                           filename=os.path.basename(__file__)))

@@ -68,10 +68,12 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
             case nir_intrinsic_load_desc_set_address_intel:
             case nir_intrinsic_load_desc_set_dynamic_index_intel: {
-               unsigned base = offsetof(struct anv_push_constants, desc_offsets);
+               unsigned base = offsetof(struct anv_push_constants,
+                                        desc_surface_offsets);
                push_start = MIN2(push_start, base);
                push_end = MAX2(push_end, base +
-                  sizeof_field(struct anv_push_constants, desc_offsets));
+                  sizeof_field(struct anv_push_constants,
+                               desc_surface_offsets));
                break;
             }
 
@@ -131,8 +133,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
    /* For vec4 our push data size needs to be aligned to a vec4 and for
     * scalar, it needs to be aligned to a DWORD.
     */
-   const unsigned align = compiler->scalar_stage[nir->info.stage] ? 4 : 16;
-   nir->num_uniforms = ALIGN(push_end - push_start, align);
+   const unsigned alignment = compiler->scalar_stage[nir->info.stage] ? 4 : 16;
+   nir->num_uniforms = ALIGN(push_end - push_start, alignment);
    prog_data->nr_params = nir->num_uniforms / 4;
    prog_data->param = rzalloc_array(mem_ctx, uint32_t, prog_data->nr_params);
 
@@ -175,8 +177,10 @@ anv_nir_compute_push_layout(nir_shader *nir,
                   b->cursor = nir_before_instr(&intrin->instr);
                   nir_def *pc_load = nir_load_uniform(b, 1, 32,
                      nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
-                     .base = offsetof(struct anv_push_constants, desc_offsets),
-                     .range = sizeof_field(struct anv_push_constants, desc_offsets),
+                     .base = offsetof(struct anv_push_constants,
+                                      desc_surface_offsets),
+                     .range = sizeof_field(struct anv_push_constants,
+                                           desc_surface_offsets),
                      .dest_type = nir_type_uint32);
                   pc_load = nir_iand_imm(b, pc_load, ANV_DESCRIPTOR_SET_OFFSET_MASK);
                   nir_def *desc_addr =
@@ -192,8 +196,10 @@ anv_nir_compute_push_layout(nir_shader *nir,
                   b->cursor = nir_before_instr(&intrin->instr);
                   nir_def *pc_load = nir_load_uniform(b, 1, 32,
                      nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
-                     .base = offsetof(struct anv_push_constants, desc_offsets),
-                     .range = sizeof_field(struct anv_push_constants, desc_offsets),
+                     .base = offsetof(struct anv_push_constants,
+                                      desc_surface_offsets),
+                     .range = sizeof_field(struct anv_push_constants,
+                                           desc_surface_offsets),
                      .dest_type = nir_type_uint32);
                   pc_load = nir_iand_imm(
                      b, pc_load, ANV_DESCRIPTOR_SET_DYNAMIC_INDEX_MASK);
@@ -210,7 +216,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
    }
 
    if (push_ubo_ranges) {
-      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
       /* The vec4 back-end pushes at most 32 regs while the scalar back-end
        * pushes up to 64.  This is primarily because the scalar back-end has a

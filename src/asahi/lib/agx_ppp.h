@@ -36,8 +36,15 @@ agx_ppp_update_size(struct AGX_PPP_HEADER *present)
    PPP_CASE(fragment_back_face_2, FRAGMENT_FACE_2);
    PPP_CASE(fragment_back_stencil, FRAGMENT_STENCIL);
    PPP_CASE(depth_bias_scissor, DEPTH_BIAS_SCISSOR);
-   PPP_CASE(region_clip, REGION_CLIP);
-   PPP_CASE(viewport, VIEWPORT);
+
+   if (present->region_clip)
+      size += present->viewport_count * AGX_REGION_CLIP_LENGTH;
+
+   if (present->viewport) {
+      size += AGX_VIEWPORT_CONTROL_LENGTH +
+              (present->viewport_count * AGX_VIEWPORT_LENGTH);
+   }
+
    PPP_CASE(w_clamp, W_CLAMP);
    PPP_CASE(output_select, OUTPUT_SELECT);
    PPP_CASE(varying_counts_32, VARYING_COUNTS);

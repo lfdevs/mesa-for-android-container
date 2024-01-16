@@ -73,7 +73,8 @@ struct radeon_drm_cs {
    struct pipe_fence_handle *next_fence;
 };
 
-int radeon_lookup_buffer(struct radeon_cs_context *csc, struct radeon_bo *bo);
+int radeon_lookup_buffer(struct radeon_winsys *rws, struct radeon_cs_context *csc,
+                         struct radeon_bo *bo);
 
 static inline struct radeon_drm_cs *
 radeon_drm_cs(struct radeon_cmdbuf *rcs)
@@ -87,7 +88,7 @@ radeon_bo_is_referenced_by_cs(struct radeon_drm_cs *cs,
 {
    int num_refs = bo->num_cs_references;
    return num_refs == bo->rws->num_cs ||
-         (num_refs && radeon_lookup_buffer(cs->csc, bo) != -1);
+         (num_refs && radeon_lookup_buffer(&cs->ws->base, cs->csc, bo) != -1);
 }
 
 static inline bool
@@ -99,7 +100,7 @@ radeon_bo_is_referenced_by_cs_for_write(struct radeon_drm_cs *cs,
    if (!bo->num_cs_references)
       return false;
 
-   index = radeon_lookup_buffer(cs->csc, bo);
+   index = radeon_lookup_buffer(&cs->ws->base, cs->csc, bo);
    if (index == -1)
       return false;
 

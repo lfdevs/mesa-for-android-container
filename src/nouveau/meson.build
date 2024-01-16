@@ -18,8 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-subdir('nvidia-headers')
-subdir('compiler')
+subdir('headers')
+if with_nouveau_vk
+  subdir('compiler')
+endif
 subdir('winsys')
 if with_tools.contains('drm-shim')
   subdir('drm-shim')

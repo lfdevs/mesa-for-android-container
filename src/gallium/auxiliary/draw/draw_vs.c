@@ -65,7 +65,7 @@ draw_create_vertex_shader(struct draw_context *draw,
       tgsi_dump(shader->tokens, 0);
    }
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    bool is_allocated = false;
    if (draw->pt.middle.llvm) {
       struct pipe_screen *screen = draw->pipe->screen;
@@ -84,7 +84,7 @@ draw_create_vertex_shader(struct draw_context *draw,
       vs = draw_create_vs_exec(draw, &state);
    }
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (is_allocated) {
       ureg_free_tokens(state.tokens);
    }

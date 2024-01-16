@@ -8,9 +8,8 @@
     paths:
     - public/
   script:
-  - apk --no-cache add graphviz doxygen
-  - pip3 install sphinx===5.1.1 breathe===4.34.0 mako===1.2.3
-  - docs/doxygen-wrapper.py --out-dir=docs/doxygen_xml
+  - apk --no-cache add coreutils graphviz py3-clang clang-dev musl-dev linux-headers
+  - pip3 install sphinx===5.1.1 mako===1.2.3 hawkmoth===0.16.0
   - sphinx-build -W -b $BUILDER docs public
 
 pages:
@@ -23,7 +22,8 @@ pages:
       changes: &docs-or-ci
       - docs/**/*
       - .gitlab-ci.yml
-      # Paths from doxygen-wrapper.py
+      # All the source files documentation is extracted from
+      # git grep -h ":file: src/" -- docs | sort | uniq
       - src/compiler/nir/nir.h
       - src/intel/isl/**/*
       - src/vulkan/runtime/**/*
@@ -47,7 +47,8 @@ test-docs-mr:
   extends:
     - test-docs
   needs:
-    - sanity
+    - job: sanity
+      optional: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *docs-or-ci

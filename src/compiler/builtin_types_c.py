@@ -56,5 +56,5 @@ for t in BUILTIN_TYPES:
     t["name_id"] = id
     id += len(name) + 1
 
-with open(output, 'w') as f:
+with open(output, 'w', encoding='utf-8') as f:
     f.write(Template(template).render(BUILTIN_TYPES=BUILTIN_TYPES, NAME_ARRAY=NAME_ARRAY))

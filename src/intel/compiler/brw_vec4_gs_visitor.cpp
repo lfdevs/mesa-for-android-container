@@ -171,7 +171,7 @@ vec4_gs_visitor::emit_prolog()
    inst->force_writemask_all = true;
 
    /* Create a virtual register to hold the vertex count */
-   this->vertex_count = src_reg(this, glsl_type::uint_type);
+   this->vertex_count = src_reg(this, glsl_uint_type());
 
    /* Initialize the vertex_count register to 0 */
    this->current_annotation = "initialize vertex_count";
@@ -182,7 +182,7 @@ vec4_gs_visitor::emit_prolog()
       /* Create a virtual register to hold the current set of control data
        * bits.
        */
-      this->control_data_bits = src_reg(this, glsl_type::uint_type);
+      this->control_data_bits = src_reg(this, glsl_uint_type());
 
       /* If we're outputting more than 32 control data bits, then EmitVertex()
        * will set control_data_bits to 0 after emitting the first vertex.
@@ -316,9 +316,9 @@ vec4_gs_visitor::emit_control_data_bits()
     *
     *     dword_index = (vertex_count - 1) >> (6 - log2(bits_per_vertex))
     */
-   src_reg dword_index(this, glsl_type::uint_type);
+   src_reg dword_index(this, glsl_uint_type());
    if (urb_write_flags) {
-      src_reg prev_count(this, glsl_type::uint_type);
+      src_reg prev_count(this, glsl_uint_type());
       emit(ADD(dst_reg(prev_count), this->vertex_count,
                brw_imm_ud(0xffffffffu)));
       unsigned log2_bits_per_vertex =
@@ -340,7 +340,7 @@ vec4_gs_visitor::emit_control_data_bits()
       /* Set the per-slot offset to dword_index / 4, to that we'll write to
        * the appropriate OWORD within the control data header.
        */
-      src_reg per_slot_offset(this, glsl_type::uint_type);
+      src_reg per_slot_offset(this, glsl_uint_type());
       emit(SHR(dst_reg(per_slot_offset), dword_index, brw_imm_ud(2u)));
       emit(GS_OPCODE_SET_WRITE_OFFSET, mrf_reg, per_slot_offset,
            brw_imm_ud(1u));
@@ -354,13 +354,13 @@ vec4_gs_visitor::emit_control_data_bits()
        * GS_OPCODE_PREPARE_CHANNEL_MASKS tries to OR the two masks
        * together.
        */
-      src_reg channel(this, glsl_type::uint_type);
+      src_reg channel(this, glsl_uint_type());
       inst = emit(AND(dst_reg(channel), dword_index, brw_imm_ud(3u)));
       inst->force_writemask_all = true;
-      src_reg one(this, glsl_type::uint_type);
+      src_reg one(this, glsl_uint_type());
       inst = emit(MOV(dst_reg(one), brw_imm_ud(1u)));
       inst->force_writemask_all = true;
-      src_reg channel_mask(this, glsl_type::uint_type);
+      src_reg channel_mask(this, glsl_uint_type());
       inst = emit(SHL(dst_reg(channel_mask), one, channel));
       inst->force_writemask_all = true;
       emit(GS_OPCODE_PREPARE_CHANNEL_MASKS, dst_reg(channel_mask),
@@ -400,11 +400,11 @@ vec4_gs_visitor::set_stream_control_data_bits(unsigned stream_id)
       return;
 
    /* reg::sid = stream_id */
-   src_reg sid(this, glsl_type::uint_type);
+   src_reg sid(this, glsl_uint_type());
    emit(MOV(dst_reg(sid), brw_imm_ud(stream_id)));
 
    /* reg:shift_count = 2 * (vertex_count - 1) */
-   src_reg shift_count(this, glsl_type::uint_type);
+   src_reg shift_count(this, glsl_uint_type());
    emit(SHL(dst_reg(shift_count), this->vertex_count, brw_imm_ud(1u)));
 
    /* Note: we're relying on the fact that the GEN SHL instruction only pays
@@ -412,7 +412,7 @@ vec4_gs_visitor::set_stream_control_data_bits(unsigned stream_id)
     * architecture, stream_id << 2 * (vertex_count - 1) is equivalent to
     * stream_id << ((2 * (vertex_count - 1)) % 32).
     */
-   src_reg mask(this, glsl_type::uint_type);
+   src_reg mask(this, glsl_uint_type());
    emit(SHL(dst_reg(mask), sid, shift_count));
    emit(OR(dst_reg(this->control_data_bits), this->control_data_bits, mask));
 }
@@ -496,7 +496,7 @@ vec4_gs_visitor::gs_emit_vertex(int stream_id)
 
    /* In stream mode we have to set control data bits for all vertices
     * unless we have disabled control data bits completely (which we do
-    * do for GL_POINTS outputs that don't use streams).
+    * do for MESA_PRIM_POINTS outputs that don't use streams).
     */
    if (c->control_data_header_size_bits > 0 &&
        gs_prog_data->control_data_format ==
@@ -548,11 +548,11 @@ vec4_gs_visitor::gs_end_primitive()
     */
 
    /* control_data_bits |= 1 << ((vertex_count - 1) % 32) */
-   src_reg one(this, glsl_type::uint_type);
+   src_reg one(this, glsl_uint_type());
    emit(MOV(dst_reg(one), brw_imm_ud(1u)));
-   src_reg prev_count(this, glsl_type::uint_type);
+   src_reg prev_count(this, glsl_uint_type());
    emit(ADD(dst_reg(prev_count), this->vertex_count, brw_imm_ud(0xffffffffu)));
-   src_reg mask(this, glsl_type::uint_type);
+   src_reg mask(this, glsl_uint_type());
    /* Note: we're relying on the fact that the GEN SHL instruction only pays
     * attention to the lower 5 bits of its second source argument, so on this
     * architecture, 1 << (vertex_count - 1) is equivalent to 1 <<
@@ -632,7 +632,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
 
    if (compiler->devinfo->ver >= 8)
       nir_gs_count_vertices_and_primitives(
-         nir, &prog_data->static_vertex_count, nullptr, 1u);
+         nir, &prog_data->static_vertex_count, nullptr, nullptr, 1u);
 
    if (compiler->devinfo->ver >= 7) {
       if (nir->info.gs.output_primitive == MESA_PRIM_POINTS) {
@@ -838,7 +838,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
                                          label, nir->info.name);
             g.enable_debug(name);
          }
-         g.generate_code(v.cfg, 8, v.shader_stats,
+         g.generate_code(v.cfg, v.dispatch_width, v.shader_stats,
                          v.performance_analysis.require(), params->base.stats);
          g.add_const_data(nir->constant_data, nir->constant_data_size);
          return g.get_assembly();

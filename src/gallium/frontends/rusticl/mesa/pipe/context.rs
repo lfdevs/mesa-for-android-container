@@ -4,6 +4,7 @@ use crate::pipe::resource::*;
 use crate::pipe::screen::*;
 use crate::pipe::transfer::*;
 
+use mesa_rust_gen::pipe_fd_type::*;
 use mesa_rust_gen::*;
 use mesa_rust_util::has_required_feature;
 
@@ -248,10 +249,10 @@ impl PipeContext {
         size: i32,
         rw: RWFlags,
         map_type: ResourceMapType,
-    ) -> PipeTransfer {
+    ) -> Option<PipeTransfer> {
         let mut flags: pipe_map_flags = map_type.into();
         flags |= rw.into();
-        self._buffer_map(res, offset, size, flags).unwrap()
+        self._buffer_map(res, offset, size, flags)
     }
 
     pub fn buffer_map_directly(
@@ -285,10 +286,10 @@ impl PipeContext {
         bx: &pipe_box,
         rw: RWFlags,
         map_type: ResourceMapType,
-    ) -> PipeTransfer {
+    ) -> Option<PipeTransfer> {
         let mut flags: pipe_map_flags = map_type.into();
         flags |= rw.into();
-        self._texture_map(res, bx, flags).unwrap()
+        self._texture_map(res, bx, flags)
     }
 
     pub fn texture_map_directly(
@@ -342,6 +343,10 @@ impl PipeContext {
         }
     }
 
+    pub fn is_create_fence_fd_supported(&self) -> bool {
+        unsafe { self.pipe.as_ref().create_fence_fd.is_some() }
+    }
+
     pub fn create_sampler_state(&self, state: &pipe_sampler_state) -> *mut c_void {
         unsafe { self.pipe.as_ref().create_sampler_state.unwrap()(self.pipe.as_ptr(), state) }
     }
@@ -374,6 +379,24 @@ impl PipeContext {
 
     pub fn delete_sampler_state(&self, ptr: *mut c_void) {
         unsafe { self.pipe.as_ref().delete_sampler_state.unwrap()(self.pipe.as_ptr(), ptr) }
+    }
+
+    pub fn bind_constant_buffer(&self, idx: u32, res: &PipeResource) {
+        let cb = pipe_constant_buffer {
+            buffer: res.pipe(),
+            buffer_offset: 0,
+            buffer_size: res.width(),
+            user_buffer: ptr::null(),
+        };
+        unsafe {
+            self.pipe.as_ref().set_constant_buffer.unwrap()(
+                self.pipe.as_ptr(),
+                pipe_shader_type::PIPE_SHADER_COMPUTE,
+                idx,
+                false,
+                &cb,
+            )
+        }
     }
 
     pub fn set_constant_buffer(&self, idx: u32, data: &[u8]) {
@@ -561,6 +584,19 @@ impl PipeContext {
         unsafe {
             let mut fence = ptr::null_mut();
             self.pipe.as_ref().flush.unwrap()(self.pipe.as_ptr(), &mut fence, 0);
+            PipeFence::new(fence, &self.screen)
+        }
+    }
+
+    pub fn import_fence(&self, fence_fd: &FenceFd) -> PipeFence {
+        unsafe {
+            let mut fence = ptr::null_mut();
+            self.pipe.as_ref().create_fence_fd.unwrap()(
+                self.pipe.as_ptr(),
+                &mut fence,
+                fence_fd.fd,
+                PIPE_FD_TYPE_NATIVE_SYNC,
+            );
             PipeFence::new(fence, &self.screen)
         }
     }

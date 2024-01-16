@@ -13,8 +13,7 @@
 
 #include "nouveau_context.h"
 
-#include "classes/cla0b5.h"
-
+#include "cla0b5.h"
 #include "cla1c0.h"
 #include "clc0c0.h"
 #include "clc5c0.h"
@@ -149,17 +148,20 @@ nvk_compute_local_size(struct nvk_cmd_buffer *cmd)
 {
    const struct nvk_compute_pipeline *pipeline = cmd->state.cs.pipeline;
    const struct nvk_shader *shader =
-      &pipeline->base.shaders[MESA_SHADER_COMPUTE];
+      pipeline->base.shaders[MESA_SHADER_COMPUTE];
 
-   return shader->cp.block_size[0] *
-          shader->cp.block_size[1] *
-          shader->cp.block_size[2];
+   return shader->info.cs.local_size[0] *
+          shader->info.cs.local_size[1] *
+          shader->info.cs.local_size[2];
 }
 
 static uint64_t
 nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
                         uint64_t *root_desc_addr_out)
 {
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
    const struct nvk_compute_pipeline *pipeline = cmd->state.cs.pipeline;
    struct nvk_descriptor_state *desc = &cmd->state.cs.descriptors;
    VkResult result;
@@ -171,10 +173,12 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
     * 0x100 aligned.
     */
    STATIC_ASSERT((sizeof(desc->root) & 0xff) == 0);
+   assert(sizeof(desc->root) % min_cbuf_alignment == 0);
 
    void *root_desc_map;
    uint64_t root_desc_addr;
-   result = nvk_cmd_buffer_upload_alloc(cmd, sizeof(desc->root), 0x100,
+   result = nvk_cmd_buffer_upload_alloc(cmd, sizeof(desc->root),
+                                        min_cbuf_alignment,
                                         &root_desc_addr, &root_desc_map);
    if (unlikely(result != VK_SUCCESS)) {
       vk_command_buffer_set_error(&cmd->vk, result);
@@ -193,26 +197,50 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
                                    desc->root.cs.group_count[0],
                                    desc->root.cs.group_count[1],
                                    desc->root.cs.group_count[2]);
-
-      nvc6c0_cp_launch_desc_set_cb(qmd, 0, sizeof(desc->root), root_desc_addr);
-      nvc6c0_cp_launch_desc_set_cb(qmd, 1, sizeof(desc->root), root_desc_addr);
    } else if (nvk_cmd_buffer_compute_cls(cmd) >= PASCAL_COMPUTE_A) {
       nvc0c0_qmd_set_dispatch_size(nvk_cmd_buffer_device(cmd), qmd,
                                    desc->root.cs.group_count[0],
                                    desc->root.cs.group_count[1],
                                    desc->root.cs.group_count[2]);
-
-      nvc0c0_cp_launch_desc_set_cb(qmd, 0, sizeof(desc->root), root_desc_addr);
-      nvc0c0_cp_launch_desc_set_cb(qmd, 1, sizeof(desc->root), root_desc_addr);
    } else {
       assert(nvk_cmd_buffer_compute_cls(cmd) >= KEPLER_COMPUTE_A);
       nva0c0_qmd_set_dispatch_size(nvk_cmd_buffer_device(cmd), qmd,
                                    desc->root.cs.group_count[0],
                                    desc->root.cs.group_count[1],
                                    desc->root.cs.group_count[2]);
+   }
 
-      nva0c0_cp_launch_desc_set_cb(qmd, 0, sizeof(desc->root), root_desc_addr);
-      nva0c0_cp_launch_desc_set_cb(qmd, 1, sizeof(desc->root), root_desc_addr);
+   const struct nvk_shader *shader =
+      pipeline->base.shaders[MESA_SHADER_COMPUTE];
+   for (uint32_t c = 0; c < shader->cbuf_map.cbuf_count; c++) {
+      const struct nvk_cbuf *cbuf = &shader->cbuf_map.cbufs[c];
+
+      struct nvk_buffer_address ba;
+      if (cbuf->type == NVK_CBUF_TYPE_ROOT_DESC) {
+         ba = (struct nvk_buffer_address) {
+            .base_addr = root_desc_addr,
+            .size = sizeof(desc->root),
+         };
+      } else {
+         ASSERTED bool direct_descriptor =
+            nvk_cmd_buffer_get_cbuf_descriptor(cmd, desc, cbuf, &ba);
+         assert(direct_descriptor);
+      }
+
+      if (ba.size > 0) {
+         assert(ba.base_addr % min_cbuf_alignment == 0);
+         ba.size = align(ba.size, min_cbuf_alignment);
+         ba.size = MIN2(ba.size, NVK_MAX_CBUF_SIZE);
+
+         if (nvk_cmd_buffer_compute_cls(cmd) >= AMPERE_COMPUTE_A) {
+            nvc6c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
+         } else if (nvk_cmd_buffer_compute_cls(cmd) >= PASCAL_COMPUTE_A) {
+            nvc0c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
+         } else {
+            assert(nvk_cmd_buffer_compute_cls(cmd) >= KEPLER_COMPUTE_A);
+            nva0c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
+         }
+      }
    }
 
    uint64_t qmd_addr;
@@ -282,16 +310,11 @@ nvk_CmdDispatchBase(VkCommandBuffer commandBuffer,
       (uint64_t)local_size * (uint64_t)groupCountX *
       (uint64_t)groupCountY * (uint64_t)groupCountZ;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 9);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
 
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS));
    P_INLINE_DATA(p, cs_invocations >> 32);
    P_INLINE_DATA(p, cs_invocations);
-
-   P_MTHD(p, NVA0C0, INVALIDATE_SHADER_CACHES_NO_WFI);
-   P_NVA0C0_INVALIDATE_SHADER_CACHES_NO_WFI(p, {
-      .constant = CONSTANT_TRUE
-   });
 
    P_MTHD(p, NVA0C0, SEND_PCAS_A);
    P_NVA0C0_SEND_PCAS_A(p, qmd_addr >> 8);
@@ -394,9 +417,8 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
    if (unlikely(qmd_addr == 0))
       return;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 18);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 14);
 
-   P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
    P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DISPATCH_INDIRECT));
    P_INLINE_DATA(p, nvk_compute_local_size(cmd));
@@ -406,11 +428,6 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
    P_INLINE_DATA(p, root_desc_addr);
    P_INLINE_DATA(p, qmd_addr >> 32);
    P_INLINE_DATA(p, qmd_addr);
-
-   P_MTHD(p, NVA0C0, INVALIDATE_SHADER_CACHES_NO_WFI);
-   P_NVA0C0_INVALIDATE_SHADER_CACHES_NO_WFI(p, {
-      .constant = CONSTANT_TRUE
-   });
 
    P_MTHD(p, NVA0C0, SEND_PCAS_A);
    P_NVA0C0_SEND_PCAS_A(p, qmd_addr >> 8);

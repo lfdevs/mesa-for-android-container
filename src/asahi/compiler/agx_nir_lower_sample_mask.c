@@ -16,7 +16,7 @@
  *
  *    foreach sample in TARGET {
  *       if sample in LIVE {
- *          run depth/stencil test and update
+ *          run depth/stencil/occlusion test/update
  *       } else {
  *          kill sample
  *       }
@@ -145,40 +145,20 @@ cf_node_contains_discard(nir_cf_node *node)
    return false;
 }
 
-bool
-agx_nir_lower_sample_mask(nir_shader *shader, unsigned nr_samples)
+/*
+ * We want to run depth/stencil tests as early as possible, but we have to
+ * wait until after the last discard. We find the last discard and
+ * execute depth/stencil tests in the first unconditional block after (if
+ * in conditional control flow), or fuse depth/stencil tests into the
+ * sample instruction (if in unconditional control flow).
+ *
+ * To do so, we walk the root control flow list backwards, looking for the
+ * earliest unconditionally executed instruction after all discard.
+ */
+static void
+run_tests_after_last_discard(nir_builder *b)
 {
-   if (!shader->info.fs.uses_discard)
-      return false;
-
-   /* sample_mask can't be used with zs_emit, so lower sample_mask to zs_emit */
-   if (shader->info.outputs_written & (BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
-                                       BITFIELD64_BIT(FRAG_RESULT_STENCIL))) {
-      bool progress = nir_shader_intrinsics_pass(
-         shader, lower_sample_mask_to_zs,
-         nir_metadata_block_index | nir_metadata_dominance, NULL);
-
-      /* The lowering requires an unconditional depth write. We mark this after
-       * lowering so the lowering knows whether there was already a depth write
-       */
-      assert(progress && "must have lowered something,given the outputs");
-      shader->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_DEPTH);
-
-      return true;
-   }
-
-   /* We want to run depth/stencil tests as early as possible, but we have to
-    * wait until after the last discard. We find the last discard and
-    * execute depth/stencil tests in the first unconditional block after (if in
-    * conditional control flow), or fuse depth/stencil tests into the sample
-    * instruction (if in unconditional control flow).
-    *
-    * To do so, we walk the root control flow list backwards, looking for the
-    * earliest unconditionally executed instruction after all discard.
-    */
-   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   nir_builder b = nir_builder_create(impl);
-   foreach_list_typed_reverse(nir_cf_node, node, node, &impl->body) {
+   foreach_list_typed_reverse(nir_cf_node, node, node, &b->impl->body) {
       if (node->type == nir_cf_node_block) {
          /* Unconditionally executed block */
          nir_block *block = nir_cf_node_as_block(node);
@@ -186,29 +166,77 @@ agx_nir_lower_sample_mask(nir_shader *shader, unsigned nr_samples)
 
          if (intr) {
             /* Last discard is executed unconditionally, so fuse tests. */
-            b.cursor = nir_before_instr(&intr->instr);
+            b->cursor = nir_before_instr(&intr->instr);
 
-            nir_def *all_samples = nir_imm_intN_t(&b, ALL_SAMPLES, 16);
+            nir_def *all_samples = nir_imm_intN_t(b, ALL_SAMPLES, 16);
             nir_def *killed = intr->src[0].ssa;
-            nir_def *live = nir_ixor(&b, killed, all_samples);
+            nir_def *live = nir_ixor(b, killed, all_samples);
 
-            nir_sample_mask_agx(&b, all_samples, live);
+            nir_sample_mask_agx(b, all_samples, live);
             nir_instr_remove(&intr->instr);
-            break;
+            return;
          } else {
             /* Set cursor for insertion due to a preceding conditionally
              * executed discard.
              */
-            b.cursor = nir_before_block_after_phis(block);
+            b->cursor = nir_before_block_after_phis(block);
          }
       } else if (cf_node_contains_discard(node)) {
          /* Conditionally executed block contains the last discard. Test
           * depth/stencil for remaining samples in unconditional code after.
           */
-         nir_sample_mask_agx(&b, nir_imm_intN_t(&b, ALL_SAMPLES, 16),
-                             nir_imm_intN_t(&b, ALL_SAMPLES, 16));
-         break;
+         nir_sample_mask_agx(b, nir_imm_intN_t(b, ALL_SAMPLES, 16),
+                             nir_imm_intN_t(b, ALL_SAMPLES, 16));
+         return;
       }
+   }
+}
+
+static void
+run_tests_at_start(nir_shader *shader)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+
+   nir_sample_mask_agx(&b, nir_imm_intN_t(&b, ALL_SAMPLES, 16),
+                       nir_imm_intN_t(&b, ALL_SAMPLES, 16));
+}
+
+bool
+agx_nir_lower_sample_mask(nir_shader *shader, unsigned nr_samples)
+{
+   if (shader->info.fs.early_fragment_tests) {
+      /* run tests early */
+      run_tests_at_start(shader);
+   } else if (shader->info.fs.uses_discard) {
+      /* sample_mask can't be used with zs_emit, so lower sample_mask to zs_emit.
+       * We ignore depth/stencil writes with early fragment testing though.
+       */
+      if (shader->info.outputs_written &
+          (BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
+           BITFIELD64_BIT(FRAG_RESULT_STENCIL))) {
+         bool progress = nir_shader_intrinsics_pass(
+            shader, lower_sample_mask_to_zs,
+            nir_metadata_block_index | nir_metadata_dominance, NULL);
+
+         /* The lowering requires an unconditional depth write. We mark this
+          * after lowering so the lowering knows whether there was already a
+          * depth write
+          */
+         assert(progress && "must have lowered something,given the outputs");
+         shader->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_DEPTH);
+
+         return true;
+      }
+
+      nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+      nir_builder b = nir_builder_create(impl);
+
+      /* run tests late */
+      run_tests_after_last_discard(&b);
+   } else {
+      /* regular shaders that don't use discard have nothing to lower */
+      return false;
    }
 
    nir_shader_intrinsics_pass(shader, lower_discard_to_sample_mask_0,

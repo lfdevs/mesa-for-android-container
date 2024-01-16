@@ -21,6 +21,8 @@
 import os
 import sys
 
+from hawkmoth.util import compiler
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -38,8 +40,8 @@ sys.path.append(os.path.abspath('_exts'))
 # ones.
 extensions = [
     'bootstrap',
-    'breathe',
     'formatting',
+    'hawkmoth',
     'nir',
     'redirects',
     'sphinx.ext.graphviz',
@@ -84,7 +86,7 @@ language = 'en'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = []
+exclude_patterns = ['header-stubs']
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
@@ -214,10 +216,25 @@ texinfo_documents = [
 
 graphviz_output_format = 'svg'
 
-# -- Options for breathe --------------------------------------------------
-breathe_projects = {
-    'mesa' : 'doxygen_xml',
-}
-breathe_default_project = 'mesa'
-breathe_show_define_initializer = True
-breathe_show_enumvalue_initializer = True
+# -- Options for hawkmoth -------------------------------------------------
+
+hawkmoth_root = os.path.abspath('..')
+hawkmoth_clang = [
+  '-Idocs/header-stubs/',
+  '-Iinclude/',
+  '-Isrc/',
+  '-Isrc/gallium/include/',
+  '-Isrc/intel/',
+  '-Isrc/mesa/',
+  '-DHAVE_STRUCT_TIMESPEC',
+  '-DHAVE_PTHREAD',
+  '-DHAVE_ENDIAN_H',
+]
+hawkmoth_clang.extend(compiler.get_include_args())
+
+# helpers for definining parameter direction
+rst_prolog = '''
+.. |in| replace:: **[in]**
+.. |out| replace:: **[out]**
+.. |inout| replace:: **[inout]**
+'''

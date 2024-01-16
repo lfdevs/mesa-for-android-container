@@ -177,9 +177,6 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
             .clear_bits = 0xffff
          });
       }
-   } else {
-      if (!screen->specs.use_blt)
-         etna_rs_gen_clear_surface(ctx, surf, surf->level->clear_value);
    }
 
    return &surf->base;

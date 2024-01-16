@@ -34,10 +34,6 @@
 
 #include "util/u_math.h"
 
-#ifndef ALIGN
-#define ALIGN(x, y) (((x) + (y)-1) & ~((y)-1))
-#endif
-
 #define MI_BATCH_NON_SECURE_I965 (1 << 8)
 
 #define min(a, b) ({                            \

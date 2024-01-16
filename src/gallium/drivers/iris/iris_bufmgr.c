@@ -179,8 +179,6 @@ struct iris_memregion {
 struct iris_slab {
    struct pb_slab base;
 
-   unsigned entry_size;
-
    /** The BO representing the entire slab */
    struct iris_bo *bo;
 
@@ -189,6 +187,11 @@ struct iris_slab {
 };
 
 #define BUCKET_ARRAY_SIZE (14 * 4)
+
+struct iris_bucket_cache {
+   struct bo_cache_bucket bucket[BUCKET_ARRAY_SIZE];
+   int num_buckets;
+};
 
 struct iris_bufmgr {
    /**
@@ -204,16 +207,7 @@ struct iris_bufmgr {
    simple_mtx_t bo_deps_lock;
 
    /** Array of lists of cached gem objects of power-of-two sizes */
-   struct bo_cache_bucket cache_bucket[BUCKET_ARRAY_SIZE];
-   int num_buckets;
-
-   /** Same as cache_bucket, but for local memory gem objects */
-   struct bo_cache_bucket local_cache_bucket[BUCKET_ARRAY_SIZE];
-   int num_local_buckets;
-
-   /** Same as cache_bucket, but for local-preferred memory gem objects */
-   struct bo_cache_bucket local_preferred_cache_bucket[BUCKET_ARRAY_SIZE];
-   int num_local_preferred_buckets;
+   struct iris_bucket_cache bucket_cache[IRIS_HEAP_MAX];
 
    time_t time;
 
@@ -280,32 +274,6 @@ find_and_ref_external_bo(struct hash_table *ht, unsigned int key)
    return bo;
 }
 
-static void
-bucket_info_for_heap(struct iris_bufmgr *bufmgr, enum iris_heap heap,
-                     struct bo_cache_bucket **cache_bucket, int **num_buckets)
-{
-   switch (heap) {
-   case IRIS_HEAP_SYSTEM_MEMORY:
-      *cache_bucket = bufmgr->cache_bucket;
-      *num_buckets = &bufmgr->num_buckets;
-      break;
-   case IRIS_HEAP_DEVICE_LOCAL:
-      *cache_bucket = bufmgr->local_cache_bucket;
-      *num_buckets = &bufmgr->num_local_buckets;
-      break;
-   case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
-      *cache_bucket = bufmgr->local_preferred_cache_bucket;
-      *num_buckets = &bufmgr->num_local_preferred_buckets;
-      break;
-   case IRIS_HEAP_MAX:
-   default:
-      *cache_bucket = NULL;
-      *num_buckets = NULL;
-      unreachable("invalid heap");
-   }
-
-   assert(**num_buckets < BUCKET_ARRAY_SIZE);
-}
 /**
  * This function finds the correct bucket fit for the input size.
  * The function works with O(1) complexity when the requested size
@@ -319,9 +287,7 @@ bucket_for_size(struct iris_bufmgr *bufmgr, uint64_t size,
       return NULL;
 
    const struct intel_device_info *devinfo = &bufmgr->devinfo;
-   if (devinfo->has_set_pat_uapi &&
-       iris_pat_index_for_bo_flags(devinfo, flags) != devinfo->pat.writeback)
-      return NULL;
+   struct iris_bucket_cache *cache = &bufmgr->bucket_cache[heap];
 
    if (devinfo->kmd_type == INTEL_KMD_TYPE_XE &&
        (flags & (BO_ALLOC_SHARED | BO_ALLOC_SCANOUT)))
@@ -355,11 +321,7 @@ bucket_for_size(struct iris_bufmgr *bufmgr, uint64_t size,
    /* Calculating the index based on the row and column. */
    const unsigned index = (row * 4) + (col - 1);
 
-   int *num_buckets;
-   struct bo_cache_bucket *buckets;
-   bucket_info_for_heap(bufmgr, heap, &buckets, &num_buckets);
-
-   return (index < *num_buckets) ? &buckets[index] : NULL;
+   return (index < cache->num_buckets) ? &cache->bucket[index] : NULL;
 }
 
 enum iris_memory_zone
@@ -407,9 +369,17 @@ vma_alloc(struct iris_bufmgr *bufmgr,
 {
    simple_mtx_assert_locked(&bufmgr->lock);
 
+   const unsigned _2mb = 2 * 1024 * 1024;
+
    /* Force minimum alignment based on device requirements */
    assert((alignment & (alignment - 1)) == 0);
    alignment = MAX2(alignment, bufmgr->devinfo.mem_alignment);
+
+   /* If the allocation is a multiple of 2MB, ensure the virtual address is
+    * aligned to 2MB, so that it's possible for the kernel to use 64K pages.
+    */
+   if (size % _2mb == 0)
+      alignment = MAX2(alignment, _2mb);
 
    if (memzone == IRIS_MEMZONE_BORDER_COLOR_POOL)
       return IRIS_BORDER_COLOR_POOL_ADDRESS;
@@ -804,7 +774,8 @@ iris_slab_alloc(void *priv,
    }
    assert(slab_size != 0);
 
-   if (heap == IRIS_HEAP_SYSTEM_MEMORY)
+   if (heap == IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT ||
+       heap == IRIS_HEAP_SYSTEM_MEMORY_UNCACHED)
       flags = BO_ALLOC_SMEM;
    else if (heap == IRIS_HEAP_DEVICE_LOCAL)
       flags = BO_ALLOC_LMEM;
@@ -820,7 +791,8 @@ iris_slab_alloc(void *priv,
 
    slab->base.num_entries = slab_size / entry_size;
    slab->base.num_free = slab->base.num_entries;
-   slab->entry_size = entry_size;
+   slab->base.group_index = group_index;
+   slab->base.entry_size = entry_size;
    slab->entries = calloc(slab->base.num_entries, sizeof(*slab->entries));
    if (!slab->entries)
       goto fail_bo;
@@ -839,10 +811,9 @@ iris_slab_alloc(void *priv,
       bo->index = -1;
       bo->refcount = 0;
       bo->idle = true;
+      bo->zeroed = slab->bo->zeroed;
 
       bo->slab.entry.slab = &slab->base;
-      bo->slab.entry.group_index = group_index;
-      bo->slab.entry.entry_size = entry_size;
 
       bo->slab.real = iris_get_backing_bo(slab->bo);
 
@@ -858,19 +829,41 @@ fail:
    return NULL;
 }
 
+/**
+ * Selects a heap for the given buffer allocation flags.
+ *
+ * This determines the cacheability, coherency, and mmap mode settings.
+ */
 static enum iris_heap
 flags_to_heap(struct iris_bufmgr *bufmgr, unsigned flags)
 {
+   const struct intel_device_info *devinfo = &bufmgr->devinfo;
+
    if (bufmgr->vram.size > 0) {
+      /* Discrete GPUs currently always snoop CPU caches. */
       if ((flags & BO_ALLOC_SMEM) || (flags & BO_ALLOC_COHERENT))
-         return IRIS_HEAP_SYSTEM_MEMORY;
+         return IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
+
       if ((flags & BO_ALLOC_LMEM) ||
           ((flags & BO_ALLOC_SCANOUT) && !(flags & BO_ALLOC_SHARED)))
          return IRIS_HEAP_DEVICE_LOCAL;
+
       return IRIS_HEAP_DEVICE_LOCAL_PREFERRED;
-   } else {
+   } else if (devinfo->has_llc) {
       assert(!(flags & BO_ALLOC_LMEM));
-      return IRIS_HEAP_SYSTEM_MEMORY;
+
+      if (flags & (BO_ALLOC_SCANOUT | BO_ALLOC_SHARED))
+         return IRIS_HEAP_SYSTEM_MEMORY_UNCACHED;
+
+      return IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
+   } else {
+      assert(!devinfo->has_llc);
+      assert(!(flags & BO_ALLOC_LMEM));
+
+      if (flags & BO_ALLOC_COHERENT)
+         return IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
+
+      return IRIS_HEAP_SYSTEM_MEMORY_UNCACHED;
    }
 }
 
@@ -880,6 +873,9 @@ zero_bo(struct iris_bufmgr *bufmgr,
         struct iris_bo *bo)
 {
    assert(flags & BO_ALLOC_ZEROED);
+
+   if (bo->zeroed)
+      return true;
 
    if (bufmgr->devinfo.has_flat_ccs && (flags & BO_ALLOC_LMEM)) {
       /* With flat CCS, all allocations in LMEM have memory ranges with
@@ -894,6 +890,7 @@ zero_bo(struct iris_bufmgr *bufmgr,
       return false;
 
    memset(map, 0, bo->size);
+   bo->zeroed = true;
    return true;
 }
 
@@ -1065,6 +1062,7 @@ alloc_bo_from_cache(struct iris_bufmgr *bufmgr,
    /* Zero the contents if necessary.  If this fails, fall back to
     * allocating a fresh BO, which will always be zeroed by the kernel.
     */
+   assert(bo->zeroed == false);
    if ((flags & BO_ALLOC_ZEROED) && !zero_bo(bufmgr, flags, bo)) {
       bo_free(bo);
       return NULL;
@@ -1079,6 +1077,15 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
    struct iris_bo *bo = bo_calloc();
    if (!bo)
       return NULL;
+
+   /* Try to allocate memory in multiples of 2MB, as this allows us to use
+    * 64K pages rather than the less-efficient 4K pages.  Most BOs smaller
+    * than 64MB should hit the BO cache or slab allocations anyway, so this
+    * shouldn't waste too much memory.  We do exclude small (< 1MB) sizes to
+    * be defensive in case any of those bypass the caches and end up here.
+    */
+   if (bo_size >= 1024 * 1024)
+      bo_size = align64(bo_size, 2 * 1024 * 1024);
 
    bo->real.heap = flags_to_heap(bufmgr, flags);
 
@@ -1095,9 +1102,11 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
       case IRIS_HEAP_DEVICE_LOCAL:
          regions[num_regions++] = bufmgr->vram.region;
          break;
-      case IRIS_HEAP_SYSTEM_MEMORY:
+      case IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT:
          regions[num_regions++] = bufmgr->sys.region;
          break;
+      case IRIS_HEAP_SYSTEM_MEMORY_UNCACHED:
+         /* not valid; discrete cards always enable snooping */
       case IRIS_HEAP_MAX:
          unreachable("invalid heap for BO");
       }
@@ -1115,40 +1124,36 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
    bo->bufmgr = bufmgr;
    bo->size = bo_size;
    bo->idle = true;
+   bo->zeroed = true;
 
    return bo;
 }
 
 const char *
 iris_heap_to_string[IRIS_HEAP_MAX] = {
-   [IRIS_HEAP_SYSTEM_MEMORY] = "system",
+   [IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT] = "system-cached-coherent",
+   [IRIS_HEAP_SYSTEM_MEMORY_UNCACHED] = "system-uncached",
    [IRIS_HEAP_DEVICE_LOCAL] = "local",
    [IRIS_HEAP_DEVICE_LOCAL_PREFERRED] = "local-preferred",
 };
 
 static enum iris_mmap_mode
-iris_bo_alloc_get_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap,
-                            unsigned flags)
+heap_to_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap)
 {
-   if (bufmgr->devinfo.kmd_type == INTEL_KMD_TYPE_XE)
-      return iris_xe_bo_flags_to_mmap_mode(bufmgr, heap, flags);
+   const struct intel_device_info *devinfo = &bufmgr->devinfo;
 
-   /* i915 */
-   const bool local = heap != IRIS_HEAP_SYSTEM_MEMORY;
-   const bool is_coherent = bufmgr->devinfo.has_llc ||
-                            (bufmgr->vram.size > 0 && !local) ||
-                            (flags & BO_ALLOC_COHERENT);
-   const bool is_scanout = (flags & BO_ALLOC_SCANOUT) != 0;
-   enum iris_mmap_mode mmap_mode;
-
-   if (!intel_vram_all_mappable(&bufmgr->devinfo) && heap == IRIS_HEAP_DEVICE_LOCAL)
-      mmap_mode = IRIS_MMAP_NONE;
-   else if (!local && is_coherent && !is_scanout)
-      mmap_mode = IRIS_MMAP_WB;
-   else
-      mmap_mode = IRIS_MMAP_WC;
-
-   return mmap_mode;
+   switch (heap) {
+   case IRIS_HEAP_DEVICE_LOCAL:
+      return intel_vram_all_mappable(devinfo) ? IRIS_MMAP_WC : IRIS_MMAP_NONE;
+   case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
+      return IRIS_MMAP_WC;
+   case IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT:
+      return IRIS_MMAP_WB;
+   case IRIS_HEAP_SYSTEM_MEMORY_UNCACHED:
+      return IRIS_MMAP_WC;
+   default:
+      unreachable("invalid heap");
+   }
 }
 
 struct iris_bo *
@@ -1162,7 +1167,8 @@ iris_bo_alloc(struct iris_bufmgr *bufmgr,
    struct iris_bo *bo;
    unsigned int page_size = getpagesize();
    enum iris_heap heap = flags_to_heap(bufmgr, flags);
-   struct bo_cache_bucket *bucket = bucket_for_size(bufmgr, size, heap, flags);
+   struct bo_cache_bucket *bucket =
+      bucket_for_size(bufmgr, size, heap, flags);
 
    if (memzone != IRIS_MEMZONE_OTHER || (flags & BO_ALLOC_COHERENT))
       flags |= BO_ALLOC_NO_SUBALLOC;
@@ -1176,8 +1182,8 @@ iris_bo_alloc(struct iris_bufmgr *bufmgr,
     * at this size, a multiple of the page size.
     */
    uint64_t bo_size =
-      bucket ? bucket->size : MAX2(ALIGN(size, page_size), page_size);
-   enum iris_mmap_mode mmap_mode = iris_bo_alloc_get_mmap_mode(bufmgr, heap, flags);
+      bucket ? bucket->size : MAX2(align64(size, page_size), page_size);
+   enum iris_mmap_mode mmap_mode = heap_to_mmap_mode(bufmgr, heap);
 
    simple_mtx_lock(&bufmgr->lock);
 
@@ -1237,8 +1243,6 @@ iris_bo_alloc(struct iris_bufmgr *bufmgr,
        !bufmgr->devinfo.has_llc && bufmgr->devinfo.has_caching_uapi) {
       if (bufmgr->kmd_backend->bo_set_caching(bo, true) != 0)
          goto err_free;
-
-      bo->real.reusable = false;
    }
 
    DBG("bo_create: buf %d (%s) (%s memzone) (%s) %llub\n", bo->gem_handle,
@@ -1265,19 +1269,6 @@ iris_bo_close(int fd, uint32_t gem_handle)
       .handle = gem_handle,
    };
    return intel_ioctl(fd, DRM_IOCTL_GEM_CLOSE, &close);
-}
-
-static enum iris_mmap_mode
-iris_bo_create_userptr_get_mmap_mode(struct iris_bufmgr *bufmgr)
-{
-   switch (bufmgr->devinfo.kmd_type) {
-   case INTEL_KMD_TYPE_I915:
-      return IRIS_MMAP_WB;
-   case INTEL_KMD_TYPE_XE:
-      return iris_xe_bo_flags_to_mmap_mode(bufmgr, IRIS_HEAP_SYSTEM_MEMORY, 0);
-   default:
-      return IRIS_MMAP_NONE;
-   }
 }
 
 struct iris_bo *
@@ -1316,8 +1307,8 @@ iris_bo_create_userptr(struct iris_bufmgr *bufmgr, const char *name,
    p_atomic_set(&bo->refcount, 1);
    bo->index = -1;
    bo->idle = true;
-   bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY;
-   bo->real.mmap_mode = iris_bo_create_userptr_get_mmap_mode(bufmgr);
+   bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
+   bo->real.mmap_mode = heap_to_mmap_mode(bufmgr, bo->real.heap);
    bo->real.prime_fd = -1;
 
    if (!bufmgr->kmd_backend->gem_vm_bind(bo))
@@ -1418,6 +1409,8 @@ iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
    bo->real.prime_fd = -1;
    bo->real.reusable = false;
    bo->real.imported = true;
+   /* Xe KMD expects at least 1-way coherency for imports */
+   bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
    bo->real.mmap_mode = IRIS_MMAP_NONE;
    bo->real.kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
    if (INTEL_DEBUG(DEBUG_CAPTURE_ALL))
@@ -1535,49 +1528,25 @@ bo_free(struct iris_bo *bo)
 static void
 cleanup_bo_cache(struct iris_bufmgr *bufmgr, time_t time)
 {
-   int i;
-
    simple_mtx_assert_locked(&bufmgr->lock);
 
    if (bufmgr->time == time)
       return;
 
-   for (i = 0; i < bufmgr->num_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->cache_bucket[i];
+   for (int h = 0; h < IRIS_HEAP_MAX; h++) {
+      struct iris_bucket_cache *cache = &bufmgr->bucket_cache[h];
 
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         if (time - bo->real.free_time <= 1)
-            break;
+      for (int i = 0; i < cache->num_buckets; i++) {
+         struct bo_cache_bucket *bucket = &cache->bucket[i];
 
-         list_del(&bo->head);
+         list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
+            if (time - bo->real.free_time <= 1)
+               break;
 
-         bo_free(bo);
-      }
-   }
+            list_del(&bo->head);
 
-   for (i = 0; i < bufmgr->num_local_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->local_cache_bucket[i];
-
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         if (time - bo->real.free_time <= 1)
-            break;
-
-         list_del(&bo->head);
-
-         bo_free(bo);
-      }
-   }
-
-   for (i = 0; i < bufmgr->num_local_preferred_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->local_preferred_cache_bucket[i];
-
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         if (time - bo->real.free_time <= 1)
-            break;
-
-         list_del(&bo->head);
-
-         bo_free(bo);
+            bo_free(bo);
+         }
       }
    }
 
@@ -1599,15 +1568,14 @@ static void
 bo_unreference_final(struct iris_bo *bo, time_t time)
 {
    struct iris_bufmgr *bufmgr = bo->bufmgr;
-   struct bo_cache_bucket *bucket;
 
    DBG("bo_unreference final: %d (%s)\n", bo->gem_handle, bo->name);
 
    assert(iris_bo_is_real(bo));
 
-   bucket = NULL;
-   if (bo->real.reusable)
-      bucket = bucket_for_size(bufmgr, bo->size, bo->real.heap, 0);
+   struct bo_cache_bucket *bucket = !bo->real.reusable ? NULL :
+      bucket_for_size(bufmgr, bo->size, bo->real.heap, 0);
+
    /* Put the buffer into our internal cache for reuse if we can. */
    if (bucket && iris_bo_madvise(bo, IRIS_MADVICE_DONT_NEED)) {
       bo->real.free_time = time;
@@ -1633,6 +1601,7 @@ iris_bo_unreference(struct iris_bo *bo)
 
       clock_gettime(CLOCK_MONOTONIC, &time);
 
+      bo->zeroed = false;
       if (bo->gem_handle == 0) {
          pb_slab_free(get_slabs(bufmgr, bo->size), &bo->slab.entry);
       } else {
@@ -1824,34 +1793,19 @@ iris_bufmgr_destroy(struct iris_bufmgr *bufmgr)
    }
 
    simple_mtx_lock(&bufmgr->lock);
+
    /* Free any cached buffer objects we were going to reuse */
-   for (int i = 0; i < bufmgr->num_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->cache_bucket[i];
+   for (int h = 0; h < IRIS_HEAP_MAX; h++) {
+      struct iris_bucket_cache *cache = &bufmgr->bucket_cache[h];
 
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         list_del(&bo->head);
+      for (int i = 0; i < cache->num_buckets; i++) {
+         struct bo_cache_bucket *bucket = &cache->bucket[i];
 
-         bo_free(bo);
-      }
-   }
+         list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
+            list_del(&bo->head);
 
-   for (int i = 0; i < bufmgr->num_local_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->local_cache_bucket[i];
-
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         list_del(&bo->head);
-
-         bo_free(bo);
-      }
-   }
-
-   for (int i = 0; i < bufmgr->num_local_preferred_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->local_preferred_cache_bucket[i];
-
-      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
-         list_del(&bo->head);
-
-         bo_free(bo);
+            bo_free(bo);
+         }
       }
    }
 
@@ -1978,6 +1932,8 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
    bo->index = -1;
    bo->real.reusable = false;
    bo->real.imported = true;
+   /* Xe KMD expects at least 1-way coherency for imports */
+   bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT;
    bo->real.mmap_mode = IRIS_MMAP_NONE;
    bo->real.kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
    if (INTEL_DEBUG(DEBUG_CAPTURE_ALL))
@@ -2183,18 +2139,15 @@ iris_bo_export_gem_handle_for_device(struct iris_bo *bo, int drm_fd,
 static void
 add_bucket(struct iris_bufmgr *bufmgr, int size, enum iris_heap heap)
 {
-   int *num_buckets;
-   struct bo_cache_bucket *buckets;
-   bucket_info_for_heap(bufmgr, heap, &buckets, &num_buckets);
+   struct iris_bucket_cache *cache = &bufmgr->bucket_cache[heap];
+   unsigned int i = cache->num_buckets++;
 
-   unsigned int i = (*num_buckets)++;
+   list_inithead(&cache->bucket[i].head);
+   cache->bucket[i].size = size;
 
-   list_inithead(&buckets[i].head);
-   buckets[i].size = size;
-
-   assert(bucket_for_size(bufmgr, size, heap, 0) == &buckets[i]);
-   assert(bucket_for_size(bufmgr, size - 2048, heap, 0) == &buckets[i]);
-   assert(bucket_for_size(bufmgr, size + 1, heap, 0) != &buckets[i]);
+   assert(bucket_for_size(bufmgr, size, heap, 0) == &cache->bucket[i]);
+   assert(bucket_for_size(bufmgr, size - 2048, heap, 0) == &cache->bucket[i]);
+   assert(bucket_for_size(bufmgr, size + 1, heap, 0) != &cache->bucket[i]);
 }
 
 static void
@@ -2210,7 +2163,7 @@ init_cache_buckets(struct iris_bufmgr *bufmgr, enum iris_heap heap)
     * width/height alignment and rounding of sizes to pages will
     * get us useful cache hit rates anyway)
     */
-   add_bucket(bufmgr, PAGE_SIZE, heap);
+   add_bucket(bufmgr, PAGE_SIZE,     heap);
    add_bucket(bufmgr, PAGE_SIZE * 2, heap);
    add_bucket(bufmgr, PAGE_SIZE * 3, heap);
 
@@ -2221,22 +2174,6 @@ init_cache_buckets(struct iris_bufmgr *bufmgr, enum iris_heap heap)
       add_bucket(bufmgr, size + size * 1 / 4, heap);
       add_bucket(bufmgr, size + size * 2 / 4, heap);
       add_bucket(bufmgr, size + size * 3 / 4, heap);
-   }
-}
-
-static enum iris_mmap_mode
-iris_bo_alloc_aux_map_get_mmap_mode(struct iris_bufmgr *bufmgr,
-                                    enum iris_heap heap)
-{
-   switch (bufmgr->devinfo.kmd_type) {
-   case INTEL_KMD_TYPE_I915:
-      return heap != IRIS_HEAP_SYSTEM_MEMORY ||
-         bufmgr->devinfo.has_set_pat_uapi ?
-         IRIS_MMAP_WC : IRIS_MMAP_WB;
-   case INTEL_KMD_TYPE_XE:
-      return iris_xe_bo_flags_to_mmap_mode(bufmgr, heap, 0);
-   default:
-      return IRIS_MMAP_NONE;
    }
 }
 
@@ -2274,8 +2211,7 @@ intel_aux_map_buffer_alloc(void *driver_ctx, uint32_t size)
    bo->index = -1;
    bo->real.kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED |
                      EXEC_OBJECT_CAPTURE;
-   bo->real.mmap_mode = iris_bo_alloc_aux_map_get_mmap_mode(bufmgr,
-                                                            bo->real.heap);
+   bo->real.mmap_mode = heap_to_mmap_mode(bufmgr, bo->real.heap);
    bo->real.prime_fd = -1;
 
    buf->driver_bo = bo;
@@ -2434,9 +2370,8 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
                       IRIS_MEMZONE_OTHER_START,
                       (devinfo->gtt_size - _4GB) - IRIS_MEMZONE_OTHER_START);
 
-   init_cache_buckets(bufmgr, IRIS_HEAP_SYSTEM_MEMORY);
-   init_cache_buckets(bufmgr, IRIS_HEAP_DEVICE_LOCAL);
-   init_cache_buckets(bufmgr, IRIS_HEAP_DEVICE_LOCAL_PREFERRED);
+   for (int h = 0; h < IRIS_HEAP_MAX; h++)
+      init_cache_buckets(bufmgr, h);
 
    unsigned min_slab_order = 8;  /* 256 bytes */
    unsigned max_slab_order = 20; /* 1 MB (slab size = 2 MB) */
@@ -2617,4 +2552,24 @@ bool
 iris_bufmgr_use_global_vm_id(struct iris_bufmgr *bufmgr)
 {
    return bufmgr->use_global_vm;
+}
+
+/**
+ * Return the pat entry based on the bo heap and allocation flags.
+ */
+const struct intel_device_info_pat_entry *
+iris_heap_to_pat_entry(const struct intel_device_info *devinfo,
+                       enum iris_heap heap)
+{
+   switch (heap) {
+   case IRIS_HEAP_SYSTEM_MEMORY_CACHED_COHERENT:
+      return &devinfo->pat.cached_coherent;
+   case IRIS_HEAP_SYSTEM_MEMORY_UNCACHED:
+      return &devinfo->pat.writecombining;
+   case IRIS_HEAP_DEVICE_LOCAL:
+   case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
+      return &devinfo->pat.writecombining;
+   default:
+      unreachable("invalid heap for platforms using PAT entries");
+   }
 }

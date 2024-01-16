@@ -121,6 +121,7 @@ label(const char *str)
 %token <num> T_INT
 %token <num> T_HEX
 %token <num> T_CONTROL_REG
+%token <num> T_SQE_REG
 %token <str> T_LABEL_DECL
 %token <str> T_LABEL_REF
 %token <num> T_LITERAL
@@ -153,6 +154,8 @@ label(const char *str)
 %token <tok> T_OP_MOV
 %token <tok> T_OP_CWRITE
 %token <tok> T_OP_CREAD
+%token <tok> T_OP_SWRITE
+%token <tok> T_OP_SREAD
 %token <tok> T_OP_STORE
 %token <tok> T_OP_LOAD
 %token <tok> T_OP_BRNE
@@ -167,6 +170,7 @@ label(const char *str)
 %token <tok> T_LSHIFT
 %token <tok> T_REP
 %token <num> T_XMOV
+%token <num> T_SDS
 
 %type <num> reg
 %type <num> immediate
@@ -187,8 +191,8 @@ instr_or_label:    instr_r
 |                  T_LABEL_DECL   { decl_label($1); }
 
 /* instructions that can optionally have (rep) flag: */
-instr_r:           alu_instr        { instr->xmov = 0; }
-|                  T_XMOV alu_instr { instr->xmov = $1; }
+instr_r:           alu_instr           { instr->xmov = 0; }
+|                  T_XMOV alu_instr    { instr->xmov = $1; }
 |                  load_instr
 |                  store_instr
 
@@ -252,16 +256,22 @@ alu_instr:         alu_2src_instr
 |                  alu_clrsetbit_instr
 |                  alu_bitfield_instr
 
-load_op:           T_OP_LOAD      { new_instr(OPC_LOAD); }
-|                  T_OP_CREAD     { new_instr(OPC_CREAD); }
-store_op:          T_OP_STORE     { new_instr(OPC_STORE); }
-|                  T_OP_CWRITE    { new_instr(OPC_CWRITE); }
+load_op:           T_OP_LOAD           { new_instr(OPC_LOAD); }
+|                  T_OP_CREAD          { new_instr(OPC_CREAD); }
+|                  T_OP_SREAD          { new_instr(OPC_SREAD); }
+store_op:          T_OP_STORE          { new_instr(OPC_STORE); }
+|                  T_OP_CWRITE         { new_instr(OPC_CWRITE); instr->sds = 0; }
+|                  T_SDS T_OP_CWRITE   { new_instr(OPC_CWRITE); instr->sds = $1; }
+|                  T_OP_SWRITE         { new_instr(OPC_SWRITE); }
 
-load_instr:        load_op reg ',' '[' reg '+' immediate ']' ',' immediate {
-                       dst($2); src1($5); immed($7); bit($10);
+preincrement:
+|              '!'   { instr->preincrement = true; }
+
+load_instr:        load_op reg ',' '[' reg '+' immediate ']' preincrement {
+                       dst($2); src1($5); immed($7);
 }
-store_instr:       store_op reg ',' '[' reg '+' immediate ']' ',' immediate {
-                       src1($2); src2($5); immed($7); bit($10);
+store_instr:       store_op reg ',' '[' reg '+' immediate ']' preincrement {
+                       src1($2); src2($5); immed($7);
 }
 
 branch_op:         T_OP_BRNE      { new_instr(OPC_BRNE); }
@@ -286,4 +296,6 @@ immediate:         T_HEX
 |                  T_INT
 |                  T_CONTROL_REG
 |                  T_CONTROL_REG '+' immediate { $$ = $1 + $3; }
+|                  T_SQE_REG
+|                  T_SQE_REG '+' immediate { $$ = $1 + $3; }
 

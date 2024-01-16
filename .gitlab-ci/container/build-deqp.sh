@@ -8,16 +8,22 @@
 # DEBIAN_X86_64_TEST_VK_TAG
 # KERNEL_ROOTFS_TAG
 
-set -ex
+set -ex -o pipefail
+
+DEQP_VERSION=vulkan-cts-1.3.7.0
 
 git config --global user.email "mesa@example.com"
 git config --global user.name "Mesa CI"
 git clone \
     https://github.com/KhronosGroup/VK-GL-CTS.git \
-    -b vulkan-cts-1.3.7.0 \
+    -b $DEQP_VERSION \
     --depth 1 \
     /VK-GL-CTS
 pushd /VK-GL-CTS
+
+mkdir -p /deqp
+
+echo "dEQP base version $DEQP_VERSION" > /deqp/version-log
 
 # Patches to VulkanCTS may come from commits in their repo (listed in
 # cts_commits_to_backport) or patch files stored in our repo (in the patch
@@ -26,6 +32,17 @@ pushd /VK-GL-CTS
 # patches.
 
 cts_commits_to_backport=(
+    # Take multiview into account for task shader inv. stats
+    22aa3f4c59f6e1d4daebd5a8c9c05bce6cd3b63b
+
+    # Remove illegal mesh shader query tests
+    2a87f7b25dc27188be0f0a003b2d7aef69d9002e
+
+    # Relax fragment shader invocations result verifications
+    0d8bf6a2715f95907e9cf86a86876ff1f26c66fe
+
+    # Fix several issues in dynamic rendering basic tests
+    c5453824b498c981c6ba42017d119f5de02a3e34
 )
 
 for commit in "${cts_commits_to_backport[@]}"
@@ -48,12 +65,13 @@ do
   git am < $OLDPWD/.gitlab-ci/container/patches/$patch
 done
 
+echo "The following local patches are applied on top:" >> /deqp/version-log
+git log --reverse --oneline $DEQP_VERSION.. --format=%s | sed 's/^/- /' >> /deqp/version-log
+
 # --insecure is due to SSL cert failures hitting sourceforge for zlib and
 # libpng (sigh).  The archives get their checksums checked anyway, and git
 # always goes through ssh or https.
 python3 external/fetch_sources.py --insecure
-
-mkdir -p /deqp
 
 # Save the testlog stylesheets:
 cp doc/testlog-stylesheet/testlog.{css,xsl} /deqp
@@ -80,7 +98,7 @@ if [ "${DEQP_TARGET}" != 'android' ]; then
 fi
 
 cmake -S /VK-GL-CTS -B . -G Ninja \
-      -DDEQP_TARGET=${DEQP_TARGET:-x11_glx} \
+      -DDEQP_TARGET=${DEQP_TARGET:-default} \
       -DCMAKE_BUILD_TYPE=Release \
       $EXTRA_CMAKE_ARGS
 mold --run ninja
@@ -88,8 +106,6 @@ mold --run ninja
 if [ "${DEQP_TARGET}" = 'android' ]; then
     mv /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-android
 fi
-
-git -C /VK-GL-CTS describe --long > /deqp/version
 
 # Copy out the mustpass lists we want.
 mkdir /deqp/mustpass
@@ -132,8 +148,7 @@ rm -rf /deqp/external/openglcts/modules/cts-runner
 rm -rf /deqp/modules/internal
 rm -rf /deqp/execserver
 rm -rf /deqp/framework
-# shellcheck disable=SC2038,SC2185 # TODO: rewrite find
-find -iname '*cmake*' -o -name '*ninja*' -o -name '*.o' -o -name '*.a' | xargs rm -rf
+find . -depth \( -iname '*cmake*' -o -name '*ninja*' -o -name '*.o' -o -name '*.a' \) -exec rm -rf {} \;
 ${STRIP_CMD:-strip} external/vulkancts/modules/vulkan/deqp-vk
 ${STRIP_CMD:-strip} external/openglcts/modules/glcts
 ${STRIP_CMD:-strip} modules/*/deqp-*

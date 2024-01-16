@@ -17,13 +17,16 @@
 
 #include <sys/types.h>
 
+struct nak_compiler;
 struct nvk_instance;
 
 struct nvk_physical_device {
    struct vk_physical_device vk;
    struct nv_device_info info;
+   enum nvk_debug debug_flags;
    dev_t render_dev;
    dev_t primary_dev;
+   struct nak_compiler *nak;
    struct wsi_device wsi_device;
 
    uint8_t device_uuid[VK_UUID_SIZE];
@@ -31,12 +34,14 @@ struct nvk_physical_device {
    // TODO: add mapable VRAM heap if possible
    VkMemoryHeap mem_heaps[2];
    VkMemoryType mem_types[2];
-   uint8_t mem_heap_cnt;
-   uint8_t mem_type_cnt;
+   uint8_t mem_heap_count;
+   uint8_t mem_type_count;
 
    struct vk_sync_type syncobj_sync_type;
    const struct vk_sync_type *sync_types[2];
 };
+
+uint32_t nvk_min_cbuf_alignment(const struct nv_device_info *info);
 
 VK_DEFINE_HANDLE_CASTS(nvk_physical_device,
    vk.base,

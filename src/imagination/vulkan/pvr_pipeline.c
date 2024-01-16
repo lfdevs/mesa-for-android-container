@@ -2266,8 +2266,6 @@ pvr_create_renderpass_state(const VkGraphicsPipelineCreateInfo *const info)
 
    return (struct vk_render_pass_state){
       .attachment_aspects = attachment_aspects,
-      .render_pass = info->renderPass,
-      .subpass = info->subpass,
 
       /* TODO: This is only needed for VK_KHR_create_renderpass2 (or core 1.2),
        * which is not currently supported.
@@ -2299,6 +2297,7 @@ pvr_graphics_pipeline_init(struct pvr_device *device,
                                             &state,
                                             pCreateInfo,
                                             &rp_state,
+                                            0,
                                             &all_state,
                                             NULL,
                                             0,

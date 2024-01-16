@@ -672,6 +672,7 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
                              bool has_param_exports,
                              bool disable_streamout,
                              bool kill_pointsize,
+                             bool kill_layer,
                              bool force_vrs,
                              ac_nir_gs_output_info *output_info)
 {
@@ -760,6 +761,8 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
          uint64_t export_outputs = b.shader->info.outputs_written | VARYING_BIT_POS;
          if (kill_pointsize)
             export_outputs &= ~VARYING_BIT_PSIZ;
+         if (kill_layer)
+            export_outputs &= ~VARYING_BIT_LAYER;
 
          ac_nir_export_position(&b, gfx_level, clip_cull_mask, !has_param_exports,
                                 force_vrs, true, export_outputs, outputs.data, NULL);
@@ -833,6 +836,7 @@ ac_nir_lower_legacy_vs(nir_shader *nir,
                        bool export_primitive_id,
                        bool disable_streamout,
                        bool kill_pointsize,
+                       bool kill_layer,
                        bool force_vrs)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
@@ -867,6 +871,8 @@ ac_nir_lower_legacy_vs(nir_shader *nir,
    uint64_t export_outputs = nir->info.outputs_written | VARYING_BIT_POS;
    if (kill_pointsize)
       export_outputs &= ~VARYING_BIT_PSIZ;
+   if (kill_layer)
+      export_outputs &= ~VARYING_BIT_LAYER;
 
    ac_nir_export_position(&b, gfx_level, clip_cull_mask, !has_param_exports,
                           force_vrs, true, export_outputs, outputs.data, NULL);

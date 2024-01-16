@@ -35,7 +35,6 @@
 #include "draw/draw_private.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 
 #include "pipe/p_defines.h"
 
@@ -187,7 +186,7 @@ draw_mesh_prim_run(struct draw_context *draw,
    struct draw_mesh_prim *asmblr = &asmblr_mesh;
    unsigned start, i;
    unsigned max_primitives = input_prims->primitive_count;
-   unsigned max_verts = u_vertices_per_prim(input_prims->prim) * max_primitives;
+   unsigned max_verts = mesa_vertices_per_prim(input_prims->prim) * max_primitives;
 
    asmblr->output_prims = output_prims;
    asmblr->output_verts = output_verts;

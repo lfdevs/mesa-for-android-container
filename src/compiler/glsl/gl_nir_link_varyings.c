@@ -43,7 +43,6 @@
 #include "gl_nir_link_varyings.h"
 #include "gl_nir_linker.h"
 #include "linker_util.h"
-#include "nir_gl_types.h"
 #include "string_to_uint_map.h"
 
 #define SAFE_MASK_FROM_INDEX(i) (((i) >= 32) ? ~0 : ((1 << (i)) - 1))
@@ -4390,7 +4389,7 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
                              has_xfb_qualifiers, mem_ctx))
       return false;
 
-   return true;
+   return prog->data->LinkStatus != LINKING_FAILURE;
 }
 
 /**

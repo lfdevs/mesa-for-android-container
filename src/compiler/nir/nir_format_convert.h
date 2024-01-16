@@ -24,6 +24,7 @@
 #include "nir_builder.h"
 
 #include "util/format_rgb9e5.h"
+#include "util/macros.h"
 
 static inline nir_def *
 nir_shift_imm(nir_builder *b, nir_def *value, int left_shift)
@@ -335,10 +336,10 @@ nir_format_clamp_uint(nir_builder *b, nir_def *f, const unsigned *bits)
    nir_const_value max[NIR_MAX_VEC_COMPONENTS];
    memset(max, 0, sizeof(max));
    for (unsigned i = 0; i < f->num_components; i++) {
-      assert(bits[i] < 32);
-      max[i].u32 = (1 << bits[i]) - 1;
+      assert(bits[i] < 32 && bits[i] <= f->bit_size);
+      max[i].u32 = u_uintN_max(bits[i]);
    }
-   return nir_umin(b, f, nir_build_imm(b, f->num_components, 32, max));
+   return nir_umin(b, f, nir_u2uN(b, nir_build_imm(b, f->num_components, 32, max), f->bit_size));
 }
 
 /* Clamps a vector of sints so they don't extend beyond the given number of
@@ -354,12 +355,12 @@ nir_format_clamp_sint(nir_builder *b, nir_def *f, const unsigned *bits)
    memset(min, 0, sizeof(min));
    memset(max, 0, sizeof(max));
    for (unsigned i = 0; i < f->num_components; i++) {
-      assert(bits[i] < 32);
-      max[i].i32 = (1 << (bits[i] - 1)) - 1;
-      min[i].i32 = -(1 << (bits[i] - 1));
+      assert(bits[i] < 32 && bits[i] <= f->bit_size);
+      max[i].i32 = u_intN_max(bits[i]);
+      min[i].i32 = u_intN_min(bits[i]);
    }
-   f = nir_imin(b, f, nir_build_imm(b, f->num_components, 32, max));
-   f = nir_imax(b, f, nir_build_imm(b, f->num_components, 32, min));
+   f = nir_imin(b, f, nir_i2iN(b, nir_build_imm(b, f->num_components, 32, max), f->bit_size));
+   f = nir_imax(b, f, nir_i2iN(b, nir_build_imm(b, f->num_components, 32, min), f->bit_size));
 
    return f;
 }

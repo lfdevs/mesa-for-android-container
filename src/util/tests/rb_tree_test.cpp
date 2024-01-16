@@ -28,6 +28,8 @@
 #include <gtest/gtest.h>
 #include <limits.h>
 
+#include "macros.h"
+
 /* A list of 100 random numbers from 1 to 100.  The number 30 is explicitly
  * missing from this list.
  */
@@ -45,8 +47,6 @@ int test_numbers[] = {
 };
 
 #define NON_EXISTANT_NUMBER 30
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*a))
 
 struct rb_test_node {
     int key;
@@ -282,4 +282,87 @@ TEST(RBTreeTest, FindFirstOfMiddle)
     ASSERT_NE(nullptr, prev);
 
     EXPECT_NE(rb_test_node_cmp(prev, n), 0);
+}
+
+struct uinterval_test_node {
+    struct uinterval_node node;
+};
+
+static void
+validate_interval_search(struct rb_tree *tree,
+                         struct uinterval_test_node *nodes,
+                         int first_node, int last_node,
+                         unsigned start,
+                         unsigned end)
+{
+    /* Count the number of intervals intersecting */
+    unsigned actual_count = 0;
+    for (int i = first_node; i <= last_node; i++) {
+        if (nodes[i].node.interval.start <= end &&
+            nodes[i].node.interval.end >= start)
+            actual_count++;
+    }
+
+    /* iterate over matching intervals */
+    struct uinterval interval = { start, end };
+    unsigned max_val = 0;
+    struct uinterval_test_node *prev = NULL;
+    unsigned count = 0;
+    uinterval_tree_foreach (struct uinterval_test_node, n, interval, tree, node) {
+        assert(n->node.interval.start <= end &&
+               n->node.interval.end >= start);
+
+        /* Everything should be in increasing order */
+        assert(n->node.interval.start >= max_val);
+        if (n->node.interval.start > max_val) {
+            max_val = n->node.interval.start;
+        } else {
+            /* Things should be stable, i.e., given equal keys, they should
+             * show up in the list in order of insertion.  We insert them
+             * in the order they are in in the array.
+             */
+            assert(prev == NULL || prev < n);
+        }
+
+        prev = n;
+        count++;
+    }
+
+    assert(count == actual_count);
+}
+
+TEST(IntervalTreeTest, InsertAndSearch)
+{
+    struct uinterval_test_node nodes[ARRAY_SIZE(test_numbers) / 2];
+    struct rb_tree tree;
+
+    rb_tree_init(&tree);
+
+    for (unsigned i = 0; 2 * i < ARRAY_SIZE(test_numbers); i++) {
+        nodes[i].node.interval.start = MIN2(test_numbers[2 * i], test_numbers[2 * i + 1]);
+        nodes[i].node.interval.end = MAX2(test_numbers[2 * i], test_numbers[2 * i + 1]);
+        uinterval_tree_insert(&tree, &nodes[i].node);
+        rb_tree_validate(&tree);
+        validate_interval_search(&tree, nodes, 0, i, 0, 100);
+        validate_interval_search(&tree, nodes, 0, i, 0, 50);
+        validate_interval_search(&tree, nodes, 0, i, 50, 100);
+        validate_interval_search(&tree, nodes, 0, i, 0, 2);
+    }
+
+    for (unsigned i = 0; 2 * i < ARRAY_SIZE(test_numbers); i++) {
+        uinterval_tree_remove(&tree, &nodes[i].node);
+        rb_tree_validate(&tree);
+        validate_interval_search(&tree, nodes, i + 1,
+                                 ARRAY_SIZE(test_numbers) / 2 - 1, 
+                                 0, 100);
+        validate_interval_search(&tree, nodes, i + 1,
+                                 ARRAY_SIZE(test_numbers) / 2 - 1, 
+                                 0, 50);
+        validate_interval_search(&tree, nodes, i + 1,
+                                 ARRAY_SIZE(test_numbers) / 2 - 1, 
+                                 50, 100);
+        validate_interval_search(&tree, nodes, i + 1,
+                                 ARRAY_SIZE(test_numbers) / 2 - 1, 
+                                 0, 2);
+    }
 }

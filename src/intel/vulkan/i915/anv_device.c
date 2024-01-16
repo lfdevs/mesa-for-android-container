@@ -206,6 +206,18 @@ anv_i915_physical_device_init_memory_types(struct anv_physical_device *device)
       };
    }
 
+   if (device->has_protected_contexts) {
+      /* Add a memory type for protected buffers, local and not host
+       * visible.
+       */
+      device->memory.types[device->memory.type_count++] =
+         (struct anv_memory_type) {
+            .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                             VK_MEMORY_PROPERTY_PROTECTED_BIT,
+            .heapIndex = 0,
+      };
+   }
+
    return VK_SUCCESS;
 }
 
@@ -252,6 +264,8 @@ anv_i915_device_setup_context(struct anv_device *device,
                               const VkDeviceCreateInfo *pCreateInfo,
                               const uint32_t num_queues)
 {
+   device->protected_session_id = I915_PROTECTED_CONTENT_DEFAULT_SESSION;
+
    if (device->physical->has_vm_control)
       return anv_i915_device_setup_vm(device);
 
@@ -263,6 +277,7 @@ anv_i915_device_setup_context(struct anv_device *device,
       assert(num_queues <= 64);
       enum intel_engine_class engine_classes[64];
       int engine_count = 0;
+      enum intel_gem_create_context_flags flags = 0;
       for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
          const VkDeviceQueueCreateInfo *queueCreateInfo =
             &pCreateInfo->pQueueCreateInfos[i];
@@ -274,8 +289,12 @@ anv_i915_device_setup_context(struct anv_device *device,
 
          for (uint32_t j = 0; j < queueCreateInfo->queueCount; j++)
             engine_classes[engine_count++] = queue_family->engine_class;
+
+         if (pCreateInfo->pQueueCreateInfos[i].flags &
+             VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT)
+            flags |= INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG;
       }
-      if (!intel_gem_create_context_engines(device->fd, 0 /* flags */,
+      if (!intel_gem_create_context_engines(device->fd, flags,
                                             physical_device->engine_info,
                                             engine_count, engine_classes,
                                             device->vm_id,

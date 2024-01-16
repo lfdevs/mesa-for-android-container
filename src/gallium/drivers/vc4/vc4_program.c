@@ -31,9 +31,9 @@
 #include "util/ralloc.h"
 #include "util/hash_table.h"
 #include "tgsi/tgsi_dump.h"
+#include "compiler/glsl_types.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
-#include "compiler/nir_types.h"
 #include "nir/tgsi_to_nir.h"
 #include "vc4_context.h"
 #include "vc4_qpu.h"
@@ -1565,11 +1565,9 @@ ntq_setup_inputs(struct vc4_compile *c)
 
         for (unsigned i = 0; i < num_entries; i++) {
                 nir_variable *var = vars[i];
-                unsigned array_len = MAX2(glsl_get_length(var->type), 1);
+                assert(glsl_type_is_vector_or_scalar(var->type));
                 unsigned loc = var->data.driver_location;
 
-                assert(array_len == 1);
-                (void)array_len;
                 resize_qreg_array(c, &c->inputs, &c->inputs_array_size,
                                   (loc + 1) * 4);
 
@@ -1593,11 +1591,8 @@ static void
 ntq_setup_outputs(struct vc4_compile *c)
 {
         nir_foreach_shader_out_variable(var, c->s) {
-                unsigned array_len = MAX2(glsl_get_length(var->type), 1);
+                assert(glsl_type_is_vector_or_scalar(var->type));
                 unsigned loc = var->data.driver_location * 4;
-
-                assert(array_len == 1);
-                (void)array_len;
 
                 for (int i = 0; i < 4; i++)
                         add_output(c, loc + i, var->data.location, i);
@@ -2428,7 +2423,9 @@ precompile_all_fs_inputs(nir_shader *s,
         /* Assume all VS outputs will actually be used by the FS and output
          * them (the two sides have to match exactly) */
         nir_foreach_shader_out_variable(var, s) {
-                const int array_len = MAX2(glsl_get_length(var->type), 1);
+                const int array_len =
+                        glsl_type_is_vector_or_scalar(var->type) ?
+                        1 : glsl_get_length(var->type);
                 for (int j = 0; j < array_len; j++) {
                         const int slot = var->data.location + j;
                         const int num_components =

@@ -127,6 +127,7 @@ static const nir_shader_compiler_options ir3_base_options = {
 
 struct ir3_compiler *
 ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
+                    const struct fd_dev_info *dev_info,
                     const struct ir3_compiler_options *options)
 {
    struct ir3_compiler *compiler = rzalloc(NULL, struct ir3_compiler);
@@ -146,7 +147,6 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->options = *options;
 
    /* TODO see if older GPU's were different here */
-   const struct fd_dev_info *dev_info = fd_dev_info(compiler->dev_id);
    compiler->branchstack_size = 64;
    compiler->wave_granularity = dev_info->wave_granularity;
    compiler->max_waves = 16;
@@ -290,6 +290,8 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
       compiler->nir_options.has_sudot_4x8 = true,
       compiler->nir_options.has_udot_4x8 = dev_info->a6xx.has_dp2acc;
       compiler->nir_options.has_sudot_4x8 = dev_info->a6xx.has_dp2acc;
+      compiler->nir_options.has_udot_4x8_sat = dev_info->a6xx.has_dp2acc;
+      compiler->nir_options.has_sudot_4x8_sat = dev_info->a6xx.has_dp2acc;
    } else if (compiler->gen >= 3 && compiler->gen <= 5) {
       compiler->nir_options.vertex_id_zero_based = true;
    } else if (compiler->gen <= 2) {

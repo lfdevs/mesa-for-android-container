@@ -117,3 +117,6 @@ spec@arb_timer_query@timestamp-get
 # ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49445862
 # ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49588884
 glx@glx_ext_no_config_context@no fbconfig
+
+# See https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25861#note_2140498
+spec@ext_timer_query@time-elapsed

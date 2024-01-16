@@ -602,14 +602,14 @@ brw_nir_lower_fs_outputs(nir_shader *nir)
 })
 
 void
-brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler)
+brw_nir_optimize(nir_shader *nir, bool is_scalar,
+                 const struct intel_device_info *devinfo)
 {
    bool progress;
    unsigned lower_flrp =
       (nir->options->lower_flrp16 ? 16 : 0) |
       (nir->options->lower_flrp32 ? 32 : 0) |
       (nir->options->lower_flrp64 ? 64 : 0);
-   const bool is_scalar = compiler->scalar_stage[nir->info.stage];
 
    do {
       progress = false;
@@ -680,7 +680,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler)
           nir->info.stage == MESA_SHADER_TESS_EVAL);
       OPT(nir_opt_peephole_select, 0, !is_vec4_tessellation, false);
       OPT(nir_opt_peephole_select, 8, !is_vec4_tessellation,
-          compiler->devinfo->ver >= 6);
+          devinfo->ver >= 6);
 
       OPT(nir_opt_intrinsics);
       OPT(nir_opt_idiv_const, 32);
@@ -689,7 +689,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler)
       /* BFI2 did not exist until Gfx7, so there's no point in trying to
        * optimize an instruction that should not get generated.
        */
-      if (compiler->devinfo->ver >= 7)
+      if (devinfo->ver >= 7)
          OPT(nir_opt_reassociate_bfi);
 
       OPT(nir_lower_constant_convert_alu_types);
@@ -709,8 +709,8 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler)
       }
 
       OPT(nir_opt_dead_cf);
-      if (OPT(nir_opt_trivial_continues)) {
-         /* If nir_opt_trivial_continues makes progress, then we need to clean
+      if (OPT(nir_opt_loop)) {
+         /* If nir_opt_loop makes progress, then we need to clean
           * things up if we want any hope of nir_opt_if or nir_opt_loop_unroll
           * to make progress.
           */
@@ -961,7 +961,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    OPT(nir_split_var_copies);
    OPT(nir_split_struct_vars, nir_var_function_temp);
 
-   brw_nir_optimize(nir, compiler);
+   brw_nir_optimize(nir, is_scalar, devinfo);
 
    OPT(nir_lower_doubles, opts->softfp64, nir->options->lower_doubles_options);
    if (OPT(nir_lower_int64_float_conversions)) {
@@ -1044,7 +1044,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       OPT(brw_nir_clamp_per_vertex_loads);
 
    /* Get rid of split copies */
-   brw_nir_optimize(nir, compiler);
+   brw_nir_optimize(nir, is_scalar, devinfo);
 }
 
 static bool
@@ -1162,6 +1162,8 @@ void
 brw_nir_link_shaders(const struct brw_compiler *compiler,
                      nir_shader *producer, nir_shader *consumer)
 {
+   const struct intel_device_info *devinfo = compiler->devinfo;
+
    if (producer->info.stage == MESA_SHADER_MESH &&
        consumer->info.stage == MESA_SHADER_FRAGMENT) {
       uint64_t fs_inputs = 0, ms_outputs = 0;
@@ -1204,12 +1206,12 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
    if (p_is_scalar && c_is_scalar) {
       NIR_PASS(_, producer, nir_lower_io_to_scalar_early, nir_var_shader_out);
       NIR_PASS(_, consumer, nir_lower_io_to_scalar_early, nir_var_shader_in);
-      brw_nir_optimize(producer, compiler);
-      brw_nir_optimize(consumer, compiler);
+      brw_nir_optimize(producer, p_is_scalar, devinfo);
+      brw_nir_optimize(consumer, c_is_scalar, devinfo);
    }
 
    if (nir_link_opt_varyings(producer, consumer))
-      brw_nir_optimize(consumer, compiler);
+      brw_nir_optimize(consumer, c_is_scalar, devinfo);
 
    NIR_PASS(_, producer, nir_remove_dead_variables, nir_var_shader_out, NULL);
    NIR_PASS(_, consumer, nir_remove_dead_variables, nir_var_shader_in, NULL);
@@ -1238,8 +1240,8 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
                   brw_nir_no_indirect_mask(compiler, consumer->info.stage),
                   UINT32_MAX);
 
-      brw_nir_optimize(producer, compiler);
-      brw_nir_optimize(consumer, compiler);
+      brw_nir_optimize(producer, p_is_scalar, devinfo);
+      brw_nir_optimize(consumer, c_is_scalar, devinfo);
 
       if (producer->info.stage == MESA_SHADER_MESH &&
             consumer->info.stage == MESA_SHADER_FRAGMENT) {
@@ -1587,20 +1589,20 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    if (gl_shader_stage_can_set_fragment_shading_rate(nir->info.stage))
       NIR_PASS(_, nir, brw_nir_lower_shading_rate_output);
 
-   brw_nir_optimize(nir, compiler);
+   brw_nir_optimize(nir, is_scalar, devinfo);
 
    if (is_scalar && nir_shader_has_local_variables(nir)) {
       OPT(nir_lower_vars_to_explicit_types, nir_var_function_temp,
           glsl_get_natural_size_align_bytes);
       OPT(nir_lower_explicit_io, nir_var_function_temp,
           nir_address_format_32bit_offset);
-      brw_nir_optimize(nir, compiler);
+      brw_nir_optimize(nir, is_scalar, devinfo);
    }
 
    brw_vectorize_lower_mem_access(nir, compiler, robust_flags);
 
    if (OPT(nir_lower_int64))
-      brw_nir_optimize(nir, compiler);
+      brw_nir_optimize(nir, is_scalar, devinfo);
 
    if (devinfo->ver >= 6) {
       /* Try and fuse multiply-adds, if successful, run shrink_vectors to
@@ -1658,11 +1660,13 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    } while (progress);
 
 
-   if (OPT(brw_nir_lower_conversions)) {
+   if (OPT(nir_lower_fp16_casts, nir_lower_fp16_split_fp64)) {
       if (OPT(nir_lower_int64)) {
-         brw_nir_optimize(nir, compiler);
+         brw_nir_optimize(nir, is_scalar, devinfo);
       }
    }
+
+   OPT(brw_nir_lower_conversions);
 
    if (is_scalar)
       OPT(nir_lower_alu_to_scalar, NULL, NULL);
@@ -1705,7 +1709,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_lower_subgroups, &subgroups_options);
 
       if (OPT(nir_lower_int64))
-         brw_nir_optimize(nir, compiler);
+         brw_nir_optimize(nir, is_scalar, devinfo);
    }
 
    /* Do this only after the last opt_gcm. GCM will undo this lowering. */
@@ -1762,7 +1766,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
     */
    if (nir->info.stage == MESA_SHADER_MESH ||
        nir->info.stage == MESA_SHADER_TASK)
-      brw_nir_adjust_payload(nir, compiler);
+      brw_nir_adjust_payload(nir);
 
    nir_trivialize_registers(nir);
 
@@ -1892,8 +1896,10 @@ brw_nir_apply_key(nir_shader *nir,
    if (key->limit_trig_input_range)
       OPT(brw_nir_limit_trig_input_range_workaround);
 
-   if (progress)
-      brw_nir_optimize(nir, compiler);
+   if (progress) {
+      const bool is_scalar = compiler->scalar_stage[nir->info.stage];
+      brw_nir_optimize(nir, is_scalar, compiler->devinfo);
+   }
 }
 
 enum brw_conditional_mod

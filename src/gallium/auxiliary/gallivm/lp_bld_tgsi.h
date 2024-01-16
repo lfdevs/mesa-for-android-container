@@ -267,6 +267,7 @@ struct lp_build_tgsi_params {
    LLVMValueRef const_sizes_ptr;
    const struct lp_bld_tgsi_system_values *system_values;
    const LLVMValueRef (*inputs)[4];
+   int num_inputs;
    LLVMTypeRef context_type;
    LLVMValueRef context_ptr;
    LLVMTypeRef resources_type;

@@ -187,33 +187,14 @@ TESShader::do_scan_instruction(nir_instr *instr)
       break;
    case nir_intrinsic_store_output: {
       int driver_location = nir_intrinsic_base(intr);
-      int location = nir_intrinsic_io_semantics(intr).location;
-      auto semantic = r600_get_varying_semantic(location);
-      tgsi_semantic name = (tgsi_semantic)semantic.first;
-      unsigned sid = semantic.second;
+      auto location = static_cast<gl_varying_slot>(nir_intrinsic_io_semantics(intr).location);
       auto write_mask = nir_intrinsic_write_mask(intr);
 
       if (location == VARYING_SLOT_LAYER)
          write_mask = 4;
 
-      ShaderOutput output(driver_location, name, write_mask);
-      output.set_sid(sid);
+      ShaderOutput output(driver_location, write_mask, location);
 
-      switch (location) {
-      case VARYING_SLOT_PSIZ:
-      case VARYING_SLOT_POS:
-      case VARYING_SLOT_CLIP_VERTEX:
-      case VARYING_SLOT_EDGE: {
-         break;
-      }
-      case VARYING_SLOT_CLIP_DIST0:
-      case VARYING_SLOT_CLIP_DIST1:
-      case VARYING_SLOT_VIEWPORT:
-      case VARYING_SLOT_LAYER:
-      case VARYING_SLOT_VIEW_INDEX:
-      default:
-         output.set_is_param(true);
-      }
       add_output(output);
       break;
    }

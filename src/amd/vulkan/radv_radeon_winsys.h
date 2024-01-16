@@ -184,8 +184,10 @@ struct radeon_winsys_ctx;
 
 struct radeon_winsys_bo {
    uint64_t va;
+   /* buffer is created with AMDGPU_GEM_CREATE_VM_ALWAYS_VALID */
    bool is_local;
    bool vram_no_cpu_access;
+   /* buffer is added to the BO list of all submissions */
    bool use_global_list;
    enum radeon_bo_domain initial_domain;
 };
@@ -345,10 +347,16 @@ radv_buffer_get_va(const struct radeon_winsys_bo *bo)
    return bo->va;
 }
 
+static inline bool
+radv_buffer_is_resident(const struct radeon_winsys_bo *bo)
+{
+   return bo->use_global_list || bo->is_local;
+}
+
 static inline void
 radv_cs_add_buffer(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, struct radeon_winsys_bo *bo)
 {
-   if (bo->use_global_list)
+   if (radv_buffer_is_resident(bo))
       return;
 
    ws->cs_add_buffer(cs, bo);

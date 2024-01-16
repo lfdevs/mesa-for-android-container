@@ -82,7 +82,7 @@ vir_opt_small_immediates(struct v3d_compile *c)
                          */
                         struct v3d_qpu_sig new_sig = inst->qpu.sig;
                         uint32_t sig_packed;
-                        if (c->devinfo->ver <= 42) {
+                        if (c->devinfo->ver == 42) {
                                 new_sig.small_imm_b = true;
                         } else {
                                if (vir_is_add(inst)) {

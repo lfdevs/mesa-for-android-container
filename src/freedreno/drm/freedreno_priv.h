@@ -108,6 +108,9 @@ struct fd_device_funcs {
     */
    struct fd_bo *(*bo_from_handle)(struct fd_device *dev, uint32_t size,
                                    uint32_t handle);
+   uint32_t (*handle_from_dmabuf)(struct fd_device *dev, int fd);
+   struct fd_bo *(*bo_from_dmabuf)(struct fd_device *dev, int fd);
+   void (*bo_close_handle)(struct fd_bo *bo);
 
    struct fd_pipe *(*pipe_new)(struct fd_device *dev, enum fd_pipe_id id,
                                unsigned prio);
@@ -421,10 +424,12 @@ fd_dev_count_deferred_cmds(struct fd_device *dev)
 
 struct fd_bo_funcs {
    int (*offset)(struct fd_bo *bo, uint64_t *offset);
+   void *(*map)(struct fd_bo *bo);
    int (*cpu_prep)(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op);
    int (*madvise)(struct fd_bo *bo, int willneed);
    uint64_t (*iova)(struct fd_bo *bo);
    void (*set_name)(struct fd_bo *bo, const char *fmt, va_list ap);
+   int (*dmabuf)(struct fd_bo *bo);
 
    /**
     * Optional hook that is called before ->destroy().  In the case of
@@ -450,9 +455,13 @@ struct fd_bo_funcs {
     * Optional, if upload is supported, should upload be preferred?
     */
    bool (*prefer_upload)(struct fd_bo *bo, unsigned len);
+
+   void (*set_metadata)(struct fd_bo *bo, void *metadata, uint32_t metadata_size);
+   int (*get_metadata)(struct fd_bo *bo, void *metadata, uint32_t metadata_size);
 };
 
 void fd_bo_add_fence(struct fd_bo *bo, struct fd_fence *fence);
+void *fd_bo_map_os_mmap(struct fd_bo *bo);
 
 enum fd_bo_state {
    FD_BO_STATE_IDLE,
@@ -466,6 +475,10 @@ void fd_bo_fini_fences(struct fd_bo *bo);
 void fd_bo_fini_common(struct fd_bo *bo);
 
 struct fd_bo *fd_bo_new_ring(struct fd_device *dev, uint32_t size);
+
+uint32_t fd_handle_from_dmabuf_drm(struct fd_device *dev, int fd);
+struct fd_bo *fd_bo_from_dmabuf_drm(struct fd_device *dev, int fd);
+void fd_bo_close_handle_drm(struct fd_bo *bo);
 
 #define enable_debug 0 /* TODO make dynamic */
 
@@ -543,6 +556,12 @@ VG_BO_OBTAIN(struct fd_bo *bo)
       VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, 1);
    }
 }
+/* special case for fd_bo_upload */
+static inline void
+VG_BO_MAPPED(struct fd_bo *bo)
+{
+   VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, 1);
+}
 #else
 static inline void
 VG_BO_ALLOC(struct fd_bo *bo)
@@ -558,6 +577,10 @@ VG_BO_RELEASE(struct fd_bo *bo)
 }
 static inline void
 VG_BO_OBTAIN(struct fd_bo *bo)
+{
+}
+static inline void
+VG_BO_MAPPED(struct fd_bo *bo)
 {
 }
 #endif

@@ -123,6 +123,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .KHR_maintenance3                      = true,
    .KHR_maintenance4                      = true,
    .KHR_maintenance5                      = true,
+   .KHR_maintenance6                      = true,
    .KHR_map_memory2                       = true,
    .KHR_multiview                         = true,
    .KHR_push_descriptor                   = true,
@@ -603,6 +604,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_ycbcr_image_arrays */
       .ycbcrImageArrays = true,
 
+      /* maintenance6 */
+      .maintenance6 = true,
+
       /* VK_AMDX_shader_enqueue */
 #ifdef VK_ENABLE_BETA_EXTENSIONS
       .shaderEnqueue = true,
@@ -661,6 +665,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
 
    int texel_buffer_alignment = device->pscreen->get_param(device->pscreen, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT);
 
+   STATIC_ASSERT(sizeof(struct lp_descriptor) <= 256);
    *p = (struct vk_properties) {
       /* Vulkan 1.0 */
       .apiVersion = LVP_API_VERSION,
@@ -909,6 +914,9 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .nonStrictSinglePixelWideLinesUseParallelogram = false,
       .nonStrictWideLinesUseParallelogram = false,
 
+      /* maintenance6 */
+      .maxCombinedImageSamplerDescriptorCount = 3,
+
       /* VK_EXT_extended_dynamic_state3 */
       .dynamicPrimitiveTopologyUnrestricted = VK_TRUE,
 
@@ -968,7 +976,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .inputAttachmentDescriptorSize = sizeof(struct lp_descriptor),
       .accelerationStructureDescriptorSize = 0,
       .maxSamplerDescriptorBufferRange = 1<<27, //spec minimum
-      .maxResourceDescriptorBufferRange = 1<<27, //spec minimum
+      .maxResourceDescriptorBufferRange = 1<<28, //spec minimum
       .resourceDescriptorBufferAddressSpaceSize = 1<<27, //spec minimum
       .samplerDescriptorBufferAddressSpaceSize = 1<<27, //spec minimum
       .descriptorBufferAddressSpaceSize = 1<<27, //spec minimum
@@ -1059,6 +1067,9 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       p->maxVertexAttribDivisor = UINT32_MAX;
    else
       p->maxVertexAttribDivisor = 1;
+
+   /* maintenance6 */
+   p->blockTexelViewCompatibleMultipleLayers = true,
 
    /* VK_EXT_shader_object */
    /* this is basically unsupported */
@@ -1371,28 +1382,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL lvp_GetInstanceProcAddr(
 PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
    VkInstance                                  instance,
-   const char*                                 pName);
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
-   VkInstance                                  instance,
    const char*                                 pName)
 {
    return lvp_GetInstanceProcAddr(instance, pName);
-}
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetPhysicalDeviceProcAddr(
-   VkInstance                                  _instance,
-   const char*                                 pName);
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetPhysicalDeviceProcAddr(
-   VkInstance                                  _instance,
-   const char*                                 pName)
-{
-   LVP_FROM_HANDLE(lvp_instance, instance, _instance);
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
 }
 
 static void
@@ -2019,6 +2011,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindBufferMemory2(VkDevice _device,
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       LVP_FROM_HANDLE(lvp_device_memory, mem, pBindInfos[i].memory);
       LVP_FROM_HANDLE(lvp_buffer, buffer, pBindInfos[i].buffer);
+      VkBindMemoryStatusKHR *status = (void*)vk_find_struct_const(&pBindInfos[i], BIND_MEMORY_STATUS_KHR);
 
       buffer->pmem = mem->pmem;
       buffer->offset = pBindInfos[i].memoryOffset;
@@ -2026,6 +2019,8 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindBufferMemory2(VkDevice _device,
                                              buffer->bo,
                                              mem->pmem,
                                              pBindInfos[i].memoryOffset);
+      if (status)
+         *status->pResult = VK_SUCCESS;
    }
    return VK_SUCCESS;
 }
@@ -2060,10 +2055,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
                               const VkBindImageMemoryInfo *pBindInfos)
 {
    LVP_FROM_HANDLE(lvp_device, device, _device);
+   VkResult res = VK_SUCCESS;
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       const VkBindImageMemoryInfo *bind_info = &pBindInfos[i];
       LVP_FROM_HANDLE(lvp_device_memory, mem, bind_info->memory);
       LVP_FROM_HANDLE(lvp_image, image, bind_info->image);
+      VkBindMemoryStatusKHR *status = (void*)vk_find_struct_const(&pBindInfos[i], BIND_MEMORY_STATUS_KHR);
       bool did_bind = false;
 
       vk_foreach_struct_const(s, bind_info->pNext) {
@@ -2082,6 +2079,8 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
                                                    image->planes[0].pmem,
                                                    image->planes[0].memory_offset);
             did_bind = true;
+            if (status)
+               *status->pResult = VK_SUCCESS;
             break;
          }
          default:
@@ -2098,19 +2097,26 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
             uint8_t plane = lvp_image_aspects_to_plane(image, plane_info->planeAspect);
             result = lvp_image_plane_bind(device, &image->planes[plane],
                                           mem, bind_info->memoryOffset, &offset_B);
+            if (status)
+               *status->pResult = result;
             if (result != VK_SUCCESS)
                return result;
          } else {
+            VkResult fail = VK_SUCCESS;
             for (unsigned plane = 0; plane < image->plane_count; plane++) {
                result = lvp_image_plane_bind(device, &image->planes[plane],
                                              mem, bind_info->memoryOffset, &offset_B);
+               if (status)
+                  *status->pResult = res;
                if (result != VK_SUCCESS)
-                  return result;
+                  fail = result;
             }
+            if (fail != VK_SUCCESS)
+               return fail;
          }
       }
    }
-   return VK_SUCCESS;
+   return res;
 }
 
 #ifdef PIPE_MEMORY_FD
@@ -2271,7 +2277,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
    simple_mtx_unlock(&device->queue.lock);
 
    lp_jit_sampler_from_pipe(&sampler->desc.sampler, &state);
-   sampler->desc.sampler_index = sampler->texture_handle->sampler_index;
+   sampler->desc.texture.sampler_index = sampler->texture_handle->sampler_index;
 
    *pSampler = lvp_sampler_to_handle(sampler);
 
@@ -2296,60 +2302,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroySampler(
    vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
 }
 
-/* vk_icd.h does not declare this function, so we declare it here to
- * suppress Wmissing-prototypes.
- */
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion);
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it is
-    *         linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 5u);
-   return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePrivateDataSlotEXT(
+VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePrivateDataSlot(
    VkDevice                                    _device,
    const VkPrivateDataSlotCreateInfo*          pCreateInfo,
    const VkAllocationCallbacks*                pAllocator,
@@ -2360,7 +2313,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePrivateDataSlotEXT(
                                       pPrivateDataSlot);
 }
 
-VKAPI_ATTR void VKAPI_CALL lvp_DestroyPrivateDataSlotEXT(
+VKAPI_ATTR void VKAPI_CALL lvp_DestroyPrivateDataSlot(
    VkDevice                                    _device,
    VkPrivateDataSlot                           privateDataSlot,
    const VkAllocationCallbacks*                pAllocator)
@@ -2369,7 +2322,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyPrivateDataSlotEXT(
    vk_private_data_slot_destroy(&device->vk, privateDataSlot, pAllocator);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL lvp_SetPrivateDataEXT(
+VKAPI_ATTR VkResult VKAPI_CALL lvp_SetPrivateData(
    VkDevice                                    _device,
    VkObjectType                                objectType,
    uint64_t                                    objectHandle,
@@ -2382,7 +2335,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_SetPrivateDataEXT(
                                           data);
 }
 
-VKAPI_ATTR void VKAPI_CALL lvp_GetPrivateDataEXT(
+VKAPI_ATTR void VKAPI_CALL lvp_GetPrivateData(
    VkDevice                                    _device,
    VkObjectType                                objectType,
    uint64_t                                    objectHandle,
@@ -2573,7 +2526,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetCalibratedTimestampsEXT(
    return VK_SUCCESS;
 }
 
-VKAPI_ATTR void VKAPI_CALL lvp_GetDeviceGroupPeerMemoryFeaturesKHR(
+VKAPI_ATTR void VKAPI_CALL lvp_GetDeviceGroupPeerMemoryFeatures(
     VkDevice device,
     uint32_t heapIndex,
     uint32_t localDeviceIndex,

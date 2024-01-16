@@ -22,7 +22,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "program/prog_instruction.h"
 #include "nir.h"
 #include "nir_builder.h"
 

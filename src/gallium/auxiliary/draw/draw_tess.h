@@ -32,7 +32,7 @@
 #include "tgsi/tgsi_scan.h"
 
 struct draw_context;
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 
 #define NUM_PATCH_INPUTS 32
 #define NUM_TCS_INPUTS (PIPE_MAX_SHADER_INPUTS - NUM_PATCH_INPUTS)
@@ -66,7 +66,7 @@ struct draw_tess_ctrl_shader {
    unsigned input_vertex_stride;
    const float (*input)[4];
    const struct tgsi_shader_info *input_info;
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    struct draw_tcs_inputs *tcs_input;
    struct draw_tcs_outputs *tcs_output;
    struct lp_jit_resources *jit_resources;
@@ -94,7 +94,7 @@ struct draw_tess_eval_shader {
    const float (*input)[4];
    const struct tgsi_shader_info *input_info;
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    struct draw_tes_inputs *tes_input;
    struct lp_jit_resources *jit_resources;
    struct draw_tes_llvm_variant *current_variant;
@@ -119,7 +119,7 @@ int draw_tess_eval_shader_run(struct draw_tess_eval_shader *shader,
                               struct draw_prim_info *output_prims,
                               uint16_t **elts_out);
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 void draw_tcs_set_current_variant(struct draw_tess_ctrl_shader *shader,
                                   struct draw_tcs_llvm_variant *variant);
 void draw_tes_set_current_variant(struct draw_tess_eval_shader *shader,

@@ -45,21 +45,24 @@
   rules:
     - !reference [.no_scheduled_pipelines-rules, rules]
     - changes: &core_file_list
-      - .gitlab-ci.yml
-      - .gitlab-ci/**/*
-      - include/**/*
-      - meson.build
-      - .gitattributes
-      - src/*
-      - src/compiler/**/*
-      - src/drm-shim/**/*
-      - src/gbm/**/*
-      - src/gtest/**/*
-      # Some src/util and src/compiler files use headers from mesa/ (e.g.
-      # mtypes.h).  We should clean that up.
-      - src/mesa/**/*.h
-      - src/tool/**/*
-      - src/util/**/*
+        - .gitlab-ci.yml
+        - .gitlab-ci/**/*
+        - include/**/*
+        - meson.build
+        - meson_options.txt
+        - build-support/**/*
+        - subprojects/**/*
+        - .gitattributes
+        - src/*
+        - src/compiler/**/*
+        - src/drm-shim/**/*
+        - src/gbm/**/*
+        - src/gtest/**/*
+        # Some src/util and src/compiler files use headers from mesa/ (e.g.
+        # mtypes.h).  We should clean that up.
+        - src/mesa/**/*.h
+        - src/tool/**/*
+        - src/util/**/*
       when: on_success
 
 # Same core dependencies for doing manual runs.
@@ -137,36 +140,36 @@
   rules:
     - !reference [.core-rules, rules]
     - changes: &gallium_core_file_list
-      - src/gallium/*
-      - src/gallium/auxiliary/**/*
-      - src/gallium/drivers/*
-      - src/gallium/include/**/*
-      - src/gallium/frontends/dri/*
-      - src/gallium/frontends/glx/**/*
-      - src/gallium/targets/**/*
-      - src/gallium/tests/**/*
-      - src/gallium/winsys/*
+        - src/gallium/*
+        - src/gallium/auxiliary/**/*
+        - src/gallium/drivers/*
+        - src/gallium/include/**/*
+        - src/gallium/frontends/dri/*
+        - src/gallium/frontends/glx/**/*
+        - src/gallium/targets/**/*
+        - src/gallium/tests/**/*
+        - src/gallium/winsys/*
       when: on_success
 
 .gl-rules:
   rules:
     - !reference [.core-rules, rules]
     - changes: &mesa_core_file_list
-      - src/egl/**/*
-      - src/glx/**/*
-      - src/loader/**/*
-      - src/mapi/**/*
-      - src/mesa/*
-      - src/mesa/main/**/*
-      - src/mesa/math/**/*
-      - src/mesa/program/**/*
-      - src/mesa/sparc/**/*
-      - src/mesa/state_tracker/**/*
-      - src/mesa/swrast/**/*
-      - src/mesa/swrast_setup/**/*
-      - src/mesa/vbo/**/*
-      - src/mesa/x86/**/*
-      - src/mesa/x86-64/**/*
+        - src/egl/**/*
+        - src/glx/**/*
+        - src/loader/**/*
+        - src/mapi/**/*
+        - src/mesa/*
+        - src/mesa/main/**/*
+        - src/mesa/math/**/*
+        - src/mesa/program/**/*
+        - src/mesa/sparc/**/*
+        - src/mesa/state_tracker/**/*
+        - src/mesa/swrast/**/*
+        - src/mesa/swrast_setup/**/*
+        - src/mesa/vbo/**/*
+        - src/mesa/x86/**/*
+        - src/mesa/x86-64/**/*
       when: on_success
     - !reference [.gallium-core-rules, rules]
 
@@ -186,7 +189,7 @@
   rules:
     - !reference [.core-rules, rules]
     - changes: &vulkan_file_list
-      - src/vulkan/**/*
+        - src/vulkan/**/*
       when: on_success
 
 .vulkan-manual-rules:
@@ -199,7 +202,8 @@
 
 # Rules for unusual architectures that only build a subset of drivers
 .ppc64el-rules:
-   rules:
+  rules:
+    - !reference [.never-post-merge-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.zink-common-rules, rules]
     - !reference [.softpipe-rules, rules]
@@ -211,7 +215,8 @@
     - !reference [.nouveau-rules, rules]
 
 .s390x-rules:
-   rules:
+  rules:
+    - !reference [.never-post-merge-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.zink-common-rules, rules]
     - !reference [.softpipe-rules, rules]
@@ -220,12 +225,13 @@
 
 # Rules for linters
 .lint-rustfmt-rules:
-   rules:
+  rules:
+    - !reference [.never-post-merge-rules, rules]
     - !reference [.core-rules, rules]
     # in merge pipeline, formatting checks are not allowed to fail
     - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &rust_file_list
-      - src/**/*.rs
+        - src/**/*.rs
       when: on_success
       allow_failure: false
     # in other pipelines, formatting checks are allowed to fail
@@ -234,20 +240,20 @@
       allow_failure: true
 
 .lint-clang-format-rules:
-   rules:
+  rules:
+    - !reference [.never-post-merge-rules, rules]
     - !reference [.core-rules, rules]
     # in merge pipeline, formatting checks are not allowed to fail
     - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &clang_format_file_list
-      - .clang-format
-      - .clang-format-include
-      - .clang-format-ignore
-      - src/**/.clang-format
-      - src/egl/**/*
-      - src/**/asahi/**/*
-      - src/**/panfrost/**/*
-      - src/amd/vulkan/**/*
-      - src/amd/compiler/**/*
+        - .clang-format
+        - .clang-format-include
+        - .clang-format-ignore
+        - src/**/.clang-format
+        - src/egl/**/*
+        - src/amd/vulkan/**/*
+        - src/amd/compiler/**/*
+        - src/etnaviv/isa/**/*
       when: on_success
       allow_failure: false
     # in other pipelines, formatting checks are allowed to fail

@@ -26,9 +26,15 @@
 #ifndef SHADER_ENUMS_H
 #define SHADER_ENUMS_H
 
-#include "util/macros.h"
-
+#ifndef __OPENCL_VERSION__
 #include <stdbool.h>
+#include "util/macros.h"
+#include "util/u_debug.h"
+#else
+#define ENUM_PACKED
+#define BITFIELD_BIT(b) (1u << (b))
+#define debug_printf(x, ...)
+#endif
 
 /* Project-wide (GL and Vulkan) maximum. */
 #define MAX_DRAW_BUFFERS 8
@@ -782,6 +788,7 @@ typedef enum
    SYSTEM_VALUE_SAMPLE_POS,
    SYSTEM_VALUE_SAMPLE_POS_OR_CENTER,
    SYSTEM_VALUE_SAMPLE_MASK_IN,
+   SYSTEM_VALUE_LAYER_ID,
    SYSTEM_VALUE_HELPER_INVOCATION,
    SYSTEM_VALUE_COLOR0,
    SYSTEM_VALUE_COLOR1,
@@ -1189,9 +1196,96 @@ enum ENUM_PACKED mesa_prim
 };
 
 /**
- * Number of vertices per mesh shader primitive.
+ * Number of vertices per primitive as seen by a geometry or mesh shader.
  */
-unsigned num_mesh_vertices_per_primitive(unsigned prim);
+static inline unsigned
+mesa_vertices_per_prim(enum mesa_prim prim)
+{
+   switch(prim) {
+   case MESA_PRIM_POINTS:
+      return 1;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINE_STRIP:
+      return 2;
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      return 3;
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return 4;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return 6;
+
+   case MESA_PRIM_QUADS:
+   case MESA_PRIM_QUAD_STRIP:
+      /* These won't be seen from geometry shaders but prim assembly might for
+       * prim id.
+       */
+      return 4;
+
+   /* The following primitives should never be used with geometry or mesh
+    * shaders and their size is undefined.
+    */
+   case MESA_PRIM_POLYGON:
+   default:
+      debug_printf("Unrecognized geometry or mesh shader primitive");
+      return 3;
+   }
+}
+
+/**
+ * Returns the number of decomposed primitives for the given
+ * vertex count.
+ * Parts of the pipline are invoked once for each triangle in
+ * triangle strip, triangle fans and triangles and once
+ * for each line in line strip, line loop, lines. Also 
+ * statistics depend on knowing the exact number of decomposed
+ * primitives for a set of vertices.
+ */
+static inline unsigned
+u_decomposed_prims_for_vertices(enum mesa_prim primitive, int vertices)
+{
+   switch (primitive) {
+   case MESA_PRIM_POINTS:
+      return vertices;
+   case MESA_PRIM_LINES:
+      return vertices / 2;
+   case MESA_PRIM_LINE_LOOP:
+      return (vertices >= 2) ? vertices : 0;
+   case MESA_PRIM_LINE_STRIP:
+      return (vertices >= 2) ? vertices - 1 : 0;
+   case MESA_PRIM_TRIANGLES:
+      return vertices / 3;
+   case MESA_PRIM_TRIANGLE_STRIP:
+      return (vertices >= 3) ? vertices - 2 : 0;
+   case MESA_PRIM_TRIANGLE_FAN:
+      return (vertices >= 3) ? vertices - 2 : 0;
+   case MESA_PRIM_LINES_ADJACENCY:
+      return vertices / 4;
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return (vertices >= 4) ? vertices - 3 : 0;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+      return vertices / 6;
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return (vertices >= 6) ? 1 + (vertices - 6) / 2 : 0;
+   case MESA_PRIM_QUADS:
+      return vertices / 4;
+   case MESA_PRIM_QUAD_STRIP:
+      return (vertices >= 4) ? (vertices - 2) / 2 : 0;
+   /* Polygons can't be decomposed
+    * because the number of their vertices isn't known so
+    * for them and whatever else we don't recognize just
+    * return 1 if the number of vertices is greater than
+    * or equal to 3 and zero otherwise */
+   case MESA_PRIM_POLYGON:
+   default:
+      debug_printf("Invalid decomposition primitive!\n");
+      return (vertices >= 3) ? 1 : 0;
+   }
+}
 
 /**
  * A compare function enum for use in compiler lowering passes.  This is in

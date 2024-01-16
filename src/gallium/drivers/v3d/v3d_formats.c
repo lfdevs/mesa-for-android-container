@@ -38,7 +38,7 @@
 #include "v3d_format_table.h"
 
 /* The format internal types are the same across V3D versions */
-#define V3D_VERSION 33
+#define V3D_VERSION 42
 #include "broadcom/cle/v3dx_pack.h"
 
 bool

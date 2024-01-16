@@ -25,6 +25,17 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
+
+#include "common/intel_engine.h"
 
 bool xe_gem_read_render_timestamp(int fd, uint64_t *value);
+bool
+xe_gem_read_correlate_cpu_gpu_timestamp(int fd,
+                                        enum intel_engine_class engine_class,
+                                        uint16_t engine_instance,
+                                        clockid_t cpu_clock_id,
+                                        uint64_t *cpu_timestamp,
+                                        uint64_t *gpu_timestamp,
+                                        uint64_t *cpu_delta);
 bool xe_gem_can_render_on_fd(int fd);

@@ -51,6 +51,7 @@ struct d3d12_batch {
    struct set *sampler_views;
    struct set *surfaces;
    struct set *objects;
+   struct set *queries;
 
    struct util_dynarray zombie_samplers;
 
@@ -100,5 +101,9 @@ d3d12_batch_reference_surface_texture(struct d3d12_batch *batch,
 void
 d3d12_batch_reference_object(struct d3d12_batch *batch,
                              ID3D12Object *object);
+
+void
+d3d12_batch_reference_query(struct d3d12_batch *batch,
+                            struct d3d12_query *query);
 
 #endif

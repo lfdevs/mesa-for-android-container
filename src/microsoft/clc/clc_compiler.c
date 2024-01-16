@@ -25,7 +25,6 @@
 #include "nir_clc_helpers.h"
 #include "nir_serialize.h"
 #include "glsl_types.h"
-#include "nir_types.h"
 #include "clc_compiler.h"
 #include "clc_helpers.h"
 #include "clc_nir.h"
@@ -58,9 +57,16 @@ lower_image_deref_impl(nir_builder *b, struct clc_image_lower_context *context,
                        unsigned *num_bindings)
 {
    nir_variable *in_var = nir_deref_instr_get_variable(context->deref);
+   nir_foreach_variable_with_modes(var, b->shader, var_mode) {
+      // Check if we've already created a variable for this image
+      if (var->data.driver_location == in_var->data.driver_location &&
+          var->type == new_var_type)
+         return var->data.binding;
+   }
    nir_variable *image = nir_variable_create(b->shader, var_mode, new_var_type, NULL);
    image->data.access = in_var->data.access;
    image->data.binding = in_var->data.binding;
+   image->data.driver_location = in_var->data.driver_location;
    if (context->num_buf_ids > 0) {
       // Need to assign a new binding
       context->metadata->args[context->metadata_index].
@@ -129,10 +135,10 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
    nir_variable *in_var = nir_deref_instr_get_variable(context->deref);
 
    context->metadata_index = 0;
-   while (context->metadata->args[context->metadata_index].image.buf_ids[0] != in_var->data.binding)
+   while (context->metadata->args[context->metadata_index].offset != in_var->data.driver_location)
       context->metadata_index++;
 
-   context->num_buf_ids = 0;
+   context->num_buf_ids = context->metadata->args[context->metadata_index].image.num_buf_ids;
 
    /* Do this in 2 passes:
     * 1. When encountering a strongly-typed access (load/store), replace the deref
@@ -206,11 +212,23 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
                nir_def **cached_deref = intrinsic->intrinsic == nir_intrinsic_image_deref_format ?
                   &format_deref_dest : &order_deref_dest;
                if (!*cached_deref) {
-                  nir_variable *new_input = nir_variable_create(b->shader, nir_var_uniform, glsl_uint_type(), NULL);
-                  new_input->data.driver_location = in_var->data.driver_location;
+                  unsigned driver_location = in_var->data.driver_location;
                   if (intrinsic->intrinsic == nir_intrinsic_image_deref_format) {
                      /* Match cl_image_format { image_channel_order, image_channel_data_type }; */
-                     new_input->data.driver_location += glsl_get_cl_size(new_input->type);
+                     driver_location += 4;
+                  }
+
+                  nir_variable *new_input = NULL;
+                  nir_foreach_variable_with_modes(var, b->shader, nir_var_uniform) {
+                     if (var->data.driver_location == driver_location &&
+                         var->type == glsl_uint_type()) {
+                        new_input = var;
+                        break;
+                     }
+                  }
+                  if (!new_input) {
+                     new_input = nir_variable_create(b->shader, nir_var_uniform, glsl_uint_type(), NULL);
+                     new_input->data.driver_location = driver_location;
                   }
 
                   b->cursor = nir_after_instr(&context->deref->instr);
@@ -252,7 +270,6 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
    context->metadata->args[context->metadata_index].image.num_buf_ids = context->num_buf_ids;
 
    nir_instr_remove(&context->deref->instr);
-   exec_node_remove(&in_var->node);
 }
 
 static void
@@ -277,6 +294,11 @@ clc_lower_images(nir_shader *nir, struct clc_image_lower_context *context)
             }
          }
       }
+   }
+
+   nir_foreach_variable_with_modes_safe(var, nir, nir_var_image) {
+      if (glsl_type_is_image(var->type) && glsl_get_sampler_result_type(var->type) == GLSL_TYPE_VOID)
+         exec_node_remove(&var->node);
    }
 }
 
@@ -542,7 +564,7 @@ copy_const_initializer(const nir_constant *constant, const struct glsl_type *typ
    }
 }
 
-static enum pipe_tex_wrap
+static enum dxil_tex_wrap
 wrap_from_cl_addressing(unsigned addressing_mode)
 {
    switch (addressing_mode)
@@ -551,10 +573,10 @@ wrap_from_cl_addressing(unsigned addressing_mode)
    case SAMPLER_ADDRESSING_MODE_NONE:
    case SAMPLER_ADDRESSING_MODE_CLAMP:
       // Since OpenCL's only border color is 0's and D3D specs out-of-bounds loads to return 0, don't apply any wrap mode
-      return (enum pipe_tex_wrap)-1;
-   case SAMPLER_ADDRESSING_MODE_CLAMP_TO_EDGE: return PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   case SAMPLER_ADDRESSING_MODE_REPEAT: return PIPE_TEX_WRAP_REPEAT;
-   case SAMPLER_ADDRESSING_MODE_REPEAT_MIRRORED: return PIPE_TEX_WRAP_MIRROR_REPEAT;
+      return (enum dxil_tex_wrap)-1;
+   case SAMPLER_ADDRESSING_MODE_CLAMP_TO_EDGE: return DXIL_TEX_WRAP_CLAMP_TO_EDGE;
+   case SAMPLER_ADDRESSING_MODE_REPEAT: return DXIL_TEX_WRAP_REPEAT;
+   case SAMPLER_ADDRESSING_MODE_REPEAT_MIRRORED: return DXIL_TEX_WRAP_MIRROR_REPEAT;
    }
 }
 
@@ -639,6 +661,11 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
          .kernel_image_read_write = true,
          .literal_sampler = true,
          .printf = true,
+
+         // These aren't fully supported, but silence warnings about them from
+         // code that doesn't really use them.
+         .linkage = true,
+         .generic_pointers = true,
       },
    };
    unsigned supported_int_sizes = (16 | 32 | 64);
@@ -722,7 +749,7 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
          NIR_PASS(progress, nir, nir_lower_var_copies);
          NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
          NIR_PASS(progress, nir, nir_opt_algebraic);
-         NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
+         NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
          NIR_PASS(progress, nir, nir_opt_dead_cf);
          NIR_PASS(progress, nir, nir_opt_remove_phis);
          NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
@@ -733,7 +760,8 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
 
    NIR_PASS_V(nir, nir_scale_fdiv);
 
-   dxil_wrap_sampler_state int_sampler_states[PIPE_MAX_SHADER_SAMPLER_VIEWS] = { {{0}} };
+   /* 128 is the minimum value for CL_DEVICE_MAX_READ_IMAGE_ARGS and used by CLOn12 */
+   dxil_wrap_sampler_state int_sampler_states[128] = { {{0}} };
    unsigned sampler_id = 0;
 
    NIR_PASS_V(nir, nir_lower_variable_initializers, ~(nir_var_function_temp | nir_var_shader_temp));
@@ -809,7 +837,7 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
          metadata->args[i].image.buf_ids[0] = uav_id++;
       }
 
-      metadata->args[i].image.num_buf_ids = 1;
+      metadata->args[i].image.num_buf_ids = 0;
       var->data.binding = metadata->args[i].image.buf_ids[0];
 
       // Assign location that'll be used for uniforms for format/order
@@ -853,9 +881,7 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
    NIR_PASS_V(nir, clc_lower_nonnormalized_samplers, int_sampler_states);
    NIR_PASS_V(nir, nir_lower_samplers);
    NIR_PASS_V(nir, dxil_lower_sample_to_txf_for_integer_tex,
-              PIPE_MAX_SHADER_SAMPLER_VIEWS, int_sampler_states, NULL, 14.0f);
-
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_mem_shared | nir_var_function_temp, NULL);
+              sampler_id, int_sampler_states, NULL, 14.0f);
 
    nir->scratch_size = 0;
    NIR_PASS_V(nir, nir_lower_vars_to_explicit_types,

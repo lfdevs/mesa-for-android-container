@@ -65,7 +65,7 @@ vk_common_CreateAccelerationStructureKHR(VkDevice _device,
 
    if (pCreateInfo->deviceAddress &&
        vk_acceleration_structure_get_va(accel_struct) != pCreateInfo->deviceAddress)
-      return vk_error(device, VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR);
+      return vk_error(device, VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS);
 
    *pAccelerationStructure = vk_acceleration_structure_to_handle(accel_struct);
    return VK_SUCCESS;

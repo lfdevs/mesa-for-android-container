@@ -53,7 +53,7 @@ static uint32_t
 i915_gem_create(struct iris_bufmgr *bufmgr,
                 const struct intel_memory_class_instance **regions,
                 uint16_t regions_count, uint64_t size,
-                enum iris_heap heap_flags, unsigned alloc_flags)
+                enum iris_heap heap, unsigned alloc_flags)
 {
    const struct intel_device_info *devinfo =
       iris_bufmgr_get_device_info(bufmgr);
@@ -94,7 +94,7 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
 
    if (iris_bufmgr_vram_size(bufmgr) > 0 &&
        !intel_vram_all_mappable(devinfo) &&
-       heap_flags == IRIS_HEAP_DEVICE_LOCAL_PREFERRED)
+       heap == IRIS_HEAP_DEVICE_LOCAL_PREFERRED)
       create.flags |= I915_GEM_CREATE_EXT_FLAG_NEEDS_CPU_ACCESS;
 
    /* Protected param */
@@ -110,8 +110,7 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
    /* Set PAT param */
    struct drm_i915_gem_create_ext_set_pat set_pat_param = { 0 };
    if (devinfo->has_set_pat_uapi) {
-      set_pat_param.pat_index =
-         iris_pat_index_for_bo_flags(devinfo, alloc_flags);
+      set_pat_param.pat_index = iris_heap_to_pat_entry(devinfo, heap)->index;
       intel_i915_gem_add_ext(&create.extensions,
                              I915_GEM_CREATE_EXT_SET_PAT,
                              &set_pat_param.base);
@@ -176,7 +175,7 @@ i915_gem_mmap_offset(struct iris_bufmgr *bufmgr, struct iris_bo *bo)
        * across PCIe, it's always snooped.  The only caching mode allowed by
        * DG1 hardware for LMEM is WC.
        */
-      if (bo->real.heap != IRIS_HEAP_SYSTEM_MEMORY)
+      if (iris_heap_is_device_local(bo->real.heap))
          assert(bo->real.mmap_mode == IRIS_MMAP_WC);
       else
          assert(bo->real.mmap_mode == IRIS_MMAP_WB);

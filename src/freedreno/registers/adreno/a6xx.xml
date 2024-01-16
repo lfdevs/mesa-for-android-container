@@ -2573,7 +2573,7 @@ to upconvert to 32b float internally?
 		</reg32>
 	</array>
 	<!-- 0x891b-0x8926 invalid -->
-	<reg64 offset="0x8927" name="RB_SAMPLE_COUNT_ADDR" type="waddress" align="16" variants="A6XX" usage="cmd"/>
+	<reg64 offset="0x8927" name="RB_SAMPLE_COUNT_ADDR" type="waddress" align="16" usage="cmd"/>
 	<!-- 0x8929-0x89ff invalid -->
 
 	<!-- TODO: there are some registers in the 0x8a00-0x8bff range -->
@@ -3745,6 +3745,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xaa00" name="SP_CS_IBO_COUNT" low="0" high="6" type="uint"/>
 
 	<reg32 offset="0xaa01" name="SP_UNKNOWN_AA01" type="uint" variants="A7XX-" usage="cmd"/>
+
+	<reg32 offset="0xaaf2" name="SP_UNKNOWN_AAF2" type="uint" usage="cmd"/>
 
 	<!--
                 This enum is probably similar in purpose to SNORMMODE on a3xx,

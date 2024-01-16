@@ -6,6 +6,7 @@
 
 #include "si_pipe.h"
 #include "si_shader_internal.h"
+#include "si_shader_llvm.h"
 #include "sid.h"
 
 static LLVMValueRef si_build_fs_interp(struct si_shader_context *ctx, unsigned attr_index,

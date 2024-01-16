@@ -32,6 +32,7 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 #include "common/intel_guardband.h"
+#include "common/intel_tiled_render.h"
 #include "compiler/brw_prim.h"
 
 const uint32_t genX(vk_to_intel_blend)[] = {
@@ -78,7 +79,9 @@ genX(streamout_prologue)(struct anv_cmd_buffer *cmd_buffer)
    if (!intel_needs_workaround(cmd_buffer->device->info, 16013994831))
       return;
 
-   if (cmd_buffer->state.gfx.pipeline->uses_xfb) {
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
+   if (pipeline->uses_xfb) {
       genX(cmd_buffer_set_preemption)(cmd_buffer, false);
       return;
    }
@@ -193,7 +196,8 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer,
    assert(d_iview && d_iview->image->planes[0].aux_usage == ISL_AUX_USAGE_HIZ);
 
    /* 3DSTATE_PS_EXTRA::PixelShaderValid */
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT))
       return false;
 
@@ -288,6 +292,143 @@ genX(rasterization_mode)(VkPolygonMode raster_mode,
    }
 }
 
+#if GFX_VERx10 == 125
+/**
+ * Return the dimensions of the current rendering area, defined as the
+ * bounding box of all present color, depth and stencil attachments.
+ */
+UNUSED static bool
+calculate_render_area(struct anv_cmd_buffer *cmd_buffer,
+                      unsigned *width, unsigned *height)
+{
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+
+   *width = gfx->render_area.offset.x + gfx->render_area.extent.width;
+   *height = gfx->render_area.offset.y + gfx->render_area.extent.height;
+
+   for (unsigned i = 0; i < gfx->color_att_count; i++) {
+      struct anv_attachment *att = &gfx->color_att[i];
+      if (att->iview) {
+         *width = MAX2(*width, att->iview->vk.extent.width);
+         *height = MAX2(*height, att->iview->vk.extent.height);
+      }
+   }
+
+   const struct anv_image_view *const z_view = gfx->depth_att.iview;
+   if (z_view) {
+      *width = MAX2(*width, z_view->vk.extent.width);
+      *height = MAX2(*height, z_view->vk.extent.height);
+   }
+
+   const struct anv_image_view *const s_view = gfx->stencil_att.iview;
+   if (s_view) {
+      *width = MAX2(*width, s_view->vk.extent.width);
+      *height = MAX2(*height, s_view->vk.extent.height);
+   }
+
+   return *width && *height;
+}
+
+/* Calculate TBIMR tiling parameters adequate for the current pipeline
+ * setup.  Return true if TBIMR should be enabled.
+ */
+UNUSED static bool
+calculate_tile_dimensions(struct anv_cmd_buffer *cmd_buffer,
+                          unsigned fb_width, unsigned fb_height,
+                          unsigned *tile_width, unsigned *tile_height)
+{
+   const struct anv_device *device = cmd_buffer->device;
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+   const unsigned aux_scale = 256;
+   unsigned pixel_size = 0;
+
+   /* Perform a rough calculation of the tile cache footprint of the
+    * pixel pipeline, approximating it as the sum of the amount of
+    * memory used per pixel by every render target, depth, stencil and
+    * auxiliary surfaces bound to the pipeline.
+    */
+   for (uint32_t i = 0; i < gfx->color_att_count; i++) {
+      struct anv_attachment *att = &gfx->color_att[i];
+
+      if (att->iview) {
+         const struct anv_image *image = att->iview->image;
+         const unsigned p = anv_image_aspect_to_plane(image,
+                                                      VK_IMAGE_ASPECT_COLOR_BIT);
+         const struct anv_image_plane *plane = &image->planes[p];
+
+         pixel_size += intel_calculate_surface_pixel_size(
+            &plane->primary_surface.isl);
+
+         if (isl_aux_usage_has_mcs(att->aux_usage))
+            pixel_size += intel_calculate_surface_pixel_size(
+               &plane->aux_surface.isl);
+
+         /* XXX - Use proper implicit CCS surface metadata tracking
+          *       instead of inferring pixel size from primary
+          *       surface.
+          */
+         if (isl_aux_usage_has_ccs(att->aux_usage))
+            pixel_size += DIV_ROUND_UP(intel_calculate_surface_pixel_size(
+                                          &plane->primary_surface.isl),
+                                       aux_scale);
+      }
+   }
+
+   const struct anv_image_view *const z_view = gfx->depth_att.iview;
+   if (z_view) {
+      const struct anv_image *image = z_view->image;
+      assert(image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT);
+      const unsigned p = anv_image_aspect_to_plane(image,
+                                                   VK_IMAGE_ASPECT_DEPTH_BIT);
+      const struct anv_image_plane *plane = &image->planes[p];
+
+      pixel_size += intel_calculate_surface_pixel_size(
+         &plane->primary_surface.isl);
+
+      if (isl_aux_usage_has_hiz(image->planes[p].aux_usage))
+         pixel_size += intel_calculate_surface_pixel_size(
+            &plane->aux_surface.isl);
+
+      /* XXX - Use proper implicit CCS surface metadata tracking
+       *       instead of inferring pixel size from primary
+       *       surface.
+       */
+      if (isl_aux_usage_has_ccs(image->planes[p].aux_usage))
+         pixel_size += DIV_ROUND_UP(intel_calculate_surface_pixel_size(
+                                       &plane->primary_surface.isl),
+                                    aux_scale);
+   }
+
+   const struct anv_image_view *const s_view = gfx->depth_att.iview;
+   if (s_view && s_view != z_view) {
+      const struct anv_image *image = s_view->image;
+      assert(image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT);
+      const unsigned p = anv_image_aspect_to_plane(image,
+                                                   VK_IMAGE_ASPECT_STENCIL_BIT);
+      const struct anv_image_plane *plane = &image->planes[p];
+
+      pixel_size += intel_calculate_surface_pixel_size(
+         &plane->primary_surface.isl);
+   }
+
+   if (!pixel_size)
+      return false;
+
+   /* Compute a tile layout that allows reasonable utilization of the
+    * tile cache based on the per-pixel cache footprint estimated
+    * above.
+    */
+   intel_calculate_tile_dimensions(device->info, cmd_buffer->state.current_l3_config,
+                                   32, 32, fb_width, fb_height,
+                                   pixel_size, tile_width, tile_height);
+
+   /* Perform TBIMR tile passes only if the framebuffer covers more
+    * than a single tile.
+    */
+   return *tile_width < fb_width || *tile_height < fb_height;
+}
+#endif
+
 /**
  * This function takes the vulkan runtime values & dirty states and updates
  * the values in anv_gfx_dynamic_state, flagging HW instructions for
@@ -300,7 +441,8 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    UNUSED struct anv_device *device = cmd_buffer->device;
    struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
-   const struct anv_graphics_pipeline *pipeline = gfx->pipeline;
+   const struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(gfx->base.pipeline);
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
    struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
@@ -526,7 +668,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
                                      pipeline->rasterization_samples);
 
       const VkPolygonMode dynamic_raster_mode =
-         genX(raster_polygon_mode)(gfx->pipeline,
+         genX(raster_polygon_mode)(pipeline,
                                    dyn->rs.polygon_mode,
                                    dyn->ia.primitive_topology);
 
@@ -1022,12 +1164,16 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
          SET_VP(VIEWPORT_SF_CLIP, vp_sf_clip.elem[i], YMaxViewPort);
 #undef SET_VP
 
+         const bool depth_range_unrestricted =
+            cmd_buffer->device->vk.enabled_extensions.EXT_depth_range_unrestricted;
+
+         float min_depth_limit = depth_range_unrestricted ? -FLT_MAX : 0.0;
+         float max_depth_limit = depth_range_unrestricted ? FLT_MAX : 1.0;
+
          float min_depth = dyn->rs.depth_clamp_enable ?
-                           MIN2(vp->minDepth, vp->maxDepth) :
-                           0.0f;
+                           MIN2(vp->minDepth, vp->maxDepth) : min_depth_limit;
          float max_depth = dyn->rs.depth_clamp_enable ?
-                           MAX2(vp->minDepth, vp->maxDepth) :
-                           1.0f;
+                           MAX2(vp->minDepth, vp->maxDepth) : max_depth_limit;
 
          SET(VIEWPORT_CC, vp_cc.elem[i].MinimumDepth, min_depth);
          SET(VIEWPORT_CC, vp_cc.elem[i].MaximumDepth, max_depth);
@@ -1120,6 +1266,36 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
+#if GFX_VERx10 == 125
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_RENDER_TARGETS)) {
+      unsigned fb_width, fb_height, tile_width, tile_height;
+
+      if (cmd_buffer->device->physical->instance->enable_tbimr &&
+          calculate_render_area(cmd_buffer, &fb_width, &fb_height) &&
+          calculate_tile_dimensions(cmd_buffer, fb_width, fb_height,
+                                    &tile_width, &tile_height)) {
+         /* Use a batch size of 128 polygons per slice as recommended
+          * by BSpec 68436 "TBIMR Programming".
+          */
+         const unsigned num_slices = cmd_buffer->device->info->num_slices;
+         const unsigned batch_size = DIV_ROUND_UP(num_slices, 2) * 256;
+
+         SET(TBIMR_TILE_PASS_INFO, tbimr.TileRectangleHeight, tile_height);
+         SET(TBIMR_TILE_PASS_INFO, tbimr.TileRectangleWidth, tile_width);
+         SET(TBIMR_TILE_PASS_INFO, tbimr.VerticalTileCount,
+             DIV_ROUND_UP(fb_height, tile_height));
+         SET(TBIMR_TILE_PASS_INFO, tbimr.HorizontalTileCount,
+             DIV_ROUND_UP(fb_width, tile_width));
+         SET(TBIMR_TILE_PASS_INFO, tbimr.TBIMRBatchSize,
+             util_logbase2(batch_size) - 5);
+         SET(TBIMR_TILE_PASS_INFO, tbimr.TileBoxCheck, true);
+         SET(TBIMR_TILE_PASS_INFO, use_tbimr, true);
+      } else {
+         hw_state->use_tbimr = false;
+      }
+   }
+#endif
+
 #undef GET
 #undef SET
 #undef SET_STAGE
@@ -1127,49 +1303,94 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
    vk_dynamic_graphics_state_clear_dirty(&cmd_buffer->vk.dynamic_graphics_state);
 }
 
+static void
+emit_wa_18020335297_dummy_draw(struct anv_cmd_buffer *cmd_buffer)
+{
+#if GFX_VERx10 >= 125
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VFG), vfg) {
+      vfg.DistributionMode = RR_STRICT;
+   }
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF), vf) {
+      vf.GeometryDistributionEnable = true;
+   }
+#endif
+
+#if GFX_VER >= 12
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr) {
+      pr.ReplicaMask = 1;
+   }
+#endif
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_RASTER), rr) {
+      rr.CullMode = CULLMODE_NONE;
+      rr.FrontFaceFillMode = FILL_MODE_SOLID;
+      rr.BackFaceFillMode = FILL_MODE_SOLID;
+   }
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_STATISTICS), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS), zero);
+
+#if GFX_VER >= 11
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS_2), zero);
+#endif
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CLIP), clip) {
+      clip.ClipEnable = true;
+      clip.ClipMode = CLIPMODE_REJECT_ALL;
+   }
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VS), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_GS), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_HS), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_TE), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_DS), zero);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_STREAMOUT), zero);
+
+   uint32_t *vertex_elements = anv_batch_emitn(&cmd_buffer->batch, 1 + 2 * 2,
+                                               GENX(3DSTATE_VERTEX_ELEMENTS));
+   uint32_t *ve_pack_dest = &vertex_elements[1];
+
+   for (int i = 0; i < 2; i++) {
+      struct GENX(VERTEX_ELEMENT_STATE) element = {
+         .Valid = true,
+         .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+         .Component0Control = VFCOMP_STORE_0,
+         .Component1Control = VFCOMP_STORE_0,
+         .Component2Control = i == 0 ? VFCOMP_STORE_0 : VFCOMP_STORE_1_FP,
+         .Component3Control = i == 0 ? VFCOMP_STORE_0 : VFCOMP_STORE_1_FP,
+      };
+      GENX(VERTEX_ELEMENT_STATE_pack)(NULL, ve_pack_dest, &element);
+      ve_pack_dest += GENX(VERTEX_ELEMENT_STATE_length);
+   }
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
+      topo.PrimitiveTopologyType = _3DPRIM_TRILIST;
+   }
+
+   /* Emit dummy draw per slice. */
+   for (unsigned i = 0; i < cmd_buffer->device->info->num_slices; i++) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
+         prim.VertexCountPerInstance = 3;
+         prim.PrimitiveTopologyType = _3DPRIM_TRILIST;
+         prim.InstanceCount = 1;
+         prim.VertexAccessType = SEQUENTIAL;
+      }
+   }
+}
 /**
- * This function emits the dirty instructions in the batch buffer.
+ * This function handles dirty state emission to the batch buffer.
  */
-void
-genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
+static void
+cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_device *device = cmd_buffer->device;
    struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
-   struct anv_graphics_pipeline *pipeline = gfx->pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(gfx->base.pipeline);
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
    struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
 
-   if (INTEL_DEBUG(DEBUG_REEMIT)) {
-      BITSET_OR(gfx->dyn_state.dirty, gfx->dyn_state.dirty,
-                device->gfx_dirty_state);
-   }
-
-   /**
-    * Put potential workarounds here if you need to reemit an instruction
-    * because of another one is changing.
-    */
-
-   /* Since Wa_16011773973 will disable 3DSTATE_STREAMOUT, we need to reemit
-    * it after.
-    */
-   if (intel_needs_workaround(device->info, 16011773973) &&
-       pipeline->uses_xfb &&
-       BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_SO_DECL_LIST)) {
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
-   }
-
-   /* Gfx11 undocumented issue :
-    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/9781
-    */
-#if GFX_VER == 11
-   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WM))
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
-#endif
-
-   /**
-    * State emission
-    */
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_URB))
       anv_batch_emit_pipeline_state(&cmd_buffer->batch, pipeline, final.urb);
 
@@ -1232,6 +1453,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
        * On DG2+ also known as Wa_1509820217.
        */
       genx_batch_emit_pipe_control(&cmd_buffer->batch, device->info,
+                                   cmd_buffer->state.current_pipeline,
                                    ANV_PIPE_CS_STALL_BIT);
 #endif
    }
@@ -1355,6 +1577,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
                      GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), cc) {
          cc.CCViewportPointer = cc_state.offset;
       }
+      cmd_buffer->state.gfx.viewport_set = true;
    }
 
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_SCISSOR)) {
@@ -1577,6 +1800,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
        */
       genx_batch_emit_pipe_control(&cmd_buffer->batch,
                                    cmd_buffer->device->info,
+                                   cmd_buffer->state.current_pipeline,
                                    ANV_PIPE_CS_STALL_BIT);
 #endif
    }
@@ -1597,13 +1821,15 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
          ib.IndexFormat           = gfx->index_type;
          ib.MOCS                  = anv_mocs(cmd_buffer->device,
-                                             buffer->address.bo,
+                                             buffer ? buffer->address.bo : NULL,
                                              ISL_SURF_USAGE_INDEX_BUFFER_BIT);
 #if GFX_VER >= 12
          ib.L3BypassDisable       = true;
 #endif
-         ib.BufferStartingAddress = anv_address_add(buffer->address, offset);
-         ib.BufferSize            = gfx->index_size;
+         if (buffer) {
+            ib.BufferStartingAddress = anv_address_add(buffer->address, offset);
+            ib.BufferSize            = gfx->index_size;
+         }
       }
    }
 
@@ -1702,6 +1928,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
 #if GFX_VERx10 >= 125
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WA_18019816803)) {
       genx_batch_emit_pipe_control(&cmd_buffer->batch, cmd_buffer->device->info,
+                                   cmd_buffer->state.current_pipeline,
                                    ANV_PIPE_PSS_STALL_SYNC_BIT);
    }
 #endif
@@ -1711,15 +1938,133 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
       genX(cmd_buffer_enable_pma_fix)(cmd_buffer, hw_state->pma_fix);
 #endif
 
+#if GFX_VERx10 >= 125
+   if (hw_state->use_tbimr &&
+       BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_TBIMR_TILE_PASS_INFO)) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_TBIMR_TILE_PASS_INFO),
+                     tbimr) {
+         SET(tbimr, tbimr, TileRectangleHeight);
+         SET(tbimr, tbimr, TileRectangleWidth);
+         SET(tbimr, tbimr, VerticalTileCount);
+         SET(tbimr, tbimr, HorizontalTileCount);
+         SET(tbimr, tbimr, TBIMRBatchSize);
+         SET(tbimr, tbimr, TileBoxCheck);
+      }
+   }
+#endif
+
 #undef INIT
 #undef SET
 
    BITSET_ZERO(hw_state->dirty);
 }
 
+/**
+ * This function handles possible state workarounds and emits the dirty
+ * instructions to the batch buffer.
+ */
+void
+genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
+{
+   struct anv_device *device = cmd_buffer->device;
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
+   struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
+
+   if (INTEL_DEBUG(DEBUG_REEMIT)) {
+      BITSET_OR(gfx->dyn_state.dirty, gfx->dyn_state.dirty,
+                device->gfx_dirty_state);
+   }
+
+   /**
+    * Put potential workarounds here if you need to reemit an instruction
+    * because of another one is changing.
+    */
+
+   /* Since Wa_16011773973 will disable 3DSTATE_STREAMOUT, we need to reemit
+    * it after.
+    */
+   if (intel_needs_workaround(device->info, 16011773973) &&
+       pipeline->uses_xfb &&
+       BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_SO_DECL_LIST)) {
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
+   }
+
+   /* Gfx11 undocumented issue :
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/9781
+    */
+#if GFX_VER == 11
+   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WM))
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
+#endif
+
+   /* Wa_18020335297 - Apply the WA when viewport ptr is reprogrammed. */
+   if (intel_needs_workaround(device->info, 18020335297) &&
+       BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_VIEWPORT_CC) &&
+       cmd_buffer->state.gfx.viewport_set) {
+      /* For mesh, we implement the WA using CS stall. This is for
+       * simplicity and takes care of possible interaction with Wa_16014390852.
+       */
+      if (anv_pipeline_is_mesh(pipeline)) {
+         genx_batch_emit_pipe_control(&cmd_buffer->batch, device->info,
+                                      _3D, ANV_PIPE_CS_STALL_BIT);
+      } else {
+         /* Mask off all instructions that we program. */
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VFG);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VF);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_RASTER);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VF_SGVS);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VF_SGVS_2);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_CLIP);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VERTEX_INPUT);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VF_TOPOLOGY);
+
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_VS);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_GS);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_HS);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_TE);
+         BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_DS);
+
+         cmd_buffer_gfx_state_emission(cmd_buffer);
+
+         emit_wa_18020335297_dummy_draw(cmd_buffer);
+
+         /* Dirty all emitted WA state to make sure that current real
+          * state is restored.
+          */
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VFG);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_RASTER);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS_2);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_CLIP);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VERTEX_INPUT);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_TOPOLOGY);
+
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VS);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_GS);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_HS);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TE);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_DS);
+      }
+   }
+
+   cmd_buffer_gfx_state_emission(cmd_buffer);
+}
+
 void
 genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
 {
+   if (!anv_cmd_buffer_is_render_queue(cmd_buffer))
+      return;
+
    if (cmd_buffer->state.pma_fix_enabled == enable)
       return;
 
@@ -1736,6 +2081,7 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
     */
    genx_batch_emit_pipe_control
       (&cmd_buffer->batch, cmd_buffer->device->info,
+       cmd_buffer->state.current_pipeline,
        ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
        ANV_PIPE_CS_STALL_BIT |
 #if GFX_VER >= 12
@@ -1764,6 +2110,7 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
     */
    genx_batch_emit_pipe_control
       (&cmd_buffer->batch, cmd_buffer->device->info,
+       cmd_buffer->state.current_pipeline,
        ANV_PIPE_DEPTH_STALL_BIT |
        ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
 #if GFX_VER >= 12

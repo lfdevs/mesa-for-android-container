@@ -549,9 +549,10 @@ _eglCreateExtensionsString(_EGLDisplay *disp)
    _EGL_CHECK_EXTENSION(EXT_create_context_robustness);
    _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import);
    _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import_modifiers);
+   _EGL_CHECK_EXTENSION(EXT_present_opaque);
    _EGL_CHECK_EXTENSION(EXT_protected_content);
    _EGL_CHECK_EXTENSION(EXT_protected_surface);
-   _EGL_CHECK_EXTENSION(EXT_present_opaque);
+   _EGL_CHECK_EXTENSION(EXT_query_reset_notification_strategy);
    _EGL_CHECK_EXTENSION(EXT_surface_CTA861_3_metadata);
    _EGL_CHECK_EXTENSION(EXT_surface_SMPTE2086_metadata);
    _EGL_CHECK_EXTENSION(EXT_swap_buffers_with_damage);
@@ -2899,7 +2900,7 @@ MesaGLInteropEGLExportObject(EGLDisplay dpy, EGLContext context,
 PUBLIC int
 MesaGLInteropEGLFlushObjects(EGLDisplay dpy, EGLContext context, unsigned count,
                              struct mesa_glinterop_export_in *objects,
-                             GLsync *sync)
+                             struct mesa_glinterop_flush_out *out)
 {
    _EGLDisplay *disp;
    _EGLContext *ctx;
@@ -2910,8 +2911,7 @@ MesaGLInteropEGLFlushObjects(EGLDisplay dpy, EGLContext context, unsigned count,
       return ret;
 
    if (disp->Driver->GLInteropFlushObjects)
-      ret =
-         disp->Driver->GLInteropFlushObjects(disp, ctx, count, objects, sync);
+      ret = disp->Driver->GLInteropFlushObjects(disp, ctx, count, objects, out);
    else
       ret = MESA_GLINTEROP_UNSUPPORTED;
 

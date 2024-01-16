@@ -805,14 +805,14 @@ radv_init_graphics_state(struct radeon_cmdbuf *cs, struct radv_device *device)
 
       radv_cs_add_buffer(device->ws, cs, device->gfx_init);
    } else {
-      si_emit_graphics(device, cs);
+      radv_emit_graphics(device, cs);
    }
 }
 
 static void
 radv_init_compute_state(struct radeon_cmdbuf *cs, struct radv_device *device)
 {
-   si_emit_compute(device, cs);
+   radv_emit_compute(device, cs);
 }
 
 static VkResult
@@ -1061,7 +1061,7 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
                flush_bits |= RADV_CMD_FLAG_PS_PARTIAL_FLUSH;
          }
 
-         si_cs_emit_cache_flush(ws, cs, gfx_level, NULL, 0, queue->qf, flush_bits, &sqtt_flush_bits, 0);
+         radv_cs_emit_cache_flush(ws, cs, gfx_level, NULL, 0, queue->qf, flush_bits, &sqtt_flush_bits, 0);
       }
 
       result = ws->cs_finalize(cs);
@@ -1301,9 +1301,9 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     */
    radv_cp_wait_mem(leader_post_cs, queue->state.qf, WAIT_REG_MEM_GREATER_OR_EQUAL, leader_wait_va, 1, 0xffffffff);
    radv_cs_write_data(device, leader_post_cs, queue->state.qf, V_370_ME, leader_wait_va, 1, &zero, false);
-   si_cs_emit_write_event_eop(ace_post_cs, device->physical_device->rad_info.gfx_level, RADV_QUEUE_COMPUTE,
-                              V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, leader_wait_va,
-                              1, 0);
+   radv_cs_emit_write_event_eop(ace_post_cs, device->physical_device->rad_info.gfx_level, RADV_QUEUE_COMPUTE,
+                                V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT,
+                                leader_wait_va, 1, 0);
 
    r = ws->cs_finalize(leader_pre_cs);
    if (r != VK_SUCCESS)
@@ -1683,16 +1683,58 @@ fail:
 }
 
 static VkResult
+radv_queue_sparse_submit(struct vk_queue *vqueue, struct vk_queue_submit *submission)
+{
+   struct radv_queue *queue = (struct radv_queue *)vqueue;
+   struct radv_device *device = queue->device;
+   VkResult result;
+
+   result = radv_queue_submit_bind_sparse_memory(device, submission);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   /* We do a CPU wait here, in part to avoid more winsys mechanisms. In the likely kernel explicit
+    * sync mechanism, we'd need to do a CPU wait anyway. Haven't seen this be a perf issue yet, but
+    * we have to make sure the queue always has its submission thread enabled. */
+   result = vk_sync_wait_many(&device->vk, submission->wait_count, submission->waits, 0, UINT64_MAX);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   /* Ignore all the commandbuffers. They're necessarily empty anyway. */
+
+   for (unsigned i = 0; i < submission->signal_count; ++i) {
+      result = vk_sync_signal(&device->vk, submission->signals[i].sync, submission->signals[i].signal_value);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
+fail:
+   if (result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST) {
+      /* When something bad happened during the submission, such as
+       * an out of memory issue, it might be hard to recover from
+       * this inconsistent state. To avoid this sort of problem, we
+       * assume that we are in a really bad situation and return
+       * VK_ERROR_DEVICE_LOST to ensure the clients do not attempt
+       * to submit the same job again to this device.
+       */
+      result = vk_device_set_lost(&queue->device->vk, "vkQueueSubmit() failed");
+   }
+   return result;
+}
+
+static VkResult
 radv_queue_submit(struct vk_queue *vqueue, struct vk_queue_submit *submission)
 {
    struct radv_queue *queue = (struct radv_queue *)vqueue;
    VkResult result;
 
-   radv_rmv_log_submit(queue->device, radv_queue_ring(queue));
-
-   result = radv_queue_submit_bind_sparse_memory(queue->device, submission);
-   if (result != VK_SUCCESS)
-      goto fail;
+   if (queue->device->instance->drirc.legacy_sparse_binding) {
+      result = radv_queue_submit_bind_sparse_memory(queue->device, submission);
+      if (result != VK_SUCCESS)
+         goto fail;
+   } else {
+      assert(!submission->buffer_bind_count && !submission->image_bind_count && !submission->image_opaque_bind_count);
+   }
 
    if (!submission->command_buffer_count && !submission->wait_count && !submission->signal_count)
       return VK_SUCCESS;
@@ -1760,7 +1802,12 @@ radv_queue_init(struct radv_device *device, struct radv_queue *queue, int idx,
          goto fail;
    }
 
-   queue->vk.driver_submit = radv_queue_submit;
+   if (queue->state.qf == RADV_QUEUE_SPARSE) {
+      queue->vk.driver_submit = radv_queue_sparse_submit;
+      vk_queue_enable_submit_thread(&queue->vk);
+   } else {
+      queue->vk.driver_submit = radv_queue_submit;
+   }
    return VK_SUCCESS;
 fail:
    vk_queue_finish(&queue->vk);

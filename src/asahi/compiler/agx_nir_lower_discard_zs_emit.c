@@ -13,7 +13,7 @@
 #define BASE_S      2
 
 static bool
-lower_zs_emit(nir_block *block)
+lower_zs_emit(nir_block *block, bool force_early_z)
 {
    nir_intrinsic_instr *zs_emit = NULL;
    bool progress = false;
@@ -30,6 +30,16 @@ lower_zs_emit(nir_block *block)
       if (sem.location != FRAG_RESULT_DEPTH &&
           sem.location != FRAG_RESULT_STENCIL)
          continue;
+
+      /* If early-Z is forced, z/s writes are a no-op (and will cause problems
+       * later in the compile). Piglit early-z tests this. Just remove the
+       * offending writes.
+       */
+      if (force_early_z) {
+         nir_instr_remove(instr);
+         progress = true;
+         continue;
+      }
 
       nir_builder b = nir_builder_at(nir_before_instr(instr));
 
@@ -117,7 +127,7 @@ agx_nir_lower_zs_emit(nir_shader *s)
       bool progress = false;
 
       nir_foreach_block(block, impl) {
-         progress |= lower_zs_emit(block);
+         progress |= lower_zs_emit(block, s->info.fs.early_fragment_tests);
       }
 
       if (progress) {

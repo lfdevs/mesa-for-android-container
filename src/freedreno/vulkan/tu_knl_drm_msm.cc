@@ -651,6 +651,45 @@ msm_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
    mtx_unlock(&dev->bo_mutex);
 }
 
+
+static void
+msm_bo_set_metadata(struct tu_device *dev, struct tu_bo *bo,
+                    void *metadata, uint32_t metadata_size)
+{
+   struct drm_msm_gem_info req = {
+      .handle = bo->gem_handle,
+      .info = MSM_INFO_SET_METADATA,
+      .value = (uintptr_t)(void *)metadata,
+      .len = metadata_size,
+   };
+
+   int ret = drmCommandWrite(dev->fd, DRM_MSM_GEM_INFO, &req, sizeof(req));
+   if (ret) {
+      mesa_logw_once("Failed to set BO metadata with DRM_MSM_GEM_INFO: %d",
+                     ret);
+   }
+}
+
+static int
+msm_bo_get_metadata(struct tu_device *dev, struct tu_bo *bo,
+                    void *metadata, uint32_t metadata_size)
+{
+   struct drm_msm_gem_info req = {
+      .handle = bo->gem_handle,
+      .info = MSM_INFO_GET_METADATA,
+      .value = (uintptr_t)(void *)metadata,
+      .len = metadata_size,
+   };
+
+   int ret = drmCommandWrite(dev->fd, DRM_MSM_GEM_INFO, &req, sizeof(req));
+   if (ret) {
+      mesa_logw_once("Failed to get BO metadata with DRM_MSM_GEM_INFO: %d",
+                     ret);
+   }
+
+   return ret;
+}
+
 static VkResult
 tu_queue_submit_create_locked(struct tu_queue *queue,
                               struct vk_queue_submit *vk_submit,
@@ -1071,6 +1110,8 @@ static const struct tu_knl msm_knl_funcs = {
       .bo_map = msm_bo_map,
       .bo_allow_dump = msm_bo_allow_dump,
       .bo_finish = tu_drm_bo_finish,
+      .bo_set_metadata = msm_bo_set_metadata,
+      .bo_get_metadata = msm_bo_get_metadata,
       .device_wait_u_trace = msm_device_wait_u_trace,
       .queue_submit = msm_queue_submit,
 };

@@ -47,7 +47,7 @@ tu_bo_suballocator_finish(struct tu_suballocator *suballoc);
 
 VkResult
 tu_suballoc_bo_alloc(struct tu_suballoc_bo *suballoc_bo, struct tu_suballocator *suballoc,
-                     uint32_t size, uint32_t align);
+                     uint32_t size, uint32_t alignment);
 
 void *
 tu_suballoc_bo_map(struct tu_suballoc_bo *bo);

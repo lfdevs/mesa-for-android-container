@@ -2014,7 +2014,7 @@ try_pbo_download(struct st_context *st,
    memset(&fb, 0, sizeof(fb));
    fb.width = texture->width0;
    fb.height = texture->height0;
-   fb.layers = 1;
+   fb.layers = addr.depth;
    fb.samples = 1;
    cso_set_framebuffer(cso, &fb);
 
@@ -2355,7 +2355,7 @@ st_TexImage(struct gl_context * ctx, GLuint dims,
 
    prep_teximage(ctx, texImage, format, type);
 
-   if (texImage->Width == 0 || texImage->Height == 0 || texImage->Depth == 0)
+   if (_mesa_is_zero_size_texture(texImage))
       return;
 
    /* allocate storage for texture data */

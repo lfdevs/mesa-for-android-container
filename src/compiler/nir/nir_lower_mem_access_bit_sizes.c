@@ -294,7 +294,7 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
       if (chunk_align < requested.align ||
           chunk_bytes > max_chunk_bytes) {
          /* Otherwise the caller made a mistake with their return values. */
-         assert(chunk_bytes <= 32);
+         assert(chunk_bytes <= 4);
          assert(allow_unaligned_stores_as_atomics);
 
          /* We'll turn this into a pair of 32-bit atomics to modify only the right

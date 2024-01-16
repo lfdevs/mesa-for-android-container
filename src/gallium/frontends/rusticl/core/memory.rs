@@ -4,6 +4,7 @@ use crate::api::util::*;
 use crate::core::context::*;
 use crate::core::device::*;
 use crate::core::format::*;
+use crate::core::gl::*;
 use crate::core::queue::*;
 use crate::core::util::*;
 use crate::impl_cl_type_trait;
@@ -118,6 +119,7 @@ pub struct Mem {
     pub image_elem_size: u8,
     pub props: Vec<cl_mem_properties>,
     pub cbs: Mutex<Vec<MemCB>>,
+    pub gl_obj: Option<GLObject>,
     res: Option<HashMap<&'static Device, Arc<PipeResource>>>,
     maps: Mutex<Mappings>,
 }
@@ -306,6 +308,7 @@ impl Mem {
             image_desc: cl_image_desc::default(),
             image_elem_size: 0,
             props: props,
+            gl_obj: None,
             cbs: Mutex::new(Vec::new()),
             res: Some(buffer),
             maps: Mappings::new(),
@@ -338,6 +341,7 @@ impl Mem {
             image_desc: cl_image_desc::default(),
             image_elem_size: 0,
             props: Vec::new(),
+            gl_obj: None,
             cbs: Mutex::new(Vec::new()),
             res: None,
             maps: Mappings::new(),
@@ -422,8 +426,98 @@ impl Mem {
             image_desc: api_image_desc,
             image_elem_size: image_elem_size,
             props: props,
+            gl_obj: None,
             cbs: Mutex::new(Vec::new()),
             res: texture,
+            maps: Mappings::new(),
+        }))
+    }
+
+    pub fn from_gl(
+        context: Arc<Context>,
+        flags: cl_mem_flags,
+        gl_export_manager: &GLExportManager,
+    ) -> CLResult<Arc<Mem>> {
+        let export_in = &gl_export_manager.export_in;
+        let export_out = &gl_export_manager.export_out;
+
+        let (mem_type, gl_object_type) = target_from_gl(export_in.target)?;
+        let gl_mem_props = gl_export_manager.get_gl_mem_props()?;
+
+        // Handle Buffers
+        let (image_format, pipe_format) = if gl_export_manager.is_gl_buffer() {
+            (cl_image_format::default(), pipe_format::PIPE_FORMAT_NONE)
+        } else {
+            let image_format =
+                format_from_gl(export_out.internal_format).ok_or(CL_OUT_OF_HOST_MEMORY)?;
+            (image_format, image_format.to_pipe_format().unwrap())
+        };
+
+        let imported_gl_tex = context.import_gl_buffer(
+            export_out.dmabuf_fd as u32,
+            export_out.modifier,
+            mem_type,
+            export_in.target,
+            pipe_format,
+            gl_mem_props.clone(),
+        )?;
+
+        // Cube maps faces are not linear in memory, so copy all contents
+        // of desired face into a 2D image and copy it back after gl release.
+        let (shadow_map, texture) = if is_cube_map_face(export_in.target) {
+            let shadow = create_shadow_slice(&imported_gl_tex, image_format)?;
+
+            let mut res_map = HashMap::new();
+            shadow
+                .iter()
+                .map(|(k, v)| {
+                    let gl_res = imported_gl_tex.get(k).unwrap().clone();
+                    res_map.insert(v.clone(), gl_res);
+                })
+                .for_each(drop);
+
+            (Some(res_map), shadow)
+        } else {
+            (None, imported_gl_tex)
+        };
+
+        let gl_obj = GLObject {
+            gl_object_target: gl_export_manager.export_in.target,
+            gl_object_type: gl_object_type,
+            gl_object_name: export_in.obj,
+            shadow_map: shadow_map,
+        };
+
+        let desc = cl_image_desc {
+            image_type: mem_type,
+            image_width: gl_mem_props.width as usize,
+            image_height: gl_mem_props.height as usize,
+            image_depth: gl_mem_props.depth as usize,
+            image_array_size: gl_mem_props.array_size as usize,
+            image_row_pitch: 0,
+            image_slice_pitch: 0,
+            num_mip_levels: 1,
+            num_samples: 1,
+            ..Default::default()
+        };
+
+        Ok(Arc::new(Self {
+            base: CLObjectBase::new(),
+            context: context,
+            parent: None,
+            mem_type: mem_type,
+            flags: flags,
+            size: gl_mem_props.size(),
+            offset: 0,
+            host_ptr: ptr::null_mut(),
+            image_format: image_format,
+            pipe_format: pipe_format,
+            image_desc: desc,
+            image_elem_size: gl_mem_props.pixel_size,
+            props: Vec::new(),
+            gl_obj: Some(gl_obj),
+            cbs: Mutex::new(Vec::new()),
+            res: Some(texture),
             maps: Mappings::new(),
         }))
     }
@@ -451,29 +545,30 @@ impl Mem {
         let b = self.to_parent(&mut offset);
         let r = b.get_res()?.get(&q.device).unwrap();
 
-        Ok(ctx.buffer_map(
+        ctx.buffer_map(
             r,
             offset.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
             size.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
             rw,
             ResourceMapType::Normal,
-        ))
+        )
+        .ok_or(CL_OUT_OF_RESOURCES)
     }
 
     fn tx_raw_async(
         &self,
-        q: &Arc<Queue>,
+        dev: &Device,
         rw: RWFlags,
     ) -> CLResult<(PipeTransfer, Option<PipeResource>)> {
         let mut offset = 0;
         let b = self.to_parent(&mut offset);
-        let r = b.get_res()?.get(&q.device).unwrap();
+        let r = b.get_res()?.get(dev).unwrap();
         let size = self.size.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
-        let ctx = q.device.helper_ctx();
+        let ctx = dev.helper_ctx();
 
         assert!(self.is_buffer());
 
-        let tx = if can_map_directly(q.device, r) {
+        let tx = if can_map_directly(dev, r) {
             ctx.buffer_map_directly(
                 r,
                 offset.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
@@ -487,12 +582,13 @@ impl Mem {
         if let Some(tx) = tx {
             Ok((tx, None))
         } else {
-            let shadow = q
-                .device
+            let shadow = dev
                 .screen()
-                .resource_create_buffer(size as u32, ResourceType::Staging)
+                .resource_create_buffer(size as u32, ResourceType::Staging, 0)
                 .ok_or(CL_OUT_OF_RESOURCES)?;
-            let tx = ctx.buffer_map_coherent(&shadow, 0, size, rw);
+            let tx = ctx
+                .buffer_map_coherent(&shadow, 0, size, rw)
+                .ok_or(CL_OUT_OF_RESOURCES)?;
             Ok((tx, Some(shadow)))
         }
     }
@@ -518,21 +614,22 @@ impl Mem {
         assert!(!self.is_buffer());
 
         let r = self.get_res()?.get(&q.device).unwrap();
-        Ok(ctx.texture_map(r, bx, rw, ResourceMapType::Normal))
+        ctx.texture_map(r, bx, rw, ResourceMapType::Normal)
+            .ok_or(CL_OUT_OF_RESOURCES)
     }
 
     fn tx_image_raw_async(
         &self,
-        q: &Arc<Queue>,
+        dev: &Device,
         bx: &pipe_box,
         rw: RWFlags,
     ) -> CLResult<(PipeTransfer, Option<PipeResource>)> {
         assert!(!self.is_buffer());
 
-        let r = self.get_res()?.get(q.device).unwrap();
-        let ctx = q.device.helper_ctx();
+        let r = self.get_res()?.get(dev).unwrap();
+        let ctx = dev.helper_ctx();
 
-        let tx = if can_map_directly(q.device, r) {
+        let tx = if can_map_directly(dev, r) {
             ctx.texture_map_directly(r, bx, rw)
         } else {
             None
@@ -541,8 +638,7 @@ impl Mem {
         if let Some(tx) = tx {
             Ok((tx, None))
         } else {
-            let shadow = q
-                .device
+            let shadow = dev
                 .screen()
                 .resource_create_texture(
                     r.width(),
@@ -555,7 +651,9 @@ impl Mem {
                     false,
                 )
                 .ok_or(CL_OUT_OF_RESOURCES)?;
-            let tx = ctx.texture_map_coherent(&shadow, bx, rw);
+            let tx = ctx
+                .texture_map_coherent(&shadow, bx, rw)
+                .ok_or(CL_OUT_OF_RESOURCES)?;
             Ok((tx, Some(shadow)))
         }
     }
@@ -1093,34 +1191,39 @@ impl Mem {
     /// the content behind the returned pointer is valid until unmapped.
     fn map<'a>(
         &self,
-        q: &Arc<Queue>,
+        dev: &'static Device,
         lock: &'a mut MutexGuard<Mappings>,
         rw: RWFlags,
     ) -> CLResult<&'a PipeTransfer> {
-        if let Entry::Vacant(e) = lock.tx.entry(q.device) {
+        if let Entry::Vacant(e) = lock.tx.entry(dev) {
             let (tx, res) = if self.is_buffer() {
-                self.tx_raw_async(q, rw)?
+                self.tx_raw_async(dev, rw)?
             } else {
                 let bx = self.image_desc.bx()?;
-                self.tx_image_raw_async(q, &bx, rw)?
+                self.tx_image_raw_async(dev, &bx, rw)?
             };
 
             e.insert(MappingTransfer::new(tx, res));
         } else {
-            lock.mark_pending(q.device);
+            lock.mark_pending(dev);
         }
 
-        Ok(&lock.tx.get_mut(&q.device).unwrap().tx)
+        Ok(&lock.tx.get_mut(dev).unwrap().tx)
     }
 
-    pub fn map_buffer(&self, q: &Arc<Queue>, offset: usize, _size: usize) -> CLResult<*mut c_void> {
+    pub fn map_buffer(
+        &self,
+        dev: &'static Device,
+        offset: usize,
+        _size: usize,
+    ) -> CLResult<*mut c_void> {
         assert!(self.is_buffer());
 
         let mut lock = self.maps.lock().unwrap();
-        let ptr = if self.has_user_shadow_buffer(q.device)? {
+        let ptr = if self.has_user_shadow_buffer(dev)? {
             self.host_ptr
         } else {
-            let tx = self.map(q, &mut lock, RWFlags::RW)?;
+            let tx = self.map(dev, &mut lock, RWFlags::RW)?;
             tx.ptr()
         };
 
@@ -1130,7 +1233,7 @@ impl Mem {
 
     pub fn map_image(
         &self,
-        q: &Arc<Queue>,
+        dev: &'static Device,
         origin: &CLVec<usize>,
         _region: &CLVec<usize>,
         row_pitch: &mut usize,
@@ -1141,18 +1244,18 @@ impl Mem {
         let mut lock = self.maps.lock().unwrap();
 
         // we might have a host_ptr shadow buffer or image created from buffer
-        let ptr = if self.has_user_shadow_buffer(q.device)? || self.is_parent_buffer() {
+        let ptr = if self.has_user_shadow_buffer(dev)? || self.is_parent_buffer() {
             *row_pitch = self.image_desc.image_row_pitch;
             *slice_pitch = self.image_desc.image_slice_pitch;
 
             if let Some(src) = &self.parent {
-                let tx = src.map(q, &mut lock, RWFlags::RW)?;
+                let tx = src.map(dev, &mut lock, RWFlags::RW)?;
                 tx.ptr()
             } else {
                 self.host_ptr
             }
         } else {
-            let tx = self.map(q, &mut lock, RWFlags::RW)?;
+            let tx = self.map(dev, &mut lock, RWFlags::RW)?;
 
             if self.image_desc.dims() > 1 {
                 *row_pitch = tx.row_pitch() as usize;

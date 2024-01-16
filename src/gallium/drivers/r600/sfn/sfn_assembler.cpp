@@ -27,6 +27,8 @@
 #include "sfn_assembler.h"
 
 #include "../eg_sq.h"
+#include "../r600_asm.h"
+
 #include "sfn_callstack.h"
 #include "sfn_conditionaljumptracker.h"
 #include "sfn_debug.h"
@@ -551,7 +553,7 @@ AssamblerVisitor::visit(const TexInstr& tex_instr)
    else
       tex.inst_mod = tex_instr.inst_mode();
    if (r600_bytecode_add_tex(m_bc, &tex)) {
-      R600_ERR("shader_from_nir: Error creating tex assembly instruction\n");
+      R600_ASM_ERR("shader_from_nir: Error creating tex assembly instruction\n");
       m_result = false;
    }
 }
@@ -588,7 +590,8 @@ AssamblerVisitor::visit(const ExportInstr& exi)
       output.array_base = exi.location();
       break;
    default:
-      R600_ERR("shader_from_nir: export %d type not yet supported\n", exi.export_type());
+      R600_ASM_ERR("shader_from_nir: export %d type not yet supported\n",
+                   exi.export_type());
       m_result = false;
    }
 
@@ -601,7 +604,7 @@ AssamblerVisitor::visit(const ExportInstr& exi)
 
    int r = 0;
    if ((r = r600_bytecode_add_output(m_bc, &output))) {
-      R600_ERR("Error adding export at location %d : err: %d\n", exi.location(), r);
+      R600_ASM_ERR("Error adding export at location %d : err: %d\n", exi.location(), r);
       m_result = false;
    }
 }
@@ -641,7 +644,7 @@ AssamblerVisitor::visit(const ScratchIOInstr& instr)
    }
 
    if (r600_bytecode_add_output(m_bc, &cf)) {
-      R600_ERR("shader_from_nir: Error creating SCRATCH_WR assembly instruction\n");
+      R600_ASM_ERR("shader_from_nir: Error creating SCRATCH_WR assembly instruction\n");
       m_result = false;
    }
 }
@@ -662,7 +665,7 @@ AssamblerVisitor::visit(const StreamOutInstr& instr)
    output.op = instr.op(m_shader->bc.gfx_level);
 
    if (r600_bytecode_add_output(m_bc, &output)) {
-      R600_ERR("shader_from_nir: Error creating stream output instruction\n");
+      R600_ASM_ERR("shader_from_nir: Error creating stream output instruction\n");
       m_result = false;
    }
 }
@@ -687,7 +690,7 @@ AssamblerVisitor::visit(const MemRingOutInstr& instr)
    output.array_base = instr.array_base();
 
    if (r600_bytecode_add_output(m_bc, &output)) {
-      R600_ERR("shader_from_nir: Error creating mem ring write instruction\n");
+      R600_ASM_ERR("shader_from_nir: Error creating mem ring write instruction\n");
       m_result = false;
    }
 }
@@ -763,13 +766,13 @@ AssamblerVisitor::visit(const FetchInstr& fetch_instr)
 
    if (fetch_instr.has_fetch_flag(FetchInstr::use_tc)) {
       if ((r600_bytecode_add_vtx_tc(m_bc, &vtx))) {
-         R600_ERR("shader_from_nir: Error creating tex assembly instruction\n");
+         R600_ASM_ERR("shader_from_nir: Error creating tex assembly instruction\n");
          m_result = false;
       }
 
    } else {
       if ((r600_bytecode_add_vtx(m_bc, &vtx))) {
-         R600_ERR("shader_from_nir: Error creating tex assembly instruction\n");
+         R600_ASM_ERR("shader_from_nir: Error creating tex assembly instruction\n");
          m_result = false;
       }
    }
@@ -1203,9 +1206,9 @@ bool
 AssamblerVisitor::copy_dst(r600_bytecode_alu_dst& dst, const Register& d, bool write)
 {
    if (write && d.sel() > g_clause_local_end) {
-      R600_ERR("shader_from_nir: Don't support more then 123 GPRs + 4 clause "
-               "local, but try using %d\n",
-               d.sel());
+      R600_ASM_ERR("shader_from_nir: Don't support more then 123 GPRs + 4 clause "
+                   "local, but try using %d\n",
+                   d.sel());
       m_result = false;
       return false;
    }

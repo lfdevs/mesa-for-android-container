@@ -117,38 +117,4 @@ ANativeWindow_query(const struct ANativeWindow *window,
 }
 #endif // ANDROID_API_LEVEL < 26
 
-struct buffer_info {
-   int width;
-   int height;
-   uint32_t drm_fourcc;
-   int num_planes;
-   int fds[4];
-   uint64_t modifier;
-   int offsets[4];
-   int pitches[4];
-   enum __DRIYUVColorSpace yuv_color_space;
-   enum __DRISampleRange sample_range;
-   enum __DRIChromaSiting horizontal_siting;
-   enum __DRIChromaSiting vertical_siting;
-};
-
-#ifdef USE_IMAPPER4_METADATA_API
-#ifdef __cplusplus
-extern "C" {
-#endif
-extern int
-mapper_metadata_get_buffer_info(struct ANativeWindowBuffer *buf,
-                                struct buffer_info *out_buf_info);
-#ifdef __cplusplus
-}
-#endif
-#else
-static inline int
-mapper_metadata_get_buffer_info(struct ANativeWindowBuffer *buf,
-                                struct buffer_info *out_buf_info)
-{
-   return -ENOTSUP;
-}
-#endif /* USE_IMAPPER4_METADATA_API */
-
 #endif /* EGL_ANDROID_INCLUDED */

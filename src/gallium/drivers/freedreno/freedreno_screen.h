@@ -98,6 +98,7 @@ struct fd_screen {
       bool enable_throttling;
    } driconf;
 
+   struct fd_dev_info dev_info;
    const struct fd_dev_info *info;
    uint32_t ccu_offset_gmem;
    uint32_t ccu_offset_bypass;

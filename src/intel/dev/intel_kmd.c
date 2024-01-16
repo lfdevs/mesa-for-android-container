@@ -22,7 +22,7 @@
  */
 
 #include <string.h>
-#include <xf86drm.h>
+#include "util/libdrm.h"
 
 #include "intel_kmd.h"
 

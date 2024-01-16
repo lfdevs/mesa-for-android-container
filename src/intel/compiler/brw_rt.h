@@ -24,6 +24,11 @@
 #ifndef BRW_RT_H
 #define BRW_RT_H
 
+#include <stdint.h>
+
+#include "compiler/shader_enums.h"
+#include "util/macros.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -194,8 +199,8 @@ struct brw_rt_raygen_trampoline_params {
 #define BRW_RT_OFFSETOF_HIT_ATTRIB_DATA BRW_RT_SIZEOF_HW_STACK
 
 #define BRW_RT_ASYNC_STACK_STRIDE \
-   ALIGN(BRW_RT_OFFSETOF_HIT_ATTRIB_DATA + \
-         BRW_RT_SIZEOF_HIT_ATTRIB_DATA, 64)
+   ALIGN_POT(BRW_RT_OFFSETOF_HIT_ATTRIB_DATA + \
+             BRW_RT_SIZEOF_HIT_ATTRIB_DATA, 64)
 
 static inline void
 brw_rt_compute_scratch_layout(struct brw_rt_scratch_layout *layout,

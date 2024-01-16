@@ -171,7 +171,9 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #if GFX_VERx10 >= 125
       db.TiledMode = isl_encode_tiling[info->depth_surf->tiling];
       db.MipTailStartLOD = info->depth_surf->miptail_start_level;
+#if GFX_VERx10 < 20
       db.CompressionMode = isl_aux_usage_has_ccs(info->hiz_usage);
+#endif
       db.RenderCompressionFormat =
          isl_get_render_compression_format(info->depth_surf->format);
 #elif GFX_VER >= 9
@@ -194,7 +196,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
          isl_surf_get_array_pitch_el_rows(info->depth_surf) >> 2;
 #endif
 
-#if GFX_VER >= 12
+#if GFX_VER == 12
       db.ControlSurfaceEnable = db.DepthBufferCompressionEnable =
          isl_aux_usage_has_ccs(info->hiz_usage);
 #endif
@@ -234,9 +236,14 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       db.StencilWriteEnable = true;
 #endif
 #if GFX_VERx10 >= 125
+#if GFX_VER < 20
       sb.CompressionMode = isl_aux_usage_has_ccs(info->stencil_aux_usage);
       sb.RenderCompressionFormat =
          isl_get_render_compression_format(info->stencil_surf->format);
+#else
+      sb.CompressionFormat =
+         isl_get_render_compression_format(info->stencil_surf->format);
+#endif
 #endif
 #if GFX_VER >= 12
       sb.TiledMode = isl_encode_tiling[info->stencil_surf->tiling];
@@ -250,9 +257,11 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       sb.MinimumArrayElement = info->view->base_array_layer;
       assert(info->stencil_aux_usage == ISL_AUX_USAGE_NONE ||
              info->stencil_aux_usage == ISL_AUX_USAGE_STC_CCS);
+#if GFX_VER < 20
       sb.StencilCompressionEnable =
          info->stencil_aux_usage == ISL_AUX_USAGE_STC_CCS;
       sb.ControlSurfaceEnable = sb.StencilCompressionEnable;
+#endif
 #elif GFX_VERx10 >= 75
       sb.StencilBufferEnable = true;
 #endif
@@ -282,9 +291,11 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       GENX(3DSTATE_HIER_DEPTH_BUFFER_header),
       .MOCS = info->mocs,
    };
+#if GFX_VER < 20
    struct GENX(3DSTATE_CLEAR_PARAMS) clear = {
       GENX(3DSTATE_CLEAR_PARAMS_header),
    };
+#endif
 
    assert(info->hiz_usage == ISL_AUX_USAGE_NONE ||
           isl_aux_usage_has_hiz(info->hiz_usage));
@@ -384,6 +395,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
          isl_surf_get_array_pitch_sa_rows(info->hiz_surf) >> 2;
 #endif
 
+#if GFX_VER < 20
       clear.DepthClearValueValid = true;
 #if GFX_VER >= 8
       clear.DepthClearValue = info->depth_clear_value;
@@ -405,6 +417,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
          unreachable("Invalid depth type");
       }
 #endif
+#endif
    }
 #endif /* GFX_VER >= 6 */
 
@@ -420,7 +433,9 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
    GENX(3DSTATE_HIER_DEPTH_BUFFER_pack)(NULL, dw, &hiz);
    dw += GENX(3DSTATE_HIER_DEPTH_BUFFER_length);
 
+#if GFX_VER < 20
    GENX(3DSTATE_CLEAR_PARAMS_pack)(NULL, dw, &clear);
    dw += GENX(3DSTATE_CLEAR_PARAMS_length);
-#endif
+#endif /* GFX_VER < 20 */
+#endif /* GFX_VER >= 6 */
 }

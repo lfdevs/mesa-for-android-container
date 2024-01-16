@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "nir/pipe_nir.h"
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_blitter.h"
@@ -239,12 +240,7 @@ static void *vc4_get_yuv_vs(struct pipe_context *pctx)
 
    nir_store_var(&b, pos_out, nir_load_var(&b, pos_in), 0xf);
 
-   struct pipe_shader_state shader_tmpl = {
-           .type = PIPE_SHADER_IR_NIR,
-           .ir.nir = b.shader,
-   };
-
-   vc4->yuv_linear_blit_vs = pctx->create_vs_state(pctx, &shader_tmpl);
+   vc4->yuv_linear_blit_vs = pipe_shader_from_nir(pctx, b.shader);
 
    return vc4->yuv_linear_blit_vs;
 }
@@ -329,12 +325,7 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
                  nir_unpack_unorm_4x8(&b, load),
                  0xf);
 
-   struct pipe_shader_state shader_tmpl = {
-           .type = PIPE_SHADER_IR_NIR,
-           .ir.nir = b.shader,
-   };
-
-   *cached_shader = pctx->create_fs_state(pctx, &shader_tmpl);
+   *cached_shader = pipe_shader_from_nir(pctx, b.shader);
 
    return *cached_shader;
 }

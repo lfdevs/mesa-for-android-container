@@ -163,6 +163,7 @@ static inline void
 zink_resource_usage_set(struct zink_resource *res, struct zink_batch_state *bs, bool write)
 {
    zink_bo_usage_set(res->obj->bo, bs, write);
+   res->obj->unsync_access = false;
 }
 
 static inline bool

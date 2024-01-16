@@ -138,7 +138,7 @@ else
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
 	confflags_GALLIUM += -Dgallium-va=enabled
-	confflags_GALLIUM += -Dvideo-codecs="vc1dec, h264dec, h264enc, h265dec, h265enc"
+	confflags_GALLIUM += -Dvideo-codecs="all"
   endif
 endif
 
@@ -266,9 +266,6 @@ override_dh_install:
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
-
-override_dh_missing:
-	dh_missing --fail-missing
 
 override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4

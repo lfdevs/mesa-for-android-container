@@ -309,7 +309,8 @@ create_new_io_vars(nir_shader *shader, nir_variable_mode mode,
             var->type = flat_type;
 
          nir_shader_add_variable(shader, var);
-         unsigned num_slots = MAX2(glsl_get_length(flat_type), 1);
+         unsigned num_slots =
+            glsl_type_is_array(flat_type) ? glsl_get_length(flat_type) : 1;
          for (unsigned i = 0; i < num_slots; i++) {
             for (unsigned j = 0; j < 4; j++)
                new_vars[loc + i][j] = var;

@@ -53,15 +53,16 @@ anv_device_print_vas(struct anv_physical_device *device)
    PRINT_HEAP(general_state_pool);
    PRINT_HEAP(low_heap);
    PRINT_HEAP(dynamic_state_pool);
+   PRINT_HEAP(sampler_state_pool);
    PRINT_HEAP(binding_table_pool);
    PRINT_HEAP(internal_surface_state_pool);
    PRINT_HEAP(scratch_surface_state_pool);
    PRINT_HEAP(bindless_surface_state_pool);
-   PRINT_HEAP(descriptor_pool);
-   PRINT_HEAP(push_descriptor_pool);
+   PRINT_HEAP(indirect_descriptor_pool);
+   PRINT_HEAP(indirect_push_descriptor_pool);
    PRINT_HEAP(instruction_state_pool);
-   PRINT_HEAP(client_visible_heap);
    PRINT_HEAP(high_heap);
+   PRINT_HEAP(trtt);
 }
 
 void
@@ -101,41 +102,37 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
                     _1Gb - address);
 
    address = va_add(&device->va.low_heap, address, _1Gb);
-   /* The STATE_BASE_ADDRESS can only express up to 4Gb - 4Kb */
-   address = va_add(&device->va.dynamic_state_pool, address, 4 * _1Gb - 4096);
-   address = align64(address, _1Gb);
 
-   /* The following addresses have to be located in a 4Gb range so that the
-    * binding tables can address internal surface states & bindless surface
-    * states.
+   /* The binding table pool has to be located directly in front of the
+    * surface states.
     */
-   address = align64(address, _4Gb);
+   address += _1Gb;
    address = va_add(&device->va.binding_table_pool, address, _1Gb);
    address = va_add(&device->va.internal_surface_state_pool, address, 1 * _1Gb);
+   assert(device->va.internal_surface_state_pool.addr ==
+          align64(device->va.internal_surface_state_pool.addr, 2 * _1Gb));
    /* Scratch surface state overlaps with the internal surface state */
    va_at(&device->va.scratch_surface_state_pool,
          device->va.internal_surface_state_pool.addr,
          8 * _1Mb);
+   address = va_add(&device->va.bindless_surface_state_pool, address, 2 * _1Gb);
 
-   /* Both of the following heaps have be in the same 4Gb range from the
-    * binding table pool start so they can be addressed from binding table
-    * entries.
+
+   /* PRMs & simulation disagrees on the actual size of this heap. Take the
+    * smallest (simulation) so that it works everywhere.
     */
-   if (device->indirect_descriptors) {
-      /* With indirect descriptors, we allocate bindless surface states from
-       * this pool.
-       */
-      address = va_add(&device->va.bindless_surface_state_pool, address, 2 * _1Gb);
+   address = align64(address, _4Gb);
+   address = va_add(&device->va.dynamic_state_pool, address, _1Gb);
+   address = va_add(&device->va.sampler_state_pool, address, 2 * _1Gb);
 
-      /* Descriptor buffers can go anywhere */
-      address = align64(address, _4Gb);
-      address = va_add(&device->va.descriptor_pool, address, 3 * _1Gb);
-      address = va_add(&device->va.push_descriptor_pool, address, _1Gb);
-   } else {
-      /* With direct descriptor, descriptors set buffers are allocated
-       * here.
+   if (device->indirect_descriptors) {
+      /* With indirect descriptors, descriptor buffers can go anywhere, they
+       * just need to be in a 4Gb aligned range, so all shader accesses can
+       * use a relocatable upper dword for the 64bit address.
        */
-      address = va_add(&device->va.descriptor_pool, address, 2 * _1Gb);
+      address = align64(address, _4Gb);
+      address = va_add(&device->va.indirect_descriptor_pool, address, 3 * _1Gb);
+      address = va_add(&device->va.indirect_push_descriptor_pool, address, _1Gb);
    }
 
    /* We use a trick to compute constant data offsets in the shaders to avoid
@@ -146,18 +143,36 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
    address = align64(address, _4Gb);
    address = va_add(&device->va.instruction_state_pool, address, 2 * _1Gb);
 
-   /* Whatever we have left we split in 2 for app allocations client-visible &
-    * non-client-visible.
+   /* What's left to do for us is to set va.high_heap and va.trtt without
+    * overlap, but there are a few things to be considered:
     *
-    * Leave the last 4GiB out of the high vma range, so that no state
-    * base address + size can overflow 48 bits. For more information see
+    * The TR-TT address space is governed by the GFX_TRTT_VA_RANGE register,
+    * which carves out part of the address space for TR-TT and is independent
+    * of device->gtt_size. We use 47:44 for gen9+, the values we set here
+    * should be in sync with what we write to the register.
+    *
+    * If we ever gain the capability to use more than 48 bits of address space
+    * we'll have to adjust where we put the TR-TT space (and how we set
+    * GFX_TRTT_VA_RANGE).
+    *
+    * We have to leave the last 4GiB out of the high vma range, so that no
+    * state base address + size can overflow 48 bits. For more information see
     * the comment about Wa32bitGeneralStateOffset in anv_allocator.c
+    *
+    * Despite the comment above, before we had TR-TT we were not only avoiding
+    * the last 4GiB of the 48bit address space, but also avoiding the last
+    * 4GiB from gtt_size, so let's be on the safe side and do the 4GiB
+    * avoiding for both the TR-TT space top and the gtt top.
     */
-   uint64_t user_heaps_size = device->gtt_size - address - 4 * _1Gb;
-   uint64_t heaps_size_Gb = user_heaps_size / _1Gb / 2 ;
+   assert(device->gtt_size <= (1uLL << 48));
+   uint64_t trtt_start = 0xFuLL << 44;
+   uint64_t trtt_end = (1uLL << 48) - 4 * _1Gb;
+   uint64_t addressable_top = MIN2(device->gtt_size, trtt_start) - 4 * _1Gb;
 
-   address = va_add(&device->va.client_visible_heap, address, heaps_size_Gb * _1Gb);
-   address = va_add(&device->va.high_heap, address, heaps_size_Gb * _1Gb);
+   uint64_t user_heaps_size = addressable_top - address;
+   address = va_add(&device->va.high_heap, address, user_heaps_size);
+   assert(address <= trtt_start);
+   address = va_add(&device->va.trtt, trtt_start, trtt_end - trtt_start);
 
    if (INTEL_DEBUG(DEBUG_HEAPS))
       anv_device_print_vas(device);

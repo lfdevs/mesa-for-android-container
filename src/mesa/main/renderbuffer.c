@@ -301,7 +301,6 @@ _mesa_init_renderbuffer(struct gl_renderbuffer *rb, GLuint name)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   rb->ClassID = 0;
    rb->Name = name;
    rb->RefCount = 1;
    rb->Delete = delete_renderbuffer;

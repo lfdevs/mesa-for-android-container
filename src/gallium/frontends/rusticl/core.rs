@@ -2,6 +2,7 @@ pub mod context;
 pub mod device;
 pub mod event;
 pub mod format;
+pub mod gl;
 pub mod kernel;
 pub mod memory;
 pub mod platform;

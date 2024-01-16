@@ -210,6 +210,13 @@ parse_control_reg(const char *name)
    return afuc_control_reg(name + 1);
 }
 
+unsigned
+parse_sqe_reg(const char *name)
+{
+   /* skip leading "%" */
+   return afuc_sqe_reg(name + 1);
+}
+
 static void
 emit_jumptable(int outfd)
 {
@@ -289,6 +296,8 @@ main(int argc, char **argv)
          gpuver = 5;
       } else if (strstr(file, "a6")) {
          gpuver = 6;
+      } else if (strstr(file, "a7")) {
+         gpuver = 7;
       }
    }
 

@@ -175,8 +175,17 @@ v3d_end_query_perfcnt(struct v3d_context *v3d, struct v3d_query *query)
         /* Get a copy of latest submitted job's fence to wait for its
          * completion
          */
-        if (v3d->active_perfmon->job_submitted)
-                v3d->active_perfmon->last_job_fence = v3d_fence_create(v3d);
+        if (v3d->active_perfmon->job_submitted) {
+                int fd = -1;
+                drmSyncobjExportSyncFile(v3d->fd, v3d->out_sync, &fd);
+                if (fd == -1) {
+                        fprintf(stderr, "export failed\n");
+                        v3d->active_perfmon->last_job_fence = NULL;
+                } else {
+                        v3d->active_perfmon->last_job_fence =
+                                v3d_fence_create(v3d, fd);
+                }
+        }
 
         v3d->active_perfmon = NULL;
 

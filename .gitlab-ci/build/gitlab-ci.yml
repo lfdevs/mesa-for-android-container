@@ -61,15 +61,6 @@
   script:
     - .gitlab-ci/meson/build.sh
 
-.meson-build_mingw:
-  extends:
-    - .build-linux
-    - .use-debian/x86_64_build_mingw
-    - .use-wine
-  stage: build-x86_64
-  script:
-    - .gitlab-ci/meson/build.sh
-
 debian-testing:
   extends:
     - .meson-build
@@ -84,7 +75,8 @@ debian-testing:
     GALLIUM_ST: >
       -D dri3=enabled
       -D gallium-va=enabled
-    GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915"
+      -D gallium-rusticl=true
+    GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915,r300"
     VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio,nouveau-experimental"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
@@ -133,33 +125,6 @@ debian-testing-msan:
     GALLIUM_DRIVERS: "freedreno,iris,nouveau,kmsro,r300,r600,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus"
     VULKAN_DRIVERS: intel,amd,broadcom,virtio
 
-.debian-cl-testing:
-  extends:
-    - .meson-build
-    - .ci-deqp-artifacts
-  variables:
-    LLVM_VERSION: 15
-    UNWIND: "enabled"
-    DRI_LOADERS: >
-      -D glx=disabled
-      -D egl=disabled
-      -D gbm=disabled
-    GALLIUM_DRIVERS: "swrast"
-    BUILDTYPE: "debugoptimized"
-    EXTRA_OPTION: >
-      -D valgrind=disabled
-  script:
-    - .gitlab-ci/meson/build.sh
-    - .gitlab-ci/prepare-artifacts.sh
-
-debian-rusticl-testing:
-  extends:
-    - .debian-cl-testing
-  variables:
-    GALLIUM_ST: >
-      -D gallium-rusticl=true
-      -D opencl-spirv=true
-
 debian-build-testing:
   extends: .meson-build
   variables:
@@ -178,7 +143,6 @@ debian-build-testing:
       -D gallium-va=enabled
       -D gallium-xa=enabled
       -D gallium-nine=true
-      -D gallium-opencl=disabled
       -D gallium-rusticl=false
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,asahi,crocus"
     VULKAN_DRIVERS: swrast
@@ -222,7 +186,6 @@ debian-release:
       -D gallium-va=enabled
       -D gallium-xa=enabled
       -D gallium-nine=false
-      -D gallium-opencl=disabled
       -D gallium-rusticl=false
       -D llvm=enabled
     GALLIUM_DRIVERS: "i915,iris,nouveau,kmsro,freedreno,r300,svga,swrast,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,crocus"
@@ -274,8 +237,6 @@ alpine-build-testing:
       -D shared-llvm=enabled
     UNWIND: "disabled"
     VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,imagination-experimental"
-  script:
-    - .gitlab-ci/meson/build.sh
 
 fedora-release:
   extends:
@@ -315,7 +276,6 @@ fedora-release:
       -D gallium-va=enabled
       -D gallium-xa=enabled
       -D gallium-nine=false
-      -D gallium-opencl=icd
       -D gallium-rusticl=true
       -D gles1=disabled
       -D gles2=enabled
@@ -325,8 +285,6 @@ fedora-release:
     LLVM_VERSION: ""
     UNWIND: "disabled"
     VULKAN_DRIVERS: "amd,broadcom,freedreno,imagination-experimental,intel,intel_hasvk"
-  script:
-    - .gitlab-ci/meson/build.sh
 
 debian-android:
   extends:
@@ -365,7 +323,6 @@ debian-android:
       -D gallium-va=disabled
       -D gallium-xa=disabled
       -D gallium-nine=false
-      -D gallium-opencl=disabled
       -D gallium-rusticl=false
     LLVM_VERSION: ""
     PKG_CONFIG_LIBDIR: "/disable/non/android/system/pc/files"
@@ -485,8 +442,6 @@ debian-arm64-build-test:
     VULKAN_DRIVERS: "amd"
     EXTRA_OPTION: >
       -Dtools=panfrost,imagination
-  script:
-    - .gitlab-ci/meson/build.sh
 
 debian-arm64-release:
   extends:
@@ -514,6 +469,7 @@ debian-clang:
       -Wno-error=enum-conversion
       -Wno-error=initializer-overrides
       -Wno-error=sometimes-uninitialized
+      -Werror=misleading-indentation
     CPP_ARGS: >
       -Wno-error=c99-designator
       -Wno-error=overloaded-virtual
@@ -533,7 +489,6 @@ debian-clang:
       -D gallium-va=enabled
       -D gallium-xa=enabled
       -D gallium-nine=true
-      -D gallium-opencl=icd
       -D gles1=enabled
       -D gles2=enabled
       -D llvm=enabled
@@ -542,7 +497,7 @@ debian-clang:
       -D opencl-spirv=true
       -D shared-glapi=enabled
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio,swrast,panfrost,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio,swrast,panfrost,imagination-experimental,microsoft-experimental,nouveau-experimental
     EXTRA_OPTION:
       -D spirv-to-dxil=true
       -D osmesa=true
@@ -570,7 +525,6 @@ debian-clang-release:
       -D gallium-va=enabled
       -D gallium-xa=enabled
       -D gallium-nine=true
-      -D gallium-opencl=icd
       -D gles1=disabled
       -D gles2=disabled
       -D llvm=enabled
@@ -579,10 +533,10 @@ debian-clang-release:
       -D opencl-spirv=true
       -D shared-glapi=disabled
 
-windows-vs2019:
+windows-msvc:
   extends:
     - .build-windows
-    - .use-windows_build_vs2019
+    - .use-windows_build_msvc
     - .windows-build-rules
   stage: build-misc
   script:
@@ -591,34 +545,6 @@ windows-vs2019:
     paths:
       - _build/meson-logs/*.txt
       - _install/
-
-.debian-cl:
-  extends: .meson-build
-  variables:
-    LLVM_VERSION: 15
-    UNWIND: "enabled"
-    DRI_LOADERS: >
-      -D glx=disabled
-      -D egl=disabled
-      -D gbm=disabled
-    EXTRA_OPTION: >
-      -D valgrind=disabled
-
-debian-rusticl:
-  extends: .debian-cl
-  variables:
-    BUILDTYPE: debug
-    GALLIUM_DRIVERS: "iris,swrast"
-    GALLIUM_ST: >
-      -D dri3=disabled
-      -D gallium-vdpau=disabled
-      -D gallium-omx=disabled
-      -D gallium-va=disabled
-      -D gallium-xa=disabled
-      -D gallium-nine=false
-      -D gallium-opencl=disabled
-      -D gallium-rusticl=true
-    RUSTC: clippy-driver
 
 debian-vulkan:
   extends: .meson-build
@@ -630,6 +556,9 @@ debian-vulkan:
       -D glx=disabled
       -D gbm=disabled
       -D egl=disabled
+      -D opengl=false
+      -D gles1=disabled
+      -D gles2=disabled
       -D platforms=x11,wayland
       -D osmesa=false
     GALLIUM_ST: >
@@ -639,7 +568,6 @@ debian-vulkan:
       -D gallium-va=disabled
       -D gallium-xa=disabled
       -D gallium-nine=false
-      -D gallium-opencl=disabled
       -D gallium-rusticl=false
       -D b_sanitize=undefined
       -D c_args=-fno-sanitize-recover=all
@@ -660,7 +588,7 @@ debian-x86_32:
     BUILDTYPE: debug
     CROSS: i386
     VULKAN_DRIVERS: intel,amd,swrast,virtio
-    GALLIUM_DRIVERS: "iris,nouveau,r300,r600,radeonsi,swrast,virgl,zink,crocus"
+    GALLIUM_DRIVERS: "iris,nouveau,r300,r600,radeonsi,swrast,virgl,zink,crocus,d3d12"
     LLVM_VERSION: 15
     EXTRA_OPTION: >
       -D vulkan-layers=device-select,overlay
@@ -688,41 +616,3 @@ debian-ppc64el:
     CROSS: ppc64el
     GALLIUM_DRIVERS: "nouveau,radeonsi,swrast,virgl,zink"
     VULKAN_DRIVERS: "amd,swrast"
-
-# Disabled as it hangs with winedbg on shared runners
-.debian-mingw32-x86_64:
-  extends: .meson-build_mingw
-  stage: build-misc
-  variables:
-    UNWIND: "disabled"
-    C_ARGS: >
-      -Wno-error=format
-      -Wno-error=unused-but-set-variable
-    CPP_ARGS: >
-      -Wno-error=format
-      -Wno-error=unused-function
-      -Wno-error=unused-variable
-      -Wno-error=sign-compare
-      -Wno-error=narrowing
-    GALLIUM_DRIVERS: "swrast,d3d12,zink"
-    VULKAN_DRIVERS: "swrast,amd,microsoft-experimental"
-    GALLIUM_ST: >
-      -D gallium-opencl=icd
-      -D gallium-rusticl=false
-      -D opencl-spirv=true
-      -D microsoft-clc=enabled
-      -D static-libclc=all
-      -D opencl-external-clang-headers=disabled
-      -D llvm=enabled
-      -D gallium-va=enabled
-      -D video-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec
-    EXTRA_OPTION: >
-      -D min-windows-version=7
-      -D spirv-to-dxil=true
-      -D gles1=enabled
-      -D gles2=enabled
-      -D osmesa=true
-      -D cpp_rtti=true
-      -D shared-glapi=enabled
-      -D zlib=enabled
-      --cross-file=.gitlab-ci/x86_64-w64-mingw32

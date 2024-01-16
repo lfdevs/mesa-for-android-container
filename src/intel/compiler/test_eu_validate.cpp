@@ -3136,3 +3136,396 @@ TEST_P(validation_test, add3_immediate_types)
       clear_instructions(p);
    }
 }
+
+TEST_P(validation_test, dpas_sdepth)
+{
+   if (devinfo.verx10 < 125)
+      return;
+
+   static const enum gfx12_systolic_depth depth[] = {
+      BRW_SYSTOLIC_DEPTH_16,
+      BRW_SYSTOLIC_DEPTH_2,
+      BRW_SYSTOLIC_DEPTH_4,
+      BRW_SYSTOLIC_DEPTH_8,
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(depth); i++) {
+      brw_DPAS(p,
+               depth[i],
+               8,
+               retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_F),
+               null,
+               retype(brw_vec8_grf(16, 0), BRW_REGISTER_TYPE_HF),
+               retype(brw_vec8_grf(32, 0), BRW_REGISTER_TYPE_HF));
+
+      const bool expected_result = depth[i] == BRW_SYSTOLIC_DEPTH_8;
+
+      EXPECT_EQ(expected_result, validate(p)) <<
+         "Encoded systolic depth value is: " << depth[i];
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, dpas_exec_size)
+{
+   if (devinfo.verx10 < 125)
+      return;
+
+   static const enum brw_execution_size test_vectors[] = {
+      BRW_EXECUTE_1,
+      BRW_EXECUTE_2,
+      BRW_EXECUTE_4,
+      BRW_EXECUTE_8,
+      BRW_EXECUTE_16,
+      BRW_EXECUTE_32,
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_vectors); i++) {
+      brw_set_default_exec_size(p, test_vectors[i]);
+
+      brw_DPAS(p,
+               BRW_SYSTOLIC_DEPTH_8,
+               8,
+               retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_F),
+               null,
+               retype(brw_vec8_grf(16, 0), BRW_REGISTER_TYPE_HF),
+               retype(brw_vec8_grf(32, 0), BRW_REGISTER_TYPE_HF));
+
+      const bool expected_result = test_vectors[i] == BRW_EXECUTE_8;
+
+      EXPECT_EQ(expected_result, validate(p)) <<
+         "Exec size = " << (1u << test_vectors[i]);
+
+      clear_instructions(p);
+   }
+
+   brw_set_default_exec_size(p, BRW_EXECUTE_8);
+}
+
+TEST_P(validation_test, dpas_sub_byte_precision)
+{
+   if (devinfo.verx10 < 125)
+      return;
+
+   static const struct {
+      brw_reg_type dst_type;
+      brw_reg_type src0_type;
+      brw_reg_type src1_type;
+      enum gfx12_sub_byte_precision src1_prec;
+      brw_reg_type src2_type;
+      enum gfx12_sub_byte_precision src2_prec;
+      bool expected_result;
+   } test_vectors[] = {
+      {
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_4BIT,
+         false,
+      },
+      {
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_2BIT,
+         false,
+      },
+      {
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_4BIT,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         false,
+      },
+      {
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_F,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_2BIT,
+         BRW_REGISTER_TYPE_HF, BRW_SUB_BYTE_PRECISION_NONE,
+         false,
+      },
+
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_4BIT,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_2BIT,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         BRW_REGISTER_TYPE_UB, (enum gfx12_sub_byte_precision) 3,
+         false,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_4BIT,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_2BIT,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         true,
+      },
+      {
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UD,
+         BRW_REGISTER_TYPE_UB, (enum gfx12_sub_byte_precision) 3,
+         BRW_REGISTER_TYPE_UB, BRW_SUB_BYTE_PRECISION_NONE,
+         false,
+      },
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_vectors); i++) {
+      brw_inst *inst =
+         brw_DPAS(p,
+                  BRW_SYSTOLIC_DEPTH_8,
+                  8,
+                  retype(brw_vec8_grf(0, 0), test_vectors[i].dst_type),
+                  retype(brw_vec8_grf(16, 0), test_vectors[i].src0_type),
+                  retype(brw_vec8_grf(32, 0), test_vectors[i].src1_type),
+                  retype(brw_vec8_grf(48, 0), test_vectors[i].src2_type));
+
+      brw_inst_set_dpas_3src_src1_subbyte(&devinfo, inst,
+                                          test_vectors[i].src1_prec);
+      brw_inst_set_dpas_3src_src2_subbyte(&devinfo, inst,
+                                          test_vectors[i].src2_prec);
+
+      EXPECT_EQ(test_vectors[i].expected_result, validate(p)) <<
+         "test vector index = " << i;
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, dpas_types)
+{
+   if (devinfo.verx10 < 125)
+      return;
+
+#define TV(a, b, c, d, r)                              \
+   { BRW_REGISTER_TYPE_ ## a, BRW_REGISTER_TYPE_ ## b, \
+     BRW_REGISTER_TYPE_ ## c, BRW_REGISTER_TYPE_ ## d, \
+     r }
+
+   static const struct {
+      brw_reg_type dst_type;
+      brw_reg_type src0_type;
+      brw_reg_type src1_type;
+      brw_reg_type src2_type;
+      bool expected_result;
+   } test_vectors[] = {
+      TV( F,  F, HF, HF, true),
+      TV( F, HF, HF, HF, false),
+      TV(HF,  F, HF, HF, false),
+      TV( F,  F,  F, HF, false),
+      TV( F,  F, HF,  F, false),
+
+      TV(DF, DF, DF, DF, false),
+      TV(DF, DF, DF,  F, false),
+      TV(DF, DF,  F, DF, false),
+      TV(DF,  F, DF, DF, false),
+      TV(DF, DF, DF, HF, false),
+      TV(DF, DF, HF, DF, false),
+      TV(DF, HF, DF, DF, false),
+
+      TV(UD, UD, UB, UB, true),
+      TV(UD, UD, UB, UD, false),
+      TV(UD, UD, UD, UB, false),
+      TV(UD, UD, UB, UW, false),
+      TV(UD, UD, UW, UB, false),
+
+      TV(UD, UB, UB, UB, false),
+      TV(UD, UW, UB, UB, false),
+
+      TV(UQ, UQ, UB, UB, false),
+      TV(UQ, UQ, UB, UQ, false),
+      TV(UQ, UQ, UQ, UB, false),
+      TV(UQ, UQ, UB, UW, false),
+      TV(UQ, UQ, UW, UB, false),
+
+      TV( D,  D,  B,  B, true),
+      TV( D,  D,  B, UB, true),
+      TV( D,  D, UB,  B, true),
+      TV( D, UD,  B,  B, true),
+
+      TV( D,  D,  B,  D, false),
+      TV( D,  D,  D,  B, false),
+      TV( D,  D,  B,  W, false),
+      TV( D,  D,  W,  B, false),
+
+      TV( D,  B,  B,  B, false),
+      TV( D,  W,  B,  B, false),
+
+      TV( Q,  Q,  B,  B, false),
+      TV( Q,  Q,  B,  Q, false),
+      TV( Q,  Q,  Q,  B, false),
+      TV( Q,  Q,  B,  W, false),
+      TV( Q,  Q,  W,  B, false),
+
+      TV(UD, UD, UB,  B, false),
+      TV(UD, UD,  B, UB, false),
+      TV(UD,  D, UB, UB, false),
+   };
+
+#undef TV
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_vectors); i++) {
+      brw_DPAS(p,
+               BRW_SYSTOLIC_DEPTH_8,
+               8,
+               retype(brw_vec8_grf(0, 0), test_vectors[i].dst_type),
+               retype(brw_vec8_grf(16, 0), test_vectors[i].src0_type),
+               retype(brw_vec8_grf(32, 0), test_vectors[i].src1_type),
+               retype(brw_vec8_grf(48, 0), test_vectors[i].src2_type));
+
+      EXPECT_EQ(test_vectors[i].expected_result, validate(p)) <<
+         "test vector index = " << i;
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, dpas_src_subreg_nr)
+{
+   if (devinfo.verx10 < 125)
+      return;
+
+#define TV(dt, od, t0, o0, t1, o1, o2, r) {  \
+      BRW_REGISTER_TYPE_ ## dt, od,          \
+      BRW_REGISTER_TYPE_ ## t0, o0,          \
+      BRW_REGISTER_TYPE_ ## t1, o1, o2,      \
+      r }
+
+   static const struct {
+      brw_reg_type dst_type;
+      unsigned dst_subnr;
+      brw_reg_type src0_type;
+      unsigned src0_subnr;
+      brw_reg_type src1_src2_type;
+      unsigned src1_subnr;
+      unsigned src2_subnr;
+      bool expected_result;
+   } test_vectors[] = {
+      TV( F,  0,  F,  0, HF,  0,  0, true),
+      TV( D,  0,  D,  0,  B,  0,  0, true),
+      TV( D,  0,  D,  0, UB,  0,  0, true),
+      TV( D,  0, UD,  0,  B,  0,  0, true),
+
+      TV( F,  1,  F,  0, HF,  0,  0, false),
+      TV( F,  2,  F,  0, HF,  0,  0, false),
+      TV( F,  3,  F,  0, HF,  0,  0, false),
+      TV( F,  4,  F,  0, HF,  0,  0, false),
+      TV( F,  5,  F,  0, HF,  0,  0, false),
+      TV( F,  6,  F,  0, HF,  0,  0, false),
+      TV( F,  7,  F,  0, HF,  0,  0, false),
+
+      TV( F,  0,  F,  1, HF,  0,  0, false),
+      TV( F,  0,  F,  2, HF,  0,  0, false),
+      TV( F,  0,  F,  3, HF,  0,  0, false),
+      TV( F,  0,  F,  4, HF,  0,  0, false),
+      TV( F,  0,  F,  5, HF,  0,  0, false),
+      TV( F,  0,  F,  6, HF,  0,  0, false),
+      TV( F,  0,  F,  7, HF,  0,  0, false),
+
+      TV( F,  0,  F,  0, HF,  1,  0, false),
+      TV( F,  0,  F,  0, HF,  2,  0, false),
+      TV( F,  0,  F,  0, HF,  3,  0, false),
+      TV( F,  0,  F,  0, HF,  4,  0, false),
+      TV( F,  0,  F,  0, HF,  5,  0, false),
+      TV( F,  0,  F,  0, HF,  6,  0, false),
+      TV( F,  0,  F,  0, HF,  7,  0, false),
+      TV( F,  0,  F,  0, HF,  8,  0, false),
+      TV( F,  0,  F,  0, HF,  9,  0, false),
+      TV( F,  0,  F,  0, HF, 10,  0, false),
+      TV( F,  0,  F,  0, HF, 11,  0, false),
+      TV( F,  0,  F,  0, HF, 12,  0, false),
+      TV( F,  0,  F,  0, HF, 13,  0, false),
+      TV( F,  0,  F,  0, HF, 14,  0, false),
+      TV( F,  0,  F,  0, HF, 15,  0, false),
+
+      TV( F,  0,  F,  0, HF,  0,  1, false),
+      TV( F,  0,  F,  0, HF,  0,  2, false),
+      TV( F,  0,  F,  0, HF,  0,  3, false),
+      TV( F,  0,  F,  0, HF,  0,  4, false),
+      TV( F,  0,  F,  0, HF,  0,  5, false),
+      TV( F,  0,  F,  0, HF,  0,  6, false),
+      TV( F,  0,  F,  0, HF,  0,  7, false),
+      TV( F,  0,  F,  0, HF,  0,  8, false),
+      TV( F,  0,  F,  0, HF,  0,  9, false),
+      TV( F,  0,  F,  0, HF,  0, 10, false),
+      TV( F,  0,  F,  0, HF,  0, 11, false),
+      TV( F,  0,  F,  0, HF,  0, 12, false),
+      TV( F,  0,  F,  0, HF,  0, 13, false),
+      TV( F,  0,  F,  0, HF,  0, 14, false),
+      TV( F,  0,  F,  0, HF,  0, 15, false),
+
+      /* These meet the requirements, but they specify a subnr that is part of
+       * the next register. It is currently not possible to specify a subnr of
+       * 32 for the B and UB values because brw_reg::subnr is only 5 bits.
+       */
+      TV( F, 16,  F,  0, HF,  0,  0, false),
+      TV( F,  0,  F, 16, HF,  0,  0, false),
+      TV( F,  0,  F,  0, HF,  0, 16, false),
+
+      TV( D, 16,  D,  0,  B,  0,  0, false),
+      TV( D,  0,  D, 16,  B,  0,  0, false),
+   };
+
+#undef TV
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_vectors); i++) {
+      struct brw_reg dst =
+         retype(brw_vec8_grf( 0, 0), test_vectors[i].dst_type);
+      struct brw_reg src0 =
+         retype(brw_vec8_grf(16, 0), test_vectors[i].src0_type);
+      struct brw_reg src1 =
+         retype(brw_vec8_grf(32, 0), test_vectors[i].src1_src2_type);
+      struct brw_reg src2 =
+         retype(brw_vec8_grf(48, 0), test_vectors[i].src1_src2_type);
+
+      /* subnr for DPAS is in units of datatype precision instead of bytes as
+       * it is for every other instruction. Set the value by hand instead of
+       * using byte_offset() or similar.
+       */
+      dst.subnr = test_vectors[i].dst_subnr;
+      src0.subnr = test_vectors[i].src0_subnr;
+      src1.subnr = test_vectors[i].src1_subnr;
+      src2.subnr = test_vectors[i].src2_subnr;
+
+      brw_DPAS(p, BRW_SYSTOLIC_DEPTH_8, 8, dst, src0, src1, src2);
+
+      EXPECT_EQ(test_vectors[i].expected_result, validate(p)) <<
+         "test vector index = " << i;
+
+      clear_instructions(p);
+   }
+}

@@ -55,6 +55,7 @@ nvk_CreateQueryPool(VkDevice device,
    uint32_t reports_per_query;
    switch (pCreateInfo->queryType) {
    case VK_QUERY_TYPE_OCCLUSION:
+   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
       reports_per_query = 2;
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
@@ -174,7 +175,8 @@ emit_zero_queries(struct nvk_cmd_buffer *cmd, struct nvk_query_pool *pool,
    switch (pool->vk.query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
    case VK_QUERY_TYPE_TIMESTAMP:
-   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
       for (uint32_t i = 0; i < num_queries; i++) {
          uint64_t addr = nvk_query_available_addr(pool, first_index + i);
 
@@ -401,10 +403,12 @@ nvk_cmd_begin_end_query(struct nvk_cmd_buffer *cmd,
    uint64_t report_addr = nvk_query_report_addr(pool, query) +
                           end * sizeof(struct nvk_query_report);
 
+   uint32_t end_size = 7 * end;
+
    struct nv_push *p;
    switch (pool->vk.query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      p = nvk_cmd_buffer_push(cmd, 2 + 5 * (1 + end));
+      p = nvk_cmd_buffer_push(cmd, 7 + end_size);
 
       P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, !end);
 
@@ -417,12 +421,13 @@ nvk_cmd_begin_end_query(struct nvk_cmd_buffer *cmd,
          .pipeline_location = PIPELINE_LOCATION_ALL,
          .report = REPORT_ZPASS_PIXEL_CNT64,
          .structure_size = STRUCTURE_SIZE_FOUR_WORDS,
+         .flush_disable = true,
       });
       break;
 
    case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
       uint32_t stat_count = util_bitcount(pool->vk.pipeline_statistics);
-      p = nvk_cmd_buffer_push(cmd, (stat_count + end) * 5);
+      p = nvk_cmd_buffer_push(cmd, stat_count * 5 + end_size);
 
       ASSERTED uint32_t stats_left = pool->vk.pipeline_statistics;
       for (uint32_t i = 0; i < ARRAY_SIZE(nvk_3d_stat_queries); i++) {
@@ -447,6 +452,7 @@ nvk_cmd_begin_end_query(struct nvk_cmd_buffer *cmd,
                .pipeline_location = sq->loc,
                .report = sq->report,
                .structure_size = STRUCTURE_SIZE_FOUR_WORDS,
+               .flush_disable = true,
             });
          }
 
@@ -461,7 +467,7 @@ nvk_cmd_begin_end_query(struct nvk_cmd_buffer *cmd,
          NV9097_SET_REPORT_SEMAPHORE_D_REPORT_STREAMING_PRIMITIVES_SUCCEEDED,
          NV9097_SET_REPORT_SEMAPHORE_D_REPORT_STREAMING_PRIMITIVES_NEEDED,
       };
-      p = nvk_cmd_buffer_push(cmd, 5*ARRAY_SIZE(xfb_reports) + 5*end);
+      p = nvk_cmd_buffer_push(cmd, 5 * ARRAY_SIZE(xfb_reports) + end_size);
       for (uint32_t i = 0; i < ARRAY_SIZE(xfb_reports); ++i) {
          P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
          P_NV9097_SET_REPORT_SEMAPHORE_A(p, report_addr >> 32);
@@ -473,16 +479,37 @@ nvk_cmd_begin_end_query(struct nvk_cmd_buffer *cmd,
                .report = xfb_reports[i],
                .structure_size = STRUCTURE_SIZE_FOUR_WORDS,
                .sub_report = index,
+               .flush_disable = true,
                });
-         report_addr += 2*sizeof(struct nvk_query_report);
+         report_addr += 2 * sizeof(struct nvk_query_report);
       }
       break;
    }
+
+   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+      p = nvk_cmd_buffer_push(cmd, 5 + end_size);
+
+      P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
+      P_NV9097_SET_REPORT_SEMAPHORE_A(p, report_addr >> 32);
+      P_NV9097_SET_REPORT_SEMAPHORE_B(p, report_addr);
+      P_NV9097_SET_REPORT_SEMAPHORE_C(p, 1);
+      P_NV9097_SET_REPORT_SEMAPHORE_D(p, {
+         .operation = OPERATION_REPORT_ONLY,
+         .pipeline_location = PIPELINE_LOCATION_STREAMING_OUTPUT,
+         .report = REPORT_VTG_PRIMITIVES_OUT,
+         .sub_report = index,
+         .structure_size = STRUCTURE_SIZE_FOUR_WORDS,
+         .flush_disable = true,
+      });
+      break;
+
    default:
       unreachable("Unsupported query type");
    }
 
    if (end) {
+      P_IMMD(p, NV9097, FLUSH_PENDING_WRITES, 0);
+
       uint64_t available_addr = nvk_query_available_addr(pool, query);
       P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
       P_NV9097_SET_REPORT_SEMAPHORE_A(p, available_addr >> 32);
@@ -630,6 +657,7 @@ nvk_GetQueryPoolResults(VkDevice device,
       uint32_t available_dst_idx = 1;
       switch (pool->vk.query_type) {
       case VK_QUERY_TYPE_OCCLUSION:
+      case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
          if (write_results)
             cpu_get_query_delta(dst, src, 0, flags);
          break;

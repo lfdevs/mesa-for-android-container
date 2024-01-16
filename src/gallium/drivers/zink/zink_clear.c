@@ -705,14 +705,14 @@ fb_clears_apply_internal(struct zink_context *ctx, struct pipe_resource *pres, i
       bool can_reorder = zink_screen(ctx->base.screen)->info.have_KHR_dynamic_rendering &&
                          !ctx->render_condition_active &&
                          !ctx->unordered_blitting &&
-                         zink_get_cmdbuf(ctx, NULL, res) == ctx->batch.state->barrier_cmdbuf;
+                         zink_get_cmdbuf(ctx, NULL, res) == ctx->batch.state->reordered_cmdbuf;
       if (can_reorder) {
          /* set unordered_blitting but NOT blitting:
           * let begin_rendering handle layouts
           */
          ctx->unordered_blitting = true;
          /* for unordered clears, swap the unordered cmdbuf for the main one for the whole op to avoid conditional hell */
-         ctx->batch.state->cmdbuf = ctx->batch.state->barrier_cmdbuf;
+         ctx->batch.state->cmdbuf = ctx->batch.state->reordered_cmdbuf;
          ctx->rp_changed = true;
          ctx->queries_disabled = true;
          ctx->batch.state->has_barriers = true;

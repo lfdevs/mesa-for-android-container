@@ -11,65 +11,63 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get install -y libelogind0  # this interfere with systemd deps, install separately
 
 # Ephemeral packages (installed for this script and removed again at the end)
-STABLE_EPHEMERAL=" \
-      ccache \
-      cmake \
-      g++ \
-      g++-mingw-w64-i686-posix \
-      g++-mingw-w64-x86-64-posix \
-      glslang-tools \
-      libexpat1-dev \
-      gnupg2 \
-      libdrm-dev \
-      libgbm-dev \
-      libgles2-mesa-dev \
-      liblz4-dev \
-      libpciaccess-dev \
-      libudev-dev \
-      libvulkan-dev \
-      libwaffle-dev \
-      libx11-xcb-dev \
-      libxcb-ewmh-dev \
-      libxcb-keysyms1-dev \
-      libxkbcommon-dev \
-      libxrandr-dev \
-      libxrender-dev \
-      libzstd-dev \
-      meson \
-      mingw-w64-i686-dev \
-      mingw-w64-tools \
-      mingw-w64-x86-64-dev \
-      p7zip \
-      patch \
-      pkgconf \
-      python3-dev \
-      python3-distutils \
-      python3-pip \
-      python3-setuptools \
-      python3-wheel \
-      software-properties-common \
-      wine64-tools \
-      xz-utils \
-      "
+EPHEMERAL=(
+    ccache
+    cmake
+    g++
+    glslang-tools
+    libexpat1-dev
+    gnupg2
+    libdrm-dev
+    libgbm-dev
+    libgles2-mesa-dev
+    liblz4-dev
+    libpciaccess-dev
+    libudev-dev
+    libvulkan-dev
+    libwaffle-dev
+    libx11-xcb-dev
+    libxcb-ewmh-dev
+    libxcb-keysyms1-dev
+    libxkbcommon-dev
+    libxrandr-dev
+    libxrender-dev
+    libzstd-dev
+    meson
+    p7zip
+    patch
+    pkgconf
+    python3-dev
+    python3-distutils
+    python3-pip
+    python3-setuptools
+    python3-wheel
+    software-properties-common
+    wine64-tools
+    xz-utils
+)
+
+DEPS=(
+    curl
+    libepoxy0
+    libxcb-shm0
+    pciutils
+    python3-lxml
+    python3-simplejson
+    sysvinit-core
+    weston
+    xwayland
+    wine
+    wine64
+    xinit
+    xserver-xorg-video-amdgpu
+    xserver-xorg-video-ati
+)
+
+apt-get update
 
 apt-get install -y --no-remove --no-install-recommends \
-      $STABLE_EPHEMERAL \
-      curl \
-      libepoxy0 \
-      libxcb-shm0 \
-      pciutils \
-      python3-lxml \
-      python3-simplejson \
-      sysvinit-core \
-      weston \
-      xwayland \
-      wine \
-      wine64 \
-      xinit \
-      xserver-xorg-video-amdgpu \
-      xserver-xorg-video-ati
-
-apt-get update -q
+      "${DEPS[@]}" "${EPHEMERAL[@]}"
 
 ############### Install DXVK
 
@@ -123,11 +121,6 @@ PIGLIT_BUILD_TARGETS="piglit_replayer" . .gitlab-ci/container/build-piglit.sh
 
 ############### Uninstall the build software
 
-ccache --show-stats
+apt-get purge -y "${EPHEMERAL[@]}"
 
-apt-get purge -y \
-      $STABLE_EPHEMERAL
-
-apt-get autoremove -y --purge
-
-#dpkg -r --force-depends "mesa-vulkan-drivers" "mesa-vdpau-drivers" "mesa-va-drivers" "libgl1-mesa-dri" "libglx-mesa0" "vdpau-driver-all" "va-driver-all" "libglx0" "libgl1" "libvdpau-va-gl1" "libglu1-mesa" "libegl-mesa0" "libgl1-mesa-dri" "libglapi-mesa" "libosmesa6"
+. .gitlab-ci/container/container_post_build.sh

@@ -856,8 +856,12 @@ print_block_kind(uint16_t kind, FILE* output)
       fprintf(output, "invert, ");
    if (kind & block_kind_uses_discard)
       fprintf(output, "discard, ");
+   if (kind & block_kind_resume)
+      fprintf(output, "resume, ");
    if (kind & block_kind_export_end)
       fprintf(output, "export_end, ");
+   if (kind & block_kind_end_with_regs)
+      fprintf(output, "end_with_regs, ");
 }
 
 static void

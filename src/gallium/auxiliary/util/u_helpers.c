@@ -553,9 +553,9 @@ util_clamp_color(enum pipe_format format,
          continue;
 
       if (util_format_is_unorm(format))
-         clamp_color.ui[i] = _mesa_unorm_to_unorm(clamp_color.ui[i], bits, bits);
+         clamp_color.f[i] = SATURATE(clamp_color.f[i]);
       else if (util_format_is_snorm(format))
-         clamp_color.i[i] = _mesa_snorm_to_snorm(clamp_color.i[i], bits, bits);
+         clamp_color.f[i] = CLAMP(clamp_color.f[i], -1.0, 1.0);
       else if (util_format_is_pure_uint(format))
          clamp_color.ui[i] = _mesa_unsigned_to_unsigned(clamp_color.ui[i], bits);
       else if (util_format_is_pure_sint(format))

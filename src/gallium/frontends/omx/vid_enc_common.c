@@ -162,7 +162,7 @@ void vid_enc_BufferEncoded_common(vid_enc_PrivateType * priv, OMX_BUFFERHEADERTY
 
    /* ------------- get size of result ----------------- */
 
-   priv->codec->get_feedback(priv->codec, task->feedback, &size);
+   priv->codec->get_feedback(priv->codec, task->feedback, &size, NULL);
 
    output->nOffset = 0;
    output->nFilledLen = size; /* mark buffer as full */

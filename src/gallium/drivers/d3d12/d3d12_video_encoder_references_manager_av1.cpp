@@ -294,7 +294,7 @@ d3d12_video_encoder_references_manager_av1::get_dpb_physical_slot_refcount_from_
    return refCount;
 }
 
-void
+bool
 d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_data(
    D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA &codecAllocation)
 {
@@ -321,6 +321,7 @@ d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_da
 #endif
 
    *codecAllocation.pAV1PicData = m_CurrentFramePicParams;
+   return true;
 }
 
 void

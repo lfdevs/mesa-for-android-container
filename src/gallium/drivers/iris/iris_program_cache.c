@@ -264,11 +264,13 @@ iris_init_program_cache(struct iris_context *ice)
       _mesa_hash_table_create(ice, keybox_hash, keybox_equals);
 
    ice->shaders.uploader_driver =
-      u_upload_create(&ice->ctx, 16384, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
+      u_upload_create(&ice->ctx, 64 * 1024,
+                      PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
                       IRIS_RESOURCE_FLAG_SHADER_MEMZONE |
                       IRIS_RESOURCE_FLAG_DEVICE_MEM);
    ice->shaders.uploader_unsync =
-      u_upload_create(&ice->ctx, 16384, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
+      u_upload_create(&ice->ctx, 64 * 1024,
+                      PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
                       IRIS_RESOURCE_FLAG_SHADER_MEMZONE |
                       IRIS_RESOURCE_FLAG_DEVICE_MEM);
 }

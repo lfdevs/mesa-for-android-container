@@ -44,10 +44,12 @@ struct nouveau_ws_bo {
 };
 
 uint64_t nouveau_ws_alloc_vma(struct nouveau_ws_device *dev,
-                              uint64_t size, uint64_t align, bool sparse);
+                              uint64_t addr, uint64_t size, uint64_t align,
+                              bool bda, bool sparse);
 
 void nouveau_ws_free_vma(struct nouveau_ws_device *dev,
-                         uint64_t offset, uint64_t size, bool sparse);
+                         uint64_t offset, uint64_t size,
+                         bool bda, bool sparse);
 
 void nouveau_ws_bo_bind_vma(struct nouveau_ws_device *dev,
                             struct nouveau_ws_bo *bo,
@@ -66,11 +68,6 @@ struct nouveau_ws_bo *nouveau_ws_bo_new_mapped(struct nouveau_ws_device *,
                                                enum nouveau_ws_bo_flags,
                                                enum nouveau_ws_bo_map_flags map_flags,
                                                void **map_out);
-struct nouveau_ws_bo *nouveau_ws_bo_new_tiled(struct nouveau_ws_device *,
-                                              uint64_t size, uint64_t align,
-                                              uint8_t pte_kind,
-                                              uint16_t tile_mode,
-                                              enum nouveau_ws_bo_flags);
 struct nouveau_ws_bo *nouveau_ws_bo_from_dma_buf(struct nouveau_ws_device *,
                                                  int fd);
 void nouveau_ws_bo_destroy(struct nouveau_ws_bo *);

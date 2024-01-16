@@ -26,6 +26,8 @@
 
 #include <stdint.h>
 
+#include "util/macros.h"
+
 #define RING_SIZE         (1 * 4096)
 #define PPHWSP_SIZE         (1 * 4096)
 
@@ -72,8 +74,8 @@
 #define PTE_SIZE 4
 #define GFX8_PTE_SIZE 8
 
-#define NUM_PT_ENTRIES (ALIGN(MEMORY_MAP_SIZE, 4096) / 4096)
-#define PT_SIZE ALIGN(NUM_PT_ENTRIES * GFX8_PTE_SIZE, 4096)
+#define NUM_PT_ENTRIES (ALIGN_POT(MEMORY_MAP_SIZE, 4096) / 4096)
+#define PT_SIZE ALIGN_POT(NUM_PT_ENTRIES * GFX8_PTE_SIZE, 4096)
 
 #define CONTEXT_FLAGS (0x339)   /* Normal Priority | L3-LLC Coherency |
                                  * PPGTT Enabled |

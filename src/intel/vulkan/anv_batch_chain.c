@@ -118,6 +118,10 @@ VkResult
 anv_reloc_list_add_bo_impl(struct anv_reloc_list *list,
                            struct anv_bo *target_bo)
 {
+   /* This can happen with sparse resources. */
+   if (!target_bo)
+      return VK_SUCCESS;
+
    uint32_t idx = target_bo->gem_handle;
    VkResult result = anv_reloc_list_grow_deps(list,
                                               (idx / BITSET_WORDBITS) + 1);
@@ -357,7 +361,8 @@ anv_batch_bo_link(struct anv_cmd_buffer *cmd_buffer,
    *map = intel_canonical_address(next_bbo->bo->offset + next_bbo_offset);
 
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
-   if (cmd_buffer->device->physical->memory.need_flush)
+   if (cmd_buffer->device->physical->memory.need_flush &&
+       anv_bo_needs_host_cache_flush(prev_bbo->bo->alloc_flags))
       intel_flush_range(map, sizeof(uint64_t));
 #endif
 }
@@ -721,19 +726,47 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
 }
 
 struct anv_state
-anv_cmd_buffer_alloc_surface_state(struct anv_cmd_buffer *cmd_buffer)
+anv_cmd_buffer_alloc_surface_states(struct anv_cmd_buffer *cmd_buffer,
+                                    uint32_t count)
 {
+   if (count == 0)
+      return ANV_STATE_NULL;
    struct isl_device *isl_dev = &cmd_buffer->device->isl_dev;
-   return anv_state_stream_alloc(&cmd_buffer->surface_state_stream,
-                                 isl_dev->ss.size, isl_dev->ss.align);
+   struct anv_state state =
+      anv_state_stream_alloc(&cmd_buffer->surface_state_stream,
+                             count * isl_dev->ss.size,
+                             isl_dev->ss.align);
+   if (state.map == NULL)
+      anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   return state;
 }
 
 struct anv_state
 anv_cmd_buffer_alloc_dynamic_state(struct anv_cmd_buffer *cmd_buffer,
                                    uint32_t size, uint32_t alignment)
 {
-   return anv_state_stream_alloc(&cmd_buffer->dynamic_state_stream,
-                                 size, alignment);
+   if (size == 0)
+      return ANV_STATE_NULL;
+   struct anv_state state =
+      anv_state_stream_alloc(&cmd_buffer->dynamic_state_stream,
+                             size, alignment);
+   if (state.map == NULL)
+      anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   return state;
+}
+
+struct anv_state
+anv_cmd_buffer_alloc_general_state(struct anv_cmd_buffer *cmd_buffer,
+                                   uint32_t size, uint32_t alignment)
+{
+   if (size == 0)
+      return ANV_STATE_NULL;
+   struct anv_state state =
+      anv_state_stream_alloc(&cmd_buffer->general_state_stream,
+                             size, alignment);
+   if (state.map == NULL)
+      anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   return state;
 }
 
 /** Allocate space associated with a command buffer
@@ -753,6 +786,12 @@ anv_cmd_buffer_alloc_space(struct anv_cmd_buffer *cmd_buffer,
       struct anv_state state =
          anv_state_stream_alloc(&cmd_buffer->dynamic_state_stream,
                                 size, alignment);
+      if (state.map == NULL) {
+         anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return (struct anv_cmd_alloc) {
+            .address = ANV_NULL_ADDRESS,
+         };
+      }
 
       return (struct anv_cmd_alloc) {
          .address = anv_state_pool_state_address(
@@ -1209,8 +1248,7 @@ anv_cmd_buffer_exec_batch_debug(struct anv_queue *queue,
                                 uint32_t cmd_buffer_count,
                                 struct anv_cmd_buffer **cmd_buffers,
                                 struct anv_query_pool *perf_query_pool,
-                                uint32_t perf_query_pass,
-                                bool is_companion_rcs_cmd_buffer)
+                                uint32_t perf_query_pass)
 {
    if (!INTEL_DEBUG(DEBUG_BATCH | DEBUG_BATCH_STATS))
       return;
@@ -1238,13 +1276,8 @@ anv_cmd_buffer_exec_batch_debug(struct anv_queue *queue,
          }
       }
 
-      for (uint32_t i = 0; i < cmd_buffer_count; i++) {
-         struct anv_cmd_buffer *cmd_buffer =
-            is_companion_rcs_cmd_buffer ?
-            cmd_buffers[i]->companion_rcs_cmd_buffer :
-            cmd_buffers[i];
-         anv_print_batch(device, queue, cmd_buffer);
-      }
+      for (uint32_t i = 0; i < cmd_buffer_count; i++)
+         anv_print_batch(device, queue, cmd_buffers[i]);
    } else if (INTEL_DEBUG(DEBUG_BATCH)) {
       intel_print_batch(queue->decoder, device->trivial_batch_bo->map,
                         device->trivial_batch_bo->size,
@@ -1369,17 +1402,17 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
               submit->wait_count, submit->signal_count);
    }
 
-   /* TODO: make both the syncs and signals be passed as part of the vm_bind
-    * ioctl so they can be waited asynchronously. For now this doesn't matter
-    * as we're doing synchronous vm_bind, but later when we make it async this
-    * will make a difference.
-    */
-   result = vk_sync_wait_many(&device->vk, submit->wait_count, submit->waits,
-                              VK_SYNC_WAIT_COMPLETE, INT64_MAX);
-   if (result != VK_SUCCESS)
-      return vk_queue_set_lost(&queue->vk, "vk_sync_wait failed");
+   struct anv_sparse_submission sparse_submit = {
+      .queue = queue,
+      .binds = NULL,
+      .binds_len = 0,
+      .binds_capacity = 0,
+      .wait_count = submit->wait_count,
+      .signal_count = submit->signal_count,
+      .waits = submit->waits,
+      .signals = submit->signals,
+   };
 
-   /* Do the binds */
    for (uint32_t i = 0; i < submit->buffer_bind_count; i++) {
       VkSparseBufferMemoryBindInfo *bind_info = &submit->buffer_binds[i];
       ANV_FROM_HANDLE(anv_buffer, buffer, bind_info->buffer);
@@ -1389,9 +1422,26 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
       for (uint32_t j = 0; j < bind_info->bindCount; j++) {
          result = anv_sparse_bind_resource_memory(device,
                                                   &buffer->sparse_data,
-                                                  &bind_info->pBinds[j]);
+                                                  &bind_info->pBinds[j],
+                                                  &sparse_submit);
          if (result != VK_SUCCESS)
-            return result;
+            goto out_free_submit;
+      }
+   }
+
+   for (uint32_t i = 0; i < submit->image_bind_count; i++) {
+      VkSparseImageMemoryBindInfo *bind_info = &submit->image_binds[i];
+      ANV_FROM_HANDLE(anv_image, image, bind_info->image);
+
+      assert(anv_image_is_sparse(image));
+      assert(image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT);
+
+      for (uint32_t j = 0; j < bind_info->bindCount; j++) {
+         result = anv_sparse_bind_image_memory(queue, image,
+                                               &bind_info->pBinds[j],
+                                               &sparse_submit);
+         if (result != VK_SUCCESS)
+            goto out_free_submit;
       }
    }
 
@@ -1407,35 +1457,18 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
 
       for (uint32_t j = 0; j < bind_info->bindCount; j++) {
          result = anv_sparse_bind_resource_memory(device, sparse_data,
-                                                  &bind_info->pBinds[j]);
+                                                  &bind_info->pBinds[j],
+                                                  &sparse_submit);
          if (result != VK_SUCCESS)
-            return result;
+            goto out_free_submit;
       }
    }
 
-   for (uint32_t i = 0; i < submit->image_bind_count; i++) {
-      VkSparseImageMemoryBindInfo *bind_info = &submit->image_binds[i];
-      ANV_FROM_HANDLE(anv_image, image, bind_info->image);
+   result = anv_sparse_bind(device, &sparse_submit);
 
-      assert(anv_image_is_sparse(image));
-      assert(image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT);
-
-      for (uint32_t j = 0; j < bind_info->bindCount; j++) {
-         result = anv_sparse_bind_image_memory(queue, image,
-                                               &bind_info->pBinds[j]);
-         if (result != VK_SUCCESS)
-            return result;
-      }
-   }
-
-   for (uint32_t i = 0; i < submit->signal_count; i++) {
-      struct vk_sync_signal *s = &submit->signals[i];
-      result = vk_sync_signal(&device->vk, s->sync, s->signal_value);
-      if (result != VK_SUCCESS)
-         return vk_queue_set_lost(&queue->vk, "vk_sync_signal failed");
-   }
-
-   return VK_SUCCESS;
+out_free_submit:
+   vk_free(&device->vk.alloc, sparse_submit.binds);
+   return result;
 }
 
 static VkResult
@@ -1609,7 +1642,8 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
 
    memcpy(batch_bo->map, batch->start, batch_size);
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
-   if (device->physical->memory.need_flush)
+   if (device->physical->memory.need_flush &&
+       anv_bo_needs_host_cache_flush(batch_bo->alloc_flags))
       intel_flush_range(batch_bo->map, batch_size);
 #endif
 
@@ -1629,6 +1663,37 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
                                                       is_companion_rcs_batch);
 
    anv_bo_pool_free(&device->batch_bo_pool, batch_bo);
+
+   return result;
+}
+
+VkResult
+anv_queue_submit_trtt_batch(struct anv_sparse_submission *submit,
+                            struct anv_batch *batch)
+{
+   struct anv_queue *queue = submit->queue;
+   struct anv_device *device = queue->device;
+   VkResult result = VK_SUCCESS;
+
+   uint32_t batch_size = align(batch->next - batch->start, 8);
+   struct anv_trtt_batch_bo *trtt_bbo;
+   result = anv_trtt_batch_bo_new(device, batch_size, &trtt_bbo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   memcpy(trtt_bbo->bo->map, batch->start, trtt_bbo->size);
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
+   if (device->physical->memory.need_flush &&
+       anv_bo_needs_host_cache_flush(trtt_bbo->bo->alloc_flags))
+      intel_flush_range(trtt_bbo->bo->map, trtt_bbo->size);
+#endif
+
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
+      intel_print_batch(queue->decoder, trtt_bbo->bo->map, trtt_bbo->bo->size,
+                        trtt_bbo->bo->offset, false);
+   }
+
+   result = device->kmd_backend->execute_trtt_batch(submit, trtt_bbo);
 
    return result;
 }

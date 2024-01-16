@@ -70,6 +70,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
       DRI_CONF_NO_16BIT(false)
+      DRI_CONF_ANV_HASVK_OVERRIDE_API_VERSION(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -131,7 +132,7 @@ compiler_perf_log(UNUSED void *data, UNUSED unsigned *id, const char *fmt, ...)
 #define ANV_USE_WSI_PLATFORM
 #endif
 
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
 #define ANV_API_VERSION VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION)
 #else
 #define ANV_API_VERSION_1_3 VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
@@ -141,7 +142,7 @@ compiler_perf_log(UNUSED void *data, UNUSED unsigned *id, const char *fmt, ...)
 VkResult anv_EnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
 {
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
    *pApiVersion = ANV_API_VERSION;
 #else
    *pApiVersion = ANV_API_VERSION_1_3;
@@ -1333,6 +1334,8 @@ anv_init_dri_options(struct anv_instance *instance)
             driQueryOptionf(&instance->dri_options, "lower_depth_range_rate");
     instance->no_16bit =
             driQueryOptionb(&instance->dri_options, "no_16bit");
+    instance->report_vk_1_3 =
+            driQueryOptionb(&instance->dri_options, "hasvk_report_vk_1_3_version");
 }
 
 VkResult anv_CreateInstance(
@@ -1568,10 +1571,11 @@ void anv_GetPhysicalDeviceProperties(
    };
 
    *pProperties = (VkPhysicalDeviceProperties) {
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
       .apiVersion = ANV_API_VERSION,
 #else
-      .apiVersion = pdevice->use_softpin ? ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
+      .apiVersion =  (pdevice->use_softpin || pdevice->instance->report_vk_1_3) ?
+                     ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
 #endif
       .driverVersion = vk_get_driver_version(),
       .vendorID = 0x8086,
@@ -2245,32 +2249,10 @@ PFN_vkVoidFunction anv_GetInstanceProcAddr(
 PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
     VkInstance                                  instance,
-    const char*                                 pName);
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
-    VkInstance                                  instance,
     const char*                                 pName)
 {
    return anv_GetInstanceProcAddr(instance, pName);
 }
-
-/* With version 4+ of the loader interface the ICD should expose
- * vk_icdGetPhysicalDeviceProcAddr()
- */
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetPhysicalDeviceProcAddr(
-    VkInstance  _instance,
-    const char* pName);
-
-PFN_vkVoidFunction vk_icdGetPhysicalDeviceProcAddr(
-    VkInstance  _instance,
-    const char* pName)
-{
-   ANV_FROM_HANDLE(anv_instance, instance, _instance);
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
-}
-
 static struct anv_state
 anv_state_pool_emit_data(struct anv_state_pool *pool, size_t size, size_t align, const void *p)
 {
@@ -3738,7 +3720,7 @@ void anv_GetBufferMemoryRequirements2(
                                       pMemoryRequirements);
 }
 
-void anv_GetDeviceBufferMemoryRequirementsKHR(
+void anv_GetDeviceBufferMemoryRequirements(
     VkDevice                                    _device,
     const VkDeviceBufferMemoryRequirements*     pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements)
@@ -4026,57 +4008,4 @@ void anv_GetPhysicalDeviceMultisamplePropertiesEXT(
 
    vk_foreach_struct(ext, pMultisampleProperties->pNext)
       anv_debug_ignored_stype(ext->sType);
-}
-
-/* vk_icd.h does not declare this function, so we declare it here to
- * suppress Wmissing-prototypes.
- */
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion);
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it is
-    *         linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 5u);
-   return VK_SUCCESS;
 }

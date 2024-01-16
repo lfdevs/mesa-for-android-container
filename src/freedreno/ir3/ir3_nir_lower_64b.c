@@ -299,3 +299,100 @@ ir3_nir_lower_64b_global(nir_shader *shader)
          shader, lower_64b_global_filter,
          lower_64b_global, NULL);
 }
+
+/*
+ * Lowering for 64b registers:
+ * - @decl_reg -> split in two 32b ones
+ * - @store_reg -> unpack_64_2x32_split_x/y and two separate stores
+ * - @load_reg -> two separate loads and pack_64_2x32_split
+ */
+
+static void
+lower_64b_reg(nir_builder *b, nir_intrinsic_instr *reg)
+{
+   unsigned num_components = nir_intrinsic_num_components(reg);
+   unsigned num_array_elems = nir_intrinsic_num_array_elems(reg);
+
+   nir_def *reg_hi = nir_decl_reg(b, num_components, 32, num_array_elems);
+   nir_def *reg_lo = nir_decl_reg(b, num_components, 32, num_array_elems);
+
+   nir_foreach_reg_store_safe (store_reg_src, reg) {
+      nir_intrinsic_instr *store =
+         nir_instr_as_intrinsic(nir_src_parent_instr(store_reg_src));
+      b->cursor = nir_before_instr(&store->instr);
+
+      nir_def *packed = store->src[0].ssa;
+      nir_def *unpacked_lo = nir_unpack_64_2x32_split_x(b, packed);
+      nir_def *unpacked_hi = nir_unpack_64_2x32_split_y(b, packed);
+      int base = nir_intrinsic_base(store);
+
+      if (store->intrinsic == nir_intrinsic_store_reg) {
+         nir_build_store_reg(b, unpacked_lo, reg_lo, .base = base);
+         nir_build_store_reg(b, unpacked_hi, reg_hi, .base = base);
+      } else {
+         assert(store->intrinsic == nir_intrinsic_store_reg_indirect);
+
+         nir_def *offset = store->src[2].ssa;
+         nir_store_reg_indirect(b, unpacked_lo, reg_lo, offset, .base = base);
+         nir_store_reg_indirect(b, unpacked_hi, reg_hi, offset, .base = base);
+      }
+
+      nir_instr_remove(&store->instr);
+   }
+
+   nir_foreach_reg_load_safe (load_reg_src, reg) {
+      nir_intrinsic_instr *load =
+         nir_instr_as_intrinsic(nir_src_parent_instr(load_reg_src));
+      b->cursor = nir_before_instr(&load->instr);
+
+      int base = nir_intrinsic_base(load);
+      nir_def *load_lo, *load_hi;
+
+      if (load->intrinsic == nir_intrinsic_load_reg) {
+         load_lo =
+            nir_build_load_reg(b, num_components, 32, reg_lo, .base = base);
+         load_hi =
+            nir_build_load_reg(b, num_components, 32, reg_hi, .base = base);
+      } else {
+         assert(load->intrinsic == nir_intrinsic_load_reg_indirect);
+
+         nir_def *offset = load->src[1].ssa;
+         load_lo = nir_load_reg_indirect(b, num_components, 32, reg_lo, offset,
+                                         .base = base);
+         load_hi = nir_load_reg_indirect(b, num_components, 32, reg_hi, offset,
+                                         .base = base);
+      }
+
+      nir_def *packed = nir_pack_64_2x32_split(b, load_lo, load_hi);
+      nir_def_rewrite_uses(&load->def, packed);
+      nir_instr_remove(&load->instr);
+   }
+
+   nir_instr_remove(&reg->instr);
+}
+
+bool
+ir3_nir_lower_64b_regs(nir_shader *shader)
+{
+   bool progress = false;
+
+   nir_foreach_function_impl (impl, shader) {
+      bool impl_progress = false;
+      nir_builder b = nir_builder_create(impl);
+
+      nir_foreach_reg_decl_safe (reg, impl) {
+         if (nir_intrinsic_bit_size(reg) == 64) {
+            lower_64b_reg(&b, reg);
+            impl_progress = true;
+         }
+      }
+
+      if (impl_progress) {
+         nir_metadata_preserve(
+            impl, nir_metadata_block_index | nir_metadata_dominance);
+         progress = true;
+      }
+   }
+
+   return progress;
+}

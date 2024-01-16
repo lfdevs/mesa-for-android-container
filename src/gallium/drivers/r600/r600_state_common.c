@@ -840,7 +840,6 @@ static inline void r600_shader_selector_key(const struct pipe_context *ctx,
 
 		if (rctx->ps_shader->current->shader.gs_prim_id_input && !rctx->gs_shader) {
 			key->vs.as_gs_a = true;
-			key->vs.prim_id_out = rctx->ps_shader->current->shader.input[rctx->ps_shader->current->shader.ps_prim_id_input].spi_sid;
 		}
 		key->vs.first_atomic_counter = r600_get_hw_atomic_count(ctx, PIPE_SHADER_VERTEX);
 		break;

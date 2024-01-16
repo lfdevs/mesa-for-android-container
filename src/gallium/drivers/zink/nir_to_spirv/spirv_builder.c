@@ -470,9 +470,14 @@ spirv_builder_emit_load(struct spirv_builder *b, SpvId result_type,
 }
 
 SpvId
-spirv_builder_emit_load_aligned(struct spirv_builder *b, SpvId result_type, SpvId pointer, unsigned alignment)
+spirv_builder_emit_load_aligned(struct spirv_builder *b, SpvId result_type, SpvId pointer, unsigned alignment, bool coherent)
 {
-   return spirv_builder_emit_triop(b, SpvOpLoad, result_type, pointer, SpvMemoryAccessAlignedMask, alignment);
+   if (coherent) {
+      SpvId scope = spirv_builder_const_int(b, 32, SpvScopeDevice);
+      return spirv_builder_emit_quadop(b, SpvOpLoad, result_type, pointer, SpvMemoryAccessAlignedMask | SpvMemoryAccessNonPrivatePointerMask | SpvMemoryAccessMakePointerVisibleMask, alignment, scope);
+   } else {
+      return spirv_builder_emit_triop(b, SpvOpLoad, result_type, pointer, SpvMemoryAccessAlignedMask, alignment);
+   }
 }
 
 void
@@ -485,14 +490,27 @@ spirv_builder_emit_store(struct spirv_builder *b, SpvId pointer, SpvId object)
 }
 
 void
-spirv_builder_emit_store_aligned(struct spirv_builder *b, SpvId pointer, SpvId object, unsigned alignment)
+spirv_builder_emit_store_aligned(struct spirv_builder *b, SpvId pointer, SpvId object, unsigned alignment, bool coherent)
 {
-   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 5);
-   spirv_buffer_emit_word(&b->instructions, SpvOpStore | (5 << 16));
+   unsigned size = 5;
+   SpvMemoryAccessMask mask = SpvMemoryAccessAlignedMask;
+
+   if (coherent) {
+      mask |= SpvMemoryAccessNonPrivatePointerMask | SpvMemoryAccessMakePointerAvailableMask;
+      size++;
+   }
+
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, size);
+   spirv_buffer_emit_word(&b->instructions, SpvOpStore | (size << 16));
    spirv_buffer_emit_word(&b->instructions, pointer);
    spirv_buffer_emit_word(&b->instructions, object);
-   spirv_buffer_emit_word(&b->instructions, SpvMemoryAccessAlignedMask);
+   spirv_buffer_emit_word(&b->instructions, mask);
    spirv_buffer_emit_word(&b->instructions, alignment);
+
+   if (coherent) {
+      SpvId scope = spirv_builder_const_int(b, 32, SpvScopeDevice);
+      spirv_buffer_emit_word(&b->instructions, scope);
+   }
 }
 
 void

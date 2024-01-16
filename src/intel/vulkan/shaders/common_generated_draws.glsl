@@ -95,6 +95,7 @@ void write_3DPRIMITIVE(uint write_offset,
 void write_3DPRIMITIVE_EXTENDED(uint write_offset,
                                 bool is_predicated,
                                 bool is_indexed,
+                                bool use_tbimr,
                                 uint vertex_count_per_instance,
                                 uint start_vertex_location,
                                 uint instance_count,
@@ -107,6 +108,7 @@ void write_3DPRIMITIVE_EXTENDED(uint write_offset,
    commands[write_offset + 0] = (3 << 29 |         /* Command Type */
                                  3 << 27 |         /* Command SubType */
                                  3 << 24 |         /* 3D Command Opcode */
+                                 uint(use_tbimr) << 13 |
                                  1 << 11 |         /* Extended Parameter Enable */
                                  uint(is_predicated) << 8 |
                                  8 << 0);          /* DWord Length */

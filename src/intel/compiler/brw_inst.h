@@ -525,6 +525,67 @@ brw_inst_set_3src_a1_src2_imm(ASSERTED const struct intel_device_info *devinfo,
 /** @} */
 
 /**
+ * Three-source systolic instructions:
+ *  @{
+ */
+F(dpas_3src_src2_reg_nr,    /* 4+ */ -1, -1,   /* 12+ */ 127, 120)
+F(dpas_3src_src2_subreg_nr, /* 4+ */ -1, -1,   /* 12+ */ 119, 115)
+F(dpas_3src_src2_reg_file,  /* 4+ */ -1, -1,   /* 12+ */ 114, 114)
+F(dpas_3src_src1_reg_nr,    /* 4+ */ -1, -1,   /* 12+ */ 111, 104)
+F(dpas_3src_src1_subreg_nr, /* 4+ */ -1, -1,   /* 12+ */ 103, 99)
+F(dpas_3src_src1_reg_file,  /* 4+ */ -1, -1,   /* 12+ */ 98,  98)
+F(dpas_3src_src1_hw_type,   /* 4+ */ -1, -1,   /* 12+ */ 90,  88)
+F(dpas_3src_src1_subbyte,   /* 4+ */ -1, -1,   /* 12+ */ 87,  86)
+F(dpas_3src_src2_subbyte,   /* 4+ */ -1, -1,   /* 12+ */ 85,  84)
+F(dpas_3src_src2_hw_type,   /* 4+ */ -1, -1,   /* 12+ */ 82,  80)
+F(dpas_3src_src0_reg_nr,    /* 4+ */ -1, -1,   /* 12+ */ 79,  72)
+F(dpas_3src_src0_subreg_nr, /* 4+ */ -1, -1,   /* 12+ */ 71,  67)
+F(dpas_3src_src0_reg_file,  /* 4+ */ -1, -1,   /* 12+ */ 66,  66)
+F(dpas_3src_dst_reg_nr,     /* 4+ */ -1, -1,   /* 12+ */ 63,  56)
+F(dpas_3src_dst_subreg_nr,  /* 4+ */ -1, -1,   /* 12+ */ 55,  51)
+F(dpas_3src_dst_reg_file,   /* 4+ */ -1, -1,   /* 12+ */ 50,  50)
+F(dpas_3src_sdepth,         /* 4+ */ -1, -1,   /* 12+ */ 49,  48)
+F(dpas_3src_rcount,         /* 4+ */ -1, -1,   /* 12+ */ 45,  43)
+F(dpas_3src_src0_hw_type,   /* 4+ */ -1, -1,   /* 12+ */ 42,  40)
+F(dpas_3src_exec_type,      /* 4+ */ -1, -1,   /* 12+ */ 39,  39)
+F(dpas_3src_dst_hw_type,    /* 4+ */ -1, -1,   /* 12+ */ 38,  36)
+/** @} */
+
+#define REG_TYPE(reg)                                                         \
+static inline void                                                            \
+brw_inst_set_dpas_3src_##reg##_type(const struct intel_device_info *devinfo,  \
+                                    brw_inst *inst, enum brw_reg_type type)   \
+{                                                                             \
+   UNUSED enum gfx10_align1_3src_exec_type exec_type =                        \
+      (enum gfx10_align1_3src_exec_type) brw_inst_dpas_3src_exec_type(devinfo,\
+                                                                      inst);  \
+   if (brw_reg_type_is_floating_point(type)) {                                \
+      assert(exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);                   \
+   } else {                                                                   \
+      assert(exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_INT);                     \
+   }                                                                          \
+   unsigned hw_type = brw_reg_type_to_a1_hw_3src_type(devinfo, type);         \
+   brw_inst_set_dpas_3src_##reg##_hw_type(devinfo, inst, hw_type);            \
+}                                                                             \
+                                                                              \
+static inline enum brw_reg_type                                               \
+brw_inst_dpas_3src_##reg##_type(const struct intel_device_info *devinfo,      \
+                              const brw_inst *inst)                           \
+{                                                                             \
+   enum gfx10_align1_3src_exec_type exec_type =                               \
+      (enum gfx10_align1_3src_exec_type) brw_inst_dpas_3src_exec_type(devinfo,\
+                                                                      inst);  \
+   unsigned hw_type = brw_inst_dpas_3src_##reg##_hw_type(devinfo, inst);      \
+   return brw_a1_hw_3src_type_to_reg_type(devinfo, hw_type, exec_type);       \
+}
+
+REG_TYPE(dst)
+REG_TYPE(src0)
+REG_TYPE(src1)
+REG_TYPE(src2)
+#undef REG_TYPE
+
+/**
  * Flow control instruction bits:
  *  @{
  */

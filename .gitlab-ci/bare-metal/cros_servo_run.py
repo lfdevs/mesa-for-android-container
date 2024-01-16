@@ -7,11 +7,12 @@ import argparse
 import re
 import sys
 
+from custom_logger import CustomLogger
 from serial_buffer import SerialBuffer
 
 
 class CrosServoRun:
-    def __init__(self, cpu, ec, test_timeout):
+    def __init__(self, cpu, ec, test_timeout, logger):
         self.cpu_ser = SerialBuffer(
             cpu, "results/serial.txt", "R SERIAL-CPU> ")
         # Merge the EC serial into the cpu_ser's line stream so that we can
@@ -19,6 +20,7 @@ class CrosServoRun:
         self.ec_ser = SerialBuffer(
             ec, "results/serial-ec.txt", "R SERIAL-EC> ", line_queue=self.cpu_ser.line_queue)
         self.test_timeout = test_timeout
+        self.logger = logger
 
     def close(self):
         self.ec_ser.close()
@@ -36,6 +38,7 @@ class CrosServoRun:
         RED = '\033[0;31m'
         NO_COLOR = '\033[0m'
         print(RED + message + NO_COLOR)
+        self.logger.update_status_fail(message)
 
     def run(self):
         # Flush any partial commands in the EC's prompt, then ask for a reboot.
@@ -43,6 +46,7 @@ class CrosServoRun:
         self.ec_write("reboot\n")
 
         bootloader_done = False
+        self.logger.create_job_phase("boot")
         tftp_failures = 0
         # This is emitted right when the bootloader pauses to check for input.
         # Emit a ^N character to request network boot, because we don't have a
@@ -79,9 +83,10 @@ class CrosServoRun:
                 return 1
 
         if not bootloader_done:
-            print("Failed to make it through bootloader, abandoning run.")
+            self.print_error("Failed to make it through bootloader, abandoning run.")
             return 1
 
+        self.logger.create_job_phase("test")
         for line in self.cpu_ser.lines(timeout=self.test_timeout, phase="test"):
             if re.search("---. end Kernel panic", line):
                 return 1
@@ -125,8 +130,10 @@ class CrosServoRun:
             result = re.search("hwci: mesa: (\S*)", line)
             if result:
                 if result.group(1) == "pass":
+                    self.logger.update_dut_job("status", "pass")
                     return 0
                 else:
+                    self.logger.update_status_fail("test fail")
                     return 1
 
         self.print_error(
@@ -144,11 +151,14 @@ def main():
         '--test-timeout', type=int, help='Test phase timeout (minutes)', required=True)
     args = parser.parse_args()
 
-    servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60)
+    logger = CustomLogger("job_detail.json")
+    logger.update_dut_time("start", None)
+    servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60, logger)
     retval = servo.run()
 
     # power down the CPU on the device
     servo.ec_write("power off\n")
+    logger.update_dut_time("end", None)
     servo.close()
 
     sys.exit(retval)

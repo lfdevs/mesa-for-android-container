@@ -561,7 +561,7 @@ class ISA(object):
 
         # Validate that all bitset fields have valid types, and in
         # the case of bitset type, the sizes match:
-        builtin_types = ['branch', 'absbranch', 'int', 'uint', 'hex', 'offset', 'uoffset', 'float', 'bool', 'enum', 'custom']
+        builtin_types = ['branch', 'absbranch', 'int', 'uint', 'hex', 'offset', 'uoffset', 'float', 'bool', 'bool_inv', 'enum', 'custom']
         for bitset_name, bitset in self.bitsets.items():
             if bitset.extends is not None:
                 assert bitset.extends in self.bitsets, "{} extends invalid type: {}".format(

@@ -45,6 +45,9 @@ fd_reg_stomp_allowed(chip CHIP, uint16_t reg)
        */
       case REG_A6XX_SP_FS_OBJ_START ... REG_A6XX_SP_FS_OBJ_START + 1:
          return false;
+      /* Not used on A6XX but causes failures when set */
+      case REG_A6XX_TPL1_UNKNOWN_B602:
+         return false;
       }
       break;
    }

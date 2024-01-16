@@ -68,11 +68,18 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
    for (unsigned i = 0; i < num_locations; i++) {
       const struct glsl_type *type;
       unsigned semantic = locations[i];
-      if ((semantic <= VARYING_SLOT_VAR31 && semantic != VARYING_SLOT_EDGE) ||
-          semantic >= VARYING_SLOT_VAR0_16BIT)
-         type = glsl_array_type(glsl_vec4_type(), 0, 0);
-      else
+
+      /* These are illegal in TCS. */
+      if (semantic == VARYING_SLOT_EDGE ||
+          semantic == VARYING_SLOT_PRIMITIVE_ID ||
+          semantic == VARYING_SLOT_LAYER ||
+          semantic == VARYING_SLOT_VIEWPORT ||
+          semantic == VARYING_SLOT_VIEW_INDEX ||
+          semantic == VARYING_SLOT_VIEWPORT_MASK ||
+          semantic == VARYING_SLOT_PRIMITIVE_SHADING_RATE)
          continue;
+
+      type = glsl_array_type(glsl_vec4_type(), 0, 0);
 
       nir_variable *in = nir_create_variable_with_location(b.shader, nir_var_shader_in,
                                                            semantic, type);

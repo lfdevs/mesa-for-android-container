@@ -432,17 +432,6 @@ st_init_driver_flags(struct st_context *st)
 }
 
 static bool
-st_have_perfmon(struct st_context *st)
-{
-   struct pipe_screen *screen = st->screen;
-
-   if (!screen->get_driver_query_info || !screen->get_driver_query_group_info)
-      return false;
-
-   return screen->get_driver_query_group_info(screen, 0, NULL) != 0;
-}
-
-static bool
 st_have_perfquery(struct st_context *ctx)
 {
    struct pipe_context *pipe = ctx->pipe;
@@ -606,7 +595,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       !screen->get_param(screen, PIPE_CAP_GL_CLAMP);
    st->has_time_elapsed =
       screen->get_param(screen, PIPE_CAP_QUERY_TIME_ELAPSED);
-   st->has_half_float_packing =
+   ctx->Const.GLSLHasHalfFloatPacking =
       screen->get_param(screen, PIPE_CAP_SHADER_PACK_HALF_FLOAT);
    st->has_multi_draw_indirect =
       screen->get_param(screen, PIPE_CAP_MULTI_DRAW_INDIRECT);
@@ -662,10 +651,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st_init_limits(screen, &ctx->Const, &ctx->Extensions, ctx->API);
    st_init_extensions(screen, &ctx->Const,
                       &ctx->Extensions, &st->options, ctx->API);
-
-   if (st_have_perfmon(st)) {
-      ctx->Extensions.AMD_performance_monitor = GL_TRUE;
-   }
 
    if (st_have_perfquery(st)) {
       ctx->Extensions.INTEL_performance_query = GL_TRUE;

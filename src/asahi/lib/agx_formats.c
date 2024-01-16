@@ -16,6 +16,7 @@
       .channels = AGX_CHANNELS_##channels_,                                    \
       .type = AGX_TEXTURE_TYPE_##type_,                                        \
       .renderable = is_renderable,                                             \
+      .texturable = true,                                                      \
       .internal = (enum pipe_format)AGX_INTERNAL_FORMAT_##internal_fmt,        \
    }
 
@@ -26,8 +27,8 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
 
    AGX_FMT(R5G5B5A1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
    AGX_FMT(B5G5R5A1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
-   AGX_FMT(R5G5B5A1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
-   AGX_FMT(B5G5R5A1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
+   AGX_FMT(R5G5B5X1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
+   AGX_FMT(B5G5R5X1_UNORM,          R5G5B5A1,      UNORM,  T, F16),
 
    AGX_FMT(R4G4B4A4_UNORM,          R4G4B4A4,      UNORM,  T, F16),
    AGX_FMT(B4G4R4A4_UNORM,          R4G4B4A4,      UNORM,  T, F16),
@@ -87,6 +88,8 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(R8G8_UINT,               R8G8,          UINT,   T, I8),
    AGX_FMT(R8G8B8X8_UINT,           R8G8B8A8,      UINT,   T, I8),
    AGX_FMT(R8G8B8A8_UINT,           R8G8B8A8,      UINT,   T, I8),
+   AGX_FMT(B8G8R8X8_UINT,           R8G8B8A8,      UINT,   T, I8),
+   AGX_FMT(B8G8R8A8_UINT,           R8G8B8A8,      UINT,   T, I8),
 
    AGX_FMT(R16_UINT,                R16,           UINT,   T, I16),
    AGX_FMT(R16G16_UINT,             R16G16,        UINT,   T, I16),
@@ -102,6 +105,8 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(R8G8_SINT,               R8G8,          SINT,   T, I8),
    AGX_FMT(R8G8B8X8_SINT,           R8G8B8A8,      SINT,   T, I8),
    AGX_FMT(R8G8B8A8_SINT,           R8G8B8A8,      SINT,   T, I8),
+   AGX_FMT(B8G8R8X8_SINT,           R8G8B8A8,      SINT,   T, I8),
+   AGX_FMT(B8G8R8A8_SINT,           R8G8B8A8,      SINT,   T, I8),
 
    AGX_FMT(R16_SINT,                R16,           SINT,   T, I16),
    AGX_FMT(R16G16_SINT,             R16G16,        SINT,   T, I16),
@@ -143,6 +148,58 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(R32G32B32_FLOAT,         R32G32B32_EMULATED,    FLOAT,  F, _),
    AGX_FMT(R32G32B32_UINT,          R32G32B32_EMULATED,    UINT,   F, _),
    AGX_FMT(R32G32B32_SINT,          R32G32B32_EMULATED,    SINT,   F, _),
+
+   /* Likewise, luminance/alpha/intensity formats are supported for texturing,
+    * because they are required for texture buffers in the compat profile and
+    * mesa/st is unable to emulate them for texture buffers. Our Gallium driver
+    * handles the swizzles appropriately, so we just need to plumb through the
+    * enums.
+    *
+    * If mesa/st grows emulation for these formats later, we can drop this.
+    */
+   AGX_FMT(A8_UNORM,                R8,                    UNORM,  F, _),
+   AGX_FMT(A16_UNORM,               R16,                   UNORM,  F, _),
+   AGX_FMT(A8_SINT,                 R8,                    SINT,   F, _),
+   AGX_FMT(A16_SINT,                R16,                   SINT,   F, _),
+   AGX_FMT(A32_SINT,                R32,                   SINT,   F, _),
+   AGX_FMT(A8_UINT,                 R8,                    UINT,   F, _),
+   AGX_FMT(A16_UINT,                R16,                   UINT,   F, _),
+   AGX_FMT(A32_UINT,                R32,                   UINT,   F, _),
+   AGX_FMT(A16_FLOAT,               R16,                   FLOAT,  F, _),
+   AGX_FMT(A32_FLOAT,               R32,                   FLOAT,  F, _),
+
+   AGX_FMT(L8_UNORM,                R8,                    UNORM,  F, _),
+   AGX_FMT(L16_UNORM,               R16,                   UNORM,  F, _),
+   AGX_FMT(L8_SINT,                 R8,                    SINT,   F, _),
+   AGX_FMT(L16_SINT,                R16,                   SINT,   F, _),
+   AGX_FMT(L32_SINT,                R32,                   SINT,   F, _),
+   AGX_FMT(L8_UINT,                 R8,                    UINT,   F, _),
+   AGX_FMT(L16_UINT,                R16,                   UINT,   F, _),
+   AGX_FMT(L32_UINT,                R32,                   UINT,   F, _),
+   AGX_FMT(L16_FLOAT,               R16,                   FLOAT,  F, _),
+   AGX_FMT(L32_FLOAT,               R32,                   FLOAT,  F, _),
+
+   AGX_FMT(L8A8_UNORM,              R8G8,                  UNORM,  F, _),
+   AGX_FMT(L16A16_UNORM,            R16G16,                UNORM,  F, _),
+   AGX_FMT(L8A8_SINT,               R8G8,                  SINT,   F, _),
+   AGX_FMT(L16A16_SINT,             R16G16,                SINT,   F, _),
+   AGX_FMT(L32A32_SINT,             R32G32,                SINT,   F, _),
+   AGX_FMT(L8A8_UINT,               R8G8,                  UINT,   F, _),
+   AGX_FMT(L16A16_UINT,             R16G16,                UINT,   F, _),
+   AGX_FMT(L32A32_UINT,             R32G32,                UINT,   F, _),
+   AGX_FMT(L16A16_FLOAT,            R16G16,                FLOAT,  F, _),
+   AGX_FMT(L32A32_FLOAT,            R32G32,                FLOAT,  F, _),
+
+   AGX_FMT(I8_UNORM,                R8,                    UNORM,  F, _),
+   AGX_FMT(I16_UNORM,               R16,                   UNORM,  F, _),
+   AGX_FMT(I8_SINT,                 R8,                    SINT,   F, _),
+   AGX_FMT(I16_SINT,                R16,                   SINT,   F, _),
+   AGX_FMT(I32_SINT,                R32,                   SINT,   F, _),
+   AGX_FMT(I8_UINT,                 R8,                    UINT,   F, _),
+   AGX_FMT(I16_UINT,                R16,                   UINT,   F, _),
+   AGX_FMT(I32_UINT,                R32,                   UINT,   F, _),
+   AGX_FMT(I16_FLOAT,               R16,                   FLOAT,  F, _),
+   AGX_FMT(I32_FLOAT,               R32,                   FLOAT,  F, _),
 
    AGX_FMT(ETC1_RGB8,               ETC2_RGB8,     UNORM,  F,_),
    AGX_FMT(ETC2_RGB8,               ETC2_RGB8,     UNORM,  F,_),

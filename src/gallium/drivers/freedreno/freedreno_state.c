@@ -459,10 +459,6 @@ fd_set_viewport_states(struct pipe_context *pctx, unsigned start_slot,
    for (unsigned i = 0; i < PIPE_MAX_VIEWPORTS; i++) {
       const struct pipe_viewport_state *vp = & ctx->viewport[i];
 
-      /* skip unused viewports: */
-      if (vp->scale[0] == 0)
-         continue;
-
       unsigned gx = fd_calc_guardband(vp->translate[0], vp->scale[0], is3x);
       unsigned gy = fd_calc_guardband(vp->translate[1], vp->scale[1], is3x);
 

@@ -109,7 +109,12 @@ static struct radv_pipeline_key
 radv_generate_compute_pipeline_key(const struct radv_device *device, const struct radv_compute_pipeline *pipeline,
                                    const VkComputePipelineCreateInfo *pCreateInfo)
 {
-   return radv_generate_pipeline_key(device, &pCreateInfo->stage, 1, pipeline->base.create_flags, pCreateInfo->pNext);
+   struct radv_pipeline_key key =
+      radv_generate_pipeline_key(device, &pCreateInfo->stage, 1, pipeline->base.create_flags, pCreateInfo->pNext);
+
+   key.shader_version = device->instance->drirc.override_compute_shader_version;
+
+   return key;
 }
 
 void
@@ -199,8 +204,7 @@ radv_compute_pipeline_compile(struct radv_compute_pipeline *pipeline, struct rad
 
    radv_pipeline_stage_init(pStage, pipeline_layout, &cs_stage);
 
-   radv_hash_shaders(hash, &cs_stage, 1, pipeline_layout, pipeline_key,
-                     radv_get_hash_flags(device, keep_statistic_info));
+   radv_hash_shaders(device, hash, &cs_stage, 1, pipeline_layout, pipeline_key);
 
    pipeline->base.pipeline_hash = *(uint64_t *)hash;
 
@@ -225,7 +229,7 @@ radv_compute_pipeline_compile(struct radv_compute_pipeline *pipeline, struct rad
    cs_stage.feedback.duration += os_time_get_nano() - stage_start;
 
    if (!keep_executable_info) {
-      radv_pipeline_cache_insert(device, cache, &pipeline->base, NULL, hash);
+      radv_pipeline_cache_insert(device, cache, &pipeline->base, hash);
    }
 
    free(cs_binary);
@@ -266,7 +270,7 @@ radv_compute_pipeline_create(VkDevice _device, VkPipelineCache _cache, const VkC
    }
 
    radv_pipeline_init(device, &pipeline->base, RADV_PIPELINE_COMPUTE);
-   pipeline->base.create_flags = radv_get_pipeline_create_flags(pCreateInfo);
+   pipeline->base.create_flags = vk_compute_pipeline_create_flags(pCreateInfo);
    pipeline->base.is_internal = _cache == device->meta_state.cache;
 
    const VkPipelineCreationFeedbackCreateInfo *creation_feedback =
@@ -303,7 +307,7 @@ radv_create_compute_pipelines(VkDevice _device, VkPipelineCache pipelineCache, u
          result = r;
          pPipelines[i] = VK_NULL_HANDLE;
 
-         VkPipelineCreateFlagBits2KHR create_flags = radv_get_pipeline_create_flags(&pCreateInfos[i]);
+         VkPipelineCreateFlagBits2KHR create_flags = vk_compute_pipeline_create_flags(&pCreateInfos[i]);
          if (create_flags & VK_PIPELINE_CREATE_2_EARLY_RETURN_ON_FAILURE_BIT_KHR)
             break;
       }

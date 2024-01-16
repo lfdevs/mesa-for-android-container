@@ -57,7 +57,7 @@
 #  include <unistd.h>
 #  include <log/log.h>
 #  include <cutils/properties.h>
-#elif DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD
+#elif DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD || DETECT_OS_MANAGARM
 #  include <unistd.h>
 #elif DETECT_OS_OPENBSD || DETECT_OS_FREEBSD
 #  include <sys/resource.h>
@@ -175,6 +175,22 @@ os_get_android_option(const char *name)
 }
 #endif
 
+#if DETECT_OS_WINDOWS
+
+/* getenv doesn't necessarily reflect changes to the environment
+ * that have been made during the process lifetime, if either the
+ * setter uses a different CRT (e.g. due to static linking) or the
+ * setter used the Win32 API directly. */
+const char *
+os_get_option(const char *name)
+{
+   static thread_local char value[_MAX_ENV];
+   DWORD size = GetEnvironmentVariableA(name, value, _MAX_ENV);
+   return (size > 0 && size < _MAX_ENV) ? value : NULL;
+}
+
+#else
+
 const char *
 os_get_option(const char *name)
 {
@@ -186,6 +202,8 @@ os_get_option(const char *name)
 #endif
    return opt;
 }
+
+#endif
 
 static struct hash_table *options_tbl;
 static bool options_tbl_exited = false;
@@ -248,7 +266,7 @@ exit_mutex:
 bool
 os_get_total_physical_memory(uint64_t *size)
 {
-#if DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD
+#if DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD || DETECT_OS_MANAGARM
    const long phys_pages = sysconf(_SC_PHYS_PAGES);
    const long page_size = sysconf(_SC_PAGE_SIZE);
 

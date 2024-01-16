@@ -150,8 +150,8 @@ it on ``#dri-devel`` on OFTC and tag `Nico Cortes
 
 .. _CI-job-user-expectations:
 
-CI job user expectations:
--------------------------
+CI job user expectations
+------------------------
 
 To make sure that testing of one vendor's drivers doesn't block
 unrelated work by other vendors, we require that a given driver's test

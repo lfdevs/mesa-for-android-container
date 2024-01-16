@@ -322,7 +322,8 @@ static void rvce_end_frame(struct pipe_video_codec *encoder, struct pipe_video_b
    }
 }
 
-static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, unsigned *size)
+static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, unsigned *size,
+                              struct pipe_enc_feedback_metadata* metadata)
 {
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
    struct rvid_buffer *fb = feedback;
@@ -342,6 +343,14 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
    // dump_feedback(enc, fb);
    si_vid_destroy_buffer(fb);
    FREE(fb);
+}
+
+static void rvce_destroy_fence(struct pipe_video_codec *encoder,
+                               struct pipe_fence_handle *fence)
+{
+   struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
+
+   enc->ws->fence_reference(enc->ws, &fence, NULL);
 }
 
 /**
@@ -406,6 +415,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
    enc->base.end_frame = rvce_end_frame;
    enc->base.flush = rvce_flush;
    enc->base.get_feedback = rvce_get_feedback;
+   enc->base.destroy_fence = rvce_destroy_fence;
    enc->get_buffer = get_buffer;
 
    enc->screen = context->screen;
@@ -518,7 +528,7 @@ bool si_vce_is_fw_version_supported(struct si_screen *sscreen)
 /**
  * Add the buffer as relocation to the current command submission
  */
-void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf, unsigned usage,
+void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer_lean *buf, unsigned usage,
                        enum radeon_bo_domain domain, signed offset)
 {
    int reloc_idx;

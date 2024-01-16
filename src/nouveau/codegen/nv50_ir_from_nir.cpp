@@ -889,13 +889,13 @@ static uint16_t
 calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
           bool input, const nir_variable *var)
 {
-   if (!type->is_array())
-      return type->count_attribute_slots(false);
+   if (!glsl_type_is_array(type))
+      return glsl_count_attribute_slots(type, false);
 
    uint16_t slots;
    switch (stage) {
    case Program::TYPE_GEOMETRY:
-      slots = type->count_attribute_slots(false);
+      slots = glsl_count_attribute_slots(type, false);
       if (input)
          slots /= info.gs.vertices_in;
       break;
@@ -903,12 +903,12 @@ calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
    case Program::TYPE_TESSELLATION_EVAL:
       // remove first dimension
       if (var->data.patch || (!input && stage == Program::TYPE_TESSELLATION_EVAL))
-         slots = type->count_attribute_slots(false);
+         slots = glsl_count_attribute_slots(type, false);
       else
-         slots = type->fields.array->count_attribute_slots(false);
+         slots = glsl_count_attribute_slots(type->fields.array, false);
       break;
    default:
-      slots = type->count_attribute_slots(false);
+      slots = glsl_count_attribute_slots(type, false);
       break;
    }
 
@@ -917,10 +917,10 @@ calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
 
 static uint8_t
 getMaskForType(const glsl_type *type, uint8_t slot) {
-   uint16_t comp = type->without_array()->components();
+   uint16_t comp = glsl_get_components(glsl_without_array(type));
    comp = comp ? comp : 4;
 
-   if (glsl_base_type_is_64bit(type->without_array()->base_type)) {
+   if (glsl_base_type_is_64bit(glsl_without_array(type)->base_type)) {
       comp *= 2;
       if (comp > 4) {
          if (slot % 2)
@@ -1018,7 +1018,7 @@ bool Converter::assignSlots() {
             assert(glsl_type_is_scalar(type->fields.array));
             assert(slots == glsl_get_length(type));
          }
-         assert(!glsl_base_type_is_64bit(type->without_array()->base_type));
+         assert(!glsl_base_type_is_64bit(glsl_without_array(type)->base_type));
 
          uint32_t comps = BITFIELD_RANGE(var->data.location_frac, slots);
          assert(!(comps & ~0xff));
@@ -1122,7 +1122,7 @@ bool Converter::assignSlots() {
             assert(glsl_type_is_scalar(type->fields.array));
             assert(slots == glsl_get_length(type));
          }
-         assert(!glsl_base_type_is_64bit(type->without_array()->base_type));
+         assert(!glsl_base_type_is_64bit(glsl_without_array(type)->base_type));
 
          uint32_t comps = BITFIELD_RANGE(var->data.location_frac, slots);
          assert(!(comps & ~0xff));
@@ -3304,7 +3304,7 @@ Converter::run()
       progress = false;
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
-      NIR_PASS(progress, nir, nir_opt_trivial_continues);
+      NIR_PASS(progress, nir, nir_opt_loop);
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);

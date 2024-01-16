@@ -106,7 +106,7 @@ is_valid_vec_const(ir_constant *ir)
    if (ir == NULL)
       return false;
 
-   if (!ir->type->is_scalar() && !ir->type->is_vector())
+   if (!glsl_type_is_scalar(ir->type) && !glsl_type_is_vector(ir->type))
       return false;
 
    return true;
@@ -115,7 +115,7 @@ is_valid_vec_const(ir_constant *ir)
 static inline bool
 is_less_than_one(ir_constant *ir)
 {
-   assert(ir->type->is_float());
+   assert(glsl_type_is_float(ir->type));
 
    if (!is_valid_vec_const(ir))
       return false;
@@ -132,7 +132,7 @@ is_less_than_one(ir_constant *ir)
 static inline bool
 is_greater_than_zero(ir_constant *ir)
 {
-   assert(ir->type->is_float());
+   assert(glsl_type_is_float(ir->type));
 
    if (!is_valid_vec_const(ir))
       return false;
@@ -149,7 +149,7 @@ is_greater_than_zero(ir_constant *ir)
 static void
 update_type(ir_expression *ir)
 {
-   if (ir->operands[0]->type->is_vector())
+   if (glsl_type_is_vector(ir->operands[0]->type))
       ir->type = ir->operands[0]->type;
    else
       ir->type = ir->operands[1]->type;
@@ -188,10 +188,10 @@ ir_algebraic_visitor::reassociate_constant(ir_expression *ir1, int const_index,
       return false;
 
    /* Don't want to even think about matrices. */
-   if (ir1->operands[0]->type->is_matrix() ||
-       ir1->operands[1]->type->is_matrix() ||
-       ir2->operands[0]->type->is_matrix() ||
-       ir2->operands[1]->type->is_matrix())
+   if (glsl_type_is_matrix(ir1->operands[0]->type) ||
+       glsl_type_is_matrix(ir1->operands[1]->type) ||
+       glsl_type_is_matrix(ir2->operands[0]->type) ||
+       glsl_type_is_matrix(ir2->operands[1]->type))
       return false;
 
    void *mem_ctx = ralloc_parent(ir2);
@@ -234,7 +234,7 @@ ir_rvalue *
 ir_algebraic_visitor::swizzle_if_required(ir_expression *expr,
 					  ir_rvalue *operand)
 {
-   if (expr->type->is_vector() && operand->type->is_scalar()) {
+   if (glsl_type_is_vector(expr->type) && glsl_type_is_scalar(operand->type)) {
       return new(mem_ctx) ir_swizzle(operand, 0, 0, 0, 0,
 				     expr->type->vector_elements);
    } else
@@ -248,13 +248,13 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
    ir_expression *op_expr[4] = {NULL, NULL, NULL, NULL};
 
    if (ir->operation == ir_binop_mul &&
-       ir->operands[0]->type->is_matrix() &&
-       ir->operands[1]->type->is_vector()) {
+       glsl_type_is_matrix(ir->operands[0]->type) &&
+       glsl_type_is_vector(ir->operands[1]->type)) {
       ir_expression *matrix_mul = ir->operands[0]->as_expression();
 
       if (matrix_mul && matrix_mul->operation == ir_binop_mul &&
-         matrix_mul->operands[0]->type->is_matrix() &&
-         matrix_mul->operands[1]->type->is_matrix()) {
+         glsl_type_is_matrix(matrix_mul->operands[0]->type) &&
+         glsl_type_is_matrix(matrix_mul->operands[1]->type)) {
 
          return mul(matrix_mul->operands[0],
                     mul(matrix_mul->operands[1], ir->operands[1]));
@@ -263,7 +263,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
    assert(ir->num_operands <= 4);
    for (unsigned i = 0; i < ir->num_operands; i++) {
-      if (ir->operands[i]->type->is_matrix())
+      if (glsl_type_is_matrix(ir->operands[i]->type))
 	 return ir;
 
       op_const[i] =
@@ -298,7 +298,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
    case ir_binop_min:
    case ir_binop_max:
-      if (!ir->type->is_float())
+      if (!glsl_type_is_float(ir->type))
          break;
 
       /* Replace min(max) operations and its commutative combinations with

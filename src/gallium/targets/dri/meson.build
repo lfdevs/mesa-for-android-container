@@ -28,9 +28,11 @@ gallium_dri_ld_args = []
 gallium_dri_link_depends = []
 gallium_dri_drivers = []
 
+dri_sym = configure_file(input : 'dri.sym.in', output : 'dri.sym', configuration : sym_config)
+
 if with_ld_version_script
-  gallium_dri_ld_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'dri.sym')]
-  gallium_dri_link_depends += files('dri.sym')
+  gallium_dri_ld_args += ['-Wl,--version-script', join_paths(meson.current_build_dir(), 'dri.sym')]
+  gallium_dri_link_depends += dri_sym
 endif
 if with_ld_dynamic_list
   gallium_dri_ld_args += ['-Wl,--dynamic-list', join_paths(meson.current_source_dir(), '../dri.dyn')]
@@ -49,7 +51,7 @@ libgallium_dri = shared_library(
   link_depends : gallium_dri_link_depends,
   link_with : [
     libdri, libmesa, libgalliumvl,
-    libgallium, libglapi, libpipe_loader_static, libws_null, libwsw, libswdri,
+    libgallium, libglapi, libloader, libpipe_loader_static, libws_null, libwsw, libswdri,
     libswkmsdri,
   ],
   dependencies : [
@@ -69,10 +71,13 @@ libgallium_dri = shared_library(
 foreach d : [[with_gallium_kmsro, [
                'armada-drm_dri.so',
                'exynos_dri.so',
+               'gm12u320_dri.so',
                'hdlcd_dri.so',
                'hx8357d_dri.so',
+               'ili9163_dri.so',
                'ili9225_dri.so',
                'ili9341_dri.so',
+               'ili9486_dri.so',
                'imx-drm_dri.so',
                'imx-dcss_dri.so',
                'imx-lcdif_dri.so',
@@ -85,14 +90,17 @@ foreach d : [[with_gallium_kmsro, [
                'meson_dri.so',
                'mi0283qt_dri.so',
                'mxsfb-drm_dri.so',
+               'panel-mipi-dbi_dri.so',
                'pl111_dri.so',
                'rcar-du_dri.so',
                'repaper_dri.so',
                'rockchip_dri.so',
                'st7586_dri.so',
                'st7735r_dri.so',
+               'sti_dri.so',
                'stm_dri.so',
                'sun4i-drm_dri.so',
+               'udl_dri.so',
              ]],
              [with_gallium_radeonsi, 'radeonsi_dri.so'],
              [with_gallium_nouveau, 'nouveau_dri.so'],

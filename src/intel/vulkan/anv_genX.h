@@ -90,7 +90,8 @@ void genX(cmd_buffer_emit_hashing_mode)(struct anv_cmd_buffer *cmd_buffer,
 
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
 void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
-void genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline);
+void genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline,
+                                const struct anv_device *device);
 
 void genX(apply_task_urb_workaround)(struct anv_cmd_buffer *cmd_buffer);
 
@@ -106,6 +107,12 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
                               uint32_t current_pipeline,
                               enum anv_pipe_bits bits,
                               enum anv_pipe_bits *emitted_flush_bits);
+void
+genX(invalidate_aux_map)(struct anv_batch *batch,
+                         struct anv_device *device,
+                         enum intel_engine_class engine_class,
+                         enum anv_pipe_bits bits);
+
 
 void genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                                struct anv_device *device,
@@ -185,13 +192,17 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               enum anv_timestamp_capture_type type,
                               void *data);
 
-void genX(batch_emit_dummy_post_sync_op)(struct anv_batch *batch,
-                                         struct anv_device *device,
-                                         uint32_t primitive_topology,
-                                         uint32_t vertex_count);
+void
+genX(batch_emit_post_3dprimitive_was)(struct anv_batch *batch,
+                                      const struct anv_device *device,
+                                      uint32_t primitive_topology,
+                                      uint32_t vertex_count);
+
+void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
+                                            struct anv_device *device);
 
 VkPolygonMode
-genX(raster_polygon_mode)(struct anv_graphics_pipeline *pipeline,
+genX(raster_polygon_mode)(const struct anv_graphics_pipeline *pipeline,
                           VkPolygonMode polygon_mode,
                           VkPrimitiveTopology primitive_topology);
 
@@ -222,6 +233,7 @@ genX(ray_tracing_pipeline_emit)(struct anv_ray_tracing_pipeline *pipeline);
 void
 genX(batch_set_preemption)(struct anv_batch *batch,
                            const struct intel_device_info *devinfo,
+                           uint32_t current_pipeline,
                            bool value);
 
 void
@@ -230,23 +242,25 @@ genX(cmd_buffer_set_preemption)(struct anv_cmd_buffer *cmd_buffer, bool value);
 void
 genX(batch_emit_pipe_control)(struct anv_batch *batch,
                               const struct intel_device_info *devinfo,
+                              uint32_t current_pipeline,
                               enum anv_pipe_bits bits,
                               const char *reason);
 
 void
 genX(batch_emit_pipe_control_write)(struct anv_batch *batch,
                                     const struct intel_device_info *devinfo,
+                                    uint32_t current_pipeline,
                                     uint32_t post_sync_op,
                                     struct anv_address address,
                                     uint32_t imm_data,
                                     enum anv_pipe_bits bits,
                                     const char *reason);
 
-#define genx_batch_emit_pipe_control(a, b, c) \
-genX(batch_emit_pipe_control) (a, b, c, __func__)
+#define genx_batch_emit_pipe_control(a, b, c, d) \
+genX(batch_emit_pipe_control) (a, b, c, d, __func__)
 
-#define genx_batch_emit_pipe_control_write(a, b, c, d, e, f) \
-genX(batch_emit_pipe_control_write) (a, b, c, d, e, f, __func__)
+#define genx_batch_emit_pipe_control_write(a, b, c, d, e, f, g) \
+genX(batch_emit_pipe_control_write) (a, b, c, d, e, f, g, __func__)
 
 void genX(batch_emit_breakpoint)(struct anv_batch *batch,
                                  struct anv_device *device,
@@ -285,3 +299,7 @@ genX(simple_shader_push_state_address)(struct anv_simple_shader *state,
 
 void
 genX(emit_simple_shader_end)(struct anv_simple_shader *state);
+
+VkResult genX(init_trtt_context_state)(struct anv_queue *queue);
+
+VkResult genX(write_trtt_entries)(struct anv_trtt_submission *submit);

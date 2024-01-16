@@ -19,7 +19,7 @@ extern "C" {
 #define MME_FERMI_DRAM_COUNT 0xc00
 #define MME_FERMI_SCRATCH_COUNT 128
 
-enum PACKED mme_fermi_reg {
+enum ENUM_PACKED mme_fermi_reg {
    MME_FERMI_REG_ZERO,
    MME_FERMI_REG_R1,
    MME_FERMI_REG_R2,
@@ -30,7 +30,7 @@ enum PACKED mme_fermi_reg {
    MME_FERMI_REG_R7,
 };
 
-enum PACKED mme_fermi_op {
+enum ENUM_PACKED mme_fermi_op {
    MME_FERMI_OP_ALU_REG,
    MME_FERMI_OP_ADD_IMM,
    MME_FERMI_OP_MERGE,
@@ -43,7 +43,7 @@ enum PACKED mme_fermi_op {
 
 const char *mme_fermi_op_to_str(enum mme_fermi_op op);
 
-enum PACKED mme_fermi_alu_op {
+enum ENUM_PACKED mme_fermi_alu_op {
     MME_FERMI_ALU_OP_ADD,
     MME_FERMI_ALU_OP_ADDC,
     MME_FERMI_ALU_OP_SUB,
@@ -81,7 +81,7 @@ enum PACKED mme_fermi_alu_op {
 const char *mme_fermi_alu_op_to_str(enum mme_fermi_alu_op op);
 
 
-enum PACKED mme_fermi_assign_op {
+enum ENUM_PACKED mme_fermi_assign_op {
     MME_FERMI_ASSIGN_OP_LOAD,
     MME_FERMI_ASSIGN_OP_MOVE,
     MME_FERMI_ASSIGN_OP_MOVE_SET_MADDR,

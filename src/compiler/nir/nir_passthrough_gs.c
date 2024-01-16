@@ -22,12 +22,11 @@
  */
 
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
 
-static unsigned int
+static enum mesa_prim
 gs_in_prim_for_topology(enum mesa_prim prim)
 {
    switch (prim) {
@@ -138,7 +137,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
    nir_shader *nir = b.shader;
    nir->info.gs.input_primitive = gs_in_prim_for_topology(primitive_type);
    nir->info.gs.output_primitive = force_line_strip_out ? MESA_PRIM_LINE_STRIP : original_our_prim;
-   nir->info.gs.vertices_in = u_vertices_per_prim(primitive_type);
+   nir->info.gs.vertices_in = mesa_vertices_per_prim(primitive_type);
    nir->info.gs.vertices_out = needs_closing ? vertices_out + 1 : vertices_out;
    nir->info.gs.invocations = 1;
    nir->info.gs.active_stream_mask = 1;
@@ -227,7 +226,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
    for (unsigned i = start_vert; i < end_vert || needs_closing; i += vert_step) {
       int idx = i < end_vert ? i : start_vert;
       /* Copy inputs to outputs. */
-      for (unsigned j = 0, oj = 0, of = 0; j < num_inputs; ++j) {
+      for (unsigned j = 0, oj = 0; j < num_inputs; ++j) {
          if (in_vars[j]->data.location == VARYING_SLOT_EDGE) {
             continue;
          }
@@ -236,7 +235,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
          if (in_vars[j]->data.location == VARYING_SLOT_POS || !handle_flat)
             index = nir_imm_int(&b, idx);
          else {
-            unsigned mask = 1u << (of++);
+            uint64_t mask = BITFIELD64_BIT(in_vars[j]->data.location);
             index = nir_bcsel(&b, nir_ieq_imm(&b, nir_iand_imm(&b, flat_interp_mask_def, mask), 0), nir_imm_int(&b, idx), pv_vert_index);
          }
          nir_deref_instr *value = nir_build_deref_array(&b, nir_build_deref_var(&b, in_vars[j]), index);

@@ -115,17 +115,6 @@
 #define TEST_MAT_FLAGS(mat, a)  \
     ((MAT_FLAGS_GEOMETRY & (~(a)) & ((mat)->flags) ) == 0)
 
-/**
- * Identity matrix.
- */
-static const GLfloat Identity[16] = {
-   1.0, 0.0, 0.0, 0.0,
-   0.0, 1.0, 0.0, 0.0,
-   0.0, 0.0, 1.0, 0.0,
-   0.0, 0.0, 0.0, 1.0
-};
-
-
 
 /**********************************************************************/
 /** \name Matrix multiplication */
@@ -187,6 +176,15 @@ static void matmul34( GLfloat *product, const GLfloat *a, const GLfloat *b )
 #undef A
 #undef B
 #undef P
+
+/* "m" must be a 4x4 matrix. Set it to the identity matrix. */
+static void
+matrix_set_identity(GLfloat *m)
+{
+   m[0] = m[5] = m[10] = m[15] = 1;
+   m[1] = m[2] = m[3] = m[4] = m[6] = m[7] = 0;
+   m[8] = m[9] = m[11] = m[12] = m[13] = m[14] = 0;
+}
 
 /**
  * Multiply a matrix by an array of floats with known properties.
@@ -424,7 +422,7 @@ static GLboolean invert_matrix_3d( GLmatrix *mat )
    }
    else {
       /* pure translation */
-      memcpy( out, Identity, sizeof(Identity) );
+      matrix_set_identity(out);
       MAT(out,0,3) = - MAT(in,0,3);
       MAT(out,1,3) = - MAT(in,1,3);
       MAT(out,2,3) = - MAT(in,2,3);
@@ -462,7 +460,7 @@ static GLboolean invert_matrix_3d( GLmatrix *mat )
  */
 static GLboolean invert_matrix_identity( GLmatrix *mat )
 {
-   memcpy( mat->inv, Identity, sizeof(Identity) );
+   matrix_set_identity(mat->inv);
    return GL_TRUE;
 }
 
@@ -484,7 +482,7 @@ static GLboolean invert_matrix_3d_no_rot( GLmatrix *mat )
    if (MAT(in,0,0) == 0 || MAT(in,1,1) == 0 || MAT(in,2,2) == 0 )
       return GL_FALSE;
 
-   memcpy( out, Identity, sizeof(Identity) );
+   matrix_set_identity(out);
    MAT(out,0,0) = 1.0F / MAT(in,0,0);
    MAT(out,1,1) = 1.0F / MAT(in,1,1);
    MAT(out,2,2) = 1.0F / MAT(in,2,2);
@@ -517,7 +515,7 @@ static GLboolean invert_matrix_2d_no_rot( GLmatrix *mat )
    if (MAT(in,0,0) == 0 || MAT(in,1,1) == 0)
       return GL_FALSE;
 
-   memcpy( out, Identity, sizeof(Identity) );
+   matrix_set_identity(out);
    MAT(out,0,0) = 1.0F / MAT(in,0,0);
    MAT(out,1,1) = 1.0F / MAT(in,1,1);
 
@@ -566,7 +564,7 @@ static GLboolean matrix_invert( GLmatrix *mat )
       return GL_TRUE;
    } else {
       mat->flags |= MAT_FLAG_SINGULAR;
-      memcpy( mat->inv, Identity, sizeof(Identity) );
+      matrix_set_identity(mat->inv);
       return GL_FALSE;
    }
 }
@@ -597,7 +595,7 @@ _math_matrix_rotate( GLmatrix *mat,
    s = sinf( angle * M_PI / 180.0 );
    c = cosf( angle * M_PI / 180.0 );
 
-   memcpy(m, Identity, sizeof(Identity));
+   matrix_set_identity(m);
    optimized = GL_FALSE;
 
 #define M(row,col)  m[col*4+row]
@@ -953,8 +951,8 @@ _math_matrix_viewport(GLmatrix *m, const float scale[3],
 void
 _math_matrix_set_identity( GLmatrix *mat )
 {
-   memcpy( mat->m, Identity, sizeof(Identity) );
-   memcpy( mat->inv, Identity, sizeof(Identity) );
+   matrix_set_identity(mat->m);
+   matrix_set_identity(mat->inv);
 
    mat->type = MATRIX_IDENTITY;
    mat->flags &= ~(MAT_DIRTY_FLAGS|
@@ -1282,8 +1280,8 @@ void
 _math_matrix_ctr( GLmatrix *m )
 {
    memset(m, 0, sizeof(*m));
-   memcpy( m->m, Identity, sizeof(Identity) );
-   memcpy( m->inv, Identity, sizeof(Identity) );
+   matrix_set_identity(m->m);
+   matrix_set_identity(m->inv);
    m->type = MATRIX_IDENTITY;
    m->flags = 0;
 }

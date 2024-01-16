@@ -62,6 +62,48 @@ struct radv_meta_saved_state {
    bool predicating;
 };
 
+enum radv_blit_ds_layout {
+   RADV_BLIT_DS_LAYOUT_TILE_ENABLE,
+   RADV_BLIT_DS_LAYOUT_TILE_DISABLE,
+   RADV_BLIT_DS_LAYOUT_COUNT,
+};
+
+static inline enum radv_blit_ds_layout
+radv_meta_blit_ds_to_type(VkImageLayout layout)
+{
+   return (layout == VK_IMAGE_LAYOUT_GENERAL) ? RADV_BLIT_DS_LAYOUT_TILE_DISABLE : RADV_BLIT_DS_LAYOUT_TILE_ENABLE;
+}
+
+static inline VkImageLayout
+radv_meta_blit_ds_to_layout(enum radv_blit_ds_layout ds_layout)
+{
+   return ds_layout == RADV_BLIT_DS_LAYOUT_TILE_ENABLE ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+}
+
+enum radv_meta_dst_layout {
+   RADV_META_DST_LAYOUT_GENERAL,
+   RADV_META_DST_LAYOUT_OPTIMAL,
+   RADV_META_DST_LAYOUT_COUNT,
+};
+
+static inline enum radv_meta_dst_layout
+radv_meta_dst_layout_from_layout(VkImageLayout layout)
+{
+   return (layout == VK_IMAGE_LAYOUT_GENERAL) ? RADV_META_DST_LAYOUT_GENERAL : RADV_META_DST_LAYOUT_OPTIMAL;
+}
+
+static inline VkImageLayout
+radv_meta_dst_layout_to_layout(enum radv_meta_dst_layout layout)
+{
+   return layout == RADV_META_DST_LAYOUT_OPTIMAL ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+}
+
+extern const VkFormat radv_fs_key_format_exemplars[NUM_META_FS_KEYS];
+unsigned radv_format_meta_fs_key(struct radv_device *device, VkFormat format);
+
+VkResult radv_device_init_meta(struct radv_device *device);
+void radv_device_finish_meta(struct radv_device *device);
+
 VkResult radv_device_init_meta_clear_state(struct radv_device *device, bool on_demand);
 void radv_device_finish_meta_clear_state(struct radv_device *device);
 
@@ -226,36 +268,6 @@ void radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image 
 void radv_meta_decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
                            const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
 
-/**
- * Return whether the bound pipeline is the FMASK decompress pass.
- */
-static inline bool
-radv_is_fmask_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
-{
-   struct radv_graphics_pipeline *pipeline = cmd_buffer->state.graphics_pipeline;
-
-   if (!pipeline)
-      return false;
-
-   return pipeline->custom_blend_mode == V_028808_CB_FMASK_DECOMPRESS;
-}
-
-/**
- * Return whether the bound pipeline is the DCC decompress pass.
- */
-static inline bool
-radv_is_dcc_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
-{
-   struct radv_graphics_pipeline *pipeline = cmd_buffer->state.graphics_pipeline;
-
-   if (!pipeline)
-      return false;
-
-   return pipeline->custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX8 ||
-          (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11 &&
-           pipeline->custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX11);
-}
-
 /* common nir builder helpers */
 #include "nir/nir_builder.h"
 
@@ -273,6 +285,32 @@ nir_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned b
 nir_def *get_global_ids(nir_builder *b, unsigned num_components);
 
 void radv_break_on_count(nir_builder *b, nir_variable *var, nir_def *count);
+
+uint32_t radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *image,
+                          struct radeon_winsys_bo *bo, uint64_t va, uint64_t size, uint32_t value);
+
+void radv_copy_buffer(struct radv_cmd_buffer *cmd_buffer, struct radeon_winsys_bo *src_bo,
+                      struct radeon_winsys_bo *dst_bo, uint64_t src_offset, uint64_t dst_offset, uint64_t size);
+
+void radv_cmd_buffer_clear_attachment(struct radv_cmd_buffer *cmd_buffer, const VkClearAttachment *attachment);
+
+void radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRenderingInfo *render_info);
+
+void radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer);
+
+void radv_cmd_buffer_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview,
+                                          VkImageLayout src_layout, struct radv_image_view *dst_iview,
+                                          VkImageLayout dst_layout, const VkImageResolve2 *region);
+
+void radv_depth_stencil_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer, VkImageAspectFlags aspects,
+                                             VkResolveModeFlagBits resolve_mode);
+
+void radv_cmd_buffer_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview,
+                                          VkImageLayout src_layout, struct radv_image_view *dst_iview,
+                                          VkImageLayout dst_layout);
+
+void radv_depth_stencil_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer, VkImageAspectFlags aspects,
+                                             VkResolveModeFlagBits resolve_mode);
 
 #ifdef __cplusplus
 }

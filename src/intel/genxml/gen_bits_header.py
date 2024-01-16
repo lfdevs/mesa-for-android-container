@@ -344,7 +344,7 @@ def main():
             assert field
             field.allowed = True
 
-    with open(pargs.output, 'w') as f:
+    with open(pargs.output, 'w', encoding='utf-8') as f:
         f.write(TEMPLATE.render(containers=containers, guard=pargs.cpp_guard))
 
 if __name__ == '__main__':

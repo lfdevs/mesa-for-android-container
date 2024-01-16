@@ -72,8 +72,7 @@
    .max_unroll_iterations = 32,                                               \
    .force_indirect_unrolling = nir_var_function_temp,                         \
    .divergence_analysis_options =                                             \
-      (nir_divergence_single_prim_per_subgroup |                              \
-       nir_divergence_single_patch_per_tcs_subgroup |                         \
+      (nir_divergence_single_patch_per_tcs_subgroup |                         \
        nir_divergence_single_patch_per_tes_subgroup |                         \
        nir_divergence_shader_record_ptr_uniform)
 
@@ -121,6 +120,9 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
    /* Default to the sampler since that's what we've done since forever */
    compiler->indirect_ubos_use_sampler = true;
+
+   compiler->lower_dpas = devinfo->verx10 < 125 ||
+      debug_get_bool_option("INTEL_LOWER_DPAS", false);
 
    /* There is no vec4 mode on Gfx10+, and we don't use it at all on Gfx8+. */
    for (int i = MESA_SHADER_VERTEX; i < MESA_ALL_SHADER_STAGES; i++) {
@@ -198,6 +200,9 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->has_sdot_4x8 = devinfo->ver >= 12;
       nir_options->has_udot_4x8 = devinfo->ver >= 12;
       nir_options->has_sudot_4x8 = devinfo->ver >= 12;
+      nir_options->has_sdot_4x8_sat = devinfo->ver >= 12;
+      nir_options->has_udot_4x8_sat = devinfo->ver >= 12;
+      nir_options->has_sudot_4x8_sat = devinfo->ver >= 12;
 
       nir_options->lower_int64_options = int64_options;
       nir_options->lower_doubles_options = fp64_options;
@@ -213,6 +218,10 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
          nir_options->divergence_analysis_options &=
             ~nir_divergence_single_patch_per_tcs_subgroup;
       }
+
+      if (devinfo->ver < 12)
+         nir_options->divergence_analysis_options |=
+            nir_divergence_single_prim_per_subgroup;
 
       compiler->nir_options[i] = nir_options;
    }

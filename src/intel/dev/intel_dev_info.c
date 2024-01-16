@@ -33,7 +33,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <xf86drm.h>
+#include "util/libdrm.h"
 
 #include "intel_device_info.h"
 #include "intel_hwconfig.h"

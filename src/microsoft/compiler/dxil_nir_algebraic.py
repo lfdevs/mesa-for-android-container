@@ -96,10 +96,6 @@ remove_unsupported_casts(no_16bit_conv, 16, 0xffff, 65535.0, -32768.0, 32767.0)
 algebraic_ops = [
   (('b2b32', 'a'), ('b2i32', 'a')),
   (('b2b1', 'a'), ('ine', ('b2i32', a), 0)),
-
-  # We don't support the saturating versions of these
-  (('sdot_4x8_iadd_sat', a, b, c), ('iadd_sat', ('sdot_4x8_iadd', a, b, 0), c)),
-  (('udot_4x8_uadd_sat', a, b, c), ('uadd_sat', ('udot_4x8_uadd', a, b, 0), c)),
 ]
 
 no_16bit_conv += [

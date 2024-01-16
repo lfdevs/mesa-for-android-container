@@ -818,7 +818,7 @@ vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pip
       pipe->screen,
       PIPE_BIND_CONSTANT_BUFFER,
       PIPE_USAGE_DEFAULT,
-      sizeof(csc_matrix) + 12*sizeof(float) + 10*sizeof(int)
+      sizeof(csc_matrix) + 16*sizeof(float) + 2*sizeof(int)
    );
 
    if (!s->shader_params)

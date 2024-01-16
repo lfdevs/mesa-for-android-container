@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "nir/pipe_nir.h"
 #include "pipe/p_defines.h"
 
 #include "compiler/nir/nir.h"
@@ -1012,7 +1013,5 @@ nvc0_program_init_tcp_empty(struct nvc0_context *nvc0)
 
    nir_validate_shader(b.shader, "in nvc0_program_init_tcp_empty");
 
-   struct pipe_shader_state state;
-   pipe_shader_state_from_nir(&state, b.shader);
-   nvc0->tcp_empty = nvc0->base.pipe.create_tcs_state(&nvc0->base.pipe, &state);
+   nvc0->tcp_empty = pipe_shader_from_nir(&nvc0->base.pipe, b.shader);
 }

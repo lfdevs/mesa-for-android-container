@@ -459,6 +459,50 @@ nir_fixup_deref_modes(nir_shader *shader)
 }
 
 static bool
+nir_fixup_deref_types_instr(UNUSED struct nir_builder *b, nir_instr *instr, UNUSED void *data)
+{
+   if (instr->type != nir_instr_type_deref)
+      return false;
+
+   nir_deref_instr *deref = nir_instr_as_deref(instr);
+   const struct glsl_type *parent_derived_type;
+   if (deref->deref_type == nir_deref_type_var) {
+      parent_derived_type = deref->var->type;
+   } else if (deref->deref_type == nir_deref_type_array ||
+              deref->deref_type == nir_deref_type_struct) {
+      nir_deref_instr *parent = nir_src_as_deref(deref->parent);
+      if (deref->deref_type == nir_deref_type_array) {
+         parent_derived_type = glsl_get_array_element(parent->type);
+      } else if (deref->deref_type == nir_deref_type_struct) {
+         parent_derived_type =
+            glsl_get_struct_field(parent->type, deref->strct.index);
+      } else {
+         unreachable("Unsupported deref type");
+      }
+   } else {
+      unreachable("Unsupported deref type");
+   }
+
+   if (deref->type == parent_derived_type)
+      return false;
+
+   deref->type = parent_derived_type;
+   return true;
+}
+
+/* Update deref types when array sizes have changed. */
+void
+nir_fixup_deref_types(nir_shader *shader)
+{
+   nir_shader_instructions_pass(shader, nir_fixup_deref_types_instr,
+                                nir_metadata_block_index |
+                                   nir_metadata_dominance |
+                                   nir_metadata_live_defs |
+                                   nir_metadata_instr_index,
+                                NULL);
+}
+
+static bool
 modes_may_alias(nir_variable_mode a, nir_variable_mode b)
 {
    /* Generic pointers can alias with SSBOs */

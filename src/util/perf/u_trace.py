@@ -511,7 +511,7 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
     """
     if cpath is not None:
         hdr = os.path.basename(cpath).rsplit('.', 1)[0] + '.h'
-        with open(cpath, 'w') as f:
+        with open(cpath, 'w', encoding='utf-8') as f:
             f.write(Template(src_template).render(
                 hdr=hdr,
                 ctx_param=ctx_param,
@@ -523,7 +523,7 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
 
     if hpath is not None:
         hdr = os.path.basename(hpath)
-        with open(hpath, 'w') as f:
+        with open(hpath, 'w', encoding='utf-8') as f:
             f.write(Template(hdr_template).render(
                 hdrname=hdr.rstrip('.h').upper(),
                 ctx_param=ctx_param,
@@ -607,8 +607,8 @@ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEve
 def utrace_generate_perfetto_utils(hpath,basename="tracepoint"):
     if hpath is not None:
         hdr = os.path.basename(hpath)
-        with open(hpath, 'wb') as f:
-            f.write(Template(perfetto_utils_hdr_template, output_encoding='utf-8').render(
+        with open(hpath, 'w', encoding='utf-8') as f:
+            f.write(Template(perfetto_utils_hdr_template).render(
                 basename=basename,
                 hdrname=hdr.rstrip('.h').upper(),
                 HEADERS=[h for h in HEADERS if h.scope & HeaderScope.PERFETTO],

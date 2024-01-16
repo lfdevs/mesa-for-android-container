@@ -276,7 +276,7 @@ draw_prim_assembler_run(struct draw_context *draw,
       MESA_PRIM_QUADS : u_reduced_prim(input_prims->prim);
    unsigned max_primitives = u_decomposed_prims_for_vertices(
       input_prims->prim, input_prims->count);
-   unsigned max_verts = u_vertices_per_prim(assembled_prim) * max_primitives;
+   unsigned max_verts = mesa_vertices_per_prim(assembled_prim) * max_primitives;
 
    asmblr->output_prims = output_prims;
    asmblr->output_verts = output_verts;

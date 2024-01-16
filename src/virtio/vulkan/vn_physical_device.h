@@ -30,6 +30,7 @@ struct vn_physical_device_properties {
    VkPhysicalDeviceConservativeRasterizationPropertiesEXT
       conservative_rasterization;
    VkPhysicalDeviceCustomBorderColorPropertiesEXT custom_border_color;
+   VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state_3;
    VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT
       graphics_pipeline_library;
    VkPhysicalDeviceLineRasterizationPropertiesEXT line_rasterization;

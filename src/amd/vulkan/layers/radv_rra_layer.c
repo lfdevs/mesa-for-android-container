@@ -166,7 +166,7 @@ handle_accel_struct_write(VkCommandBuffer commandBuffer, struct vk_acceleration_
       .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
       .srcStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
       .srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-      .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
       .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
    };
 

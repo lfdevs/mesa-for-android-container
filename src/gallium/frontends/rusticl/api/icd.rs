@@ -85,15 +85,15 @@ pub static DISPATCH: cl_icd_dispatch = cl_icd_dispatch {
     clEnqueueWaitForEvents: None,
     clEnqueueBarrier: Some(cl_enqueue_barrier),
     clGetExtensionFunctionAddress: Some(cl_get_extension_function_address),
-    clCreateFromGLBuffer: None,
-    clCreateFromGLTexture2D: None,
-    clCreateFromGLTexture3D: None,
-    clCreateFromGLRenderbuffer: None,
-    clGetGLObjectInfo: None,
-    clGetGLTextureInfo: None,
-    clEnqueueAcquireGLObjects: None,
-    clEnqueueReleaseGLObjects: None,
-    clGetGLContextInfoKHR: None,
+    clCreateFromGLBuffer: Some(cl_create_from_gl_buffer),
+    clCreateFromGLTexture2D: Some(cl_create_from_gl_texture_2d),
+    clCreateFromGLTexture3D: Some(cl_create_from_gl_texture_3d),
+    clCreateFromGLRenderbuffer: Some(cl_create_from_gl_renderbuffer),
+    clGetGLObjectInfo: Some(cl_get_gl_object_info),
+    clGetGLTextureInfo: Some(cl_get_gl_texture_info),
+    clEnqueueAcquireGLObjects: Some(cl_enqueue_acquire_gl_objects),
+    clEnqueueReleaseGLObjects: Some(cl_enqueue_release_gl_objects),
+    clGetGLContextInfoKHR: Some(cl_get_gl_context_info_khr),
     clGetDeviceIDsFromD3D10KHR: ptr::null_mut(),
     clCreateFromD3D10BufferKHR: ptr::null_mut(),
     clCreateFromD3D10Texture2DKHR: ptr::null_mut(),
@@ -127,7 +127,7 @@ pub static DISPATCH: cl_icd_dispatch = cl_icd_dispatch {
     clEnqueueMarkerWithWaitList: Some(cl_enqueue_marker_with_wait_list),
     clEnqueueBarrierWithWaitList: Some(cl_enqueue_barrier_with_wait_list),
     clGetExtensionFunctionAddressForPlatform: Some(cl_get_extension_function_address_for_platform),
-    clCreateFromGLTexture: None,
+    clCreateFromGLTexture: Some(cl_create_from_gl_texture),
     clGetDeviceIDsFromD3D11KHR: ptr::null_mut(),
     clCreateFromD3D11BufferKHR: ptr::null_mut(),
     clCreateFromD3D11Texture2DKHR: ptr::null_mut(),
@@ -413,6 +413,18 @@ extern "C" fn cl_get_extension_function_address(
         // cl_khr_il_program
         "clCreateProgramWithILKHR" => cl_create_program_with_il as *mut ::std::ffi::c_void,
 
+        // cl_khr_gl_sharing
+        "clCreateFromGLBuffer" => cl_create_from_gl_buffer as *mut ::std::ffi::c_void,
+        "clCreateFromGLRenderbuffer" => cl_create_from_gl_renderbuffer as *mut ::std::ffi::c_void,
+        "clCreateFromGLTexture" => cl_create_from_gl_texture as *mut ::std::ffi::c_void,
+        "clCreateFromGLTexture2D" => cl_create_from_gl_texture_2d as *mut ::std::ffi::c_void,
+        "clCreateFromGLTexture3D" => cl_create_from_gl_texture_3d as *mut ::std::ffi::c_void,
+        "clEnqueueAcquireGLObjects" => cl_enqueue_acquire_gl_objects as *mut ::std::ffi::c_void,
+        "clEnqueueReleaseGLObjects" => cl_enqueue_release_gl_objects as *mut ::std::ffi::c_void,
+        "clGetGLContextInfoKHR" => cl_get_gl_context_info_khr as *mut ::std::ffi::c_void,
+        "clGetGLObjectInfo" => cl_get_gl_object_info as *mut ::std::ffi::c_void,
+        "clGetGLTextureInfo" => cl_get_gl_texture_info as *mut ::std::ffi::c_void,
+
         // cl_arm_shared_virtual_memory
         "clEnqueueSVMFreeARM" => cl_enqueue_svm_free_arm as *mut ::std::ffi::c_void,
         "clEnqueueSVMMapARM" => cl_enqueue_svm_map_arm as *mut ::std::ffi::c_void,
@@ -423,6 +435,12 @@ extern "C" fn cl_get_extension_function_address(
         "clSetKernelExecInfoARM" => cl_set_kernel_exec_info as *mut ::std::ffi::c_void,
         "clSVMAllocARM" => cl_svm_alloc as *mut ::std::ffi::c_void,
         "clSVMFreeARM" => cl_svm_free as *mut ::std::ffi::c_void,
+
+        // DPCPP bug https://github.com/intel/llvm/issues/9964
+        "clSetProgramSpecializationConstant" => {
+            cl_set_program_specialization_constant as *mut ::std::ffi::c_void
+        }
+
         _ => ptr::null_mut(),
     }
 }

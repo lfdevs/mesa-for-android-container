@@ -20,9 +20,9 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include "r600_pipe.h"
+#include "r600_asm.h"
 #include "r600_opcodes.h"
-#include "r600_shader.h"
+#include "r600_shader_common.h"
 
 #include "util/u_memory.h"
 #include "eg_sq.h"

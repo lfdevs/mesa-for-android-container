@@ -118,7 +118,10 @@ struct pipe_video_codec
    /**
     * get encoder feedback
     */
-   void (*get_feedback)(struct pipe_video_codec *codec, void *feedback, unsigned *size);
+   void (*get_feedback)(struct pipe_video_codec *codec,
+                        void *feedback,
+                        unsigned *size,
+                        struct pipe_enc_feedback_metadata* metadata /* opt NULL */);
 
    /**
     * Get decoder fence.
@@ -149,6 +152,18 @@ struct pipe_video_codec
                               uint64_t timeout);
 
    /**
+    * Gets a weak reference to a feedback fence.
+    *
+    * Can be used to wait on the pipe_fence_handle directly instead
+    * of waiting on the get_feedback blocking call.
+    *
+    * Returns NULL if the feedback parameter does not have
+    * a valid in-flight submitted frame
+    */
+   struct pipe_fence_handle* (*get_feedback_fence)(struct pipe_video_codec *codec,
+                                                   void *feedback);
+
+   /**
     * Destroy fence.
     */
    void (*destroy_fence)(struct pipe_video_codec *codec,
@@ -167,6 +182,22 @@ struct pipe_video_codec
    void (*update_decoder_target)(struct pipe_video_codec *codec,
                                  struct pipe_video_buffer *old,
                                  struct pipe_video_buffer *updated);
+
+   /**
+    * Gets the bitstream headers for a given pipe_picture_desc
+    * of an encode operation
+    *
+    * User passes a buffer and its allocated size and
+    * driver writes the bitstream headers in the buffer,
+    * updating the size parameter as well.
+    *
+    * Returns 0 on success or an errno error code otherwise.
+    * such as ENOMEM if the buffer passed was not big enough
+    */
+   int (*get_encode_headers)(struct pipe_video_codec *codec,
+                              struct pipe_picture_desc *picture,
+                              void* bitstream_buf,
+                              unsigned *size);
 };
 
 /**

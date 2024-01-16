@@ -135,9 +135,7 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
           * set, resource_intel::src[0] has to be shifted right by 6 (bringing
           * it back in bytes).
           */
-         if (is_sampler)
-            set_offset = nir_ushr_imm(b, set_offset, 6);
-         else
+         if (!is_sampler)
             binding_offset = nir_ishl_imm(b, binding_offset, 6);
       }
 

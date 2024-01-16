@@ -82,7 +82,7 @@ vec4_tes_visitor::setup_payload()
 void
 vec4_tes_visitor::emit_prolog()
 {
-   input_read_header = src_reg(this, glsl_type::uvec4_type);
+   input_read_header = src_reg(this, glsl_uvec4_type());
    emit(TES_OPCODE_CREATE_INPUT_READ_HEADER, dst_reg(input_read_header));
 
    this->current_annotation = NULL;
@@ -124,22 +124,22 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_tess_level_outer:
       if (tes_prog_data->domain == BRW_TESS_DOMAIN_ISOLINE) {
          emit(MOV(get_nir_def(instr->def, BRW_REGISTER_TYPE_F),
-                  swizzle(src_reg(ATTR, 1, glsl_type::vec4_type),
+                  swizzle(src_reg(ATTR, 1, glsl_vec4_type()),
                           BRW_SWIZZLE_ZWZW)));
       } else {
          emit(MOV(get_nir_def(instr->def, BRW_REGISTER_TYPE_F),
-                  swizzle(src_reg(ATTR, 1, glsl_type::vec4_type),
+                  swizzle(src_reg(ATTR, 1, glsl_vec4_type()),
                           BRW_SWIZZLE_WZYX)));
       }
       break;
    case nir_intrinsic_load_tess_level_inner:
       if (tes_prog_data->domain == BRW_TESS_DOMAIN_QUAD) {
          emit(MOV(get_nir_def(instr->def, BRW_REGISTER_TYPE_F),
-                  swizzle(src_reg(ATTR, 0, glsl_type::vec4_type),
+                  swizzle(src_reg(ATTR, 0, glsl_vec4_type()),
                           BRW_SWIZZLE_WZYX)));
       } else {
          emit(MOV(get_nir_def(instr->def, BRW_REGISTER_TYPE_F),
-                  src_reg(ATTR, 1, glsl_type::float_type)));
+                  src_reg(ATTR, 1, glsl_float_type())));
       }
       break;
    case nir_intrinsic_load_primitive_id:
@@ -156,7 +156,7 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       unsigned first_component = nir_intrinsic_component(instr);
 
       if (indirect_offset.file != BAD_FILE) {
-         src_reg clamped_indirect_offset = src_reg(this, glsl_type::uvec4_type);
+         src_reg clamped_indirect_offset = src_reg(this, glsl_uvec4_type());
 
          /* Page 190 of "Volume 7: 3D Media GPGPU Engine (Haswell)" says the
           * valid range of the offset is [0, 0FFFFFFFh].
@@ -166,7 +166,7 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
                      retype(indirect_offset, BRW_REGISTER_TYPE_UD),
                      brw_imm_ud(0x0fffffffu));
 
-         header = src_reg(this, glsl_type::uvec4_type);
+         header = src_reg(this, glsl_uvec4_type());
          emit(TES_OPCODE_ADD_INDIRECT_URB_OFFSET, dst_reg(header),
               input_read_header, clamped_indirect_offset);
       } else {
@@ -175,7 +175,7 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
           */
          const unsigned max_push_slots = 24;
          if (imm_offset < max_push_slots) {
-            src_reg src = src_reg(ATTR, imm_offset, glsl_type::ivec4_type);
+            src_reg src = src_reg(ATTR, imm_offset, glsl_ivec4_type());
             src.swizzle = BRW_SWZ_COMP_INPUT(first_component);
 
             emit(MOV(get_nir_def(instr->def, BRW_REGISTER_TYPE_D), src));
@@ -187,7 +187,7 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          }
       }
 
-      dst_reg temp(this, glsl_type::ivec4_type);
+      dst_reg temp(this, glsl_ivec4_type());
       vec4_instruction *read =
          emit(VEC4_OPCODE_URB_READ, temp, src_reg(header));
       read->offset = imm_offset;

@@ -95,6 +95,7 @@ void
 st_feedback_draw_vbo(struct gl_context *ctx,
                      struct pipe_draw_info *info,
                      unsigned drawid_offset,
+                     const struct pipe_draw_indirect_info *indirect,
                      const struct pipe_draw_start_count_bias *draws,
                      unsigned num_draws)
 {
@@ -113,16 +114,6 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    if (!draw)
       return;
-
-   st_flush_bitmap_cache(st);
-   st_invalidate_readpix_cache(st);
-
-   st_validate_state(st, ST_PIPELINE_RENDER_STATE_MASK);
-
-   if (info->index_size && info->has_user_indices && !info->index_bounds_valid) {
-      vbo_get_minmax_indices_gallium(ctx, info, draws, num_draws);
-      info->index_bounds_valid = true;
-   }
 
    /* must get these after state validation! */
    struct st_common_variant_key key;
@@ -396,8 +387,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    /* draw here */
    for (i = 0; i < num_draws; i++) {
-      /* TODO: indirect draws */
-      draw_vbo(draw, info, info->increment_draw_id ? i : 0, NULL,
+      draw_vbo(draw, info, info->increment_draw_id ? i : 0, indirect,
                &draws[i], 1, ctx->TessCtrlProgram.patch_vertices);
    }
 
@@ -479,6 +469,6 @@ st_feedback_draw_vbo_multi_mode(struct gl_context *ctx,
 {
    for (unsigned i = 0; i < num_draws; i++) {
       info->mode = mode[i];
-      st_feedback_draw_vbo(ctx, info, 0, &draws[i], 1);
+      st_feedback_draw_vbo(ctx, info, 0, NULL, &draws[i], 1);
    }
 }

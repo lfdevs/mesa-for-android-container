@@ -28,6 +28,7 @@
 #include <stdlib.h>
 
 #include "util/hash_table.h"
+#include "util/u_math.h"
 
 #include "etnaviv_drmif.h"
 #include "etnaviv_priv.h"
@@ -59,7 +60,7 @@ void etna_cmd_stream_realloc(struct etna_cmd_stream *stream, size_t n)
 	 * Increase the command buffer size by 4 kiB. Here we pick 4 kiB
 	 * increment to prevent it from growing too much too quickly.
 	 */
-	size = ALIGN(stream->size + n, 1024);
+	size = align_uintptr(stream->size + n, 1024);
 
 	/* Command buffer is too big for older kernel versions */
 	if (size > 0x4000)
@@ -203,12 +204,11 @@ void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
 		int *out_fence_fd, bool is_noop)
 {
 	struct etna_cmd_stream_priv *priv = etna_cmd_stream_priv(stream);
-	int ret, id = priv->pipe->id;
 	struct etna_gpu *gpu = priv->pipe->gpu;
 
 	struct drm_etnaviv_gem_submit req = {
 		.pipe = gpu->core,
-		.exec_state = id,
+		.exec_state = priv->pipe->id,
 		.bos = VOID2U64(priv->submit.bos),
 		.nr_bos = priv->submit.nr_bos,
 		.relocs = VOID2U64(priv->submit.relocs),
@@ -233,16 +233,17 @@ void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
 	if (stream->offset == priv->offset_end_of_context_init && !out_fence_fd)
 		is_noop = true;
 
-	if (unlikely(is_noop))
-		ret = 0;
-	else
+	if (likely(!is_noop)) {
+		int ret;
+
 		ret = drmCommandWriteRead(gpu->dev->fd, DRM_ETNAVIV_GEM_SUBMIT,
 				&req, sizeof(req));
 
-	if (ret)
-		ERROR_MSG("submit failed: %d (%s)", ret, strerror(errno));
-	else
-		priv->last_timestamp = req.fence;
+		if (ret)
+			ERROR_MSG("submit failed: %d (%s)", ret, strerror(errno));
+		else
+			priv->last_timestamp = req.fence;
+	}
 
 	for (uint32_t i = 0; i < priv->nr_bos; i++)
 		etna_bo_del(priv->bos[i]);

@@ -344,12 +344,12 @@ void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo)
    buffer_release(srv_bo);
 }
 
-/* This function must be used to allocate inside reserved region and must be
- * used internally only. This also means whoever is using it, must know what
- * they are doing.
+/* This function must be used to allocate from a heap carveout and must only be
+ * used within the winsys code. This also means whoever is using it, must know
+ * what they are doing.
  */
-VkResult pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
-                                     const pvr_dev_addr_t reserved_dev_addr,
+VkResult pvr_srv_heap_alloc_carveout(struct pvr_winsys_heap *heap,
+                                     const pvr_dev_addr_t carveout_dev_addr,
                                      uint64_t size,
                                      uint64_t alignment,
                                      struct pvr_winsys_vma **const vma_out)
@@ -380,10 +380,10 @@ VkResult pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
    /* Just check address is correct and aligned, locking is not required as
     * user is responsible to provide a distinct address.
     */
-   if (reserved_dev_addr.addr < heap->base_addr.addr ||
-       reserved_dev_addr.addr + size >
+   if (carveout_dev_addr.addr < heap->base_addr.addr ||
+       carveout_dev_addr.addr + size >
           heap->base_addr.addr + heap->static_data_carveout_size ||
-       reserved_dev_addr.addr & ((ws->page_size) - 1)) {
+       carveout_dev_addr.addr & ((ws->page_size) - 1)) {
       result = vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
       goto err_vk_free_srv_vma;
    }
@@ -391,13 +391,13 @@ VkResult pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
    /* Reserve the virtual range in the MMU and create a mapping structure */
    result = pvr_srv_int_reserve_addr(ws->render_fd,
                                      srv_heap->server_heap,
-                                     reserved_dev_addr,
+                                     carveout_dev_addr,
                                      size,
                                      &srv_vma->reservation);
    if (result != VK_SUCCESS)
       goto err_vk_free_srv_vma;
 
-   srv_vma->base.dev_addr = reserved_dev_addr;
+   srv_vma->base.dev_addr = carveout_dev_addr;
    srv_vma->base.bo = NULL;
    srv_vma->base.heap = heap;
    srv_vma->base.size = size;

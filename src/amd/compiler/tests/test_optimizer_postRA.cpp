@@ -700,6 +700,87 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf_overwritten)
    finish_optimizer_postRA_test();
 END_TEST
 
+BEGIN_TEST(optimizer_postRA.dpp_across_cf_linear_clobber)
+   //>> v1: %a:v[0], v1: %b:v[1], s2: %c:s[0-1] = p_startpgm
+   if (!setup_cs("v1 v1 s2", GFX10_3))
+      return;
+
+   aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
+   startpgm->definitions[0].setFixed(PhysReg(256));
+   startpgm->definitions[1].setFixed(PhysReg(257));
+   startpgm->definitions[2].setFixed(PhysReg(0));
+
+   Operand a(inputs[0], PhysReg(256)); /* source for DPP */
+   Operand b(inputs[1], PhysReg(257)); /* source for fadd */
+   Operand c(inputs[2], PhysReg(0));   /* condition */
+   PhysReg reg_v12(268);               /* temporary register */
+
+   //! v1: %dpp_tmp:v[12] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1 fi
+   Temp dpp_tmp = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v12), a, dpp_row_mirror);
+
+   //! s2: %saved_exec:s[84-85],  s1: %0:scc,  s2: %0:exec = s_and_saveexec_b64 %c:s[0-1], %0:exec
+   //! s2: %0:vcc = p_cbranch_nz BB1, BB2
+
+   emit_divergent_if_else(
+      program.get(), bld, c,
+      [&]() -> void
+      {
+         /* --- logical then --- */
+         //! BB1
+         //! /* logical preds: BB0, / linear preds: BB0, / kind: */
+         //! p_logical_start
+
+         //! v1: %clobber:v[0] = p_parallelcopy 0
+         Temp clobber =
+            bld.pseudo(aco_opcode::p_parallelcopy, bld.def(v1, a.physReg()), Operand::c32(0));
+
+         //! p_unit_test 0, %clobber:v[0]
+         writeout(0, Operand(clobber, a.physReg()));
+
+         //! p_logical_end
+         //! s2: %0:vcc = p_branch BB3
+
+         /* --- linear then --- */
+         //! BB2
+         //! /* logical preds: / linear preds: BB0, / kind: */
+         //! s2: %0:vcc = p_branch BB3
+
+         /* --- invert --- */
+         //! BB3
+         //! /* logical preds: / linear preds: BB1, BB2, / kind: invert, */
+         //! s2: %0:exec,  s1: %0:scc = s_andn2_b64 %saved_exec:s[84-85], %0:exec
+         //! s2: %0:vcc = p_cbranch_nz BB4, BB5
+      },
+      [&]() -> void
+      {
+         /* --- logical else --- */
+         //! BB4
+         //! /* logical preds: BB0, / linear preds: BB3, / kind: */
+         //! p_logical_start
+
+         //! v1: %result:v[12] = v_add_f32 %dpp_mov_tmp:v[12], %b:v[1]
+         Temp result =
+            bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v12), Operand(dpp_tmp, reg_v12), b);
+         //! p_unit_test 1, %result:v[12]
+         writeout(1, Operand(result, reg_v12));
+
+         //! p_logical_end
+         //! s2: %0:vcc = p_branch BB6
+
+         /* --- linear else --- */
+         //! BB5
+         //! /* logical preds: / linear preds: BB3, / kind: */
+         //! s2: %0:vcc = p_branch BB6
+      });
+
+   /* --- merge block --- */
+   //! BB6
+   //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
+   //! s2: %0:exec = p_parallelcopy %saved_exec:s[84-85]
+
+   finish_optimizer_postRA_test();
+END_TEST
+
 BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
    //>> s2: %a:s[2-3], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1] = p_startpgm
    if (!setup_cs("s2 v1 v1 s2", GFX10_3))

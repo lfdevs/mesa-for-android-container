@@ -2024,20 +2024,8 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
 
    write_xfb_info(&ctx, nir->xfb_info);
 
-   if (nir->info.stage == MESA_SHADER_KERNEL) {
-      blob_write_uint32(blob, nir->printf_info_count);
-      for (int i = 0; i < nir->printf_info_count; i++) {
-         u_printf_info *info = &nir->printf_info[i];
-         blob_write_uint32(blob, info->num_args);
-         blob_write_uint32(blob, info->string_size);
-         blob_write_bytes(blob, info->arg_sizes,
-                          info->num_args * sizeof(*info->arg_sizes));
-         /* we can't use blob_write_string, because it contains multiple NULL
-          * terminated strings */
-         blob_write_bytes(blob, info->strings,
-                          info->string_size * sizeof(*info->strings));
-      }
-   }
+   if (nir->info.uses_printf)
+      nir_serialize_printf_info(blob, nir->printf_info, nir->printf_info_count);
 
    blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
@@ -2096,22 +2084,10 @@ nir_deserialize(void *mem_ctx,
 
    ctx.nir->xfb_info = read_xfb_info(&ctx);
 
-   if (ctx.nir->info.stage == MESA_SHADER_KERNEL) {
-      ctx.nir->printf_info_count = blob_read_uint32(blob);
+   if (ctx.nir->info.uses_printf) {
       ctx.nir->printf_info =
-         ralloc_array(ctx.nir, u_printf_info, ctx.nir->printf_info_count);
-
-      for (int i = 0; i < ctx.nir->printf_info_count; i++) {
-         u_printf_info *info = &ctx.nir->printf_info[i];
-         info->num_args = blob_read_uint32(blob);
-         info->string_size = blob_read_uint32(blob);
-         info->arg_sizes = ralloc_array(ctx.nir, unsigned, info->num_args);
-         blob_copy_bytes(blob, info->arg_sizes,
-                         info->num_args * sizeof(*info->arg_sizes));
-         info->strings = ralloc_array(ctx.nir, char, info->string_size);
-         blob_copy_bytes(blob, info->strings,
-                         info->string_size * sizeof(*info->strings));
-      }
+         nir_deserialize_printf_info(ctx.nir, blob,
+                                     &ctx.nir->printf_info_count);
    }
 
    free(ctx.idx_table);
@@ -2145,4 +2121,46 @@ nir_shader_serialize_deserialize(nir_shader *shader)
 
    nir_shader_replace(shader, copy);
    ralloc_free(dead_ctx);
+}
+
+void
+nir_serialize_printf_info(struct blob *blob,
+                          const u_printf_info *printf_info,
+                          unsigned printf_info_count)
+{
+   blob_write_uint32(blob, printf_info_count);
+   for (int i = 0; i < printf_info_count; i++) {
+      const u_printf_info *info = &printf_info[i];
+      blob_write_uint32(blob, info->num_args);
+      blob_write_uint32(blob, info->string_size);
+      blob_write_bytes(blob, info->arg_sizes,
+                       info->num_args * sizeof(info->arg_sizes[0]));
+      /* we can't use blob_write_string, because it contains multiple NULL
+       * terminated strings */
+      blob_write_bytes(blob, info->strings, info->string_size);
+   }
+}
+
+u_printf_info *
+nir_deserialize_printf_info(void *mem_ctx,
+                            struct blob_reader *blob,
+                            unsigned *printf_info_count)
+{
+   *printf_info_count = blob_read_uint32(blob);
+
+   u_printf_info *printf_info =
+      ralloc_array(mem_ctx, u_printf_info, *printf_info_count);
+
+   for (int i = 0; i < *printf_info_count; i++) {
+      u_printf_info *info = &printf_info[i];
+      info->num_args = blob_read_uint32(blob);
+      info->string_size = blob_read_uint32(blob);
+      info->arg_sizes = ralloc_array(mem_ctx, unsigned, info->num_args);
+      blob_copy_bytes(blob, info->arg_sizes,
+                      info->num_args * sizeof(info->arg_sizes[0]));
+      info->strings = ralloc_array(mem_ctx, char, info->string_size);
+      blob_copy_bytes(blob, info->strings, info->string_size);
+   }
+
+   return printf_info;
 }

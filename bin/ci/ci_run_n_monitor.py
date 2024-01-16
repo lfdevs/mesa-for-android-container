@@ -14,14 +14,14 @@ and show the job(s) logs.
 
 import argparse
 import re
-from subprocess import check_output
 import sys
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from itertools import chain
-from typing import Literal, Optional
+from subprocess import check_output
+from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 import gitlab
 from colorama import Fore, Style
@@ -32,6 +32,9 @@ from gitlab_common import (
     pretty_duration,
 )
 from gitlab_gql import GitlabGQL, create_job_needs_dag, filter_dag, print_dag
+
+if TYPE_CHECKING:
+    from gitlab_gql import Dag
 
 GITLAB_URL = "https://gitlab.freedesktop.org"
 
@@ -87,7 +90,7 @@ def pretty_wait(sec: int) -> None:
 def monitor_pipeline(
     project,
     pipeline,
-    target_job: str,
+    target_jobs_regex: re.Pattern,
     dependencies,
     force_manual: bool,
     stress: int,
@@ -98,13 +101,12 @@ def monitor_pipeline(
     stress_status_counter = defaultdict(lambda: defaultdict(int))
     target_id = None
 
-    target_jobs_regex = re.compile(target_job.strip())
-
     while True:
+        deps_failed = []
         to_cancel = []
         for job in pipeline.jobs.list(all=True, sort="desc"):
             # target jobs
-            if target_jobs_regex.match(job.name):
+            if target_jobs_regex.fullmatch(job.name):
                 target_id = job.id
 
                 if stress and job.status in ["success", "failed"]:
@@ -129,6 +131,8 @@ def monitor_pipeline(
             # run dependencies and cancel the rest
             if job.name in dependencies:
                 enable_job(project, job, "dep", True)
+                if job.status == "failed":
+                    deps_failed.append(job.name)
             else:
                 to_cancel.append(job)
 
@@ -161,6 +165,18 @@ def monitor_pipeline(
             {"failed"}.intersection(target_statuses.values())
             and not set(["running", "pending"]).intersection(target_statuses.values())
         ):
+            return None, 1
+
+        if (
+            {"skipped"}.intersection(target_statuses.values())
+            and not {"running", "pending"}.intersection(target_statuses.values())
+        ):
+            print(
+                Fore.RED,
+                "Target in skipped state, aborting. Failed dependencies:",
+                deps_failed,
+                Fore.RESET,
+            )
             return None, 1
 
         if {"success", "manual"}.issuperset(target_statuses.values()):
@@ -282,6 +298,11 @@ def parse_args() -> None:
         "--pipeline-url",
         help="URL of the pipeline to use, instead of auto-detecting it.",
     )
+    mutex_group1.add_argument(
+        "--mr",
+        type=int,
+        help="ID of a merge request; the latest pipeline in that MR will be used.",
+    )
 
     args = parser.parse_args()
 
@@ -295,22 +316,39 @@ def parse_args() -> None:
     return args
 
 
-def find_dependencies(target_job: str, project_path: str, sha: str) -> set[str]:
+def print_detected_jobs(
+    target_dep_dag: "Dag", dependency_jobs: Iterable[str], target_jobs: Iterable[str]
+) -> None:
+    def print_job_set(color: str, kind: str, job_set: Iterable[str]):
+        print(
+            color + f"Running {len(job_set)} {kind} jobs: ",
+            "\n",
+            ", ".join(sorted(job_set)),
+            Fore.RESET,
+            "\n",
+        )
+
+    print(Fore.YELLOW + "Detected target job and its dependencies:", "\n")
+    print_dag(target_dep_dag)
+    print_job_set(Fore.MAGENTA, "dependency", dependency_jobs)
+    print_job_set(Fore.BLUE, "target", target_jobs)
+
+
+def find_dependencies(target_jobs_regex: re.Pattern, project_path: str, iid: int) -> set[str]:
     gql_instance = GitlabGQL()
-    dag, _ = create_job_needs_dag(
-        gql_instance, {"projectPath": project_path.path_with_namespace, "sha": sha}
+    dag = create_job_needs_dag(
+        gql_instance, {"projectPath": project_path.path_with_namespace, "iid": iid}
     )
 
-    target_dep_dag = filter_dag(dag, target_job)
+    target_dep_dag = filter_dag(dag, target_jobs_regex)
     if not target_dep_dag:
         print(Fore.RED + "The job(s) were not found in the pipeline." + Fore.RESET)
         sys.exit(1)
-    print(Fore.YELLOW)
-    print("Detected job dependencies:")
-    print()
-    print_dag(target_dep_dag)
-    print(Fore.RESET)
-    return set(chain.from_iterable(target_dep_dag.values()))
+
+    dependency_jobs = set(chain.from_iterable(d["needs"] for d in target_dep_dag.values()))
+    target_jobs = set(target_dep_dag.keys())
+    print_detected_jobs(target_dep_dag, dependency_jobs, target_jobs)
+    return target_jobs.union(dependency_jobs)
 
 
 if __name__ == "__main__":
@@ -339,23 +377,28 @@ if __name__ == "__main__":
             pipe = cur_project.pipelines.get(pipeline_id)
             REV = pipe.sha
         else:
-            REV = check_output(['git', 'rev-parse', REV]).decode('ascii').strip()
-
             mesa_project = gl.projects.get("mesa/mesa")
-            user_project = get_gitlab_project(gl, args.project)
-            (pipe, cur_project) = wait_for_pipeline([mesa_project, user_project], REV)
+            projects = [mesa_project]
+            if args.mr:
+                REV = mesa_project.mergerequests.get(args.mr).sha
+            else:
+                REV = check_output(['git', 'rev-parse', REV]).decode('ascii').strip()
+                projects.append(get_gitlab_project(gl, args.project))
+            (pipe, cur_project) = wait_for_pipeline(projects, REV)
 
         print(f"Revision: {REV}")
         print(f"Pipeline: {pipe.web_url}")
+
+        target_jobs_regex = re.compile(args.target.strip())
 
         deps = set()
         if args.target:
             print("🞋 job: " + Fore.BLUE + args.target + Style.RESET_ALL)
             deps = find_dependencies(
-                target_job=args.target, sha=REV, project_path=cur_project
+                target_jobs_regex=target_jobs_regex, iid=pipe.iid, project_path=cur_project
             )
         target_job_id, ret = monitor_pipeline(
-            cur_project, pipe, args.target, deps, args.force_manual, args.stress
+            cur_project, pipe, target_jobs_regex, deps, args.force_manual, args.stress
         )
 
         if target_job_id:

@@ -27,7 +27,6 @@
 
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
 #include "util/strtod.h"
@@ -1758,7 +1757,7 @@ static bool parse_property( struct translate_ctx *ctx )
       }
       if (property_name == TGSI_PROPERTY_GS_INPUT_PRIM &&
           ctx->processor == PIPE_SHADER_GEOMETRY) {
-         ctx->implied_array_size = u_vertices_per_prim(values[0]);
+         ctx->implied_array_size = mesa_vertices_per_prim(values[0]);
       }
       break;
    case TGSI_PROPERTY_FS_COORD_ORIGIN:

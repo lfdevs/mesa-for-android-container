@@ -222,7 +222,6 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
    ctx->Extensions.ARB_shader_stencil_export = true;
    ctx->Extensions.ARB_shader_texture_lod = true;
    ctx->Extensions.ARB_shading_language_420pack = true;
-   ctx->Extensions.ARB_shading_language_packing = true;
    ctx->Extensions.ARB_tessellation_shader = true;
    ctx->Extensions.ARB_texture_cube_map_array = true;
    ctx->Extensions.ARB_texture_gather = true;

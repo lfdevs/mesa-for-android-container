@@ -194,7 +194,7 @@ panfrost_resource_get_handle(struct pipe_screen *pscreen,
    if (handle->type == WINSYS_HANDLE_TYPE_KMS && dev->ro) {
       return renderonly_get_handle(scanout, handle);
    } else if (handle->type == WINSYS_HANDLE_TYPE_KMS) {
-      handle->handle = rsrc->image.data.bo->gem_handle;
+      handle->handle = panfrost_bo_handle(rsrc->image.data.bo);
    } else if (handle->type == WINSYS_HANDLE_TYPE_FD) {
       int fd = panfrost_bo_export(rsrc->image.data.bo);
 
@@ -737,9 +737,14 @@ panfrost_resource_create_with_modifier(struct pipe_screen *screen,
    } else {
       /* We create a BO immediately but don't bother mapping, since we don't
        * care to map e.g. FBOs which the CPU probably won't touch */
+      uint32_t flags = PAN_BO_DELAY_MMAP;
 
-      so->image.data.bo = panfrost_bo_create(dev, so->image.layout.data_size,
-                                             PAN_BO_DELAY_MMAP, label);
+      /* If the resource is never exported, we can make the BO private. */
+      if (template->bind & PIPE_BIND_SHARED)
+         flags |= PAN_BO_SHAREABLE;
+
+      so->image.data.bo =
+         panfrost_bo_create(dev, so->image.layout.data_size, flags, label);
 
       so->constant_stencil = true;
    }
@@ -859,7 +864,7 @@ pan_blit_from_staging(struct pipe_context *pctx,
    blit.mask = util_format_get_mask(blit.src.format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-   panfrost_blit(pctx, &blit);
+   panfrost_blit_no_afbc_legalization(pctx, &blit);
 }
 
 static void
@@ -879,7 +884,7 @@ pan_blit_to_staging(struct pipe_context *pctx, struct panfrost_transfer *trans)
    blit.mask = util_format_get_mask(blit.dst.format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-   panfrost_blit(pctx, &blit);
+   panfrost_blit_no_afbc_legalization(pctx, &blit);
 }
 
 static void
@@ -1140,9 +1145,10 @@ panfrost_ptr_map(struct pipe_context *pctx, struct pipe_resource *resource,
    /* If we haven't already mmaped, now's the time */
    panfrost_bo_mmap(bo);
 
-   if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC))
-      pandecode_inject_mmap(dev->decode_ctx, bo->ptr.gpu, bo->ptr.cpu, bo->size,
-                            NULL);
+   if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC)) {
+      pandecode_inject_mmap(dev->decode_ctx, bo->ptr.gpu, bo->ptr.cpu,
+                            panfrost_bo_size(bo), NULL);
+   }
 
    /* Upgrade writes to uninitialized ranges to UNSYNCHRONIZED */
    if ((usage & PIPE_MAP_WRITE) && resource->target == PIPE_BUFFER &&
@@ -1208,12 +1214,16 @@ panfrost_ptr_map(struct pipe_context *pctx, struct pipe_resource *resource,
           * importer/exporter wouldn't see the change we're
           * doing to it.
           */
-         if (!(bo->flags & PAN_BO_SHARED))
-            newbo = panfrost_bo_create(dev, bo->size, flags, bo->label);
+         if (!(bo->flags & PAN_BO_SHARED)) {
+            newbo =
+               panfrost_bo_create(dev, panfrost_bo_size(bo), flags, bo->label);
+         }
 
          if (newbo) {
-            if (copy_resource)
-               memcpy(newbo->ptr.cpu, rsrc->image.data.bo->ptr.cpu, bo->size);
+            if (copy_resource) {
+               memcpy(newbo->ptr.cpu, rsrc->image.data.bo->ptr.cpu,
+                      panfrost_bo_size(bo));
+            }
 
             /* Swap the pointers, dropping a reference to
              * the old BO which is no long referenced from
@@ -1309,30 +1319,37 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
       ctx->base.screen, &rsrc->base, modifier);
    struct panfrost_resource *tmp_rsrc = pan_resource(tmp_prsrc);
 
-   unsigned depth = rsrc->base.target == PIPE_TEXTURE_3D
-                       ? rsrc->base.depth0
-                       : rsrc->base.array_size;
-
-   struct pipe_box box = {0,    0, 0, rsrc->base.width0, rsrc->base.height0,
-                          depth};
-
    struct pipe_blit_info blit = {
       .dst.resource = &tmp_rsrc->base,
       .dst.format = tmp_rsrc->base.format,
-      .dst.box = box,
       .src.resource = &rsrc->base,
       .src.format = rsrc->base.format,
-      .src.box = box,
       .mask = util_format_get_mask(tmp_rsrc->base.format),
       .filter = PIPE_TEX_FILTER_NEAREST,
    };
 
+   /* data_valid is not valid until flushed */
+   panfrost_flush_writer(ctx, rsrc, "AFBC decompressing blit");
+
    for (int i = 0; i <= rsrc->base.last_level; i++) {
       if (BITSET_TEST(rsrc->valid.data, i)) {
          blit.dst.level = blit.src.level = i;
-         panfrost_blit(&ctx->base, &blit);
+
+         u_box_3d(0, 0, 0,
+                  u_minify(rsrc->base.width0, i),
+                  u_minify(rsrc->base.height0, i),
+                  util_num_layers(&rsrc->base, i),
+                  &blit.dst.box);
+         blit.src.box = blit.dst.box;
+
+         panfrost_blit_no_afbc_legalization(&ctx->base, &blit);
       }
    }
+
+   /* we lose track of tmp_rsrc after this point, and the BO migration
+    * (from tmp_rsrc to rsrc) doesn't transfer the last_writer to rsrc
+    */
+   panfrost_flush_writer(ctx, tmp_rsrc, "AFBC decompressing blit");
 
    panfrost_bo_unreference(rsrc->image.data.bo);
 
@@ -1519,7 +1536,7 @@ panfrost_pack_afbc(struct panfrost_context *ctx,
    }
 
    unsigned new_size = ALIGN_POT(total_size, 4096); // FIXME
-   unsigned old_size = prsrc->image.data.bo->size;
+   unsigned old_size = panfrost_bo_size(prsrc->image.data.bo);
    unsigned ratio = 100 * new_size / old_size;
 
    if (ratio > screen->max_afbc_packing_ratio)
@@ -1607,7 +1624,7 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
             if (panfrost_should_linear_convert(dev, prsrc, transfer)) {
                panfrost_resource_setup(dev, prsrc, DRM_FORMAT_MOD_LINEAR,
                                        prsrc->image.layout.format);
-               if (prsrc->image.layout.data_size > bo->size) {
+               if (prsrc->image.layout.data_size > panfrost_bo_size(bo)) {
                   const char *label = bo->label;
                   panfrost_bo_unreference(bo);
                   bo = prsrc->image.data.bo = panfrost_bo_create(

@@ -93,7 +93,7 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
    if (dest.file == BRW_MESSAGE_REGISTER_FILE)
       assert((dest.nr & ~BRW_MRF_COMPR4) < BRW_MAX_MRF(devinfo->ver));
    else if (dest.file == BRW_GENERAL_REGISTER_FILE)
-      assert(dest.nr < 128);
+      assert(dest.nr < XE2_MAX_GRF);
 
    /* The hardware has a restriction where a destination of size Byte with
     * a stride of 1 is only allowed for a packed byte MOV. For any other
@@ -213,7 +213,7 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
    if (reg.file == BRW_MESSAGE_REGISTER_FILE)
       assert((reg.nr & ~BRW_MRF_COMPR4) < BRW_MAX_MRF(devinfo->ver));
    else if (reg.file == BRW_GENERAL_REGISTER_FILE)
-      assert(reg.nr < 128);
+      assert(reg.nr < XE2_MAX_GRF);
 
    gfx7_convert_mrf_to_grf(p, &reg);
 
@@ -347,7 +347,7 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
    const struct intel_device_info *devinfo = p->devinfo;
 
    if (reg.file == BRW_GENERAL_REGISTER_FILE)
-      assert(reg.nr < 128);
+      assert(reg.nr < XE2_MAX_GRF);
 
    if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
        brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC ||
@@ -643,11 +643,11 @@ brw_inst_set_state(const struct brw_isa_info *isa,
 }
 
 static brw_inst *
-brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned align)
+brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned alignment)
 {
    assert(util_is_power_of_two_or_zero(sizeof(brw_inst)));
-   assert(util_is_power_of_two_or_zero(align));
-   const unsigned align_insn = MAX2(align / sizeof(brw_inst), 1);
+   assert(util_is_power_of_two_or_zero(alignment));
+   const unsigned align_insn = MAX2(alignment / sizeof(brw_inst), 1);
    const unsigned start_insn = ALIGN(p->nr_insn, align_insn);
    const unsigned new_nr_insn = start_insn + nr_insn;
 
@@ -672,17 +672,17 @@ brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned align)
 }
 
 void
-brw_realign(struct brw_codegen *p, unsigned align)
+brw_realign(struct brw_codegen *p, unsigned alignment)
 {
-   brw_append_insns(p, 0, align);
+   brw_append_insns(p, 0, alignment);
 }
 
 int
 brw_append_data(struct brw_codegen *p, void *data,
-                unsigned size, unsigned align)
+                unsigned size, unsigned alignment)
 {
    unsigned nr_insn = DIV_ROUND_UP(size, sizeof(brw_inst));
-   void *dst = brw_append_insns(p, nr_insn, align);
+   void *dst = brw_append_insns(p, nr_insn, alignment);
    memcpy(dst, data, size);
 
    /* If it's not a whole number of instructions, memset the end */
@@ -811,15 +811,15 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
    gfx7_convert_mrf_to_grf(p, &dest);
 
-   assert(dest.nr < 128);
+   assert(dest.nr < XE2_MAX_GRF);
 
    if (devinfo->ver >= 10)
       assert(!(src0.file == BRW_IMMEDIATE_VALUE &&
                src2.file == BRW_IMMEDIATE_VALUE));
 
-   assert(src0.file == BRW_IMMEDIATE_VALUE || src0.nr < 128);
-   assert(src1.file != BRW_IMMEDIATE_VALUE && src1.nr < 128);
-   assert(src2.file == BRW_IMMEDIATE_VALUE || src2.nr < 128);
+   assert(src0.file == BRW_IMMEDIATE_VALUE || src0.nr < XE2_MAX_GRF);
+   assert(src1.file != BRW_IMMEDIATE_VALUE && src1.nr < XE2_MAX_GRF);
+   assert(src2.file == BRW_IMMEDIATE_VALUE || src2.nr < XE2_MAX_GRF);
    assert(dest.address_mode == BRW_ADDRESS_DIRECT);
    assert(src0.address_mode == BRW_ADDRESS_DIRECT);
    assert(src1.address_mode == BRW_ADDRESS_DIRECT);
@@ -1016,6 +1016,60 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
    return inst;
 }
 
+static brw_inst *
+brw_dpas_three_src(struct brw_codegen *p, enum gfx12_systolic_depth opcode,
+                   unsigned sdepth, unsigned rcount, struct brw_reg dest,
+                   struct brw_reg src0, struct brw_reg src1, struct brw_reg src2)
+{
+   const struct intel_device_info *devinfo = p->devinfo;
+   brw_inst *inst = next_insn(p, opcode);
+
+   assert(dest.file == BRW_GENERAL_REGISTER_FILE);
+   brw_inst_set_dpas_3src_dst_reg_file(devinfo, inst,
+                                       BRW_GENERAL_REGISTER_FILE);
+   brw_inst_set_dpas_3src_dst_reg_nr(devinfo, inst, dest.nr);
+   brw_inst_set_dpas_3src_dst_subreg_nr(devinfo, inst, dest.subnr);
+
+   if (brw_reg_type_is_floating_point(dest.type)) {
+      brw_inst_set_dpas_3src_exec_type(devinfo, inst,
+                                       BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);
+   } else {
+      brw_inst_set_dpas_3src_exec_type(devinfo, inst,
+                                       BRW_ALIGN1_3SRC_EXEC_TYPE_INT);
+   }
+
+   brw_inst_set_dpas_3src_sdepth(devinfo, inst, sdepth);
+   brw_inst_set_dpas_3src_rcount(devinfo, inst, rcount - 1);
+
+   brw_inst_set_dpas_3src_dst_type(devinfo, inst, dest.type);
+   brw_inst_set_dpas_3src_src0_type(devinfo, inst, src0.type);
+   brw_inst_set_dpas_3src_src1_type(devinfo, inst, src1.type);
+   brw_inst_set_dpas_3src_src2_type(devinfo, inst, src2.type);
+
+   assert(src0.file == BRW_GENERAL_REGISTER_FILE ||
+          (src0.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+           src0.nr == BRW_ARF_NULL));
+
+   brw_inst_set_dpas_3src_src0_reg_file(devinfo, inst, src0.file);
+   brw_inst_set_dpas_3src_src0_reg_nr(devinfo, inst, src0.nr);
+   brw_inst_set_dpas_3src_src0_subreg_nr(devinfo, inst, src0.subnr);
+
+   assert(src1.file == BRW_GENERAL_REGISTER_FILE);
+
+   brw_inst_set_dpas_3src_src1_reg_file(devinfo, inst, src1.file);
+   brw_inst_set_dpas_3src_src1_reg_nr(devinfo, inst, src1.nr);
+   brw_inst_set_dpas_3src_src1_subreg_nr(devinfo, inst, src1.subnr);
+   brw_inst_set_dpas_3src_src1_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
+
+   assert(src2.file == BRW_GENERAL_REGISTER_FILE);
+
+   brw_inst_set_dpas_3src_src2_reg_file(devinfo, inst, src2.file);
+   brw_inst_set_dpas_3src_src2_reg_nr(devinfo, inst, src2.nr);
+   brw_inst_set_dpas_3src_src2_subreg_nr(devinfo, inst, src2.subnr);
+   brw_inst_set_dpas_3src_src2_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
+
+   return inst;
+}
 
 /***********************************************************************
  * Convenience routines.
@@ -1246,6 +1300,15 @@ brw_PLN(struct brw_codegen *p, struct brw_reg dest,
    src1.width = BRW_WIDTH_8;
    src1.hstride = BRW_HORIZONTAL_STRIDE_1;
    return brw_alu2(p, BRW_OPCODE_PLN, dest, src0, src1);
+}
+
+brw_inst *
+brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
+         unsigned rcount, struct brw_reg dest, struct brw_reg src0,
+         struct brw_reg src1, struct brw_reg src2)
+{
+   return brw_dpas_three_src(p, BRW_OPCODE_DPAS, sdepth, rcount, dest, src0,
+                             src1, src2);
 }
 
 brw_inst *
@@ -2394,6 +2457,7 @@ void brw_oword_block_read(struct brw_codegen *p,
 
    brw_push_insn_state(p);
    brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+   brw_set_default_flag_reg(p, 0, 0);
    brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
@@ -2703,6 +2767,7 @@ brw_send_indirect_message(struct brw_codegen *p,
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_flag_reg(p, 0, 0);
       brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
 
       /* Load the indirect descriptor to an address register using OR so the
@@ -2760,6 +2825,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_flag_reg(p, 0, 0);
       brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
 
       /* Load the indirect descriptor to an address register using OR so the
@@ -2794,6 +2860,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_flag_reg(p, 0, 0);
       brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
 
       /* Load the indirect extended descriptor to an address register using OR
@@ -2860,7 +2927,13 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    }
 
    if (ex_bso) {
-      brw_inst_set_send_ex_bso(devinfo, send, true);
+      /* The send instruction ExBSO field does not exist with UGM on Gfx20+,
+       * it is assumed.
+       *
+       * BSpec 56890
+       */
+      if (devinfo->ver < 20 || sfid != GFX12_SFID_UGM)
+         brw_inst_set_send_ex_bso(devinfo, send, true);
       brw_inst_set_send_src1_len(devinfo, send, GET_BITS(ex_desc_imm, 10, 6));
    }
    brw_inst_set_sfid(devinfo, send, sfid);
@@ -2884,6 +2957,7 @@ brw_send_indirect_surface_message(struct brw_codegen *p,
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_flag_reg(p, 0, 0);
       brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
 
       /* Mask out invalid bits from the surface index to avoid hangs e.g. when
@@ -3501,6 +3575,7 @@ brw_broadcast(struct brw_codegen *p,
          brw_push_insn_state(p);
          brw_set_default_mask_control(p, BRW_MASK_DISABLE);
          brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+         brw_set_default_flag_reg(p, 0, 0);
 
          /* Take into account the component size and horizontal stride. */
          assert(src.vstride == src.hstride + src.width);

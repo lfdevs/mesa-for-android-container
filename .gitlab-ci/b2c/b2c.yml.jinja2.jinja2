@@ -2,12 +2,7 @@ version: 1
 
 # Rules to match for a machine to qualify
 target:
-{% if tags %}
-  tags:
-{% for tag in tags %}
-    - '{{ tag | trim }}'
-{% endfor %}
-{% endif %}
+  id: '{{ ci_runner_id }}'
 
 timeouts:
   first_console_activity:  # This limits the time it can take to receive the first console log
@@ -59,8 +54,8 @@ deployment:
         b2c.volume={{ volume }}
 {% endfor %}
         b2c.container="-v {{ '{{' }} job_bucket }}-results:{{ working_dir }} -w {{ working_dir }} {% for mount_volume in mount_volumes %} -v {{ mount_volume }}{% endfor %} --tls-verify=false docker://{{ local_container }} {{ container_cmd }}"
-        {% if cmdline_extras is defined %}
-        {{ cmdline_extras }}
+        {% if kernel_cmdline_extras is defined %}
+        {{ kernel_cmdline_extras }}
         {% endif %}
 
     initramfs:

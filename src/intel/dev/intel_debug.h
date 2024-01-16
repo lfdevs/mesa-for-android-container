@@ -117,24 +117,27 @@ extern uint32_t intel_debug_bkp_after_draw_count;
 #define DEBUG_FS_SIMD8    (1ull << 0)
 #define DEBUG_FS_SIMD16   (1ull << 1)
 #define DEBUG_FS_SIMD32   (1ull << 2)
+#define DEBUG_FS_SIMD2X8  (1ull << 3)
+#define DEBUG_FS_SIMD4X8  (1ull << 4)
+#define DEBUG_FS_SIMD2X16 (1ull << 5)
 
-#define DEBUG_CS_SIMD8    (1ull << 3)
-#define DEBUG_CS_SIMD16   (1ull << 4)
-#define DEBUG_CS_SIMD32   (1ull << 5)
+#define DEBUG_CS_SIMD8    (1ull << 6)
+#define DEBUG_CS_SIMD16   (1ull << 7)
+#define DEBUG_CS_SIMD32   (1ull << 8)
 
-#define DEBUG_TS_SIMD8    (1ull << 6)
-#define DEBUG_TS_SIMD16   (1ull << 7)
-#define DEBUG_TS_SIMD32   (1ull << 8)
+#define DEBUG_TS_SIMD8    (1ull << 9)
+#define DEBUG_TS_SIMD16   (1ull << 10)
+#define DEBUG_TS_SIMD32   (1ull << 11)
 
-#define DEBUG_MS_SIMD8    (1ull << 9)
-#define DEBUG_MS_SIMD16   (1ull << 10)
-#define DEBUG_MS_SIMD32   (1ull << 11)
+#define DEBUG_MS_SIMD8    (1ull << 12)
+#define DEBUG_MS_SIMD16   (1ull << 13)
+#define DEBUG_MS_SIMD32   (1ull << 14)
 
-#define DEBUG_RT_SIMD8    (1ull << 12)
-#define DEBUG_RT_SIMD16   (1ull << 13)
-#define DEBUG_RT_SIMD32   (1ull << 14)
+#define DEBUG_RT_SIMD8    (1ull << 15)
+#define DEBUG_RT_SIMD16   (1ull << 16)
+#define DEBUG_RT_SIMD32   (1ull << 17)
 
-#define SIMD_DISK_CACHE_MASK ((1ull << 15) - 1)
+#define SIMD_DISK_CACHE_MASK ((1ull << 18) - 1)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"

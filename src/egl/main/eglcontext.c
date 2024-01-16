@@ -737,6 +737,11 @@ _eglQueryContext(_EGLContext *c, EGLint attribute, EGLint *value)
          return _eglError(EGL_BAD_ATTRIBUTE, "eglQueryContext");
       *value = c->Protected;
       break;
+   case EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_EXT:
+      if (!disp->Extensions.EXT_query_reset_notification_strategy)
+         return _eglError(EGL_BAD_ATTRIBUTE, "eglQueryContext");
+      *value = c->ResetNotificationStrategy;
+      break;
    default:
       return _eglError(EGL_BAD_ATTRIBUTE, "eglQueryContext");
    }

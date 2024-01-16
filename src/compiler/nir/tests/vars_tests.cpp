@@ -1302,9 +1302,8 @@ TEST_F(nir_copy_prop_vars_test, restrict_ssbo_bindings)
    field.type = glsl_int_type();
    field.name = "x";
    const glsl_type *ifc_type =
-      glsl_type::get_interface_instance(&field, 1,
-                                        GLSL_INTERFACE_PACKING_STD430,
-                                        false /* row_major */, "b");
+      glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                          false /* row_major */, "b");
    nir_variable *ssbo0 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo0");
    nir_variable *ssbo1 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo1");
    ssbo0->data.access = ssbo1->data.access = ACCESS_RESTRICT;
@@ -1347,9 +1346,8 @@ TEST_F(nir_copy_prop_vars_test, aliasing_ssbo_bindings)
    field.type = glsl_int_type();
    field.name = "x";
    const glsl_type *ifc_type =
-      glsl_type::get_interface_instance(&field, 1,
-                                        GLSL_INTERFACE_PACKING_STD430,
-                                        false /* row_major */, "b");
+      glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                          false /* row_major */, "b");
    nir_variable *ssbo0 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo0");
    nir_variable *ssbo1 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo1");
    nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
@@ -1386,10 +1384,9 @@ TEST_F(nir_copy_prop_vars_test, ssbo_array_binding_indirect)
    field.type = glsl_int_type();
    field.name = "x";
    const glsl_type *ifc_type =
-      glsl_type::get_interface_instance(&field, 1,
-                                        GLSL_INTERFACE_PACKING_STD430,
-                                        false /* row_major */, "b");
-   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+      glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                          false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_array_type(ifc_type, 2, 0);
    nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
                                        "ssbo_arr");
    ssbo_arr->data.access = ACCESS_RESTRICT;
@@ -1430,10 +1427,9 @@ TEST_F(nir_copy_prop_vars_test, restrict_ssbo_array_binding)
    field.type = glsl_int_type();
    field.name = "x";
    const glsl_type *ifc_type =
-      glsl_type::get_interface_instance(&field, 1,
-                                        GLSL_INTERFACE_PACKING_STD430,
-                                        false /* row_major */, "b");
-   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+      glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                          false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_array_type(ifc_type, 2, 0);
    nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
                                        "ssbo_arr");
    ssbo_arr->data.access = ACCESS_RESTRICT;
@@ -1478,10 +1474,9 @@ TEST_F(nir_copy_prop_vars_test, aliasing_ssbo_array_binding)
    field.type = glsl_int_type();
    field.name = "x";
    const glsl_type *ifc_type =
-      glsl_type::get_interface_instance(&field, 1,
-                                        GLSL_INTERFACE_PACKING_STD430,
-                                        false /* row_major */, "b");
-   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+      glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                          false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_array_type(ifc_type, 2, 0);
    nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
                                        "ssbo_arr");
    nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");

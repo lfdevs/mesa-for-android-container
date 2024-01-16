@@ -733,7 +733,7 @@ static void si_check_render_feedback(struct si_context *sctx)
    /* There is no render feedback if color writes are disabled.
     * (e.g. a pixel shader with image stores)
     */
-   if (!si_get_total_colormask(sctx))
+   if (!si_any_colorbuffer_written(sctx))
       return;
 
    for (int i = 0; i < SI_NUM_GRAPHICS_SHADERS; ++i) {

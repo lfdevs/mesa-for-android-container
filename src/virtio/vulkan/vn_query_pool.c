@@ -123,7 +123,7 @@ vn_CreateQueryPool(VkDevice device,
    };
 
    VkQueryPool pool_handle = vn_query_pool_to_handle(pool);
-   vn_async_vkCreateQueryPool(dev->instance, device, pCreateInfo, NULL,
+   vn_async_vkCreateQueryPool(dev->primary_ring, device, pCreateInfo, NULL,
                               &pool_handle);
 
    *pQueryPool = pool_handle;
@@ -149,7 +149,7 @@ vn_DestroyQueryPool(VkDevice device,
    if (pool->feedback)
       vn_feedback_buffer_destroy(dev, pool->feedback, alloc);
 
-   vn_async_vkDestroyQueryPool(dev->instance, device, queryPool, NULL);
+   vn_async_vkDestroyQueryPool(dev->primary_ring, device, queryPool, NULL);
 
    vn_object_base_fini(&pool->base);
    vk_free(alloc, pool);
@@ -165,7 +165,7 @@ vn_ResetQueryPool(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
 
-   vn_async_vkResetQueryPool(dev->instance, device, queryPool, firstQuery,
+   vn_async_vkResetQueryPool(dev->primary_ring, device, queryPool, firstQuery,
                              queryCount);
    if (pool->feedback) {
       /* Feedback results are always 64 bit and include availability bit
@@ -336,8 +336,8 @@ vn_GetQueryPoolResults(VkDevice device,
          return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
    result = vn_call_vkGetQueryPoolResults(
-      dev->instance, device, queryPool, firstQuery, queryCount, packed_size,
-      packed_data, packed_stride, packed_flags);
+      dev->primary_ring, device, queryPool, firstQuery, queryCount,
+      packed_size, packed_data, packed_stride, packed_flags);
 
    if (packed_data == pData)
       return vn_result(dev->instance, result);

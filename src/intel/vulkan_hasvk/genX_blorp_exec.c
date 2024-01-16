@@ -165,7 +165,7 @@ blorp_alloc_general_state(struct blorp_batch *batch,
    return state.map;
 }
 
-static void
+static bool
 blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           unsigned state_size, unsigned state_alignment,
                           uint32_t *bt_offset,
@@ -180,7 +180,7 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
       anv_cmd_buffer_alloc_blorp_binding_table(cmd_buffer, num_entries,
                                                &state_offset, &bt_state);
    if (result != VK_SUCCESS)
-      return;
+      return false;
 
    uint32_t *bt_map = bt_state.map;
    *bt_offset = bt_state.offset;
@@ -192,6 +192,8 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
       surface_offsets[i] = surface_state.offset;
       surface_maps[i] = surface_state.map;
    }
+
+   return true;
 }
 
 static uint32_t
@@ -371,13 +373,13 @@ genX(blorp_exec)(struct blorp_batch *batch,
 }
 
 static void
-blorp_emit_breakpoint_pre_draw(struct blorp_batch *batch)
+blorp_emit_pre_draw(struct blorp_batch *batch, const struct blorp_params *params)
 {
    /* "Not implemented" */
 }
 
 static void
-blorp_emit_breakpoint_post_draw(struct blorp_batch *batch)
+blorp_emit_post_draw(struct blorp_batch *batch, const struct blorp_params *params)
 {
    /* "Not implemented" */
 }

@@ -1,8 +1,10 @@
 #include "nir/nir_builder.h"
 #include "radv_meta.h"
+#include "radv_sdma.h"
 
 #include "radv_cs.h"
 #include "sid.h"
+#include "vk_common_entrypoints.h"
 
 static nir_shader *
 build_buffer_fill_shader(struct radv_device *dev)
@@ -171,8 +173,8 @@ fill_buffer_shader(struct radv_cmd_buffer *cmd_buffer, uint64_t va, uint64_t siz
       .data = data,
    };
 
-   radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.buffer.fill_p_layout,
-                         VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fill_consts), &fill_consts);
+   vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.buffer.fill_p_layout,
+                              VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fill_consts), &fill_consts);
 
    radv_unaligned_dispatch(cmd_buffer, DIV_ROUND_UP(size, 16), 1, 1);
 
@@ -198,8 +200,8 @@ copy_buffer_shader(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, uint64_t
       .max_offset = size - 16,
    };
 
-   radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.buffer.copy_p_layout,
-                         VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(copy_consts), &copy_consts);
+   vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.buffer.copy_p_layout,
+                              VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(copy_consts), &copy_consts);
 
    radv_unaligned_dispatch(cmd_buffer, DIV_ROUND_UP(size, 16), 1, 1);
 
@@ -236,7 +238,9 @@ radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
    if (bo)
       radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, bo);
 
-   if (use_compute) {
+   if (cmd_buffer->qf == RADV_QUEUE_TRANSFER) {
+      radv_sdma_fill_buffer(cmd_buffer->device, cmd_buffer->cs, va, size, value);
+   } else if (use_compute) {
       cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
       fill_buffer_shader(cmd_buffer, va, size, value);
@@ -244,7 +248,7 @@ radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
       flush_bits = RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
                    radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
    } else if (size)
-      si_cp_dma_clear_buffer(cmd_buffer, va, size, value);
+      radv_cp_dma_clear_buffer(cmd_buffer, va, size, value);
 
    return flush_bits;
 }
@@ -262,10 +266,12 @@ radv_copy_buffer(struct radv_cmd_buffer *cmd_buffer, struct radeon_winsys_bo *sr
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, src_bo);
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_bo);
 
-   if (use_compute)
+   if (cmd_buffer->qf == RADV_QUEUE_TRANSFER)
+      radv_sdma_copy_buffer(cmd_buffer->device, cmd_buffer->cs, src_va, dst_va, size);
+   else if (use_compute)
       copy_buffer_shader(cmd_buffer, src_va, dst_va, size);
    else if (size)
-      si_cp_dma_buffer_copy(cmd_buffer, src_va, dst_va, size);
+      radv_cp_dma_buffer_copy(cmd_buffer, src_va, dst_va, size);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -320,7 +326,7 @@ radv_update_buffer_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, const voi
 
    assert(size < RADV_BUFFER_UPDATE_THRESHOLD);
 
-   si_emit_cache_flush(cmd_buffer);
+   radv_emit_cache_flush(cmd_buffer);
    radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, words + 4);
 
    radeon_emit(cmd_buffer->cs, PKT3(PKT3_WRITE_DATA, 2 + words, 0));
@@ -349,7 +355,7 @@ radv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDevice
    if (!dataSize)
       return;
 
-   if (dataSize < RADV_BUFFER_UPDATE_THRESHOLD) {
+   if (dataSize < RADV_BUFFER_UPDATE_THRESHOLD && cmd_buffer->qf != RADV_QUEUE_TRANSFER) {
       radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_buffer->bo);
       radv_update_buffer_cp(cmd_buffer, va, pData, dataSize);
    } else {

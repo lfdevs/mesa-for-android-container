@@ -77,9 +77,9 @@ struct vk_object_base {
 
 /** Initialize a vk_base_object
  *
- * @param[in]  device   The vk_device this object was created from or NULL
- * @param[out] base     The vk_object_base to initialize
- * @param[in]  obj_type The VkObjectType of the object being initialized
+ * :param device:       |in|  The vk_device this object was created from or NULL
+ * :param base:         |out| The vk_object_base to initialize
+ * :param obj_type:     |in|  The VkObjectType of the object being initialized
  */
 void vk_object_base_init(struct vk_device *device,
                          struct vk_object_base *base,
@@ -97,7 +97,7 @@ void vk_object_base_instance_init(struct vk_instance *instance,
 
 /** Tear down a vk_object_base
  *
- * @param[out] base     The vk_object_base being torn down
+ * :param base:         |out| The vk_object_base being torn down
  */
 void vk_object_base_finish(struct vk_object_base *base);
 
@@ -108,7 +108,7 @@ void vk_object_base_finish(struct vk_object_base *base);
  * long as it's called between when the client thinks the object was destroyed
  * and when the client sees it again as a supposedly new object.
  *
- * @param[inout] base   The vk_object_base being recycled
+ * :param base:         |inout| The vk_object_base being recycled
  */
 void vk_object_base_recycle(struct vk_object_base *base);
 
@@ -136,16 +136,16 @@ vk_object_base_from_u64_handle(uint64_t handle, VkObjectType obj_type)
  * `VkObjectType` to assert that the object is of the correct type when
  * running with a debug build.
  *
- * @param __driver_type The name of the driver struct; it is assumed this is
- *                      the name of a struct type and `struct` will be
- *                      prepended automatically
+ * :param __driver_type: The name of the driver struct; it is assumed this is
+ *                       the name of a struct type and ``struct`` will be
+ *                       prepended automatically
  *
- * @param __base        The name of the vk_base_object member
+ * :param __base:        The name of the vk_base_object member
  *
- * @param __VkType      The Vulkan object type such as VkImage
+ * :param __VkType:      The Vulkan object type such as VkImage
  *
- * @param __VK_TYPE     The VkObjectType corresponding to __VkType, such as
- *                      VK_OBJECT_TYPE_IMAGE
+ * :param __VK_TYPE:     The VkObjectType corresponding to __VkType, such as
+ *                       VK_OBJECT_TYPE_IMAGE
  */
 #define VK_DEFINE_HANDLE_CASTS(__driver_type, __base, __VkType, __VK_TYPE) \
    static inline struct __driver_type *                                    \
@@ -175,16 +175,16 @@ vk_object_base_from_u64_handle(uint64_t handle, VkObjectType obj_type)
  * `VkObjectType` to assert that the object is of the correct type when
  * running with a debug build.
  *
- * @param __driver_type The name of the driver struct; it is assumed this is
- *                      the name of a struct type and `struct` will be
- *                      prepended automatically
+ * :param __driver_type: The name of the driver struct; it is assumed this is
+ *                       the name of a struct type and ``struct`` will be
+ *                       prepended automatically
  *
- * @param __base        The name of the vk_base_object member
+ * :param __base:        The name of the vk_base_object member
  *
- * @param __VkType      The Vulkan object type such as VkImage
+ * :param __VkType:      The Vulkan object type such as VkImage
  *
- * @param __VK_TYPE     The VkObjectType corresponding to __VkType, such as
- *                      VK_OBJECT_TYPE_IMAGE
+ * :param __VK_TYPE:     The VkObjectType corresponding to __VkType, such as
+ *                       VK_OBJECT_TYPE_IMAGE
  */
 #define VK_DEFINE_NONDISP_HANDLE_CASTS(__driver_type, __base, __VkType, __VK_TYPE) \
    UNUSED static inline struct __driver_type *                             \
@@ -208,14 +208,14 @@ vk_object_base_from_u64_handle(uint64_t handle, VkObjectType obj_type)
 
 /** Declares a __driver_type pointer which represents __handle
  *
- * @param __driver_type The name of the driver struct; it is assumed this is
- *                      the name of a struct type and `struct` will be
- *                      prepended automatically
+ * :param __driver_type: The name of the driver struct; it is assumed this is
+ *                       the name of a struct type and ``struct`` will be
+ *                       prepended automatically
  *
- * @param __name        The name of the declared pointer
+ * :param __name:        The name of the declared pointer
  *
- * @param __handle      The Vulkan object handle with which to initialize
- *                      `__name`
+ * :param __handle:      The Vulkan object handle with which to initialize
+ *                       `__name`
  */
 #define VK_FROM_HANDLE(__driver_type, __name, __handle) \
    struct __driver_type *__name = __driver_type ## _from_handle(__handle)

@@ -275,6 +275,7 @@ struct lp_build_nir_soa_context
    LLVMValueRef consts_ptr;
    const LLVMValueRef (*inputs)[TGSI_NUM_CHANNELS];
    LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS];
+   int num_inputs;
    LLVMTypeRef context_type;
    LLVMValueRef context_ptr;
    LLVMTypeRef resources_type;

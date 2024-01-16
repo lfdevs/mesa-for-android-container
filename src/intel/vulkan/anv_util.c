@@ -147,6 +147,8 @@ anv_gfx_state_bit_to_str(enum anv_gfx_state_bits state)
       NAME(WM);
       NAME(WM_DEPTH_STENCIL);
       NAME(PMA_FIX);
+      NAME(WA_18019816803);
+      NAME(TBIMR_TILE_PASS_INFO);
    default: unreachable("invalid state");
    }
 }

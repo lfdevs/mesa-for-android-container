@@ -57,11 +57,6 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
    for (enum amd_ip_type ip_type = AMD_IP_UVD; ip_type <= AMD_IP_VCN_ENC; ip_type++)
       ws->info.max_submitted_ibs[ip_type] = 1;
 
-   if (ws->info.drm_minor < 27) {
-      fprintf(stderr, "radv/amdgpu: DRM 3.27+ is required (Linux kernel 4.20+)\n");
-      return false;
-   }
-
    ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "radv/amdgpu: Cannot create addrlib.\n");

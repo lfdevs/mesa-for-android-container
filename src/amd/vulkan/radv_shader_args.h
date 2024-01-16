@@ -61,7 +61,10 @@ struct radv_shader_args {
    struct ac_arg vs_inputs[MAX_VERTEX_ATTRIBS];
 
    /* PS epilogs */
-   struct ac_arg ps_epilog_inputs[MAX_RTS];
+   struct ac_arg colors[MAX_RTS];
+   struct ac_arg depth;
+   struct ac_arg stencil;
+   struct ac_arg sample_mask;
 
    /* TCS */
    /* # [0:5] = the number of patch control points

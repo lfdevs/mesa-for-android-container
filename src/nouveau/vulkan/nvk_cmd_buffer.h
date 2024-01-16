@@ -18,6 +18,7 @@
 #include <stdio.h>
 
 struct nvk_buffer;
+struct nvk_cbuf;
 struct nvk_cmd_bo;
 struct nvk_cmd_pool;
 struct nvk_image_view;
@@ -65,6 +66,7 @@ struct nvk_root_descriptor_table {
 
 struct nvk_descriptor_state {
    struct nvk_root_descriptor_table root;
+   uint32_t set_sizes[NVK_MAX_SETS];
    struct nvk_descriptor_set *sets[NVK_MAX_SETS];
    uint32_t sets_dirty;
 
@@ -191,10 +193,8 @@ nvk_cmd_buffer_push(struct nvk_cmd_buffer *cmd, uint32_t dw_count)
 }
 
 void
-nvk_cmd_buffer_push_indirect_buffer(struct nvk_cmd_buffer *cmd,
-                                    struct nvk_buffer *buffer,
-                                    uint64_t offset,
-                                    uint64_t dw_count);
+nvk_cmd_buffer_push_indirect(struct nvk_cmd_buffer *cmd,
+                             uint64_t addr, uint32_t dw_count);
 
 void nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
                                    const VkCommandBufferBeginInfo *pBeginInfo);
@@ -234,9 +234,27 @@ VkResult nvk_cmd_buffer_upload_data(struct nvk_cmd_buffer *cmd,
 VkResult nvk_cmd_buffer_cond_render_alloc(struct nvk_cmd_buffer *cmd,
 					  uint64_t *addr);
 
+void nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
+                            const VkDependencyInfo *dep,
+                            bool wait);
+
+void nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
+                             uint32_t dep_count,
+                             const VkDependencyInfo *deps);
+
 void
 nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
                                       struct nvk_descriptor_state *desc);
+
+bool
+nvk_cmd_buffer_get_cbuf_descriptor(struct nvk_cmd_buffer *cmd,
+                                   const struct nvk_descriptor_state *desc,
+                                   const struct nvk_cbuf *cbuf,
+                                   struct nvk_buffer_address *desc_out);
+uint64_t
+nvk_cmd_buffer_get_cbuf_descriptor_addr(struct nvk_cmd_buffer *cmd,
+                                        const struct nvk_descriptor_state *desc,
+                                        const struct nvk_cbuf *cbuf);
 
 void nvk_meta_resolve_rendering(struct nvk_cmd_buffer *cmd,
                                 const VkRenderingInfo *pRenderingInfo);

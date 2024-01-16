@@ -1375,7 +1375,8 @@ wayland_throttle_callback(void *data, struct wl_callback *callback,
 }
 
 static const struct wl_callback_listener throttle_listener = {
-   .done = wayland_throttle_callback};
+   .done = wayland_throttle_callback,
+};
 
 static EGLBoolean
 get_fourcc(struct dri2_egl_display *dri2_dpy, __DRIimage *image, int *fourcc)

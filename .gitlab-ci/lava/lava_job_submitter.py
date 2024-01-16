@@ -17,32 +17,32 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
-from io import StringIO
 from os import environ, getenv, path
 from typing import Any, Optional
 
 import fire
+from lavacli.utils import flow_yaml as lava_yaml
+
 from lava.exceptions import (
     MesaCIException,
     MesaCIParseException,
     MesaCIRetryError,
     MesaCITimeoutError,
 )
-from lava.utils import CONSOLE_LOG
-from lava.utils import DEFAULT_GITLAB_SECTION_TIMEOUTS as GL_SECTION_TIMEOUTS
 from lava.utils import (
+    CONSOLE_LOG,
     GitlabSection,
     LAVAJob,
+    LAVAJobDefinition,
     LogFollower,
     LogSectionType,
     call_proxy,
     fatal_err,
-    generate_lava_job_definition,
     hide_sensitive_data,
     print_log,
     setup_lava_proxy,
 )
-from lavacli.utils import flow_yaml as lava_yaml
+from lava.utils import DEFAULT_GITLAB_SECTION_TIMEOUTS as GL_SECTION_TIMEOUTS
 
 # Initialize structural logging with a defaultdict, it can be changed for more
 # sophisticated dict-like data abstractions.
@@ -370,6 +370,7 @@ class LAVAJobSubmitter(PathResolver):
     kernel_image_name: str = None
     kernel_image_type: str = ""
     kernel_url_prefix: str = None
+    kernel_external: str = None
     lava_tags: str = ""  # Comma-separated LAVA tags for the job
     mesa_job_name: str = "mesa_ci_job"
     pipeline_info: str = ""
@@ -379,6 +380,7 @@ class LAVAJobSubmitter(PathResolver):
     job_rootfs_overlay_url: str = None
     structured_log_file: pathlib.Path = None  # Log file path with structured LAVA log
     ssh_client_image: str = None  # x86_64 SSH client image to follow the job's output
+    project_name: str = None  # Project name to be used in the job name
     __structured_log_context = contextlib.nullcontext()  # Structured Logger context
 
     def __post_init__(self) -> None:
@@ -402,7 +404,7 @@ class LAVAJobSubmitter(PathResolver):
             minutes=self.job_timeout_min
         )
 
-        job_definition = generate_lava_job_definition(self)
+        job_definition = LAVAJobDefinition(self).generate_lava_job_definition()
 
         if self.dump_yaml:
             self.dump_job_definition(job_definition)
@@ -456,10 +458,8 @@ class LAVAJobSubmitter(PathResolver):
                 self.finish_script(last_attempt_job)
 
     def print_log_artifact_url(self):
-        base_url = "https://$CI_PROJECT_ROOT_NAMESPACE.pages.freedesktop.org/"
-        artifacts_path = "-/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/"
         relative_log_path = self.structured_log_file.relative_to(pathlib.Path.cwd())
-        full_path = f"{base_url}{artifacts_path}{relative_log_path}"
+        full_path = f"$ARTIFACTS_BASE_URL/{relative_log_path}"
         artifact_url = path.expandvars(full_path)
 
         print_log(f"Structural Logging data available at: {artifact_url}")

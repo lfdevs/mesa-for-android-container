@@ -147,9 +147,14 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
    uint64_t vary_srt = cs_get_u64(qctx, reg_vary_srt);
    uint64_t frag_srt = cs_get_u64(qctx, reg_frag_srt);
 
-   GENX(pandecode_resource_tables)(ctx, position_srt, "Position resources");
-   GENX(pandecode_resource_tables)(ctx, vary_srt, "Varying resources");
-   GENX(pandecode_resource_tables)(ctx, frag_srt, "Fragment resources");
+   if (position_srt)
+      GENX(pandecode_resource_tables)(ctx, position_srt, "Position resources");
+
+   if (vary_srt)
+      GENX(pandecode_resource_tables)(ctx, vary_srt, "Varying resources");
+
+   if (frag_srt)
+      GENX(pandecode_resource_tables)(ctx, frag_srt, "Fragment resources");
 
    mali_ptr position_fau = cs_get_u64(qctx, reg_position_fau);
    mali_ptr vary_fau = cs_get_u64(qctx, reg_vary_fau);
@@ -176,8 +181,10 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
       GENX(pandecode_fau)(ctx, lo, hi, "Fragment FAU");
    }
 
-   GENX(pandecode_shader)
-   (ctx, cs_get_u64(qctx, 16), "Position shader", qctx->gpu_id);
+   if (cs_get_u64(qctx, 16)) {
+      GENX(pandecode_shader)
+      (ctx, cs_get_u64(qctx, 16), "Position shader", qctx->gpu_id);
+   }
 
    if (tiler_flags.secondary_shader) {
       uint64_t ptr = cs_get_u64(qctx, 18);
@@ -185,8 +192,10 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
       GENX(pandecode_shader)(ctx, ptr, "Varying shader", qctx->gpu_id);
    }
 
-   GENX(pandecode_shader)
-   (ctx, cs_get_u64(qctx, 20), "Fragment shader", qctx->gpu_id);
+   if (cs_get_u64(qctx, 20)) {
+      GENX(pandecode_shader)
+      (ctx, cs_get_u64(qctx, 20), "Fragment shader", qctx->gpu_id);
+   }
 
    DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, 24),
              "Position Local Storage @%" PRIx64 ":\n",
@@ -247,7 +256,8 @@ pandecode_run_fragment(struct pandecode_context *ctx, struct queue_ctx *qctx,
    DUMP_CL(ctx, SCISSOR, &qctx->regs[42], "Scissor\n");
 
    /* TODO: Tile enable map */
-   GENX(pandecode_fbd)(ctx, cs_get_u64(qctx, 40), true, qctx->gpu_id);
+   GENX(pandecode_fbd)
+   (ctx, cs_get_u64(qctx, 40) & ~0x3full, true, qctx->gpu_id);
 
    ctx->indent--;
 }
@@ -697,7 +707,7 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
    }
 
    case MALI_CEU_OPCODE_JUMP: {
-      pan_unpack(bytes, CEU_CALL, I);
+      pan_unpack(bytes, CEU_JUMP, I);
 
       if (qctx->call_stack_depth == 0) {
          fprintf(stderr, "Cannot jump from the entrypoint\n");

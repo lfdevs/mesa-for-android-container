@@ -27,8 +27,8 @@
 #ifndef ASSEMBLER_H
 #define ASSEMBLER_H
 
-#include "../r600_pipe.h"
-#include "../r600_shader.h"
+#include "../r600_shader_common.h"
+
 #include "sfn_shader.h"
 
 namespace r600 {

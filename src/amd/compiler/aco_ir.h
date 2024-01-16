@@ -57,84 +57,7 @@ enum {
    DEBUG_LIVE_INFO = 0x100,
    DEBUG_FORCE_WAITDEPS = 0x200,
    DEBUG_NO_VALIDATE_IR = 0x400,
-};
-
-/**
- * Representation of the instruction's microcode encoding format
- * Note: Some Vector ALU Formats can be combined, such that:
- * - VOP2* | VOP3 represents a VOP2 instruction in VOP3 encoding
- * - VOP2* | DPP represents a VOP2 instruction with data parallel primitive.
- * - VOP2* | SDWA represents a VOP2 instruction with sub-dword addressing.
- *
- * (*) The same is applicable for VOP1 and VOPC instructions.
- */
-enum class Format : std::uint16_t {
-   /* Pseudo Instruction Format */
-   PSEUDO = 0,
-   /* Scalar ALU & Control Formats */
-   SOP1 = 1,
-   SOP2 = 2,
-   SOPK = 3,
-   SOPP = 4,
-   SOPC = 5,
-   /* Scalar Memory Format */
-   SMEM = 6,
-   /* LDS/GDS Format */
-   DS = 8,
-   LDSDIR = 9,
-   /* Vector Memory Buffer Formats */
-   MTBUF = 10,
-   MUBUF = 11,
-   /* Vector Memory Image Format */
-   MIMG = 12,
-   /* Export Format */
-   EXP = 13,
-   /* Flat Formats */
-   FLAT = 14,
-   GLOBAL = 15,
-   SCRATCH = 16,
-
-   PSEUDO_BRANCH = 17,
-   PSEUDO_BARRIER = 18,
-   PSEUDO_REDUCTION = 19,
-
-   /* Vector ALU Formats */
-   VINTERP_INREG = 21,
-   VOP3P = 1 << 7,
-   VOP1 = 1 << 8,
-   VOP2 = 1 << 9,
-   VOPC = 1 << 10,
-   VOP3 = 1 << 11,
-   /* Vector Parameter Interpolation Format */
-   VINTRP = 1 << 12,
-   DPP16 = 1 << 13,
-   SDWA = 1 << 14,
-   DPP8 = 1 << 15,
-};
-
-enum class instr_class : uint8_t {
-   valu32 = 0,
-   valu_convert32 = 1,
-   valu64 = 2,
-   valu_quarter_rate32 = 3,
-   valu_fma = 4,
-   valu_transcendental32 = 5,
-   valu_double = 6,
-   valu_double_add = 7,
-   valu_double_convert = 8,
-   valu_double_transcendental = 9,
-   salu = 10,
-   smem = 11,
-   barrier = 12,
-   branch = 13,
-   sendmsg = 14,
-   ds = 15,
-   exp = 16,
-   vmem = 17,
-   waitcnt = 18,
-   other = 19,
-   wmma = 20,
-   count,
+   DEBUG_NO_SCHED_ILP = 0x800,
 };
 
 enum storage_class : uint8_t {
@@ -497,8 +420,6 @@ static constexpr PhysReg exec{126};
 static constexpr PhysReg exec_lo{126};
 static constexpr PhysReg exec_hi{127};
 static constexpr PhysReg pops_exiting_wave_id{239}; /* GFX9-GFX10.3 */
-static constexpr PhysReg vccz{251};
-static constexpr PhysReg execz{252};
 static constexpr PhysReg scc{253};
 
 /**
@@ -1303,7 +1224,7 @@ struct Instruction {
       assert(isVINTRP());
       return *(VINTRP_instruction*)this;
    }
-   constexpr bool isVINTRP() const noexcept { return (uint16_t)format & (uint16_t)Format::VINTRP; }
+   constexpr bool isVINTRP() const noexcept { return format == Format::VINTRP; }
    DPP16_instruction& dpp16() noexcept
    {
       assert(isDPP16());
@@ -1367,6 +1288,7 @@ struct Instruction {
 
    constexpr bool isVMEM() const noexcept { return isMTBUF() || isMUBUF() || isMIMG(); }
 
+   bool accessesLDS() const noexcept;
    bool isTrans() const noexcept;
 };
 static_assert(sizeof(Instruction) == 16, "Unexpected padding");
@@ -1754,6 +1676,12 @@ struct Pseudo_reduction_instruction : public Instruction {
 static_assert(sizeof(Pseudo_reduction_instruction) == sizeof(Instruction) + 4,
               "Unexpected padding");
 
+inline bool
+Instruction::accessesLDS() const noexcept
+{
+   return (isDS() && !ds().gds) || isLDSDIR() || isVINTRP();
+}
+
 inline void
 VALU_instruction::swapOperands(unsigned idx0, unsigned idx1)
 {
@@ -2098,7 +2026,7 @@ struct DeviceInfo {
    uint16_t sgpr_alloc_granule;
    uint16_t vgpr_alloc_granule;
    unsigned scratch_alloc_granule;
-   unsigned max_wave64_per_simd;
+   uint16_t max_waves_per_simd;
    unsigned simd_per_cu;
    bool has_fast_fma32 = false;
    bool has_mac_legacy32 = false;
@@ -2280,6 +2208,7 @@ void register_allocation(Program* program, std::vector<IDSet>& live_out_per_bloc
 void ssa_elimination(Program* program);
 void lower_to_hw_instr(Program* program);
 void schedule_program(Program* program, live& live_vars);
+void schedule_ilp(Program* program);
 void spill(Program* program, live& live_vars);
 void insert_wait_states(Program* program);
 bool dealloc_vgprs(Program* program);
@@ -2376,6 +2305,8 @@ typedef struct {
    /* sizes used for input/output modifiers and constants */
    const unsigned operand_size[static_cast<int>(aco_opcode::num_opcodes)];
    const instr_class classes[static_cast<int>(aco_opcode::num_opcodes)];
+   const uint32_t definitions[static_cast<int>(aco_opcode::num_opcodes)];
+   const uint32_t operands[static_cast<int>(aco_opcode::num_opcodes)];
 } Info;
 
 extern const Info instr_info;

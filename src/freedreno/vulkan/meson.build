@@ -45,6 +45,7 @@ libtu_includes = [
     inc_freedreno,
 ]
 
+tu_link_with = []
 tu_deps = []
 tu_flags = []
 
@@ -91,7 +92,11 @@ endif
 if freedreno_kmds.contains('virtio')
   tu_flags += '-DTU_HAS_VIRTIO'
   libtu_files += files('tu_knl_drm_virtio.cc', 'tu_knl_drm.cc')
-  libtu_includes += inc_virtio_gpu
+  libtu_includes += [
+    inc_virtio_gpu,
+    inc_virtio_vdrm,
+  ]
+  tu_link_with += libvdrm
   tu_deps += dep_libdrm
 endif
 
@@ -152,6 +157,7 @@ libvulkan_freedreno = shared_library(
     libfreedreno_ir3,
     libfreedreno_layout,
     libfreedreno_perfcntrs,
+    tu_link_with,
   ],
   dependencies : [
     idep_libfreedreno_common,

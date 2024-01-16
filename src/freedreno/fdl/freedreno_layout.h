@@ -93,6 +93,17 @@ struct fdl_explicit_layout {
 };
 
 /**
+ * Metadata shared between vk and gallium driver for interop.
+ *
+ * NOTE: EXT_external_objects requires app to check device and driver
+ * UUIDs to ensure that the vk and gl driver are compatible.  So for
+ * now we don't need any additional versioning of the metadata.
+ */
+struct fdl_metadata {
+   uint64_t modifier;
+};
+
+/**
  * Encapsulates the layout of a resource, including position of given 2d
  * surface (layer, level) within.  Or rather all the information needed
  * to derive this.

@@ -560,7 +560,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    ws->info.max_alignment = 1024*1024;
    ws->info.has_graphics = true;
    ws->info.cpdma_prefetch_writes_memory = true;
-   ws->info.max_wave64_per_simd = 10;
+   ws->info.max_waves_per_simd = 10;
    ws->info.num_physical_sgprs_per_simd = 512;
    ws->info.num_physical_wave64_vgprs_per_simd = 256;
    ws->info.has_3d_cube_border_color_mipmap = true;
@@ -885,7 +885,9 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
 
    pb_cache_init(&ws->bo_cache, RADEON_NUM_HEAPS,
                  500000, ws->check_vm ? 1.0f : 2.0f, 0,
-                 (uint64_t)MIN2(ws->info.vram_size_kb, ws->info.gart_size_kb) * 1024, NULL,
+                 (uint64_t)MIN2(ws->info.vram_size_kb, ws->info.gart_size_kb) * 1024,
+                 offsetof(struct radeon_bo, u.real.cache_entry),
+                 NULL,
                  radeon_bo_destroy,
                  radeon_bo_can_reclaim);
 

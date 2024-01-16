@@ -6,6 +6,7 @@
 
 #include "si_pipe.h"
 #include "si_shader_internal.h"
+#include "si_shader_llvm.h"
 #include "sid.h"
 
 LLVMValueRef si_get_rel_patch_id(struct si_shader_context *ctx)
@@ -486,6 +487,9 @@ void si_llvm_ls_build_end(struct si_shader_context *ctx)
       for (unsigned i = 0; i < info->num_outputs; i++) {
          unsigned semantic = info->output_semantic[i];
          int param = si_shader_io_get_unique_index(semantic);
+
+         if (!(info->outputs_written_before_tes_gs & BITFIELD64_BIT(param)))
+            continue;
 
          for (unsigned chan = 0; chan < 4; chan++) {
             if (!(info->output_usagemask[i] & (1 << chan)))

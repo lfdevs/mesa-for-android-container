@@ -112,10 +112,15 @@ panvk_get_device_uuid(void *uuid)
 }
 
 static const struct debug_control panvk_debug_options[] = {
-   {"startup", PANVK_DEBUG_STARTUP}, {"nir", PANVK_DEBUG_NIR},
-   {"trace", PANVK_DEBUG_TRACE},     {"sync", PANVK_DEBUG_SYNC},
-   {"afbc", PANVK_DEBUG_AFBC},       {"linear", PANVK_DEBUG_LINEAR},
-   {"dump", PANVK_DEBUG_DUMP},       {NULL, 0}};
+   {"startup", PANVK_DEBUG_STARTUP},
+   {"nir", PANVK_DEBUG_NIR},
+   {"trace", PANVK_DEBUG_TRACE},
+   {"sync", PANVK_DEBUG_SYNC},
+   {"afbc", PANVK_DEBUG_AFBC},
+   {"linear", PANVK_DEBUG_LINEAR},
+   {"dump", PANVK_DEBUG_DUMP},
+   {"no_known_warn", PANVK_DEBUG_NO_KNOWN_WARN},
+   {NULL, 0}};
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
 #define PANVK_USE_WSI_PLATFORM
@@ -460,7 +465,8 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    memset(device->name, 0, sizeof(device->name));
    sprintf(device->name, "%s", device->pdev.model->name);
 
-   if (panvk_device_get_cache_uuid(device->pdev.gpu_id, device->cache_uuid)) {
+   if (panvk_device_get_cache_uuid(panfrost_device_gpu_id(&device->pdev),
+                                   device->cache_uuid)) {
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "cannot generate UUID");
       goto fail_close_device;
@@ -471,7 +477,8 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    panvk_get_driver_uuid(&device->device_uuid);
    panvk_get_device_uuid(&device->device_uuid);
 
-   device->drm_syncobj_type = vk_drm_syncobj_get_type(device->pdev.fd);
+   device->drm_syncobj_type =
+      vk_drm_syncobj_get_type(panfrost_device_fd(&device->pdev));
    /* We don't support timelines in the uAPI yet and we don't want it getting
     * suddenly turned on by vk_drm_syncobj_get_type() without us adding panvk
     * code for it first.
@@ -800,7 +807,8 @@ panvk_queue_init(struct panvk_device *device, struct panvk_queue *queue,
       .flags = DRM_SYNCOBJ_CREATE_SIGNALED,
    };
 
-   int ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
+   int ret =
+      drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_CREATE, &create);
    if (ret) {
       vk_queue_finish(&queue->vk);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -897,7 +905,7 @@ panvk_CreateDevice(VkPhysicalDevice physicalDevice,
    device->physical_device = physical_device;
 
    const struct panfrost_device *pdev = &physical_device->pdev;
-   vk_device_set_drm_fd(&device->vk, pdev->fd);
+   vk_device_set_drm_fd(&device->vk, panfrost_device_fd(pdev));
 
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create =
@@ -983,7 +991,7 @@ panvk_QueueWaitIdle(VkQueue _queue)
    };
    int ret;
 
-   ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
+   ret = drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_WAIT, &wait);
    assert(!ret);
 
    return VK_SUCCESS;
@@ -1014,28 +1022,9 @@ panvk_GetInstanceProcAddr(VkInstance _instance, const char *pName)
  */
 PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName);
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName)
 {
    return panvk_GetInstanceProcAddr(instance, pName);
-}
-
-/* With version 4+ of the loader interface the ICD should expose
- * vk_icdGetPhysicalDeviceProcAddr()
- */
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-vk_icdGetPhysicalDeviceProcAddr(VkInstance _instance, const char *pName);
-
-PFN_vkVoidFunction
-vk_icdGetPhysicalDeviceProcAddr(VkInstance _instance, const char *pName)
-{
-   VK_FROM_HANDLE(panvk_instance, instance, _instance);
-
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
 }
 
 VkResult
@@ -1046,6 +1035,7 @@ panvk_AllocateMemory(VkDevice _device,
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
    struct panvk_device_memory *mem;
+   bool can_be_exported = false;
 
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
 
@@ -1053,6 +1043,18 @@ panvk_AllocateMemory(VkDevice _device,
       /* Apparently, this is allowed */
       *pMem = VK_NULL_HANDLE;
       return VK_SUCCESS;
+   }
+
+   const VkExportMemoryAllocateInfo *export_info =
+      vk_find_struct_const(pAllocateInfo->pNext, EXPORT_MEMORY_ALLOCATE_INFO);
+
+   if (export_info) {
+      if (export_info->handleTypes &
+          ~(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT |
+            VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT))
+         return vk_error(device, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      else if (export_info->handleTypes)
+         can_be_exported = true;
    }
 
    mem = vk_object_alloc(&device->vk, pAllocator, sizeof(*mem),
@@ -1080,9 +1082,9 @@ panvk_AllocateMemory(VkDevice _device,
       /* take ownership and close the fd */
       close(fd_info->fd);
    } else {
-      mem->bo = panfrost_bo_create(&device->physical_device->pdev,
-                                   pAllocateInfo->allocationSize, 0,
-                                   "User-requested memory");
+      mem->bo = panfrost_bo_create(
+         &device->physical_device->pdev, pAllocateInfo->allocationSize,
+         can_be_exported ? PAN_BO_SHAREABLE : 0, "User-requested memory");
    }
 
    assert(mem->bo);
@@ -1157,11 +1159,11 @@ panvk_GetBufferMemoryRequirements2(VkDevice device,
 {
    VK_FROM_HANDLE(panvk_buffer, buffer, pInfo->buffer);
 
-   const uint64_t align = 64;
-   const uint64_t size = align64(buffer->vk.size, align);
+   const uint64_t alignment = 64;
+   const uint64_t size = align64(buffer->vk.size, alignment);
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = 1;
-   pMemoryRequirements->memoryRequirements.alignment = align;
+   pMemoryRequirements->memoryRequirements.alignment = alignment;
    pMemoryRequirements->memoryRequirements.size = size;
 }
 
@@ -1172,11 +1174,11 @@ panvk_GetImageMemoryRequirements2(VkDevice device,
 {
    VK_FROM_HANDLE(panvk_image, image, pInfo->image);
 
-   const uint64_t align = 4096;
+   const uint64_t alignment = 4096;
    const uint64_t size = panvk_image_get_total_size(image);
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = 1;
-   pMemoryRequirements->memoryRequirements.alignment = align;
+   pMemoryRequirements->memoryRequirements.alignment = alignment;
    pMemoryRequirements->memoryRequirements.size = size;
 }
 
@@ -1266,7 +1268,8 @@ panvk_CreateEvent(VkDevice _device, const VkEventCreateInfo *pCreateInfo,
       .flags = 0,
    };
 
-   int ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
+   int ret =
+      drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_CREATE, &create);
    if (ret)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -1288,7 +1291,7 @@ panvk_DestroyEvent(VkDevice _device, VkEvent _event,
       return;
 
    struct drm_syncobj_destroy destroy = {.handle = event->syncobj};
-   drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_DESTROY, &destroy);
+   drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_DESTROY, &destroy);
 
    vk_object_free(&device->vk, pAllocator, event);
 }
@@ -1308,7 +1311,7 @@ panvk_GetEventStatus(VkDevice _device, VkEvent _event)
       .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
    };
 
-   int ret = drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
+   int ret = drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_WAIT, &wait);
    if (ret) {
       if (errno == ETIME)
          signaled = false;
@@ -1339,7 +1342,7 @@ panvk_SetEvent(VkDevice _device, VkEvent _event)
     * command executes.
     * https://www.khronos.org/registry/vulkan/specs/1.2/html/chap6.html#commandbuffers-submission-progress
     */
-   if (drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_SIGNAL, &objs))
+   if (drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_SIGNAL, &objs))
       return VK_ERROR_DEVICE_LOST;
 
    return VK_SUCCESS;
@@ -1356,7 +1359,7 @@ panvk_ResetEvent(VkDevice _device, VkEvent _event)
       .handles = (uint64_t)(uintptr_t)&event->syncobj,
       .count_handles = 1};
 
-   if (drmIoctl(pdev->fd, DRM_IOCTL_SYNCOBJ_RESET, &objs))
+   if (drmIoctl(panfrost_device_fd(pdev), DRM_IOCTL_SYNCOBJ_RESET, &objs))
       return VK_ERROR_DEVICE_LOST;
 
    return VK_SUCCESS;
@@ -1448,60 +1451,6 @@ panvk_DestroySampler(VkDevice _device, VkSampler _sampler,
       return;
 
    vk_object_free(&device->vk, pAllocator, sampler);
-}
-
-/* vk_icd.h does not declare this function, so we declare it here to
- * suppress Wmissing-prototypes.
- */
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion);
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it
-    * is linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to
-    * ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 5u);
-   return VK_SUCCESS;
 }
 
 VkResult

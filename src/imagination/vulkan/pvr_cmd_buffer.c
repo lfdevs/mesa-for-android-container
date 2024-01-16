@@ -7969,7 +7969,7 @@ void pvr_CmdWaitEvents2(VkCommandBuffer commandBuffer,
    pvr_cmd_buffer_end_sub_cmd(cmd_buffer);
 }
 
-void pvr_CmdWriteTimestamp2KHR(VkCommandBuffer commandBuffer,
+void pvr_CmdWriteTimestamp2(VkCommandBuffer commandBuffer,
                                VkPipelineStageFlags2 stage,
                                VkQueryPool queryPool,
                                uint32_t query)

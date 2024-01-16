@@ -73,6 +73,7 @@ amd_common_files = files(
   'ac_shader_args.h',
   'ac_shader_util.c',
   'ac_shader_util.h',
+  'ac_gather_context_rolls.c',
   'ac_gpu_info.c',
   'ac_gpu_info.h',
   'ac_surface.c',
@@ -104,6 +105,7 @@ amd_common_files = files(
   'ac_nir_lower_ngg.c',
   'ac_nir_lower_ps.c',
   'amd_family.c',
+  'ac_parse_ib.c',
   'ac_perfcounter.c',
   'ac_perfcounter.h',
   'ac_vcn_av1_default.h',
@@ -134,8 +136,8 @@ libamd_common = static_library(
 idep_amdgfxregs_h = declare_dependency(sources : [amdgfxregs_h])
 
 executable(
-  'ac_parse_ib',
-  ['ac_parse_ib.c'],
+  'ac_ib_parser',
+  ['ac_ib_parser.c'],
   link_with: [libamd_common],
   include_directories : [
     inc_amd, inc_include, inc_src,

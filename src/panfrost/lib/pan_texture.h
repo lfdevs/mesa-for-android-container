@@ -287,7 +287,7 @@ unsigned panfrost_texture_offset(const struct pan_image_layout *layout,
                                  unsigned surface_idx);
 
 struct pan_pool;
-struct pan_scoreboard;
+struct pan_jc;
 
 /* DRM modifier helper */
 
@@ -328,7 +328,7 @@ void pan_iview_get_surface(const struct pan_image_view *iview, unsigned level,
 
 #if PAN_ARCH >= 9
 enum mali_afbc_compression_mode
-pan_afbc_compression_mode(enum pipe_format format);
+GENX(pan_afbc_compression_mode)(enum pipe_format format);
 #endif
 
 #ifdef __cplusplus

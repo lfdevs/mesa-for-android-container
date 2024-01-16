@@ -18,7 +18,7 @@ DEPS=(
 )
 
 
-apk add "${DEPS[@]}" "${EPHEMERAL[@]}"
+apk --no-cache add "${DEPS[@]}" "${EPHEMERAL[@]}"
 
 . .gitlab-ci/container/container_pre_build.sh
 

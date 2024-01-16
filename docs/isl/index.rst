@@ -16,7 +16,8 @@ Chery.
    ccs
    hiz
 
-The core representation of a surface in ISL is :cpp:struct:`isl_surf`.
+The core representation of a surface in ISL is :c:struct:`isl_surf`.
 
-.. doxygenstruct:: isl_surf
+.. c:autostruct:: isl_surf
+   :file: src/intel/isl/isl.h
    :members:

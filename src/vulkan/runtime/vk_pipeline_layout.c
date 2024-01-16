@@ -66,7 +66,7 @@ vk_pipeline_layout_zalloc(struct vk_device *device, size_t size,
     * their own object.
     */
    struct vk_pipeline_layout *layout =
-      vk_zalloc(&device->alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      vk_zalloc(&device->alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (layout == NULL)
       return NULL;
 

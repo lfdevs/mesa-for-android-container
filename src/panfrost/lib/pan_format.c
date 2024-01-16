@@ -123,52 +123,11 @@ const struct pan_blendable_format
 #define FLAGS_VT__ (_V | _T)
 #define FLAGS__T_Z (_T | _Z)
 
-#define SRGB_L (0)
-#define SRGB_S (1)
-
-#if PAN_ARCH <= 6
-#define V6_0000 PAN_V6_SWIZZLE(0, 0, 0, 0)
-#define V6_000R PAN_V6_SWIZZLE(0, 0, 0, R)
-#define V6_0R00 PAN_V6_SWIZZLE(0, R, 0, 0)
-#define V6_0A00 PAN_V6_SWIZZLE(0, A, 0, 0)
-#define V6_AAAA PAN_V6_SWIZZLE(A, A, A, A)
-#define V6_A001 PAN_V6_SWIZZLE(A, 0, 0, 1)
-#define V6_ABG1 PAN_V6_SWIZZLE(A, B, G, 1)
-#define V6_ABGR PAN_V6_SWIZZLE(A, B, G, R)
-#define V6_BGR1 PAN_V6_SWIZZLE(B, G, R, 1)
-#define V6_BGRA PAN_V6_SWIZZLE(B, G, R, A)
-#define V6_GBA1 PAN_V6_SWIZZLE(G, B, A, 1)
-#define V6_GBAR PAN_V6_SWIZZLE(G, B, A, R)
-#define V6_R000 PAN_V6_SWIZZLE(R, 0, 0, 0)
-#define V6_R001 PAN_V6_SWIZZLE(R, 0, 0, 1)
-#define V6_RG01 PAN_V6_SWIZZLE(R, G, 0, 1)
-#define V6_RGB1 PAN_V6_SWIZZLE(R, G, B, 1)
-#define V6_RGBA PAN_V6_SWIZZLE(R, G, B, A)
-#define V6_RRR1 PAN_V6_SWIZZLE(R, R, R, 1)
-#define V6_RRRG PAN_V6_SWIZZLE(R, R, R, G)
-#define V6_RRRR PAN_V6_SWIZZLE(R, R, R, R)
-#define V6_GGGG PAN_V6_SWIZZLE(G, G, G, G)
-
 #define FMT(pipe, mali, swizzle, srgb, flags)                                  \
    [PIPE_FORMAT_##pipe] = {                                                    \
-      .hw = (V6_##swizzle) | ((MALI_##mali) << 12) | (((SRGB_##srgb)) << 20),  \
+      .hw = MALI_PACK_FMT(mali, swizzle, srgb),                                \
       .bind = FLAGS_##flags,                                                   \
    }
-#else
-
-#define MALI_RGB_COMPONENT_ORDER_R001 MALI_RGB_COMPONENT_ORDER_RGB1
-#define MALI_RGB_COMPONENT_ORDER_RG01 MALI_RGB_COMPONENT_ORDER_RGB1
-#define MALI_RGB_COMPONENT_ORDER_GBAR MALI_RGB_COMPONENT_ORDER_ARGB
-#define MALI_RGB_COMPONENT_ORDER_GBA1 MALI_RGB_COMPONENT_ORDER_1RGB
-#define MALI_RGB_COMPONENT_ORDER_ABG1 MALI_RGB_COMPONENT_ORDER_1BGR
-
-#define FMT(pipe, mali, swizzle, srgb, flags)                                  \
-   [PIPE_FORMAT_##pipe] = {                                                    \
-      .hw = (MALI_RGB_COMPONENT_ORDER_##swizzle) | ((MALI_##mali) << 12) |     \
-            (((SRGB_##srgb)) << 20),                                           \
-      .bind = FLAGS_##flags,                                                   \
-   }
-#endif
 
 #if PAN_ARCH >= 7
 #define YUV_NO_SWAP (0)

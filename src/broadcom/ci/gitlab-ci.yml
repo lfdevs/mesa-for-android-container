@@ -1,132 +1,68 @@
-.broadcom-common-rules:
-  rules:
-    - changes: &broadcom_file_list
-      - src/broadcom/meson.build
-      - src/broadcom/ci/**/*
-      - src/broadcom/cle/**/*
-      - src/broadcom/clif/**/*
-      - src/broadcom/common/**/*
-      - src/broadcom/compiler/**/*
-      - src/broadcom/drm-shim/**/*
-      - src/broadcom/qpu/**/*
-      - src/broadcom/simulator/**/*
-      when: on_success
-
-.vc4-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - !reference [.broadcom-common-rules, rules]
-    - changes:
-      - src/gallium/drivers/vc4/**/*
-      - src/gallium/winsys/vc4/**/*
-      - src/gallium/auxiliary/renderonly/**/*
-      - src/gallium/winsys/kmsro/**/*
-      when: on_success
-
-.v3d-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - !reference [.broadcom-common-rules, rules]
-    - changes: &v3d_file_list
-      - src/gallium/drivers/v3d/**/*
-      - src/gallium/winsys/v3d/**/*
-      - src/gallium/auxiliary/renderonly/**/*
-      - src/gallium/winsys/kmsro/**/*
-      when: on_success
-
-.v3d-manual-rules:
-  stage: broadcom
-  retry: !reference [.scheduled_pipeline-rules, retry]
-  rules:
-    - !reference [.igalia-farm-manual-rules, rules]
-    - !reference [.gl-manual-rules, rules]
-    - changes:
-        *broadcom_file_list
-      when: manual
-    - changes:
-        *v3d_file_list
-      when: manual
-
-.v3dv-rules:
-  stage: broadcom
-  rules:
-    - !reference [.igalia-farm-rules, rules]
-    - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/broadcom/**/*
-      when: on_success
-
-
-.broadcom-test:
-  script:
-    - ./install/bare-metal/poe-powered.sh
-  variables:
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    FLAKES_CHANNEL: "#videocore-ci"
-  timeout: 20m
-
-.broadcom-test:arm64:
-  extends:
-    - .broadcom-test
-    - .baremetal-test-arm64
-  variables:
-    BM_BOOTFS: /boot/raspberrypi_arm64
-
-.broadcom-test:arm32:
-  extends:
-    - .broadcom-test
-    - .baremetal-test-arm32
-  variables:
-    BM_BOOTFS: /boot/raspberrypi_armhf
+include:
+  - local: 'src/broadcom/ci/gitlab-ci-inc.yml'
 
 vc4-rpi3-gl:arm32:
   extends:
+    - .igalia-bcm2837-rpi-3-b:arm64
     - .broadcom-test:arm32
     - .vc4-rules
-  tags:
-    - igalia-rpi3
   parallel: 4
   variables:
-    GPU_VERSION: broadcom-rpi3
-    HWCI_KERNEL_MODULES: vc4
     DEQP_SUITE: broadcom-rpi3
     HWCI_START_WESTON: 1
 
-v3d-rpi4-gl:arm32:
+vc4-rpi3-gl-piglit-full:arm32:
   extends:
-    - .broadcom-test:arm32
-    - .v3d-rules
+    - vc4-rpi3-gl:arm32
+    - .vc4-manual-rules
   tags:
-    - igalia-rpi4
+    - igalia-rpi3
+    - igalia-fullrun
+  variables:
+    DEQP_SUITE: broadcom-rpi3-piglit-full
+
+
+v3d-rpi4-gl:arm64:
+  extends:
+    - .igalia-bcm2711-rpi-4:arm64
+    - .broadcom-test:arm64
+    - .v3d-rules
   parallel: 10
   variables:
-    GPU_VERSION: broadcom-rpi4
-    HWCI_KERNEL_MODULES: v3d,vc4
     HWCI_START_WESTON: 1
     DEQP_SUITE: broadcom-rpi4
     DEQP_FRACTION: 2
 
+v3d-rpi4-gl-full:arm64:
+  extends:
+    - v3d-rpi4-gl:arm64
+    - .v3d-manual-rules
+  tags:
+    - igalia-rpi4
+    - igalia-fullrun
+  parallel: 6
+  timeout: 45m
+  variables:
+    TEST_PHASE_TIMEOUT: 40
+    DEQP_FRACTION: 1
+
+
 v3d-rpi4-traces:arm64:
   extends:
+    - .igalia-bcm2711-rpi-4:arm64
     - .piglit-traces-test
     - .broadcom-test:arm64
     - .v3d-rules
   variables:
-    GPU_VERSION: broadcom-rpi4
-    HWCI_KERNEL_MODULES: v3d,vc4
     HWCI_TEST_SCRIPT: "/install/piglit/piglit-traces.sh"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-broadcom.yml"
+    PIGLIT_TRACES_FILE: traces-broadcom.yml
     PIGLIT_REPLAY_DEVICE_NAME: "broadcom-rpi4"
     PIGLIT_RESULTS: "broadcom-rpi4-replay"
-  tags:
-    - igalia-rpi4
+
 
 v3dv-rpi4-vk:arm64:
   extends:
+    - .igalia-bcm2711-rpi-4:arm64
     - .broadcom-test:arm64
     - .v3dv-rules
   parallel: 10
@@ -136,8 +72,38 @@ v3dv-rpi4-vk:arm64:
     DEQP_FRACTION: 9
     DEQP_VER: vk
     FLAKES_CHANNEL: "#videocore-ci"
-    GPU_VERSION: broadcom-rpi4
-    HWCI_KERNEL_MODULES: v3d,vc4
-    VK_DRIVER: broadcom
+
+v3dv-rpi4-vk-full:arm64:
+  extends:
+    - v3dv-rpi4-vk:arm64
+    - .v3dv-manual-rules
   tags:
     - igalia-rpi4
+    - igalia-fullrun
+  parallel: 6
+  timeout: 1h 30m
+  variables:
+    TEST_PHASE_TIMEOUT: 80
+    DEQP_FRACTION: 1
+
+
+.v3dv-rpi5-vk:arm64:
+  extends:
+    - .igalia-bcm2712-rpi-5:arm64
+    - .broadcom-test:arm64
+    - .v3dv-rules
+  variables:
+    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
+    DEQP_EXPECTED_RENDERER: "V3D.7.1"
+    DEQP_FRACTION: 15
+    DEQP_VER: vk
+    FLAKES_CHANNEL: "#videocore-ci"
+
+v3dv-rpi5-vk-full:arm64:
+  extends:
+    - .v3dv-rpi5-vk:arm64
+    - .v3dv-manual-rules
+  timeout: 2h 30m
+  variables:
+    TEST_PHASE_TIMEOUT: 180
+    DEQP_FRACTION: 1

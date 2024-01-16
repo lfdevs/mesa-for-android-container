@@ -1,38 +1,55 @@
 .radeonsi-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.gl-rules, rules]
+    - changes: &amd_common_file_list
+        - src/amd/*
+        - src/amd/addrlib/**/*
+        - src/amd/ci/gitlab-ci.yml
+        - src/amd/ci/gitlab-ci-inc.yml
+        - src/amd/ci/deqp-$DEQP_SUITE.toml
+        - src/amd/ci/$GPU_VERSION-fails.txt
+        - src/amd/ci/$GPU_VERSION-flakes.txt
+        - src/amd/ci/$GPU_VERSION-skips.txt
+        - src/amd/ci/$PIGLIT_TRACES_FILE
+        - src/amd/common/**/*
+        - src/amd/llvm/**/*
+        - src/amd/registers/**/*
+      when: on_success
     - changes: &radeonsi_file_list
-      - src/gallium/drivers/radeonsi/**/*
-      - src/gallium/include/winsys/**/*
-      - src/gallium/winsys/amdgpu/**/*
-      - src/amd/*
-      - src/amd/addrlib/**/*
-      - src/amd/ci/*
-      - src/amd/common/**/*
-      - src/amd/llvm/**/*
-      - src/amd/registers/**/*
+        - src/gallium/drivers/radeonsi/**/*
+        - src/gallium/include/winsys/**/*
+        - src/gallium/winsys/amdgpu/**/*
+        - src/amd/vpelib/**/*
       when: on_success
 
 .radv-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.vulkan-rules, rules]
+    - changes:
+        *amd_common_file_list
+      when: on_success
     - changes: &radv_file_list
-      - src/amd/**/*
-      - src/vulkan/**/*
+        - src/amd/compiler/**/*
+        - src/amd/vulkan/**/*
+        - src/vulkan/**/*
       when: on_success
 
 .radv-collabora-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.radv-rules, rules]
 
 .radv-valve-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.valve-farm-rules, rules]
     - !reference [.radv-rules, rules]
 
@@ -40,8 +57,12 @@
   stage: amd
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
+    - changes:
+        *amd_common_file_list
+      when: on_success
     - changes:
         *radv_file_list
       when: manual
@@ -49,25 +70,24 @@
 .radeonsi+radv-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.radeonsi-rules, rules]
     - !reference [.radv-rules, rules]
 
 .radeonsi-vaapi-rules:
   stage: amd
   rules:
-    - !reference [.collabora-farm-rules, rules]
-    - !reference [.gl-rules, rules]
-    - changes:
-        *radeonsi_file_list
-      when: on_success
+    - !reference [.test, rules]
+    - !reference [.radeonsi-rules, rules]
     - changes: &radeon_vcn_file_list
-      - src/gallium/frontends/va/**/*
-      - src/gallium/targets/va/**/*
+        - src/gallium/frontends/va/**/*
+        - src/gallium/targets/va/**/*
       when: on_success
 
 .radeonsi-vaapi-manual-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
@@ -77,78 +97,101 @@
 .radeonsi-valve-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.valve-farm-rules, rules]
     - !reference [.radeonsi-rules, rules]
 
 .radeonsi-valve-manual-rules:
   stage: amd
   rules:
+    - !reference [.test, rules]
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
+        *amd_common_file_list
+      when: manual
+    - changes:
         *radeonsi_file_list
       when: manual
+
+
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-R721T-grunt
+.lava-acer-R721T-grunt:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: acer-R721T-grunt
+    DTB: ""
+    FDO_CI_CONCURRENT: 3
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-R721T-grunt
+    VK_DRIVER: radeon
+
+# Status: https://lava.collabora.dev/scheduler/device_type/hp-14-db0003na-grunt
+.lava-hp-14-db0003na-grunt:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: hp-14-db0003na-grunt
+    DTB: ""
+    FDO_CI_CONCURRENT: 3
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-14-db0003na-grunt
+    VK_DRIVER: radeon
+
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-CM1400CXA-dalboz
+.lava-asus-CM1400CXA-dalboz:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: asus-CM1400CXA-dalboz
+    DTB: ""
+#   FDO_CI_CONCURRENT: ?
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-CM1400CXA-dalboz
+
+# Status: https://lava.collabora.dev/scheduler/device_type/lenovo-TPad-C13-Yoga-zork
+.lava-lenovo-TPad-C13-Yoga-zork:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: lenovo-TPad-C13-Yoga-zork
+    DTB: ""
+#   FDO_CI_CONCURRENT: ?
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-lenovo-TPad-C13-Yoga-zork
 
 
 ############### LAVA
 # job prefixes: radeonsi (OpenGL), radv (Vulkan), amd (radeonsi+radv)
 .stoney-test:x86_64:
   variables:
-    BOOT_METHOD: depthcharge
     DEQP_EXPECTED_RENDERER: STONEY
-    DTB: ""
-    FDO_CI_CONCURRENT: 3
-    HWCI_FREQ_MAX: "true"
-    HWCI_KERNEL_MODULES: amdgpu
-    KERNEL_IMAGE_TYPE: ""
     FLAKES_CHANNEL: "#amd-ci"
 
 .radeonsi-stoney-test:x86_64:
   extends:
     - .stoney-test:x86_64
+    - .lava-acer-R721T-grunt:x86_64
     - .radeonsi-rules
   variables:
     GPU_VERSION: radeonsi-stoney
     DRIVER_NAME: radeonsi
-    # 12 devices (2023-01-10)
-    RUNNER_TAG: mesa-ci-x86-64-lava-acer-R721T-grunt
-    DEVICE_TYPE: acer-R721T-grunt
     PIGLIT_PLATFORM: mixed_glx_egl
 
 .radv-stoney-test:x86_64:
   extends:
     - .stoney-test:x86_64
+    - .lava-hp-14-db0003na-grunt:x86_64
     - .radv-collabora-rules
   variables:
     DEQP_VER: vk
     DRIVER_NAME: radv
     GPU_VERSION: radv-stoney-aco
-    VK_DRIVER: radeon
-    # 6 devices (2022-11-30)
-    DEVICE_TYPE: hp-14-db0003na-grunt
-    RUNNER_TAG: mesa-ci-x86-64-lava-hp-14-db0003na-grunt
-
-# 10 devices (2023-01-17)
-.lava-asus-CM1400CXA-dalboz:x86_64:
-  variables:
-    BOOT_METHOD: depthcharge
-    DEVICE_TYPE: asus-CM1400CXA-dalboz
-    DTB: ""
-    HWCI_FREQ_MAX: "true"
-    HWCI_KERNEL_MODULES: amdgpu
-    KERNEL_IMAGE_TYPE: ""
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-CM1400CXA-dalboz
-
-# 5 devices (2023-05-03)
-.lava-lenovo-TPad-C13-Yoga-zork:x86_64:
-  variables:
-    BOOT_METHOD: depthcharge
-    DEVICE_TYPE: lenovo-TPad-C13-Yoga-zork
-    DTB: ""
-    HWCI_FREQ_MAX: "true"
-    HWCI_KERNEL_MODULES: amdgpu
-    KERNEL_IMAGE_TYPE: ""
-    RUNNER_TAG: mesa-ci-x86-64-lava-lenovo-TPad-C13-Yoga-zork
 
 .radeonsi-raven-test:x86_64:
   extends:
@@ -178,7 +221,7 @@
     - .lava-piglit-traces:x86_64
   variables:
     PIGLIT_PLATFORM: mixed_glx_egl  # TODO, take wine/VK in account
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+    PIGLIT_TRACES_FILE: traces-amd.yml
 
 ############### Valve Infra
 .test-radv:
@@ -211,6 +254,7 @@
     RUNNER_FARM_LOCATION: mupuf
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=8g'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:KABINI
 
 .polaris10-test-valve:
@@ -221,6 +265,7 @@
     #    TSC found unstable after boot, most likely due to broken BIOS. Use 'tsc=unstable'.
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g tsc=unstable'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:POLARIS10
 
 .polaris10-test-valve-mupuf:
@@ -239,16 +284,18 @@
     FDO_CI_CONCURRENT: 16
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:VEGA10
 
 .renoir-test-valve:
   variables:
     RUNNER_FARM_LOCATION: mupuf
-    FDO_CI_CONCURRENT: 24
+    FDO_CI_CONCURRENT: 16
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
     B2C_TIMEOUT_BOOT_MINUTES: 60
     B2C_TIMEOUT_OVERALL_MINUTES: 120
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:RENOIR
 
 .navi10-test-valve:
@@ -259,6 +306,7 @@
     # MSI IRQs leading to GPU hangs on amdgpu.
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g noapic'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:NAVI10
 
 .navi10-test-valve-mupuf:
@@ -281,6 +329,7 @@
     FDO_CI_CONCURRENT: 32
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:NAVI21
 
 .vangogh-test-valve:
@@ -291,6 +340,7 @@
     B2C_TIMEOUT_OVERALL_MINUTES: 120
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:VANGOGH
     - $VALVE_INFRA_VANGOGH_JOB_PRIORITY
 
@@ -301,6 +351,7 @@
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
     B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.10/downloads/linux-x86_64'  # Linux 6.3
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:NAVI31
 
 ############### VKCTS tests ###############

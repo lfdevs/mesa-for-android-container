@@ -319,11 +319,9 @@ spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthst
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small depthstencil,Fail
 
-spec@ext_framebuffer_object@fbo-alphatest-formats,Crash
 spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
-spec@ext_framebuffer_object@fbo-blending-formats,Crash
-spec@ext_framebuffer_object@fbo-clear-formats,Crash
-spec@ext_framebuffer_object@fbo-colormask-formats,Crash
+spec@ext_framebuffer_object@fbo-blending-formats,Fail
+spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10,Fail
 spec@ext_framebuffer_object@fbo-copyteximage,Fail
 spec@ext_framebuffer_object@fbo-copyteximage-simple,Fail
 spec@ext_framebuffer_object@fbo-cubemap,Fail
@@ -382,7 +380,6 @@ spec@ext_texture_format_bgra8888@api-errors,Fail
 
 spec@ext_texture_lod_bias@lodbias,Fail
 
-spec@ext_texture_srgb@fbo-alphatest-formats,Crash
 spec@ext_texture_srgb@texwrap formats bordercolor,Fail
 spec@ext_texture_srgb@texwrap formats bordercolor@GL_SLUMINANCE8_ALPHA8- border color only,Fail
 spec@ext_texture_srgb@texwrap formats bordercolor@GL_SLUMINANCE8- border color only,Fail
@@ -442,6 +439,7 @@ spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec4-ivec4,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation clipvert_pos,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation fixed,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation pos_clipvert,Fail
+spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
 spec@glsl-1.10@execution@glsl-fs-uniform-array-7,Fail
 spec@glsl-1.10@execution@glsl-vs-large-uniform-array,Fail
@@ -1859,7 +1857,6 @@ spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)-
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right middle PV: LAST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: LAST,Fail
-spec@!opengl 1.1@getteximage-luminance,Crash
 spec@!opengl 1.1@gl-1.1-xor-copypixels,Fail
 spec@!opengl 1.1@gl-1.1-xor,Fail
 spec@!opengl 1.1@line-flat-clip-color,Fail

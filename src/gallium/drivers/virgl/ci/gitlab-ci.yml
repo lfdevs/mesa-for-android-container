@@ -38,7 +38,7 @@ virgl-traces:
     - .piglit-traces-test
   variables:
     EGL_PLATFORM: "surfaceless"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-virgl.yml"
+    PIGLIT_TRACES_FILE: traces-virgl.yml
     PIGLIT_REPLAY_DEVICE_NAME: "gl-virgl"
     PIGLIT_RESULTS: "virgl-replay"
     LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/install/lib/"     # For Crosvm

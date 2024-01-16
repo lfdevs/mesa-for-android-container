@@ -68,8 +68,6 @@ v3d_get_device_info(int fd, struct v3d_device_info* devinfo, v3d_ioctl_fun drm_i
     devinfo->has_accumulators = devinfo->ver < 71;
 
     switch (devinfo->ver) {
-        case 33:
-        case 41:
         case 42:
         case 71:
                 break;

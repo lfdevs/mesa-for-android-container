@@ -386,12 +386,12 @@ if __name__ == "__main__":
         print("zink_instance.py: Found {} error(s) in total. Quitting.".format(error_count))
         exit(1)
 
-    with open(header_path, "w") as header_file:
+    with open(header_path, "w", encoding='utf-8') as header_file:
         header = Template(header_code).render(extensions=extensions, layers=layers, registry=registry).strip()
         header = replace_code(header, replacement)
         print(header, file=header_file)
 
-    with open(impl_path, "w") as impl_file:
+    with open(impl_path, "w", encoding='utf-8') as impl_file:
         impl = Template(impl_code).render(extensions=extensions, layers=layers, registry=registry).strip()
         impl = replace_code(impl, replacement)
         print(impl, file=impl_file)

@@ -1,6 +1,9 @@
 .virgl-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
+    - if: $FORCE_KERNEL_TAG != null
+      when: never
     - !reference [.gl-rules, rules]
     - !reference [.llvmpipe-rules, rules]
     - changes: &virgl_file_list
@@ -12,6 +15,7 @@
   stage: layered-backends
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
@@ -23,6 +27,7 @@
   stage: layered-backends
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.performance-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -62,9 +67,8 @@
 .virgl-iris-test:
   extends:
     - .lava-piglit-traces:x86_64
+    - .lava-asus-cx9400-volteer:x86_64
   variables:
-    DEVICE_TYPE: asus-cx9400-volteer
-    BOOT_METHOD: depthcharge
     HWCI_KERNEL_MODULES: vhost_vsock
     HWCI_KVM: "true"
     HWCI_TEST_SCRIPT: "LP_NUM_THREADS=${FDO_CI_CONCURRENT} FDO_CI_CONCURRENT=1 /install/crosvm-runner.sh /install/piglit/piglit-traces.sh"
@@ -75,5 +79,4 @@
     CROSVM_GPU_ARGS: "gles=false,backend=virglrenderer,egl=true,surfaceless=true,width=1024,height=768"
     EGL_PLATFORM: surfaceless
     PIGLIT_PROFILES: replay
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-virgl-iris.yml"
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
+    PIGLIT_TRACES_FILE: traces-virgl-iris.yml

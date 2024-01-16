@@ -49,11 +49,11 @@ tu_bo_suballocator_finish(struct tu_suballocator *suballoc)
 VkResult
 tu_suballoc_bo_alloc(struct tu_suballoc_bo *suballoc_bo,
                      struct tu_suballocator *suballoc,
-                     uint32_t size, uint32_t align)
+                     uint32_t size, uint32_t alignment)
 {
    struct tu_bo *bo = suballoc->bo;
    if (bo) {
-      uint32_t offset = ALIGN(suballoc->next_offset, align);
+      uint32_t offset = ALIGN(suballoc->next_offset, alignment);
       if (offset + size <= bo->size) {
          suballoc_bo->bo = tu_bo_get_ref(bo);
          suballoc_bo->iova = bo->iova + offset;

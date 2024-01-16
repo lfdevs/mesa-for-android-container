@@ -299,16 +299,11 @@ LLVMPassManagerRef ac_create_passmgr(LLVMTargetLibraryInfoRef target_library_inf
     */
    unwrap(passmgr)->add(createBarrierNoopPass());
 
-   /* This pass eliminates all loads and stores on alloca'd pointers. */
-   unwrap(passmgr)->add(createPromoteMemoryToRegisterPass());
    #if LLVM_VERSION_MAJOR >= 16
    unwrap(passmgr)->add(createSROAPass(true));
    #else
    unwrap(passmgr)->add(createSROAPass());
    #endif
-   /* TODO: restore IPSCCP */
-   if (LLVM_VERSION_MAJOR >= 16)
-      unwrap(passmgr)->add(createLoopSinkPass());
    /* TODO: restore IPSCCP */
    unwrap(passmgr)->add(createLICMPass());
    unwrap(passmgr)->add(createCFGSimplificationPass());

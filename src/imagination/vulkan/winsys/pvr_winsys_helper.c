@@ -138,7 +138,7 @@ void pvr_winsys_helper_heap_free(struct pvr_winsys_vma *const vma)
  */
 static VkResult
 pvr_buffer_create_and_map(struct pvr_winsys *const ws,
-                          heap_alloc_reserved_func heap_alloc_reserved,
+                          heap_alloc_carveout_func heap_alloc_carveout,
                           struct pvr_winsys_heap *heap,
                           pvr_dev_addr_t dev_addr,
                           uint64_t size,
@@ -150,7 +150,7 @@ pvr_buffer_create_and_map(struct pvr_winsys *const ws,
    VkResult result;
 
    /* Address should not be NULL, this function is used to allocate and map
-    * reserved addresses and is only supposed to be used internally.
+    * carveout addresses and is only supposed to be used internally.
     */
    assert(dev_addr.addr);
 
@@ -163,7 +163,7 @@ pvr_buffer_create_and_map(struct pvr_winsys *const ws,
    if (result != VK_SUCCESS)
       goto err_out;
 
-   result = heap_alloc_reserved(heap, dev_addr, size, alignment, &vma);
+   result = heap_alloc_carveout(heap, dev_addr, size, alignment, &vma);
    if (result != VK_SUCCESS)
       goto err_pvr_winsys_buffer_destroy;
 
@@ -203,7 +203,7 @@ static void inline pvr_buffer_destroy_and_unmap(struct pvr_winsys_vma *vma)
 
 VkResult pvr_winsys_helper_allocate_static_memory(
    struct pvr_winsys *const ws,
-   heap_alloc_reserved_func heap_alloc_reserved,
+   heap_alloc_carveout_func heap_alloc_carveout,
    struct pvr_winsys_heap *const general_heap,
    struct pvr_winsys_heap *const pds_heap,
    struct pvr_winsys_heap *const usc_heap,
@@ -217,7 +217,7 @@ VkResult pvr_winsys_helper_allocate_static_memory(
    VkResult result;
 
    result = pvr_buffer_create_and_map(ws,
-                                      heap_alloc_reserved,
+                                      heap_alloc_carveout,
                                       general_heap,
                                       general_heap->static_data_carveout_addr,
                                       general_heap->static_data_carveout_size,
@@ -227,7 +227,7 @@ VkResult pvr_winsys_helper_allocate_static_memory(
       goto err_out;
 
    result = pvr_buffer_create_and_map(ws,
-                                      heap_alloc_reserved,
+                                      heap_alloc_carveout,
                                       pds_heap,
                                       pds_heap->static_data_carveout_addr,
                                       pds_heap->static_data_carveout_size,
@@ -237,7 +237,7 @@ VkResult pvr_winsys_helper_allocate_static_memory(
       goto err_pvr_buffer_destroy_and_unmap_general;
 
    result = pvr_buffer_create_and_map(ws,
-                                      heap_alloc_reserved,
+                                      heap_alloc_carveout,
                                       usc_heap,
                                       usc_heap->static_data_carveout_addr,
                                       pds_heap->static_data_carveout_size,

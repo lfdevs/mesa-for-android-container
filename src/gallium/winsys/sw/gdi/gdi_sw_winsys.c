@@ -78,6 +78,10 @@ gdi_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
    switch(format) {
    case PIPE_FORMAT_B8G8R8X8_UNORM:
    case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B5G6R5_UNORM:
+   case PIPE_FORMAT_B5G5R5A1_UNORM:
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
       return true;
 
    /* TODO: Support other formats possible with BMPs, as described in 
@@ -167,6 +171,16 @@ gdi_sw_displaytarget_create(struct sw_winsys *winsys,
       gdt->bmi.bV5RedMask = 0xF800;
       gdt->bmi.bV5GreenMask = 0x07E0;
       gdt->bmi.bV5BlueMask = 0x001F;
+   } else if (format == PIPE_FORMAT_B4G4R4A4_UNORM) {
+      gdt->bmi.bV5Compression = BI_BITFIELDS;
+      gdt->bmi.bV5RedMask = 0x0F00;
+      gdt->bmi.bV5GreenMask = 0x00F0;
+      gdt->bmi.bV5BlueMask = 0x000F;
+   } else if (format == PIPE_FORMAT_R10G10B10A2_UNORM) {
+      gdt->bmi.bV5Compression = BI_BITFIELDS;
+      gdt->bmi.bV5RedMask = 0x000003FF;
+      gdt->bmi.bV5GreenMask = 0x000FFC00;
+      gdt->bmi.bV5BlueMask = 0x3FF00000;
    }
 
    *stride = gdt->stride;

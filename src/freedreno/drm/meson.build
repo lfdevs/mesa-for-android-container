@@ -38,6 +38,10 @@ libfreedreno_drm_includes = [
   inc_include,
   inc_src,
 ]
+libfreedreno_drm_deps = [
+  dep_libdrm,
+  dep_valgrind,
+]
 
 libfreedreno_drm_msm_files = files(
   'msm/msm_bo.c',
@@ -59,7 +63,10 @@ libfreedreno_drm_virtio_files = files(
 if freedreno_kmds.contains('virtio')
   libfreedreno_drm_files += libfreedreno_drm_virtio_files
   libfreedreno_drm_flags += '-DHAVE_FREEDRENO_VIRTIO'
-  libfreedreno_drm_includes += inc_virtio_gpu
+  libfreedreno_drm_includes += [
+    inc_virtio_gpu,
+    inc_virtio_vdrm,
+  ]
 endif
 
 libfreedreno_drm = static_library(
@@ -71,10 +78,9 @@ libfreedreno_drm = static_library(
   include_directories : libfreedreno_drm_includes,
   c_args : [no_override_init_args, libfreedreno_drm_flags],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [
-    dep_libdrm,
-    dep_valgrind,
-  ],
+  dependencies : libfreedreno_drm_deps,
+  # TODO
+  link_with : [libvdrm],
   build_by_default : false,
 )
 

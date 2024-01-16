@@ -169,7 +169,7 @@ opt_cmod_propagation_local(bblock_t *block, vec4_visitor *v)
                  (inst->src[0].swizzle == BRW_SWIZZLE_WWWW &&
                   scan_inst->dst.writemask == WRITEMASK_W))) {
                if (inst->dst.writemask != scan_inst->dst.writemask) {
-                  src_reg temp(v, glsl_type::vec4_type, 1);
+                  src_reg temp(v, glsl_vec4_type(), 1);
 
                   /* Given a sequence like:
                    *

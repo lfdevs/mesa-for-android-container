@@ -7,14 +7,13 @@
 #include "si_pipe.h"
 #include "si_query.h"
 #include "si_shader_internal.h"
-#include "util/u_prim.h"
 
 unsigned gfx10_ngg_get_vertices_per_prim(struct si_shader *shader)
 {
    const struct si_shader_info *info = &shader->selector->info;
 
    if (shader->selector->stage == MESA_SHADER_GEOMETRY)
-      return u_vertices_per_prim(info->base.gs.output_primitive);
+      return mesa_vertices_per_prim(info->base.gs.output_primitive);
    else if (shader->selector->stage == MESA_SHADER_VERTEX) {
       if (info->base.vs.blit_sgprs_amd) {
          /* Blits always use axis-aligned rectangles with 3 vertices. */
@@ -86,7 +85,7 @@ bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    const unsigned input_prim = si_get_input_prim(gs_sel, &shader->key);
    const bool use_adjacency =
       input_prim >= MESA_PRIM_LINES_ADJACENCY && input_prim <= MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
-   const unsigned max_verts_per_prim = u_vertices_per_prim(input_prim);
+   const unsigned max_verts_per_prim = mesa_vertices_per_prim(input_prim);
    const unsigned min_verts_per_prim = gs_stage == MESA_SHADER_GEOMETRY ? max_verts_per_prim : 1;
 
    /* All these are in dwords. The maximum is 16K dwords (64KB) of LDS per workgroup. */
@@ -234,17 +233,9 @@ retry_select_mode:
               : max_esverts;
    assert(max_out_vertices <= 256);
 
-   unsigned prim_amp_factor = 1;
-   if (gs_stage == MESA_SHADER_GEOMETRY) {
-      /* Number of output primitives per GS input primitive after
-       * GS instancing. */
-      prim_amp_factor = gs_sel->info.base.gs.vertices_out;
-   }
-
    shader->ngg.hw_max_esverts = max_esverts;
    shader->ngg.max_gsprims = max_gsprims;
    shader->ngg.max_out_verts = max_out_vertices;
-   shader->ngg.prim_amp_factor = prim_amp_factor;
    shader->ngg.max_vert_out_per_gs_instance = max_vert_out_per_gs_instance;
 
    /* Don't count unusable vertices. */

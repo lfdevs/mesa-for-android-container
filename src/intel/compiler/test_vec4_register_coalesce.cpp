@@ -140,8 +140,8 @@ _register_coalesce(vec4_visitor *v, const char *func)
 
 TEST_F(register_coalesce_vec4_test, test_compute_to_mrf)
 {
-   src_reg something = src_reg(v, glsl_type::float_type);
-   dst_reg temp = dst_reg(v, glsl_type::float_type);
+   src_reg something = src_reg(v, glsl_float_type());
+   dst_reg temp = dst_reg(v, glsl_float_type());
    dst_reg init;
 
    dst_reg m0 = dst_reg(MRF, 0);
@@ -159,8 +159,8 @@ TEST_F(register_coalesce_vec4_test, test_compute_to_mrf)
 
 TEST_F(register_coalesce_vec4_test, test_multiple_use)
 {
-   src_reg something = src_reg(v, glsl_type::float_type);
-   dst_reg temp = dst_reg(v, glsl_type::vec4_type);
+   src_reg something = src_reg(v, glsl_float_type());
+   dst_reg temp = dst_reg(v, glsl_vec4_type());
    dst_reg init;
 
    dst_reg m0 = dst_reg(MRF, 0);
@@ -185,15 +185,15 @@ TEST_F(register_coalesce_vec4_test, test_multiple_use)
 
 TEST_F(register_coalesce_vec4_test, test_dp4_mrf)
 {
-   src_reg some_src_1 = src_reg(v, glsl_type::vec4_type);
-   src_reg some_src_2 = src_reg(v, glsl_type::vec4_type);
+   src_reg some_src_1 = src_reg(v, glsl_vec4_type());
+   src_reg some_src_2 = src_reg(v, glsl_vec4_type());
    dst_reg init;
 
    dst_reg m0 = dst_reg(MRF, 0);
    m0.writemask = WRITEMASK_Y;
    m0.type = BRW_REGISTER_TYPE_F;
 
-   dst_reg temp = dst_reg(v, glsl_type::float_type);
+   dst_reg temp = dst_reg(v, glsl_float_type());
 
    vec4_instruction *dp4 = v->emit(v->DP4(temp, some_src_1, some_src_2));
    v->emit(v->MOV(m0, src_reg(temp)));
@@ -206,12 +206,12 @@ TEST_F(register_coalesce_vec4_test, test_dp4_mrf)
 
 TEST_F(register_coalesce_vec4_test, test_dp4_grf)
 {
-   src_reg some_src_1 = src_reg(v, glsl_type::vec4_type);
-   src_reg some_src_2 = src_reg(v, glsl_type::vec4_type);
+   src_reg some_src_1 = src_reg(v, glsl_vec4_type());
+   src_reg some_src_2 = src_reg(v, glsl_vec4_type());
    dst_reg init;
 
-   dst_reg to = dst_reg(v, glsl_type::vec4_type);
-   dst_reg temp = dst_reg(v, glsl_type::float_type);
+   dst_reg to = dst_reg(v, glsl_vec4_type());
+   dst_reg temp = dst_reg(v, glsl_float_type());
 
    vec4_instruction *dp4 = v->emit(v->DP4(temp, some_src_1, some_src_2));
    to.writemask = WRITEMASK_Y;
@@ -232,12 +232,12 @@ TEST_F(register_coalesce_vec4_test, test_dp4_grf)
 
 TEST_F(register_coalesce_vec4_test, test_channel_mul_grf)
 {
-   src_reg some_src_1 = src_reg(v, glsl_type::vec4_type);
-   src_reg some_src_2 = src_reg(v, glsl_type::vec4_type);
+   src_reg some_src_1 = src_reg(v, glsl_vec4_type());
+   src_reg some_src_2 = src_reg(v, glsl_vec4_type());
    dst_reg init;
 
-   dst_reg to = dst_reg(v, glsl_type::vec4_type);
-   dst_reg temp = dst_reg(v, glsl_type::float_type);
+   dst_reg to = dst_reg(v, glsl_vec4_type());
+   dst_reg temp = dst_reg(v, glsl_float_type());
 
    vec4_instruction *mul = v->emit(v->MUL(temp, some_src_1, some_src_2));
    to.writemask = WRITEMASK_Y;

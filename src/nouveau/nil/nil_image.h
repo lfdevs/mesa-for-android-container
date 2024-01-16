@@ -14,13 +14,13 @@
 
 struct nv_device_info;
 
-enum PACKED nil_image_dim {
+enum ENUM_PACKED nil_image_dim {
    NIL_IMAGE_DIM_1D = 1,
    NIL_IMAGE_DIM_2D = 2,
    NIL_IMAGE_DIM_3D = 3,
 };
 
-enum PACKED nil_sample_layout {
+enum ENUM_PACKED nil_sample_layout {
    NIL_SAMPLE_LAYOUT_1X1,
    NIL_SAMPLE_LAYOUT_2X1,
    NIL_SAMPLE_LAYOUT_2X2,
@@ -42,7 +42,7 @@ enum nil_image_usage_flags {
    NIL_IMAGE_USAGE_LINEAR_BIT          = BITFIELD_BIT(7),
 };
 
-enum PACKED nil_view_type {
+enum ENUM_PACKED nil_view_type {
    NIL_VIEW_TYPE_1D,
    NIL_VIEW_TYPE_2D,
    NIL_VIEW_TYPE_3D,

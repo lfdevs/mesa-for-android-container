@@ -65,6 +65,8 @@ void init_compiler(
 	unsigned is_r500,
 	unsigned is_r400);
 
+void destroy_compiler(struct radeon_compiler *c);
+
 unsigned load_program(
 	struct radeon_compiler *c,
 	struct rc_test_file *test,

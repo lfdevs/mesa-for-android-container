@@ -131,7 +131,7 @@ zink_bo_get_mem(const struct zink_bo *bo)
 static ALWAYS_INLINE VkDeviceSize
 zink_bo_get_size(const struct zink_bo *bo)
 {
-   return bo->mem ? bo->base.size : bo->u.slab.real->base.size;
+   return bo->mem ? bo->base.base.size : bo->u.slab.real->base.base.size;
 }
 
 void *
@@ -140,7 +140,7 @@ void
 zink_bo_unmap(struct zink_screen *screen, struct zink_bo *bo);
 
 bool
-zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned level, struct pipe_box *box, bool commit, VkSemaphore *sem);
+zink_bo_commit(struct zink_context *ctx, struct zink_resource *res, unsigned level, struct pipe_box *box, bool commit, VkSemaphore *sem);
 
 static ALWAYS_INLINE bool
 zink_bo_has_unflushed_usage(const struct zink_bo *bo)

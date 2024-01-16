@@ -26,7 +26,6 @@
 #include "util/u_memory.h"
 #include "util/os_time.h"
 #include "util/u_dump.h"
-#include "util/u_prim.h"
 #include "util/u_string.h"
 #include "gallivm/lp_bld_const.h"
 #include "gallivm/lp_bld_debug.h"
@@ -2042,7 +2041,7 @@ lp_mesh_call_draw(struct llvmpipe_context *lp,
                   int vsize, int psize, int per_prim_count,
                   size_t prim_offset)
 {
-   unsigned prim_len = u_vertices_per_prim(prim);
+   unsigned prim_len = mesa_vertices_per_prim(prim);
    uint32_t *ptr = (uint32_t *)((char *)vbuf + task_out_size * task_idx);
    uint32_t vertex_count = ptr[1];
    uint32_t prim_count = ptr[2];

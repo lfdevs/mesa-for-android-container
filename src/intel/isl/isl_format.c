@@ -882,10 +882,6 @@ bool
 isl_format_supports_ccs_e(const struct intel_device_info *devinfo,
                           enum isl_format format)
 {
-   /* Disable compression on MTL until B0 */
-   if (intel_needs_workaround(devinfo, 14017240301))
-      return false;
-
    if (!format_info_exists(format))
       return false;
 
@@ -1205,6 +1201,45 @@ isl_format_rgbx_to_rgba(enum isl_format rgbx)
    default:
       assert(!"Invalid RGBX format");
       return rgbx;
+   }
+}
+
+/*
+ * Xe2 allows route of LD messages from Sampler to LSC to improve performance
+ * when some restrictions are met, here checking the format restrictions.
+ *
+ * RENDER_SURFACE_STATE::Enable Sampler Route to LSC:
+ *   "The Surface Format is one of the following:
+ *
+ *     R8_UNORM, R8G8_UNORM, R16_UNORM, R16G16_UNORM, R16G16B16A16_UNORM
+ *     R16_FLOAT, R16G16_FLOAT, R16G16B16A16_FLOAT
+ *     R32_FLOAT, R32G32_FLOAT, R32G32B32A32_FLOAT, R32_UINT, R32G32_UINT, R32G32B32A32_UINT
+ *     R10G10B10A2_UNORM, R11G11B10_FLOAT
+ *   "
+ */
+bool
+isl_format_support_sampler_route_to_lsc(enum isl_format fmt)
+{
+   switch (fmt) {
+   case ISL_FORMAT_R8_UNORM:
+   case ISL_FORMAT_R8G8_UNORM:
+   case ISL_FORMAT_R16_UNORM:
+   case ISL_FORMAT_R16G16_UNORM:
+   case ISL_FORMAT_R16G16B16A16_UNORM:
+   case ISL_FORMAT_R16_FLOAT:
+   case ISL_FORMAT_R16G16_FLOAT:
+   case ISL_FORMAT_R16G16B16A16_FLOAT:
+   case ISL_FORMAT_R32_FLOAT:
+   case ISL_FORMAT_R32G32_FLOAT:
+   case ISL_FORMAT_R32G32B32A32_FLOAT:
+   case ISL_FORMAT_R32_UINT:
+   case ISL_FORMAT_R32G32_UINT:
+   case ISL_FORMAT_R32G32B32A32_UINT:
+   case ISL_FORMAT_R10G10B10A2_UNORM:
+   case ISL_FORMAT_R11G11B10_FLOAT:
+      return true;
+   default:
+      return false;
    }
 }
 

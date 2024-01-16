@@ -159,8 +159,8 @@ VkResult pvr_srv_winsys_buffer_get_fd(struct pvr_winsys_bo *bo,
 VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo);
 void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo);
 
-VkResult pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
-                                     const pvr_dev_addr_t reserved_dev_addr,
+VkResult pvr_srv_heap_alloc_carveout(struct pvr_winsys_heap *heap,
+                                     const pvr_dev_addr_t carveout_dev_addr,
                                      uint64_t size,
                                      uint64_t alignment,
                                      struct pvr_winsys_vma **vma_out);

@@ -78,6 +78,7 @@ void si_init_cp_reg_shadowing(struct si_context *sctx)
       ac_emulate_clear_state(&sctx->screen->info, &sctx->gfx_cs, si_set_context_reg_array);
 
       /* TODO: Gfx11 fails GLCTS if we don't re-emit the preamble at the beginning of every IB. */
+      /* TODO: Skipping this may have made register shadowing slower on Gfx11. */
       if (sctx->gfx_level < GFX11) {
          si_pm4_emit_commands(sctx, sctx->cs_preamble_state);
 

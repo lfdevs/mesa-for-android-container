@@ -82,8 +82,8 @@ d3d12_make_passthrough_gs(struct d3d12_context *ctx, struct d3d12_gs_variant_key
    nir = b.shader;
    nir->info.inputs_read = varyings;
    nir->info.outputs_written = varyings;
-   nir->info.gs.input_primitive = GL_POINTS;
-   nir->info.gs.output_primitive = GL_POINTS;
+   nir->info.gs.input_primitive = MESA_PRIM_POINTS;
+   nir->info.gs.output_primitive = MESA_PRIM_POINTS;
    nir->info.gs.vertices_in = 1;
    nir->info.gs.vertices_out = 1;
    nir->info.gs.invocations = 1;
@@ -148,8 +148,8 @@ struct emit_primitives_context
    nir_builder b;
 
    unsigned num_vars;
-   nir_variable *in[VARYING_SLOT_MAX];
-   nir_variable *out[VARYING_SLOT_MAX];
+   nir_variable *in[VARYING_SLOT_MAX * 4];
+   nir_variable *out[VARYING_SLOT_MAX * 4];
    nir_variable *front_facing_var;
 
    nir_loop *loop;
@@ -163,7 +163,7 @@ static bool
 d3d12_begin_emit_primitives_gs(struct emit_primitives_context *emit_ctx,
                                struct d3d12_context *ctx,
                                struct d3d12_gs_variant_key *key,
-                               uint16_t output_primitive,
+                               enum mesa_prim output_primitive,
                                unsigned vertices_out)
 {
    nir_builder *b = &emit_ctx->b;
@@ -180,7 +180,7 @@ d3d12_begin_emit_primitives_gs(struct emit_primitives_context *emit_ctx,
    nir_shader *nir = b->shader;
    nir->info.inputs_read = varyings;
    nir->info.outputs_written = varyings;
-   nir->info.gs.input_primitive = GL_TRIANGLES;
+   nir->info.gs.input_primitive = MESA_PRIM_TRIANGLES;
    nir->info.gs.output_primitive = output_primitive;
    nir->info.gs.vertices_in = 3;
    nir->info.gs.vertices_out = vertices_out;
@@ -340,7 +340,7 @@ d3d12_emit_points(struct d3d12_context *ctx, struct d3d12_gs_variant_key *key)
    struct emit_primitives_context emit_ctx = {0};
    nir_builder *b = &emit_ctx.b;
 
-   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, GL_POINTS, 3);
+   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, MESA_PRIM_POINTS, 3);
 
    /**
     *  if (edge_flag)
@@ -380,7 +380,7 @@ d3d12_emit_lines(struct d3d12_context *ctx, struct d3d12_gs_variant_key *key)
    struct emit_primitives_context emit_ctx = {0};
    nir_builder *b = &emit_ctx.b;
 
-   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, GL_LINE_STRIP, 6);
+   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, MESA_PRIM_LINE_STRIP, 6);
 
    nir_def *next_index = nir_imod_imm(b, nir_iadd_imm(b, emit_ctx.loop_index, 1), 3);
 
@@ -420,7 +420,7 @@ d3d12_emit_triangles(struct d3d12_context *ctx, struct d3d12_gs_variant_key *key
    struct emit_primitives_context emit_ctx = {0};
    nir_builder *b = &emit_ctx.b;
 
-   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, GL_TRIANGLE_STRIP, 3);
+   d3d12_begin_emit_primitives_gs(&emit_ctx, ctx, key, MESA_PRIM_TRIANGLE_STRIP, 3);
 
    /**
     *  [...] // Copy variables

@@ -90,7 +90,7 @@ struct pvr_srv_winsys {
    bool rgn_hdr_heap_present;
    struct pvr_srv_winsys_heap rgn_hdr_heap;
 
-   /* vma's for reserved memory regions */
+   /* vma's for carveout memory regions */
    struct pvr_winsys_vma *pds_vma;
    struct pvr_winsys_vma *usc_vma;
    struct pvr_winsys_vma *general_vma;

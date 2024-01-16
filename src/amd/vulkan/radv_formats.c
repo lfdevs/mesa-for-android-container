@@ -1091,6 +1091,10 @@ radv_get_modifier_flags(struct radv_physical_device *dev, VkFormat format, uint6
    features &= ~VK_FORMAT_FEATURE_2_DISJOINT_BIT;
 
    if (ac_modifier_has_dcc(modifier)) {
+      /* We don't enable DCC for multi-planar formats */
+      if (vk_format_get_plane_count(format) > 1)
+         return 0;
+
       /* Only disable support for STORAGE_IMAGE on modifiers that
        * do not support DCC image stores.
        */
@@ -1136,16 +1140,11 @@ radv_list_drm_format_modifiers(struct radv_physical_device *dev, VkFormat format
 
    for (unsigned i = 0; i < mod_count; ++i) {
       VkFormatFeatureFlags2 features = radv_get_modifier_flags(dev, format, mods[i], format_props);
-      unsigned planes = vk_format_get_plane_count(format);
-      if (planes == 1) {
-         if (ac_modifier_has_dcc_retile(mods[i]))
-            planes = 3;
-         else if (ac_modifier_has_dcc(mods[i]))
-            planes = 2;
-      }
-
       if (!features)
          continue;
+
+      unsigned planes =
+         vk_format_get_plane_count(format) + ac_modifier_has_dcc(mods[i]) + ac_modifier_has_dcc_retile(mods[i]);
 
       vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out, out_props)
       {
@@ -1192,16 +1191,11 @@ radv_list_drm_format_modifiers_2(struct radv_physical_device *dev, VkFormat form
 
    for (unsigned i = 0; i < mod_count; ++i) {
       VkFormatFeatureFlags2 features = radv_get_modifier_flags(dev, format, mods[i], format_props);
-      unsigned planes = vk_format_get_plane_count(format);
-      if (planes == 1) {
-         if (ac_modifier_has_dcc_retile(mods[i]))
-            planes = 3;
-         else if (ac_modifier_has_dcc(mods[i]))
-            planes = 2;
-      }
-
       if (!features)
          continue;
+
+      unsigned planes =
+         vk_format_get_plane_count(format) + ac_modifier_has_dcc(mods[i]) + ac_modifier_has_dcc_retile(mods[i]);
 
       vk_outarray_append_typed(VkDrmFormatModifierProperties2EXT, &out, out_props)
       {
@@ -1620,6 +1614,7 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
    struct VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
    VkTextureLODGatherFormatPropertiesAMD *texture_lod_props = NULL;
+   VkImageCompressionPropertiesEXT *image_compression_props = NULL;
    VkResult result;
    VkFormat format = radv_select_android_external_format(base_info->pNext, base_info->format);
 
@@ -1652,6 +1647,9 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
          break;
       case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
          texture_lod_props = (void *)s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
+         image_compression_props = (void *)s;
          break;
       default:
          break;
@@ -1703,6 +1701,21 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
          texture_lod_props->supportsTextureGatherLODBiasAMD = true;
       } else {
          texture_lod_props->supportsTextureGatherLODBiasAMD = !vk_format_is_int(format);
+      }
+   }
+
+   if (image_compression_props) {
+      image_compression_props->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+
+      if (vk_format_is_depth_or_stencil(format)) {
+         image_compression_props->imageCompressionFlags = (physical_device->instance->debug_flags & RADV_DEBUG_NO_HIZ)
+                                                             ? VK_IMAGE_COMPRESSION_DISABLED_EXT
+                                                             : VK_IMAGE_COMPRESSION_DEFAULT_EXT;
+      } else {
+         image_compression_props->imageCompressionFlags =
+            ((physical_device->instance->debug_flags & RADV_DEBUG_NO_DCC) || physical_device->rad_info.gfx_level < GFX8)
+               ? VK_IMAGE_COMPRESSION_DISABLED_EXT
+               : VK_IMAGE_COMPRESSION_DEFAULT_EXT;
       }
    }
 
@@ -1946,6 +1959,10 @@ radv_dcc_formats_compatible(enum amd_gfx_level gfx_level, VkFormat format1, VkFo
    unsigned size1, size2;
    int i;
 
+   /* All formats are compatible on GFX11. */
+   if (gfx_level >= GFX11)
+      return true;
+
    if (format1 == format2)
       return true;
 
@@ -1968,16 +1985,8 @@ radv_dcc_formats_compatible(enum amd_gfx_level gfx_level, VkFormat format1, VkFo
        (type1 == dcc_channel_float) != (type2 == dcc_channel_float) || size1 != size2)
       return false;
 
-   if (type1 != type2) {
-      /* FIXME: All formats should be compatible on GFX11 but for some reasons DCC with signedness
-       * reinterpretation doesn't work as expected, like R8_UINT<->R8_SINT. Note that disabling
-       * fast-clears doesn't help.
-       */
-      if (gfx_level >= GFX11)
-         return false;
-
+   if (type1 != type2)
       *sign_reinterpret = true;
-   }
 
    return true;
 }

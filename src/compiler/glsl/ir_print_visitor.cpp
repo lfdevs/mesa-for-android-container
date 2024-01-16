@@ -49,11 +49,11 @@ ir_instruction::fprint(FILE *f) const
 static void
 glsl_print_type(FILE *f, const glsl_type *t)
 {
-   if (t->is_array()) {
+   if (glsl_type_is_array(t)) {
       fprintf(f, "(array ");
       glsl_print_type(f, t->fields.array);
       fprintf(f, " %u)", t->length);
-   } else if (t->is_struct() && !is_gl_identifier(glsl_get_type_name(t))) {
+   } else if (glsl_type_is_struct(t) && !is_gl_identifier(glsl_get_type_name(t))) {
       fprintf(f, "%s@%p", glsl_get_type_name(t), (void *) t);
    } else {
       fprintf(f, "%s", glsl_get_type_name(t));
@@ -500,17 +500,17 @@ void ir_print_visitor::visit(ir_constant *ir)
    glsl_print_type(f, ir->type);
    fprintf(f, " (");
 
-   if (ir->type->is_array()) {
+   if (glsl_type_is_array(ir->type)) {
       for (unsigned i = 0; i < ir->type->length; i++)
 	 ir->get_array_element(i)->accept(this);
-   } else if (ir->type->is_struct()) {
+   } else if (glsl_type_is_struct(ir->type)) {
       for (unsigned i = 0; i < ir->type->length; i++) {
 	 fprintf(f, "(%s ", ir->type->fields.structure[i].name);
          ir->get_record_field(i)->accept(this);
 	 fprintf(f, ")");
       }
    } else {
-      for (unsigned i = 0; i < ir->type->components(); i++) {
+      for (unsigned i = 0; i < glsl_get_components(ir->type); i++) {
 	 if (i != 0)
 	    fprintf(f, " ");
 	 switch (ir->type->base_type) {

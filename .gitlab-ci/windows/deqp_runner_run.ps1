@@ -27,7 +27,7 @@ deqp-runner suite --suite $($suite) `
 $jobs
 $deqpstatus = $?
 
-$template = "See https://$($env:CI_PROJECT_ROOT_NAMESPACE).pages.freedesktop.org/-/$($env:CI_PROJECT_NAME)/-/jobs/$($env:CI_JOB_ID)/artifacts/results/{{testcase}}.xml"
+$template = "See $($env:ARTIFACTS_BASE_URL)/results/{{testcase}}.xml"
 deqp-runner junit --testsuite dEQP --results "$($results)/failures.csv" --output "$($results)/junit.xml" --limit 50 --template $template
 Copy-Item -Path "C:\deqp\testlog.css" -Destination $($results)
 Copy-Item -Path "C:\deqp\testlog.xsl" -Destination $($results)

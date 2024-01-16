@@ -18,7 +18,7 @@ extern "C" {
 #define MME_TU104_DRAM_COUNT 0xc00
 #define MME_TU104_SCRATCH_COUNT 256
 
-enum PACKED mme_tu104_pred {
+enum ENUM_PACKED mme_tu104_pred {
    MME_TU104_PRED_UUUU,
    MME_TU104_PRED_TTTT,
    MME_TU104_PRED_FFFF,
@@ -39,7 +39,7 @@ enum PACKED mme_tu104_pred {
 
 const char *mme_tu104_pred_to_str(enum mme_tu104_pred pred);
 
-enum PACKED mme_tu104_reg {
+enum ENUM_PACKED mme_tu104_reg {
    MME_TU104_REG_R0,
    MME_TU104_REG_R1,
    MME_TU104_REG_R2,
@@ -73,7 +73,7 @@ enum PACKED mme_tu104_reg {
    MME_TU104_REG_VIRTUAL0 = 32,
 };
 
-enum PACKED mme_tu104_alu_op {
+enum ENUM_PACKED mme_tu104_alu_op {
    MME_TU104_ALU_OP_ADD,
    MME_TU104_ALU_OP_ADDC,
    MME_TU104_ALU_OP_SUB,
@@ -115,7 +115,7 @@ bool mme_tu104_alu_op_has_side_effects(enum mme_tu104_alu_op op);
 bool mme_tu104_alu_op_is_control_flow(enum mme_tu104_alu_op op);
 bool mme_tu104_alu_op_may_depend_on_mthd(enum mme_tu104_alu_op op);
 
-enum PACKED mme_tu104_out_op {
+enum ENUM_PACKED mme_tu104_out_op {
    MME_TU104_OUT_OP_NONE,
    MME_TU104_OUT_OP_ALU0,
    MME_TU104_OUT_OP_ALU1,

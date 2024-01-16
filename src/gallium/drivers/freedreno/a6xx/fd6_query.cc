@@ -267,16 +267,6 @@ record_timestamp(struct fd_ringbuffer *ring, struct fd_bo *bo, unsigned offset)
    OUT_RING(ring, 0x00000000);
 }
 
-static uint64_t
-ticks_to_ns(uint64_t ts)
-{
-   /* This is based on the 19.2MHz always-on rbbm timer.
-    *
-    * TODO we should probably query this value from kernel..
-    */
-   return ts * (1000000000 / 19200000);
-}
-
 static void
 time_elapsed_accumulate_result(struct fd_acc_query *aq,
                                struct fd_acc_query_sample *s,

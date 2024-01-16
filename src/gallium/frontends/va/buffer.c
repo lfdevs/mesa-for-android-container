@@ -195,9 +195,45 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
          return VA_STATUS_ERROR_INVALID_BUFFER;
 
       if (buf->type == VAEncCodedBufferType) {
-         ((VACodedBufferSegment*)buf->data)->buf = *pbuff;
-         ((VACodedBufferSegment*)buf->data)->size = buf->coded_size;
-         *pbuff = buf->data;
+         VACodedBufferSegment* curr_buf_ptr = (VACodedBufferSegment*) buf->data;
+
+         if ((buf->extended_metadata.present_metadata & PIPE_VIDEO_FEEDBACK_METADATA_TYPE_ENCODE_RESULT) &&
+             (buf->extended_metadata.encode_result & PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED)) {
+            curr_buf_ptr->status = VA_CODED_BUF_STATUS_BAD_BITSTREAM;
+            return VA_STATUS_ERROR_OPERATION_FAILED;
+         }
+
+         curr_buf_ptr->status = (buf->extended_metadata.average_frame_qp & VA_CODED_BUF_STATUS_PICTURE_AVE_QP_MASK);
+         if (buf->extended_metadata.encode_result & PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_MAX_FRAME_SIZE_OVERFLOW)
+            curr_buf_ptr->status |= VA_CODED_BUF_STATUS_FRAME_SIZE_OVERFLOW;
+
+         if ((buf->extended_metadata.present_metadata & PIPE_VIDEO_FEEDBACK_METADATA_TYPE_CODEC_UNIT_LOCATION) == 0) {
+            curr_buf_ptr->buf = *pbuff;
+            curr_buf_ptr->size = buf->coded_size;
+            *pbuff = buf->data;
+         } else {
+            uint8_t* compressed_bitstream_data = *pbuff;
+            *pbuff = buf->data;
+
+            for (size_t i = 0; i < buf->extended_metadata.codec_unit_metadata_count - 1; i++) {
+               curr_buf_ptr->next = CALLOC(1, sizeof(VACodedBufferSegment));
+               if (!curr_buf_ptr->next)
+                  return VA_STATUS_ERROR_ALLOCATION_FAILED;
+               curr_buf_ptr = curr_buf_ptr->next;
+            }
+            curr_buf_ptr->next = NULL;
+
+            curr_buf_ptr = buf->data;
+            for (size_t i = 0; i < buf->extended_metadata.codec_unit_metadata_count; i++) {
+               curr_buf_ptr->status |= VA_CODED_BUF_STATUS_SINGLE_NALU;
+               curr_buf_ptr->size = buf->extended_metadata.codec_unit_metadata[i].size;
+               curr_buf_ptr->buf = compressed_bitstream_data + buf->extended_metadata.codec_unit_metadata[i].offset;
+               if (buf->extended_metadata.codec_unit_metadata[i].flags & PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_MAX_SLICE_SIZE_OVERFLOW)
+                  curr_buf_ptr->status |= VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK;
+
+               curr_buf_ptr = curr_buf_ptr->next;
+            }
+         }
       }
    } else {
       mtx_unlock(&drv->mutex);
@@ -278,7 +314,17 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
          buf->derived_image_buffer->destroy(buf->derived_image_buffer);
    }
 
-   FREE(buf->data);
+   if (buf->type == VAEncCodedBufferType) {
+      VACodedBufferSegment* node = buf->data;
+      while(!node) {
+         VACodedBufferSegment* next = (VACodedBufferSegment*) node->next;
+         FREE(node);
+         node = next;
+      }
+   } else {
+      FREE(buf->data);
+   }
+
    FREE(buf);
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, buf_id);
    mtx_unlock(&drv->mutex);
@@ -534,7 +580,7 @@ vlVaSyncBuffer(VADriverContextP ctx, VABufferID buf_id, uint64_t timeout_ns)
    vlVaSurface* surf = handle_table_get(drv->htab, buf->associated_encode_input_surf);
 
    if ((buf->feedback) && (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)) {
-      context->decoder->get_feedback(context->decoder, buf->feedback, &(buf->coded_size));
+      context->decoder->get_feedback(context->decoder, buf->feedback, &(buf->coded_size), &(buf->extended_metadata));
       buf->feedback = NULL;
       /* Also mark the associated render target (encode source texture) surface as done
          in case they call vaSyncSurface on it to avoid getting the feedback twice*/

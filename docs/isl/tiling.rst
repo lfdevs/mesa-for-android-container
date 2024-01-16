@@ -73,13 +73,16 @@ ISL Representation
 ------------------
 
 The structure of any given tiling format is represented by ISL using the
-:cpp:enum:`isl_tiling` enum and the :cpp:struct:`isl_tile_info` structure:
+:c:enum:`isl_tiling` enum and the :c:struct:`isl_tile_info` structure:
 
-.. doxygenenum:: isl_tiling
+.. c:autoenum:: isl_tiling
+   :file: src/intel/isl/isl.h
+   :members:
 
-.. doxygenfunction:: isl_tiling_get_info
+.. c:autofunction:: isl_tiling_get_info
+   :file: src/intel/isl/isl.c
 
-.. doxygenstruct:: isl_tile_info
+.. c:autostruct:: isl_tile_info
    :members:
 
 The ``isl_tile_info`` structure has two different sizes for a tile: a logical
@@ -97,11 +100,11 @@ image in bytes given a width and height in elements is as follows:
    uint32_t size = height_tl * tile_info.phys_extent_el.h * row_pitch;
 
 It is very important to note that there is no direct conversion between
-:cpp:member:`isl_tile_info::logical_extent_el` and
-:cpp:member:`isl_tile_info::phys_extent_B`.  It is tempting to assume that the
+:c:member:`isl_tile_info.logical_extent_el` and
+:c:member:`isl_tile_info.phys_extent_B`.  It is tempting to assume that the
 logical and physical heights are the same and simply divide the width of
-:cpp:member:`isl_tile_info::phys_extent_B` by the size of the format (which is
-what the PRM does) to get :cpp:member:`isl_tile_info::logical_extent_el` but
+:c:member:`isl_tile_info.phys_extent_B` by the size of the format (which is
+what the PRM does) to get :c:member:`isl_tile_info.logical_extent_el` but
 this is not at all correct. Some tiling formats have logical and physical
 heights that differ and so no such calculation will work in general.  The
 easiest case study for this is W-tiling. From the Sky Lake PRM Vol. 2d,
@@ -302,10 +305,10 @@ the tile are given by the table below:
 =========================================== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== ===========
  Tiling                                          11          10          9           8           7           6           5           4           3           2           1           0
 =========================================== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== ===========
-:cpp:enumerator:`isl_tiling::ISL_TILING_X`  :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_8` :math:`u_7` :math:`u_6` :math:`u_5` :math:`u_4` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
-:cpp:enumerator:`isl_tiling::ISL_TILING_Y0` :math:`u_6` :math:`u_5` :math:`u_4` :math:`v_4` :math:`v_3` :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
-:cpp:enumerator:`isl_tiling::ISL_TILING_W`  :math:`u_5` :math:`u_4` :math:`u_3` :math:`v_5` :math:`v_4` :math:`v_3` :math:`v_2` :math:`u_2` :math:`v_1` :math:`u_1` :math:`v_0` :math:`u_0`
-:cpp:enumerator:`isl_tiling::ISL_TILING_4`  :math:`v_4` :math:`v_3` :math:`u_6` :math:`v_2` :math:`u_5` :math:`u_4` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
+:c:enumerator:`isl_tiling.ISL_TILING_X`     :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_8` :math:`u_7` :math:`u_6` :math:`u_5` :math:`u_4` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
+:c:enumerator:`isl_tiling.ISL_TILING_Y0`    :math:`u_6` :math:`u_5` :math:`u_4` :math:`v_4` :math:`v_3` :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
+:c:enumerator:`isl_tiling.ISL_TILING_W`     :math:`u_5` :math:`u_4` :math:`u_3` :math:`v_5` :math:`v_4` :math:`v_3` :math:`v_2` :math:`u_2` :math:`v_1` :math:`u_1` :math:`v_0` :math:`u_0`
+:c:enumerator:`isl_tiling.ISL_TILING_4`     :math:`v_4` :math:`v_3` :math:`u_6` :math:`v_2` :math:`u_5` :math:`u_4` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
 =========================================== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== ===========
 
 Constructing the mapping this way makes a lot of sense when you think about

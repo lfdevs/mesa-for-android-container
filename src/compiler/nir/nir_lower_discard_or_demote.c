@@ -158,7 +158,7 @@ nir_lower_discard_or_demote(nir_shader *shader,
                                             NULL);
       shader->info.fs.uses_demote = true;
    } else if (!shader->info.fs.needs_quad_helper_invocations &&
-              !shader->info.fs.needs_all_helper_invocations &&
+              !shader->info.uses_wide_subgroup_intrinsics &&
               shader->info.fs.uses_demote) {
       /* If we don't need any helper invocations, convert demote to discard. */
       progress = nir_shader_intrinsics_pass(shader, lower_demote_to_discard,

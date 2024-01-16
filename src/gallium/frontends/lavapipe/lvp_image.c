@@ -42,7 +42,7 @@ lvp_image_create(VkDevice _device,
    if (image == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   image->alignment = 16;
+   image->alignment = 64;
    image->plane_count = vk_format_get_plane_count(pCreateInfo->format);
    image->disjoint = image->plane_count > 1 &&
                      (pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT);
@@ -230,10 +230,10 @@ lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv, VkF
    templ.u.tex.last_layer = iv->vk.base_array_layer + iv->vk.layer_count - 1;
    templ.u.tex.first_level = iv->vk.base_mip_level;
    templ.u.tex.last_level = iv->vk.base_mip_level + iv->vk.level_count - 1;
-   templ.swizzle_r = vk_conv_swizzle(iv->vk.swizzle.r);
-   templ.swizzle_g = vk_conv_swizzle(iv->vk.swizzle.g);
-   templ.swizzle_b = vk_conv_swizzle(iv->vk.swizzle.b);
-   templ.swizzle_a = vk_conv_swizzle(iv->vk.swizzle.a);
+   templ.swizzle_r = vk_conv_swizzle(iv->vk.swizzle.r, PIPE_SWIZZLE_X);
+   templ.swizzle_g = vk_conv_swizzle(iv->vk.swizzle.g, PIPE_SWIZZLE_Y);
+   templ.swizzle_b = vk_conv_swizzle(iv->vk.swizzle.b, PIPE_SWIZZLE_Z);
+   templ.swizzle_a = vk_conv_swizzle(iv->vk.swizzle.a, PIPE_SWIZZLE_W);
 
    /* depth stencil swizzles need special handling to pass VK CTS
     * but also for zink GL tests.
@@ -424,11 +424,11 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout(
    pLayout->size = plane->size;
 }
 
-VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout2EXT(
+VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout2KHR(
     VkDevice                       _device,
     VkImage                        _image,
-    const VkImageSubresource2EXT*  pSubresource,
-    VkSubresourceLayout2EXT*       pLayout)
+    const VkImageSubresource2KHR*  pSubresource,
+    VkSubresourceLayout2KHR*       pLayout)
 {
    lvp_GetImageSubresourceLayout(_device, _image, &pSubresource->imageSubresource, &pLayout->subresourceLayout);
    VkSubresourceHostMemcpySizeEXT *size = vk_find_struct(pLayout, SUBRESOURCE_HOST_MEMCPY_SIZE_EXT);
@@ -445,7 +445,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDeviceImageSubresourceLayoutKHR(
    /* technically supposed to be able to do this without creating an image, but that's harder */
    if (lvp_image_create(_device, pInfo->pCreateInfo, NULL, &image) != VK_SUCCESS)
       return;
-   lvp_GetImageSubresourceLayout2EXT(_device, image, pInfo->pSubresource, pLayout);
+   lvp_GetImageSubresourceLayout2KHR(_device, image, pInfo->pSubresource, pLayout);
    lvp_DestroyImage(_device, image, NULL);
 }
 

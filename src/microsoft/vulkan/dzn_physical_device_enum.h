@@ -26,11 +26,7 @@
 
 #include <vulkan/vulkan.h>
 
-#include <unknwn.h>
-
-#ifndef _WIN32
 #include <wsl/winadapter.h>
-#endif
 
 #include <stdbool.h>
 

@@ -177,13 +177,13 @@ component(fs_reg reg, unsigned idx)
  * contained in.  A register is by definition fully contained in the single
  * reg_space it belongs to, so two registers with different reg_space ids are
  * guaranteed not to overlap.  Most register files are a single reg_space of
- * its own, only the VGRF file is composed of multiple discrete address
- * spaces, one for each VGRF allocation.
+ * its own, only the VGRF and ATTR files are composed of multiple discrete
+ * address spaces, one for each allocation and input attribute respectively.
  */
 static inline uint32_t
 reg_space(const fs_reg &r)
 {
-   return r.file << 16 | (r.file == VGRF ? r.nr : 0);
+   return r.file << 16 | (r.file == VGRF || r.file == ATTR ? r.nr : 0);
 }
 
 /**
@@ -193,7 +193,7 @@ reg_space(const fs_reg &r)
 static inline unsigned
 reg_offset(const fs_reg &r)
 {
-   return (r.file == VGRF || r.file == IMM ? 0 : r.nr) *
+   return (r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
           (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
           (r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
 }
@@ -426,6 +426,7 @@ public:
 
    bool last_rt:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
+   bool keep_payload_trailing_zeros;
 
    tgl_swsb sched; /**< Scheduling info. */
 };
@@ -574,7 +575,8 @@ is_send(const fs_inst *inst)
 static inline bool
 is_unordered(const intel_device_info *devinfo, const fs_inst *inst)
 {
-   return is_send(inst) || inst->is_math() ||
+   return is_send(inst) || (devinfo->ver < 20 && inst->is_math()) ||
+          inst->opcode == BRW_OPCODE_DPAS ||
           (devinfo->has_64bit_float_via_math_pipe &&
            (get_exec_type(inst) == BRW_REGISTER_TYPE_DF ||
             inst->dst.type == BRW_REGISTER_TYPE_DF));

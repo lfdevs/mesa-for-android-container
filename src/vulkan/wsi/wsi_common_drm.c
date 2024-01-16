@@ -336,9 +336,9 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
          .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
          .pNext = &modifier_props_list,
       };
-      wsi->GetPhysicalDeviceFormatProperties2KHR(wsi->pdevice,
-                                                 pCreateInfo->imageFormat,
-                                                 &format_props);
+      wsi->GetPhysicalDeviceFormatProperties2(wsi->pdevice,
+                                              pCreateInfo->imageFormat,
+                                              &format_props);
       assert(modifier_props_list.drmFormatModifierCount > 0);
       info->modifier_props =
          vk_alloc(&chain->alloc,
@@ -349,9 +349,9 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
          goto fail_oom;
 
       modifier_props_list.pDrmFormatModifierProperties = info->modifier_props;
-      wsi->GetPhysicalDeviceFormatProperties2KHR(wsi->pdevice,
-                                                 pCreateInfo->imageFormat,
-                                                 &format_props);
+      wsi->GetPhysicalDeviceFormatProperties2(wsi->pdevice,
+                                              pCreateInfo->imageFormat,
+                                              &format_props);
 
       /* Call GetImageFormatProperties with every modifier and filter the list
        * down to those that we know work.

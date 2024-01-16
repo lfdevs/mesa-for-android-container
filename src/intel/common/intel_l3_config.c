@@ -156,6 +156,17 @@ static const struct intel_l3_config empty_l3_configs[] = {
 DECLARE_L3_LIST(empty);
 
 /**
+ * DG2 validated L3 configurations. \sa dg2_l3_configs.
+ */
+static const struct intel_l3_config dg2_l3_configs[] = {
+   /* SLM URB  ALL   DC   RO  IS   C   T  TC */
+   {{  0,  0,  128,   0,   0,  0,  0,  0,  0 }},
+   {{  0,  0,   96,   0,   0,  0,  0,  0, 32 }},
+   {{  0,  0,   64,   0,   0,  0,  0,  0, 64 }},
+};
+DECLARE_L3_LIST(dg2);
+
+/**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
  */
@@ -178,7 +189,13 @@ get_l3_list(const struct intel_device_info *devinfo)
       return &icl_l3_list;
 
    case 12:
-      if (devinfo->platform == INTEL_PLATFORM_DG1 || devinfo->verx10 == 125)
+      if (intel_device_info_is_dg2(devinfo) ||
+          intel_device_info_is_mtl(devinfo)) {
+         /* XXX - Some MTL configs may need special-casing here, but
+          *       we have no way to identify them right now.
+          */
+         return &dg2_l3_list;
+      } else if (devinfo->platform == INTEL_PLATFORM_DG1 || devinfo->verx10 == 125)
          return &empty_l3_list;
       else
          return &tgl_l3_list;
@@ -262,7 +279,7 @@ intel_get_default_l3_weights(const struct intel_device_info *devinfo,
    struct intel_l3_weights w = {{ 0 }};
 
    w.w[INTEL_L3P_SLM] = devinfo->ver < 11 && needs_slm;
-   w.w[INTEL_L3P_URB] = 1.0;
+   w.w[INTEL_L3P_URB] = devinfo->verx10 < 125 ? 1.0 : 0.0;
 
    if (devinfo->ver >= 8) {
       w.w[INTEL_L3P_ALL] = 1.0;
@@ -328,9 +345,13 @@ intel_get_l3_config(const struct intel_device_info *devinfo,
 static unsigned
 get_l3_way_size(const struct intel_device_info *devinfo)
 {
+   /*  Only MTL N/S/M have an 8KB way size, other MTL configs have 4KB
+    *  ways.  See BSpec 45319.
+    */
    const unsigned way_size_per_bank =
-      (devinfo->ver >= 9 && devinfo->l3_banks == 1) || devinfo->ver >= 11 ?
-      4 : 2;
+      devinfo->platform == INTEL_PLATFORM_MTL_U ? 8 :
+      (devinfo->ver >= 9 && devinfo->l3_banks == 1) || devinfo->ver >= 11 ? 4 :
+      2;
 
    assert(devinfo->l3_banks);
    return way_size_per_bank * devinfo->l3_banks;
@@ -350,14 +371,21 @@ unsigned
 intel_get_l3_config_urb_size(const struct intel_device_info *devinfo,
                              const struct intel_l3_config *cfg)
 {
+   unsigned urb_size;
+
    /* We don't have to program the URB size for some platforms. It's a fixed
     * value.
     */
    if (cfg == NULL) {
       ASSERTED const struct intel_l3_list *const list = get_l3_list(devinfo);
       assert(list->length == 0);
-      return devinfo->urb.size;
+      urb_size = 0;
+   } else {
+      urb_size = intel_get_l3_partition_size(devinfo, cfg, INTEL_L3P_URB);
    }
+
+   if (urb_size == 0)
+      return devinfo->urb.size;
 
    /* From the SKL "L3 Allocation and Programming" documentation:
     *
@@ -368,8 +396,18 @@ intel_get_l3_config_urb_size(const struct intel_device_info *devinfo,
     * only 1008KB of this will be used."
     */
    const unsigned max = (devinfo->ver == 9 ? 1008 : ~0);
-   return MIN2(max, cfg->n[INTEL_L3P_URB] * get_l3_way_size(devinfo)) /
-          get_urb_size_scale(devinfo);
+   return MIN2(max, urb_size) / get_urb_size_scale(devinfo);
+}
+
+/**
+ * Return the size of the specified L3 partition in KB.
+ */
+unsigned
+intel_get_l3_partition_size(const struct intel_device_info *devinfo,
+                            const struct intel_l3_config *cfg,
+                            enum intel_l3_partition i)
+{
+   return cfg->n[i] * get_l3_way_size(devinfo);
 }
 
 /**

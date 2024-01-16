@@ -235,11 +235,11 @@ optimize(nir_shader *nir)
       NIR_PASS(progress, nir, nir_opt_constant_folding);
 
       NIR_PASS(progress, nir, nir_opt_remove_phis);
-      bool trivial_continues = false;
-      NIR_PASS(trivial_continues, nir, nir_opt_trivial_continues);
-      progress |= trivial_continues;
-      if (trivial_continues) {
-         /* If nir_opt_trivial_continues makes progress, then we need to clean
+      bool loop = false;
+      NIR_PASS(loop, nir, nir_opt_loop);
+      progress |= loop;
+      if (loop) {
+         /* If nir_opt_loop makes progress, then we need to clean
           * things up if we want any hope of nir_opt_if or nir_opt_loop_unroll
           * to make progress.
           */
@@ -247,7 +247,7 @@ optimize(nir_shader *nir)
          NIR_PASS(progress, nir, nir_opt_dce);
          NIR_PASS(progress, nir, nir_opt_remove_phis);
       }
-      NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
+      NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
@@ -853,7 +853,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
 
    result = vk_graphics_pipeline_state_fill(&device->vk,
                                             &pipeline->graphics_state,
-                                            pCreateInfo, NULL, NULL, NULL,
+                                            pCreateInfo, NULL, 0, NULL, NULL,
                                             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                                             &pipeline->state_data);
    if (result != VK_SUCCESS)
@@ -1032,42 +1032,6 @@ lvp_graphics_pipeline_create(
    return VK_SUCCESS;
 }
 
-static VkPipelineCreateFlagBits2KHR
-get_pipeline_create_flags(const void *pCreateInfo)
-{
-   const VkBaseInStructure *base = pCreateInfo;
-   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
-      vk_find_struct_const(base->pNext, PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
-
-   if (flags2)
-      return flags2->flags;
-
-   switch (((VkBaseInStructure *)pCreateInfo)->sType) {
-   case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO: {
-      const VkGraphicsPipelineCreateInfo *create_info = (VkGraphicsPipelineCreateInfo *)pCreateInfo;
-      return create_info->flags;
-   }
-   case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO: {
-      const VkComputePipelineCreateInfo *create_info = (VkComputePipelineCreateInfo *)pCreateInfo;
-      return create_info->flags;
-   }
-   case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR: {
-      const VkRayTracingPipelineCreateInfoKHR *create_info = (VkRayTracingPipelineCreateInfoKHR *)pCreateInfo;
-      return create_info->flags;
-   }
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-   case VK_STRUCTURE_TYPE_EXECUTION_GRAPH_PIPELINE_CREATE_INFO_AMDX: {
-      const VkExecutionGraphPipelineCreateInfoAMDX *create_info = (VkExecutionGraphPipelineCreateInfoAMDX *)pCreateInfo;
-      return create_info->flags;
-   }
-#endif
-   default:
-      unreachable("invalid pCreateInfo pipeline struct");
-   }
-
-   return 0;
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateGraphicsPipelines(
    VkDevice                                    _device,
    VkPipelineCache                             pipelineCache,
@@ -1081,7 +1045,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateGraphicsPipelines(
 
    for (; i < count; i++) {
       VkResult r = VK_PIPELINE_COMPILE_REQUIRED;
-      VkPipelineCreateFlagBits2KHR flags = get_pipeline_create_flags(&pCreateInfos[i]);
+      VkPipelineCreateFlagBits2KHR flags = vk_graphics_pipeline_create_flags(&pCreateInfos[i]);
 
       if (!(flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
          r = lvp_graphics_pipeline_create(_device,
@@ -1183,7 +1147,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateComputePipelines(
 
    for (; i < count; i++) {
       VkResult r = VK_PIPELINE_COMPILE_REQUIRED;
-      VkPipelineCreateFlagBits2KHR flags = get_pipeline_create_flags(&pCreateInfos[i]);
+      VkPipelineCreateFlagBits2KHR flags = vk_compute_pipeline_create_flags(&pCreateInfos[i]);
 
       if (!(flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
          r = lvp_compute_pipeline_create(_device,
@@ -1491,7 +1455,7 @@ lvp_CreateExecutionGraphPipelinesAMDX(VkDevice device, VkPipelineCache pipelineC
    uint32_t i = 0;
 
    for (; i < createInfoCount; i++) {
-      VkPipelineCreateFlagBits2KHR flags = get_pipeline_create_flags(&pCreateInfos[i]);
+      VkPipelineCreateFlagBits2KHR flags = vk_graph_pipeline_create_flags(&pCreateInfos[i]);
 
       VkResult r = VK_PIPELINE_COMPILE_REQUIRED;
       if (!(flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))

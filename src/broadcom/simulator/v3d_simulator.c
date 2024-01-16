@@ -68,6 +68,8 @@
 #include "v3d_simulator.h"
 #include "v3d_simulator_wrapper.h"
 
+#include "broadcom/common/v3d_csd.h"
+
 /** Global (across GEM fds) state for the simulator */
 static struct v3d_simulator_state {
         simple_mtx_t mutex;
@@ -686,6 +688,296 @@ v3d_simulator_submit_csd_ioctl(int fd, struct drm_v3d_submit_csd *args)
         return ret;
 }
 
+static void
+v3d_rewrite_csd_job_wg_counts_from_indirect(int fd,
+					    struct drm_v3d_extension *ext,
+					    struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_indirect_csd *indirect_csd = (struct drm_v3d_indirect_csd *) ext;
+	uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+
+	assert(args->bo_handle_count == 1);
+	struct v3d_simulator_bo *bo = v3d_get_simulator_bo(file, bo_handles[0]);
+	struct v3d_simulator_bo *indirect = v3d_get_simulator_bo(file, indirect_csd->indirect);
+	struct drm_v3d_submit_csd *submit = &indirect_csd->submit;
+
+	uint32_t *wg_counts = (uint32_t *) (bo->gem_vaddr + indirect_csd->offset);
+
+	if (wg_counts[0] == 0 || wg_counts[1] == 0 || wg_counts[2] == 0)
+		return;
+
+	submit->cfg[0] = wg_counts[0] << V3D_CSD_CFG012_WG_COUNT_SHIFT;
+	submit->cfg[1] = wg_counts[1] << V3D_CSD_CFG012_WG_COUNT_SHIFT;
+	submit->cfg[2] = wg_counts[2] << V3D_CSD_CFG012_WG_COUNT_SHIFT;
+	submit->cfg[4] = DIV_ROUND_UP(indirect_csd->wg_size, 16) *
+			(wg_counts[0] * wg_counts[1] * wg_counts[2]) - 1;
+
+	for (int i = 0; i < 3; i++) {
+		/* 0xffffffff indicates that the uniform rewrite is not needed */
+		if (indirect_csd->wg_uniform_offsets[i] != 0xffffffff) {
+			uint32_t uniform_idx = indirect_csd->wg_uniform_offsets[i];
+			((uint32_t *) indirect->gem_vaddr)[uniform_idx] = wg_counts[i];
+		}
+	}
+
+	v3d_simulator_submit_csd_ioctl(fd, submit);
+}
+
+static void
+v3d_timestamp_query(int fd,
+		    struct drm_v3d_extension *ext,
+		    struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_timestamp_query *timestamp_query = (struct drm_v3d_timestamp_query *) ext;
+	uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+	struct v3d_simulator_bo *bo = v3d_get_simulator_bo(file, bo_handles[0]);
+	uint32_t *offsets = (void *)(uintptr_t) timestamp_query->offsets;
+	uint32_t *syncs = (void *)(uintptr_t) timestamp_query->syncs;
+	uint8_t *value_addr;
+
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+
+	for (uint32_t i = 0; i < timestamp_query->count; i++) {
+		value_addr = ((uint8_t *) bo->sim_vaddr) + offsets[i];
+		*((uint64_t*)value_addr) = (i == 0) ? t.tv_sec * 1000000000ull + t.tv_nsec : 0ull;
+	}
+
+	drmSyncobjSignal(fd, syncs, timestamp_query->count);
+}
+
+static void
+v3d_reset_timestamp_queries(int fd,
+			    struct drm_v3d_extension *ext,
+			    struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_reset_timestamp_query *reset = (struct drm_v3d_reset_timestamp_query *) ext;
+	uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+	struct v3d_simulator_bo *bo = v3d_get_simulator_bo(file, bo_handles[0]);
+	uint32_t *syncs = (void *)(uintptr_t) reset->syncs;
+	uint8_t *base_addr;
+
+	base_addr = ((uint8_t *) bo->sim_vaddr) + reset->offset;
+	memset(base_addr, 0, 8 * reset->count);
+
+	drmSyncobjReset(fd, syncs, reset->count);
+}
+
+static void
+write_to_buffer(void *dst, uint32_t idx, bool do_64bit, uint64_t value)
+{
+        if (do_64bit) {
+                uint64_t *dst64 = (uint64_t *) dst;
+                dst64[idx] = value;
+        } else {
+                uint32_t *dst32 = (uint32_t *) dst;
+                dst32[idx] = (uint32_t) value;
+        }
+}
+
+static void
+v3d_copy_query_results(int fd,
+		       struct drm_v3d_extension *ext,
+		       struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_copy_timestamp_query *copy = (struct drm_v3d_copy_timestamp_query *) ext;
+	uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+	struct v3d_simulator_bo *bo = v3d_get_simulator_bo(file, bo_handles[0]);
+	struct v3d_simulator_bo *timestamp = v3d_get_simulator_bo(file, bo_handles[1]);
+	uint32_t *offsets = (void *)(uintptr_t) copy->offsets;
+	uint32_t *syncs = (void *)(uintptr_t) copy->syncs;
+	bool available, write_result;
+	uint8_t *query_addr;
+	uint8_t *data;
+
+	data = ((uint8_t *) bo->sim_vaddr) + copy->offset;
+
+	for (uint32_t i = 0; i < copy->count; i++) {
+		available = (drmSyncobjWait(fd, &syncs[i], 1, 0, 0, NULL) == 0);
+
+		write_result = available || copy->do_partial;
+		if (write_result) {
+			query_addr = ((uint8_t *) timestamp->sim_vaddr) + offsets[i];
+			write_to_buffer(data, 0, copy->do_64bit, *((uint64_t *) query_addr));
+		}
+
+		if (copy->availability_bit)
+			write_to_buffer(data, 1, copy->do_64bit, available ? 1u : 0u);
+
+		data += copy->stride;
+	}
+}
+
+static void
+v3d_reset_performance_queries(int fd,
+			      struct drm_v3d_extension *ext,
+			      struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_reset_performance_query *reset = (struct drm_v3d_reset_performance_query *) ext;
+	uint64_t *kperfmon_ids = (void *)(uintptr_t) reset->kperfmon_ids;
+	uint32_t *syncs = (void *)(uintptr_t) reset->syncs;
+	struct v3d_simulator_perfmon *perfmon;
+
+	for (uint32_t i = 0; i < reset->count; i++) {
+		uint32_t *ids = (void *)(uintptr_t) kperfmon_ids[i];
+
+		for (uint32_t j = 0; j < reset->nperfmons; j++) {
+			mtx_lock(&sim_state.submit_lock);
+
+			/* Stop the perfmon if it is still active */
+			if (ids[j] == file->active_perfid)
+				v3d_simulator_perfmon_switch(fd, 0);
+
+			mtx_unlock(&sim_state.submit_lock);
+
+			perfmon = v3d_get_simulator_perfmon(fd, ids[j]);
+
+			if (!perfmon)
+				return;
+
+			memset(perfmon->values, 0, perfmon->ncounters * sizeof(uint64_t));
+		}
+	}
+
+	drmSyncobjReset(fd, syncs, reset->count);
+}
+
+static void
+v3d_write_performance_query_result(int fd,
+				   struct drm_v3d_copy_performance_query *copy,
+				   uint32_t *kperfmon_ids,
+				   void *data)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct v3d_simulator_perfmon *perfmon;
+	uint64_t counter_values[V3D_PERFCNT_NUM];
+
+	for (uint32_t i = 0; i < copy->nperfmons; i++) {
+		mtx_lock(&sim_state.submit_lock);
+
+		/* Stop the perfmon if it is still active */
+		if (kperfmon_ids[i] == file->active_perfid)
+			v3d_simulator_perfmon_switch(fd, 0);
+
+		mtx_unlock(&sim_state.submit_lock);
+
+		perfmon = v3d_get_simulator_perfmon(fd, kperfmon_ids[i]);
+
+		if (!perfmon)
+			return;
+
+		memcpy(&counter_values[i * DRM_V3D_MAX_PERF_COUNTERS], perfmon->values,
+		       perfmon->ncounters * sizeof(uint64_t));
+	}
+
+	for (uint32_t i = 0; i < copy->ncounters; i++)
+		write_to_buffer(data, i, copy->do_64bit, counter_values[i]);
+}
+
+static void
+v3d_copy_performance_query(int fd,
+			   struct drm_v3d_extension *ext,
+			   struct drm_v3d_submit_cpu *args)
+{
+	struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+	struct drm_v3d_copy_performance_query *copy = (struct drm_v3d_copy_performance_query *) ext;
+	uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+	struct v3d_simulator_bo *bo = v3d_get_simulator_bo(file, bo_handles[0]);
+	uint64_t *kperfmon_ids = (void *)(uintptr_t) copy->kperfmon_ids;
+	uint32_t *syncs = (void *)(uintptr_t) copy->syncs;
+	bool available, write_result;
+	uint8_t *data;
+
+	data = ((uint8_t *) bo->sim_vaddr) + copy->offset;
+
+	for (uint32_t i = 0; i < copy->count; i++) {
+		/* Although we don't have in_syncs implemented in the simulator,
+		 * we don't need to wait for the availability of the syncobjs,
+		 * as they are signaled by CL and CSD jobs, which are serialized
+		 * by the simulator.
+		 */
+		available = (drmSyncobjWait(fd, &syncs[i], 1, 0, 0, NULL) == 0);
+
+		write_result = available || copy->do_partial;
+		if (write_result) {
+			v3d_write_performance_query_result(fd, copy,
+							   (void *)(uintptr_t) kperfmon_ids[i],
+							   data);
+		}
+
+		if (copy->availability_bit) {
+			write_to_buffer(data, copy->ncounters, copy->do_64bit,
+					available ? 1u : 0u);
+		}
+
+		data += copy->stride;
+	}
+}
+
+static int
+v3d_simulator_submit_cpu_ioctl(int fd, struct drm_v3d_submit_cpu *args)
+{
+	struct drm_v3d_extension *ext = (void *)(uintptr_t)args->extensions;
+        struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+        uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+        int ret = 0;
+
+        for (int i = 0; i < args->bo_handle_count; i++)
+                v3d_simulator_copy_in_handle(file, bo_handles[i]);
+
+	while (ext) {
+		switch (ext->id) {
+		case DRM_V3D_EXT_ID_MULTI_SYNC:
+			/* As the simulator serializes the jobs, we don't need
+			 * to handle the in_syncs here. The out_syncs are handled
+			 * by the end of the ioctl in v3d_simulator_process_post_deps().
+			 */
+			break;
+		case DRM_V3D_EXT_ID_CPU_INDIRECT_CSD:
+			v3d_rewrite_csd_job_wg_counts_from_indirect(fd, ext, args);
+			break;
+		case DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY:
+			v3d_timestamp_query(fd, ext, args);
+			break;
+		case DRM_V3D_EXT_ID_CPU_RESET_TIMESTAMP_QUERY:
+			v3d_reset_timestamp_queries(fd, ext, args);
+			break;
+		case DRM_V3D_EXT_ID_CPU_COPY_TIMESTAMP_QUERY:
+			v3d_copy_query_results(fd, ext, args);
+			break;
+		case DRM_V3D_EXT_ID_CPU_RESET_PERFORMANCE_QUERY:
+			v3d_reset_performance_queries(fd, ext, args);
+			break;
+		case DRM_V3D_EXT_ID_CPU_COPY_PERFORMANCE_QUERY:
+			v3d_copy_performance_query(fd, ext, args);
+			break;
+		default:
+			fprintf(stderr, "Unknown CPU job 0x%08x\n", (int)ext->id);
+			break;
+		}
+
+                ext = (void *)(uintptr_t) ext->next;
+	}
+
+        for (int i = 0; i < args->bo_handle_count; i++)
+                v3d_simulator_copy_out_handle(file, bo_handles[i]);
+
+        if (ret < 0)
+                return ret;
+
+        if (args->flags & DRM_V3D_SUBMIT_EXTENSION) {
+                ext = (void *)(uintptr_t)args->extensions;
+                ret = v3d_simulator_process_post_deps(fd, ext);
+        }
+
+        return ret;
+}
+
 static int
 v3d_simulator_perfmon_create_ioctl(int fd, struct drm_v3d_perfmon_create *args)
 {
@@ -791,6 +1083,9 @@ v3d_simulator_ioctl(int fd, unsigned long request, void *args)
 
         case DRM_IOCTL_V3D_SUBMIT_CSD:
                 return v3d_simulator_submit_csd_ioctl(fd, args);
+
+	case DRM_IOCTL_V3D_SUBMIT_CPU:
+		return v3d_simulator_submit_cpu_ioctl(fd, args);
 
         case DRM_IOCTL_V3D_PERFMON_CREATE:
                 return v3d_simulator_perfmon_create_ioctl(fd, args);

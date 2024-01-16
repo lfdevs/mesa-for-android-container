@@ -183,18 +183,18 @@ VK_DEFINE_HANDLE_CASTS(vk_instance, base, VkInstance,
  * Along with initializing the data structures in `vk_instance`, this function
  * validates the Vulkan version number provided by the client and checks that
  * every extension specified by
- * `VkInstanceCreateInfo::ppEnabledExtensionNames` is actually supported by
+ * ``VkInstanceCreateInfo::ppEnabledExtensionNames`` is actually supported by
  * the implementation and returns `VK_ERROR_EXTENSION_NOT_PRESENT` if an
  * unsupported extension is requested.
  *
- * @param[out] instance             The instance to initialize
- * @param[in]  supported_extensions Table of all instance extensions supported
- *                                  by this instance
- * @param[in]  dispatch_table       Instance-level dispatch table
- * @param[in]  pCreateInfo          VkInstanceCreateInfo pointer passed to
- *                                  `vkCreateInstance()`
- * @param[in]  alloc                Allocation callbacks used to create this
- *                                  instance; must not be `NULL`
+ * :param instance:             |out| The instance to initialize
+ * :param supported_extensions: |in|  Table of all instance extensions supported
+ *                                    by this instance
+ * :param dispatch_table:       |in|  Instance-level dispatch table
+ * :param pCreateInfo:          |in|  VkInstanceCreateInfo pointer passed to
+ *                                    `vkCreateInstance()`
+ * :param alloc:                |in|  Allocation callbacks used to create this
+ *                                    instance; must not be `NULL`
  */
 VkResult MUST_CHECK
 vk_instance_init(struct vk_instance *instance,
@@ -205,7 +205,7 @@ vk_instance_init(struct vk_instance *instance,
 
 /** Tears down a vk_instance
  *
- * @param[out] instance             The instance to tear down
+ * :param instance:     |out| The instance to tear down
  */
 void
 vk_instance_finish(struct vk_instance *instance);
@@ -242,6 +242,9 @@ vk_instance_get_physical_device_proc_addr(const struct vk_instance *instance,
 void
 vk_instance_add_driver_trace_modes(struct vk_instance *instance,
                                    const struct debug_control *modes);
+
+uint32_t
+vk_get_negotiated_icd_version(void);
 
 #ifdef __cplusplus
 }

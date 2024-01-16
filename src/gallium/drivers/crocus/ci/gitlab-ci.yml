@@ -4,6 +4,7 @@ include:
 crocus-hsw:
   extends:
     - .anholt-hsw-test
+    - .test-gl
     - .deqp-test
     - .crocus-manual-rules
   variables:
@@ -14,9 +15,10 @@ crocus-hsw:
 crocus-hsw-traces:
   extends:
     - .anholt-hsw-test
+    - .test-gl
     - .piglit-traces-test
     - .crocus-manual-rules
   variables:
     EGL_PLATFORM: "surfaceless"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-crocus.yml"
+    PIGLIT_TRACES_FILE: traces-crocus.yml
     PIGLIT_REPLAY_DEVICE_NAME: "crocus-hsw"

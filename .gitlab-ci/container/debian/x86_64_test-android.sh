@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # The relative paths in this file only become valid at runtime.
 # shellcheck disable=SC1091
-# shellcheck disable=SC2086 # we want word splitting
 
 set -e
 set -o xtrace
@@ -9,20 +8,22 @@ set -o xtrace
 export DEBIAN_FRONTEND=noninteractive
 
 # Ephemeral packages (installed for this script and removed again at the end)
-STABLE_EPHEMERAL=" \
-      ccache \
-      unzip \
-      dpkg-dev \
-      build-essential:native \
-      config-package-dev \
-      debhelper-compat \
-      cmake \
-      ninja-build \
-      "
+EPHEMERAL=(
+   build-essential:native
+   ccache
+   cmake
+   config-package-dev
+   debhelper-compat
+   dpkg-dev
+   ninja-build
+   unzip
+)
 
+DEPS=(
+    iproute2
+)
 apt-get install -y --no-remove --no-install-recommends \
-      $STABLE_EPHEMERAL \
-      iproute2
+      "${DEPS[@]}" "${EPHEMERAL[@]}"
 
 ############### Building ...
 
@@ -33,9 +34,9 @@ apt-get install -y --no-remove --no-install-recommends \
 # Fetch the NDK and extract just the toolchain we want.
 ndk=$ANDROID_NDK
 curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
-  -o $ndk.zip https://dl.google.com/android/repository/$ndk-linux.zip
-unzip -d / $ndk.zip
-rm $ndk.zip
+  -o "$ndk.zip" "https://dl.google.com/android/repository/$ndk-linux.zip"
+unzip -d / "$ndk.zip"
+rm "$ndk.zip"
 
 ############### Build dEQP runner
 
@@ -91,9 +92,6 @@ usermod -a -G kvm,cvdnetwork root
 
 rm -rf "/${ndk:?}"
 
-ccache --show-stats
+apt-get purge -y "${EPHEMERAL[@]}"
 
-apt-get purge -y \
-      $STABLE_EPHEMERAL
-
-apt-get autoremove -y --purge
+. .gitlab-ci/container/container_post_build.sh

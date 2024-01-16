@@ -490,8 +490,8 @@ get_register_queries_function(const struct intel_device_info *devinfo)
       return intel_oa_register_queries_acmgt1;
    case INTEL_PLATFORM_DG2_G12:
       return intel_oa_register_queries_acmgt2;
-   case INTEL_PLATFORM_MTL_M:
-   case INTEL_PLATFORM_MTL_P:
+   case INTEL_PLATFORM_MTL_U:
+   case INTEL_PLATFORM_MTL_H:
       if (intel_device_info_eu_total(devinfo) <= 64)
          return intel_oa_register_queries_mtlgt2;
       if (intel_device_info_eu_total(devinfo) <= 128)

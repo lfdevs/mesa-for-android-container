@@ -1322,7 +1322,7 @@ iris_compile_vs(struct iris_screen *screen,
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
                             num_system_values, num_cbufs);
 
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+   brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    brw_compute_vue_map(devinfo,
                        &vue_prog_data->vue_map, nir->info.outputs_written,
@@ -1504,7 +1504,7 @@ iris_compile_tcs(struct iris_screen *screen,
                        &num_system_values, &num_cbufs);
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
                             num_system_values, num_cbufs);
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+   brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_compile_tcs_params params = {
       .base = {
@@ -1664,7 +1664,7 @@ iris_compile_tes(struct iris_screen *screen,
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
                             num_system_values, num_cbufs);
 
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+   brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_vue_map input_vue_map;
    brw_compute_tess_vue_map(&input_vue_map, key->inputs_read,
@@ -1807,7 +1807,7 @@ iris_compile_gs(struct iris_screen *screen,
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
                             num_system_values, num_cbufs);
 
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+   brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    brw_compute_vue_map(devinfo,
                        &vue_prog_data->vue_map, nir->info.outputs_written,
@@ -1951,7 +1951,7 @@ iris_compile_fs(struct iris_screen *screen,
                             MAX2(key->nr_color_regions, null_rts),
                             num_system_values, num_cbufs);
 
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
+   brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
    struct brw_wm_prog_key brw_key = iris_to_brw_fs_key(screen, key);
 
@@ -1966,6 +1966,7 @@ iris_compile_fs(struct iris_screen *screen,
       .prog_data = fs_prog_data,
 
       .allow_spilling = true,
+      .max_polygons = UCHAR_MAX,
       .vue_map = vue_map,
    };
 

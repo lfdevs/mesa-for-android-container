@@ -10,65 +10,16 @@
 #include "vulkan/wsi/wsi_common.h"
 
 #include "util/build_id.h"
+#include "util/driconf.h"
 #include "util/mesa-sha1.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
 nvk_EnumerateInstanceVersion(uint32_t *pApiVersion)
 {
-   *pApiVersion = VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION);
-   return VK_SUCCESS;
-}
+   uint32_t version_override = vk_get_version_override();
+   *pApiVersion = version_override ? version_override :
+                  VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION);
 
-/* vk_icd.h does not declare this function, so we declare it here to
- * suppress Wmissing-prototypes.
- */
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion);
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it is
-    *         linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 4u);
    return VK_SUCCESS;
 }
 
@@ -111,6 +62,26 @@ nvk_EnumerateInstanceExtensionProperties(const char *pLayerName,
       &instance_extensions, pPropertyCount, pProperties);
 }
 
+static const driOptionDescription nvk_dri_options[] = {
+   DRI_CONF_SECTION_PERFORMANCE
+      DRI_CONF_ADAPTIVE_SYNC(true)
+      DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
+      DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
+      DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false)
+      DRI_CONF_VK_KHR_PRESENT_WAIT(false)
+      DRI_CONF_VK_XWAYLAND_WAIT_READY(true)
+   DRI_CONF_SECTION_END
+};
+
+static void
+nvk_init_dri_options(struct nvk_instance *instance)
+{
+   driParseOptionInfo(&instance->available_dri_options, nvk_dri_options, ARRAY_SIZE(nvk_dri_options));
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options, 0, "nvk", NULL, NULL,
+                       instance->vk.app_info.app_name, instance->vk.app_info.app_version,
+                       instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 nvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator,
@@ -139,6 +110,8 @@ nvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                              &dispatch_table, pCreateInfo, pAllocator);
    if (result != VK_SUCCESS)
       goto fail_alloc;
+
+   nvk_init_dri_options(instance);
 
    instance->vk.physical_devices.try_create_for_drm =
       nvk_create_drm_physical_device;

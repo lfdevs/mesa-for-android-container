@@ -222,6 +222,52 @@ lp_build_sample_texel_soa(struct lp_build_sample_context *bld,
    }
 }
 
+static LLVMValueRef
+get_first_level(struct gallivm_state *gallivm,
+                LLVMTypeRef resources_type,
+                LLVMValueRef resources_ptr,
+                unsigned texture_unit,
+                LLVMValueRef texture_unit_offset,
+                const struct lp_static_texture_state *static_state,
+                struct lp_sampler_dynamic_state *dynamic_state)
+{
+   if (static_state->level_zero_only)
+      return lp_build_const_int32(gallivm, 0);
+   else {
+      LLVMValueRef first_level;
+
+      first_level = dynamic_state->first_level(gallivm, resources_type,
+                                               resources_ptr, texture_unit,
+                                               texture_unit_offset);
+      first_level = LLVMBuildZExt(gallivm->builder, first_level,
+                                  LLVMInt32TypeInContext(gallivm->context), "");
+      return first_level;
+   }
+}
+
+
+static LLVMValueRef
+get_last_level(struct gallivm_state *gallivm,
+               LLVMTypeRef resources_type,
+               LLVMValueRef resources_ptr,
+               unsigned texture_unit,
+               LLVMValueRef texture_unit_offset,
+               const struct lp_static_texture_state *static_state,
+               struct lp_sampler_dynamic_state *dynamic_state)
+{
+   if (static_state->level_zero_only)
+      return lp_build_const_int32(gallivm, 0);
+   else {
+      LLVMValueRef last_level;
+
+      last_level = dynamic_state->last_level(gallivm, resources_type,
+                                             resources_ptr, texture_unit,
+                                             texture_unit_offset);
+      last_level = LLVMBuildZExt(gallivm->builder, last_level,
+                                 LLVMInt32TypeInContext(gallivm->context), "");
+      return last_level;
+   }
+}
 
 /**
  * Helper to compute the mirror function for the PIPE_WRAP_MIRROR_REPEAT mode.
@@ -2020,7 +2066,8 @@ lp_build_layer_coord(struct lp_build_sample_context *bld,
 
    num_layers = bld->dynamic_state->depth(bld->gallivm, bld->resources_type,
                                           bld->resources_ptr, texture_unit, NULL);
-
+   num_layers = LLVMBuildZExt(bld->gallivm->builder, num_layers,
+                              bld->int_bld.elem_type, "");
    if (out_of_bounds) {
       LLVMValueRef out1, out;
       assert(!is_cube_array);
@@ -2541,14 +2588,18 @@ lp_build_sample_common(struct lp_build_sample_context *bld,
           mip_filter, min_filter, mag_filter);
    */
 
-   first_level = bld->dynamic_state->first_level(bld->gallivm,
-                                                 bld->resources_type,
-                                                 bld->resources_ptr,
-                                                 texture_index, NULL);
-   last_level = bld->dynamic_state->last_level(bld->gallivm,
-                                               bld->resources_type,
-                                               bld->resources_ptr,
-                                               texture_index, NULL);
+   first_level = get_first_level(bld->gallivm,
+                                 bld->resources_type,
+                                 bld->resources_ptr,
+                                 texture_index, NULL,
+                                 bld->static_texture_state,
+                                 bld->dynamic_state);
+   last_level = get_last_level(bld->gallivm,
+                               bld->resources_type,
+                               bld->resources_ptr,
+                               texture_index, NULL,
+                               bld->static_texture_state,
+                               bld->dynamic_state);
 
    /*
     * Choose cube face, recompute texcoords for the chosen face and
@@ -3106,10 +3157,15 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
    LLVMValueRef x = coords[0], y = coords[1], z = coords[2];
    LLVMValueRef width, height, depth, i, j;
    LLVMValueRef offset, out_of_bounds, out1;
-   LLVMValueRef first_level = bld->dynamic_state->first_level(bld->gallivm,
-                                                              bld->resources_type,
-                                                              bld->resources_ptr, texture_unit, NULL);
 
+   LLVMValueRef first_level;
+
+   first_level = get_first_level(bld->gallivm,
+                                 bld->resources_type,
+                                 bld->resources_ptr,
+                                 texture_unit, NULL,
+                                 bld->static_texture_state,
+                                 bld->dynamic_state);
    out_of_bounds = int_coord_bld->zero;
 
    if (explicit_lod && bld->static_texture_state->target != PIPE_BUFFER) {
@@ -3119,9 +3175,16 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
       } else {
          ilevel = explicit_lod;
       }
-      LLVMValueRef last_level = bld->dynamic_state->last_level(bld->gallivm,
-                                                               bld->resources_type,
-                                                               bld->resources_ptr, texture_unit, NULL);
+
+      LLVMValueRef last_level;
+
+      last_level = get_last_level(bld->gallivm,
+                                  bld->resources_type,
+                                  bld->resources_ptr,
+                                  texture_unit, NULL,
+                                  bld->static_texture_state,
+                                  bld->dynamic_state);
+
       first_level = lp_build_broadcast_scalar(&bld->leveli_bld, first_level);
       last_level = lp_build_broadcast_scalar(&bld->leveli_bld, last_level);
       lp_build_nearest_mip_level(bld,
@@ -3195,16 +3258,17 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
                             lp_build_get_mip_offsets(bld, ilevel));
    }
 
-   if (bld->fetch_ms) {
-      LLVMValueRef num_samples = bld->dynamic_state->num_samples(bld->gallivm,
-                                                                 bld->resources_type,
-                                                                 bld->resources_ptr,
-                                                                 texture_unit, NULL);
-      LLVMValueRef sample_stride = bld->dynamic_state->sample_stride(bld->gallivm,
-                                                                     bld->resources_type,
-                                                                     bld->resources_ptr,
-                                                                     texture_unit,
-                                                                     NULL);
+   if (bld->fetch_ms && bld->static_texture_state->level_zero_only) {
+      LLVMValueRef num_samples = bld->dynamic_state->last_level(bld->gallivm,
+                                                                bld->resources_type,
+                                                                bld->resources_ptr,
+                                                                texture_unit, NULL);
+      num_samples = LLVMBuildZExt(bld->gallivm->builder, num_samples,
+                                  bld->int_bld.elem_type, "");
+      LLVMValueRef sample_stride = lp_sample_load_mip_value(bld->gallivm,
+                                                            bld->mip_offsets_type,
+                                                            bld->mip_offsets,
+                                                            lp_build_const_int32(bld->gallivm, LP_JIT_TEXTURE_SAMPLE_STRIDE));
       lp_build_sample_ms_offset(int_coord_bld, ms_index, num_samples, sample_stride,
                                 &offset, &out_of_bounds);
    }
@@ -3614,6 +3678,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
          LLVMValueRef tex_height =
             dynamic_state->height(gallivm, resources_type,
                                   resources_ptr, texture_index, NULL);
+         tex_height = LLVMBuildZExt(gallivm->builder, tex_height,
+                                    bld.int_bld.elem_type, "");
          bld.int_size = LLVMBuildInsertElement(builder, bld.int_size,
                                                tex_height,
                                                LLVMConstInt(i32t, 1, 0), "");
@@ -3630,6 +3696,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
             LLVMValueRef tex_depth =
                dynamic_state->depth(gallivm, resources_type, resources_ptr,
                                     texture_index, NULL);
+            tex_depth = LLVMBuildZExt(gallivm->builder, tex_depth,
+                                      bld.int_bld.elem_type, "");
             bld.int_size = LLVMBuildInsertElement(builder, bld.int_size,
                                                   tex_depth,
                                                   LLVMConstInt(i32t, 2, 0), "");
@@ -4448,14 +4516,23 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
    lp_build_context_init(&bld_int_vec4, gallivm, lp_type_int_vec(32, 128));
 
    if (params->samples_only) {
+      LLVMValueRef num_samples;
+      if (params->ms && static_state->level_zero_only) {
+         /* multisample never has levels. */
+         num_samples = dynamic_state->last_level(gallivm,
+                                                 resources_type,
+                                                 resources_ptr,
+                                                 texture_unit,
+                                                 texture_unit_offset);
+         num_samples = LLVMBuildZExt(gallivm->builder, num_samples,
+                                     bld_int_vec4.elem_type, "");
+      } else {
+         num_samples = lp_build_const_int32(gallivm, 0);
+      }
       params->sizes_out[0] =
          lp_build_broadcast(gallivm,
                             lp_build_vec_type(gallivm, params->int_type),
-                            dynamic_state->num_samples(gallivm,
-                                                       resources_type,
-                                                       resources_ptr,
-                                                       texture_unit,
-                                                       texture_unit_offset));
+                            num_samples);
       return;
    }
 
@@ -4465,9 +4542,9 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
       /* FIXME: this needs to honor per-element lod */
       lod = LLVMBuildExtractElement(gallivm->builder, params->explicit_lod,
                                     lp_build_const_int32(gallivm, 0), "");
-      first_level = dynamic_state->first_level(gallivm, resources_type,
-                                               resources_ptr, texture_unit,
-                                               texture_unit_offset);
+      first_level = get_first_level(gallivm, resources_type, resources_ptr,
+                                    texture_unit, texture_unit_offset,
+                                    static_state, dynamic_state);
       level = LLVMBuildAdd(gallivm->builder, lod, first_level, "level");
       lod = lp_build_broadcast_scalar(&bld_int_vec4, level);
    } else {
@@ -4489,12 +4566,14 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
       res_bw = bw = 1;
    if (res_bh == bh)
       res_bh = bh = 1;
+
+   LLVMValueRef tex_width = dynamic_state->width(gallivm,
+                                                 resources_type,
+                                                 resources_ptr,
+                                                 texture_unit,
+                                                 texture_unit_offset);
    size = LLVMBuildInsertElement(gallivm->builder, size,
-                                 dynamic_state->width(gallivm,
-                                                      resources_type,
-                                                      resources_ptr,
-                                                      texture_unit,
-                                                      texture_unit_offset),
+                                 tex_width,
                                  lp_build_const_int32(gallivm, 0), "");
    tex_blocksize = LLVMBuildInsertElement(gallivm->builder, tex_blocksize,
                                           lp_build_const_int32(gallivm, res_bw),
@@ -4506,12 +4585,12 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                                            lp_build_const_int32(gallivm, bw),
                                            lp_build_const_int32(gallivm, 0), "");
    if (dims >= 2) {
-      size = LLVMBuildInsertElement(gallivm->builder, size,
-                                    dynamic_state->height(gallivm,
-                                                          resources_type,
-                                                          resources_ptr,
-                                                          texture_unit,
-                                                          texture_unit_offset),
+      LLVMValueRef tex_height =
+         dynamic_state->height(gallivm, resources_type,
+                               resources_ptr, texture_unit, texture_unit_offset);
+      tex_height = LLVMBuildZExt(gallivm->builder, tex_height,
+                                 bld_int_vec4.elem_type, "");
+      size = LLVMBuildInsertElement(gallivm->builder, size, tex_height,
                                     lp_build_const_int32(gallivm, 1), "");
       tex_blocksize = LLVMBuildInsertElement(gallivm->builder, tex_blocksize,
                                              lp_build_const_int32(gallivm, res_bh),
@@ -4525,12 +4604,12 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
    }
 
    if (dims >= 3) {
-      size = LLVMBuildInsertElement(gallivm->builder, size,
-                                    dynamic_state->depth(gallivm,
-                                                         resources_type,
-                                                         resources_ptr,
-                                                         texture_unit,
-                                                         texture_unit_offset),
+      LLVMValueRef tex_depth  =
+         dynamic_state->depth(gallivm, resources_type,
+                              resources_ptr, texture_unit, texture_unit_offset);
+      tex_depth = LLVMBuildZExt(gallivm->builder, tex_depth,
+                                bld_int_vec4.elem_type, "");
+      size = LLVMBuildInsertElement(gallivm->builder, size, tex_depth,
                                     lp_build_const_int32(gallivm, 2), "");
       tex_blocksize = LLVMBuildInsertElement(gallivm->builder, tex_blocksize,
                                              lp_build_const_int32(gallivm, 1),
@@ -4551,6 +4630,8 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
       LLVMValueRef layers = dynamic_state->depth(gallivm, resources_type,
                                                  resources_ptr, texture_unit,
                                                  texture_unit_offset);
+      layers = LLVMBuildZExt(gallivm->builder, layers,
+                             bld_int_vec4.elem_type, "");
       if (target == PIPE_TEXTURE_CUBE_ARRAY) {
          /*
           * It looks like GL wants number of cubes, d3d10.1 has it undefined?
@@ -4575,9 +4656,9 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
 
       /* everything is scalar for now */
       lp_build_context_init(&leveli_bld, gallivm, lp_type_int_vec(32, 32));
-      last_level = dynamic_state->last_level(gallivm, resources_type,
-                                             resources_ptr, texture_unit,
-                                             texture_unit_offset);
+      last_level = get_last_level(gallivm, resources_type, resources_ptr,
+                                  texture_unit, texture_unit_offset,
+                                  static_state, dynamic_state);
 
       out = lp_build_cmp(&leveli_bld, PIPE_FUNC_LESS, level, first_level);
       out1 = lp_build_cmp(&leveli_bld, PIPE_FUNC_GREATER, level, last_level);
@@ -4619,10 +4700,9 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
          num_levels = bld_int_scalar.one;
       } else {
          LLVMValueRef last_level;
-
-         last_level = dynamic_state->last_level(gallivm, resources_type,
-                                                resources_ptr, texture_unit,
-                                                texture_unit_offset);
+         last_level = get_last_level(gallivm, resources_type, resources_ptr,
+                                     texture_unit, texture_unit_offset,
+                                     static_state, dynamic_state);
          num_levels = lp_build_sub(&bld_int_scalar, last_level, first_level);
          num_levels = lp_build_add(&bld_int_scalar, num_levels,
                                    bld_int_scalar.one);
@@ -4839,10 +4919,14 @@ lp_build_img_op_soa(const struct lp_static_texture_state *static_texture_state,
                                                params->resources_type,
                                                params->resources_ptr,
                                                params->image_index, NULL);
+   height = LLVMBuildZExt(gallivm->builder, height,
+                          int_coord_bld.elem_type, "");
    LLVMValueRef depth = dynamic_state->depth(gallivm,
                                              params->resources_type,
                                              params->resources_ptr,
                                              params->image_index, NULL);
+   depth = LLVMBuildZExt(gallivm->builder, depth,
+                         int_coord_bld.elem_type, "");
    bool layer_coord = has_layer_coord(target);
 
    width = lp_build_scale_view_dim(gallivm, width, res_format_desc->block.width,
@@ -4878,11 +4962,13 @@ lp_build_img_op_soa(const struct lp_static_texture_state *static_texture_state,
                           x, y, z, row_stride_vec, img_stride_vec,
                           &offset, &i, &j);
 
-   if (params->ms_index) {
-      LLVMValueRef num_samples = dynamic_state->num_samples(gallivm,
-                                                            params->resources_type,
-                                                            params->resources_ptr,
-                                                            params->image_index, NULL);
+   if (params->ms_index && static_texture_state->level_zero_only) {
+      LLVMValueRef num_samples = dynamic_state->last_level(gallivm,
+                                                           params->resources_type,
+                                                           params->resources_ptr,
+                                                           params->image_index, NULL);
+      num_samples = LLVMBuildZExt(gallivm->builder, num_samples,
+                                  int_coord_bld.elem_type, "");
       LLVMValueRef sample_stride = dynamic_state->sample_stride(gallivm,
                                                                 params->resources_type,
                                                                 params->resources_ptr,

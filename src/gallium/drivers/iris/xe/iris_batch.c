@@ -28,6 +28,7 @@
 
 #include "common/intel_gem.h"
 #include "common/intel_engine.h"
+#include "common/xe/intel_device_query.h"
 #include "common/xe/intel_engine.h"
 
 #include "drm-uapi/xe_drm.h"
@@ -62,6 +63,20 @@ iris_xe_init_batch(struct iris_bufmgr *bufmgr,
    if (!instances)
       return false;
 
+   enum drm_sched_priority requested_priority = iris_context_priority_to_drm_sched_priority(priority);
+   enum drm_sched_priority allowed_priority = DRM_SCHED_PRIORITY_MIN;
+   if (requested_priority > DRM_SCHED_PRIORITY_MIN) {
+      struct drm_xe_query_config *config;
+
+      config = xe_device_query_alloc_fetch(iris_bufmgr_get_fd(bufmgr),
+                                           DRM_XE_DEVICE_QUERY_CONFIG, NULL);
+      if (config)
+         allowed_priority = config->info[DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY];
+      free(config);
+   }
+   if (requested_priority < allowed_priority)
+      allowed_priority = requested_priority;
+
    uint32_t count = 0;
    for (uint32_t i = 0; i < engines_info->num_engines; i++) {
       const struct intel_engine_class_instance engine = engines_info->engines[i];
@@ -72,26 +87,23 @@ iris_xe_init_batch(struct iris_bufmgr *bufmgr,
       instances[count].engine_instance = engine.engine_instance;
       instances[count++].gt_id = engine.gt_id;
    }
-
+   struct drm_xe_ext_set_property ext = {
+      .base.name = DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY,
+      .property = DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY,
+      .value = allowed_priority,
+   };
    struct drm_xe_exec_queue_create create = {
          .instances = (uintptr_t)instances,
          .vm_id = iris_bufmgr_get_global_vm_id(bufmgr),
          .width = 1,
          .num_placements = count,
-   };
-   struct drm_xe_exec_queue_set_property exec_queue_property = {
-      .property = XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY,
-      .value = iris_context_priority_to_drm_sched_priority(priority),
+         .extensions = (uintptr_t)&ext,
    };
    int ret = intel_ioctl(iris_bufmgr_get_fd(bufmgr),
                          DRM_IOCTL_XE_EXEC_QUEUE_CREATE, &create);
    free(instances);
    if (ret)
       goto error_create_exec_queue;
-
-   exec_queue_property.exec_queue_id = create.exec_queue_id;
-   intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_XE_EXEC_QUEUE_SET_PROPERTY,
-               &exec_queue_property);
 
    /* TODO: handle "protected" context/exec_queue */
    *exec_queue_id = create.exec_queue_id;

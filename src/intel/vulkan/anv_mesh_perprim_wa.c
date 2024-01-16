@@ -150,7 +150,7 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
       provoking_vertex = 2;
 
    unsigned vertices_per_primitive =
-         num_mesh_vertices_per_primitive(nir->info.mesh.primitive_type);
+         mesa_vertices_per_prim(nir->info.mesh.primitive_type);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    nir_builder b = nir_builder_at(nir_after_impl(impl));

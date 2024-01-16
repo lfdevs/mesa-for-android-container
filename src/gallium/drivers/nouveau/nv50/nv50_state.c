@@ -27,7 +27,6 @@
 #include "util/u_transfer.h"
 #include "util/format_srgb.h"
 
-#include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
 #include "nir/tgsi_to_nir.h"
 

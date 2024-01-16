@@ -90,7 +90,7 @@ radv_descriptor_alignment(VkDescriptorType type)
 }
 
 static bool
-radv_mutable_descriptor_type_size_alignment(const VkMutableDescriptorTypeListVALVE *list, uint64_t *out_size,
+radv_mutable_descriptor_type_size_alignment(const VkMutableDescriptorTypeListEXT *list, uint64_t *out_size,
                                             uint64_t *out_align)
 {
    uint32_t max_size = 0;
@@ -167,7 +167,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
       /* Store block of offsets first, followed by the conversion descriptors (padded to the struct
        * alignment) */
       size += num_bindings * sizeof(uint32_t);
-      size = ALIGN(size, alignof(struct vk_ycbcr_conversion_state));
+      size = align_uintptr(size, alignof(struct vk_ycbcr_conversion_state));
       size += ycbcr_sampler_count * sizeof(struct vk_ycbcr_conversion_state);
    }
 
@@ -191,7 +191,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
       set_layout->ycbcr_sampler_offsets_offset = (char *)ycbcr_sampler_offsets - (char *)set_layout;
 
       uintptr_t first_ycbcr_sampler_offset = (uintptr_t)ycbcr_sampler_offsets + sizeof(uint32_t) * num_bindings;
-      first_ycbcr_sampler_offset = ALIGN(first_ycbcr_sampler_offset, alignof(struct vk_ycbcr_conversion_state));
+      first_ycbcr_sampler_offset = align_uintptr(first_ycbcr_sampler_offset, alignof(struct vk_ycbcr_conversion_state));
       ycbcr_samplers = (struct vk_ycbcr_conversion_state *)first_ycbcr_sampler_offset;
    } else
       set_layout->ycbcr_sampler_offsets_offset = 0;
@@ -910,10 +910,10 @@ radv_create_descriptor_pool(struct radv_device *device, const VkDescriptorPoolCr
    }
 
    if (bo_size) {
-      if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_VALVE)) {
+      if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT)) {
          enum radeon_bo_flag flags = RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT;
 
-         if (device->instance->zero_vram)
+         if (device->instance->drirc.zero_vram)
             flags |= RADEON_FLAG_ZERO_VRAM;
 
          VkResult result = device->ws->buffer_create(device->ws, bo_size, 32, RADEON_DOMAIN_VRAM, flags,

@@ -151,7 +151,7 @@ radv_amdgpu_winsys_bo_virtual_bind(struct radeon_winsys *_ws, struct radeon_wins
     * The issue still exists for non-global BO but it will be addressed later, once we are 100% it's
     * RADV fault (mostly because the solution looks more complicated).
     */
-   if (bo && bo->base.use_global_list) {
+   if (bo && radv_buffer_is_resident(&bo->base)) {
       bo = NULL;
       bo_offset = 0;
    }
@@ -514,7 +514,7 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
 
    bo->bo = buf_handle;
    bo->base.initial_domain = initial_domain;
-   bo->base.use_global_list = bo->base.is_local;
+   bo->base.use_global_list = false;
    bo->priority = priority;
 
    r = amdgpu_bo_export(buf_handle, amdgpu_bo_handle_type_kms, &bo->bo_handle);
@@ -1053,9 +1053,8 @@ radv_amdgpu_dump_bo_ranges(struct radeon_winsys *_ws, FILE *file)
       qsort(bos, ws->global_bo_list.count, sizeof(bos[0]), radv_amdgpu_bo_va_compare);
 
       for (i = 0; i < ws->global_bo_list.count; ++i) {
-         fprintf(file, "  VA=%.16llx-%.16llx, handle=%d%s\n", (long long)radv_amdgpu_canonicalize_va(bos[i]->base.va),
-                 (long long)radv_amdgpu_canonicalize_va(bos[i]->base.va + bos[i]->size), bos[i]->bo_handle,
-                 bos[i]->is_virtual ? " sparse" : "");
+         fprintf(file, "  VA=%.16llx-%.16llx, handle=%d\n", (long long)radv_amdgpu_canonicalize_va(bos[i]->base.va),
+                 (long long)radv_amdgpu_canonicalize_va(bos[i]->base.va + bos[i]->size), bos[i]->bo_handle);
       }
       free(bos);
       u_rwlock_rdunlock(&ws->global_bo_list.lock);

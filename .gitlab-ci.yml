@@ -1,24 +1,67 @@
+# Types of CI pipelines:
+# | pipeline name        | context   | description                                                 |
+# |----------------------|-----------|-------------------------------------------------------------|
+# | merge pipeline       | mesa/mesa | pipeline running for an MR; if it passes the MR gets merged |
+# | pre-merge pipeline   | mesa/mesa | same as above, except its status doesn't affect the MR      |
+# | post-merge pipeline  | mesa/mesa | pipeline immediately after merging                          |
+# | fork pipeline        | fork      | pipeline running in a user fork                             |
+# | scheduled pipeline   | mesa/mesa | nightly pipelines, running every morning at 4am UTC         |
+# | direct-push pipeline | mesa/mesa | when commits are pushed directly to mesa/mesa, bypassing Marge and its gating pipeline |
+#
+# Note that the release branches maintained by the release manager fall under
+# the "direct push" category.
+#
+# "context" indicates the permissions that the jobs get; notably, any
+# container created in mesa/mesa gets pushed immediately for everyone to use
+# as soon as the image tag change is merged.
+#
+# Merge pipelines contain all jobs that must pass before the MR can be merged.
+# Pre-merge pipelines contain the exact same jobs as merge pipelines.
+# Post-merge pipelines contain *only* the `pages` job that deploys the new
+# version of the website.
+# Fork pipelines contain everything.
+# Scheduled pipelines only contain the container+build jobs, and some extra
+# test jobs (typically "full" variants of pre-merge jobs that only run 1/X
+# test cases), but not a repeat of the merge pipeline jobs.
+# Direct-push pipelines contain the same jobs as merge pipelines.
+
 workflow:
   rules:
     # do not duplicate pipelines on merge pipelines
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
       when: never
     # merge pipeline
-    - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_COMMIT_BRANCH == null
+    - if: &is-merge-attempt $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       variables:
+        KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${KERNEL_TAG}
         MESA_CI_PERFORMANCE_ENABLED: 1
         VALVE_INFRA_VANGOGH_JOB_PRIORITY: ""  # Empty tags are ignored by gitlab
     # post-merge pipeline
-    - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_COMMIT_BRANCH
+    - if: &is-post-merge $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "push"
+    # nightly pipeline
+    - if: &is-scheduled-pipeline $CI_PIPELINE_SOURCE == "schedule"
       variables:
-        JOB_PRIORITY: 40
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
-    # any other pipeline
-    - if: $GITLAB_USER_LOGIN != "marge-bot"
-      variables:
+        KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${KERNEL_TAG}
         JOB_PRIORITY: 50
         VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
-    - when: always
+    # pipeline for direct pushes that bypassed the CI
+    - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $GITLAB_USER_LOGIN != "marge-bot"
+      variables:
+        KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${KERNEL_TAG}
+        JOB_PRIORITY: 40
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+    # pre-merge or fork pipeline
+    - if: $FORCE_KERNEL_TAG != null
+      variables:
+        KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
+        JOB_PRIORITY: 50
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+    - if: $FORCE_KERNEL_TAG == null
+      variables:
+        KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${KERNEL_TAG}
+        JOB_PRIORITY: 50
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+
 
 variables:
   FDO_UPSTREAM_REPO: mesa/mesa
@@ -35,13 +78,15 @@ variables:
   PIPELINE_ARTIFACTS_BASE: ${S3_HOST}/artifacts/${CI_PROJECT_PATH}/${CI_PIPELINE_ID}
   # per-job artifact storage on MinIO
   JOB_ARTIFACTS_BASE: ${PIPELINE_ARTIFACTS_BASE}/${CI_JOB_ID}
-  KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/gfx-ci/linux/${KERNEL_TAG}
   # reference images stored for traces
   PIGLIT_REPLAY_REFERENCE_IMAGES_BASE: "${S3_HOST}/mesa-tracie-results/$FDO_UPSTREAM_REPO"
   # For individual CI farm status see .ci-farms folder
   # Disable farm with   `git mv .ci-farms{,-disabled}/$farm_name`
   # Re-enable farm with `git mv .ci-farms{-disabled,}/$farm_name`
   # NEVER MIX FARM MAINTENANCE WITH ANY OTHER CHANGE IN THE SAME MERGE REQUEST!
+  ARTIFACTS_BASE_URL: https://${CI_PROJECT_ROOT_NAMESPACE}.${CI_PAGES_DOMAIN}/-/${CI_PROJECT_NAME}/-/jobs/${CI_JOB_ID}/artifacts
+  # Python scripts for structured logger
+  PYTHONPATH: "$PYTHONPATH:$CI_PROJECT_DIR/install"
 
 default:
   before_script:
@@ -84,7 +129,7 @@ stages:
   - git-archive
   - build-x86_64
   - build-misc
-  - lint
+  - code-validation
   - amd
   - intel
   - nouveau
@@ -122,6 +167,7 @@ include:
   - local: 'src/gallium/drivers/crocus/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/d3d12/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/i915/ci/gitlab-ci.yml'
+  - local: 'src/gallium/drivers/r300/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/lima/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/llvmpipe/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/nouveau/ci/gitlab-ci.yml'
@@ -138,28 +184,25 @@ include:
 # YAML anchors for rule conditions
 # --------------------------------
 .rules-anchors:
+  # Pre-merge pipeline
+  - &is-pre-merge '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+
+.never-post-merge-rules:
   rules:
-    # Post-merge pipeline
-    - if: &is-post-merge '$CI_PROJECT_NAMESPACE == "mesa" && $CI_COMMIT_BRANCH'
-      when: on_success
-    # Post-merge pipeline, not for Marge Bot
-    - if: &is-post-merge-not-for-marge '$CI_PROJECT_NAMESPACE == "mesa" && $GITLAB_USER_LOGIN != "marge-bot" && $CI_COMMIT_BRANCH'
-      when: on_success
-    # Pre-merge pipeline
-    - if: &is-pre-merge '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_success
-    # Pre-merge pipeline for Marge Bot
-    - if: &is-pre-merge-for-marge '$GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_success
+    - if: *is-post-merge
+      when: never
 
 
 .container+build-rules:
   rules:
     # Run when re-enabling a disabled farm, but not when disabling it
     - !reference [.disable-farm-mr-rules, rules]
-    # Run pipeline by default in the main project if any CI pipeline
-    # configuration files were changed, to ensure docker images are up to date
-    - if: *is-post-merge
+    # Never run immediately after merging, as we just ran everything
+    - !reference [.never-post-merge-rules, rules]
+    # Build everything in merge pipelines, if any files affecting the pipeline
+    # were changed
+    - if: *is-merge-attempt
       changes: &all_paths
         - VERSION
         - bin/git_sha1_gen.py
@@ -168,33 +211,38 @@ include:
         # GitLab CI
         - .gitlab-ci.yml
         - .gitlab-ci/**/*
+        - .ci-farms/*
         # Meson
         - meson*
         - build-support/**/*
         - subprojects/**/*
+        # clang format
+        - .clang-format
+        - .clang-format-include
+        - .clang-format-ignore
         # Source code
         - include/**/*
         - src/**/*
       when: on_success
-    # Run pipeline by default if it was triggered by Marge Bot, is for a
-    # merge request, and any files affecting the pipeline were changed
-    - if: *is-pre-merge-for-marge
+    # Same as above, but for pre-merge pipelines
+    - if: *is-pre-merge
       changes:
         *all_paths
-      when: on_success
-    # Run pipeline by default in the main project if it was not triggered by
-    # Marge Bot, and any files affecting the pipeline were changed
-    - if: *is-post-merge-not-for-marge
-      changes:
-        *all_paths
-      when: on_success
-    # Just skip everything for MRs which don't actually change anything in the
-    # build - the same rules as above, but without the file-change rules
-    - if: *is-pre-merge-for-marge
+      when: manual
+    # Skip everything for pre-merge and merge pipelines which don't change
+    # anything in the build
+    - if: *is-merge-attempt
       when: never
-    - if: *is-post-merge
+    - if: *is-pre-merge
       when: never
-    # Always allow user branches etc to trigger jobs manually
+    # Build everything after someone bypassed the CI
+    - if: *is-direct-push
+      when: on_success
+    # Build everything in scheduled pipelines
+    - if: *is-scheduled-pipeline
+      when: on_success
+    # Allow building everything in fork pipelines, but build nothing unless
+    # manually triggered
     - when: manual
 
 
@@ -240,7 +288,7 @@ sanity:
   rules:
     - if: *is-pre-merge
       when: on_success
-    # Other cases default to never
+    - when: never
   variables:
     GIT_STRATEGY: none
   script:
@@ -250,6 +298,8 @@ sanity:
     when: on_failure
     reports:
       junit: check-*.xml
+  tags:
+    - placeholder-job
 
 
 # Jobs that need to pass before spending hardware resources on further testing

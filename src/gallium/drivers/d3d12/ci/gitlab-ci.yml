@@ -1,13 +1,13 @@
 .d3d12-test:
   extends:
-    - .use-windows_test_vs2019
+    - .use-windows_test_msvc
     - .glon12-test-rules
   stage: layered-backends
   dependencies:
-    - windows-vs2019
+    - windows-msvc
   needs:
-    - windows-vs2019
-    - windows_test_vs2019
+    - windows-msvc
+    - windows_test_msvc
     - !reference [.required-for-hardware-jobs, needs]
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source

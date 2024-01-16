@@ -138,6 +138,16 @@ can_fast_clear_color(struct iris_context *ice,
       return false;
    }
 
+   /* Wa_18020603990 - slow clear surfaces up to 256x256, 32bpp. */
+   const struct intel_device_info *devinfo =
+      ((struct iris_screen *)ice->ctx.screen)->devinfo;
+   if (intel_needs_workaround(devinfo, 18020603990)) {
+      if (isl_format_get_layout(res->surf.format)->bpb <= 32 &&
+          res->surf.logical_level0_px.w <= 256 &&
+          res->surf.logical_level0_px.h <= 256)
+         return false;
+   }
+
    return true;
 }
 

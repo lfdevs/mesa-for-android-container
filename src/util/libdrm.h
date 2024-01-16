@@ -33,6 +33,7 @@
 
 #include <errno.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #define DRM_NODE_PRIMARY 0
 #define DRM_NODE_CONTROL 1
@@ -44,12 +45,58 @@
 #define DRM_BUS_PLATFORM  2
 #define DRM_BUS_HOST1X    3
 
+typedef struct _drmPciDeviceInfo {
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint16_t subvendor_id;
+    uint16_t subdevice_id;
+    uint8_t revision_id;
+} drmPciDeviceInfo, *drmPciDeviceInfoPtr;
+
+#define DRM_PLATFORM_DEVICE_NAME_LEN 512
+
+typedef struct _drmPlatformBusInfo {
+    char fullname[DRM_PLATFORM_DEVICE_NAME_LEN];
+} drmPlatformBusInfo, *drmPlatformBusInfoPtr;
+
+typedef struct _drmPlatformDeviceInfo {
+    char **compatible; /* NULL terminated list of compatible strings */
+} drmPlatformDeviceInfo, *drmPlatformDeviceInfoPtr;
+
+#define DRM_HOST1X_DEVICE_NAME_LEN 512
+
+typedef struct _drmHost1xBusInfo {
+    char fullname[DRM_HOST1X_DEVICE_NAME_LEN];
+} drmHost1xBusInfo, *drmHost1xBusInfoPtr;
+
+typedef struct _drmPciBusInfo {
+   uint16_t domain;
+   uint8_t bus;
+   uint8_t dev;
+   uint8_t func;
+} drmPciBusInfo, *drmPciBusInfoPtr;
+
 typedef struct _drmDevice {
     char **nodes; /* DRM_NODE_MAX sized array */
     int available_nodes; /* DRM_NODE_* bitmask */
     int bustype;
+    union {
+       drmPciBusInfoPtr pci;
+       drmPlatformBusInfoPtr platform;
+       drmHost1xBusInfoPtr host1x;
+    } businfo;
+    union {
+        drmPciDeviceInfoPtr pci;
+    } deviceinfo;
     /* ... */
 } drmDevice, *drmDevicePtr;
+
+#define DRM_DEVICE_GET_PCI_REVISION (1 << 0)
+static inline int
+drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
+{
+   return -ENOENT;
+}
 
 static inline int
 drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices)
@@ -57,8 +104,20 @@ drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices)
    return -ENOENT;
 }
 
+static inline int
+drmGetDeviceFromDevId(dev_t dev_id, uint32_t flags, drmDevicePtr *device)
+{
+   return -ENOENT;
+}
+
+static inline void
+drmFreeDevice(drmDevicePtr *device) {}
+
 static inline void
 drmFreeDevices(drmDevicePtr devices[], int count) {}
+
+static inline char*
+drmGetDeviceNameFromFd2(int fd) { return NULL;}
 
 typedef struct _drmVersion {
     int     version_major;        /**< Major version */

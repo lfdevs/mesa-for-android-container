@@ -13,9 +13,11 @@ $ make headers_install INSTALL_HDR_PATH=/path/to/install
 
 The last update was done at the following kernel commit :
 
-commit d9aa1da9a8cfb0387eb5703c15bd1f54421460ac
-Merge: 7c9aa0f7463e 28e671114fb0
-Author: Dave Airlie <airlied@redhat.com>
-Date:   Mon Aug 7 13:49:24 2023 +1000
+commit ea97a66a221893fb9b4d96688e759d1db2d6e683
+Author:     Lucas De Marchi <lucas.demarchi@intel.com>
+AuthorDate: Thu Dec 21 14:28:04 2023 -0800
+Commit:     Dave Airlie <airlied@redhat.com>
+CommitDate: Fri Dec 22 11:17:15 2023 +1000
 
-    Merge tag 'drm-intel-gt-next-2023-08-04' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+    drm/xe: Disable 32bits build
+

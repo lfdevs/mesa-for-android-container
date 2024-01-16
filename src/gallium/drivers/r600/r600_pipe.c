@@ -23,6 +23,7 @@
 #include "r600_pipe.h"
 #include "r600_public.h"
 #include "r600_isa.h"
+#include "r600_sfn.h"
 #include "evergreen_compute.h"
 #include "r600d.h"
 
@@ -214,7 +215,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
                             0, PIPE_USAGE_DEFAULT, 0, false);
 
 	rctx->isa = calloc(1, sizeof(struct r600_isa));
-	if (!rctx->isa || r600_isa_init(rctx, rctx->isa))
+	if (!rctx->isa || r600_isa_init(rctx->b.gfx_level, rctx->isa))
 		goto fail;
 
 	if (rscreen->b.debug_flags & DBG_FORCE_DMA)
@@ -662,9 +663,6 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 
 	return r600_resource_create_common(screen, templ);
 }
-
-char *
-r600_finalize_nir(struct pipe_screen *screen, void *shader);
 
 struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 				       const struct pipe_screen_config *config)

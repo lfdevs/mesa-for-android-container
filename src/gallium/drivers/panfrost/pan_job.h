@@ -28,10 +28,10 @@
 
 #include "pipe/p_state.h"
 #include "util/u_dynarray.h"
-#include "pan_cs.h"
+#include "pan_desc.h"
+#include "pan_jm.h"
 #include "pan_mempool.h"
 #include "pan_resource.h"
-#include "pan_scoreboard.h"
 
 /* Simple tri-state data structure. In the default "don't care" state, the value
  * may be set to true or false. However, once the value is set, it must not be
@@ -139,12 +139,6 @@ struct panfrost_batch {
     * varyings */
    struct panfrost_pool invisible_pool;
 
-   /* Job scoreboarding state */
-   struct pan_scoreboard scoreboard;
-
-   /* Polygon list bound to the batch, or NULL if none bound yet */
-   struct panfrost_bo *polygon_list;
-
    /* Scratchpad BO bound to the batch, or NULL if none bound yet */
    struct panfrost_bo *scratchpad;
 
@@ -178,6 +172,19 @@ struct panfrost_batch {
    unsigned nr_push_uniforms[PIPE_SHADER_TYPES];
    unsigned nr_uniform_buffers[PIPE_SHADER_TYPES];
 
+   /* Varying related pointers */
+   struct {
+      mali_ptr bufs;
+      unsigned nr_bufs;
+      mali_ptr vs;
+      mali_ptr fs;
+      mali_ptr pos;
+      mali_ptr psiz;
+   } varyings;
+
+   /* Index array */
+   mali_ptr indices;
+
    /* Valhall: struct mali_scissor_packed */
    unsigned scissor[2];
    float minimum_z, maximum_z;
@@ -192,6 +199,20 @@ struct panfrost_batch {
     */
    struct pan_tristate sprite_coord_origin;
    struct pan_tristate first_provoking_vertex;
+
+   /* Number of effective draws in the batch. Draws with rasterization disabled
+    * don't count as effective draws. It's basically the number of IDVS or
+    * <vertex,tiler> jobs present in the batch.
+    */
+   uint32_t draw_count;
+
+   /* Number of compute jobs in the batch. */
+   uint32_t compute_count;
+
+   /* Job frontend specific fields. */
+   union {
+      struct panfrost_jm_batch jm;
+   };
 };
 
 /* Functions for managing the above */
@@ -257,5 +278,11 @@ void panfrost_batch_union_scissor(struct panfrost_batch *batch, unsigned minx,
                                   unsigned miny, unsigned maxx, unsigned maxy);
 
 bool panfrost_batch_skip_rasterization(struct panfrost_batch *batch);
+
+static inline bool
+panfrost_has_fragment_job(struct panfrost_batch *batch)
+{
+   return batch->draw_count > 0 || batch->clear;
+}
 
 #endif

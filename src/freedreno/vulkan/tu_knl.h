@@ -13,6 +13,7 @@
 #include "tu_common.h"
 
 struct tu_u_trace_syncobj;
+struct vdrm_bo;
 
 enum tu_bo_alloc_flags
 {
@@ -41,11 +42,6 @@ enum tu_timeline_sync_state {
 struct tu_bo {
    uint32_t gem_handle;
 #ifdef TU_HAS_VIRTIO
-   /* Between the guest UMD and host native-ctx shim/proxy, guest kernel
-    * assigned res_id is used instead of host gem handle.  This allows
-    * the guest to run ahead of the host without having to wait for
-    * response from the host when buffers are allocated.
-    */
    uint32_t res_id;
 #endif
    uint64_t size;
@@ -78,6 +74,10 @@ struct tu_knl {
    VkResult (*bo_map)(struct tu_device *dev, struct tu_bo *bo);
    void (*bo_allow_dump)(struct tu_device *dev, struct tu_bo *bo);
    void (*bo_finish)(struct tu_device *dev, struct tu_bo *bo);
+   void (*bo_set_metadata)(struct tu_device *dev, struct tu_bo *bo,
+                           void *metadata, uint32_t metadata_size);
+   int (*bo_get_metadata)(struct tu_device *dev, struct tu_bo *bo,
+                          void *metadata, uint32_t metadata_size);
    VkResult (*device_wait_u_trace)(struct tu_device *dev,
                                    struct tu_u_trace_syncobj *syncobj);
    VkResult (*queue_submit)(struct tu_queue *queue,
@@ -142,6 +142,11 @@ VkResult
 tu_bo_map(struct tu_device *dev, struct tu_bo *bo);
 
 void tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo);
+
+void tu_bo_set_metadata(struct tu_device *dev, struct tu_bo *bo,
+                        void *metadata, uint32_t metadata_size);
+int tu_bo_get_metadata(struct tu_device *dev, struct tu_bo *bo,
+                       void *metadata, uint32_t metadata_size);
 
 static inline struct tu_bo *
 tu_bo_get_ref(struct tu_bo *bo)

@@ -150,7 +150,6 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_push_constant:
    case nir_intrinsic_load_work_dim:
    case nir_intrinsic_load_num_workgroups:
-   case nir_intrinsic_load_workgroup_size:
    case nir_intrinsic_load_ray_launch_size:
    case nir_intrinsic_load_ray_launch_size_addr_amd:
    case nir_intrinsic_load_sbt_base_amd:
@@ -199,6 +198,9 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_subgroup_size:
    case nir_intrinsic_load_num_subgroups:
       return ctx->options->subgroup_size_uniform;
+
+   case nir_intrinsic_load_workgroup_size:
+      return ctx->options->load_workgroup_size_allowed;
 
    /* Intrinsics which can be moved if the sources can */
    case nir_intrinsic_load_ubo:

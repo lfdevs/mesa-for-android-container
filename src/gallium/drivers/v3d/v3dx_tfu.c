@@ -118,7 +118,7 @@ v3dX(tfu)(struct pipe_context *pctx,
                 break;
        }
 
-#if V3D_VERSION <= 42
+#if V3D_VERSION == 42
         if (src_base_slice->tiling == V3D_TILING_RASTER) {
                 tfu.icfg |= (V3D33_TFU_ICFG_FORMAT_RASTER <<
                              V3D33_TFU_ICFG_FORMAT_SHIFT);
@@ -152,7 +152,7 @@ v3dX(tfu)(struct pipe_context *pctx,
                                implicit_padded_height) / uif_block_h) <<
                              V3D33_TFU_ICFG_OPAD_SHIFT);
         }
-#endif /* V3D_VERSION <= 42 */
+#endif /* V3D_VERSION == 42 */
 
 #if V3D_VERSION >= 71
         if (src_base_slice->tiling == V3D_TILING_RASTER) {

@@ -270,7 +270,7 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
 }
 
 static uint32_t
-translate_stencil_op(enum pipe_stencil_op op)
+translate_stencil_op(VkStencilOp op)
 {
    switch (op) {
    case VK_STENCIL_OP_KEEP:

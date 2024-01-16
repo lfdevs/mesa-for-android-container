@@ -189,6 +189,8 @@ void brw_nir_lower_fs_outputs(nir_shader *nir);
 
 bool brw_nir_lower_conversions(nir_shader *nir);
 
+bool brw_nir_lower_cmat(nir_shader *nir, unsigned subgroup_size);
+
 bool brw_nir_lower_shading_rate_output(nir_shader *nir);
 
 bool brw_nir_lower_sparse_intrinsics(nir_shader *nir);
@@ -253,7 +255,6 @@ bool brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
 
 void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                                 nir_shader *nir,
-                                const struct brw_vs_prog_key *vs_key,
                                 struct brw_ubo_range out_ranges[4]);
 
 bool brw_nir_opt_peephole_ffma(nir_shader *shader);
@@ -267,8 +268,8 @@ bool brw_nir_lower_patch_vertices_in(nir_shader *shader, unsigned input_vertices
 bool brw_nir_blockify_uniform_loads(nir_shader *shader,
                                     const struct intel_device_info *devinfo);
 
-void brw_nir_optimize(nir_shader *nir,
-                      const struct brw_compiler *compiler);
+void brw_nir_optimize(nir_shader *nir, bool is_scalar,
+                      const struct intel_device_info *devinfo);
 
 nir_shader *brw_nir_create_passthrough_tcs(void *mem_ctx,
                                            const struct brw_compiler *compiler,
@@ -290,7 +291,7 @@ nir_def *brw_nir_load_global_const(nir_builder *b,
 const struct glsl_type *brw_nir_get_var_type(const struct nir_shader *nir,
                                              nir_variable *var);
 
-void brw_nir_adjust_payload(nir_shader *shader, const struct brw_compiler *compiler);
+void brw_nir_adjust_payload(nir_shader *shader);
 
 #ifdef __cplusplus
 }

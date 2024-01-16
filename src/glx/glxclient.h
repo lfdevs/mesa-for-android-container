@@ -208,6 +208,7 @@ typedef struct __GLXattributeMachineRec
 struct mesa_glinterop_device_info;
 struct mesa_glinterop_export_in;
 struct mesa_glinterop_export_out;
+struct mesa_glinterop_flush_out;
 
 struct glx_context_vtable {
    void (*destroy)(struct glx_context *ctx);
@@ -222,7 +223,7 @@ struct glx_context_vtable {
                                 struct mesa_glinterop_export_out *out);
    int (*interop_flush_objects)(struct glx_context *ctx,
                                 unsigned count, struct mesa_glinterop_export_in *objects,
-                                GLsync *sync);
+                                struct mesa_glinterop_flush_out *out);
 };
 
 /**
@@ -457,7 +458,7 @@ struct glx_screen_vtable {
    /* The error outparameter abuses the fact that the only possible errors are
     * GLXBadContext (0), GLXBadFBConfig (9), GLXBadProfileARB (13), BadValue
     * (2), BadMatch (8), and BadAlloc (11). Since those don't collide we just
-    * use them directly rather than try to offset or use a sign convention. 
+    * use them directly rather than try to offset or use a sign convention.
     */
    struct glx_context *(*create_context_attribs)(struct glx_screen *psc,
 						 struct glx_config *config,

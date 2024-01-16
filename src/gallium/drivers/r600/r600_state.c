@@ -23,6 +23,7 @@
 #include "r600_formats.h"
 #include "r600_shader.h"
 #include "r600d.h"
+#include "r600d_common.h"
 
 #include "pipe/p_shader_tokens.h"
 #include "util/u_endian.h"
@@ -30,6 +31,8 @@
 #include "util/u_memory.h"
 #include "util/u_framebuffer.h"
 #include "util/u_dual_blend.h"
+
+#include <assert.h>
 
 static uint32_t r600_translate_blend_function(int blend_func)
 {
@@ -1721,7 +1724,7 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 		offset = cb->buffer_offset;
 
 		if (!gs_ring_buffer) {
-			assert(buffer_index < R600_MAX_HW_CONST_BUFFERS);
+			assert(buffer_index < R600_MAX_ALU_CONST_BUFFERS);
 			radeon_set_context_reg(cs, reg_alu_constbuf_size + buffer_index * 4,
 					       DIV_ROUND_UP(cb->buffer_size, 256));
 			radeon_set_context_reg(cs, reg_alu_const_cache + buffer_index * 4, offset >> 8);
@@ -2477,11 +2480,15 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 
 	r600_store_context_reg_seq(cb, R_028644_SPI_PS_INPUT_CNTL_0, rshader->ninput);
 	for (i = 0; i < rshader->ninput; i++) {
-		if (rshader->input[i].name == TGSI_SEMANTIC_POSITION)
+		const gl_varying_slot varying_slot = rshader->input[i].varying_slot;
+
+		if (varying_slot == VARYING_SLOT_POS)
 			pos_index = i;
-		if (rshader->input[i].name == TGSI_SEMANTIC_FACE && face_index == -1)
-			face_index = i;
-		if (rshader->input[i].name == TGSI_SEMANTIC_SAMPLEID)
+		else if (varying_slot == VARYING_SLOT_FACE) {
+			if (face_index == -1)
+				face_index = i;
+		}
+		else if (rshader->input[i].system_value == SYSTEM_VALUE_SAMPLE_ID)
 			fixed_pt_position_index = i;
 
 		sid = rshader->input[i].spi_sid;
@@ -2489,17 +2496,17 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 		tmp = S_028644_SEMANTIC(sid);
 
 		/* D3D 9 behaviour. GL is undefined */
-		if (rshader->input[i].name == TGSI_SEMANTIC_COLOR && rshader->input[i].sid == 0)
+		if (varying_slot == VARYING_SLOT_COL0)
 			tmp |= S_028644_DEFAULT_VAL(3);
 
-		if (rshader->input[i].name == TGSI_SEMANTIC_POSITION ||
+		if (varying_slot == VARYING_SLOT_POS ||
 			rshader->input[i].interpolate == TGSI_INTERPOLATE_CONSTANT ||
 			(rshader->input[i].interpolate == TGSI_INTERPOLATE_COLOR && flatshade))
 			tmp |= S_028644_FLAT_SHADE(1);
 
-		if (rshader->input[i].name == TGSI_SEMANTIC_PCOORD ||
-		    (rshader->input[i].name == TGSI_SEMANTIC_TEXCOORD &&
-		     sprite_coord_enable & (1 << rshader->input[i].sid))) {
+		if (varying_slot == VARYING_SLOT_PNTC ||
+		    (varying_slot >= VARYING_SLOT_TEX0 && varying_slot <= VARYING_SLOT_TEX7 &&
+		     (sprite_coord_enable & (1 << ((int)varying_slot - (int)VARYING_SLOT_TEX0))))) {
 			tmp |= S_028644_PT_SPRITE_TEX(1);
 		}
 
@@ -2518,13 +2525,25 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	}
 
 	db_shader_control = 0;
+	exports_ps = 0;
 	for (i = 0; i < rshader->noutput; i++) {
-		if (rshader->output[i].name == TGSI_SEMANTIC_POSITION)
+		switch (rshader->output[i].frag_result) {
+		case FRAG_RESULT_DEPTH:
 			z_export = 1;
-		if (rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
+			exports_ps |= 1;
+			break;
+		case FRAG_RESULT_STENCIL:
 			stencil_export = 1;
-		if (rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK && msaa)
-			mask_export = 1;
+			exports_ps |= 1;
+			break;
+		case FRAG_RESULT_SAMPLE_MASK:
+			if (msaa)
+				mask_export = 1;
+			exports_ps |= 1;
+			break;
+		default:
+			break;
+		}
 	}
 	db_shader_control |= S_02880C_Z_EXPORT_ENABLE(z_export);
 	db_shader_control |= S_02880C_STENCIL_REF_EXPORT_ENABLE(stencil_export);
@@ -2532,14 +2551,6 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	if (rshader->uses_kill)
 		db_shader_control |= S_02880C_KILL_ENABLE(1);
 
-	exports_ps = 0;
-	for (i = 0; i < rshader->noutput; i++) {
-		if (rshader->output[i].name == TGSI_SEMANTIC_POSITION ||
-		    rshader->output[i].name == TGSI_SEMANTIC_STENCIL ||
-		    rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK) {
-			exports_ps |= 1;
-		}
-	}
 	num_cout = rshader->nr_ps_color_exports;
 	exports_ps |= S_028854_EXPORT_COLORS(num_cout);
 	if (!exports_ps) {
@@ -2613,14 +2624,16 @@ void r600_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	struct r600_command_buffer *cb = &shader->command_buffer;
 	struct r600_shader *rshader = &shader->shader;
 	unsigned spi_vs_out_id[10] = {};
-	unsigned i, tmp, nparams = 0;
+	unsigned i;
 
 	for (i = 0; i < rshader->noutput; i++) {
-		if (rshader->output[i].spi_sid) {
-			tmp = rshader->output[i].spi_sid << ((nparams & 3) * 8);
-			spi_vs_out_id[nparams / 4] |= tmp;
-			nparams++;
-		}
+		const int param = rshader->output[i].export_param;
+		if (param < 0)
+			continue;
+		unsigned *const param_spi_vs_out_id = &spi_vs_out_id[param / 4];
+		const unsigned param_shift = (param & 3) * 8;
+		assert(!(*param_spi_vs_out_id & (0xFFu << param_shift)));
+		*param_spi_vs_out_id |= (unsigned)rshader->output[i].spi_sid << param_shift;
 	}
 
 	r600_init_command_buffer(cb, 32);
@@ -2630,15 +2643,8 @@ void r600_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 		r600_store_value(cb, spi_vs_out_id[i]);
 	}
 
-	/* Certain attributes (position, psize, etc.) don't count as params.
-	 * VS is required to export at least one param and r600_shader_from_tgsi()
-	 * takes care of adding a dummy export.
-	 */
-	if (nparams < 1)
-		nparams = 1;
-
 	r600_store_context_reg(cb, R_0286C4_SPI_VS_OUT_CONFIG,
-			       S_0286C4_VS_EXPORT_COUNT(nparams - 1));
+			       S_0286C4_VS_EXPORT_COUNT(rshader->highest_export_param));
 	r600_store_context_reg(cb, R_028868_SQ_PGM_RESOURCES_VS,
 			       S_028868_NUM_GPRS(rshader->bc.ngpr) |
 			       S_028868_DX10_CLAMP(1) |

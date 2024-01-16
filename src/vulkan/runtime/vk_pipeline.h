@@ -25,6 +25,7 @@
 #define VK_PIPELINE_H
 
 #include "vulkan/vulkan_core.h"
+#include "vk_util.h"
 
 #include <stdbool.h>
 
@@ -87,6 +88,56 @@ vk_pipeline_robustness_state_fill(const struct vk_device *device,
                                   struct vk_pipeline_robustness_state *rs,
                                   const void *pipeline_pNext,
                                   const void *shader_stage_pNext);
+
+static inline VkPipelineCreateFlags2KHR
+vk_compute_pipeline_create_flags(const VkComputePipelineCreateInfo *info)
+{
+   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(info->pNext,
+                           PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
+   if (flags2)
+      return flags2->flags;
+   else
+      return info->flags;
+}
+
+static inline VkPipelineCreateFlags2KHR
+vk_graphics_pipeline_create_flags(const VkGraphicsPipelineCreateInfo *info)
+{
+   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(info->pNext,
+                           PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
+   if (flags2)
+      return flags2->flags;
+   else
+      return info->flags;
+}
+
+static inline VkPipelineCreateFlags2KHR
+vk_rt_pipeline_create_flags(const VkRayTracingPipelineCreateInfoKHR *info)
+{
+   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(info->pNext,
+                           PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
+   if (flags2)
+      return flags2->flags;
+   else
+      return info->flags;
+}
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+static inline VkPipelineCreateFlags2KHR
+vk_graph_pipeline_create_flags(const VkExecutionGraphPipelineCreateInfoAMDX *info)
+{
+   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(info->pNext,
+                           PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
+   if (flags2)
+      return flags2->flags;
+   else
+      return info->flags;
+}
+#endif
 
 #ifdef __cplusplus
 }

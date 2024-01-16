@@ -39,7 +39,7 @@ extern "C" {
 #include "util/list.h"
 
 
-#define DXIL_SHADER_MAX_IO_ROWS 80
+#define DXIL_SHADER_MAX_IO_ROWS 128
 
 enum dxil_shader_kind {
    DXIL_PIXEL_SHADER = 0,

@@ -52,33 +52,29 @@ zink-anv-tgl-traces:
     # dependencies right.
     - .lava-traces-base
   variables:
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-zink.yml"
+    PIGLIT_TRACES_FILE: traces-zink.yml
 
 zink-anv-tgl-traces-restricted:
   extends:
     - zink-anv-tgl-traces
     - .zink-anv-rules-restricted
   variables:
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-zink-restricted.yml"
+    PIGLIT_TRACES_FILE: traces-zink-restricted.yml
     PIGLIT_REPLAY_EXTRA_ARGS: --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}
   allow_failure: true
 
 zink-tu-a618:
   extends:
     - .lava-test-deqp:arm64
-    - .a618-test
     - .zink-turnip-rules
     - .zink-test
-  parallel: 3
+    - .lava-sc7180-trogdor-lazor-limozeen:arm64
+  parallel: 2
   variables:
     DEQP_SUITE: zink-freedreno-a618
-    HWCI_START_XORG: 1
+    FLAKES_CHANNEL: "#freedreno-ci"
+    HWCI_START_WESTON: 1
     GPU_VERSION: zink-freedreno-a618
-    JOB_TIMEOUT: 120
-    VK_DRIVER: freedreno
-    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
-    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
-    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
 
 zink-tu-a618-traces:
   extends:
@@ -138,6 +134,19 @@ zink-radv-vangogh-valve:
     B2C_TIMEOUT_BOOT_RETRIES: 1
     B2C_TIMEOUT_BOOT_MINUTES: 30
     B2C_TIMEOUT_OVERALL_MINUTES: 30
+    FDO_CI_CONCURRENT: 6
   # Override the list of tags to drop `priority:low`
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:VANGOGH
+
+zink-radv-navi31-valve:
+  extends:
+    - .radv-zink-test-valve
+    - .navi31-test-valve
+    - .zink-radv-manual-rules
+  timeout: 1h 20m
+  variables:
+    GPU_VERSION: zink-radv-navi31
+    B2C_TIMEOUT_BOOT_MINUTES: 75
+    B2C_TIMEOUT_OVERALL_MINUTES: 75

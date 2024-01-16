@@ -178,17 +178,17 @@ bool ac_surface_supports_dcc_image_stores(enum amd_gfx_level gfx_level,
            surf->u.gfx9.color.dcc.max_compressed_block_size == V_028C78_MAX_BLOCK_SIZE_256B);
 }
 
-static
-AddrSwizzleMode ac_modifier_gfx9_swizzle_mode(uint64_t modifier)
+static unsigned ac_get_modifier_swizzle_mode(enum amd_gfx_level gfx_level, uint64_t modifier)
 {
    if (modifier == DRM_FORMAT_MOD_LINEAR)
       return ADDR_SW_LINEAR;
 
    return AMD_FMT_MOD_GET(TILE, modifier);
 }
+
 static void
 ac_modifier_fill_dcc_params(uint64_t modifier, struct radeon_surf *surf,
-             ADDR2_COMPUTE_SURFACE_INFO_INPUT *surf_info)
+                            ADDR2_COMPUTE_SURFACE_INFO_INPUT *surf_info)
 {
    assert(ac_modifier_has_dcc(modifier));
 
@@ -247,7 +247,7 @@ bool ac_is_modifier_supported(const struct radeon_info *info,
       return false;
    }
 
-   if (!((1u << ac_modifier_gfx9_swizzle_mode(modifier)) & allowed_swizzles))
+   if (!((1u << ac_get_modifier_swizzle_mode(info->gfx_level, modifier)) & allowed_swizzles))
       return false;
 
    if (ac_modifier_has_dcc(modifier)) {
@@ -809,11 +809,13 @@ static int gfx6_compute_level(ADDR_HANDLE addrlib, const struct ac_surf_config *
       surf_level->mode = RADEON_SURF_MODE_LINEAR_ALIGNED;
       break;
    case ADDR_TM_1D_TILED_THIN1:
+   case ADDR_TM_1D_TILED_THICK:
    case ADDR_TM_PRT_TILED_THIN1:
       surf_level->mode = RADEON_SURF_MODE_1D;
       break;
    case ADDR_TM_2D_TILED_THIN1:
    case ADDR_TM_PRT_2D_TILED_THIN1:
+   case ADDR_TM_PRT_TILED_THICK:
       surf_level->mode = RADEON_SURF_MODE_2D;
       break;
    default:
@@ -1170,9 +1172,13 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib, const struct radeon_info *i
          AddrSurfInfoIn.tileMode = ADDR_TM_1D_TILED_THIN1;
       break;
    case RADEON_SURF_MODE_2D:
-      if (surf->flags & RADEON_SURF_PRT)
-         AddrSurfInfoIn.tileMode = ADDR_TM_PRT_2D_TILED_THIN1;
-      else
+      if (surf->flags & RADEON_SURF_PRT) {
+         if (config->is_3d && surf->bpe < 8) {
+            AddrSurfInfoIn.tileMode = ADDR_TM_PRT_2D_TILED_THICK;
+         } else {
+            AddrSurfInfoIn.tileMode = ADDR_TM_PRT_2D_TILED_THIN1;
+         }
+      } else
          AddrSurfInfoIn.tileMode = ADDR_TM_2D_TILED_THIN1;
       break;
    default:
@@ -1612,14 +1618,22 @@ static int gfx9_get_preferred_swizzle_mode(ADDR_HANDLE addrlib, const struct rad
 
 static bool is_dcc_supported_by_CB(const struct radeon_info *info, unsigned sw_mode)
 {
-   if (info->gfx_level >= GFX11)
+   switch (info->gfx_level) {
+   case GFX9:
+      return sw_mode != ADDR_SW_LINEAR;
+
+   case GFX10:
+   case GFX10_3:
+      return sw_mode == ADDR_SW_64KB_Z_X || sw_mode == ADDR_SW_64KB_R_X;
+
+   case GFX11:
+   case GFX11_5:
       return sw_mode == ADDR_SW_64KB_Z_X || sw_mode == ADDR_SW_64KB_R_X ||
              sw_mode == ADDR_SW_256KB_Z_X || sw_mode == ADDR_SW_256KB_R_X;
 
-   if (info->gfx_level >= GFX10)
-      return sw_mode == ADDR_SW_64KB_Z_X || sw_mode == ADDR_SW_64KB_R_X;
-
-   return sw_mode != ADDR_SW_LINEAR;
+   default:
+      unreachable("invalid gfx_level");
+   }
 }
 
 ASSERTED static bool is_dcc_supported_by_L2(const struct radeon_info *info,
@@ -1688,10 +1702,10 @@ void ac_modifier_max_extent(const struct radeon_info *info,
    }
 }
 
-static bool is_dcc_supported_by_DCN(const struct radeon_info *info,
-                                    const struct ac_surf_config *config,
-                                    const struct radeon_surf *surf, bool rb_aligned,
-                                    bool pipe_aligned)
+static bool gfx9_is_dcc_supported_by_DCN(const struct radeon_info *info,
+                                         const struct ac_surf_config *config,
+                                         const struct radeon_surf *surf, bool rb_aligned,
+                                         bool pipe_aligned)
 {
    if (!info->use_display_dcc_unaligned && !info->use_display_dcc_with_retile_blit)
       return false;
@@ -1875,14 +1889,8 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
                                       linear_alignment);
       surf->u.gfx9.epitch =
          MAX2(surf->u.gfx9.epitch, surf->u.gfx9.surf_pitch * surf->blk_w - 1);
-      /* The surface is really a surf->bpe bytes per pixel surface even if we
-       * use it as a surf->bpe bytes per element one.
-       * Adjust surf_slice_size and surf_size to reflect the change
-       * made to surf_pitch.
-       */
-      surf->u.gfx9.surf_slice_size =
-         MAX2(surf->u.gfx9.surf_slice_size,
-              (uint64_t)surf->u.gfx9.surf_pitch * out.height * surf->bpe * surf->blk_w);
+       /* Adjust surf_slice_size and surf_size to reflect the change made to surf_pitch. */
+      surf->u.gfx9.surf_slice_size = (uint64_t)surf->u.gfx9.surf_pitch * out.height * surf->bpe;
       surf->surf_size = surf->u.gfx9.surf_slice_size * in->numSlices;
 
       for (unsigned i = 0; i < in->numMipLevels; i++) {
@@ -2004,8 +2012,8 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          use_dcc = info->has_graphics && !(surf->flags & RADEON_SURF_DISABLE_DCC) && !compressed &&
                    is_dcc_supported_by_CB(info, in->swizzleMode) &&
                    (!in->flags.display ||
-                    is_dcc_supported_by_DCN(info, config, surf, !in->flags.metaRbUnaligned,
-                                            !in->flags.metaPipeUnaligned));
+                    gfx9_is_dcc_supported_by_DCN(info, config, surf, !in->flags.metaRbUnaligned,
+                                                 !in->flags.metaPipeUnaligned));
       }
 
       /* DCC */
@@ -2409,7 +2417,7 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
       assert(!ac_modifier_has_dcc(surf->modifier) ||
              !(surf->flags & RADEON_SURF_DISABLE_DCC));
 
-      AddrSurfInfoIn.swizzleMode = ac_modifier_gfx9_swizzle_mode(surf->modifier);
+      AddrSurfInfoIn.swizzleMode = ac_get_modifier_swizzle_mode(info->gfx_level, surf->modifier);
    }
 
    surf->u.gfx9.resource_type = (enum gfx9_resource_type)AddrSurfInfoIn.resourceType;
@@ -2469,8 +2477,8 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
       /* Display needs unaligned DCC. */
       if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
           surf->num_meta_levels &&
-          (!is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
-                                    surf->u.gfx9.color.dcc.pipe_aligned) ||
+          (!gfx9_is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
+                                         surf->u.gfx9.color.dcc.pipe_aligned) ||
            /* Don't set is_displayable if displayable DCC is missing. */
            (info->use_display_dcc_with_retile_blit && !surf->u.gfx9.color.dcc.display_equation_valid)))
          displayable = false;
@@ -2486,8 +2494,8 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
       if (AddrSurfInfoIn.flags.color)
          assert(is_dcc_supported_by_CB(info, surf->u.gfx9.swizzle_mode));
       if (AddrSurfInfoIn.flags.display && surf->modifier == DRM_FORMAT_MOD_INVALID) {
-         assert(is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
-                                        surf->u.gfx9.color.dcc.pipe_aligned));
+         assert(gfx9_is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
+                                             surf->u.gfx9.color.dcc.pipe_aligned));
       }
    }
 
@@ -2497,8 +2505,8 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
        !(surf->flags & (RADEON_SURF_DISABLE_DCC | RADEON_SURF_FORCE_SWIZZLE_MODE |
                         RADEON_SURF_FORCE_MICRO_TILE_MODE)) &&
        surf->modifier == DRM_FORMAT_MOD_INVALID &&
-       is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
-                               surf->u.gfx9.color.dcc.pipe_aligned)) {
+       gfx9_is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
+                                    surf->u.gfx9.color.dcc.pipe_aligned)) {
       /* Validate that DCC is enabled if DCN can do it. */
       if ((info->use_display_dcc_unaligned || info->use_display_dcc_with_retile_blit) &&
           AddrSurfInfoIn.flags.display && surf->bpe == 4) {
@@ -2590,6 +2598,9 @@ int ac_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *inf
    if (!info->has_image_opcodes)
       mode = RADEON_SURF_MODE_LINEAR_ALIGNED;
 
+   /* 0 offsets mean disabled. */
+   surf->meta_offset = surf->fmask_offset = surf->cmask_offset = surf->display_dcc_offset = 0;
+
    if (info->family_id >= FAMILY_AI)
       r = gfx9_compute_surface(addrlib, info, config, mode, surf);
    else
@@ -2601,9 +2612,6 @@ int ac_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *inf
    /* Determine the memory layout of multiple allocations in one buffer. */
    surf->total_size = surf->surf_size;
    surf->alignment_log2 = surf->surf_alignment_log2;
-
-   /* Ensure the offsets are always 0 if not available. */
-   surf->meta_offset = surf->display_dcc_offset = surf->fmask_offset = surf->cmask_offset = 0;
 
    if (surf->fmask_size) {
       assert(config->info.samples >= 2);
@@ -3085,8 +3093,9 @@ bool ac_surface_override_offset_stride(const struct radeon_info *info, struct ra
             surf->total_size = surf->surf_size = surf->u.gfx9.surf_slice_size * slices;
          }
       }
+
       surf->u.gfx9.surf_offset = offset;
-      if (surf->u.gfx9.zs.stencil_offset)
+      if (surf->has_stencil)
          surf->u.gfx9.zs.stencil_offset += offset;
    } else {
       if (pitch) {

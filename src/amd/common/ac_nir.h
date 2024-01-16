@@ -167,6 +167,7 @@ typedef struct {
    bool has_gen_prim_query;
    bool has_xfb_prim_query;
    bool kill_pointsize;
+   bool kill_layer;
    bool force_vrs;
 
    /* VS */
@@ -248,6 +249,7 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
                              bool has_param_exports,
                              bool disable_streamout,
                              bool kill_pointsize,
+                             bool kill_layer,
                              bool force_vrs,
                              ac_nir_gs_output_info *output_info);
 
@@ -260,6 +262,7 @@ ac_nir_lower_legacy_vs(nir_shader *nir,
                        bool export_primitive_id,
                        bool disable_streamout,
                        bool kill_pointsize,
+                       bool kill_layer,
                        bool force_vrs);
 
 bool
@@ -317,6 +320,7 @@ typedef struct {
    /* Vulkan only */
    unsigned enable_mrt_output_nan_fixup;
    bool no_color_export;
+   bool no_depth_export;
 } ac_nir_lower_ps_options;
 
 void

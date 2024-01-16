@@ -181,6 +181,7 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
       cs->RS_KICKER_INPLACE = rs->tile_count;
    }
    cs->source_ts_valid = rs->source_ts_valid;
+   cs->valid = true;
 }
 
 /* modify the clear bits value in the compiled RS state */
@@ -279,7 +280,7 @@ etna_submit_rs_state(struct etna_context *ctx,
 }
 
 /* Generate clear command for a surface (non-fast clear case) */
-void
+static void
 etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
                           uint64_t clear_value)
 {
@@ -332,6 +333,9 @@ etna_blit_clear_color_rs(struct pipe_context *pctx, struct pipe_surface *dst,
    struct etna_surface *surf = etna_surface(dst);
    uint64_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color);
 
+   if (!surf->clear_command.valid)
+      etna_rs_gen_clear_surface(ctx, surf, surf->level->clear_value);
+
    if (surf->level->ts_size) { /* TS: use precompiled clear command */
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = new_clear_value >> 32;
@@ -370,6 +374,9 @@ etna_blit_clear_zs_rs(struct pipe_context *pctx, struct pipe_surface *dst,
    struct etna_surface *surf = etna_surface(dst);
    uint32_t new_clear_value = translate_clear_depth_stencil(surf->base.format, depth, stencil);
    uint32_t new_clear_bits = 0, clear_bits_depth, clear_bits_stencil;
+
+   if (!surf->clear_command.valid)
+      etna_rs_gen_clear_surface(ctx, surf, surf->level->clear_value);
 
    /* Get the channels to clear */
    switch (surf->base.format) {

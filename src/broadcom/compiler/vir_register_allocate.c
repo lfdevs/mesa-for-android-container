@@ -942,7 +942,7 @@ v3d_ra_select_rf(struct v3d_ra_select_callback_data *v3d_ra,
          * avoid allocating these to registers used by the last instructions
          * in the shader.
          */
-        const uint32_t safe_rf_start = v3d_ra->devinfo->ver <= 42 ? 3 : 4;
+        const uint32_t safe_rf_start = v3d_ra->devinfo->ver == 42 ? 3 : 4;
         if (v3d_ra->nodes->info[node].is_program_end &&
             v3d_ra->next_phys < safe_rf_start) {
                 v3d_ra->next_phys = safe_rf_start;
@@ -1004,7 +1004,7 @@ vir_init_reg_sets(struct v3d_compiler *compiler)
         /* Allocate up to 3 regfile classes, for the ways the physical
          * register file can be divided up for fragment shader threading.
          */
-        int max_thread_index = (compiler->devinfo->ver >= 40 ? 2 : 3);
+        int max_thread_index = 2;
         uint8_t phys_index = get_phys_index(compiler->devinfo);
 
         compiler->regs = ra_alloc_reg_set(compiler, phys_index + PHYS_COUNT,
@@ -1070,20 +1070,10 @@ update_graph_and_reg_classes_for_inst(struct v3d_compile *c,
         int32_t ip = inst->ip;
         assert(ip >= 0);
 
-        /* If the instruction writes r3/r4 (and optionally moves its
-         * result to a temp), nothing else can be stored in r3/r4 across
+        /* If the instruction writes r4 (and optionally moves its
+         * result to a temp), nothing else can be stored in r4 across
          * it.
          */
-        if (vir_writes_r3_implicitly(c->devinfo, inst)) {
-                for (int i = 0; i < c->num_temps; i++) {
-                        if (c->temp_start[i] < ip && c->temp_end[i] > ip) {
-                                ra_add_node_interference(c->g,
-                                                         temp_to_node(c, i),
-                                                         acc_nodes[3]);
-                        }
-                }
-        }
-
         if (vir_writes_r4_implicitly(c->devinfo, inst)) {
                 for (int i = 0; i < c->num_temps; i++) {
                         if (c->temp_start[i] < ip && c->temp_end[i] > ip) {
@@ -1207,15 +1197,6 @@ update_graph_and_reg_classes_for_inst(struct v3d_compile *c,
                                 set_temp_class_bits(c, inst->dst.index,
                                                     class_bits);
 
-                        } else {
-                                /* Until V3D 4.x, we could only load a uniform
-                                 * to r5, so we'll need to spill if uniform
-                                 * loads interfere with each other.
-                                 */
-                                if (c->devinfo->ver < 40) {
-                                        set_temp_class_bits(c, inst->dst.index,
-                                                            CLASS_BITS_R5);
-                                }
                         }
                 } else {
                         /* Make sure we don't allocate the ldvary's
@@ -1320,7 +1301,7 @@ v3d_register_allocate(struct v3d_compile *c)
                  * RF0-2. Start at RF4 in 7.x to prevent TLB writes from
                  * using RF2-3.
                  */
-                .next_phys = c->devinfo->ver <= 42 ? 3 : 4,
+                .next_phys = c->devinfo->ver == 42 ? 3 : 4,
                 .nodes = &c->nodes,
                 .devinfo = c->devinfo,
         };
@@ -1333,10 +1314,8 @@ v3d_register_allocate(struct v3d_compile *c)
          * are available at both 1x and 2x threading, and 4x has 32.
          */
         c->thread_index = ffs(c->threads) - 1;
-        if (c->devinfo->ver >= 40) {
-                if (c->thread_index >= 1)
-                        c->thread_index--;
-        }
+        if (c->thread_index >= 1)
+                c->thread_index--;
 
         c->g = ra_alloc_interference_graph(c->compiler->regs, num_ra_nodes);
         ra_set_select_reg_callback(c->g, v3d_ra_select_callback, &callback_data);

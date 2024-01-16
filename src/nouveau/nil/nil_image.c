@@ -167,6 +167,7 @@ nil_tiling_extent_B(struct nil_tiling tiling)
          .a = 1,
       };
    } else {
+      /* We handle linear images in nil_image_create */
       return nil_extent4d(1, 1, 1, 1);
    }
 }
@@ -423,18 +424,40 @@ nil_image_init(struct nv_device_info *dev,
       /* Tiling is chosen per-level with LOD0 acting as a maximum */
       struct nil_tiling lvl_tiling = choose_tiling(lvl_ext_B, info->usage);
 
-      /* Align the size to tiles */
-      struct nil_extent4d lvl_tiling_ext_B = nil_tiling_extent_B(lvl_tiling);
-      lvl_ext_B = nil_extent4d_align(lvl_ext_B, lvl_tiling_ext_B);
+      if (lvl_tiling.is_tiled) {
+         /* Align the size to tiles */
+         struct nil_extent4d lvl_tiling_ext_B = nil_tiling_extent_B(lvl_tiling);
+         lvl_ext_B = nil_extent4d_align(lvl_ext_B, lvl_tiling_ext_B);
 
-      image->levels[l] = (struct nil_image_level) {
-         .offset_B = layer_size_B,
-         .tiling = lvl_tiling,
-         .row_stride_B = lvl_ext_B.width,
-      };
-      layer_size_B += (uint64_t)lvl_ext_B.w *
-                      (uint64_t)lvl_ext_B.h *
-                      (uint64_t)lvl_ext_B.d;
+         image->levels[l] = (struct nil_image_level) {
+            .offset_B = layer_size_B,
+            .tiling = lvl_tiling,
+            .row_stride_B = lvl_ext_B.width,
+         };
+
+         layer_size_B += (uint64_t)lvl_ext_B.w *
+                         (uint64_t)lvl_ext_B.h *
+                         (uint64_t)lvl_ext_B.d;
+      } else {
+         /* Linear images need to be 2D */
+         assert(image->dim == NIL_IMAGE_DIM_2D);
+         /* NVIDIA can't do linear and mipmapping */
+         assert(image->num_levels == 1);
+         /* NVIDIA can't do linear and multisampling*/
+         assert(image->sample_layout == NIL_SAMPLE_LAYOUT_1X1);
+
+         image->levels[l] = (struct nil_image_level) {
+            .offset_B = layer_size_B,
+            .tiling = lvl_tiling,
+            /* Row stride needs to be aligned to 128B for render to work */
+            .row_stride_B = align(lvl_ext_B.width, 128),
+         };
+
+         assert(lvl_ext_B.d == 1);
+         layer_size_B += (uint64_t)image->levels[l].row_stride_B * 
+                         (uint64_t)lvl_ext_B.h;
+
+      }
    }
 
    /* Align the image and array stride to a single level0 tile */
@@ -445,19 +468,22 @@ nil_image_init(struct nv_device_info *dev,
 
    image->size_B = (uint64_t)image->array_stride_B * image->extent_px.a;
 
-   image->tile_mode = (uint16_t)image->levels[0].tiling.y_log2 << 4 |
-                      (uint16_t)image->levels[0].tiling.z_log2 << 8;
+   if (image->levels[0].tiling.is_tiled) {
+      image->tile_mode = (uint16_t)image->levels[0].tiling.y_log2 << 4 |
+                         (uint16_t)image->levels[0].tiling.z_log2 << 8;
 
-   if (!(info->usage & NIL_IMAGE_USAGE_LINEAR_BIT)) {
       image->pte_kind = nil_choose_pte_kind(dev, info->format, info->samples,
                                             false /* TODO: compressed */);
+
+      image->align_B = MAX2(image->align_B, 4096);
+      if (image->pte_kind >= 0xb && image->pte_kind <= 0xe)
+         image->align_B = MAX2(image->align_B, (1 << 16));
+   } else {
+      /* Linear images need to be aligned to 128B for render to work */
+      image->align_B = MAX2(image->align_B, 128);
    }
 
-   image->align_B = MAX2(image->align_B, 4096);
-   if (image->pte_kind >= 0xb && image->pte_kind <= 0xe)
-      image->align_B = MAX2(image->align_B, (1 << 16));
-
-   image->size_B = ALIGN(image->size_B, image->align_B);
+   image->size_B = align64(image->size_B, image->align_B);
    return true;
 }
 

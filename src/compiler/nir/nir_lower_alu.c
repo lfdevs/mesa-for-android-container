@@ -225,6 +225,7 @@ bool
 nir_lower_alu(nir_shader *shader)
 {
    if (!shader->options->lower_bitfield_reverse &&
+       !shader->options->lower_bit_count &&
        !shader->options->lower_mul_high)
       return false;
 

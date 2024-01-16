@@ -93,6 +93,7 @@ generate_math2_gfx4(struct brw_codegen *p,
    brw_push_insn_state(p);
    brw_set_default_saturate(p, false);
    brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+   brw_set_default_flag_reg(p, 0, 0);
    brw_MOV(p, retype(brw_message_reg(inst->base_mrf + 1), op1.type), op1);
    brw_pop_insn_state(p);
 
@@ -1198,7 +1199,9 @@ generate_scratch_write(struct brw_codegen *p,
    /* If the instruction is predicated, we'll predicate the send, not
     * the header setup.
     */
+   brw_push_insn_state(p);
    brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+   brw_set_default_flag_reg(p, 0, 0);
 
    gfx6_resolve_implied_move(p, &header, inst->base_mrf);
 
@@ -1208,6 +1211,8 @@ generate_scratch_write(struct brw_codegen *p,
    brw_MOV(p,
 	   retype(brw_message_reg(inst->base_mrf + 2), BRW_REGISTER_TYPE_D),
 	   retype(src, BRW_REGISTER_TYPE_D));
+
+   brw_pop_insn_state(p);
 
    uint32_t msg_type;
 
@@ -2231,13 +2236,19 @@ generate_code(struct brw_codegen *p,
    brw_compact_instructions(p, 0, disasm_info);
    int after_size = p->next_insn_offset;
 
-   if (unlikely(debug_enabled)) {
-      unsigned char sha1[21];
-      char sha1buf[41];
+   bool dump_shader_bin = brw_should_dump_shader_bin();
+   unsigned char sha1[21];
+   char sha1buf[41];
 
+   if (unlikely(debug_enabled || dump_shader_bin)) {
       _mesa_sha1_compute(p->store, p->next_insn_offset, sha1);
       _mesa_sha1_format(sha1buf, sha1);
+   }
 
+   if (unlikely(dump_shader_bin))
+      brw_dump_shader_bin(p->store, 0, p->next_insn_offset, sha1buf);
+
+   if (unlikely(debug_enabled)) {
       fprintf(stderr, "Native code for %s %s shader %s (src_hash 0x%08x) (sha1 %s):\n",
             nir->info.label ? nir->info.label : "unnamed",
             _mesa_shader_stage_to_string(nir->info.stage), nir->info.name,

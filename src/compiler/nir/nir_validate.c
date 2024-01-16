@@ -73,8 +73,10 @@ typedef struct {
    /* Set of all blocks in the list */
    struct set *blocks;
 
-   /* Set of seen SSA sources */
-   struct set *ssa_srcs;
+   /* Number of tagged nir_src's. This is implicitly the cardinality of the set
+    * of pending nir_src's.
+    */
+   uint32_t nr_tagged_srcs;
 
    /* bitset of ssa definitions we have found; used to check uniqueness */
    BITSET_WORD *ssa_defs_found;
@@ -110,7 +112,7 @@ static bool
 validate_assert_impl(validate_state *state, bool cond, const char *str,
                      const char *file, unsigned line)
 {
-   if (!cond)
+   if (unlikely(!cond))
       log_error(state, str, file, line);
    return cond;
 }
@@ -118,49 +120,88 @@ validate_assert_impl(validate_state *state, bool cond, const char *str,
 #define validate_assert(state, cond) \
    validate_assert_impl(state, (cond), #cond, __FILE__, __LINE__)
 
-static void validate_src(nir_src *src, validate_state *state,
-                         unsigned bit_sizes, unsigned num_components);
-
 static void
 validate_num_components(validate_state *state, unsigned num_components)
 {
    validate_assert(state, nir_num_components_valid(num_components));
 }
 
+/* Tag used in nir_src::_parent to indicate that a source has been seen. */
+#define SRC_TAG_SEEN (0x2)
+
+static_assert(SRC_TAG_SEEN == (~NIR_SRC_PARENT_MASK + 1),
+              "Parent pointer tags chosen not to collide");
+
 static void
-validate_ssa_src(nir_src *src, validate_state *state,
-                 unsigned bit_sizes, unsigned num_components)
+tag_src(nir_src *src, validate_state *state)
 {
-   validate_assert(state, src->ssa != NULL);
-
-   /* As we walk SSA defs, we add every use to this set.  We need to make sure
-    * our use is seen in a use list.
+   /* nir_src only appears once and only in one SSA def use list, since we
+    * mark nir_src's as we go by tagging this pointer.
     */
-   struct set_entry *entry = _mesa_set_search(state->ssa_srcs, src);
-   validate_assert(state, entry);
+   if (validate_assert(state, (src->_parent & SRC_TAG_SEEN) == 0)) {
+      src->_parent |= SRC_TAG_SEEN;
+      state->nr_tagged_srcs++;
+   }
+}
 
-   /* This will let us prove that we've seen all the sources */
-   if (entry)
-      _mesa_set_remove(state->ssa_srcs, entry);
+/* Due to tagging, it's not safe to use nir_src_parent_instr during the main
+ * validate loop. This is a tagging-aware version.
+ */
+static nir_instr *
+src_parent_instr_safe(nir_src *src)
+{
+   uintptr_t untagged = (src->_parent & ~SRC_TAG_SEEN);
+   assert(!(untagged & NIR_SRC_PARENT_IS_IF) && "precondition");
+   return (nir_instr *)untagged;
+}
+
+/*
+ * As we walk SSA defs, we mark every use as seen by tagging the parent pointer.
+ * We need to make sure our use is seen in a use list.
+ *
+ * Then we unmark when we hit the source. This will let us prove that we've
+ * seen all the sources.
+ */
+static void
+validate_src_tag(nir_src *src, validate_state *state)
+{
+   if (validate_assert(state, src->_parent & SRC_TAG_SEEN)) {
+      src->_parent &= ~SRC_TAG_SEEN;
+      state->nr_tagged_srcs--;
+   }
+}
+
+static void
+validate_if_src(nir_src *src, validate_state *state)
+{
+   validate_src_tag(src, state);
+   validate_assert(state, nir_src_parent_if(src) == state->if_stmt);
+   validate_assert(state, src->ssa != NULL);
+   validate_assert(state, src->ssa->num_components == 1);
+}
+
+static void
+validate_src(nir_src *src, validate_state *state)
+{
+   /* Validate the tag first, so that nir_src_parent_instr is valid */
+   validate_src_tag(src, state);
+
+   /* Source assumed to be instruction, use validate_if_src for if */
+   validate_assert(state, nir_src_parent_instr(src) == state->instr);
+
+   validate_assert(state, src->ssa != NULL);
+}
+
+static void
+validate_sized_src(nir_src *src, validate_state *state,
+                   unsigned bit_sizes, unsigned num_components)
+{
+   validate_src(src, state);
 
    if (bit_sizes)
       validate_assert(state, src->ssa->bit_size & bit_sizes);
    if (num_components)
       validate_assert(state, src->ssa->num_components == num_components);
-
-   /* TODO validate that the use is dominated by the definition */
-}
-
-static void
-validate_src(nir_src *src, validate_state *state,
-             unsigned bit_sizes, unsigned num_components)
-{
-   if (state->instr)
-      validate_assert(state, nir_src_parent_instr(src) == state->instr);
-   else
-      validate_assert(state, nir_src_parent_if(src) == state->if_stmt);
-
-   validate_ssa_src(src, state, bit_sizes, num_components);
 }
 
 static void
@@ -168,26 +209,19 @@ validate_alu_src(nir_alu_instr *instr, unsigned index, validate_state *state)
 {
    nir_alu_src *src = &instr->src[index];
 
+   unsigned num_instr_channels = nir_ssa_alu_instr_src_components(instr, index);
    unsigned num_components = nir_src_num_components(src->src);
-   for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++) {
-      validate_assert(state, src->swizzle[i] < NIR_MAX_VEC_COMPONENTS);
 
-      if (nir_alu_instr_channel_used(instr, index, i))
-         validate_assert(state, src->swizzle[i] < num_components);
+   for (unsigned i = 0; i < num_instr_channels; i++) {
+      validate_assert(state, src->swizzle[i] < num_components);
    }
 
-   validate_src(&src->src, state, 0, 0);
+   validate_src(&src->src, state);
 }
 
 static void
-validate_def(nir_def *def, validate_state *state,
-             unsigned bit_sizes, unsigned num_components)
+validate_def(nir_def *def, validate_state *state)
 {
-   if (bit_sizes)
-      validate_assert(state, def->bit_size & bit_sizes);
-   if (num_components)
-      validate_assert(state, def->num_components == num_components);
-
    validate_assert(state, def->index < state->impl->ssa_alloc);
    validate_assert(state, !BITSET_TEST(state->ssa_defs_found, def->index));
    BITSET_SET(state->ssa_defs_found, def->index);
@@ -197,12 +231,11 @@ validate_def(nir_def *def, validate_state *state,
 
    list_validate(&def->uses);
    nir_foreach_use_including_if(src, def) {
+      /* Check that the def matches. */
       validate_assert(state, src->ssa == def);
 
-      bool already_seen = false;
-      _mesa_set_search_and_add(state->ssa_srcs, src, &already_seen);
-      /* A nir_src should only appear once and only in one SSA def use list */
-      validate_assert(state, !already_seen);
+      /* Check that nir_src's are unique */
+      tag_src(src, state);
    }
 }
 
@@ -263,7 +296,7 @@ validate_alu_instr(nir_alu_instr *instr, validate_state *state)
                                 dest_bit_size == 64);
    }
 
-   validate_def(&instr->def, state, 0, 0);
+   validate_def(&instr->def, state);
 }
 
 static void
@@ -287,7 +320,7 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
       /* For cast, we simply have to trust the instruction.  It's up to
        * lowering passes and front/back-ends to make them sane.
        */
-      validate_src(&instr->parent, state, 0, 0);
+      validate_src(&instr->parent, state);
 
       /* Most variable modes in NIR can only exist by themselves. */
       if (instr->modes & ~nir_var_mem_generic)
@@ -316,8 +349,8 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
       /* The parent pointer value must have the same number of components
        * as the destination.
        */
-      validate_src(&instr->parent, state, instr->def.bit_size,
-                   instr->def.num_components);
+      validate_sized_src(&instr->parent, state, instr->def.bit_size,
+                         instr->def.num_components);
 
       nir_instr *parent_instr = instr->parent.ssa->parent_instr;
 
@@ -356,8 +389,8 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
                          instr->type == glsl_get_array_element(parent->type));
 
          if (instr->deref_type == nir_deref_type_array) {
-            validate_src(&instr->arr.index, state,
-                         instr->def.bit_size, 1);
+            validate_sized_src(&instr->arr.index, state,
+                               instr->def.bit_size, 1);
          }
          break;
 
@@ -370,8 +403,8 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
                          parent->deref_type == nir_deref_type_array ||
                             parent->deref_type == nir_deref_type_ptr_as_array ||
                             parent->deref_type == nir_deref_type_cast);
-         validate_src(&instr->arr.index, state,
-                      instr->def.bit_size, 1);
+         validate_sized_src(&instr->arr.index, state,
+                            instr->def.bit_size, 1);
          break;
 
       default:
@@ -383,7 +416,7 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
     * want to let other compiler components such as SPIR-V decide how big
     * pointers should be.
     */
-   validate_def(&instr->def, state, 0, 0);
+   validate_def(&instr->def, state);
 
    /* Certain modes cannot be used as sources for phi instructions because
     * way too many passes assume that they can always chase deref chains.
@@ -396,7 +429,7 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
       if (!validate_assert(state, !nir_src_is_if(use)))
          continue;
 
-      if (nir_src_parent_instr(use)->type == nir_instr_type_phi) {
+      if (src_parent_instr_safe(use)->type == nir_instr_type_phi) {
          validate_assert(state, !(instr->modes & (nir_var_shader_in |
                                                   nir_var_shader_out |
                                                   nir_var_shader_out |
@@ -676,7 +709,7 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
 
       validate_num_components(state, components_read);
 
-      validate_src(&instr->src[i], state, src_bit_sizes[i], components_read);
+      validate_sized_src(&instr->src[i], state, src_bit_sizes[i], components_read);
    }
 
    if (nir_intrinsic_infos[instr->intrinsic].has_dest) {
@@ -691,7 +724,11 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
       else
          dest_bit_size = dest_bit_size ? dest_bit_size : bit_sizes;
 
-      validate_def(&instr->def, state, dest_bit_size, components_written);
+      validate_def(&instr->def, state);
+      validate_assert(state, instr->def.num_components == components_written);
+
+      if (dest_bit_size)
+         validate_assert(state, instr->def.bit_size & dest_bit_size);
    }
 
    if (!vectorized_intrinsic(instr))
@@ -738,8 +775,8 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
    for (unsigned i = 0; i < instr->num_srcs; i++) {
       validate_assert(state, !src_type_seen[instr->src[i].src_type]);
       src_type_seen[instr->src[i].src_type] = true;
-      validate_src(&instr->src[i].src, state,
-                   0, nir_tex_instr_src_size(instr, i));
+      validate_sized_src(&instr->src[i].src, state,
+                         0, nir_tex_instr_src_size(instr, i));
 
       switch (instr->src[i].src_type) {
 
@@ -749,7 +786,8 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
 
       case nir_tex_src_bias:
          validate_assert(state, instr->op == nir_texop_txb ||
-                                   instr->op == nir_texop_tg4);
+                                   instr->op == nir_texop_tg4 ||
+                                   instr->op == nir_texop_lod);
          break;
 
       case nir_tex_src_lod:
@@ -847,7 +885,9 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
    if (instr->is_gather_implicit_lod)
       validate_assert(state, instr->op == nir_texop_tg4);
 
-   validate_def(&instr->def, state, 0, nir_tex_instr_dest_size(instr));
+   validate_def(&instr->def, state);
+   validate_assert(state, instr->def.num_components ==
+                             nir_tex_instr_dest_size(instr));
 
    unsigned bit_size = nir_alu_type_get_type_size(instr->dest_type);
    validate_assert(state,
@@ -861,9 +901,9 @@ validate_call_instr(nir_call_instr *instr, validate_state *state)
    validate_assert(state, instr->num_params == instr->callee->num_params);
 
    for (unsigned i = 0; i < instr->num_params; i++) {
-      validate_src(&instr->params[i], state,
-                   instr->callee->params[i].bit_size,
-                   instr->callee->params[i].num_components);
+      validate_sized_src(&instr->params[i], state,
+                         instr->callee->params[i].bit_size,
+                         instr->callee->params[i].num_components);
    }
 }
 
@@ -904,7 +944,7 @@ validate_const_value(nir_const_value *val, unsigned bit_size,
 static void
 validate_load_const_instr(nir_load_const_instr *instr, validate_state *state)
 {
-   validate_def(&instr->def, state, 0, 0);
+   validate_def(&instr->def, state);
 
    for (unsigned i = 0; i < instr->def.num_components; i++)
       validate_const_value(&instr->value[i], instr->def.bit_size, false, state);
@@ -913,7 +953,7 @@ validate_load_const_instr(nir_load_const_instr *instr, validate_state *state)
 static void
 validate_ssa_undef_instr(nir_undef_instr *instr, validate_state *state)
 {
-   validate_def(&instr->def, state, 0, 0);
+   validate_def(&instr->def, state);
 }
 
 static void
@@ -924,7 +964,7 @@ validate_phi_instr(nir_phi_instr *instr, validate_state *state)
     * basic blocks, to avoid validating an SSA use before its definition.
     */
 
-   validate_def(&instr->def, state, 0, 0);
+   validate_def(&instr->def, state);
 
    exec_list_validate(&instr->srcs);
    validate_assert(state, exec_list_length(&instr->srcs) ==
@@ -984,7 +1024,7 @@ validate_jump_instr(nir_jump_instr *instr, validate_state *state)
       validate_assert(state, !state->impl->structured);
       validate_assert(state, instr->target == block->successors[1]);
       validate_assert(state, instr->else_target == block->successors[0]);
-      validate_src(&instr->condition, state, 0, 1);
+      validate_sized_src(&instr->condition, state, 0, 1);
       validate_assert(state, instr->target != NULL);
       validate_assert(state, instr->else_target != NULL);
       break;
@@ -1055,8 +1095,8 @@ validate_phi_src(nir_phi_instr *instr, nir_block *pred, validate_state *state)
    exec_list_validate(&instr->srcs);
    nir_foreach_phi_src(src, instr) {
       if (src->pred == pred) {
-         validate_src(&src->src, state, instr->def.bit_size,
-                      instr->def.num_components);
+         validate_sized_src(&src->src, state, instr->def.bit_size,
+                            instr->def.num_components);
          state->instr = NULL;
          return;
       }
@@ -1258,7 +1298,7 @@ validate_if(nir_if *if_stmt, validate_state *state)
    validate_assert(state, next_node->type == nir_cf_node_block);
 
    validate_assert(state, nir_src_is_if(&if_stmt->condition));
-   validate_src(&if_stmt->condition, state, 0, 1);
+   validate_if_src(&if_stmt->condition, state);
 
    validate_assert(state, !exec_list_is_empty(&if_stmt->then_list));
    validate_assert(state, !exec_list_is_empty(&if_stmt->else_list));
@@ -1481,15 +1521,6 @@ validate_ssa_dominance(nir_function_impl *impl, validate_state *state)
 static void
 validate_function_impl(nir_function_impl *impl, validate_state *state)
 {
-   /* Resize the ssa_srcs set.  It's likely that the size of this set will
-    * never actually hit the number of SSA defs because we remove sources from
-    * the set as we visit them.  (It could actually be much larger because
-    * each SSA def can be used more than once.)  However, growing it now costs
-    * us very little (the extra memory is already dwarfed by the SSA defs
-    * themselves) and makes collisions much less likely.
-    */
-   _mesa_set_resize(state->ssa_srcs, impl->ssa_alloc);
-
    validate_assert(state, impl->function->impl == impl);
    validate_assert(state, impl->cf_node.parent == NULL);
 
@@ -1524,8 +1555,10 @@ validate_function_impl(nir_function_impl *impl, validate_state *state)
    }
    validate_end_block(impl->end_block, state);
 
-   validate_assert(state, state->ssa_srcs->entries == 0);
-   _mesa_set_clear(state->ssa_srcs, NULL);
+   /* We must have seen every source by now. This also means that we've untagged
+    * every source, so we have valid (unaugmented) NIR once again.
+    */
+   validate_assert(state, state->nr_tagged_srcs == 0);
 
    static int validate_dominance = -1;
    if (validate_dominance < 0) {
@@ -1551,11 +1584,11 @@ static void
 init_validate_state(validate_state *state)
 {
    state->mem_ctx = ralloc_context(NULL);
-   state->ssa_srcs = _mesa_pointer_set_create(state->mem_ctx);
    state->ssa_defs_found = NULL;
    state->blocks = _mesa_pointer_set_create(state->mem_ctx);
    state->var_defs = _mesa_pointer_hash_table_create(state->mem_ctx);
    state->errors = _mesa_pointer_hash_table_create(state->mem_ctx);
+   state->nr_tagged_srcs = 0;
 
    state->loop = NULL;
    state->in_loop_continue_construct = false;

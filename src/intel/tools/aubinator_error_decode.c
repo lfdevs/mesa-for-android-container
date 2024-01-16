@@ -291,7 +291,7 @@ struct section {
    size_t data_offset;
 };
 
-#define MAX_SECTIONS 256
+#define MAX_SECTIONS 1024
 static unsigned num_sections;
 static struct section sections[MAX_SECTIONS];
 
@@ -596,7 +596,15 @@ read_data_file(FILE *file)
          if (matched == 1)
             print_register(spec, "SC_INSTDONE", reg);
 
+         matched = sscanf(line, "  GEN7_SC_INSTDONE: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SC_INSTDONE", reg);
+
          matched = sscanf(line, "  SC_INSTDONE_EXTRA: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SC_INSTDONE_EXTRA", reg);
+
+         matched = sscanf(line, "  GEN12_SC_INSTDONE_EXTRA: 0x%08x\n", &reg);
          if (matched == 1)
             print_register(spec, "SC_INSTDONE_EXTRA", reg);
 
@@ -604,7 +612,15 @@ read_data_file(FILE *file)
          if (matched == 1)
             print_register(spec, "SC_INSTDONE_EXTRA2", reg);
 
+         matched = sscanf(line, "  GEN12_SC_INSTDONE_EXTRA2: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SC_INSTDONE_EXTRA2", reg);
+
          matched = sscanf(line, "  SAMPLER_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SAMPLER_INSTDONE", reg);
+
+         matched = sscanf(line, "  GEN8_SAMPLER_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
          if (matched == 1)
             print_register(spec, "SAMPLER_INSTDONE", reg);
 
@@ -612,7 +628,15 @@ read_data_file(FILE *file)
          if (matched == 1)
             print_register(spec, "ROW_INSTDONE", reg);
 
+         matched = sscanf(line, "  GEN8_ROW_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "ROW_INSTDONE", reg);
+
          matched = sscanf(line, "  GEOM_SVGUNIT_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "INSTDONE_GEOM", reg);
+
+         matched = sscanf(line, "  XEHPG_INSTDONE_GEOM_SVG[%*d][%*d]: 0x%08x\n", &reg);
          if (matched == 1)
             print_register(spec, "INSTDONE_GEOM", reg);
 

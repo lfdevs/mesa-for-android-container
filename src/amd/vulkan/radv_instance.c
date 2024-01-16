@@ -76,6 +76,7 @@ static const struct debug_control radv_debug_options[] = {{"nofastclears", RADV_
                                                           {"nogpl", RADV_DEBUG_NO_GPL},
                                                           {"videoarraypath", RADV_DEBUG_VIDEO_ARRAY_PATH},
                                                           {"nort", RADV_DEBUG_NO_RT},
+                                                          {"nomeshshader", RADV_DEBUG_NO_MESH_SHADER},
                                                           {NULL, 0}};
 
 const char *
@@ -96,10 +97,10 @@ static const struct debug_control radv_perftest_options[] = {{"localbos", RADV_P
                                                              {"nggc", RADV_PERFTEST_NGGC},
                                                              {"emulate_rt", RADV_PERFTEST_EMULATE_RT},
                                                              {"rtwave64", RADV_PERFTEST_RT_WAVE_64},
-                                                             {"ngg_streamout", RADV_PERFTEST_NGG_STREAMOUT},
                                                              {"video_decode", RADV_PERFTEST_VIDEO_DECODE},
                                                              {"dmashaders", RADV_PERFTEST_DMA_SHADERS},
                                                              {"gsfastlaunch2", RADV_PERFTEST_GS_FAST_LAUNCH_2},
+                                                             {"transfer_queue", RADV_PERFTEST_TRANSFER_QUEUE},
                                                              {NULL, 0}};
 
 const char *
@@ -129,6 +130,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(false)
       DRI_CONF_RADV_NO_DYNAMIC_BOUNDS(false)
       DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(0)
+      DRI_CONF_RADV_CLEAR_LDS(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -152,7 +154,11 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_TEX_NON_UNIFORM(false)
       DRI_CONF_RADV_FLUSH_BEFORE_TIMESTAMP_WRITE(false)
       DRI_CONF_RADV_RT_WAVE64(false)
+      DRI_CONF_RADV_LEGACY_SPARSE_BINDING(false)
       DRI_CONF_DUAL_COLOR_BLEND_BY_LOCATION(false)
+      DRI_CONF_RADV_OVERRIDE_GRAPHICS_SHADER_VERSION(0)
+      DRI_CONF_RADV_OVERRIDE_COMPUTE_SHADER_VERSION(0)
+      DRI_CONF_RADV_OVERRIDE_RAY_TRACING_SHADER_VERSION(0)
       DRI_CONF_RADV_SSBO_NON_UNIFORM(false)
       DRI_CONF_RADV_APP_LAYER()
    DRI_CONF_SECTION_END
@@ -162,58 +168,89 @@ static const driOptionDescription radv_dri_options[] = {
 static void
 radv_init_dri_options(struct radv_instance *instance)
 {
-   driParseOptionInfo(&instance->available_dri_options, radv_dri_options, ARRAY_SIZE(radv_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options, 0, "radv", NULL, NULL,
+   driParseOptionInfo(&instance->drirc.available_options, radv_dri_options, ARRAY_SIZE(radv_dri_options));
+   driParseConfigFiles(&instance->drirc.options, &instance->drirc.available_options, 0, "radv", NULL, NULL,
                        instance->vk.app_info.app_name, instance->vk.app_info.app_version,
                        instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
 
-   instance->enable_mrt_output_nan_fixup = driQueryOptionb(&instance->dri_options, "radv_enable_mrt_output_nan_fixup");
+   instance->drirc.enable_mrt_output_nan_fixup =
+      driQueryOptionb(&instance->drirc.options, "radv_enable_mrt_output_nan_fixup");
 
-   instance->disable_shrink_image_store = driQueryOptionb(&instance->dri_options, "radv_disable_shrink_image_store");
+   instance->drirc.disable_shrink_image_store =
+      driQueryOptionb(&instance->drirc.options, "radv_disable_shrink_image_store");
 
-   instance->disable_tc_compat_htile_in_general =
-      driQueryOptionb(&instance->dri_options, "radv_disable_tc_compat_htile_general");
+   instance->drirc.disable_tc_compat_htile_in_general =
+      driQueryOptionb(&instance->drirc.options, "radv_disable_tc_compat_htile_general");
 
-   if (driQueryOptionb(&instance->dri_options, "radv_no_dynamic_bounds"))
+   if (driQueryOptionb(&instance->drirc.options, "radv_no_dynamic_bounds"))
       instance->debug_flags |= RADV_DEBUG_NO_DYNAMIC_BOUNDS;
 
-   if (driQueryOptionb(&instance->dri_options, "radv_lower_discard_to_demote"))
+   if (driQueryOptionb(&instance->drirc.options, "radv_lower_discard_to_demote"))
       instance->debug_flags |= RADV_DEBUG_DISCARD_TO_DEMOTE;
 
-   if (driQueryOptionb(&instance->dri_options, "radv_invariant_geom"))
+   if (driQueryOptionb(&instance->drirc.options, "radv_invariant_geom"))
       instance->debug_flags |= RADV_DEBUG_INVARIANT_GEOM;
 
-   if (driQueryOptionb(&instance->dri_options, "radv_split_fma"))
+   if (driQueryOptionb(&instance->drirc.options, "radv_split_fma"))
       instance->debug_flags |= RADV_DEBUG_SPLIT_FMA;
 
-   if (driQueryOptionb(&instance->dri_options, "radv_disable_dcc"))
+   if (driQueryOptionb(&instance->drirc.options, "radv_disable_dcc"))
       instance->debug_flags |= RADV_DEBUG_NO_DCC;
 
-   instance->zero_vram = driQueryOptionb(&instance->dri_options, "radv_zero_vram");
+   instance->drirc.clear_lds = driQueryOptionb(&instance->drirc.options, "radv_clear_lds");
 
-   instance->disable_aniso_single_level = driQueryOptionb(&instance->dri_options, "radv_disable_aniso_single_level");
+   instance->drirc.zero_vram = driQueryOptionb(&instance->drirc.options, "radv_zero_vram");
 
-   instance->disable_trunc_coord = driQueryOptionb(&instance->dri_options, "radv_disable_trunc_coord");
+   instance->drirc.disable_aniso_single_level =
+      driQueryOptionb(&instance->drirc.options, "radv_disable_aniso_single_level");
 
-   instance->disable_sinking_load_input_fs =
-      driQueryOptionb(&instance->dri_options, "radv_disable_sinking_load_input_fs");
+   instance->drirc.disable_trunc_coord = driQueryOptionb(&instance->drirc.options, "radv_disable_trunc_coord");
 
-   instance->flush_before_query_copy = driQueryOptionb(&instance->dri_options, "radv_flush_before_query_copy");
+   instance->drirc.disable_sinking_load_input_fs =
+      driQueryOptionb(&instance->drirc.options, "radv_disable_sinking_load_input_fs");
 
-   instance->enable_unified_heap_on_apu = driQueryOptionb(&instance->dri_options, "radv_enable_unified_heap_on_apu");
+   instance->drirc.flush_before_query_copy = driQueryOptionb(&instance->drirc.options, "radv_flush_before_query_copy");
 
-   instance->tex_non_uniform = driQueryOptionb(&instance->dri_options, "radv_tex_non_uniform");
+   instance->drirc.enable_unified_heap_on_apu =
+      driQueryOptionb(&instance->drirc.options, "radv_enable_unified_heap_on_apu");
 
-   instance->ssbo_non_uniform = driQueryOptionb(&instance->dri_options, "radv_ssbo_non_uniform");
+   instance->drirc.tex_non_uniform = driQueryOptionb(&instance->drirc.options, "radv_tex_non_uniform");
 
-   instance->app_layer = driQueryOptionstr(&instance->dri_options, "radv_app_layer");
+   instance->drirc.ssbo_non_uniform = driQueryOptionb(&instance->drirc.options, "radv_ssbo_non_uniform");
 
-   instance->flush_before_timestamp_write =
-      driQueryOptionb(&instance->dri_options, "radv_flush_before_timestamp_write");
+   instance->drirc.app_layer = driQueryOptionstr(&instance->drirc.options, "radv_app_layer");
 
-   instance->force_rt_wave64 = driQueryOptionb(&instance->dri_options, "radv_rt_wave64");
+   instance->drirc.flush_before_timestamp_write =
+      driQueryOptionb(&instance->drirc.options, "radv_flush_before_timestamp_write");
 
-   instance->dual_color_blend_by_location = driQueryOptionb(&instance->dri_options, "dual_color_blend_by_location");
+   instance->drirc.force_rt_wave64 = driQueryOptionb(&instance->drirc.options, "radv_rt_wave64");
+
+   instance->drirc.dual_color_blend_by_location =
+      driQueryOptionb(&instance->drirc.options, "dual_color_blend_by_location");
+
+   instance->drirc.legacy_sparse_binding = driQueryOptionb(&instance->drirc.options, "radv_legacy_sparse_binding");
+
+   instance->drirc.override_graphics_shader_version =
+      driQueryOptioni(&instance->drirc.options, "radv_override_graphics_shader_version");
+   instance->drirc.override_compute_shader_version =
+      driQueryOptioni(&instance->drirc.options, "radv_override_compute_shader_version");
+   instance->drirc.override_ray_tracing_shader_version =
+      driQueryOptioni(&instance->drirc.options, "radv_override_ray_tracing_shader_version");
+
+   instance->drirc.enable_dgc = driQueryOptionb(&instance->drirc.options, "radv_dgc");
+
+   instance->drirc.override_vram_size = driQueryOptioni(&instance->drirc.options, "override_vram_size");
+
+   instance->drirc.enable_khr_present_wait = driQueryOptionb(&instance->drirc.options, "vk_khr_present_wait");
+
+   instance->drirc.override_uniform_offset_alignment =
+      driQueryOptioni(&instance->drirc.options, "radv_override_uniform_offset_alignment");
+
+   instance->drirc.report_llvm9_version_string =
+      driQueryOptionb(&instance->drirc.options, "radv_report_llvm9_version_string");
+
+   instance->drirc.vk_require_etc2 = driQueryOptionb(&instance->drirc.options, "vk_require_etc2");
+   instance->drirc.vk_require_astc = driQueryOptionb(&instance->drirc.options, "vk_require_astc");
 }
 
 static const struct vk_instance_extension_table radv_instance_extensions_supported = {
@@ -328,8 +365,8 @@ radv_DestroyInstance(VkInstance _instance, const VkAllocationCallbacks *pAllocat
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
-   driDestroyOptionCache(&instance->dri_options);
-   driDestroyOptionInfo(&instance->available_dri_options);
+   driDestroyOptionCache(&instance->drirc.options);
+   driDestroyOptionInfo(&instance->drirc.available_options);
 
    vk_instance_finish(&instance->vk);
    vk_free(&instance->vk.alloc, instance);
@@ -377,53 +414,6 @@ radv_GetInstanceProcAddr(VkInstance _instance, const char *pName)
 #define PUBLIC
 #endif
 
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it is
-    *         linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 5u);
-   return VK_SUCCESS;
-}
-
 /* The loader wants us to expose a second GetInstanceProcAddr function
  * to work around certain LD_PRELOAD issues seen in apps.
  */
@@ -432,12 +422,4 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName)
 {
    return radv_GetInstanceProcAddr(instance, pName);
-}
-
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-vk_icdGetPhysicalDeviceProcAddr(VkInstance _instance, const char *pName)
-{
-   RADV_FROM_HANDLE(radv_instance, instance, _instance);
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
 }

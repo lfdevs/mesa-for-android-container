@@ -257,7 +257,10 @@ trace_video_codec_flush(struct pipe_video_codec *_codec)
 }
 
 static void
-trace_video_codec_get_feedback(struct pipe_video_codec *_codec, void *feedback, unsigned *size)
+trace_video_codec_get_feedback(struct pipe_video_codec *_codec,
+                               void *feedback,
+                               unsigned *size,
+                               struct pipe_enc_feedback_metadata* metadata)
 {
     struct trace_video_codec *tr_vcodec = trace_video_codec(_codec);
     struct pipe_video_codec *codec = tr_vcodec->video_codec;
@@ -268,7 +271,7 @@ trace_video_codec_get_feedback(struct pipe_video_codec *_codec, void *feedback, 
     trace_dump_arg(ptr, size);
     trace_dump_call_end();
 
-    codec->get_feedback(codec, feedback, size);
+    codec->get_feedback(codec, feedback, size, metadata);
 }
 
 static int

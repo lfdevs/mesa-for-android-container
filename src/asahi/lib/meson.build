@@ -1,5 +1,6 @@
 # Copyright 2018 Rob Clark
 # Copyright 2019 Collabora, Ltd.
+# Copyright 2017 Intel Corporation
 # SPDX-License-Identifier: MIT
 
 dep_iokit = dependency('IOKit', required : false)
@@ -12,6 +13,8 @@ libasahi_lib_files = files(
   'agx_meta.c',
   'agx_tilebuffer.c',
   'agx_nir_lower_alpha.c',
+  'agx_nir_lower_gs.c',
+  'agx_nir_lower_ia.c',
   'agx_nir_lower_msaa.c',
   'agx_nir_lower_sample_intrinsics.c',
   'agx_nir_lower_tilebuffer.c',
@@ -23,6 +26,13 @@ libasahi_lib_files = files(
 
 libasahi_decode_files = files(
   'decode.c',
+)
+
+libagx_shader_files = files(
+  'shaders/libagx.h',
+  'shaders/geometry.cl',
+  'shaders/geometry.h',
+  'shaders/texture.cl',
 )
 
 agx_pack = custom_target(
@@ -56,9 +66,30 @@ libasahi_decode_shared = shared_library(
   build_by_default : with_tools.contains('asahi'),
 )
 
+prepended_input_args = []
+foreach input_arg : libagx_shader_files
+  prepended_input_args += ['--in', input_arg]
+endforeach
+libagx_shaders = custom_target(
+  'libagx_shaders.h',
+  input : libagx_shader_files,
+  output : 'libagx_shaders.h',
+  command : [
+    prog_asahi_clc, '--prefix', 'libagx_shaders',
+    prepended_input_args, '-o', '@OUTPUT@', '--',
+    '-cl-std=cl2.0', '-D__OPENCL_VERSION__=200',
+    '-I' + join_paths(meson.current_source_dir(), '.'),
+    '-I' + join_paths(meson.current_source_dir(), '../../'),
+    '-I' + join_paths(meson.current_source_dir(), 'shaders'),
+    '-I' + join_paths(meson.current_build_dir(), '.'),
+    ],
+  env: ['MESA_SHADER_CACHE_DISABLE=true'],
+  depends : [prog_asahi_clc, agx_pack],
+)
+
 libasahi_lib = static_library(
   'asahi_lib',
-  [libasahi_lib_files, agx_pack],
+  [libasahi_lib_files, libagx_shaders, agx_pack],
   include_directories : inc_asahi,
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',

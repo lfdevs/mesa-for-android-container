@@ -29,7 +29,7 @@ traces:
       checksum: 8d71757cb74f8d71bf87c8af7e7f725a
   pathfinder/demo-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 86318ec31a55a1246cb4a136a15475fd
+      checksum: c81c85f9b247dd1b06c3dd5b669cc283
   pathfinder/canvas_moire-v2.trace:
     gl-radeonsi-stoney:
       checksum: 78dd2357ad6e5ffc049a75bfb11c5497
@@ -44,7 +44,7 @@ traces:
       checksum: 2d0527e7288a0fc31099404546dadbfb
   humus/Portals-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 5b96333495b794691e4ed071ae92ff19
+      checksum: fac6a97146115f62ef4e74f2e265ed3c
   godot/Material Testers.x86_64_2020.04.08_13.38_frame799.rdc:
     gl-radeonsi-stoney:
       label: [skip]
@@ -52,7 +52,7 @@ traces:
       checksum: 0e7441a7f2c86c75eeac72269786e7a1
   gputest/gimark-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 32d373e5ae6cd241c5a7b286c296113f
+      checksum: f2aee98f2b8813ad60d98cf241e42114
   gputest/pixmark-julia-fp32-v2.trace:
     gl-radeonsi-stoney:
       checksum: b5e0ae5ad680d884432f89a923f3e70d
@@ -70,19 +70,19 @@ traces:
       checksum: 071c8863793e7adcd95acb054592f819
   humus/AmbientAperture-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 679dc88e5f0d3b3608e0490b4b39fbea
+      checksum: ed3444722d2468d5306bc734f0c24089
   humus/CelShading-v2.trace:
     gl-radeonsi-stoney:
       checksum: ebd3f460386b9461aab6adef04dc0547
   humus/DynamicBranching3-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 9f932808ccce10a2bf7568ddafe1a1cf
+      checksum: 34729da23982aef3a4b50a539a6f48aa
   humus/HDR-v2.trace:
     gl-radeonsi-stoney:
       checksum: fddf642f7a4e3946f1975e33cf773220
   humus/RaytracedShadows-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 743ce9c218b87404cfe615ed7951d5b8
+      checksum: 2f8ff223286ed95d8b13fcb87b09a636
   paraview/pv-manyspheres-v2.trace:
     gl-radeonsi-stoney:
       checksum: 7728082892aa81ee74484b1ed239db74
@@ -94,19 +94,19 @@ traces:
       checksum: 491d0572ab0bcbcbc9827521597b3787
   humus/VolumetricFogging2-v2.trace:
     gl-radeonsi-stoney:
-      checksum: e3eb8d6934c23cbef7133ba501821698
+      checksum: b85d66d9c773fdc550e7d3038ccd71e6
   supertuxkart/supertuxkart-antediluvian-abyss.rdc:
     gl-radeonsi-stoney:
-      checksum: 112f203971d0f1ae46bc8268683480a2
+      checksum: 6b2e8d20d2774ece96c999ef01533695
   supertuxkart/supertuxkart-menu.rdc:
     gl-radeonsi-stoney:
       checksum: e17f3125683d8b2acac8bc0b4b8e1b44
   supertuxkart/supertuxkart-ravenbridge-mansion.rdc:
     gl-radeonsi-stoney:
-      checksum: 60f74020451e9beaf586b4551541b763
+      checksum: 3719b5ef32db846570f9b9a3b5ac8705
   ror/ror-default.trace:
     gl-radeonsi-stoney:
-      checksum: a37b58424c4289a6de77e61d599b6fab
+      checksum: 9ab581db528a53d91f870a064aff9cd4
   nheko/nheko-colors.trace:
     gl-radeonsi-stoney:
       checksum: d3234cd6ccc2ab5d3ceab7db79300c69

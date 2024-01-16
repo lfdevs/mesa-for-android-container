@@ -27,15 +27,6 @@
 
 #include "v3dv_private.h"
 
-/* The only version specific structure that we need is
- * TMU_CONFIG_PARAMETER_1. This didn't seem to change significantly from
- * previous V3D versions and we don't expect that to change, so for now let's
- * just hardcode the V3D version here.
- */
-#define V3D_VERSION 41
-#include "broadcom/common/v3d_macros.h"
-#include "broadcom/cle/v3dx_pack.h"
-
 /* Our Vulkan resource indices represent indices in descriptor maps which
  * include all shader stages, so we need to size the arrays below
  * accordingly. For now we only support a maximum of 3 stages: VS, GS, FS.
@@ -223,11 +214,8 @@ write_tmu_p1(struct v3dv_cmd_buffer *cmd_buffer,
    /* Set unnormalized coordinates flag from sampler object */
    uint32_t p1_packed = v3d_unit_data_get_offset(data);
    if (sampler->unnormalized_coordinates) {
-      struct V3DX(TMU_CONFIG_PARAMETER_1) p1_unpacked;
-      V3DX(TMU_CONFIG_PARAMETER_1_unpack)((uint8_t *)&p1_packed, &p1_unpacked);
-      p1_unpacked.unnormalized_coordinates = true;
-      V3DX(TMU_CONFIG_PARAMETER_1_pack)(NULL, (uint8_t *)&p1_packed,
-                                        &p1_unpacked);
+      v3d_pack_unnormalized_coordinates(&cmd_buffer->device->devinfo, &p1_packed,
+                                        sampler->unnormalized_coordinates);
    }
 
    cl_aligned_u32(uniforms, sampler_state_reloc.bo->offset +
@@ -667,6 +655,10 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
       case QUNIFORM_SPILL_SIZE_PER_THREAD:
          assert(pipeline->spill.size_per_thread > 0);
          cl_aligned_u32(&uniforms, pipeline->spill.size_per_thread);
+         break;
+
+      case QUNIFORM_DRAW_ID:
+         cl_aligned_u32(&uniforms, job->cmd_buffer->state.draw_id);
          break;
 
       default:

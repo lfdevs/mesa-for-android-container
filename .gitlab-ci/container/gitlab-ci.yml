@@ -23,10 +23,6 @@
   variables:
     MESA_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${FDO_DISTRIBUTION_TAG}"
 
-.use-wine:
-  variables:
-    WINEPATH: "/usr/x86_64-w64-mingw32/bin;/usr/x86_64-w64-mingw32/lib;/usr/lib/gcc/x86_64-w64-mingw32/10-posix;c:/windows;c:/windows/system32"
-
 # Build the CI docker images.
 #
 # MESA_IMAGE_TAG is the tag of the docker image used by later stage jobs. If the
@@ -44,14 +40,16 @@
 # repository's container registry, so that the image from the main
 # repository's registry will be used there as well.
 
+.debian-container:
+  variables:
+    FDO_DISTRIBUTION_VERSION: bookworm-slim
+
 .container:
   stage: container
   extends:
     - .container+build-rules
     - .incorporate-templates-commit
-    - .use-wine
   variables:
-    FDO_DISTRIBUTION_VERSION: bookworm-slim
     FDO_REPO_SUFFIX: $CI_JOB_NAME
     FDO_DISTRIBUTION_EXEC: 'bash .gitlab-ci/container/${CI_JOB_NAME}.sh'
     # no need to pull the whole repo to build the container image
@@ -67,12 +65,14 @@ debian/x86_64_build-base:
   extends:
     - .fdo.container-build@debian
     - .container
+    - .debian-container
   variables:
-    MESA_IMAGE_TAG: &debian-x86_64_build-base ${DEBIAN_BASE_TAG}
+    MESA_IMAGE_TAG: &debian-x86_64_build-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
 .use-debian/x86_64_build-base:
   extends:
     - .fdo.container-build@debian
+    - .debian-container
     - .use-base-image
   variables:
     MESA_BASE_IMAGE: ${DEBIAN_X86_64_BUILD_BASE_IMAGE}
@@ -87,6 +87,10 @@ debian/x86_64_build:
     - .use-debian/x86_64_build-base
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build ${DEBIAN_BUILD_TAG}
+  rules:
+    - !reference [.use-debian/x86_64_build-base, rules]
+    # python-test requires this job
+    - !reference [python-test, rules]
 
 .use-debian/x86_64_build:
   extends:
@@ -114,24 +118,6 @@ debian/x86_32_build:
     MESA_IMAGE_TAG: *debian-x86_32_build
   needs:
     - debian/x86_32_build
-
-# Debian based x86_64-mingw cross main build image
-# FIXME: Until gets fixed on Debian 12, disabled.
-.debian/x86_64_build-mingw:
-  extends:
-    - .use-debian/x86_64_build-base
-  variables:
-    MESA_IMAGE_TAG: &debian-x86_64_build_mingw ${DEBIAN_BUILD_MINGW_TAG}
-
-.use-debian/x86_64_build_mingw:
-  extends:
-    - .set-image-base-tag
-  variables:
-    MESA_BASE_TAG: *debian-x86_64_build-base
-    MESA_IMAGE_PATH: ${DEBIAN_X86_64_BUILD_MINGW_IMAGE_PATH}
-    MESA_IMAGE_TAG: *debian-x86_64_build_mingw
-  needs:
-    - .debian/x86_64_build-mingw
 
 # Debian based ppc64el cross-build image
 debian/ppc64el_build:
@@ -190,11 +176,12 @@ debian/android_build:
 debian/x86_64_test-base:
   extends: debian/x86_64_build-base
   variables:
-    MESA_IMAGE_TAG: &debian-x86_64_test-base "${DEBIAN_BASE_TAG}--${KERNEL_TAG}"
+    MESA_IMAGE_TAG: &debian-x86_64_test-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}--${KERNEL_TAG}"
 
 .use-debian/x86_64_test-base:
   extends:
     - .fdo.container-build@debian
+    - .debian-container
     - .use-base-image
   variables:
     MESA_BASE_IMAGE: ${DEBIAN_X86_64_TEST_BASE_IMAGE}
@@ -256,10 +243,11 @@ debian/arm64_build:
   extends:
     - .fdo.container-build@debian
     - .container
+    - .debian-container
   tags:
     - aarch64
   variables:
-    MESA_IMAGE_TAG: &debian-arm64_build ${DEBIAN_BASE_TAG}
+    MESA_IMAGE_TAG: &debian-arm64_build "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
 .use-debian/arm64_build:
   extends:
@@ -278,7 +266,8 @@ debian/arm64_build:
     - .fdo.container-build@alpine
     - .container
   variables:
-    FDO_DISTRIBUTION_VERSION: "3.18"
+    FDO_DISTRIBUTION_VERSION: "edge"  # switch to 3.20 when gets released
+    FDO_BASE_IMAGE: alpine:$FDO_DISTRIBUTION_VERSION  # since cbuild ignores it
 
 # Alpine based x86_64 build image
 alpine/x86_64_build:
@@ -325,6 +314,7 @@ fedora/x86_64_build:
 .kernel+rootfs:
   extends:
     - .container+build-rules
+    - .debian-container
   stage: container
   variables:
     GIT_STRATEGY: fetch
@@ -373,6 +363,7 @@ kernel+rootfs_arm32:
   extends:
     - .fdo.container-build@debian
     - .container
+    - .debian-container
     # Don't want the .container rules
     - .container+build-rules
   variables:
@@ -388,7 +379,7 @@ debian/arm32_test:
   needs:
     - kernel+rootfs_arm32
   variables:
-    MESA_IMAGE_TAG: &debian-arm32_test ${DEBIAN_BASE_TAG}
+    MESA_IMAGE_TAG: &debian-arm32_test "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
 debian/arm64_test:
   extends:
@@ -396,7 +387,7 @@ debian/arm64_test:
   needs:
     - kernel+rootfs_arm64
   variables:
-    MESA_IMAGE_TAG: &debian-arm64_test ${DEBIAN_BASE_TAG}
+    MESA_IMAGE_TAG: &debian-arm64_test "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
 .use-debian/arm_test:
   variables:
@@ -434,7 +425,7 @@ debian/arm64_test:
 # (host PowerShell) in the container stage to build and push the image,
 # then in the build stage by executing inside Docker.
 
-.windows-docker-vs2019:
+.windows-docker-msvc:
   variables:
     MESA_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}"
     MESA_UPSTREAM_IMAGE: "$CI_REGISTRY/$FDO_UPSTREAM_REPO/$MESA_IMAGE_PATH:${MESA_IMAGE_TAG}"
@@ -446,7 +437,7 @@ debian/arm64_test:
     default: [retry]
   extends:
     - .container
-    - .windows-docker-vs2019
+    - .windows-docker-msvc
     - .windows-shell-tags
   rules:
     - !reference [.microsoft-farm-container-rules, rules]
@@ -457,18 +448,18 @@ debian/arm64_test:
   script:
     - .\.gitlab-ci\windows\mesa_container.ps1 $CI_REGISTRY $CI_REGISTRY_USER $CI_REGISTRY_PASSWORD $MESA_IMAGE $MESA_UPSTREAM_IMAGE ${DOCKERFILE} ${MESA_BASE_IMAGE}
 
-windows_vs2019:
+windows_msvc:
   inherit:
     default: [retry]
   extends:
     - .windows_container_build
   variables:
-    MESA_IMAGE_PATH: &windows_vs_image_path ${WINDOWS_X64_VS_PATH}
-    MESA_IMAGE_TAG: &windows_vs_image_tag ${WINDOWS_X64_VS_TAG}
-    DOCKERFILE: Dockerfile_vs
+    MESA_IMAGE_PATH: &windows_msvc_image_path ${WINDOWS_X64_MSVC_PATH}
+    MESA_IMAGE_TAG: ${WINDOWS_X64_MSVC_TAG}
+    DOCKERFILE: Dockerfile_msvc
     MESA_BASE_IMAGE: "mcr.microsoft.com/windows/server:ltsc2022"
 
-windows_build_vs2019:
+windows_build_msvc:
   inherit:
     default: [retry]
   extends:
@@ -478,16 +469,15 @@ windows_build_vs2019:
     - !reference [.container+build-rules, rules]
   variables:
     MESA_IMAGE_PATH: &windows_build_image_path ${WINDOWS_X64_BUILD_PATH}
-    MESA_IMAGE_TAG: &windows_build_image_tag ${MESA_BASE_IMAGE_TAG}--${WINDOWS_X64_BUILD_TAG}
+    MESA_IMAGE_TAG: &windows_build_image_tag ${WINDOWS_X64_MSVC_TAG}--${WINDOWS_X64_BUILD_TAG}
     DOCKERFILE: Dockerfile_build
-    MESA_BASE_IMAGE_PATH: *windows_vs_image_path
-    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
-    MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${MESA_BASE_IMAGE_TAG}"
+    MESA_BASE_IMAGE_PATH: *windows_msvc_image_path
+    MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${WINDOWS_X64_MSVC_TAG}"
   timeout: 2h 30m # LLVM takes ages
   needs:
-    - windows_vs2019
+    - windows_msvc
 
-windows_test_vs2019:
+windows_test_msvc:
   inherit:
     default: [retry]
   extends:
@@ -497,33 +487,30 @@ windows_test_vs2019:
     - !reference [.container+build-rules, rules]
   variables:
     MESA_IMAGE_PATH: &windows_test_image_path ${WINDOWS_X64_TEST_PATH}
-    MESA_IMAGE_TAG: &windows_test_image_tag ${MESA_BASE_IMAGE_TAG}--${WINDOWS_X64_TEST_TAG}
+    MESA_IMAGE_TAG: &windows_test_image_tag ${WINDOWS_X64_MSVC_TAG}--${WINDOWS_X64_TEST_TAG}
     DOCKERFILE: Dockerfile_test
-    MESA_BASE_IMAGE_PATH: *windows_vs_image_path
-    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
-    MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${MESA_BASE_IMAGE_TAG}"
+    MESA_BASE_IMAGE_PATH: *windows_msvc_image_path
+    MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${WINDOWS_X64_MSVC_TAG}"
   timeout: 2h 30m
   needs:
-    - windows_vs2019
+    - windows_msvc
 
-.use-windows_build_vs2019:
+.use-windows_build_msvc:
   inherit:
     default: [retry]
-  extends: .windows-docker-vs2019
+  extends: .windows-docker-msvc
   image: "$MESA_IMAGE"
   variables:
     MESA_IMAGE_PATH: *windows_build_image_path
     MESA_IMAGE_TAG: *windows_build_image_tag
-    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
   needs:
-    - windows_build_vs2019
+    - windows_build_msvc
 
-.use-windows_test_vs2019:
+.use-windows_test_msvc:
   inherit:
     default: [retry]
-  extends: .windows-docker-vs2019
+  extends: .windows-docker-msvc
   image: "$MESA_IMAGE"
   variables:
     MESA_IMAGE_PATH: *windows_test_image_path
     MESA_IMAGE_TAG: *windows_test_image_tag
-    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag

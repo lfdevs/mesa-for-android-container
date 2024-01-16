@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 #include <assert.h>
+#include <time.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -88,6 +89,15 @@ bool intel_gem_supports_syncobj_wait(int fd);
 bool
 intel_gem_read_render_timestamp(int fd, enum intel_kmd_type kmd_type,
                                 uint64_t *value);
+bool
+intel_gem_read_correlate_cpu_gpu_timestamp(int fd,
+                                           enum intel_kmd_type kmd_type,
+                                           enum intel_engine_class engine_class,
+                                           uint16_t engine_instance,
+                                           clockid_t cpu_clock_id,
+                                           uint64_t *cpu_timestamp,
+                                           uint64_t *gpu_timestamp,
+                                           uint64_t *cpu_delta);
 bool intel_gem_can_render_on_fd(int fd, enum intel_kmd_type kmd_type);
 
 /* Functions only used by i915 */

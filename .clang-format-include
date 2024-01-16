@@ -1,9 +1,8 @@
 # The following files are opted into `ninja clang-format` and
 # enforcement in the CI.
 
-src/**/asahi/**/*
-src/**/panfrost/**/*
 src/gallium/drivers/i915
 src/amd/vulkan/**/*
 src/amd/compiler/**/*
 src/egl/**/*
+src/etnaviv/isa/**/*

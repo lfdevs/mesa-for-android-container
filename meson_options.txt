@@ -31,6 +31,15 @@ option(
 )
 
 option(
+  'android-strict',
+  type : 'boolean',
+  value : true,
+  description : 'Enable strict Android compliance. Disabling may cause CTS ' +
+                'failures or other problems, but allows drivers to expose ' +
+                'capabilities that are normally hidden. Default: true'
+)
+
+option(
   'android-libbacktrace',
   type : 'feature',
   description : 'Use Android\'s libbacktrace',
@@ -629,15 +638,15 @@ option(
 option(
   'video-codecs',
   type : 'array',
-  value : [],
+  value : ['all_free'],
   choices: [
-    'vc1dec', 'h264dec', 'h264enc', 'h265dec', 'h265enc'
+    'all', 'all_free', 'vc1dec', 'h264dec', 'h264enc', 'h265dec', 'h265enc', 'av1dec', 'av1enc', 'vp9dec'
   ],
-  description : 'List of patent encumbered codecs to build support for. ' +
+  description : 'List of codecs to build support for. ' +
                 'Distros might want to consult their legal department before ' +
                 'enabling these. This is used for all video APIs (vaapi, ' +
                 'vdpau, vulkan). Non-patent encumbered codecs will be ' +
-                'enabled by default.'
+                'enabled by default with the all_free default value.'
 )
 
 option(

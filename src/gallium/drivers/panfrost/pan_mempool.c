@@ -104,8 +104,8 @@ panfrost_pool_get_bo_handles(struct panfrost_pool *pool, uint32_t *handles)
 
    unsigned idx = 0;
    util_dynarray_foreach(&pool->bos, struct panfrost_bo *, bo) {
-      assert((*bo)->gem_handle > 0);
-      handles[idx++] = (*bo)->gem_handle;
+      assert(panfrost_bo_handle(*bo) > 0);
+      handles[idx++] = panfrost_bo_handle(*bo);
 
       /* Update the BO access flags so that panfrost_bo_wait() knows
        * about all pending accesses.

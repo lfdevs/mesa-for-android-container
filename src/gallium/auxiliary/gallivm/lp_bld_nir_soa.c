@@ -2196,7 +2196,10 @@ emit_prologue(struct lp_build_nir_soa_context *bld)
 {
    struct gallivm_state * gallivm = bld->bld_base.base.gallivm;
    if (bld->indirects & nir_var_shader_in && !bld->gs_iface && !bld->tcs_iface && !bld->tes_iface) {
-      uint32_t num_inputs = util_bitcount64(bld->bld_base.shader->info.inputs_read);
+      uint32_t num_inputs = bld->num_inputs;
+      /* If this is an indirect case, the number of inputs should not be 0 */
+      assert(num_inputs > 0);
+
       unsigned index, chan;
       LLVMTypeRef vec_type = bld->bld_base.base.vec_type;
       LLVMValueRef array_size = lp_build_const_int32(gallivm, num_inputs * 4);
@@ -3037,6 +3040,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
    bld.payload_ptr = params->payload_ptr;
    bld.coro = params->coro;
    bld.kernel_args_ptr = params->kernel_args;
+   bld.num_inputs = params->num_inputs;
    bld.indirects = 0;
    if (shader->info.inputs_read_indirectly)
       bld.indirects |= nir_var_shader_in;

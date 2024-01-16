@@ -85,7 +85,7 @@ struct ail_layout {
     *
     * If depth_px = 1, the value of this field is UNDEFINED.
     */
-   uint32_t layer_stride_B;
+   uint64_t layer_stride_B;
 
    /**
     * Whether the layer stride is aligned to the page size or not. The hardware
@@ -96,12 +96,12 @@ struct ail_layout {
    /**
     * Offsets of mip levels within a layer.
     */
-   uint32_t level_offsets_B[AIL_MAX_MIP_LEVELS];
+   uint64_t level_offsets_B[AIL_MAX_MIP_LEVELS];
 
    /**
     * For the compressed buffer, offsets of mip levels within a layer.
     */
-   uint32_t level_offsets_compressed_B[AIL_MAX_MIP_LEVELS];
+   uint64_t level_offsets_compressed_B[AIL_MAX_MIP_LEVELS];
 
    /**
     * If tiling is TWIDDLED, the tile size used for each mip level within a
@@ -110,14 +110,22 @@ struct ail_layout {
     */
    struct ail_tile tilesize_el[AIL_MAX_MIP_LEVELS];
 
+   /**
+    * If tiling is TWIDDLED, the stride in elements used for each mip level
+    * within a layer. Calculating level strides is the sole responsibility of
+    * ail_initialized_twiddled. This is necessary because compressed pixel
+    * formats may add extra stride padding.
+    */
+   uint32_t stride_el[AIL_MAX_MIP_LEVELS];
+
    /* Offset of the start of the compression metadata buffer */
    uint32_t metadata_offset_B;
 
    /* Stride between subsequent layers in the compression metadata buffer */
-   uint32_t compression_layer_stride_B;
+   uint64_t compression_layer_stride_B;
 
    /* Size of entire texture */
-   uint32_t size_B;
+   uint64_t size_B;
 
    /* Must the layout support writeable images? If false, the layout MUST NOT be
     * used as a writeable image (either PBE or image atomics).
@@ -194,12 +202,6 @@ ail_get_linear_pixel_B(struct ail_layout *layout, ASSERTED unsigned level,
           (x_px * util_format_get_blocksize(layout->format));
 }
 
-static inline bool
-ail_is_compressed(struct ail_layout *layout)
-{
-   return layout->tiling == AIL_TILING_TWIDDLED_COMPRESSED;
-}
-
 static inline unsigned
 ail_effective_width_sa(unsigned width_px, unsigned sample_count_sa)
 {
@@ -220,6 +222,43 @@ ail_can_compress(unsigned w_px, unsigned h_px, unsigned sample_count_sa)
    /* Small textures cannot be compressed */
    return ail_effective_width_sa(w_px, sample_count_sa) >= 16 &&
           ail_effective_height_sa(h_px, sample_count_sa) >= 16;
+}
+
+static inline bool
+ail_is_compressed(struct ail_layout *layout)
+{
+   return layout->tiling == AIL_TILING_TWIDDLED_COMPRESSED;
+}
+
+/*
+ * Even when the base mip level is compressed, high levels of the miptree
+ * (smaller than 16 pixels on either axis) are not compressed as it would be
+ * pointless. This queries this case.
+ */
+static inline bool
+ail_is_level_compressed(struct ail_layout *layout, unsigned level)
+{
+   unsigned width_sa = ALIGN(
+      ail_effective_width_sa(layout->width_px, layout->sample_count_sa), 16);
+
+   unsigned height_sa = ALIGN(
+      ail_effective_height_sa(layout->height_px, layout->sample_count_sa), 16);
+
+   return ail_is_compressed(layout) &&
+          u_minify(MAX2(width_sa, height_sa), level) >= 16;
+}
+
+static inline bool
+ail_is_level_twiddled_uncompressed(struct ail_layout *layout, unsigned level)
+{
+   switch (layout->tiling) {
+   case AIL_TILING_TWIDDLED:
+      return true;
+   case AIL_TILING_TWIDDLED_COMPRESSED:
+      return !ail_is_level_compressed(layout, level);
+   default:
+      return false;
+   }
 }
 
 void ail_make_miptree(struct ail_layout *layout);

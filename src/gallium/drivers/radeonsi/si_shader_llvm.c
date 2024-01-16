@@ -9,6 +9,7 @@
 #include "ac_rtld.h"
 #include "si_pipe.h"
 #include "si_shader_internal.h"
+#include "si_shader_llvm.h"
 #include "sid.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"

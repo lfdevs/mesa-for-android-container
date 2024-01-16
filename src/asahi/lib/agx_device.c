@@ -6,16 +6,24 @@
 
 #include "agx_device.h"
 #include <inttypes.h>
+#include "util/timespec.h"
 #include "agx_bo.h"
+#include "agx_compile.h"
 #include "decode.h"
+#include "glsl_types.h"
+#include "libagx_shaders.h"
 
 #include <fcntl.h>
 #include <xf86drm.h>
 #include "drm-uapi/dma-buf.h"
+#include "util/blob.h"
 #include "util/log.h"
 #include "util/os_file.h"
 #include "util/os_mman.h"
+#include "util/os_time.h"
 #include "util/simple_mtx.h"
+#include "git_sha1.h"
+#include "nir_serialize.h"
 
 /* TODO: Linux UAPI. Dummy defines to get some things to compile. */
 #define ASAHI_BIND_READ  0
@@ -68,7 +76,8 @@ agx_bo_bind(struct agx_device *dev, struct agx_bo *bo, uint64_t addr,
 }
 
 struct agx_bo *
-agx_bo_alloc(struct agx_device *dev, size_t size, enum agx_bo_flags flags)
+agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
+             enum agx_bo_flags flags)
 {
    struct agx_bo *bo;
    unsigned handle = 0;
@@ -90,6 +99,7 @@ agx_bo_alloc(struct agx_device *dev, size_t size, enum agx_bo_flags flags)
 
    bo->type = AGX_ALLOC_REGULAR;
    bo->size = size; /* TODO: gem_create.size */
+   bo->align = MAX2(dev->params.vm_page_size, align);
    bo->flags = flags;
    bo->dev = dev;
    bo->handle = handle;
@@ -104,8 +114,7 @@ agx_bo_alloc(struct agx_device *dev, size_t size, enum agx_bo_flags flags)
       heap = &dev->main_heap;
 
    simple_mtx_lock(&dev->vma_lock);
-   bo->ptr.gpu = util_vma_heap_alloc(heap, size + dev->guard_size,
-                                     dev->params.vm_page_size);
+   bo->ptr.gpu = util_vma_heap_alloc(heap, size + dev->guard_size, bo->align);
    simple_mtx_unlock(&dev->vma_lock);
    if (!bo->ptr.gpu) {
       fprintf(stderr, "Failed to allocate BO VMA\n");
@@ -331,8 +340,13 @@ agx_open_device(void *memctx, struct agx_device *dev)
       &dev->usc_heap, dev->params.vm_shader_start,
       dev->params.vm_shader_end - dev->params.vm_shader_start + 1);
 
-   dev->queue_id = agx_create_command_queue(dev, 0 /* TODO: CAPS */);
    agx_get_global_ids(dev);
+
+   glsl_type_singleton_init_or_ref();
+   struct blob_reader blob;
+   blob_reader_init(&blob, (void *)libagx_shaders_nir,
+                    sizeof(libagx_shaders_nir));
+   dev->libagx = nir_deserialize(memctx, &agx_nir_options, &blob);
 
    return true;
 }
@@ -351,16 +365,6 @@ agx_close_device(struct agx_device *dev)
 
 uint32_t
 agx_create_command_queue(struct agx_device *dev, uint32_t caps)
-{
-   unreachable("Linux UAPI not yet upstream");
-}
-
-int
-agx_submit_single(struct agx_device *dev, enum drm_asahi_cmd_type cmd_type,
-                  uint32_t barriers, struct drm_asahi_sync *in_syncs,
-                  unsigned in_sync_count, struct drm_asahi_sync *out_syncs,
-                  unsigned out_sync_count, void *cmdbuf, uint32_t result_handle,
-                  uint32_t result_off, uint32_t result_size)
 {
    unreachable("Linux UAPI not yet upstream");
 }
@@ -443,4 +447,21 @@ agx_debug_fault(struct agx_device *dev, uint64_t addr)
    }
 
    pthread_mutex_unlock(&dev->bo_map_lock);
+}
+
+uint64_t
+agx_get_gpu_timestamp(struct agx_device *dev)
+{
+#if DETECT_ARCH_AARCH64
+   uint64_t ret;
+   __asm__ volatile("mrs \t%0, cntvct_el0" : "=r"(ret));
+   return ret;
+#elif DETECT_ARCH_X86 || DETECT_ARCH_X86_64
+   /* Maps to the above when run under FEX without thunking */
+   uint32_t high, low;
+   __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
+   return (uint64_t)low | ((uint64_t)high << 32);
+#else
+#error "invalid architecture for asahi"
+#endif
 }

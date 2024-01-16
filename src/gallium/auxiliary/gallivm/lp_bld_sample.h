@@ -136,6 +136,7 @@ struct lp_sampler_size_query_params
    LLVMValueRef resources_ptr;
    bool is_sviewinfo;
    bool samples_only;
+   bool ms;
    enum lp_sampler_lod_property lod_property;
    LLVMValueRef explicit_lod;
    LLVMValueRef *sizes_out;
@@ -878,6 +879,11 @@ lp_build_reduce_filter_3d(struct lp_build_context *bld,
 struct lp_type
 lp_build_texel_type(struct lp_type texel_type,
                     const struct util_format_description *format_desc);
+
+LLVMValueRef lp_sample_load_mip_value(struct gallivm_state *gallivm,
+                                      LLVMTypeRef ptr_type,
+                                      LLVMValueRef offsets,
+                                      LLVMValueRef index1);
 
 const float *lp_build_sample_aniso_filter_table(void);
 #ifdef __cplusplus

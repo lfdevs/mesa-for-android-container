@@ -1,3 +1,5 @@
+#include "nir.h"
+
 struct rusticl_lower_state {
     size_t base_global_invoc_id_loc;
     size_t const_buf_loc;

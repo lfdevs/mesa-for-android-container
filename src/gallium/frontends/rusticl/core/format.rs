@@ -398,7 +398,7 @@ impl CLFormatInfo for cl_image_format {
     #[allow(non_upper_case_globals)]
     fn channels(&self) -> Option<u8> {
         match self.image_channel_order {
-            CL_R | CL_A | CL_DEPTH | CL_INTENSITY | CL_LUMINANCE => Some(1),
+            CL_R | CL_A | CL_DEPTH | CL_INTENSITY | CL_LUMINANCE | CL_NONE => Some(1),
             CL_RG | CL_RA | CL_Rx => Some(2),
             CL_RGB | CL_RGx | CL_sRGB => Some(3),
             CL_RGBA | CL_ARGB | CL_BGRA | CL_ABGR | CL_RGBx | CL_sRGBA | CL_sBGRA | CL_sRGBx => {
@@ -410,7 +410,9 @@ impl CLFormatInfo for cl_image_format {
 
     fn format_info(&self) -> Option<(u8, bool)> {
         match self.image_channel_data_type {
-            CL_SIGNED_INT8 | CL_UNSIGNED_INT8 | CL_SNORM_INT8 | CL_UNORM_INT8 => Some((1, false)),
+            CL_SIGNED_INT8 | CL_UNSIGNED_INT8 | CL_SNORM_INT8 | CL_UNORM_INT8 | CL_NONE => {
+                Some((1, false))
+            }
             CL_SIGNED_INT16 | CL_UNSIGNED_INT16 | CL_SNORM_INT16 | CL_UNORM_INT16
             | CL_HALF_FLOAT => Some((2, false)),
             CL_SIGNED_INT32 | CL_UNSIGNED_INT32 | CL_FLOAT => Some((4, false)),
@@ -423,4 +425,70 @@ impl CLFormatInfo for cl_image_format {
     fn to_pipe_format(&self) -> Option<pipe_format> {
         cl_format_to_pipe(self.image_channel_order, self.image_channel_data_type)
     }
+}
+
+macro_rules! gl_cl_format_table {
+    ([$($gl: ident => ($order: expr, $dtype: expr),)+]) => {
+        #[allow(non_upper_case_globals)]
+        const fn gl_format_to_cl(
+            gl_format: cl_GLenum
+        ) -> Option<(cl_channel_order, cl_channel_type)> {
+            Some(match gl_format {
+                $($gl => ($order, $dtype),)+
+                _ => return None,
+            })
+        }
+    };
+}
+
+gl_cl_format_table!([
+    GL_RGBA8                        => (CL_RGBA, CL_UNORM_INT8),
+    GL_SRGB8_ALPHA8                 => (CL_sRGBA, CL_UNORM_INT8),
+    GL_RGBA                         => (CL_RGBA, CL_UNORM_INT8),
+    GL_UNSIGNED_INT_8_8_8_8_REV     => (CL_RGBA, CL_UNORM_INT8),
+    GL_BGRA                         => (CL_BGRA, CL_UNORM_INT8),
+    GL_RGBA8I                       => (CL_RGBA, CL_SIGNED_INT8),
+    GL_RGBA16I                      => (CL_RGBA, CL_SIGNED_INT16),
+    GL_RGBA32I                      => (CL_RGBA, CL_SIGNED_INT32),
+    GL_RGBA8UI                      => (CL_RGBA, CL_UNSIGNED_INT8),
+    GL_RGBA16UI                     => (CL_RGBA, CL_UNSIGNED_INT16),
+    GL_RGBA32UI                     => (CL_RGBA, CL_UNSIGNED_INT32),
+    GL_RGBA8_SNORM                  => (CL_RGBA, CL_SNORM_INT8),
+    GL_RGBA16                       => (CL_RGBA, CL_UNORM_INT16),
+    GL_RGBA16_SNORM                 => (CL_RGBA, CL_SNORM_INT16),
+    GL_RGBA16F                      => (CL_RGBA, CL_HALF_FLOAT),
+    GL_RGBA32F                      => (CL_RGBA, CL_FLOAT),
+
+    GL_R8                           => (CL_R, CL_UNORM_INT8),
+    GL_R8_SNORM                     => (CL_R, CL_SNORM_INT8),
+    GL_R16                          => (CL_R, CL_UNORM_INT16),
+    GL_R16_SNORM                    => (CL_R, CL_SNORM_INT16),
+    GL_R16F                         => (CL_R, CL_HALF_FLOAT),
+    GL_R32F                         => (CL_R, CL_FLOAT),
+    GL_R8I                          => (CL_R, CL_SIGNED_INT8),
+    GL_R16I                         => (CL_R, CL_SIGNED_INT16),
+    GL_R32I                         => (CL_R, CL_SIGNED_INT32),
+    GL_R8UI                         => (CL_R, CL_UNSIGNED_INT8),
+    GL_R16UI                        => (CL_R, CL_UNSIGNED_INT16),
+    GL_R32UI                        => (CL_R, CL_UNSIGNED_INT32),
+
+    GL_RG8                          => (CL_RG, CL_UNORM_INT8),
+    GL_RG8_SNORM                    => (CL_RG, CL_SNORM_INT8),
+    GL_RG16                         => (CL_RG, CL_UNORM_INT16),
+    GL_RG16_SNORM                   => (CL_RG, CL_SNORM_INT16),
+    GL_RG16F                        => (CL_RG, CL_HALF_FLOAT),
+    GL_RG32F                        => (CL_RG, CL_FLOAT),
+    GL_RG8I                         => (CL_RG, CL_SIGNED_INT8),
+    GL_RG16I                        => (CL_RG, CL_SIGNED_INT16),
+    GL_RG32I                        => (CL_RG, CL_SIGNED_INT32),
+    GL_RG8UI                        => (CL_RG, CL_UNSIGNED_INT8),
+    GL_RG16UI                       => (CL_RG, CL_UNSIGNED_INT16),
+    GL_RG32UI                       => (CL_RG, CL_UNSIGNED_INT32),
+]);
+
+pub fn format_from_gl(internal_format: cl_GLenum) -> Option<cl_image_format> {
+    gl_format_to_cl(internal_format).map(|(order, dtype)| cl_image_format {
+        image_channel_order: order,
+        image_channel_data_type: dtype,
+    })
 }

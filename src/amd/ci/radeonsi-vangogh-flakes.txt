@@ -5,7 +5,3 @@ KHR-GLES31.core.tessellation_shader.vertex.vertex_ordering
 KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives
 
 KHR-Single-GL46.arrays_of_arrays_gl.SizedDeclarationsPrimitive
-
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB9_E5

@@ -114,16 +114,16 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
    info->max_se = 4;
    info->num_se = 4;
    if (info->gfx_level >= GFX10_3)
-      info->max_wave64_per_simd = 16;
+      info->max_waves_per_simd = 16;
    else if (info->gfx_level >= GFX10)
-      info->max_wave64_per_simd = 20;
+      info->max_waves_per_simd = 20;
    else if (info->family >= CHIP_POLARIS10 && info->family <= CHIP_VEGAM)
-      info->max_wave64_per_simd = 8;
+      info->max_waves_per_simd = 8;
    else
-      info->max_wave64_per_simd = 10;
+      info->max_waves_per_simd = 10;
 
    if (info->gfx_level >= GFX10)
-      info->num_physical_sgprs_per_simd = 128 * info->max_wave64_per_simd * 2;
+      info->num_physical_sgprs_per_simd = 128 * info->max_waves_per_simd;
    else if (info->gfx_level >= GFX8)
       info->num_physical_sgprs_per_simd = 800;
    else

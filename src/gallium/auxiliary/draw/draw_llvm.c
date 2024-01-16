@@ -596,6 +596,7 @@ generate_vs(struct draw_llvm_variant *variant,
       lp_jit_resources_constants(variant->gallivm, variant->resources_type, resources_ptr);
    LLVMValueRef ssbos_ptr =
       lp_jit_resources_ssbos(variant->gallivm, variant->resources_type, resources_ptr);
+   struct draw_llvm_variant_key *key = &variant->key;
 
    struct lp_build_tgsi_params params;
    memset(&params, 0, sizeof(params));
@@ -605,6 +606,7 @@ generate_vs(struct draw_llvm_variant *variant,
    params.consts_ptr = consts_ptr;
    params.system_values = system_values;
    params.inputs = inputs;
+   params.num_inputs = key->nr_vertex_elements;
    params.context_type = variant->context_type;
    params.context_ptr = context_ptr;
    params.resources_type = variant->resources_type;
@@ -1146,7 +1148,7 @@ generate_clipmask(struct draw_llvm *llvm,
    LLVMValueRef zero, shift;
    LLVMValueRef pos_x, pos_y, pos_z, pos_w;
    LLVMValueRef cv_x, cv_y, cv_z, cv_w;
-   LLVMValueRef plane1, planes, plane_ptr, sum;
+   LLVMValueRef plane1, planes, plane_ptr;
    struct lp_type f32_type = vs_type;
    struct lp_type i32_type = lp_int_type(vs_type);
    const unsigned pos = llvm->draw->vs.position_output;
@@ -1287,6 +1289,7 @@ generate_clipmask(struct draw_llvm *llvm,
          } else {
             LLVMTypeRef vs_elem_type = lp_build_elem_type(gallivm, vs_type);
             LLVMTypeRef vs_type_llvm = lp_build_vec_type(gallivm, vs_type);
+            LLVMValueRef sum = NULL;
             indices[0] = lp_build_const_int32(gallivm, 0);
             indices[1] = lp_build_const_int32(gallivm, plane_idx);
 
@@ -2162,14 +2165,19 @@ draw_llvm_set_mapped_texture(struct draw_context *draw,
    jit_tex->depth = depth;
    jit_tex->first_level = first_level;
    jit_tex->last_level = last_level;
+   jit_tex->mip_offsets[0] = 0;
    jit_tex->base = base_ptr;
-   jit_tex->num_samples = num_samples;
-   jit_tex->sample_stride = sample_stride;
-
-   for (unsigned j = first_level; j <= last_level; j++) {
-      jit_tex->mip_offsets[j] = mip_offsets[j];
-      jit_tex->row_stride[j] = row_stride[j];
-      jit_tex->img_stride[j] = img_stride[j];
+   if (num_samples > 1) {
+      jit_tex->mip_offsets[LP_JIT_TEXTURE_SAMPLE_STRIDE] = sample_stride;
+      jit_tex->row_stride[0] = row_stride[0];
+      jit_tex->img_stride[0] = img_stride[0];
+      jit_tex->last_level = num_samples;
+   } else {
+      for (unsigned j = first_level; j <= last_level; j++) {
+         jit_tex->mip_offsets[j] = mip_offsets[j];
+         jit_tex->row_stride[j] = row_stride[j];
+         jit_tex->img_stride[j] = img_stride[j];
+      }
    }
 }
 
@@ -2452,6 +2460,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
    params.aniso_filter_table = lp_jit_resources_aniso_filter_table(gallivm,
                                                                    variant->resources_type,
                                                                    resources_ptr);
+
 
    if (llvm->draw->gs.geometry_shader->state.type == PIPE_SHADER_IR_TGSI)
       lp_build_tgsi_soa(variant->gallivm,

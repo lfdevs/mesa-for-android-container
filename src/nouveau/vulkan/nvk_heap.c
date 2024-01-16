@@ -224,20 +224,30 @@ nvk_heap_free_locked(struct nvk_device *dev, struct nvk_heap *heap,
 {
    assert(addr + size > addr);
 
-   for (uint32_t bo_idx = 0; bo_idx < heap->bo_count; bo_idx++) {
-      if (addr < heap->bos[bo_idx].bo->offset)
-         continue;
+   if (heap->contiguous) {
+      assert(heap->bo_count == 1);
+      uint64_t bo_offset = addr;
 
-      uint64_t bo_offset = addr - heap->bos[bo_idx].bo->offset;
-      if (bo_offset >= heap->bos[bo_idx].bo->size)
-         continue;
-
-      assert(bo_offset + size <= heap->bos[bo_idx].bo->size);
-      uint64_t vma = encode_vma(bo_idx, bo_offset);
+      assert(bo_offset + size <= heap->bos[0].bo->size);
+      uint64_t vma = encode_vma(0, bo_offset);
 
       util_vma_heap_free(&heap->heap, vma, size);
+   } else {
+      for (uint32_t bo_idx = 0; bo_idx < heap->bo_count; bo_idx++) {
+         if (addr < heap->bos[bo_idx].bo->offset)
+            continue;
 
-      break;
+         uint64_t bo_offset = addr - heap->bos[bo_idx].bo->offset;
+         if (bo_offset >= heap->bos[bo_idx].bo->size)
+            continue;
+
+         assert(bo_offset + size <= heap->bos[bo_idx].bo->size);
+         uint64_t vma = encode_vma(bo_idx, bo_offset);
+
+         util_vma_heap_free(&heap->heap, vma, size);
+         return;
+      }
+      assert(!"Failed to find heap BO");
    }
 }
 

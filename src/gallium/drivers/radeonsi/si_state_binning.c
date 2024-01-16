@@ -42,7 +42,7 @@ static struct uvec2 si_find_bin_size(struct si_screen *sscreen, const si_bin_siz
    return size;
 }
 
-static struct uvec2 si_get_color_bin_size(struct si_context *sctx, unsigned cb_target_enabled_4bit)
+static struct uvec2 gfx9_get_color_bin_size(struct si_context *sctx, unsigned cb_target_enabled_4bit)
 {
    unsigned num_fragments = sctx->framebuffer.nr_color_samples;
    unsigned sum = 0;
@@ -156,7 +156,7 @@ static struct uvec2 si_get_color_bin_size(struct si_context *sctx, unsigned cb_t
    return si_find_bin_size(sctx->screen, table, sum);
 }
 
-static struct uvec2 si_get_depth_bin_size(struct si_context *sctx)
+static struct uvec2 gfx9_get_depth_bin_size(struct si_context *sctx)
 {
    struct si_state_dsa *dsa = sctx->queued.named.dsa;
 
@@ -465,8 +465,8 @@ void si_emit_dpbb_state(struct si_context *sctx, unsigned index)
    if (sctx->gfx_level >= GFX10) {
       gfx10_get_bin_sizes(sctx, cb_target_enabled_4bit, &color_bin_size, &depth_bin_size);
    } else {
-      color_bin_size = si_get_color_bin_size(sctx, cb_target_enabled_4bit);
-      depth_bin_size = si_get_depth_bin_size(sctx);
+      color_bin_size = gfx9_get_color_bin_size(sctx, cb_target_enabled_4bit);
+      depth_bin_size = gfx9_get_depth_bin_size(sctx);
    }
 
    unsigned color_area = color_bin_size.x * color_bin_size.y;

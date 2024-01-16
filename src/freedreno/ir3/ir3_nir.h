@@ -65,6 +65,7 @@ void ir3_nir_lower_gs(nir_shader *shader);
 bool ir3_nir_lower_64b_intrinsics(nir_shader *shader);
 bool ir3_nir_lower_64b_undef(nir_shader *shader);
 bool ir3_nir_lower_64b_global(nir_shader *shader);
+bool ir3_nir_lower_64b_regs(nir_shader *shader);
 
 void ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s);
 void ir3_nir_lower_io_to_temporaries(nir_shader *s);

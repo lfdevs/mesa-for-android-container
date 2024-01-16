@@ -354,7 +354,7 @@ enum pipe_control_flags
    PIPE_CONTROL_STATE_CACHE_INVALIDATE          = (1 << 22),
    PIPE_CONTROL_STALL_AT_SCOREBOARD             = (1 << 23),
    PIPE_CONTROL_DEPTH_CACHE_FLUSH               = (1 << 24),
-   PIPE_CONTROL_TILE_CACHE_FLUSH                = (1 << 25),
+   PIPE_CONTROL_TILE_CACHE_FLUSH                = (1 << 25), /* Not available in Gfx20+ */
    PIPE_CONTROL_FLUSH_HDC                       = (1 << 26),
    PIPE_CONTROL_PSS_STALL_SYNC                  = (1 << 27),
    PIPE_CONTROL_L3_READ_ONLY_CACHE_INVALIDATE   = (1 << 28),
@@ -829,6 +829,9 @@ struct iris_context {
       bool color_blend_zero;
       bool alpha_blend_zero;
 
+      /** State tracking for Wa_18020335297. */
+      bool viewport_ptr_set;
+
       /** Do we have integer RT in current framebuffer state? */
       bool has_integer_rt;
 
@@ -914,6 +917,8 @@ struct iris_context {
 
       /** Resource holding the pixel pipe hashing tables. */
       struct pipe_resource *pixel_hashing_tables;
+
+      bool use_tbimr;
    } state;
 };
 
@@ -1147,6 +1152,30 @@ int iris_get_driver_query_group_info(struct pipe_screen *pscreen,
 void gfx9_toggle_preemption(struct iris_context *ice,
                             struct iris_batch *batch,
                             const struct pipe_draw_info *draw);
+static const bool
+iris_execute_indirect_draw_supported(const struct iris_context *ice,
+                                     const struct pipe_draw_indirect_info *indirect,
+                                     const struct pipe_draw_info *draw)
+{
+   const struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
+   const struct brw_vs_prog_data *vs_prog_data = (void *)
+      ice->shaders.prog[MESA_SHADER_VERTEX]->prog_data;
+   const bool is_multiview = draw->view_mask != 0;
+   const size_t struct_size = draw->index_size ?
+      sizeof(uint32_t) * 5 :
+      sizeof(uint32_t) * 4;
+   const bool aligned_stride =
+      indirect && (indirect->stride == 0 || indirect->stride == struct_size);
+
+   return (screen->devinfo->has_indirect_unroll &&
+           aligned_stride &&
+           (indirect &&
+           !indirect->count_from_stream_output) &&
+           !is_multiview &&
+           !(vs_prog_data->uses_firstvertex ||
+             vs_prog_data->uses_baseinstance ||
+             vs_prog_data->uses_drawid));
+}
 
 #ifdef genX
 #  include "iris_genx_protos.h"

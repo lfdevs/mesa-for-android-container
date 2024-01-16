@@ -127,6 +127,7 @@ struct nir_shader;
 struct nir_instr;
 struct nir_lower_subgroups_options;
 
+#define SI_NUM_INTERP     32
 #define SI_MAX_ATTRIBS    16
 #define SI_MAX_VS_OUTPUTS 40
 #define SI_USER_CLIP_PLANE_MASK  0x3F
@@ -136,6 +137,10 @@ struct nir_lower_subgroups_options;
 #define SI_PS_INPUT_CNTL_UNUSED        SI_PS_INPUT_CNTL_0000
 /* D3D9 behaviour for COLOR0 requires 0001. GL is undefined. */
 #define SI_PS_INPUT_CNTL_UNUSED_COLOR0 SI_PS_INPUT_CNTL_0001
+
+#define SI_VECTOR_ARG_IS_COLOR               BITFIELD_BIT(0)
+#define SI_VECTOR_ARG_COLOR_COMPONENT(x)     (((x) & 0x7) << 1)
+#define SI_GET_VECTOR_ARG_COLOR_COMPONENT(x) (((x) >> 1) & 0x7)
 
 /* SGPR user data indices */
 enum
@@ -302,10 +307,10 @@ enum
 #define SI_NGG_CULL_GET_CLIP_PLANE_ENABLE(x)  (((x) >> 5) & 0xff)
 
 #define SI_PROFILE_WAVE32                    (1 << 0)
-#define SI_PROFILE_WAVE64                    (1 << 1)
+#define SI_PROFILE_GFX10_WAVE64              (1 << 1)
 /* bit gap */
 #define SI_PROFILE_VS_NO_BINNING             (1 << 3)
-#define SI_PROFILE_PS_NO_BINNING             (1 << 4)
+#define SI_PROFILE_GFX9_GFX10_PS_NO_BINNING  (1 << 4)
 #define SI_PROFILE_CLAMP_DIV_BY_ZERO         (1 << 5)
 
 enum si_shader_dump_type {
@@ -436,8 +441,8 @@ struct si_shader_info {
    uint64_t inputs_read; /* "get_unique_index" bits */
    uint64_t tcs_vgpr_only_inputs; /* TCS inputs that are only in VGPRs, not LDS. */
 
+   uint64_t outputs_written_before_tes_gs; /* "get_unique_index" bits */
    uint64_t outputs_written_before_ps; /* "get_unique_index" bits */
-   uint64_t outputs_written;           /* "get_unique_index" bits */
    uint32_t patch_outputs_written;     /* "get_unique_index_patch" bits */
 
    uint8_t clipdist_mask;
@@ -504,6 +509,7 @@ struct si_shader_info {
    bool uses_indirect_descriptor;
    bool has_divergent_loop;
    bool uses_sampleid;
+   bool uses_layer_id;
    bool has_non_uniform_tex_access;
 
    bool uses_vmem_sampler_or_bvh;
@@ -678,7 +684,7 @@ union si_shader_part_key {
       /* Color interpolation and two-side color selection. */
       unsigned colors_read : 8;       /* color input components read */
       unsigned num_interp_inputs : 5; /* BCOLOR is at this location */
-      unsigned num_pos_inputs : 3;
+      unsigned num_fragcoord_components : 3;
       unsigned wqm : 1;
       char color_attr_index[2];
       signed char color_interp_vgpr_index[2]; /* -1 == constant */
@@ -742,6 +748,7 @@ struct si_shader_key_ge {
       uint64_t kill_outputs; /* "get_unique_index" bits */
       unsigned kill_clip_distances : 8;
       unsigned kill_pointsize : 1;
+      unsigned kill_layer : 1;
       unsigned remove_streamout : 1;
 
       /* For NGG VS and TES. */
@@ -795,6 +802,9 @@ struct si_shader_key_ps {
       unsigned prefer_mono : 1;
       unsigned inline_uniforms:1;
 
+      /* This eliminates the FRONT_FACE input VGPR as well as shader code using it. */
+      int force_front_face_input : 2; /* 0 = gl_FrontFacing, 1 = true, -1 = false */
+
       /* This must be kept last to limit the number of variants
        * depending only on the uniform values.
        */
@@ -814,11 +824,14 @@ union si_shader_key {
 struct si_shader_binary_info {
    uint8_t vs_output_param_offset[NUM_TOTAL_VARYING_SLOTS];
    uint32_t vs_output_ps_input_cntl[NUM_TOTAL_VARYING_SLOTS];
+   union si_input_info ps_inputs[SI_NUM_INTERP];
+   uint8_t num_ps_inputs;
+   uint8_t ps_colors_read;
    uint8_t num_input_sgprs;
    uint8_t num_input_vgprs;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */
    bool uses_vmem_sampler_or_bvh;
-   uint8_t num_ps_pos_inputs;
+   uint8_t num_fragcoord_components;
    bool uses_instanceid;
    uint8_t nr_pos_exports;
    uint8_t nr_param_exports;
@@ -886,9 +899,6 @@ struct si_shader {
    bool is_gs_copy_shader;
    uint8_t wave_size;
 
-   /* Use ACO for compilation. */
-   bool use_aco;
-
    /* The following data is all that's needed for binary shaders. */
    struct si_shader_binary binary;
    struct ac_shader_config config;
@@ -934,7 +944,6 @@ struct si_shader {
          uint16_t hw_max_esverts;
          uint16_t max_gsprims;
          uint16_t max_out_verts;
-         uint16_t prim_amp_factor;
          bool max_vert_out_per_gs_instance;
          /* Register values. */
          unsigned ge_max_output_per_subgroup;
@@ -944,7 +953,6 @@ struct si_shader {
          unsigned vgt_gs_instance_cnt;
          unsigned esgs_vertex_stride;
          unsigned spi_vs_out_config;
-         unsigned spi_shader_idx_format;
          unsigned spi_shader_pos_format;
          unsigned pa_cl_vte_cntl;
          unsigned vgt_gs_max_vert_out; /* for API GS */
@@ -1037,6 +1045,8 @@ unsigned si_determine_wave_size(struct si_screen *sscreen, struct si_shader *sha
 void gfx9_get_gs_info(struct si_shader_selector *es, struct si_shader_selector *gs,
                       struct gfx9_gs_info *out);
 bool gfx10_is_ngg_passthrough(struct si_shader *shader);
+
+bool si_should_clear_lds(struct si_screen *sscreen, const struct nir_shader *shader);
 
 /* Inline helpers. */
 

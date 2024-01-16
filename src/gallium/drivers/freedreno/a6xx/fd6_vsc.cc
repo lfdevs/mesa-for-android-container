@@ -24,7 +24,6 @@
 #define FD_BO_NO_HARDPIN 1
 
 #include "pipe/p_state.h"
-#include "util/u_prim.h"
 
 #include "freedreno_batch.h"
 #include "freedreno_gmem.h"
@@ -69,7 +68,7 @@ prim_count(const struct pipe_draw_info *info,
 {
    /* MESA_PRIM_COUNT used internally for RECTLIST blits on 3d pipe: */
    unsigned vtx_per_prim =
-      (info->mode == MESA_PRIM_COUNT) ? 2 : u_vertices_per_prim(info->mode);
+      (info->mode == MESA_PRIM_COUNT) ? 2 : mesa_vertices_per_prim(info->mode);
    return MAX2(1, (draw->count * info->instance_count) / vtx_per_prim);
 }
 
@@ -157,7 +156,7 @@ fd6_vsc_update_sizes(struct fd_batch *batch, const struct pipe_draw_info *info,
              prim_strm_bits, draw_strm_bits, batch->num_bins_per_pipe,
              info->instance_count, info->count,
              (info->count * info->instance_count) /
-             u_vertices_per_prim(info->mode),
+             mesa_vertices_per_prim(info->mode),
              u_prim_name(info->mode));
 #endif
 

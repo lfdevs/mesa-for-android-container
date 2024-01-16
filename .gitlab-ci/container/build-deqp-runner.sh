@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2086 # we want word splitting
 
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# DEBIAN_BASE_TAG
+# DEBIAN_X86_64_TEST_ANDROID_TAG
+# KERNEL_ROOTFS_TAG
+
 set -ex
 
 if [ -n "${DEQP_RUNNER_GIT_TAG}${DEQP_RUNNER_GIT_REV}" ]; then
@@ -27,7 +33,7 @@ if [ -z "$ANDROID_NDK_HOME" ]; then
 else
     mkdir -p /deqp-runner
     pushd /deqp-runner
-    git clone --branch v0.16.1 --depth 1 https://gitlab.freedesktop.org/anholt/deqp-runner.git deqp-runner-git
+    git clone --branch v0.18.0 --depth 1 https://gitlab.freedesktop.org/anholt/deqp-runner.git deqp-runner-git
     pushd deqp-runner-git
 
     cargo install --locked  \

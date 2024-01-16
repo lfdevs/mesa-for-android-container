@@ -41,3 +41,7 @@ endif
 if with_tools.contains('drm-shim')
   subdir('drm-shim')
 endif
+
+if with_gallium_radeonsi
+  subdir('vpelib')
+endif

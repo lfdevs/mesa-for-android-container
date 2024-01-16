@@ -141,8 +141,7 @@ fd_screen_get_timestamp(struct pipe_screen *pscreen)
    if (screen->has_timestamp) {
       uint64_t n;
       fd_pipe_get_param(screen->pipe, FD_TIMESTAMP, &n);
-      assert(screen->max_freq > 0);
-      return n * 1000000000 / screen->max_freq;
+      return ticks_to_ns(n);
    } else {
       int64_t cpu_time = os_time_get_nano();
       return cpu_time + screen->cpu_gpu_time_delta;
@@ -590,6 +589,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       /* only a4xx, requires new enough kernel so we know max_freq: */
       return (screen->max_freq > 0) &&
              (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
+   case PIPE_CAP_TIMER_RESOLUTION:
+      return ticks_to_ns(1);
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_SO_OVERFLOW:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE:
@@ -1113,9 +1114,10 @@ fd_screen_create(int fd,
       screen->max_freq = 0;
    } else {
       screen->max_freq = val;
-      if (fd_pipe_get_param(screen->pipe, FD_TIMESTAMP, &val) == 0)
-         screen->has_timestamp = true;
    }
+
+   if (fd_pipe_get_param(screen->pipe, FD_TIMESTAMP, &val) == 0)
+      screen->has_timestamp = true;
 
    screen->dev_id = fd_pipe_dev_id(screen->pipe);
 
@@ -1184,13 +1186,14 @@ fd_screen_create(int fd,
    DBG(" Chip-id:         0x%016"PRIx64, screen->chip_id);
    DBG(" GMEM size:       0x%08x", screen->gmemsize_bytes);
 
-   const struct fd_dev_info *info = fd_dev_info(screen->dev_id);
-   if (!info) {
+   const struct fd_dev_info info = fd_dev_info(screen->dev_id);
+   if (!info.chip) {
       mesa_loge("unsupported GPU: a%03d", screen->gpu_id);
       goto fail;
    }
 
-   screen->info = info;
+   screen->dev_info = info;
+   screen->info = &screen->dev_info;
 
    /* explicitly checking for GPU revisions that are known to work.  This
     * may be overly conservative for a3xx, where spoofing the gpu_id with

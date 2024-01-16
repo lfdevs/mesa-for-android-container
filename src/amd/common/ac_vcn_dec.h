@@ -87,6 +87,7 @@
 #define RDECODE_CODEC_H265                                  0x00000010
 #define RDECODE_CODEC_VP9                                   0x00000011
 #define RDECODE_CODEC_AV1                                   0x00000013
+#define RDECODE_MESSAGE_HEVC_DIRECT_REF_LIST                0x00000015
 
 #define RDECODE_ARRAY_MODE_LINEAR                           0x00000000
 #define RDECODE_ARRAY_MODE_MACRO_LINEAR_MICRO_TILED         0x00000001
@@ -581,6 +582,11 @@ typedef struct rvcn_dec_message_dynamic_dpb_t2_s {
     unsigned int dpbAddrLo[16];
     unsigned int dpbAddrHi[16];
 } rvcn_dec_message_dynamic_dpb_t2_t;
+
+typedef struct rvcn_dec_message_hevc_direct_ref_list_s {
+   unsigned int num_direct_reflist;
+   unsigned char multi_direct_reflist[128][2][15];
+} rvcn_dec_message_hevc_direct_ref_list_t;
 
 typedef struct {
    unsigned short viewOrderIndex;

@@ -51,7 +51,7 @@ panvk_meta_clear_color_attachment_shader(struct panfrost_device *pdev,
    nir_store_var(&b, out, clear_values, 0xff);
 
    struct panfrost_compile_inputs inputs = {
-      .gpu_id = pdev->gpu_id,
+      .gpu_id = panfrost_device_gpu_id(pdev),
       .is_blit = true,
       .no_ubo_to_push = true,
    };
@@ -184,8 +184,7 @@ panvk_meta_clear_attachment_emit_dcd(struct pan_pool *pool, mali_ptr coords,
 
 static struct panfrost_ptr
 panvk_meta_clear_attachment_emit_tiler_job(struct pan_pool *desc_pool,
-                                           struct pan_scoreboard *scoreboard,
-                                           mali_ptr coords,
+                                           struct pan_jc *jc, mali_ptr coords,
                                            mali_ptr push_constants,
                                            mali_ptr vpd, mali_ptr rsd,
                                            mali_ptr tsd, mali_ptr tiler)
@@ -215,8 +214,8 @@ panvk_meta_clear_attachment_emit_tiler_job(struct pan_pool *desc_pool,
       cfg.address = tiler;
    }
 
-   panfrost_add_job(desc_pool, scoreboard, MALI_JOB_TYPE_TILER, false, false, 0,
-                    0, &job, false);
+   pan_jc_add_job(desc_pool, jc, MALI_JOB_TYPE_TILER, false, false, 0, 0, &job,
+                  false);
    return job;
 }
 
@@ -309,8 +308,8 @@ panvk_meta_clear_attachment(struct panvk_cmd_buffer *cmdbuf,
    struct panfrost_ptr job;
 
    job = panvk_meta_clear_attachment_emit_tiler_job(
-      &cmdbuf->desc_pool.base, &batch->scoreboard, coordinates, pushconsts, vpd,
-      rsd, tsd, tiler);
+      &cmdbuf->desc_pool.base, &batch->jc, coordinates, pushconsts, vpd, rsd,
+      tsd, tiler);
 
    util_dynarray_append(&batch->jobs, void *, job.cpu);
 }
@@ -341,8 +340,9 @@ panvk_meta_clear_color_img(struct panvk_cmd_buffer *cmdbuf,
    };
 
    uint32_t clearval[4];
-   pan_pack_color(clearval, (union pipe_color_union *)color,
-                  img->pimage.layout.format, false);
+   pan_pack_color(panfrost_blendable_formats_v7, clearval,
+                  (union pipe_color_union *)color, img->pimage.layout.format,
+                  false);
    memcpy(fbinfo->rts[0].clear_value, clearval,
           sizeof(fbinfo->rts[0].clear_value));
 

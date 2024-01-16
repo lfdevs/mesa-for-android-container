@@ -118,12 +118,12 @@ pan_pack_raw(uint32_t *packed, const union pipe_color_union *color,
 }
 
 void
-pan_pack_color(uint32_t *packed, const union pipe_color_union *color,
+pan_pack_color(const struct pan_blendable_format *blendable_formats,
+               uint32_t *packed, const union pipe_color_union *color,
                enum pipe_format format, bool dithered)
 {
-   /* Set of blendable formats is common across versions. TODO: v9 */
    enum mali_color_buffer_internal_format internal =
-      panfrost_blendable_formats_v7[format].internal;
+      blendable_formats[format].internal;
 
    if (internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE) {
       pan_pack_raw(packed, color, format);

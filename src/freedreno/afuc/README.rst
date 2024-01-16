@@ -37,6 +37,14 @@ it internally).
 With Adreno 6xx, the separate PFP and ME are replaced with a single
 SQE microcontroller using the same instruction set as 5xx.
 
+Starting with Adreno 660, another processor called LPAC (Low Priority
+Asynchronous Compute) is introduced which is a slightly cut-down copy of the
+SQE used to execute background compute tasks. Unlike on 5xx, the firmware is
+bundled together with the main SQE firmware, and the SQE is responsible for
+booting LPAC. On 7xx, to implement concurrent binning the SQE is split into two
+processors called BR and BV. Again, the firmware for all three is bundled
+together and BR is responsible for booting both BV and LPAC.
+
 .. _afuc-overview:
 
 Instruction Set Overview
@@ -224,19 +232,24 @@ Control registers are a special register space that can only be read/written
 directly by CP through ``cread``/``cwrite`` instructions::
 
 - ``cread $dst, [$off + addr], flags``
+- ``cread $dst, [$off + addr]!, flags``
 - ``cwrite $src, [$off + addr], flags``
+- ``cwrite $src, [$off + addr]!, flags``
 
 Control registers ``0x000`` to ``0x0ff`` are private registers used to control
 the CP, for example to indicate where to read from memory or (normal)
 registers.  ``0x100`` to ``0x17f`` are a private scratch space used by the
 firmware however it wants, for example as an ad-hoc stack to spill registers
 when calling a function or to store the scratch used in ``CP_SCRATCH_TO_*``
-packets.
+packets. Starting with the introduction of LPAC, ``0x200`` to ``0x27f`` are a
+shared scratch space used to communicate between processors and on a7xx they
+can also be written on event completion to implement so-called "on-chip
+timestamps".
 
 In cases where no offset is needed, ``$00`` is frequently used as the offset.
 
-A value of 4 for ``flags`` is known to be a pre-increment mode that writes the
-final address ``$off + addr`` to ``$off``, it's not known what other values do.
+The addressing mode with ``!`` is a pre-increment mode that writes the final
+address ``$off + addr`` to ``$off``.
 
 For example, the following sequences sets::
 
@@ -275,6 +288,17 @@ but on a6xx::
   cwrite $0e, [$05 + @IB1_BASE], 0x0
   cwrite $0b, [$05 + @IB1_BASE+0x1], 0x0
   cwrite $04, [$05 + @IB1_DWORDS], 0x0
+
+.. _afuc-sqe-regs:
+
+SQE Registers
+=============
+
+Starting with a6xx, the state of the SQE processor itself can be accessed
+through ``sread``/``swrite`` instructions that work identically to
+``cread``/``cwrite``. For example, this includes the state of the
+``call``/``ret`` stack. This is mainly used during the preemption routine but
+it's also used to set the entrypoint for preemption.
 
 .. _afuc-read:
 
@@ -538,6 +562,28 @@ so 2 registers per cycle is likely a hardware limitation.
 Although ``(xmovN)`` is often used in combination with ``(rep)``, it doesn't
 have to be. For example, ``(xmov1)mov $data, $data`` moves the next 2 packet
 words to 2 successive registers.
+
+.. _afuc-sds:
+
+Set Draw State
+--------------
+
+``(sdsN)`` is a modifier for ``cwrite`` used to accelerate
+``CP_SET_DRAW_STATE``. For each draw state group to update,
+``CP_SET_DRAW_STATE`` needs to copy 3 words from the packet containing the
+group to update, metadata, and base address plus size.  Using the ``(sds2)``
+modifier as well as ``(rep)``, this can be accomplished in a single
+instruction::
+
+  (rep)(sds2)cwrite $data, [$00 + @DRAW_STATE_SET_HDR]
+
+The first word containing the header is written to ``@DRAW_STATE_SET_HDR``, and
+the second and third words containing the draw state base come from reading the
+source again twice and are written directly to the draw state RAM.
+
+In testing with other control registers, ``(sdsN)`` causes the source to be
+read ``N`` extra times and then thrown away. Only when used in combination with
+``@DRAW_STATE_SET_HDR`` do the extra source reads have an effect.
 
 Packet Table
 ============

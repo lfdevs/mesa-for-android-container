@@ -24,8 +24,9 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "../r600_isa.h"
+
 #include "sfn_split_address_loads.h"
-#include "r600_isa.h"
 #include "sfn_alu_defines.h"
 #include "sfn_defines.h"
 #include "sfn_instr_alugroup.h"

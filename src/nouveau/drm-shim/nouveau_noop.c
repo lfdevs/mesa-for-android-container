@@ -198,6 +198,7 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       case NV_DEVICE_V0_INFO: {
          struct nv_device_info_v0 *info = (void *)&mthd->mthd.data;
          info->chipset = device_info.chip_id;
+         info->platform = NV_DEVICE_INFO_V0_PCIE;
          break;
       }
       default:
@@ -262,6 +263,17 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
             sclass->sclass.oclass[idx].oclass = KEPLER_DMA_COPY_A;
             break;
          }
+         sclass->sclass.oclass[idx].minver = -1;
+         sclass->sclass.oclass[idx].maxver = -1;
+         idx++;
+      }
+      /* 2d */
+      if (device_info.chip_id >= 0x50) {
+         if (device_info.chip_id <= 0xa0)
+            sclass->sclass.oclass[idx].oclass = NV50_2D_CLASS;
+         else
+            sclass->sclass.oclass[idx].oclass = NVC0_2D_CLASS;
+
          sclass->sclass.oclass[idx].minver = -1;
          sclass->sclass.oclass[idx].maxver = -1;
          idx++;
@@ -390,6 +402,10 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_NOUVEAU_GEM_PUSHBUF] = nouveau_ioctl_gem_pushbuf,
    [DRM_NOUVEAU_GEM_CPU_PREP] = nouveau_ioctl_noop,
    [DRM_NOUVEAU_GEM_INFO] = nouveau_ioctl_gem_info,
+   [DRM_NOUVEAU_GEM_CPU_FINI] = nouveau_ioctl_gem_info,
+   [DRM_NOUVEAU_VM_INIT] = nouveau_ioctl_noop,
+   [DRM_NOUVEAU_VM_BIND] = nouveau_ioctl_noop,
+   [DRM_NOUVEAU_EXEC] = nouveau_ioctl_noop,
 };
 
 static void

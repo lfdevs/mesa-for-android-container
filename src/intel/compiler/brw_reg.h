@@ -57,8 +57,9 @@ extern "C" {
 
 struct intel_device_info;
 
-/** Number of general purpose registers (VS, WM, etc) */
+/** Size of general purpose register space in REG_SIZE units */
 #define BRW_MAX_GRF 128
+#define XE2_MAX_GRF 256
 
 /**
  * First GRF used for the MRF hack.
@@ -417,7 +418,7 @@ brw_reg(enum brw_reg_file file,
 {
    struct brw_reg reg;
    if (file == BRW_GENERAL_REGISTER_FILE)
-      assert(nr < BRW_MAX_GRF);
+      assert(nr < XE2_MAX_GRF);
    else if (file == BRW_ARCHITECTURE_REGISTER_FILE)
       assert(nr <= BRW_ARF_TIMESTAMP);
    /* Asserting on the MRF register number requires to know the hardware gen
@@ -783,11 +784,23 @@ brw_vec1_grf(unsigned nr, unsigned subnr)
    return brw_vec1_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
 }
 
+static inline struct brw_reg
+xe2_vec1_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec1_reg(BRW_GENERAL_REGISTER_FILE, 2 * nr + subnr / 8, subnr % 8);
+}
+
 /** Construct float[2] general-purpose register */
 static inline struct brw_reg
 brw_vec2_grf(unsigned nr, unsigned subnr)
 {
    return brw_vec2_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
+static inline struct brw_reg
+xe2_vec2_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec2_reg(BRW_GENERAL_REGISTER_FILE, 2 * nr + subnr / 8, subnr % 8);
 }
 
 /** Construct float[4] general-purpose register */
@@ -797,11 +810,23 @@ brw_vec4_grf(unsigned nr, unsigned subnr)
    return brw_vec4_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
 }
 
+static inline struct brw_reg
+xe2_vec4_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec4_reg(BRW_GENERAL_REGISTER_FILE, 2 * nr + subnr / 8, subnr % 8);
+}
+
 /** Construct float[8] general-purpose register */
 static inline struct brw_reg
 brw_vec8_grf(unsigned nr, unsigned subnr)
 {
    return brw_vec8_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
+static inline struct brw_reg
+xe2_vec8_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec8_reg(BRW_GENERAL_REGISTER_FILE, 2 * nr + subnr / 8, subnr % 8);
 }
 
 /** Construct float[16] general-purpose register */
@@ -812,11 +837,22 @@ brw_vec16_grf(unsigned nr, unsigned subnr)
 }
 
 static inline struct brw_reg
+xe2_vec16_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec16_reg(BRW_GENERAL_REGISTER_FILE, 2 * nr + subnr / 8, subnr % 8);
+}
+
+static inline struct brw_reg
 brw_vecn_grf(unsigned width, unsigned nr, unsigned subnr)
 {
    return brw_vecn_reg(width, BRW_GENERAL_REGISTER_FILE, nr, subnr);
 }
 
+static inline struct brw_reg
+xe2_vecn_grf(unsigned width, unsigned nr, unsigned subnr)
+{
+   return brw_vecn_reg(width, BRW_GENERAL_REGISTER_FILE, nr + subnr / 8, subnr % 8);
+}
 
 static inline struct brw_reg
 brw_uw1_grf(unsigned nr, unsigned subnr)

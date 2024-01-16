@@ -421,7 +421,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       agx_unpack(agxdecode_dump_stream, map, USC_SAMPLER, temp);
       DUMP_UNPACKED(USC_SAMPLER, temp, "Sampler state\n");
 
-      uint8_t buf[AGX_SAMPLER_LENGTH * temp.count];
+      uint8_t buf[(AGX_SAMPLER_LENGTH + AGX_BORDER_LENGTH) * temp.count];
       uint8_t *samp = buf;
 
       agxdecode_fetch_gpu_array(temp.buffer, buf);
@@ -517,8 +517,38 @@ agxdecode_record(uint64_t va, size_t size, bool verbose, decoder_params *params)
    PPP_PRINT(map, fragment_back_face_2, FRAGMENT_FACE_2, "Back face 2");
    PPP_PRINT(map, fragment_back_stencil, FRAGMENT_STENCIL, "Back stencil");
    PPP_PRINT(map, depth_bias_scissor, DEPTH_BIAS_SCISSOR, "Depth bias/scissor");
-   PPP_PRINT(map, region_clip, REGION_CLIP, "Region clip");
-   PPP_PRINT(map, viewport, VIEWPORT, "Viewport");
+
+   if (hdr.region_clip) {
+      if (((map + (AGX_REGION_CLIP_LENGTH * hdr.viewport_count)) >
+           (base + size))) {
+         fprintf(agxdecode_dump_stream, "Buffer overrun in PPP update\n");
+         return;
+      }
+
+      for (unsigned i = 0; i < hdr.viewport_count; ++i) {
+         DUMP_CL(REGION_CLIP, map, "Region clip");
+         map += AGX_REGION_CLIP_LENGTH;
+         fflush(agxdecode_dump_stream);
+      }
+   }
+
+   if (hdr.viewport) {
+      if (((map + AGX_VIEWPORT_CONTROL_LENGTH +
+            (AGX_VIEWPORT_LENGTH * hdr.viewport_count)) > (base + size))) {
+         fprintf(agxdecode_dump_stream, "Buffer overrun in PPP update\n");
+         return;
+      }
+
+      DUMP_CL(VIEWPORT_CONTROL, map, "Viewport control");
+      map += AGX_VIEWPORT_CONTROL_LENGTH;
+
+      for (unsigned i = 0; i < hdr.viewport_count; ++i) {
+         DUMP_CL(VIEWPORT, map, "Viewport");
+         map += AGX_VIEWPORT_LENGTH;
+         fflush(agxdecode_dump_stream);
+      }
+   }
+
    PPP_PRINT(map, w_clamp, W_CLAMP, "W clamp");
    PPP_PRINT(map, output_select, OUTPUT_SELECT, "Output select");
    PPP_PRINT(map, varying_counts_32, VARYING_COUNTS, "Varying counts 32");
@@ -570,8 +600,8 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
    enum agx_cdm_block_type block_type = (map[3] >> 5);
 
    switch (block_type) {
-   case AGX_CDM_BLOCK_TYPE_HEADER: {
-      size_t length = AGX_CDM_HEADER_LENGTH;
+   case AGX_CDM_BLOCK_TYPE_LAUNCH: {
+      size_t length = AGX_CDM_LAUNCH_LENGTH;
 
 #define CDM_PRINT(STRUCT_NAME, human)                                          \
    do {                                                                        \
@@ -580,11 +610,11 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
       length += AGX_CDM_##STRUCT_NAME##_LENGTH;                                \
    } while (0);
 
-      agx_unpack(agxdecode_dump_stream, map, CDM_HEADER, hdr);
+      agx_unpack(agxdecode_dump_stream, map, CDM_LAUNCH, hdr);
       agxdecode_stateful(hdr.pipeline, "Pipeline", agxdecode_usc, verbose,
                          params, &hdr.sampler_state_register_count);
-      DUMP_UNPACKED(CDM_HEADER, hdr, "Compute\n");
-      map += AGX_CDM_HEADER_LENGTH;
+      DUMP_UNPACKED(CDM_LAUNCH, hdr, "Compute\n");
+      map += AGX_CDM_LAUNCH_LENGTH;
 
       /* Added in G14X */
       if (params->gpu_generation >= 14 && params->num_clusters_total > 1)
@@ -622,9 +652,9 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
       return STATE_DONE;
    }
 
-   case AGX_CDM_BLOCK_TYPE_LAUNCH: {
-      DUMP_CL(CDM_LAUNCH, map, "Launch");
-      return AGX_CDM_LAUNCH_LENGTH;
+   case AGX_CDM_BLOCK_TYPE_BARRIER: {
+      DUMP_CL(CDM_BARRIER, map, "Barrier");
+      return AGX_CDM_BARRIER_LENGTH;
    }
 
    default:
@@ -705,10 +735,12 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
       VDM_PRINT(vertex_shader_word_1, VERTEX_SHADER_WORD_1,
                 "Vertex shader word 1");
       VDM_PRINT(vertex_outputs, VERTEX_OUTPUTS, "Vertex outputs");
+      VDM_PRINT(tessellation, TESSELLATION, "Tessellation");
       VDM_PRINT(vertex_unknown, VERTEX_UNKNOWN, "Vertex unknown");
+      VDM_PRINT(tessellation_scale, TESSELLATION_SCALE, "Tessellation scale");
 
 #undef VDM_PRINT
-      return ALIGN_POT(length, 8);
+      return hdr.tessellation_scale_present ? length : ALIGN_POT(length, 8);
    }
 
    case AGX_VDM_BLOCK_TYPE_INDEX_LIST: {
@@ -745,6 +777,32 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
    case AGX_VDM_BLOCK_TYPE_STREAM_TERMINATE: {
       DUMP_CL(VDM_STREAM_TERMINATE, map, "Stream Terminate");
       return STATE_DONE;
+   }
+
+   case AGX_VDM_BLOCK_TYPE_TESSELLATE: {
+      size_t length = AGX_VDM_TESSELLATE_LENGTH;
+      agx_unpack(agxdecode_dump_stream, map, VDM_TESSELLATE, hdr);
+      DUMP_UNPACKED(VDM_TESSELLATE, hdr, "Tessellate List\n");
+      map += AGX_VDM_TESSELLATE_LENGTH;
+
+#define TESS_PRINT(header_name, STRUCT_NAME, human)                            \
+   if (hdr.header_name##_present) {                                            \
+      DUMP_CL(VDM_TESSELLATE_##STRUCT_NAME, map, human);                       \
+      map += AGX_VDM_TESSELLATE_##STRUCT_NAME##_LENGTH;                        \
+      length += AGX_VDM_TESSELLATE_##STRUCT_NAME##_LENGTH;                     \
+   }
+
+      TESS_PRINT(factor_buffer, FACTOR_BUFFER, "Factor buffer");
+      TESS_PRINT(patch_count, PATCH_COUNT, "Patch");
+      TESS_PRINT(instance_count, INSTANCE_COUNT, "Instance count");
+      TESS_PRINT(base_patch, BASE_PATCH, "Base patch");
+      TESS_PRINT(base_instance, BASE_INSTANCE, "Base instance");
+      TESS_PRINT(instance_stride, INSTANCE_STRIDE, "Instance stride");
+      TESS_PRINT(indirect, INDIRECT, "Indirect");
+      TESS_PRINT(unknown, UNKNOWN, "Unknown");
+
+#undef TESS_PRINT
+      return length;
    }
 
    default:

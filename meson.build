@@ -24,7 +24,14 @@ project(
   version : files('VERSION'),
   license : 'MIT',
   meson_version : '>= 0.60',
-  default_options : ['buildtype=debugoptimized', 'b_ndebug=if-release', 'c_std=c11', 'cpp_std=c++17', 'rust_std=2021']
+  default_options : [
+    'buildtype=debugoptimized',
+    'b_ndebug=if-release',
+    'c_std=c11',
+    'cpp_std=c++17',
+    'rust_std=2021',
+    'build.rust_std=2021',
+  ],
 )
 
 cc = meson.get_compiler('c')
@@ -121,7 +128,7 @@ with_any_opengl = with_opengl or with_gles1 or with_gles2
 # Only build shared_glapi if at least one OpenGL API is enabled
 with_shared_glapi = with_shared_glapi and with_any_opengl
 
-system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'gnu/kfreebsd', 'dragonfly', 'linux', 'sunos', 'android'].contains(host_machine.system())
+system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'gnu/kfreebsd', 'dragonfly', 'linux', 'sunos', 'android', 'managarm'].contains(host_machine.system())
 
 gallium_drivers = get_option('gallium-drivers')
 if gallium_drivers.contains('auto')
@@ -244,6 +251,20 @@ with_microsoft_vk = _vulkan_drivers.contains('microsoft-experimental')
 with_nouveau_vk = _vulkan_drivers.contains('nouveau-experimental')
 with_any_vk = _vulkan_drivers.length() != 0
 
+with_vk_compiler = [
+  with_intel_vk,
+  with_intel_hasvk,
+  with_amd_vk,
+  with_freedreno_vk,
+  with_panfrost_vk,
+  with_swrast_vk,
+  with_broadcom_vk,
+  with_imagination_vk,
+  with_microsoft_vk,
+  with_nouveau_vk,
+].contains(true)
+pre_args += '-DUSE_VK_COMPILER=@0@'.format(with_vk_compiler ? '1' : '0')
+
 freedreno_kmds = get_option('freedreno-kmds')
 if freedreno_kmds.length() != 0 and freedreno_kmds != [ 'msm' ] and with_freedreno_vk
   if freedreno_kmds.contains('msm')
@@ -304,7 +325,7 @@ if with_aco_tests and not with_amd_vk
 endif
 
 with_microsoft_clc = get_option('microsoft-clc').enabled()
-with_clc = with_microsoft_clc or with_intel_clc
+with_clc = with_microsoft_clc or with_intel_clc or with_gallium_asahi
 with_spirv_to_dxil = get_option('spirv-to-dxil')
 
 if host_machine.system() == 'darwin'
@@ -331,7 +352,22 @@ if with_vulkan_beta
 endif
 
 _codecs = get_option('video-codecs')
-foreach c : ['vc1dec', 'h264dec', 'h264enc', 'h265dec', 'h265enc']
+patent_codecs = ['vc1dec', 'h264dec', 'h264enc', 'h265dec', 'h265enc']
+free_codecs = ['av1dec', 'av1enc', 'vp9dec']
+all_codecs = patent_codecs + free_codecs
+
+if _codecs.contains('all')
+  _codecs = all_codecs
+elif _codecs.contains('all_free')
+  selected_codecs = _codecs
+  _codecs = free_codecs
+  foreach c : patent_codecs
+    if selected_codecs.contains(c)
+      _codecs += c
+    endif
+  endforeach
+endif
+foreach c : all_codecs
    pre_args += '-DVIDEO_CODEC_@0@=@1@'.format(c.to_upper(), _codecs.contains(c).to_int())
 endforeach
 
@@ -540,7 +576,7 @@ if with_gallium_d3d12 or with_microsoft_clc or with_microsoft_vk
   dep_dxheaders = dependency('directx-headers', required : false)
   if not dep_dxheaders.found()
     dep_dxheaders = dependency('DirectX-Headers',
-      version : '>= 1.610.0',
+      version : '>= 1.611.0',
       fallback : ['DirectX-Headers', 'dep_dxheaders'],
       required : with_gallium_d3d12 or with_microsoft_vk
     )
@@ -791,8 +827,8 @@ if with_gallium_rusticl
     error('rusticl requires at least one gallium driver.')
   endif
 
-  if meson.version().version_compare('< 1.2')
-    error('rusticl requires meson 1.2.0 or newer')
+  if meson.version().version_compare('< 1.3.1')
+    error('rusticl requires meson 1.3.1 or newer')
   endif
 
   add_languages('rust', required: true)
@@ -870,6 +906,9 @@ if with_platform_android
     '-DANDROID',
     '-DANDROID_API_LEVEL=' + get_option('platform-sdk-version').to_string()
   ]
+  if get_option('android-strict')
+    pre_args += '-DANDROID_STRICT'
+  endif
 endif
 
 # On Android, seccomp kills the process on kernels without
@@ -959,7 +998,7 @@ if cc.has_function('fmemopen')
 endif
 
 # TODO: this is very incomplete
-if ['linux', 'cygwin', 'gnu', 'freebsd', 'gnu/kfreebsd', 'haiku', 'android'].contains(host_machine.system())
+if ['linux', 'cygwin', 'gnu', 'freebsd', 'gnu/kfreebsd', 'haiku', 'android', 'managarm'].contains(host_machine.system())
   pre_args += '-D_GNU_SOURCE'
 elif host_machine.system() == 'sunos'
   pre_args += '-D__EXTENSIONS__'
@@ -1045,6 +1084,7 @@ else
     '-fno-trapping-math',
     '-Qunused-arguments',
     '-fno-common',
+    '-Wno-unknown-pragmas',
     # Clang
     '-Wno-microsoft-enum-value',
     '-Wno-unused-function',
@@ -1064,6 +1104,7 @@ else
     # to the memory before the constructor as "dead stores".
     # For now we disable this optimization.
     '-flifetime-dse=1',
+    '-Wno-unknown-pragmas',
     # Clang
     '-Wno-microsoft-enum-value',
   ]
@@ -1428,8 +1469,8 @@ if cc.links('''
       locale_t loc = newlocale(LC_CTYPE_MASK, "C", NULL);
       const char *s = "1.0";
       char *end;
-      double d = strtod_l(s, end, loc);
-      float f = strtof_l(s, end, loc);
+      double d = strtod_l(s, &end, loc);
+      float f = strtof_l(s, &end, loc);
       freelocale(loc);
       return 0;
     }''',
@@ -1499,7 +1540,7 @@ else
 endif
 
 dep_zlib = dependency('zlib', version : '>= 1.2.3',
-                      fallback : ['zlib', 'zlib_dep'],
+                      allow_fallback: true,
                       required : get_option('zlib'))
 if dep_zlib.found()
   pre_args += '-DHAVE_ZLIB'
@@ -1542,7 +1583,7 @@ with_expat = get_option('expat') \
 if host_machine.system() == 'darwin'
   dep_expat = meson.get_compiler('c').find_library('expat', required : with_expat)
 else
-  dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'],
+  dep_expat = dependency('expat', allow_fallback: true,
                          required : with_expat)
 endif
 
@@ -1598,7 +1639,7 @@ dep_libdrm_radeon = null_dep
 dep_libdrm_nouveau = null_dep
 dep_libdrm_intel = null_dep
 
-_drm_amdgpu_ver = '2.4.110'
+_drm_amdgpu_ver = '2.4.119'
 _drm_radeon_ver = '2.4.71'
 _drm_nouveau_ver = '2.4.102'
 _drm_intel_ver = '2.4.75'
@@ -1727,13 +1768,10 @@ if _llvm.allowed()
   with_llvm = dep_llvm.found()
 endif
 if with_llvm
-  pre_args += '-DLLVM_AVAILABLE'
   pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
   pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
 
-  if draw_with_llvm
-    pre_args += '-DDRAW_LLVM_AVAILABLE'
-  elif with_swrast_vk
+  if with_swrast_vk and not draw_with_llvm
     error('Lavapipe requires LLVM draw support.')
   endif
 
@@ -1766,8 +1804,8 @@ if with_llvm
   endif
 elif with_amd_vk and with_aco_tests
   error('ACO tests require LLVM, but LLVM is disabled.')
-elif with_gallium_radeonsi or with_swrast_vk
-  error('The following drivers require LLVM: RadeonSI, Lavapipe. One of these is enabled, but LLVM is disabled.')
+elif with_swrast_vk
+  error('The following drivers require LLVM: Lavapipe. One of these is enabled, but LLVM is disabled.')
 elif with_gallium_opencl
   error('The OpenCL "Clover" state tracker requires LLVM, but LLVM is disabled.')
 elif with_clc
@@ -1775,8 +1813,10 @@ elif with_clc
 else
   draw_with_llvm = false
 endif
+pre_args += '-DLLVM_AVAILABLE=' + (with_llvm ? '1' : '0')
+pre_args += '-DDRAW_LLVM_AVAILABLE=' + (with_llvm and draw_with_llvm ? '1' : '0')
 
-with_opencl_spirv = (_opencl != 'disabled' and get_option('opencl-spirv')) or with_intel_clc or with_microsoft_clc or with_gallium_rusticl
+with_opencl_spirv = (_opencl != 'disabled' and get_option('opencl-spirv')) or with_clc
 if with_opencl_spirv
   chosen_llvm_version_array = dep_llvm.version().split('.')
   chosen_llvm_version_major = chosen_llvm_version_array[0].to_int()
@@ -2010,6 +2050,9 @@ if with_platform_x11
     dep_xfixes = dependency('xfixes', version : '>= 2.0')
     dep_xcb_glx = dependency('xcb-glx', version : '>= 1.8.1')
     dep_xcb_shm = dependency('xcb-shm')
+  elif with_gallium_rusticl
+    # needed for GL sharing extension
+    dep_x11 = dependency('x11')
   endif
   if (with_any_vk or with_glx == 'dri' or with_egl or
        (with_gallium_vdpau or with_gallium_va or

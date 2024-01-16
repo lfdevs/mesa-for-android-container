@@ -113,7 +113,8 @@ void gl_nir_link_check_atomic_counter_resources(const struct gl_constants *const
 void gl_nir_link_assign_xfb_resources(const struct gl_constants *consts,
                                       struct gl_shader_program *prog);
 
-bool gl_nir_link_uniform_blocks(struct gl_shader_program *prog);
+bool gl_nir_link_uniform_blocks(const struct gl_constants *consts,
+                                struct gl_shader_program *prog);
 
 bool
 gl_nir_can_add_pointsize_to_program(const struct gl_constants *consts,

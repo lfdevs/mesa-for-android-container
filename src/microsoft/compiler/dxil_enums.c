@@ -23,8 +23,8 @@
 
 #include "dxil_enums.h"
 
+#include "glsl_types.h"
 #include "nir.h"
-#include "nir_types.h"
 
 #include "util/u_debug.h"
 
@@ -37,11 +37,11 @@ enum dxil_prog_sig_comp_type dxil_get_prog_sig_comp_type(const struct glsl_type 
    case GLSL_TYPE_INT: return DXIL_PROG_SIG_COMP_TYPE_SINT32;
    case GLSL_TYPE_FLOAT: return DXIL_PROG_SIG_COMP_TYPE_FLOAT32;
    case GLSL_TYPE_FLOAT16: return DXIL_PROG_SIG_COMP_TYPE_FLOAT16;
-   case GLSL_TYPE_DOUBLE: return DXIL_PROG_SIG_COMP_TYPE_FLOAT64;
+   case GLSL_TYPE_DOUBLE: return DXIL_PROG_SIG_COMP_TYPE_UINT32;
    case GLSL_TYPE_UINT16: return DXIL_PROG_SIG_COMP_TYPE_UINT16;
    case GLSL_TYPE_INT16: return DXIL_PROG_SIG_COMP_TYPE_SINT16;
-   case GLSL_TYPE_UINT64: return DXIL_PROG_SIG_COMP_TYPE_UINT64;
-   case GLSL_TYPE_INT64: return DXIL_PROG_SIG_COMP_TYPE_SINT64;
+   case GLSL_TYPE_UINT64: return DXIL_PROG_SIG_COMP_TYPE_UINT32;
+   case GLSL_TYPE_INT64: return DXIL_PROG_SIG_COMP_TYPE_SINT32;
    case GLSL_TYPE_BOOL: return DXIL_PROG_SIG_COMP_TYPE_UINT32;
    case GLSL_TYPE_STRUCT: return DXIL_PROG_SIG_COMP_TYPE_UNKNOWN;
    default:
@@ -62,11 +62,11 @@ enum dxil_component_type dxil_get_comp_type(const struct glsl_type *type)
    case GLSL_TYPE_INT: return DXIL_COMP_TYPE_I32;
    case GLSL_TYPE_FLOAT: return DXIL_COMP_TYPE_F32;
    case GLSL_TYPE_FLOAT16: return DXIL_COMP_TYPE_F16;
-   case GLSL_TYPE_DOUBLE: return DXIL_COMP_TYPE_F64;
+   case GLSL_TYPE_DOUBLE: return DXIL_COMP_TYPE_U32;
    case GLSL_TYPE_UINT16: return DXIL_COMP_TYPE_U16;
    case GLSL_TYPE_INT16: return DXIL_COMP_TYPE_I16;
-   case GLSL_TYPE_UINT64: return DXIL_COMP_TYPE_U64;
-   case GLSL_TYPE_INT64: return DXIL_COMP_TYPE_I64;
+   case GLSL_TYPE_UINT64: return DXIL_COMP_TYPE_U32;
+   case GLSL_TYPE_INT64: return DXIL_COMP_TYPE_I32;
    case GLSL_TYPE_BOOL: return DXIL_COMP_TYPE_I1;
 
    default:
@@ -122,7 +122,7 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
    unreachable("unexpected glsl type");
 }
 
-enum dxil_input_primitive dxil_get_input_primitive(unsigned primitive)
+enum dxil_input_primitive dxil_get_input_primitive(enum mesa_prim primitive)
 {
    switch (primitive) {
    case MESA_PRIM_POINTS:
@@ -140,7 +140,7 @@ enum dxil_input_primitive dxil_get_input_primitive(unsigned primitive)
    }
 }
 
-enum dxil_primitive_topology dxil_get_primitive_topology(unsigned topology)
+enum dxil_primitive_topology dxil_get_primitive_topology(enum mesa_prim topology)
 {
    switch (topology) {
    case MESA_PRIM_POINTS:

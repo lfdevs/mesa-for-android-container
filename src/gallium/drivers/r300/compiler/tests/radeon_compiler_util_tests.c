@@ -57,6 +57,8 @@ static void test_rc_inst_can_use_presub(
 			&add_inst.U.I.SrcReg[0], &add_inst.U.I.SrcReg[1]);
 
 	test_check(result, ret == expected);
+
+	destroy_compiler(&c.Base);
 }
 
 static void test_runner_rc_inst_can_use_presub(struct test_result * result)

@@ -68,9 +68,12 @@ static int is_whitespace(const char *str)
 	regex_t regex;
 	if (regcomp(&regex, "^[ \n]+$", REG_EXTENDED)) {
 		fprintf(stderr, "Failed to compile whitespace regex\n");
+		regfree(&regex);
 		return 0;
 	}
-	return regexec(&regex, str, 0, NULL, 0) != REG_NOMATCH;
+	bool ret = regexec(&regex, str, 0, NULL, 0) != REG_NOMATCH;
+	regfree(&regex);
+	return ret;
 }
 
 static int match_length(regmatch_t * matches, int index)
@@ -93,6 +96,7 @@ static int regex_helper(
 	if (err_code) {
 		regerror(err_code, &regex, err_buf, REGEX_ERR_BUF_SIZE);
 		fprintf(stderr, "Failed to compile regex: %s\n", err_buf);
+		regfree(&regex);
 		return 0;
 	}
 
@@ -106,8 +110,10 @@ static int regex_helper(
 	if (err_code) {
 		regerror(err_code, &regex, err_buf, REGEX_ERR_BUF_SIZE);
 		fprintf(stderr, "Failed to match regex: %s\n", err_buf);
+		regfree(&regex);
 		return 0;
 	}
+	regfree(&regex);
 	return 1;
 }
 
@@ -427,6 +433,7 @@ int parse_rc_normal_instruction(
 						tokens.Srcs[j].Length);
 			src_str[tokens.Srcs[j].Length] = '\0';
 			init_rc_normal_src(inst, j, src_str);
+			free(src_str);
 		}
 		if (info->HasTexture) {
 			/* XXX: Will this always be XYZW ? */
@@ -530,6 +537,13 @@ void init_compiler(
 	}
 }
 
+void destroy_compiler(struct radeon_compiler *c)
+{
+	rc_destroy_regalloc_state((struct rc_regalloc_state *)c->regalloc_state);
+	free((void *)c->regalloc_state);
+	rc_destroy(c);
+}
+
 #define MAX_LINE_LENGTH 100
 
 unsigned load_program(
@@ -608,12 +622,16 @@ unsigned load_program(
 	for (i = 0; i < test->num_input_lines; i++) {
 		if (test->input[i][0] == 'c') {
 			add_constant(c, test->input[i]);
+			free(test->input[i]);
 			continue;
 		}
 		// XXX: Parse immediates from the file.
 		add_instruction(c, test->input[i]);
+		free(test->input[i]);
 	}
 
 	fclose(file);
+	free(test->input);
+	free(test->expected);
 	return 1;
 }

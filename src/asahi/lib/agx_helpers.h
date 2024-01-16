@@ -13,6 +13,12 @@
 #include "agx_pack.h"
 #include "agx_ppp.h"
 
+#define AGX_MAX_VIEWPORTS (16)
+
+#define agx_push(ptr, T, cfg)                                                  \
+   for (unsigned _loop = 0; _loop < 1; ++_loop, ptr += AGX_##T##_LENGTH)       \
+      agx_pack(ptr, T, cfg)
+
 static inline enum agx_sampler_states
 agx_translate_sampler_state_count(unsigned count, bool extended)
 {
@@ -133,6 +139,23 @@ agx_pack_line_width(float line_width)
 
    /* Clamp to maximum line width */
    return MIN2(line_width_fixed, 0xFF);
+}
+
+static enum agx_shade_model
+agx_translate_shade_model(struct agx_varyings_fs *fs, unsigned binding,
+                          bool first_provoking_vertex)
+{
+   if (fs->bindings[binding].smooth) {
+      if (fs->bindings[binding].perspective)
+         return AGX_SHADE_MODEL_PERSPECTIVE;
+      else
+         return AGX_SHADE_MODEL_LINEAR;
+   } else {
+      if (!first_provoking_vertex)
+         return AGX_SHADE_MODEL_FLAT_VERTEX_2;
+      else
+         return AGX_SHADE_MODEL_FLAT_VERTEX_0;
+   }
 }
 
 #endif

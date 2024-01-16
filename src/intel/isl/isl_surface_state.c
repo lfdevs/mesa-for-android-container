@@ -78,7 +78,13 @@ static const uint32_t isl_encode_multisample_layout[] = {
 };
 #endif
 
-#if GFX_VER >= 12
+#if GFX_VER >= 20
+static const uint32_t isl_encode_aux_mode[] = {
+   [ISL_AUX_USAGE_NONE] = AUX_NONE,
+   [ISL_AUX_USAGE_MC] = AUX_NONE,
+   [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS,
+};
+#elif GFX_VER >= 12
 static const uint32_t isl_encode_aux_mode[] = {
    [ISL_AUX_USAGE_NONE] = AUX_NONE,
    [ISL_AUX_USAGE_MC] = AUX_NONE,
@@ -515,6 +521,21 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 
 #if GFX_VER >= 7
    s.ResourceMinLOD = info->view->min_lod_clamp;
+
+#if GFX_VERx10 >= 200
+   s.EnableSamplerRoutetoLSC = isl_format_support_sampler_route_to_lsc(info->view->format);
+   s.EnableSamplerRoutetoLSC &= (s.SurfaceType == SURFTYPE_2D);
+
+/* Wa_14018471104:
+ * For APIs that use ResourceMinLod, do the following: (remains same as before)
+ *    1. If ResourceMinLod == 0.0 then **Enable Sampler Route to LSC**
+ *       in RENDER SURFACE STATE to 1 else to 0
+ */
+#if INTEL_NEEDS_WA_14018471104
+   s.EnableSamplerRoutetoLSC &= info->view->min_lod_clamp == 0;
+#endif
+#endif /* if GFX_VERx10 >= 200 */
+
 #else
    assert(info->view->min_lod_clamp == 0);
 #endif
@@ -664,7 +685,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
             isl_get_render_compression_format(info->surf->format);
       }
 #endif
-#if GFX_VER >= 12
+#if GFX_VER == 12
       s.MemoryCompressionEnable = info->aux_usage == ISL_AUX_USAGE_MC;
 
       /* The Tiger Lake PRM for RENDER_SURFACE_STATE::DecompressInL3 says:
@@ -790,11 +811,11 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 
    if (isl_aux_usage_has_fast_clears(info->aux_usage)) {
       if (info->use_clear_address) {
-#if GFX_VER >= 10
+#if GFX_VER > 10 && GFX_VER < 20
          s.ClearValueAddressEnable = true;
          s.ClearValueAddress = info->clear_address;
 #else
-         unreachable("Gfx9 and earlier do not support indirect clear colors");
+         unreachable("Only Gfx11 and Gfx12 support indirect clear colors");
 #endif
       }
 
@@ -958,6 +979,10 @@ isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
 #else
    s.RenderCacheReadWriteMode = 0;
 #endif
+
+#if GFX_VERx10 >= 200
+   s.EnableSamplerRoutetoLSC = isl_format_support_sampler_route_to_lsc(info->format);
+#endif /* if GFX_VERx10 >= 200 */
 
    s.SurfaceBaseAddress = info->address;
 #if GFX_VER >= 6

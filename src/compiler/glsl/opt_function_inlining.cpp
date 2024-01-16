@@ -143,7 +143,7 @@ should_replace_variable(ir_variable *sig_param, ir_rvalue *param,
    /* Some places in glsl_to_nir() expect images to always be copied to a temp
     * first.
     */
-   if (sig_param->type->without_array()->is_image() && !param->is_dereference())
+   if (glsl_type_is_image(glsl_without_array(sig_param->type)) && !param->is_dereference())
       return false;
 
    /* SSBO and shared vars might be passed to a built-in such as an atomic
@@ -163,7 +163,7 @@ should_replace_variable(ir_variable *sig_param, ir_rvalue *param,
     * the location information, which an assignment of an opaque
     * variable wouldn't.
     */
-   return sig_param->type->contains_opaque();
+   return glsl_contains_opaque(sig_param->type);
 }
 
 void

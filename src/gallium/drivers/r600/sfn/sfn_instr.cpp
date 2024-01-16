@@ -68,17 +68,28 @@ Instr::ready() const
    return do_ready();
 }
 
-int
-int_from_string_with_prefix(const std::string& str, const std::string& prefix)
+bool
+int_from_string_with_prefix_optional(const std::string& str,
+                                     const std::string& prefix,
+                                     int& value)
 {
    if (str.substr(0, prefix.length()) != prefix) {
-      std::cerr << "Expect '" << prefix << "' as start of '" << str << "'\n";
-      assert(0);
+      return false;
    }
 
    std::stringstream help(str.substr(prefix.length()));
-   int retval;
-   help >> retval;
+   help >> value;
+   return true;
+}
+
+int
+int_from_string_with_prefix(const std::string& str, const std::string& prefix)
+{
+   int retval = 0;
+   if (!int_from_string_with_prefix_optional(str, prefix, retval)) {
+      std::cerr << "Expect '" << prefix << "' as start of '" << str << "'\n";
+      assert(0);
+   }
    return retval;
 }
 

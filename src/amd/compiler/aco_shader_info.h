@@ -41,9 +41,12 @@ extern "C" {
 #define ACO_MAX_VERTEX_ATTRIBS 32
 #define ACO_MAX_VBS            32
 
-struct aco_vs_input_state {
+struct aco_vs_prolog_info {
+   struct ac_arg inputs;
+
    uint32_t instance_rate_inputs;
    uint32_t nontrivial_divisors;
+   uint32_t zero_divisors;
    uint32_t post_shuffle;
    /* Having two separate fields instead of a single uint64_t makes it easier to remove attributes
     * using bitwise arithmetic.
@@ -51,13 +54,8 @@ struct aco_vs_input_state {
    uint32_t alpha_adjust_lo;
    uint32_t alpha_adjust_hi;
 
-   uint32_t divisors[ACO_MAX_VERTEX_ATTRIBS];
    uint8_t formats[ACO_MAX_VERTEX_ATTRIBS];
-};
 
-struct aco_vs_prolog_info {
-   struct ac_arg inputs;
-   struct aco_vs_input_state state;
    unsigned num_attributes;
    uint32_t misaligned_mask;
    bool is_ngg;
@@ -75,11 +73,12 @@ struct aco_ps_epilog_info {
 
    bool mrt0_is_dual_src;
 
+   bool alpha_to_coverage_via_mrtz;
+
    /* OpenGL only */
    uint16_t color_types;
    bool clamp_color;
    bool alpha_to_one;
-   bool alpha_to_coverage_via_mrtz;
    bool skip_null_export;
    unsigned broadcast_last_cbuf;
    enum compare_func alpha_func;
@@ -181,7 +180,6 @@ struct aco_shader_info {
       struct ac_arg alpha_reference;
    } ps;
    struct {
-      uint8_t subgroup_size;
       bool uses_full_subgroups;
    } cs;
 
@@ -226,6 +224,10 @@ enum aco_statistic {
    aco_statistic_smem_clauses,
    aco_statistic_sgpr_presched,
    aco_statistic_vgpr_presched,
+   aco_statistic_valu,
+   aco_statistic_salu,
+   aco_statistic_vmem,
+   aco_statistic_smem,
    aco_num_statistics
 };
 

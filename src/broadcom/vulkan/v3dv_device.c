@@ -70,7 +70,7 @@
 
 #define V3DV_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
 
-#ifdef ANDROID
+#ifdef ANDROID_STRICT
 #if ANDROID_API_LEVEL <= 32
 /* Android 12.1 and lower support only Vulkan API v1.1 */
 #undef V3DV_API_VERSION
@@ -170,6 +170,7 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .KHR_timeline_semaphore               = true,
       .KHR_uniform_buffer_standard_layout   = true,
       .KHR_shader_integer_dot_product       = true,
+      .KHR_shader_terminate_invocation      = true,
       .KHR_synchronization2                 = true,
       .KHR_workgroup_memory_explicit_layout = true,
 #ifdef V3DV_USE_WSI_PLATFORM
@@ -195,6 +196,7 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .EXT_index_type_uint8                 = true,
       .EXT_line_rasterization               = true,
       .EXT_memory_budget                    = true,
+      .EXT_multi_draw                       = true,
       .EXT_physical_device_drm              = true,
       .EXT_pipeline_creation_cache_control  = true,
       .EXT_pipeline_creation_feedback       = true,
@@ -203,7 +205,9 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .EXT_private_data                     = true,
       .EXT_provoking_vertex                 = true,
       .EXT_separate_stencil_usage           = true,
+      .EXT_shader_demote_to_helper_invocation = true,
       .EXT_shader_module_identifier         = true,
+      .EXT_subgroup_size_control            = true,
       .EXT_texel_buffer_alignment           = true,
       .EXT_tooling_info                     = true,
       .EXT_vertex_attribute_divisor         = true,
@@ -436,6 +440,19 @@ get_features(const struct v3dv_physical_device *physical_device,
 
       /* VK_EXT_pipeline_robustness */
       .pipelineRobustness = true,
+
+      /* VK_EXT_multi_draw */
+      .multiDraw = true,
+
+      /* VK_KHR_shader_terminate_invocation */
+      .shaderTerminateInvocation = true,
+
+      /* VK_EXT_shader_demote_to_helper_invocation */
+      .shaderDemoteToHelperInvocation = true,
+
+      /* VK_EXT_subgroup_size_control */
+      .subgroupSizeControl = true,
+      .computeFullSubgroups = true,
    };
 }
 
@@ -844,6 +861,9 @@ create_physical_device(struct v3dv_instance *instance,
                          "Kernel driver doesn't have required features.");
       goto fail;
    }
+
+   device->caps.cpu_queue =
+      v3d_has_feature(device, DRM_V3D_PARAM_SUPPORTS_CPU_QUEUE);
 
    device->caps.multisync =
       v3d_has_feature(device, DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT);
@@ -1286,6 +1306,11 @@ v3dv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .integerDotProductAccumulatingSaturating64BitUnsignedAccelerated = false,
       .integerDotProductAccumulatingSaturating64BitSignedAccelerated = false,
       .integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated = false,
+      /* VK_EXT_subgroup_size_control */
+      .minSubgroupSize = V3D_CHANNELS,
+      .maxSubgroupSize = V3D_CHANNELS,
+      .maxComputeWorkgroupSubgroups = 16, /* 256 / 16 */
+      .requiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT,
    };
 
    VkPhysicalDeviceVulkan12Properties vk12 = {
@@ -1469,6 +1494,12 @@ v3dv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
             VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT;
          break;
       }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT: {
+         VkPhysicalDeviceMultiDrawPropertiesEXT *properties =
+            (VkPhysicalDeviceMultiDrawPropertiesEXT *)ext;
+         properties->maxMultiDrawCount = 2048;
+         break;
+      }
       default:
          v3dv_debug_ignored_stype(ext->sType);
          break;
@@ -1559,33 +1590,11 @@ v3dv_GetInstanceProcAddr(VkInstance _instance,
  * vk_icdGetInstanceProcAddr to work around certain LD_PRELOAD issues seen in apps.
  */
 PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction
-VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance,
-                                     const char *pName);
-
-PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 vk_icdGetInstanceProcAddr(VkInstance instance,
                           const char*                                 pName)
 {
    return v3dv_GetInstanceProcAddr(instance, pName);
-}
-
-/* With version 4+ of the loader interface the ICD should expose
- * vk_icdGetPhysicalDeviceProcAddr()
- */
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-vk_icdGetPhysicalDeviceProcAddr(VkInstance  _instance,
-                                const char* pName);
-
-PFN_vkVoidFunction
-vk_icdGetPhysicalDeviceProcAddr(VkInstance  _instance,
-                                const char* pName)
-{
-   V3DV_FROM_HANDLE(v3dv_instance, instance, _instance);
-
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -2183,7 +2192,7 @@ v3dv_AllocateMemory(VkDevice _device,
     * through descriptor state.
     */
    if (flags_info &&
-       (flags_info->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR)) {
+       (flags_info->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT)) {
       mem->is_for_device_address = true;
       device_add_device_address_bo(device, mem->bo);
    }
@@ -2318,7 +2327,7 @@ v3dv_GetImageMemoryRequirements2(VkDevice device,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_GetDeviceImageMemoryRequirementsKHR(
+v3dv_GetDeviceImageMemoryRequirements(
     VkDevice _device,
     const VkDeviceImageMemoryRequirements *pInfo,
     VkMemoryRequirements2 *pMemoryRequirements)
@@ -2527,7 +2536,7 @@ v3dv_GetBufferMemoryRequirements2(VkDevice device,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_GetDeviceBufferMemoryRequirementsKHR(
+v3dv_GetDeviceBufferMemoryRequirements(
     VkDevice _device,
     const VkDeviceBufferMemoryRequirements *pInfo,
     VkMemoryRequirements2 *pMemoryRequirements)
@@ -2813,7 +2822,7 @@ v3dv_GetImageSparseMemoryRequirements2(
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_GetDeviceImageSparseMemoryRequirementsKHR(
+v3dv_GetDeviceImageSparseMemoryRequirements(
     VkDevice device,
     const VkDeviceImageMemoryRequirements *pInfo,
     uint32_t *pSparseMemoryRequirementCount,
@@ -2822,62 +2831,9 @@ v3dv_GetDeviceImageSparseMemoryRequirementsKHR(
    *pSparseMemoryRequirementCount = 0;
 }
 
-/* vk_icd.h does not declare this function, so we declare it here to
- * suppress Wmissing-prototypes.
- */
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion);
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it is
-    *         linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    *
-    *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return
-    *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
-    *          Vulkan Loader with interface v4 or smaller is being used and the
-    *          application provides an API version that is greater than 1.0.
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 5u);
-   return VK_SUCCESS;
-}
-
 VkDeviceAddress
 v3dv_GetBufferDeviceAddress(VkDevice device,
-                            const VkBufferDeviceAddressInfoKHR *pInfo)
+                            const VkBufferDeviceAddressInfo *pInfo)
 {
    V3DV_FROM_HANDLE(v3dv_buffer, buffer, pInfo->buffer);
    return buffer->mem_offset + buffer->mem->bo->offset;
@@ -2885,7 +2841,7 @@ v3dv_GetBufferDeviceAddress(VkDevice device,
 
 uint64_t
 v3dv_GetBufferOpaqueCaptureAddress(VkDevice device,
-                                   const VkBufferDeviceAddressInfoKHR *pInfo)
+                                   const VkBufferDeviceAddressInfo *pInfo)
 {
    /* Not implemented */
    return 0;
@@ -2894,7 +2850,7 @@ v3dv_GetBufferOpaqueCaptureAddress(VkDevice device,
 uint64_t
 v3dv_GetDeviceMemoryOpaqueCaptureAddress(
     VkDevice device,
-    const VkDeviceMemoryOpaqueCaptureAddressInfoKHR *pInfo)
+    const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
 {
    /* Not implemented */
    return 0;

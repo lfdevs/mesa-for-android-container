@@ -64,6 +64,8 @@ struct clc_optional_features {
     * progress
     */
    bool subgroups_ifp;
+   bool subgroups_shuffle;
+   bool subgroups_shuffle_relative;
 };
 
 struct clc_compile_args {
@@ -266,6 +268,13 @@ clc_specialize_spirv(const struct clc_binary *in_spirv,
                      const struct clc_parsed_spirv *parsed_data,
                      const struct clc_spirv_specialization_consts *consts,
                      struct clc_binary *out_spirv);
+
+enum clc_debug_flags {
+   CLC_DEBUG_DUMP_SPIRV = 1 << 0,
+   CLC_DEBUG_DUMP_LLVM = 1 << 1,
+   CLC_DEBUG_VERBOSE = 1 << 2,
+};
+uint64_t clc_debug_flags(void);
 
 #ifdef __cplusplus
 }

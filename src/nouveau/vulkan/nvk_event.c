@@ -102,7 +102,7 @@ clear_bits64(uint64_t *bitfield, uint64_t bits)
 uint32_t
 vk_stage_flags_to_nv9097_pipeline_location(VkPipelineStageFlags2 flags)
 {
-   if (clear_bits64(&flags, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR |
+   if (clear_bits64(&flags, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT |
                             VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT |
                             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT |
                             VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |
@@ -166,6 +166,8 @@ nvk_CmdSetEvent2(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_event, event, _event);
+
+   nvk_cmd_flush_wait_dep(cmd, pDependencyInfo, false);
 
    VkPipelineStageFlags2 stages = 0;
    for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
@@ -232,4 +234,6 @@ nvk_CmdWaitEvents2(VkCommandBuffer commandBuffer,
          .release_size = RELEASE_SIZE_4BYTE,
       });
    }
+
+   nvk_cmd_invalidate_deps(cmd, eventCount, pDependencyInfos);
 }

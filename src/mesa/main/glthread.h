@@ -33,7 +33,12 @@
  *   chance of experiencing CPU cache thrashing
  * but it should be high enough so that u_queue overhead remains negligible.
  */
-#define MARSHAL_MAX_CMD_SIZE (8 * 1024)
+#define MARSHAL_MAX_CMD_BUFFER_SIZE (8 * 1024)
+
+/* We need to leave 1 slot at the end to insert the END marker for unmarshal
+ * calls that look ahead to know where the batch ends.
+ */
+#define MARSHAL_MAX_CMD_SIZE (MARSHAL_MAX_CMD_BUFFER_SIZE - 8)
 
 /* The number of batch slots in memory.
  *
@@ -136,7 +141,7 @@ struct glthread_batch
    unsigned used;
 
    /** Data contained in the command buffer. */
-   uint64_t buffer[MARSHAL_MAX_CMD_SIZE / 8];
+   uint64_t buffer[MARSHAL_MAX_CMD_BUFFER_SIZE / 8];
 };
 
 struct glthread_client_attrib {

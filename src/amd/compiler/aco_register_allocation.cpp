@@ -24,6 +24,7 @@
 
 #include "aco_ir.h"
 
+#include "util/bitset.h"
 #include "util/enum_operators.h"
 
 #include <algorithm>
@@ -1971,11 +1972,12 @@ handle_fixed_operands(ra_ctx& ctx, RegisterFile& register_file,
                       std::vector<std::pair<Operand, Definition>>& parallelcopy,
                       aco_ptr<Instruction>& instr)
 {
-   assert(instr->operands.size() <= 64);
+   assert(instr->operands.size() <= 128);
 
    RegisterFile tmp_file(register_file);
 
-   uint64_t mask = 0;
+   BITSET_DECLARE(mask, 128) = {0};
+
    for (unsigned i = 0; i < instr->operands.size(); i++) {
       Operand& op = instr->operands[i];
 
@@ -1990,8 +1992,9 @@ handle_fixed_operands(ra_ctx& ctx, RegisterFile& register_file,
          continue;
       }
 
+      unsigned j;
       bool found = false;
-      u_foreach_bit64 (j, mask) {
+      BITSET_FOREACH_SET (j, mask, i) {
          if (instr->operands[j].tempId() == op.tempId() &&
              instr->operands[j].physReg() == op.physReg()) {
             found = true;
@@ -2004,18 +2007,19 @@ handle_fixed_operands(ra_ctx& ctx, RegisterFile& register_file,
       /* clear from register_file so fixed operands are not collected be collect_vars() */
       tmp_file.clear(src, op.regClass()); // TODO: try to avoid moving block vars to src
 
-      mask |= (uint64_t)1 << i;
+      BITSET_SET(mask, i);
 
       Operand pc_op(instr->operands[i].getTemp(), src);
       Definition pc_def = Definition(op.physReg(), pc_op.regClass());
       parallelcopy.emplace_back(pc_op, pc_def);
    }
 
-   if (!mask)
+   if (BITSET_IS_EMPTY(mask))
       return;
 
+   unsigned i;
    std::vector<unsigned> blocking_vars;
-   u_foreach_bit64 (i, mask) {
+   BITSET_FOREACH_SET (i, mask, instr->operands.size()) {
       Operand& op = instr->operands[i];
       PhysRegInterval target{op.physReg(), op.size()};
       std::vector<unsigned> blocking_vars2 = collect_vars(ctx, tmp_file, target);

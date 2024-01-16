@@ -1081,7 +1081,7 @@ copy_image_to_buffer_texel_buffer(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdCopyImageToBuffer2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
                               const VkCopyImageToBufferInfo2 *info)
 
 {
@@ -1677,7 +1677,7 @@ copy_image_linear_texel_buffer(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdCopyImage2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdCopyImage2(VkCommandBuffer commandBuffer,
                       const VkCopyImageInfo2 *info)
 
 {
@@ -1706,7 +1706,7 @@ v3dv_CmdCopyImage2KHR(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdCopyBuffer2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
                        const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
@@ -3210,7 +3210,7 @@ copy_buffer_to_image_shader(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
                               const VkCopyBufferToImageInfo2 *info)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
@@ -4721,7 +4721,7 @@ fail:
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdBlitImage2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdBlitImage2(VkCommandBuffer commandBuffer,
                       const VkBlitImageInfo2 *pBlitImageInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
@@ -4864,7 +4864,7 @@ resolve_image_blit(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdResolveImage2KHR(VkCommandBuffer commandBuffer,
+v3dv_CmdResolveImage2(VkCommandBuffer commandBuffer,
                          const VkResolveImageInfo2 *info)
 
 {

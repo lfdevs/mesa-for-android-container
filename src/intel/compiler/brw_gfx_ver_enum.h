@@ -40,6 +40,7 @@ enum gfx_ver {
    GFX11   = (1 << 9),
    GFX12   = (1 << 10),
    GFX125  = (1 << 11),
+   XE2     = (1 << 12),
    GFX_ALL = ~0
 };
 
@@ -62,6 +63,7 @@ gfx_ver_from_devinfo(const struct intel_device_info *devinfo)
    case 110: return GFX11;
    case 120: return GFX12;
    case 125: return GFX125;
+   case 200: return XE2;
    default:
       unreachable("not reached");
    }

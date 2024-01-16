@@ -1122,8 +1122,13 @@ nir_pack_bits(nir_builder *b, nir_def *src, unsigned dest_bit_size)
       break;
 
    case 32:
-      if (src->bit_size == 16)
-         return nir_pack_32_2x16(b, src);
+      switch (src->bit_size) {
+      case 32: return src;
+      case 16: return nir_pack_32_2x16(b, src);
+      case 8: return nir_pack_32_4x8(b, src);
+      default: break;
+      }
+
       break;
 
    default:
@@ -1144,7 +1149,7 @@ static inline nir_def *
 nir_unpack_bits(nir_builder *b, nir_def *src, unsigned dest_bit_size)
 {
    assert(src->num_components == 1);
-   assert(src->bit_size > dest_bit_size);
+   assert(src->bit_size >= dest_bit_size);
    const unsigned dest_num_components = src->bit_size / dest_bit_size;
    assert(dest_num_components <= NIR_MAX_VEC_COMPONENTS);
 
@@ -1161,8 +1166,13 @@ nir_unpack_bits(nir_builder *b, nir_def *src, unsigned dest_bit_size)
       break;
 
    case 32:
-      if (dest_bit_size == 16)
-         return nir_unpack_32_2x16(b, src);
+      switch (dest_bit_size) {
+      case 32: return src;
+      case 16: return nir_unpack_32_2x16(b, src);
+      case 8: return nir_unpack_32_4x8(b, src);
+      default: break;
+      }
+
       break;
 
    default:
@@ -1631,6 +1641,37 @@ nir_store_deref(nir_builder *build, nir_deref_instr *deref,
 }
 
 static inline void
+nir_build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
+                             nir_def *value, unsigned component)
+{
+   assert(value->num_components == 1);
+   unsigned num_components = glsl_get_components(vec_deref->type);
+   assert(num_components > 1 && num_components <= NIR_MAX_VEC_COMPONENTS);
+
+   nir_def *vec =
+      nir_vector_insert_imm(b, nir_undef(b, num_components, value->bit_size),
+                            value, component);
+   nir_store_deref(b, vec_deref, vec, (1u << component));
+}
+
+static inline void
+nir_build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
+                              nir_def *value, nir_def *index,
+                              unsigned start, unsigned end)
+{
+   if (start == end - 1) {
+      nir_build_write_masked_store(b, vec_deref, value, start);
+   } else {
+      unsigned mid = start + (end - start) / 2;
+      nir_push_if(b, nir_ilt_imm(b, index, mid));
+      nir_build_write_masked_stores(b, vec_deref, value, index, start, mid);
+      nir_push_else(b, NULL);
+      nir_build_write_masked_stores(b, vec_deref, value, index, mid, end);
+      nir_pop_if(b, NULL);
+   }
+}
+
+static inline void
 nir_copy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
                            nir_deref_instr *src,
                            enum gl_access_qualifier dest_access,
@@ -1999,6 +2040,32 @@ nir_goto_if(nir_builder *build, struct nir_block *target, nir_src cond,
    jump->else_target = else_target;
    nir_builder_instr_insert(build, &jump->instr);
 }
+
+static inline void
+nir_build_call(nir_builder *build, nir_function *func, size_t count,
+               nir_def **args)
+{
+   assert(count == func->num_params && "parameter count must match");
+   nir_call_instr *call = nir_call_instr_create(build->shader, func);
+
+   for (unsigned i = 0; i < count; ++i) {
+      call->params[i] = nir_src_for_ssa(args[i]);
+   }
+
+   nir_builder_instr_insert(build, &call->instr);
+}
+
+/*
+ * Call a given nir_function * with a variadic number of nir_def * arguments.
+ *
+ * Defined with __VA_ARGS__ instead of va_list so we can assert the correct
+ * number of parameters are passed in.
+ */
+#define nir_call(build, func, ...)                         \
+   do {                                                    \
+      nir_def *args[] = { __VA_ARGS__ };                   \
+      nir_build_call(build, func, ARRAY_SIZE(args), args); \
+   } while (0)
 
 nir_def *
 nir_compare_func(nir_builder *b, enum compare_func func,

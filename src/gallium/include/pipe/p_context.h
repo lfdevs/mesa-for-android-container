@@ -85,6 +85,14 @@ struct u_log_context;
 struct u_upload_mgr;
 struct util_debug_callback;
 struct u_vbuf;
+struct pipe_context;
+
+typedef void (*pipe_draw_func)(struct pipe_context *pipe,
+                               const struct pipe_draw_info *info,
+                               unsigned drawid_offset,
+                               const struct pipe_draw_indirect_info *indirect,
+                               const struct pipe_draw_start_count_bias *draws,
+                               unsigned num_draws);
 
 /**
  * Gallium rendering context.  Basically:
@@ -149,12 +157,7 @@ struct pipe_context {
     * \param draws         array of (start, count) pairs for direct draws
     * \param num_draws     number of direct draws; 1 for indirect multi draws
     */
-   void (*draw_vbo)(struct pipe_context *pipe,
-                    const struct pipe_draw_info *info,
-                    unsigned drawid_offset,
-                    const struct pipe_draw_indirect_info *indirect,
-                    const struct pipe_draw_start_count_bias *draws,
-                    unsigned num_draws);
+   pipe_draw_func draw_vbo;
 
    /**
     * Multi draw for display lists.

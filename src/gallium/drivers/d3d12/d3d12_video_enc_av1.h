@@ -33,7 +33,7 @@ d3d12_video_encoder_calculate_metadata_resolved_buffer_size_av1(uint32_t maxSlic
 
 bool
 d3d12_video_encoder_update_current_encoder_config_state_av1(struct d3d12_video_encoder *pD3D12Enc,
-                                                            struct pipe_video_buffer *srcTexture,
+                                                            D3D12_VIDEO_SAMPLE srcTextureDesc,
                                                             struct pipe_picture_desc *picture);
 
 void
@@ -67,7 +67,8 @@ upload_tile_group_obu(struct d3d12_video_encoder *pD3D12Enc,
                       size_t TileSizeBytes,   // Pass already +1'd from TileSizeBytesMinus1
                       const D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES &TilesPartition,
                       const av1_tile_group_t &tileGroup,
-                      size_t &written_bytes_to_staging_bitstream_buffer);
+                      size_t &written_bytes_to_staging_bitstream_buffer,
+                      std::vector<uint64_t> &pWrittenCodecUnitsSizes);
 
 
 void

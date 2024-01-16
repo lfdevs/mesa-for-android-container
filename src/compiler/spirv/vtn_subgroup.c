@@ -341,6 +341,15 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpGroupNonUniformQuadBroadcast:
+      /* From the Vulkan spec 1.3.269:
+       *
+       * 9.27. Quad Group Operations:
+       * "Fragment shaders that statically execute quad group operations
+       * must launch sufficient invocations to ensure their correct operation;"
+       */
+      if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
+         b->shader->info.fs.require_full_quads = true;
+
       vtn_push_ssa_value(b, w[2],
          vtn_build_subgroup_instr(b, nir_intrinsic_quad_broadcast,
                                   vtn_ssa_value(b, w[4]),
@@ -348,6 +357,9 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
       break;
 
    case SpvOpGroupNonUniformQuadSwap: {
+      if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
+         b->shader->info.fs.require_full_quads = true;
+
       unsigned direction = vtn_constant_uint(b, w[5]);
       nir_intrinsic_op op;
       switch (direction) {

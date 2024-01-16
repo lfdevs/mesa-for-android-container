@@ -231,6 +231,10 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast, bool zink)
       if (!_eglDeviceSupports(dev_list, _EGL_DEVICE_DRM))
          goto next;
 
+      if (_eglHasAttrib(disp, EGL_DEVICE_EXT) && dev_list != disp->Device) {
+         goto next;
+      }
+
       device = _eglDeviceDrm(dev_list);
       assert(device);
 
@@ -286,9 +290,15 @@ static bool
 surfaceless_probe_device_sw(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct _egl_device *device = _eglFindDevice(dri2_dpy->fd_render_gpu, true);
 
    dri2_dpy->fd_render_gpu = -1;
-   disp->Device = _eglFindDevice(dri2_dpy->fd_render_gpu, true);
+
+   if (_eglHasAttrib(disp, EGL_DEVICE_EXT) && disp->Device != device) {
+      return false;
+   }
+
+   disp->Device = device;
    assert(disp->Device);
 
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");

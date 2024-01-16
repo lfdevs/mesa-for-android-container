@@ -447,8 +447,7 @@ check_instr(wait_ctx& ctx, wait_imm& wait, alu_delay_info& delay, Instruction* i
 bool
 parse_wait_instr(wait_ctx& ctx, wait_imm& imm, Instruction* instr)
 {
-   if (instr->opcode == aco_opcode::s_waitcnt_vscnt &&
-       instr->definitions[0].physReg() == sgpr_null) {
+   if (instr->opcode == aco_opcode::s_waitcnt_vscnt && instr->operands[0].physReg() == sgpr_null) {
       imm.vs = std::min<uint8_t>(imm.vs, instr->sopk().imm);
       return true;
    } else if (instr->opcode == aco_opcode::s_waitcnt) {
@@ -995,8 +994,8 @@ emit_waitcnt(wait_ctx& ctx, std::vector<aco_ptr<Instruction>>& instructions, wai
    if (imm.vs != wait_imm::unset_counter) {
       assert(ctx.gfx_level >= GFX10);
       SOPK_instruction* waitcnt_vs =
-         create_instruction<SOPK_instruction>(aco_opcode::s_waitcnt_vscnt, Format::SOPK, 0, 1);
-      waitcnt_vs->definitions[0] = Definition(sgpr_null, s1);
+         create_instruction<SOPK_instruction>(aco_opcode::s_waitcnt_vscnt, Format::SOPK, 1, 0);
+      waitcnt_vs->operands[0] = Operand(sgpr_null, s1);
       waitcnt_vs->imm = imm.vs;
       instructions.emplace_back(waitcnt_vs);
       imm.vs = wait_imm::unset_counter;

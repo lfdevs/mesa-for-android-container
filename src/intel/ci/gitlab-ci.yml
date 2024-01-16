@@ -3,7 +3,7 @@ include:
 
 anv-jsl:
   extends:
-    - .jsl-test
+    - .lava-acer-cb317-1h-c3z6-dedede:x86_64
     - .anv-test
   variables:
     DEQP_SUITE: anv-jsl
@@ -45,6 +45,7 @@ anv-tgl-full:
 hasvk-hsw-full:
   extends:
     - .anholt-hsw-test
+    - .test-vk
     - .deqp-test
     - .hasvk-manual-rules
   variables:
@@ -62,7 +63,7 @@ hasvk-hsw:
 
 anv-jsl-angle:
   extends:
-    - .jsl-test
+    - .lava-acer-cb317-1h-c3z6-dedede:x86_64
     - .anv-angle-test
   variables:
     DEQP_SUITE: anv-jsl-angle
@@ -149,7 +150,7 @@ iris-cml-deqp:
 
 iris-jsl-deqp:
   extends:
-    - .jsl-test
+    - .lava-acer-cb317-1h-c3z6-dedede:x86_64
     - .iris-test
   variables:
     DEQP_SUITE: iris-jsl

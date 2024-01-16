@@ -5,7 +5,7 @@ Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
- debhelper-compat (= 12),
+ debhelper-compat (= 13),
  directx-headers-dev (>= 1.610.0) [linux-amd64 linux-arm64],
  glslang-tools [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  meson (>= 0.45),

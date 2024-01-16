@@ -61,9 +61,13 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
    struct anv_state push_data_state =
       genX(simple_shader_alloc_push)(simple_state,
                                      sizeof(struct anv_generated_indirect_params));
+   if (push_data_state.map == NULL)
+      return ANV_STATE_NULL;
 
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
+   const bool use_tbimr = cmd_buffer->state.gfx.dyn_state.use_tbimr;
 
    struct anv_address draw_count_addr;
    if (anv_address_is_null(count_addr)) {
@@ -80,7 +84,8 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
          .draw_id_addr           = anv_address_physical(draw_id_addr),
          .indirect_data_addr     = anv_address_physical(indirect_data_addr),
          .indirect_data_stride   = indirect_data_stride,
-         .flags                  = (indexed ? ANV_GENERATED_FLAG_INDEXED : 0) |
+         .flags                  = (use_tbimr ? ANV_GENERATED_FLAG_TBIMR : 0) |
+                                   (indexed ? ANV_GENERATED_FLAG_INDEXED : 0) |
                                    (cmd_buffer->state.conditional_render_enabled ?
                                     ANV_GENERATED_FLAG_PREDICATED : 0) |
                                    ((vs_prog_data->uses_firstvertex ||
@@ -158,7 +163,8 @@ genX(cmd_buffer_get_draw_id_addr)(struct anv_cmd_buffer *cmd_buffer,
 #if GFX_VER >= 11
    return ANV_NULL_ADDRESS;
 #else
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
    if (!vs_prog_data->uses_drawid)
       return ANV_NULL_ADDRESS;
@@ -180,7 +186,8 @@ genX(cmd_buffer_get_generated_draw_stride)(struct anv_cmd_buffer *cmd_buffer)
 #if GFX_VER >= 11
    return 4 * GENX(3DPRIMITIVE_EXTENDED_length);
 #else
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
 
    uint32_t len = 0;
@@ -248,7 +255,8 @@ genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cm
          device->physical->va.dynamic_state_pool.size);
    }
 
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
 
    if (vs_prog_data->uses_baseinstance ||
@@ -321,6 +329,8 @@ genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cm
             indexed,
             0 /* ring_count */);
       struct anv_generated_indirect_params *params = params_state.map;
+      if (params == NULL)
+         return;
 
       anv_batch_advance(&cmd_buffer->batch, draw_cmd_size);
 
@@ -424,7 +434,8 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
       },
       cmd_buffer->generation.ring_bo->size);
 
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
 
    if (vs_prog_data->uses_baseinstance ||
@@ -628,6 +639,9 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
 static void
 genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
 {
+   if (!anv_cmd_buffer_is_render_queue(cmd_buffer))
+      return;
+
    /* No return address setup means we don't have to do anything */
    if (anv_address_is_null(cmd_buffer->generation.return_addr))
       return;

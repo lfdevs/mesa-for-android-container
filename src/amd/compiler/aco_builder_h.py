@@ -497,7 +497,7 @@ public:
       aco_opcode op;
       Temp carry;
       if (carry_out) {
-         carry = tmp(s2);
+         carry = tmp(lm);
          if (borrow.op.isUndefined())
             op = reverse ? aco_opcode::v_subrev_co_u32 : aco_opcode::v_sub_co_u32;
          else

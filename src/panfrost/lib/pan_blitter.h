@@ -28,14 +28,14 @@
 #include "genxml/gen_macros.h"
 
 #include "util/format/u_format.h"
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "pan_pool.h"
 #include "pan_texture.h"
 #include "pan_util.h"
 #include "panfrost-job.h"
 
 struct pan_fb_info;
-struct pan_scoreboard;
+struct pan_jc;
 struct pan_pool;
 struct panfrost_device;
 
@@ -87,8 +87,7 @@ void GENX(pan_blitter_init)(struct panfrost_device *dev,
 
 void GENX(pan_blitter_cleanup)(struct panfrost_device *dev);
 
-unsigned GENX(pan_preload_fb)(struct pan_pool *desc_pool,
-                              struct pan_scoreboard *scoreboard,
+unsigned GENX(pan_preload_fb)(struct pan_pool *desc_pool, struct pan_jc *jc,
                               struct pan_fb_info *fb, mali_ptr tsd,
                               mali_ptr tiler, struct panfrost_ptr *jobs);
 
@@ -116,8 +115,7 @@ pan_blit_next_surface(struct pan_blit_context *ctx)
 }
 
 struct panfrost_ptr GENX(pan_blit)(struct pan_blit_context *ctx,
-                                   struct pan_pool *pool,
-                                   struct pan_scoreboard *scoreboard,
+                                   struct pan_pool *pool, struct pan_jc *jc,
                                    mali_ptr tsd, mali_ptr tiler);
 
 #endif

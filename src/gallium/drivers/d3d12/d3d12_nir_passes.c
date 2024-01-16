@@ -805,7 +805,7 @@ lower_multisampling_instr(nir_builder *b, nir_instr *instr, void *_data)
    case nir_intrinsic_load_sample_id:
       return nir_imm_int(b, 0);
    case nir_intrinsic_load_sample_mask_in:
-      return nir_imm_int(b, 1);
+      return nir_b2i32(b, nir_ine_imm(b, &intr->def, 0));
    default:
       unreachable("Invalid intrinsic");
    }
@@ -839,35 +839,40 @@ d3d12_disable_multisampling(nir_shader *s)
    return progress;
 }
 
-struct multistream_subvar_state {
+struct var_split_subvar_state {
    nir_variable *var;
    uint8_t stream;
    uint8_t num_components;
 };
-struct multistream_var_state {
+struct var_split_var_state {
    unsigned num_subvars;
-   struct multistream_subvar_state subvars[4];
+   struct var_split_subvar_state subvars[4];
 };
-struct multistream_state {
-   struct multistream_var_state vars[VARYING_SLOT_MAX];
+struct var_split_state {
+   struct var_split_var_state vars[2][VARYING_SLOT_MAX];
 };
 
 static bool
-split_multistream_varying_stores(nir_builder *b, nir_intrinsic_instr *intr,
+split_varying_accesses(nir_builder *b, nir_intrinsic_instr *intr,
                                  void *_state)
 {
-   if (intr->intrinsic != nir_intrinsic_store_deref)
+   if (intr->intrinsic != nir_intrinsic_store_deref &&
+       intr->intrinsic != nir_intrinsic_load_deref)
       return false;
 
    nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-   if (!nir_deref_mode_is(deref, nir_var_shader_out))
+   if (!nir_deref_mode_is(deref, nir_var_shader_out) &&
+       !nir_deref_mode_is(deref, nir_var_shader_in))
       return false;
 
    nir_variable *var = nir_deref_instr_get_variable(deref);
-   assert(var);
+   if (!var)
+      return false;
 
-   struct multistream_state *state = _state;
-   struct multistream_var_state *var_state = &state->vars[var->data.location];
+   uint32_t mode_index = deref->modes == nir_var_shader_out ? 0 : 1;
+
+   struct var_split_state *state = _state;
+   struct var_split_var_state *var_state = &state->vars[mode_index][var->data.location];
    if (var_state->num_subvars <= 1)
       return false;
 
@@ -876,6 +881,7 @@ split_multistream_varying_stores(nir_builder *b, nir_intrinsic_instr *intr,
    assert(path.path[0]->deref_type == nir_deref_type_var && path.path[0]->var == var);
    
    unsigned first_channel = 0;
+   nir_def *loads[2];
    for (unsigned subvar = 0; subvar < var_state->num_subvars; ++subvar) {
       b->cursor = nir_after_instr(&path.path[0]->instr);
       nir_deref_instr *new_path = nir_build_deref_var(b, var_state->subvars[subvar].var);
@@ -886,73 +892,102 @@ split_multistream_varying_stores(nir_builder *b, nir_intrinsic_instr *intr,
       }
 
       b->cursor = nir_before_instr(&intr->instr);
-      unsigned mask_num_channels = (1 << var_state->subvars[subvar].num_components) - 1;
-      unsigned orig_write_mask = nir_intrinsic_write_mask(intr);
-      nir_def *sub_value = nir_channels(b, intr->src[1].ssa, mask_num_channels << first_channel);
+      if (intr->intrinsic == nir_intrinsic_store_deref) {
+         unsigned mask_num_channels = (1 << var_state->subvars[subvar].num_components) - 1;
+         unsigned orig_write_mask = nir_intrinsic_write_mask(intr);
+         nir_def *sub_value = nir_channels(b, intr->src[1].ssa, mask_num_channels << first_channel);
 
-      first_channel += var_state->subvars[subvar].num_components;
+         first_channel += var_state->subvars[subvar].num_components;
 
-      unsigned new_write_mask = (orig_write_mask >> first_channel) & mask_num_channels;
-      nir_build_store_deref(b, &new_path->def, sub_value, new_write_mask, nir_intrinsic_access(intr));
+         unsigned new_write_mask = (orig_write_mask >> first_channel) & mask_num_channels;
+         nir_build_store_deref(b, &new_path->def, sub_value, new_write_mask, nir_intrinsic_access(intr));
+      } else {
+         /* The load path only handles splitting dvec3/dvec4 */
+         assert(subvar == 0 || subvar == 1);
+         assert(intr->def.num_components >= 3);
+         loads[subvar] = nir_build_load_deref(b, var_state->subvars[subvar].num_components, intr->def.bit_size, &new_path->def);
+      }
    }
 
    nir_deref_path_finish(&path);
+   if (intr->intrinsic == nir_intrinsic_load_deref) {
+      nir_def *result = nir_extract_bits(b, loads, 2, 0, intr->def.num_components, intr->def.bit_size);
+      nir_def_rewrite_uses(&intr->def, result);
+   }
    nir_instr_free_and_dce(&intr->instr);
    return true;
 }
 
 bool
-d3d12_split_multistream_varyings(nir_shader *s)
+d3d12_split_needed_varyings(nir_shader *s)
 {
-   if (s->info.stage != MESA_SHADER_GEOMETRY)
-      return false;
-
-   struct multistream_state state;
+   struct var_split_state state;
    memset(&state, 0, sizeof(state));
 
    bool progress = false;
-   nir_foreach_variable_with_modes_safe(var, s, nir_var_shader_out) {
-      if ((var->data.stream & NIR_STREAM_PACKED) == 0)
-         continue;
-
-      struct multistream_var_state *var_state = &state.vars[var->data.location];
-      struct multistream_subvar_state *subvars = var_state->subvars;
-      for (unsigned i = 0; i < glsl_get_vector_elements(var->type); ++i) {
-         unsigned stream = (var->data.stream >> (2 * (i + var->data.location_frac))) & 0x3;
-         if (var_state->num_subvars == 0 || stream != subvars[var_state->num_subvars - 1].stream) {
-            subvars[var_state->num_subvars].stream = stream;
-            subvars[var_state->num_subvars].num_components = 1;
-            var_state->num_subvars++;
-         } else {
-            subvars[var_state->num_subvars - 1].num_components++;
+   nir_foreach_variable_with_modes_safe(var, s, nir_var_shader_out | nir_var_shader_in) {
+      uint32_t mode_index = var->data.mode == nir_var_shader_out ? 0 : 1;
+      struct var_split_var_state *var_state = &state.vars[mode_index][var->data.location];
+      struct var_split_subvar_state *subvars = var_state->subvars;
+      if ((var->data.stream & NIR_STREAM_PACKED) != 0 &&
+          s->info.stage == MESA_SHADER_GEOMETRY &&
+          var->data.mode == nir_var_shader_out) {
+         for (unsigned i = 0; i < glsl_get_vector_elements(var->type); ++i) {
+            unsigned stream = (var->data.stream >> (2 * (i + var->data.location_frac))) & 0x3;
+            if (var_state->num_subvars == 0 || stream != subvars[var_state->num_subvars - 1].stream) {
+               subvars[var_state->num_subvars].stream = stream;
+               subvars[var_state->num_subvars].num_components = 1;
+               var_state->num_subvars++;
+            } else {
+               subvars[var_state->num_subvars - 1].num_components++;
+            }
          }
-      }
 
-      var->data.stream = subvars[0].stream;
-      if (var_state->num_subvars == 1)
-         continue;
+         var->data.stream = subvars[0].stream;
+         if (var_state->num_subvars == 1)
+            continue;
 
-      progress = true;
+         progress = true;
 
-      subvars[0].var = var;
-      var->type = glsl_vector_type(glsl_get_base_type(var->type), subvars[0].num_components);
-      unsigned location_frac = var->data.location_frac + subvars[0].num_components;
-      for (unsigned subvar = 1; subvar < var_state->num_subvars; ++subvar) {
-         char *name = ralloc_asprintf(s, "unpacked:%s_stream%d", var->name, subvars[subvar].stream);
-         nir_variable *new_var = nir_variable_create(s, nir_var_shader_out,
-            glsl_vector_type(glsl_get_base_type(var->type), subvars[subvar].num_components),
-            name);
+         subvars[0].var = var;
+         var->type = glsl_vector_type(glsl_get_base_type(var->type), subvars[0].num_components);
+         unsigned location_frac = var->data.location_frac + subvars[0].num_components;
+         for (unsigned subvar = 1; subvar < var_state->num_subvars; ++subvar) {
+            char *name = ralloc_asprintf(s, "unpacked:%s_stream%d", var->name, subvars[subvar].stream);
+            nir_variable *new_var = nir_variable_create(s, nir_var_shader_out,
+                                                        glsl_vector_type(glsl_get_base_type(var->type), subvars[subvar].num_components),
+                                                        name);
 
-         new_var->data = var->data;
-         new_var->data.stream = subvars[subvar].stream;
-         new_var->data.location_frac = location_frac;
-         location_frac += subvars[subvar].num_components;
-         subvars[subvar].var = new_var;
+            new_var->data = var->data;
+            new_var->data.stream = subvars[subvar].stream;
+            new_var->data.location_frac = location_frac;
+            location_frac += subvars[subvar].num_components;
+            subvars[subvar].var = new_var;
+         }
+      } else if (glsl_type_is_64bit(glsl_without_array(var->type)) &&
+                 glsl_get_components(glsl_without_array(var->type)) >= 3) {
+         progress = true;
+         assert(var->data.location_frac == 0);
+         uint32_t components = glsl_get_components(glsl_without_array(var->type));
+         var_state->num_subvars = 2;
+         subvars[0].var = var;
+         subvars[0].num_components = 2;
+         subvars[0].stream = var->data.stream;
+         const struct glsl_type *base_type = glsl_without_array(var->type);
+         var->type = glsl_type_wrap_in_arrays(glsl_vector_type(glsl_get_base_type(base_type), 2), var->type);
+
+         subvars[1].var = nir_variable_clone(var, s);
+         subvars[1].num_components = components - 2;
+         subvars[1].stream = var->data.stream;
+         exec_node_insert_after(&var->node, &subvars[1].var->node);
+         subvars[1].var->type = glsl_type_wrap_in_arrays(glsl_vector_type(glsl_get_base_type(base_type), components - 2), var->type);
+         subvars[1].var->data.location++;
+         subvars[1].var->data.driver_location++;
       }
    }
 
    if (progress) {
-      nir_shader_intrinsics_pass(s, split_multistream_varying_stores,
+      nir_shader_intrinsics_pass(s, split_varying_accesses,
                                  nir_metadata_block_index | nir_metadata_dominance,
                                  &state);
    } else {

@@ -13,9 +13,9 @@
 #include "vk_format.h"
 
 #include "nvtypes.h"
-#include "classes/cl902d.h"
-#include "classes/cl9097.h"
-#include "classes/cl90c0.h"
+#include "cl902d.h"
+#include "cl9097.h"
+#include "cl90c0.h"
 
 #define VA_FMT(vk_fmt, widths, swap_rb, type) \
    [VK_FORMAT_##vk_fmt] = \
@@ -174,8 +174,8 @@ nvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
 
    vk_foreach_struct(ext, pFormatProperties->pNext) {
       switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3_KHR: {
-         VkFormatProperties3KHR *p = (void *)ext;
+      case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
+         VkFormatProperties3 *p = (void *)ext;
          p->linearTilingFeatures = linear2;
          p->optimalTilingFeatures = optimal2;
          p->bufferFeatures = buffer2;

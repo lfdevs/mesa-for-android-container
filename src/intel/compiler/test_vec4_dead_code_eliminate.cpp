@@ -137,12 +137,12 @@ dead_code_eliminate(vec4_visitor *v)
 TEST_F(dead_code_eliminate_vec4_test, some_dead_channels_all_flags_used)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
-   src_reg r1 = src_reg(v, glsl_type::vec4_type);
-   src_reg r2 = src_reg(v, glsl_type::vec4_type);
-   src_reg r3 = src_reg(v, glsl_type::vec4_type);
-   src_reg r4 = src_reg(v, glsl_type::vec4_type);
-   src_reg r5 = src_reg(v, glsl_type::vec4_type);
-   src_reg r6 = src_reg(v, glsl_type::vec4_type);
+   src_reg r1 = src_reg(v, glsl_vec4_type());
+   src_reg r2 = src_reg(v, glsl_vec4_type());
+   src_reg r3 = src_reg(v, glsl_vec4_type());
+   src_reg r4 = src_reg(v, glsl_vec4_type());
+   src_reg r5 = src_reg(v, glsl_vec4_type());
+   src_reg r6 = src_reg(v, glsl_vec4_type());
 
    /* Sequence like the following should not be modified by DCE.
     *

@@ -211,6 +211,155 @@ d3d12_get_typeless_format(enum pipe_format format)
    return typeless_formats[format];
 }
 
+const DXGI_FORMAT cast_table_8bit[] = {
+   DXGI_FORMAT_R8_UINT,
+   DXGI_FORMAT_R8_UNORM,
+   DXGI_FORMAT_R8_SINT,
+   DXGI_FORMAT_R8_SNORM,
+   DXGI_FORMAT_A8_UNORM,
+};
+
+const DXGI_FORMAT cast_table_16bit[] = {
+   DXGI_FORMAT_R8G8_UINT,
+   DXGI_FORMAT_R8G8_UNORM,
+   DXGI_FORMAT_R8G8_SINT,
+   DXGI_FORMAT_R8G8_SNORM,
+   DXGI_FORMAT_R16_UINT,
+   DXGI_FORMAT_R16_UNORM,
+   DXGI_FORMAT_R16_SINT,
+   DXGI_FORMAT_R16_SNORM,
+   DXGI_FORMAT_R16_FLOAT,
+};
+
+const DXGI_FORMAT cast_table_32bit[] = {
+   DXGI_FORMAT_R8G8B8A8_UINT,
+   DXGI_FORMAT_R8G8B8A8_UNORM,
+   DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+   DXGI_FORMAT_R8G8B8A8_SINT,
+   DXGI_FORMAT_R8G8B8A8_SNORM,
+   DXGI_FORMAT_B8G8R8A8_UNORM,
+   DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+   DXGI_FORMAT_B8G8R8X8_UNORM,
+   DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+   DXGI_FORMAT_R16G16_UINT,
+   DXGI_FORMAT_R16G16_UNORM,
+   DXGI_FORMAT_R16G16_SINT,
+   DXGI_FORMAT_R16G16_SNORM,
+   DXGI_FORMAT_R16G16_FLOAT,
+   DXGI_FORMAT_R32_UINT,
+   DXGI_FORMAT_R32_SINT,
+   DXGI_FORMAT_R32_FLOAT,
+   DXGI_FORMAT_D32_FLOAT,
+   DXGI_FORMAT_R11G11B10_FLOAT,
+   DXGI_FORMAT_R10G10B10A2_UINT,
+   DXGI_FORMAT_R10G10B10A2_UNORM,
+   DXGI_FORMAT_R9G9B9E5_SHAREDEXP,
+};
+
+const DXGI_FORMAT cast_table_64bit[] = {
+   DXGI_FORMAT_R16G16B16A16_UINT,
+   DXGI_FORMAT_R16G16B16A16_UNORM,
+   DXGI_FORMAT_R16G16B16A16_SINT,
+   DXGI_FORMAT_R16G16B16A16_SNORM,
+   DXGI_FORMAT_R16G16B16A16_FLOAT,
+   DXGI_FORMAT_R32G32_UINT,
+   DXGI_FORMAT_R32G32_SINT,
+   DXGI_FORMAT_R32G32_FLOAT,
+};
+
+const DXGI_FORMAT cast_table_96bit[] = {
+   DXGI_FORMAT_R32G32B32_UINT,
+   DXGI_FORMAT_R32G32B32_SINT,
+   DXGI_FORMAT_R32G32B32_FLOAT,
+};
+
+const DXGI_FORMAT cast_table_128bit[] = {
+   DXGI_FORMAT_R32G32B32A32_UINT,
+   DXGI_FORMAT_R32G32B32A32_SINT,
+   DXGI_FORMAT_R32G32B32A32_FLOAT,
+};
+
+const DXGI_FORMAT cast_table_bc1[] = {
+   DXGI_FORMAT_BC1_UNORM,
+   DXGI_FORMAT_BC1_UNORM_SRGB,
+};
+
+const DXGI_FORMAT cast_table_bc2[] = {
+   DXGI_FORMAT_BC2_UNORM,
+   DXGI_FORMAT_BC2_UNORM_SRGB,
+};
+
+const DXGI_FORMAT cast_table_bc3[] = {
+   DXGI_FORMAT_BC3_UNORM,
+   DXGI_FORMAT_BC3_UNORM_SRGB,
+};
+
+const DXGI_FORMAT cast_table_bc4[] = {
+   DXGI_FORMAT_BC4_SNORM,
+   DXGI_FORMAT_BC4_UNORM,
+};
+
+const DXGI_FORMAT cast_table_bc5[] = {
+   DXGI_FORMAT_BC5_SNORM,
+   DXGI_FORMAT_BC5_UNORM,
+};
+
+const DXGI_FORMAT cast_table_bc6[] = {
+   DXGI_FORMAT_BC6H_SF16,
+   DXGI_FORMAT_BC6H_UF16,
+};
+
+const DXGI_FORMAT cast_table_bc7[] = {
+   DXGI_FORMAT_BC7_UNORM,
+   DXGI_FORMAT_BC7_UNORM_SRGB,
+};
+
+const DXGI_FORMAT *
+d3d12_get_format_cast_list(enum pipe_format format, uint32_t *num_formats)
+{
+   const struct util_format_description *format_desc = util_format_description(format);
+   if (util_format_has_depth(format_desc) || util_format_has_stencil(format_desc) || util_format_is_yuv(format))
+      return NULL;
+
+#define RET(table) *num_formats = ARRAY_SIZE(table); return table;
+   switch (format) {
+   case PIPE_FORMAT_DXT1_RGB:
+   case PIPE_FORMAT_DXT1_SRGB:
+   case PIPE_FORMAT_DXT1_RGBA:
+   case PIPE_FORMAT_DXT1_SRGBA:
+      RET(cast_table_bc1);
+   case PIPE_FORMAT_DXT3_RGBA:
+   case PIPE_FORMAT_DXT3_SRGBA:
+      RET(cast_table_bc2);
+   case PIPE_FORMAT_DXT5_RGBA:
+   case PIPE_FORMAT_DXT5_SRGBA:
+      RET(cast_table_bc3);
+   case PIPE_FORMAT_RGTC1_SNORM:
+   case PIPE_FORMAT_RGTC1_UNORM:
+      RET(cast_table_bc4);
+   case PIPE_FORMAT_RGTC2_SNORM:
+   case PIPE_FORMAT_RGTC2_UNORM:
+      RET(cast_table_bc5);
+   case PIPE_FORMAT_BPTC_RGBA_UNORM:
+   case PIPE_FORMAT_BPTC_SRGBA:
+      RET(cast_table_bc7);
+   case PIPE_FORMAT_BPTC_RGB_UFLOAT:
+   case PIPE_FORMAT_BPTC_RGB_FLOAT:
+      RET(cast_table_bc6);
+   default:
+      break;
+   }
+   switch (util_format_get_blocksizebits(format)) {
+   case 8: RET(cast_table_8bit);
+   case 16: RET(cast_table_16bit);
+   case 32: RET(cast_table_32bit);
+   case 64: RET(cast_table_64bit);
+   case 96: RET(cast_table_96bit);
+   case 128: RET(cast_table_128bit);
+   }
+   return NULL;
+}
+
 enum pipe_format
 d3d12_get_pipe_format(DXGI_FORMAT format)
 {

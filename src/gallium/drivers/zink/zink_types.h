@@ -598,7 +598,9 @@ struct zink_batch_state {
    struct zink_context *ctx;
    VkCommandPool cmdpool;
    VkCommandBuffer cmdbuf;
-   VkCommandBuffer barrier_cmdbuf;
+   VkCommandBuffer reordered_cmdbuf;
+   VkCommandPool unsynchronized_cmdpool;
+   VkCommandBuffer unsynchronized_cmdbuf;
    VkSemaphore signal_semaphore; //external signal semaphore
    struct util_dynarray signal_semaphores; //external signal semaphores
    struct util_dynarray wait_semaphores; //external wait semaphores
@@ -619,6 +621,8 @@ struct zink_batch_state {
 
    VkAccessFlags unordered_write_access;
    VkPipelineStageFlags unordered_write_stages;
+
+   simple_mtx_t exportable_lock;
 
    struct util_queue_fence flush_completed;
 
@@ -643,10 +647,11 @@ struct zink_batch_state {
    struct util_dynarray bindless_releases[2];
 
    struct util_dynarray zombie_samplers;
-   struct util_dynarray dead_framebuffers;
 
    struct set active_queries; /* zink_query objects which were active at some point in this batch */
    struct util_dynarray dead_querypools;
+
+   struct util_dynarray freed_sparse_backing_bos;
 
    struct zink_batch_descriptor_data dd;
 
@@ -654,6 +659,7 @@ struct zink_batch_state {
 
    bool is_device_lost;
    bool has_barriers;
+   bool has_unsync;
 };
 
 static inline struct zink_batch_state *
@@ -669,6 +675,8 @@ struct zink_batch {
    struct zink_resource *swapchain;
 
    unsigned work_count;
+
+   simple_mtx_t ref_lock;
 
    bool has_work;
    bool last_was_compute;
@@ -767,6 +775,12 @@ struct zink_shader_info {
    bool have_sparse;
    bool have_vulkan_memory_model;
    bool have_workgroup_memory_explicit_layout;
+   struct {
+      uint8_t flush_denorms:3; // 16, 32, 64
+      uint8_t preserve_denorms:3; // 16, 32, 64
+      bool denorms_32_bit_independence:1;
+      bool denorms_all_independence:1;
+   } float_controls;
    unsigned bindless_set_idx;
 };
 
@@ -803,7 +817,7 @@ struct zink_shader {
    unsigned num_texel_buffers;
    uint32_t ubos_used; // bitfield of which ubo indices are used
    uint32_t ssbos_used; // bitfield of which ssbo indices are used
-   uint32_t flat_flags;
+   uint64_t flat_flags;
    bool bindless;
    bool can_inline;
    bool has_uniforms;
@@ -1230,6 +1244,7 @@ struct zink_resource_object {
    bool ordered_access_is_copied;
    bool unordered_read;
    bool unordered_write;
+   bool unsync_access;
    bool copies_valid;
    bool copies_need_reset; //for use with batch state resets
 
@@ -1508,6 +1523,7 @@ struct zink_screen {
 
    void (*buffer_barrier)(struct zink_context *ctx, struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline);
    void (*image_barrier)(struct zink_context *ctx, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
+   void (*image_barrier_unsync)(struct zink_context *ctx, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
 
    bool compact_descriptors; /**< toggled if descriptor set ids are compacted */
    uint8_t desc_set_id[ZINK_MAX_DESCRIPTOR_SETS]; /**< converts enum zink_descriptor_type -> the actual set id */
@@ -1739,12 +1755,6 @@ struct zink_rendering_info {
 };
 
 
-typedef void (*pipe_draw_vbo_func)(struct pipe_context *pipe,
-                                   const struct pipe_draw_info *info,
-                                   unsigned drawid_offset,
-                                   const struct pipe_draw_indirect_info *indirect,
-                                   const struct pipe_draw_start_count_bias *draws,
-                                   unsigned num_draws);
 typedef void (*pipe_draw_vertex_state_func)(struct pipe_context *ctx,
                                             struct pipe_vertex_state *vstate,
                                             uint32_t partial_velem_mask,
@@ -1782,11 +1792,14 @@ struct zink_context {
 
    unsigned flags;
 
-   pipe_draw_vbo_func draw_vbo[2]; //batch changed
+   pipe_draw_func draw_vbo[2]; //batch changed
    pipe_draw_vertex_state_func draw_state[2]; //batch changed
    pipe_launch_grid_func launch_grid[2]; //batch changed
 
    struct pipe_device_reset_callback reset;
+
+   struct util_queue_fence unsync_fence; //unsigned during unsync recording (blocks flush ops)
+   struct util_queue_fence flush_fence; //unsigned during flush (blocks unsync ops)
 
    struct zink_fence *deferred_fence;
    struct zink_fence *last_fence; //the last command buffer submitted
@@ -2024,6 +2037,7 @@ struct zink_context {
    bool unordered_blitting : 1;
    bool vertex_state_changed : 1;
    bool blend_state_changed : 1;
+   bool blend_color_changed : 1;
    bool sample_mask_changed : 1;
    bool rast_state_changed : 1;
    bool line_width_changed : 1;

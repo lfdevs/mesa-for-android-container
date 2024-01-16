@@ -1595,7 +1595,7 @@ void anv_GetImageMemoryRequirements2(
                                      pMemoryRequirements);
 }
 
-void anv_GetDeviceImageMemoryRequirementsKHR(
+void anv_GetDeviceImageMemoryRequirements(
     VkDevice                                    _device,
     const VkDeviceImageMemoryRequirements*   pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements)
@@ -1632,7 +1632,7 @@ void anv_GetImageSparseMemoryRequirements2(
    *pSparseMemoryRequirementCount = 0;
 }
 
-void anv_GetDeviceImageSparseMemoryRequirementsKHR(
+void anv_GetDeviceImageSparseMemoryRequirements(
     VkDevice                                    device,
     const VkDeviceImageMemoryRequirements* pInfo,
     uint32_t*                                   pSparseMemoryRequirementCount,

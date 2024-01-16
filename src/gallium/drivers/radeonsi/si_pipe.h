@@ -196,7 +196,6 @@ enum
    /* Shader compiler options the shader cache should be aware of: */
    DBG_W32_GE,
    DBG_W32_PS,
-   DBG_W32_PS_DISCARD,
    DBG_W32_CS,
    DBG_W64_GE,
    DBG_W64_PS,
@@ -229,7 +228,6 @@ enum
    DBG_NO_EFC,
 
    /* 3D engine options: */
-   DBG_NO_GFX,
    DBG_NO_NGG,
    DBG_ALWAYS_NGG_CULLING_ALL,
    DBG_NO_NGG_CULLING,
@@ -324,7 +322,7 @@ struct si_resource {
    uint32_t _pad;
 
    /* Winsys objects. */
-   struct pb_buffer *buf;
+   struct pb_buffer_lean *buf;
    uint64_t gpu_address;
 
    /* Resource properties. */
@@ -440,7 +438,7 @@ struct si_texture {
  */
 struct si_auxiliary_texture {
    struct threaded_resource b;
-   struct pb_buffer *buffer;
+   struct pb_buffer_lean *buffer;
    uint32_t offset;
    uint32_t stride;
 };
@@ -459,6 +457,7 @@ struct si_surface {
    bool color_is_int8 : 1;
    bool color_is_int10 : 1;
    bool dcc_incompatible : 1;
+   uint8_t db_format_index : 3;
 
    /* Color registers. */
    unsigned cb_color_info;
@@ -530,7 +529,7 @@ union si_mmio_counters {
 
 struct si_memory_object {
    struct pipe_memory_object b;
-   struct pb_buffer *buf;
+   struct pb_buffer_lean *buf;
    uint32_t stride;
 };
 
@@ -581,6 +580,7 @@ struct si_screen {
    bool use_ngg_culling;
    bool allow_dcc_msaa_clear_to_reg_for_bpp[5]; /* indexed by log2(Bpp) */
    bool always_allow_dcc_stores;
+   bool use_aco;
 
    struct {
 #define OPT_BOOL(name, dflt, description) bool name : 1;
@@ -591,6 +591,7 @@ struct si_screen {
    /* Whether shaders are monolithic (1-part) or separate (3-part). */
    bool use_monolithic_shaders;
    bool record_llvm_ir;
+   const char *context_roll_log_filename;
 
    struct slab_parent_pool pool_transfers;
 
@@ -702,7 +703,7 @@ struct si_screen {
     */
    struct ac_llvm_compiler *compiler[24]; /* used by the queue only */
 
-   struct util_queue shader_compiler_queue_low_priority;
+   struct util_queue shader_compiler_queue_opt_variants;
    /* Compiler instances for asynchronous shader compilation of optimized shader variants,
     * one for each thread of the low-priority shader compiler queue. */
    struct ac_llvm_compiler *compiler_lowp[10];
@@ -714,7 +715,7 @@ struct si_screen {
 
    /* NGG streamout. */
    simple_mtx_t gds_mutex;
-   struct pb_buffer *gds_oa;
+   struct pb_buffer_lean *gds_oa;
 };
 
 struct si_compute {
@@ -947,7 +948,7 @@ struct si_vertex_state {
 };
 
 /* The structure layout is identical to a pair of registers in SET_*_REG_PAIRS_PACKED. */
-struct si_sh_reg_pair {
+struct gfx11_reg_pair {
    union {
       /* A pair of register offsets. */
       struct {
@@ -960,12 +961,6 @@ struct si_sh_reg_pair {
    uint32_t reg_value[2];
 };
 
-typedef void (*pipe_draw_vbo_func)(struct pipe_context *pipe,
-                                   const struct pipe_draw_info *info,
-                                   unsigned drawid_offset,
-                                   const struct pipe_draw_indirect_info *indirect,
-                                   const struct pipe_draw_start_count_bias *draws,
-                                   unsigned num_draws);
 typedef void (*pipe_draw_vertex_state_func)(struct pipe_context *ctx,
                                             struct pipe_vertex_state *vstate,
                                             uint32_t partial_velem_mask,
@@ -1024,6 +1019,7 @@ struct si_context {
    void *cs_clear_buffer;
    void *cs_clear_buffer_rmw;
    void *cs_copy_buffer;
+   void *cs_ubyte_to_ushort;
    void *cs_copy_image[3][2][2]; /* [wg_dim-1][src_is_1d][dst_is_1d] */
    void *cs_clear_render_target;
    void *cs_clear_render_target_1d_array;
@@ -1063,11 +1059,14 @@ struct si_context {
    uint64_t dirty_atoms; /* mask */
    union si_state queued;
    union si_state emitted;
-   /* Gfx11+: Buffered SH registers for SET_SH_REG_PAIRS_PACKED*. */
+
+   /* Gfx11+: Buffered SH registers for SET_SH_REG_PAIRS_*. */
    unsigned num_buffered_gfx_sh_regs;
-   struct si_sh_reg_pair buffered_gfx_sh_regs[32];
    unsigned num_buffered_compute_sh_regs;
-   struct si_sh_reg_pair buffered_compute_sh_regs[32];
+   struct {
+      struct gfx11_reg_pair buffered_gfx_sh_regs[32];
+      struct gfx11_reg_pair buffered_compute_sh_regs[32];
+   } gfx11;
 
    /* Atom declarations. */
    struct si_framebuffer framebuffer;
@@ -1250,6 +1249,23 @@ struct si_context {
    bool vs_disables_clipping_viewport;
    bool has_reset_been_notified;
 
+   /* The number of pixels outside the viewport that are not culled by the clipper.
+    * Normally, the clipper clips everything outside the viewport, however, points and lines
+    * can have vertices outside the viewport, but their edges can be inside the viewport. Those
+    * shouldn't be culled. The problem is that the register setting (PA_CL_GB_*_DISC_ADJ) that
+    * controls the discard distance, which depends on the point size and line width, applies to
+    * all primitive types, and we would have to set 0 distance for triangles and non-zero for
+    * points and lines whenever the primitive type changes, which would add overhead and cause
+    * context rolls.
+    *
+    * To reduce that, whenever the discard distance changes for points and lines, we keep it
+    * at that higher value up to a certain small number for all primitive types including all
+    * points and lines within a specific size. This is slightly inefficient, but it eliminates
+    * a lot of guardband state updates and context register changes.
+    */
+   float min_clip_discard_distance_watermark;
+   float current_clip_discard_distance;
+
    /* Precomputed IA_MULTI_VGT_PARAM */
    union si_vgt_param_key ia_multi_vgt_param_key;
    unsigned ia_multi_vgt_param[SI_NUM_VGT_PARAM_STATES];
@@ -1343,10 +1359,10 @@ struct si_context {
     */
    struct hash_table *dirty_implicit_resources;
 
-   pipe_draw_vbo_func draw_vbo[2][2][2];
+   pipe_draw_func draw_vbo[2][2][2];
    pipe_draw_vertex_state_func draw_vertex_state[2][2][2];
    /* When b.draw_vbo is a wrapper, real_draw_vbo is the real draw_vbo function */
-   pipe_draw_vbo_func real_draw_vbo;
+   pipe_draw_func real_draw_vbo;
    pipe_draw_vertex_state_func real_draw_vertex_state;
    void (*emit_spi_map[33])(struct si_context *sctx, unsigned index);
 
@@ -1404,7 +1420,7 @@ void si_gfx_blit(struct pipe_context *ctx, const struct pipe_blit_info *info);
 bool si_nir_is_output_const_if_tex_is_const(struct nir_shader *shader, float *in, float *out, int *texunit);
 
 /* si_buffer.c */
-bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer *buf,
+bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer_lean *buf,
                                 unsigned usage);
 void *si_buffer_map(struct si_context *sctx, struct si_resource *resource,
                     unsigned usage);
@@ -1417,7 +1433,7 @@ struct si_resource *si_aligned_buffer_create(struct pipe_screen *screen, unsigne
                                              unsigned usage, unsigned size, unsigned alignment);
 struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
                                                    const struct pipe_resource *templ,
-                                                   struct pb_buffer *imported_buf,
+                                                   struct pb_buffer_lean *imported_buf,
                                                    uint64_t offset);
 void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *dst,
                                struct pipe_resource *src, unsigned num_rebinds,
@@ -1485,10 +1501,10 @@ void si_compute_clear_buffer_rmw(struct si_context *sctx, struct pipe_resource *
                                  unsigned dst_offset, unsigned size,
                                  uint32_t clear_value, uint32_t writebitmask,
                                  unsigned flags, enum si_coherency coher);
-void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst, uint64_t offset,
-                            uint64_t size, unsigned value, unsigned flags);
 void si_copy_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
                     uint64_t dst_offset, uint64_t src_offset, unsigned size, unsigned flags);
+void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
+                                     uint64_t dst_offset, uint64_t src_offset, unsigned size, unsigned flags);
 bool si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, unsigned dst_level,
                            struct pipe_resource *src, unsigned src_level, unsigned dstx,
                            unsigned dsty, unsigned dstz, const struct pipe_box *src_box,
@@ -1525,6 +1541,7 @@ void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned
 void si_init_cp_reg_shadowing(struct si_context *sctx);
 
 /* si_debug.c */
+void si_gather_context_rolls(struct si_context *sctx);
 void si_save_cs(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, struct radeon_saved_cs *saved,
                 bool get_buffer_list);
 void si_clear_saved_cs(struct radeon_saved_cs *saved);
@@ -1571,7 +1588,7 @@ void gfx6_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs);
 /* Replace the sctx->b.draw_vbo function with a wrapper. This can be use to implement
  * optimizations without affecting the normal draw_vbo functions perf.
  */
-void si_install_draw_wrapper(struct si_context *sctx, pipe_draw_vbo_func wrapper,
+void si_install_draw_wrapper(struct si_context *sctx, pipe_draw_func wrapper,
                              pipe_draw_vertex_state_func vstate_wrapper);
 
 /* si_gpu_load.c */
@@ -1584,7 +1601,7 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
 void si_init_compute_functions(struct si_context *sctx);
 
 /* si_pipe.c */
-bool si_init_compiler(struct si_screen *sscreen, struct ac_llvm_compiler *compiler);
+struct ac_llvm_compiler *si_create_llvm_compiler(struct si_screen *sscreen);
 void si_init_aux_async_compute_ctx(struct si_screen *sscreen);
 struct si_context *si_get_aux_context(struct si_aux_context *ctx);
 void si_put_aux_context_flush(struct si_aux_context *ctx);
@@ -1646,15 +1663,16 @@ union si_compute_blit_shader_key {
 
 void *si_create_blit_cs(struct si_context *sctx, const union si_compute_blit_shader_key *options);
 
-/* si_shaderlib_tgsi.c */
+/* si_shaderlib_nir.c */
 void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
                         unsigned num_layers);
-void *si_create_dma_compute_shader(struct pipe_context *ctx, unsigned num_dwords_per_thread,
+void *si_create_dma_compute_shader(struct si_context *sctx, unsigned num_dwords_per_thread,
                                    bool dst_stream_cache_policy, bool is_copy);
+void *si_create_ubyte_to_ushort_compute_shader(struct si_context *sctx);
 void *si_create_clear_buffer_rmw_cs(struct si_context *sctx);
 void *si_clear_render_target_shader(struct si_context *sctx, enum pipe_texture_target type);
 void *si_clear_12bytes_buffer_shader(struct si_context *sctx);
-void *si_create_fmask_expand_cs(struct pipe_context *ctx, unsigned num_samples, bool is_array);
+void *si_create_fmask_expand_cs(struct si_context *sctx, unsigned num_samples, bool is_array);
 void *si_create_query_result_cs(struct si_context *sctx);
 void *gfx11_create_sh_query_result_cs(struct si_context *sctx);
 
@@ -1963,24 +1981,18 @@ static inline unsigned si_get_ps_iter_samples(struct si_context *sctx)
    return MIN2(sctx->ps_iter_samples, sctx->framebuffer.nr_color_samples);
 }
 
-static inline unsigned si_get_total_colormask(struct si_context *sctx)
+static inline bool si_any_colorbuffer_written(struct si_context *sctx)
 {
    if (sctx->queued.named.rasterizer->rasterizer_discard)
-      return 0;
+      return false;
 
    struct si_shader_selector *ps = sctx->shader.ps.cso;
-   if (!ps)
-      return 0;
+   if (!ps || !ps->info.colors_written_4bit)
+      return false;
 
-   unsigned colormask =
-      sctx->framebuffer.colorbuf_enabled_4bit & sctx->queued.named.blend->cb_target_mask;
-
-   if (!ps->info.color0_writes_all_cbufs)
-      colormask &= ps->info.colors_written_4bit;
-   else if (!ps->info.colors_written_4bit)
-      colormask = 0; /* color0 writes all cbufs, but it's not written */
-
-   return colormask;
+   return (sctx->framebuffer.colorbuf_enabled_4bit &
+           sctx->queued.named.blend->cb_target_enabled_4bit &
+           (ps->info.color0_writes_all_cbufs ? ~0 : ps->info.colors_written_4bit)) != 0;
 }
 
 #define UTIL_ALL_PRIM_LINE_MODES                                                                   \
@@ -2041,9 +2053,9 @@ static inline void radeon_add_to_buffer_list(struct si_context *sctx, struct rad
 
 static inline void si_select_draw_vbo(struct si_context *sctx)
 {
-   pipe_draw_vbo_func draw_vbo = sctx->draw_vbo[!!sctx->shader.tes.cso]
-                                               [!!sctx->shader.gs.cso]
-                                               [sctx->ngg];
+   pipe_draw_func draw_vbo = sctx->draw_vbo[!!sctx->shader.tes.cso]
+                                           [!!sctx->shader.gs.cso]
+                                           [sctx->ngg];
    pipe_draw_vertex_state_func draw_vertex_state =
       sctx->draw_vertex_state[!!sctx->shader.tes.cso]
                              [!!sctx->shader.gs.cso]
@@ -2111,6 +2123,28 @@ void si_check_dirty_buffers_textures(struct si_context *sctx)
    }
 }
 
+static inline void si_set_clip_discard_distance(struct si_context *sctx, float distance)
+{
+   /* Determine whether the guardband registers change.
+    *
+    * When we see a value greater than min_clip_discard_distance_watermark, we increase it
+    * up to a certain number to eliminate those state changes next time they happen.
+    * See the comment at min_clip_discard_distance_watermark.
+    */
+   if (distance > sctx->min_clip_discard_distance_watermark) {
+      /* The maximum number was determined from Viewperf. The number is in units of half-pixels. */
+      sctx->min_clip_discard_distance_watermark = MIN2(distance, 6);
+
+      float old_distance = sctx->current_clip_discard_distance;
+      float new_distance = MAX2(distance, sctx->min_clip_discard_distance_watermark);
+
+      if (old_distance != new_distance) {
+         sctx->current_clip_discard_distance = new_distance;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.guardband);
+      }
+   }
+}
+
 /* Update these two GS_STATE fields. They depend on whatever the last shader before PS is
  * and the rasterizer state.
  *
@@ -2136,7 +2170,7 @@ si_update_ngg_prim_state_sgpr(struct si_context *sctx, struct si_shader *hw_vs, 
 /* Set the primitive type seen by the rasterizer. GS and tessellation affect this.
  * It's expected that hw_vs and ngg are inline constants in draw_vbo after optimizations.
  */
-static inline void
+static ALWAYS_INLINE void
 si_set_rasterized_prim(struct si_context *sctx, enum mesa_prim rast_prim,
                        struct si_shader *hw_vs, bool ngg)
 {
@@ -2144,16 +2178,23 @@ si_set_rasterized_prim(struct si_context *sctx, enum mesa_prim rast_prim,
       bool is_rect = rast_prim == SI_PRIM_RECTANGLE_LIST;
       bool is_points = rast_prim == MESA_PRIM_POINTS;
       bool is_lines = util_prim_is_lines(rast_prim);
-      bool is_triangles = util_rast_prim_is_triangles(rast_prim);
 
-      if ((is_points || is_lines) != util_prim_is_points_or_lines(sctx->current_rast_prim))
-         si_mark_atom_dirty(sctx, &sctx->atoms.s.guardband);
+      if (is_points) {
+         si_set_clip_discard_distance(sctx, sctx->queued.named.rasterizer->max_point_size);
+         sctx->gs_out_prim = V_028A6C_POINTLIST;
+      } else if (is_lines) {
+         si_set_clip_discard_distance(sctx, sctx->queued.named.rasterizer->line_width);
+         sctx->gs_out_prim = V_028A6C_LINESTRIP;
+      } else if (is_rect) {
+         /* Don't change the clip discard distance for rectangles. */
+         sctx->gs_out_prim = V_028A6C_RECTLIST;
+      } else {
+         si_set_clip_discard_distance(sctx, 0);
+         sctx->gs_out_prim = V_028A6C_TRISTRIP;
+      }
 
       sctx->current_rast_prim = rast_prim;
-      sctx->gs_out_prim = is_triangles ? V_028A6C_TRISTRIP :
-                          is_lines ? V_028A6C_LINESTRIP :
-                          is_rect ? V_028A6C_RECTLIST : V_028A6C_POINTLIST;
-      sctx->do_update_shaders = true;
+      si_vs_ps_key_update_rast_prim_smooth_stipple(sctx);
       si_update_ngg_prim_state_sgpr(sctx, hw_vs, ngg);
    }
 }

@@ -67,6 +67,7 @@ struct d3d12_screen {
 
    util_dl_library *d3d12_mod;
    ID3D12Device3 *dev;
+   ID3D12Device10 *dev10;
    ID3D12CommandQueue *cmdqueue;
    bool (*init)(struct d3d12_screen *screen);
    void (*deinit)(struct d3d12_screen *screen);
@@ -116,6 +117,7 @@ struct d3d12_screen {
    D3D12_FEATURE_DATA_D3D12_OPTIONS2 opts2;
    D3D12_FEATURE_DATA_D3D12_OPTIONS3 opts3;
    D3D12_FEATURE_DATA_D3D12_OPTIONS4 opts4;
+   D3D12_FEATURE_DATA_D3D12_OPTIONS12 opts12;
    D3D12_FEATURE_DATA_D3D12_OPTIONS14 opts14;
 #ifndef _GAMING_XBOX
    D3D12_FEATURE_DATA_D3D12_OPTIONS19 opts19;
@@ -130,7 +132,7 @@ struct d3d12_screen {
    uint32_t revision;
    uint64_t driver_version;
    uint64_t memory_size_megabytes;
-   double timestamp_multiplier;
+   float timestamp_multiplier;
    bool have_load_at_vertex;
    bool support_shader_images;
    bool support_create_not_resident;

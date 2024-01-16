@@ -189,7 +189,6 @@ print_ubo_entry(FILE *file,
 void
 brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                            nir_shader *nir,
-                           const struct brw_vs_prog_key *vs_key,
                            struct brw_ubo_range out_ranges[4])
 {
    void *mem_ctx = ralloc_context(NULL);
@@ -200,22 +199,11 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
          _mesa_hash_table_create(mem_ctx, NULL, _mesa_key_pointer_equal),
    };
 
-   switch (nir->info.stage) {
-   case MESA_SHADER_VERTEX:
-      if (vs_key && vs_key->nr_userclip_plane_consts > 0)
-         state.uses_regular_uniforms = true;
-      break;
-
-   case MESA_SHADER_COMPUTE:
-      /* Compute shaders use push constants to get the subgroup ID so it's
-       * best to just assume some system values are pushed.
-       */
+   /* Compute shaders use push constants to get the subgroup ID so it's
+    * best to just assume some system values are pushed.
+    */
+   if (nir->info.stage == MESA_SHADER_COMPUTE)
       state.uses_regular_uniforms = true;
-      break;
-
-   default:
-      break;
-   }
 
    /* Walk the IR, recording how many times each UBO block/offset is used. */
    nir_foreach_function_impl(impl, nir) {

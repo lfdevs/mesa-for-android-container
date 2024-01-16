@@ -93,58 +93,18 @@ panfrost_get_model(uint32_t gpu_id)
    return NULL;
 }
 
-/* Abstraction over the raw drm_panfrost_get_param ioctl for fetching
- * information about devices */
-
-static __u64
-panfrost_query_raw(int fd, enum drm_panfrost_param param, bool required,
-                   unsigned default_value)
-{
-   struct drm_panfrost_get_param get_param = {
-      0,
-   };
-   ASSERTED int ret;
-
-   get_param.param = param;
-   ret = drmIoctl(fd, DRM_IOCTL_PANFROST_GET_PARAM, &get_param);
-
-   if (ret) {
-      assert(!required);
-      return default_value;
-   }
-
-   return get_param.value;
-}
-
-static unsigned
-panfrost_query_gpu_version(int fd)
-{
-   return panfrost_query_raw(fd, DRM_PANFROST_PARAM_GPU_PROD_ID, true, 0);
-}
-
-static unsigned
-panfrost_query_gpu_revision(int fd)
-{
-   return panfrost_query_raw(fd, DRM_PANFROST_PARAM_GPU_REVISION, true, 0);
-}
-
 unsigned
 panfrost_query_l2_slices(const struct panfrost_device *dev)
 {
-   /* Query MEM_FEATURES register */
-   uint32_t mem_features =
-      panfrost_query_raw(dev->fd, DRM_PANFROST_PARAM_MEM_FEATURES, true, 0);
-
    /* L2_SLICES is MEM_FEATURES[11:8] minus(1) */
-   return ((mem_features >> 8) & 0xF) + 1;
+   return ((dev->kmod.props.mem_features >> 8) & 0xF) + 1;
 }
 
 static struct panfrost_tiler_features
-panfrost_query_tiler_features(int fd)
+panfrost_query_tiler_features(const struct panfrost_device *dev)
 {
    /* Default value (2^9 bytes and 8 levels) to match old behaviour */
-   uint32_t raw =
-      panfrost_query_raw(fd, DRM_PANFROST_PARAM_TILER_FEATURES, false, 0x809);
+   uint32_t raw = dev->kmod.props.tiler_features;
 
    /* Bin size is log2 in the first byte, max levels in the second byte */
    return (struct panfrost_tiler_features){
@@ -154,12 +114,12 @@ panfrost_query_tiler_features(int fd)
 }
 
 static unsigned
-panfrost_query_core_count(int fd, unsigned *core_id_range)
+panfrost_query_core_count(const struct panfrost_device *dev,
+                          unsigned *core_id_range)
 {
    /* On older kernels, worst-case to 16 cores */
 
-   unsigned mask =
-      panfrost_query_raw(fd, DRM_PANFROST_PARAM_SHADER_PRESENT, false, 0xffff);
+   unsigned mask = dev->kmod.props.shader_present;
 
    /* Some cores might be absent. In some cases, we care
     * about the range of core IDs (that is, the greatest core ID + 1). If
@@ -172,31 +132,18 @@ panfrost_query_core_count(int fd, unsigned *core_id_range)
 }
 
 static unsigned
-panfrost_query_thread_tls_alloc(int fd, unsigned major)
+panfrost_query_thread_tls_alloc(const struct panfrost_device *dev,
+                                unsigned major)
 {
-   unsigned tls =
-      panfrost_query_raw(fd, DRM_PANFROST_PARAM_THREAD_TLS_ALLOC, false, 0);
+   unsigned tls = dev->kmod.props.thread_tls_alloc;
 
    return (tls > 0) ? tls : panfrost_max_thread_count(major, 0);
 }
 
 static uint32_t
-panfrost_query_compressed_formats(int fd)
+panfrost_query_compressed_formats(const struct panfrost_device *dev)
 {
-   /* If unspecified, assume ASTC/ETC only. Factory default for Juno, and
-    * should exist on any Mali configuration. All hardware should report
-    * these texture formats but the kernel might not be new enough. */
-
-   uint32_t default_set = (1 << MALI_ETC2_RGB8) | (1 << MALI_ETC2_R11_UNORM) |
-                          (1 << MALI_ETC2_RGBA8) | (1 << MALI_ETC2_RG11_UNORM) |
-                          (1 << MALI_ETC2_R11_SNORM) |
-                          (1 << MALI_ETC2_RG11_SNORM) |
-                          (1 << MALI_ETC2_RGB8A1) | (1 << MALI_ASTC_3D_LDR) |
-                          (1 << MALI_ASTC_3D_HDR) | (1 << MALI_ASTC_2D_LDR) |
-                          (1 << MALI_ASTC_2D_HDR);
-
-   return panfrost_query_raw(fd, DRM_PANFROST_PARAM_TEXTURE_FEATURES0, false,
-                             default_set);
+   return dev->kmod.props.texture_features[0];
 }
 
 /* DRM_PANFROST_PARAM_TEXTURE_FEATURES0 will return a bitmask of supported
@@ -218,10 +165,9 @@ panfrost_supports_compressed_format(struct panfrost_device *dev, unsigned fmt)
  * may omit it, signaled as a nonzero value in the AFBC_FEATURES property. */
 
 static bool
-panfrost_query_afbc(int fd, unsigned arch)
+panfrost_query_afbc(struct panfrost_device *dev, unsigned arch)
 {
-   unsigned reg =
-      panfrost_query_raw(fd, DRM_PANFROST_PARAM_AFBC_FEATURES, false, 0);
+   unsigned reg = dev->kmod.props.afbc_features;
 
    return (arch >= 5) && (reg == 0);
 }
@@ -245,37 +191,75 @@ panfrost_query_optimal_tib_size(const struct panfrost_device *dev)
    return dev->model->tilebuffer_size / 2;
 }
 
+static uint64_t
+panfrost_clamp_to_usable_va_range(const struct panfrost_device *dev,
+                                  uint64_t va)
+{
+   struct pan_kmod_va_range user_va_range =
+      pan_kmod_dev_query_user_va_range(dev->kmod.dev);
+
+   if (va < user_va_range.start)
+      return user_va_range.start;
+   else if (va > user_va_range.start + user_va_range.size)
+      return user_va_range.start + user_va_range.size;
+
+   return va;
+}
+
+/* Always reserve the lower 32MB. */
+#define PANFROST_VA_RESERVE_BOTTOM 0x2000000ull
+
 void
 panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
 {
-   dev->fd = fd;
    dev->memctx = memctx;
-   dev->gpu_id = panfrost_query_gpu_version(fd);
-   dev->arch = pan_arch(dev->gpu_id);
-   dev->kernel_version = drmGetVersion(fd);
-   dev->revision = panfrost_query_gpu_revision(fd);
-   dev->model = panfrost_get_model(dev->gpu_id);
 
-   if (!dev->kernel_version)
+   dev->kmod.dev = pan_kmod_dev_create(fd, PAN_KMOD_DEV_FLAG_OWNS_FD, NULL);
+   if (!dev->kmod.dev) {
+      close(fd);
       return;
+   }
+
+   pan_kmod_dev_query_props(dev->kmod.dev, &dev->kmod.props);
+
+   dev->arch = pan_arch(dev->kmod.props.gpu_prod_id);
+   dev->model = panfrost_get_model(dev->kmod.props.gpu_prod_id);
 
    /* If we don't recognize the model, bail early */
    if (!dev->model)
-      return;
+      goto err_free_kmod_dev;
 
-   dev->core_count = panfrost_query_core_count(fd, &dev->core_id_range);
-   dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(fd, dev->arch);
+   /* 32bit address space, with the lower 32MB reserved. We clamp
+    * things so it matches kmod VA range limitations.
+    */
+   uint64_t user_va_start =
+      panfrost_clamp_to_usable_va_range(dev, PANFROST_VA_RESERVE_BOTTOM);
+   uint64_t user_va_end =
+      panfrost_clamp_to_usable_va_range(dev, 1ull << 32);
+
+   dev->kmod.vm =
+      pan_kmod_vm_create(dev->kmod.dev, PAN_KMOD_VM_FLAG_AUTO_VA, user_va_start,
+                         user_va_end - user_va_start);
+   if (!dev->kmod.vm)
+      goto err_free_kmod_dev;
+
+   dev->core_count = panfrost_query_core_count(dev, &dev->core_id_range);
+   dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(dev, dev->arch);
    dev->optimal_tib_size = panfrost_query_optimal_tib_size(dev);
-   dev->compressed_formats = panfrost_query_compressed_formats(fd);
-   dev->tiler_features = panfrost_query_tiler_features(fd);
-   dev->has_afbc = panfrost_query_afbc(fd, dev->arch);
+   dev->compressed_formats = panfrost_query_compressed_formats(dev);
+   dev->tiler_features = panfrost_query_tiler_features(dev);
+   dev->has_afbc = panfrost_query_afbc(dev, dev->arch);
 
-   if (dev->arch <= 6)
+   if (dev->arch <= 6) {
       dev->formats = panfrost_pipe_format_v6;
-   else if (dev->arch <= 7)
+      dev->blendable_formats = panfrost_blendable_formats_v6;
+   } else if (dev->arch <= 7) {
       dev->formats = panfrost_pipe_format_v7;
-   else
+      dev->blendable_formats = panfrost_blendable_formats_v7;
+   } else {
       dev->formats = panfrost_pipe_format_v9;
+      dev->blendable_formats = panfrost_blendable_formats_v9;
+   }
 
    util_sparse_array_init(&dev->bo_map, sizeof(struct panfrost_bo), 512);
 
@@ -300,6 +284,11 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
 
    /* Done once on init */
    panfrost_upload_sample_positions(dev);
+   return;
+
+err_free_kmod_dev:
+   pan_kmod_dev_destroy(dev->kmod.dev);
+   dev->kmod.dev = NULL;
 }
 
 void
@@ -317,6 +306,9 @@ panfrost_close_device(struct panfrost_device *dev)
       util_sparse_array_finish(&dev->bo_map);
    }
 
-   drmFreeVersion(dev->kernel_version);
-   close(dev->fd);
+   if (dev->kmod.vm)
+      pan_kmod_vm_destroy(dev->kmod.vm);
+
+   if (dev->kmod.dev)
+      pan_kmod_dev_destroy(dev->kmod.dev);
 }

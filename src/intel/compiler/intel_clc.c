@@ -87,7 +87,8 @@ compiler_log(void *data, unsigned *id, const char *fmt, ...)
 {
    va_list args;
    va_start(args, fmt);
-   vfprintf(stderr, fmt, args);
+   if (INTEL_DEBUG(DEBUG_CS))
+      vfprintf(stderr, fmt, args);
    va_end(args);
 }
 
@@ -273,24 +274,10 @@ print_usage(char *exec_name, FILE *f)
 
 #define OPT_PREFIX 1000
 
-static uint32_t
-get_module_spirv_version(const uint32_t *spirv, size_t size)
-{
-   assert(size >= 8);
-   assert(spirv[0] == SPIR_V_MAGIC_NUMBER);
-   return spirv[1];
-}
-
-static void
-set_module_spirv_version(uint32_t *spirv, size_t size, uint32_t version)
-{
-   assert(size >= 8);
-   assert(spirv[0] == SPIR_V_MAGIC_NUMBER);
-   spirv[1] = version;
-}
-
 int main(int argc, char **argv)
 {
+   int exit_code = 0;
+
    brw_process_intel_debug_variable();
 
    static struct option long_options[] ={
@@ -308,16 +295,16 @@ int main(int argc, char **argv)
    char *entry_point = NULL, *platform = NULL, *outfile = NULL, *spv_outfile = NULL, *prefix = NULL;
    struct util_dynarray clang_args;
    struct util_dynarray input_files;
-   struct util_dynarray spirv_objs;
-   struct util_dynarray spirv_ptr_objs;
    bool print_info = false;
+
+   struct clc_binary spirv_obj = {0};
+   struct clc_parsed_spirv parsed_spirv_data = {0};
+   struct disk_cache *disk_cache = NULL;
 
    void *mem_ctx = ralloc_context(NULL);
 
    util_dynarray_init(&clang_args, mem_ctx);
    util_dynarray_init(&input_files, mem_ctx);
-   util_dynarray_init(&spirv_objs, mem_ctx);
-   util_dynarray_init(&spirv_ptr_objs, mem_ctx);
 
    int ch;
    while ((ch = getopt_long(argc, argv, "he:p:s:i:o:v", long_options, NULL)) != -1)
@@ -326,7 +313,7 @@ int main(int argc, char **argv)
       {
       case 'h':
          print_usage(argv[0], stdout);
-         return 0;
+         goto end;
       case 'e':
          entry_point = optarg;
          break;
@@ -351,7 +338,7 @@ int main(int argc, char **argv)
       default:
          fprintf(stderr, "Unrecognized option \"%s\".\n", optarg);
          print_usage(argv[0], stderr);
-         return 1;
+         goto fail;
       }
    }
 
@@ -362,30 +349,30 @@ int main(int argc, char **argv)
    if (util_dynarray_num_elements(&input_files, char *) == 0) {
       fprintf(stderr, "No input file(s).\n");
       print_usage(argv[0], stderr);
-      return -1;
+      goto fail;
    }
 
    if (platform == NULL) {
       fprintf(stderr, "No target platform name specified.\n");
       print_usage(argv[0], stderr);
-      return -1;
+      goto fail;
    }
 
    int pci_id = intel_device_name_to_pci_device_id(platform);
    if (pci_id < 0) {
       fprintf(stderr, "Invalid target platform name: %s\n", platform);
-      return -1;
+      goto fail;
    }
 
    struct intel_device_info _devinfo, *devinfo = &_devinfo;
    if (!intel_get_device_info_from_pci_id(pci_id, devinfo)) {
       fprintf(stderr, "Failed to get device information.\n");
-      return -1;
+      goto fail;
    }
 
    if (devinfo->verx10 < 125) {
       fprintf(stderr, "Platform currently not supported.\n");
-      return -1;
+      goto fail;
    }
 
    struct brw_isa_info _isa, *isa = &_isa;
@@ -394,7 +381,7 @@ int main(int argc, char **argv)
    if (entry_point == NULL) {
       fprintf(stderr, "No entry-point name specified.\n");
       print_usage(argv[0], stderr);
-      return -1;
+      goto fail;
    }
 
    struct clc_logger logger = {
@@ -408,8 +395,7 @@ int main(int argc, char **argv)
       int fd = open(*infile, O_RDONLY);
       if (fd < 0) {
          fprintf(stderr, "Failed to open %s\n", *infile);
-         ralloc_free(mem_ctx);
-         return 1;
+         goto fail;
       }
 
       off_t len = lseek(fd, 0, SEEK_END);
@@ -417,8 +403,7 @@ int main(int argc, char **argv)
       all_inputs = reralloc_size(mem_ctx, all_inputs, new_size + 1);
       if (!all_inputs) {
          fprintf(stderr, "Failed to allocate memory\n");
-         ralloc_free(mem_ctx);
-         return 1;
+         goto fail;
       }
       lseek(fd, 0, SEEK_SET);
       read(fd, all_inputs + total_size, len);
@@ -451,65 +436,18 @@ int main(int argc, char **argv)
       .allowed_spirv_extensions = allowed_spirv_extensions,
    };
 
-   struct clc_binary *spirv_out =
-      util_dynarray_grow(&spirv_objs, struct clc_binary, 1);
-
-   if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out)) {
-      ralloc_free(mem_ctx);
-      return 1;
-   }
-
-   util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
-      util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, p);
-   }
-
-   /* The SPIRV-Tools linker started checking that all modules have the same
-    * version. But SPIRV-LLVM-Translator picks the lower required version for
-    * each module it compiles. So we have to iterate over all of them and set
-    * the max found to make SPIRV-Tools link our modules.
-    *
-    * TODO: This is not the correct thing to do. We need SPIRV-LLVM-Translator
-    *       to pick a given SPIRV version given to it and have all the modules
-    *       at that version. We should remove this hack when this issue is
-    *       fixed :
-    *       https://github.com/KhronosGroup/SPIRV-LLVM-Translator/issues/1445
-    */
-   uint32_t max_spirv_version = 0;
-   util_dynarray_foreach(&spirv_ptr_objs, struct clc_binary *, module) {
-      max_spirv_version = MAX2(max_spirv_version,
-                               get_module_spirv_version((*module)->data,
-                                                        (*module)->size));
-   }
-
-   assert(max_spirv_version > 0);
-   util_dynarray_foreach(&spirv_ptr_objs, struct clc_binary *, module) {
-      set_module_spirv_version((*module)->data, (*module)->size,
-                               max_spirv_version);
-   }
-
-
-   struct clc_linker_args link_args = {
-      .in_objs = util_dynarray_begin(&spirv_ptr_objs),
-      .num_in_objs = util_dynarray_num_elements(&spirv_ptr_objs,
-                                                struct clc_binary *),
-      .create_library = true,
-   };
-   struct clc_binary final_spirv;
-   if (!clc_link_spirv(&link_args, &logger, &final_spirv)) {
-      ralloc_free(mem_ctx);
-      return 1;
+   if (!clc_compile_c_to_spirv(&clc_args, &logger, &spirv_obj)) {
+      goto fail;
    }
 
    if (spv_outfile) {
       FILE *fp = fopen(spv_outfile, "w");
-      fwrite(final_spirv.data, final_spirv.size, 1, fp);
+      fwrite(spirv_obj.data, spirv_obj.size, 1, fp);
       fclose(fp);
    }
 
-   struct clc_parsed_spirv parsed_spirv_data;
-   if (!clc_parse_spirv(&final_spirv, &logger, &parsed_spirv_data)) {
-      ralloc_free(mem_ctx);
-      return 1;
+   if (!clc_parse_spirv(&spirv_obj, &logger, &parsed_spirv_data)) {
+      goto fail;
    }
 
    const struct clc_kernel_info *kernel_info = NULL;
@@ -521,8 +459,7 @@ int main(int argc, char **argv)
    }
    if (kernel_info == NULL) {
       fprintf(stderr, "Kernel entrypoint %s not found\n", entry_point);
-      ralloc_free(mem_ctx);
-      return 1;
+      goto fail;
    }
 
    struct brw_kernel kernel = {};
@@ -531,16 +468,15 @@ int main(int argc, char **argv)
    struct brw_compiler *compiler = brw_compiler_create(mem_ctx, devinfo);
    compiler->shader_debug_log = compiler_log;
    compiler->shader_perf_log = compiler_log;
-   struct disk_cache *disk_cache = get_disk_cache(compiler);
+   disk_cache = get_disk_cache(compiler);
 
    glsl_type_singleton_init_or_ref();
 
    if (!brw_kernel_from_spirv(compiler, disk_cache, &kernel, NULL, mem_ctx,
-                              final_spirv.data, final_spirv.size,
+                              spirv_obj.data, spirv_obj.size,
                               entry_point, &error_str)) {
       fprintf(stderr, "Compile failed: %s\n", error_str);
-      ralloc_free(mem_ctx);
-      return 1;
+      goto fail;
    }
 
    if (print_info) {
@@ -579,7 +515,16 @@ int main(int argc, char **argv)
       print_kernel(stdout, prefix, &kernel, isa);
    }
 
+   goto end;
+
+fail:
+   exit_code = 1;
+
+end:
+   disk_cache_destroy(disk_cache);
+   clc_free_parsed_spirv(&parsed_spirv_data);
+   clc_free_spirv(&spirv_obj);
    ralloc_free(mem_ctx);
 
-   return 0;
+   return exit_code;
 }

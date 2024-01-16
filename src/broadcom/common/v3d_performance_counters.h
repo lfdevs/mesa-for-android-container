@@ -130,7 +130,7 @@ static const char *v3d_performance_counters[][3] = {
    {"QPU", "QPU-stalls-other", "[QPU] Stalled qcycles waiting for any other reason (vary/W/Z)"},
 };
 
-#elif (V3D_VERSION >= 41)
+#elif (V3D_VERSION >= 42)
 
 static const char *v3d_performance_counters[][3] = {
    {"FEP", "FEP-valid-primitives-no-rendered-pixels", "[FEP] Valid primitives that result in no rendered pixels, for all rendered tiles"},

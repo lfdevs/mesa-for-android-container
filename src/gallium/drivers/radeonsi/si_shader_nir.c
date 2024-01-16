@@ -8,15 +8,17 @@
 #include "nir_xfb_info.h"
 #include "si_pipe.h"
 #include "ac_nir.h"
+#include "aco_interface.h"
 
 
 bool si_alu_to_scalar_packed_math_filter(const nir_instr *instr, const void *data)
 {
    if (instr->type == nir_instr_type_alu) {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
+      bool use_aco = (bool)data;
 
-      if (alu->def.bit_size == 16 &&
-          alu->def.num_components == 2)
+      if (alu->def.bit_size == 16 && alu->def.num_components == 2 &&
+          (!use_aco || aco_nir_op_supports_packed_math_16bit(alu)))
          return false;
    }
 
@@ -29,7 +31,14 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
       return 0;
 
    nir_alu_instr *alu = nir_instr_as_alu(instr);
-   if (alu->def.bit_size == 16) {
+   if (alu->def.bit_size != 16)
+      return 1;
+
+   bool use_aco = (bool)data;
+
+   if (use_aco) {
+      return aco_nir_op_supports_packed_math_16bit(alu) ? 2 : 1;
+   } else {
       switch (alu->op) {
       case nir_op_unpack_32_2x16_split_x:
       case nir_op_unpack_32_2x16_split_y:
@@ -38,8 +47,6 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
          return 2;
       }
    }
-
-   return 1;
 }
 
 static unsigned si_lower_bit_size_callback(const nir_instr *instr, void *data)
@@ -73,7 +80,7 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
 
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
       NIR_PASS(progress, nir, nir_lower_alu_to_scalar,
-               nir->options->lower_to_scalar_filter, NULL);
+               nir->options->lower_to_scalar_filter, (void *)sscreen->use_aco);
       NIR_PASS(progress, nir, nir_lower_phis_to_scalar, false);
 
       if (first) {
@@ -84,20 +91,19 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
 
-      NIR_PASS(lower_alu_to_scalar, nir, nir_opt_trivial_continues);
+      NIR_PASS(lower_alu_to_scalar, nir, nir_opt_loop);
       /* (Constant) copy propagation is needed for txf with offsets. */
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
       /* nir_opt_if_optimize_phi_true_false is disabled on LLVM14 (#6976) */
       NIR_PASS(lower_phis_to_scalar, nir, nir_opt_if,
-               nir_opt_if_aggressive_last_continue |
                nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
 
       if (lower_alu_to_scalar) {
          NIR_PASS_V(nir, nir_lower_alu_to_scalar,
-                    nir->options->lower_to_scalar_filter, NULL);
+                    nir->options->lower_to_scalar_filter, (void *)sscreen->use_aco);
       }
       if (lower_phis_to_scalar)
          NIR_PASS_V(nir, nir_lower_phis_to_scalar, false);
@@ -139,8 +145,10 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       if (nir->info.stage == MESA_SHADER_FRAGMENT)
          NIR_PASS_V(nir, nir_opt_move_discards_to_top);
 
-      if (sscreen->info.has_packed_math_16bit)
-         NIR_PASS(progress, nir, nir_opt_vectorize, si_vectorize_callback, NULL);
+      if (sscreen->info.has_packed_math_16bit) {
+         NIR_PASS(progress, nir, nir_opt_vectorize, si_vectorize_callback,
+                  (void *)sscreen->use_aco);
+      }
    } while (progress);
 
    NIR_PASS_V(nir, nir_lower_var_copies);
@@ -252,9 +260,13 @@ const nir_lower_subgroups_options si_nir_subgroups_options = {
    .ballot_components = 1,
    .lower_to_scalar = true,
    .lower_subgroup_masks = true,
+   .lower_relative_shuffle = true,
+   .lower_shuffle_to_32bit = true,
    .lower_vote_trivial = false,
    .lower_vote_eq = true,
+   .lower_vote_bool_eq = true,
    .lower_inverse_ballot = true,
+   .lower_boolean_reduce = true,
 };
 
 /**
@@ -270,6 +282,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
     * - ensure constant offsets for texture instructions are folded
     *   and copy-propagated
     */
+   NIR_PASS_V(nir, nir_lower_int64);
 
    const struct nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0u,
@@ -278,6 +291,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
       .lower_invalid_implicit_lod = true,
       .lower_tg4_offsets = true,
       .lower_to_fragment_fetch_amd = sscreen->info.gfx_level < GFX11,
+      .lower_1d = sscreen->info.gfx_level == GFX9,
    };
    NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);
 
@@ -300,7 +314,6 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    NIR_PASS_V(nir, nir_lower_var_copies);
    NIR_PASS_V(nir, nir_opt_intrinsics);
    NIR_PASS_V(nir, nir_lower_system_values);
-   NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
 
    /* si_nir_kill_outputs and ac_nir_optimize_outputs require outputs to be scalar. */
    if (nir->info.stage == MESA_SHADER_VERTEX ||
@@ -320,21 +333,22 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    }
 
    if (nir->info.stage == MESA_SHADER_COMPUTE) {
+      nir_lower_compute_system_values_options options = {0};
+
+      /* gl_LocalInvocationIndex must be derived from gl_LocalInvocationID.xyz to make it correct
+       * with quad derivatives. Using gl_SubgroupID for that (which is what we do by default) is
+       * incorrect with a non-linear thread order.
+       */
+      options.lower_local_invocation_index =
+         nir->info.cs.derivative_group == DERIVATIVE_GROUP_QUADS;
+      NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
+
       if (nir->info.cs.derivative_group == DERIVATIVE_GROUP_QUADS) {
-         /* If we are shuffling local_invocation_id for quad derivatives, we
-          * need to derive local_invocation_index from local_invocation_id
-          * first, so that the value corresponds to the shuffled
-          * local_invocation_id.
-          */
-         nir_lower_compute_system_values_options options = {0};
-         options.lower_local_invocation_index = true;
+         nir_opt_cse(nir); /* CSE load_local_invocation_id */
+         memset(&options, 0, sizeof(options));
+         options.shuffle_local_ids_for_quad_derivatives = true;
          NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
       }
-
-      nir_opt_cse(nir); /* CSE load_local_invocation_id */
-      nir_lower_compute_system_values_options options = {0};
-      options.shuffle_local_ids_for_quad_derivatives = true;
-      NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
    }
 
    if (sscreen->b.get_shader_param(&sscreen->b, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_FP16)) {
@@ -355,6 +369,8 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
       si_late_optimize_16bit_samplers(sscreen, nir);
 
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
+
+   NIR_PASS_V(nir, nir_lower_fp16_casts, nir_lower_fp16_split_fp64);
 }
 
 static bool si_mark_divergent_texture_non_uniform(struct nir_shader *nir)

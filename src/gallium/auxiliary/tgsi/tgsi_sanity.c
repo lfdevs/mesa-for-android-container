@@ -27,7 +27,6 @@
 
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 #include "cso_cache/cso_hash.h"
 #include "tgsi_sanity.h"
 #include "tgsi_info.h"
@@ -490,7 +489,7 @@ iter_property(
 
    if (iter->processor.Processor == PIPE_SHADER_GEOMETRY &&
        prop->Property.PropertyName == TGSI_PROPERTY_GS_INPUT_PRIM) {
-      ctx->implied_array_size = u_vertices_per_prim(prop->u[0].Data);
+      ctx->implied_array_size = mesa_vertices_per_prim(prop->u[0].Data);
    }
    if (iter->processor.Processor == PIPE_SHADER_TESS_CTRL &&
        prop->Property.PropertyName == TGSI_PROPERTY_TCS_VERTICES_OUT)

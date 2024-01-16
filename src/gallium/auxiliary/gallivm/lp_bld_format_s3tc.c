@@ -2443,7 +2443,7 @@ rgtc1_to_rgba_aos(struct gallivm_state *gallivm,
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
    type8.length = n*4;
-   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xffu << 24));
    rgba = LLVMBuildOr(builder, rgba, red, "");
    return LLVMBuildBitCast(builder, rgba, lp_build_vec_type(gallivm, type8), "");
 }
@@ -2471,7 +2471,7 @@ rgtc2_to_rgba_aos(struct gallivm_state *gallivm,
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
    type8.length = n*4;
-   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xffu << 24));
    rgba = LLVMBuildOr(builder, rgba, red, "");
    green = LLVMBuildShl(builder, green, lp_build_const_int_vec(gallivm, type, 8), "");
    rgba = LLVMBuildOr(builder, rgba, green, "");
@@ -2498,7 +2498,7 @@ latc1_to_rgba_aos(struct gallivm_state *gallivm,
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
    type8.length = n*4;
-   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xffu << 24));
    rgba = LLVMBuildOr(builder, rgba, red, "");
    temp = LLVMBuildShl(builder, red, lp_build_const_int_vec(gallivm, type, 8), "");
    rgba = LLVMBuildOr(builder, rgba, temp, "");

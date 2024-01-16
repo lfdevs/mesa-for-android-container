@@ -237,7 +237,7 @@ vn_CreateRenderPass(VkDevice device,
    }
 
    VkRenderPass pass_handle = vn_render_pass_to_handle(pass);
-   vn_async_vkCreateRenderPass(dev->instance, device, pCreateInfo, NULL,
+   vn_async_vkCreateRenderPass(dev->primary_ring, device, pCreateInfo, NULL,
                                &pass_handle);
 
    if (pCreateInfo == &local_pass_info)
@@ -293,7 +293,7 @@ vn_CreateRenderPass2(VkDevice device,
       pass->subpasses[i].view_mask = pCreateInfo->pSubpasses[i].viewMask;
 
    VkRenderPass pass_handle = vn_render_pass_to_handle(pass);
-   vn_async_vkCreateRenderPass2(dev->instance, device, pCreateInfo, NULL,
+   vn_async_vkCreateRenderPass2(dev->primary_ring, device, pCreateInfo, NULL,
                                 &pass_handle);
 
    if (pCreateInfo == &local_pass_info)
@@ -317,7 +317,7 @@ vn_DestroyRenderPass(VkDevice device,
    if (!pass)
       return;
 
-   vn_async_vkDestroyRenderPass(dev->instance, device, renderPass, NULL);
+   vn_async_vkDestroyRenderPass(dev->primary_ring, device, renderPass, NULL);
 
    vn_object_base_fini(&pass->base);
    vk_free(alloc, pass);
@@ -332,8 +332,8 @@ vn_GetRenderAreaGranularity(VkDevice device,
    struct vn_render_pass *pass = vn_render_pass_from_handle(renderPass);
 
    if (!pass->granularity.width) {
-      vn_call_vkGetRenderAreaGranularity(dev->instance, device, renderPass,
-                                         &pass->granularity);
+      vn_call_vkGetRenderAreaGranularity(dev->primary_ring, device,
+                                         renderPass, &pass->granularity);
    }
 
    *pGranularity = pass->granularity;
@@ -371,7 +371,7 @@ vn_CreateFramebuffer(VkDevice device,
           sizeof(*pCreateInfo->pAttachments) * view_count);
 
    VkFramebuffer fb_handle = vn_framebuffer_to_handle(fb);
-   vn_async_vkCreateFramebuffer(dev->instance, device, pCreateInfo, NULL,
+   vn_async_vkCreateFramebuffer(dev->primary_ring, device, pCreateInfo, NULL,
                                 &fb_handle);
 
    *pFramebuffer = fb_handle;
@@ -392,7 +392,8 @@ vn_DestroyFramebuffer(VkDevice device,
    if (!fb)
       return;
 
-   vn_async_vkDestroyFramebuffer(dev->instance, device, framebuffer, NULL);
+   vn_async_vkDestroyFramebuffer(dev->primary_ring, device, framebuffer,
+                                 NULL);
 
    vn_object_base_fini(&fb->base);
    vk_free(alloc, fb);

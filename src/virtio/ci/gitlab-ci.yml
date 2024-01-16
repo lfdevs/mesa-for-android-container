@@ -1,6 +1,7 @@
 .venus-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.lavapipe-rules, rules]
     - changes: &venus_file_list
       - src/virtio/**/*
@@ -23,7 +24,7 @@ venus-lavapipe:
     - .deqp-test-vk
     - .venus-lavapipe-test
   variables:
-    DEQP_FRACTION: 15
+    DEQP_FRACTION: 35
     DEQP_SUITE: venus
     GPU_VERSION: venus
     LP_NUM_THREADS: 2

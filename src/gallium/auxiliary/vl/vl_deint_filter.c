@@ -84,7 +84,8 @@ create_vert_shader(struct vl_deint_filter *filter)
 }
 
 static void *
-create_copy_frag_shader(struct vl_deint_filter *filter, unsigned field)
+create_copy_frag_shader(struct vl_deint_filter *filter, unsigned field,
+                        struct vertex2f *sizes)
 {
    struct ureg_program *shader;
    struct ureg_src i_vtex;
@@ -104,9 +105,15 @@ create_copy_frag_shader(struct vl_deint_filter *filter, unsigned field)
 
    ureg_MOV(shader, t_tex, i_vtex);
    if (field) {
+      if (filter->interleaved)
+         ureg_ADD(shader, t_tex, ureg_src(t_tex),
+                  ureg_imm4f(shader, 0, sizes->y * 0.5f, 0, 0));
       ureg_MOV(shader, ureg_writemask(t_tex, TGSI_WRITEMASK_ZW),
                ureg_imm4f(shader, 0, 0, 1.0f, 0));
    } else {
+      if (filter->interleaved)
+         ureg_ADD(shader, t_tex, ureg_src(t_tex),
+                  ureg_imm4f(shader, 0, sizes->y * -0.5f, 0, 0));
       ureg_MOV(shader, ureg_writemask(t_tex, TGSI_WRITEMASK_ZW),
                ureg_imm1f(shader, 0));
    }
@@ -196,16 +203,24 @@ create_deint_frag_shader(struct vl_deint_filter *filter, unsigned field,
 
    if (field == 0) {
       /* weave with prev top field */
+      if (filter->interleaved)
+         ureg_ADD(shader, t_tex, ureg_src(t_tex),
+                  ureg_imm4f(shader, 0, sizes->y * -0.5f, 0, 0));
       ureg_TEX(shader, t_weave, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_tex), sampler_prev);
       /* get linear interpolation from current bottom field */
-      ureg_ADD(shader, t_comp_top, ureg_src(t_tex), ureg_imm4f(shader, 0, sizes->y * -1.0f, 1.0f, 0));
+      ureg_ADD(shader, t_comp_top, ureg_src(t_tex),
+               ureg_imm4f(shader, 0, sizes->y * (filter->interleaved ? 1.0f : -1.0f), 1.0f, 0));
       ureg_TEX(shader, t_linear, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_top), sampler_cur);
    } else {
       /* weave with prev bottom field */
+      if (filter->interleaved)
+         ureg_ADD(shader, t_tex, ureg_src(t_tex),
+                  ureg_imm4f(shader, 0, sizes->y * 0.5f, 0, 0));
       ureg_ADD(shader, t_comp_bot, ureg_src(t_tex), ureg_imm4f(shader, 0, 0, 1.0f, 0));
       ureg_TEX(shader, t_weave, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_prev);
       /* get linear interpolation from current top field */
-      ureg_ADD(shader, t_comp_bot, ureg_src(t_tex), ureg_imm4f(shader, 0, sizes->y * 1.0f, 0, 0));
+      ureg_ADD(shader, t_comp_bot, ureg_src(t_tex),
+               ureg_imm4f(shader, 0, sizes->y * (filter->interleaved ? -1.0f : 1.0f), 0, 0));
       ureg_TEX(shader, t_linear, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_cur);
    }
 
@@ -235,7 +250,7 @@ create_deint_frag_shader(struct vl_deint_filter *filter, unsigned field,
 bool
 vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
                      unsigned video_width, unsigned video_height,
-                     bool skip_chroma, bool spatial_filter)
+                     bool skip_chroma, bool spatial_filter, bool interleaved)
 {
    struct pipe_rasterizer_state rs_state;
    struct pipe_blend_state blend;
@@ -250,6 +265,7 @@ vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
    memset(filter, 0, sizeof(*filter));
    filter->pipe = pipe;
    filter->skip_chroma = skip_chroma;
+   filter->interleaved = interleaved;
    filter->video_width = video_width;
    filter->video_height = video_height;
 
@@ -328,11 +344,11 @@ vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
    if (!filter->vs)
       goto error_vs;
 
-   filter->fs_copy_top = create_copy_frag_shader(filter, 0);
+   filter->fs_copy_top = create_copy_frag_shader(filter, 0, &sizes);
    if (!filter->fs_copy_top)
       goto error_fs_copy_top;
 
-   filter->fs_copy_bottom = create_copy_frag_shader(filter, 1);
+   filter->fs_copy_bottom = create_copy_frag_shader(filter, 1, &sizes);
    if (!filter->fs_copy_bottom)
       goto error_fs_copy_bottom;
 
@@ -424,7 +440,7 @@ vl_deint_filter_check_buffers(struct vl_deint_filter *filter,
       if (bufs[i]->width < filter->video_width ||
           bufs[i]->height < filter->video_height)
          return false;
-      if (!bufs[i]->interlaced)
+      if (bufs[i]->interlaced != !filter->interleaved)
          return false;
    }
 

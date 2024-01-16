@@ -42,6 +42,7 @@ enum global_shader {
    GLOBAL_SH_FS_BLIT,
    GLOBAL_SH_FS_BLIT_ZSCALE,
    GLOBAL_SH_FS_COPY_MS,
+   GLOBAL_SH_FS_COPY_MS_HALF,
    GLOBAL_SH_FS_CLEAR0,
    GLOBAL_SH_FS_CLEAR_MAX = GLOBAL_SH_FS_CLEAR0 + MAX_RTS,
    GLOBAL_SH_COUNT,
@@ -108,6 +109,7 @@ struct tu_physical_device
    } memory;
 
    struct fd_dev_id dev_id;
+   struct fd_dev_info dev_info;
    const struct fd_dev_info *info;
 
    int msm_major_version;
@@ -354,6 +356,9 @@ struct tu_device
    struct tu_cs *perfcntrs_pass_cs;
    struct tu_cs_entry *perfcntrs_pass_cs_entries;
 
+   struct tu_cs *cmdbuf_start_a725_quirk_cs;
+   struct tu_cs_entry *cmdbuf_start_a725_quirk_entry;
+
    struct util_dynarray dynamic_rendering_pending;
    VkCommandPool dynamic_rendering_pool;
    uint32_t dynamic_rendering_fence;
@@ -400,6 +405,9 @@ struct tu_device_memory
    struct vk_object_base base;
 
    struct tu_bo *bo;
+
+   /* for dedicated allocations */
+   struct tu_image *image;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_device_memory, base, VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)

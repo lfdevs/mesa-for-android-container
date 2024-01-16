@@ -206,16 +206,6 @@ timestamp_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    OUT_RELOC(ring, query_sample(aq, start));  /* srcC */
 }
 
-static uint64_t
-ticks_to_ns(uint32_t ts)
-{
-   /* This is based on the 19.2MHz always-on rbbm timer.
-    *
-    * TODO we should probably query this value from kernel..
-    */
-   return ts * (1000000000 / 19200000);
-}
-
 static void
 time_elapsed_accumulate_result(struct fd_acc_query *aq,
                                struct fd_acc_query_sample *s,

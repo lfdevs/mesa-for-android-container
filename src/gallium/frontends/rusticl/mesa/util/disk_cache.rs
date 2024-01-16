@@ -1,3 +1,4 @@
+use libc_rust_gen::free;
 use mesa_rust_gen::*;
 
 use std::ffi::{c_void, CString};

@@ -514,7 +514,7 @@ driver_RenderTexture_is_safe(const struct gl_renderbuffer_attachment *att)
 
    if (!texImage ||
        !texImage->pt ||
-       texImage->Width == 0 || texImage->Height == 0 || texImage->Depth == 0)
+       _mesa_is_zero_size_texture(texImage))
       return false;
 
    if ((texImage->TexObject->Target == GL_TEXTURE_1D_ARRAY

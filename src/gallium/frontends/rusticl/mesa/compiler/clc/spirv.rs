@@ -2,6 +2,7 @@ use crate::compiler::nir::*;
 use crate::pipe::screen::*;
 use crate::util::disk_cache::*;
 
+use libc_rust_gen::malloc;
 use mesa_rust_gen::*;
 use mesa_rust_util::serialize::*;
 use mesa_rust_util::string::*;
@@ -333,6 +334,7 @@ impl SPIRVBin {
                 float64: true,
                 generic_pointers: true,
                 groups: true,
+                subgroup_shuffle: true,
                 int8: true,
                 int16: true,
                 int64: true,

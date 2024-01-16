@@ -70,7 +70,7 @@ sends(8)        g11UD           g25UD           g26UD           0x0210b4fe      
                             dp data 1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD8, mov) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
 sends(16)       g1UD            g14UD           g16UD           0x0420a7fe                0x00000080
                             dp data 1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, add) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(8) nullUD         g2UD            g13UD           g[a0]UD         0x00000100
+(+f1.0) sends(8) nullUD         g2UD            g13UD           a0<0>UD                   0x00000100
                             dp data 1 MsgDesc: indirect ex_mlen 4           { align1 1Q };
 (+f1.0) sends(8) nullUD         g5UD            g6UD            0x02026e01                0x00000040
                             dp data 1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };

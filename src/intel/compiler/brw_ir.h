@@ -96,7 +96,6 @@ struct bblock_t;
 
 struct backend_instruction : public exec_node {
    bool is_3src(const struct brw_compiler *compiler) const;
-   bool is_tex() const;
    bool is_math() const;
    bool is_control_flow_begin() const;
    bool is_control_flow_end() const;
@@ -199,6 +198,16 @@ struct backend_instruction {
     * mod and predication.
     */
    unsigned flag_subreg:2;
+
+   /**
+    * Systolic depth used by DPAS instruction.
+    */
+   unsigned sdepth:4;
+
+   /**
+    * Repeat count used by DPAS instruction.
+    */
+   unsigned rcount:4;
 
    /** The number of hardware registers used for a message header. */
    uint8_t header_size;

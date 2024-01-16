@@ -1,20 +1,28 @@
 # Rules for changes that impact either freedreno or turnip.
 .freedreno-common-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - changes: &freedreno_core_file_list
-      - src/freedreno/ci/**/*
-      - src/freedreno/common/**/*
-      - src/freedreno/drm/**/*
-      - src/freedreno/fdl/**/*
-      - src/freedreno/ir3/**/*
-      - src/freedreno/isa/**/*
-      - src/freedreno/registers/**/*
+        - src/freedreno/ci/gitlab-ci.yml
+        - src/freedreno/ci/gitlab-ci-inc.yml
+        - src/freedreno/ci/deqp-$DEQP_SUITE.toml
+        - src/freedreno/ci/$GPU_VERSION-fails.txt
+        - src/freedreno/ci/$GPU_VERSION-flakes.txt
+        - src/freedreno/ci/$GPU_VERSION-skips.txt
+        - src/freedreno/ci/$PIGLIT_TRACES_FILE
+        - src/freedreno/common/**/*
+        - src/freedreno/drm/**/*
+        - src/freedreno/fdl/**/*
+        - src/freedreno/ir3/**/*
+        - src/freedreno/isa/**/*
+        - src/freedreno/registers/**/*
       when: on_success
 
 .freedreno-common-manual-rules:
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.core-manual-rules, rules]
     - changes:
         *freedreno_core_file_list
@@ -25,18 +33,20 @@
 .google-freedreno-rules:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.freedreno-farm-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.gl-rules, rules]
     - changes: &freedreno_gl_file_list
-      - src/freedreno/ir2/**/*
-      - src/gallium/drivers/freedreno/**/*
-      - src/gallium/winsys/freedreno/**/*
+        - src/freedreno/ir2/**/*
+        - src/gallium/drivers/freedreno/**/*
+        - src/gallium/winsys/freedreno/**/*
       when: on_success
 
 .collabora-freedreno-rules:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.gl-rules, rules]
@@ -48,6 +58,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.freedreno-farm-manual-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -59,6 +70,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -70,16 +82,18 @@
 .google-turnip-rules:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.freedreno-farm-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.vulkan-rules, rules]
     - changes: &freedreno_vulkan_file_list
-      - src/freedreno/vulkan/**/*
+        - src/freedreno/vulkan/**/*
       when: on_success
 
 .collabora-turnip-rules:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -90,6 +104,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.freedreno-farm-manual-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
@@ -101,6 +116,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
@@ -111,23 +127,33 @@
 # For piglit and skqp test jobs that run both GL and VK tests.
 .google-freedreno-turnip-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.google-freedreno-rules, rules]
     - !reference [.google-turnip-rules, rules]
 
+.google-freedreno-turnip-manual-rules:
+  rules:
+    - !reference [.test, rules]
+    - !reference [.google-freedreno-manual-rules, rules]
+    - !reference [.google-turnip-manual-rules, rules]
+
 .collabora-freedreno-turnip-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-freedreno-rules, rules]
     - !reference [.collabora-turnip-rules, rules]
 
 .google-freedreno-rules-restricted:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.google-freedreno-rules, rules]
 
 .collabora-freedreno-rules-restricted:
   stage: freedreno
   rules:
+    - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.collabora-freedreno-rules, rules]
 
@@ -135,6 +161,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.performance-rules, rules]
     - !reference [.google-freedreno-manual-rules, rules]
   allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
@@ -150,6 +177,7 @@
   stage: freedreno
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.performance-rules, rules]
     - !reference [.collabora-freedreno-manual-rules, rules]
   allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
@@ -163,6 +191,62 @@
   dependencies: null
 
 
+# Status: https://lava.collabora.dev/scheduler/device_type/sc7180-trogdor-kingoftown
+.lava-sc7180-trogdor-kingoftown:arm64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: sc7180-trogdor-kingoftown
+    DTB: sc7180-trogdor-kingoftown
+#   FDO_CI_CONCURRENT: ?
+    # Increase the hangcheck timer for our spilling tests which bump up against
+    # the .5s default.
+    FREEDRENO_HANGCHECK_MS: 2000
+    FARM: collabora
+    GPU_VERSION: freedreno-a618
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
+    VK_DRIVER: freedreno
+    FORCE_KERNEL_TAG: "v6.4.12-for-mesa-ci-f6b4ad45f48d"  # 6.6 is slow and unstable
+    KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
+
+# Status: https://lava.collabora.dev/scheduler/device_type/sc7180-trogdor-lazor-limozeen
+.lava-sc7180-trogdor-lazor-limozeen:arm64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
+    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
+#   FDO_CI_CONCURRENT: ?
+    # Increase the hangcheck timer for our spilling tests which bump up against
+    # the .5s default.
+    FREEDRENO_HANGCHECK_MS: 2000
+    FARM: collabora
+    GPU_VERSION: freedreno-a618
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
+    VK_DRIVER: freedreno
+    FORCE_KERNEL_TAG: "v6.4.12-for-mesa-ci-f6b4ad45f48d"  # 6.6 is slow and unstable
+    KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
+
+# Status: https://lava.collabora.dev/scheduler/device_type/sm8350-hdk
+.lava-sm8350-hdk:arm64:
+  variables:
+    BOOT_METHOD: fastboot
+    DEVICE_TYPE: sm8350-hdk
+    DTB: sm8350-hdk
+#   FDO_CI_CONCURRENT: ?
+    # Increase the hangcheck timer for our spilling tests which bump up against
+    # the .5s default.
+    FREEDRENO_HANGCHECK_MS: 2000
+    FARM: collabora
+    GPU_VERSION: freedreno-a660
+    KERNEL_IMAGE_NAME: "Image.gz"
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-sm8350-hdk
+    VK_DRIVER: freedreno
+    FORCE_KERNEL_TAG: "v6.4.12-for-mesa-ci-f6b4ad45f48d"  # 6.6 is slow and unstable
+    KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
+
+
 .google-freedreno-test:
   extends:
     - .baremetal-test-arm64
@@ -172,6 +256,7 @@
     FLAKES_CHANNEL: "#freedreno-ci"
     PIGLIT_PLATFORM: mixed_glx_egl
     BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 $BM_KERNEL_EXTRA_ARGS root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init $BM_KERNELARGS"
+    FARM: google
   script:
     - ./install/bare-metal/fastboot.sh
 
@@ -190,7 +275,7 @@
   variables:
     HWCI_TEST_SCRIPT: "/install/piglit/piglit-traces.sh"
     HWCI_START_XORG: 1
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-freedreno.yml"
+    PIGLIT_TRACES_FILE: traces-freedreno.yml
   artifacts:
     reports:
       junit: results/junit.xml
@@ -201,6 +286,7 @@
   variables:
     BM_KERNEL: Image.gz
     BM_DTB: apq8016-sbc
+    DEVICE_TYPE: apq8016-sbc
     GPU_VERSION: freedreno-a307
   timeout: 20m
   tags:
@@ -232,6 +318,7 @@
   variables:
     BM_KERNEL: Image.gz
     BM_DTB: apq8096-db820c
+    DEVICE_TYPE: apq8096-db820c
     GPU_VERSION: freedreno-a530
   timeout: 20m
   tags:
@@ -259,49 +346,6 @@
   variables:
     PIGLIT_PROFILES: quick_gl
 
-.a618-test:
-  extends:
-    .lava-test:arm64
-  variables:
-    FLAKES_CHANNEL: "#freedreno-ci"
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    # Increase the hangcheck timer for our spilling tests which bump up against
-    # the .5s default.
-    FREEDRENO_HANGCHECK_MS: 2000
-    GPU_VERSION: freedreno-a618
-    VK_DRIVER: freedreno
-
-.a618-test-kingoftown:
-  extends:
-    - .a618-test
-  variables:
-    DEVICE_TYPE: sc7180-trogdor-kingoftown
-    DTB: sc7180-trogdor-kingoftown
-    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
-
-.a618-test-limozeen-nots-r5:
-  extends:
-    - .a618-test
-  variables:
-    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
-    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
-    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
-
-.lava-sm8350-hdk:
-  variables:
-    BOOT_METHOD: fastboot
-    KERNEL_IMAGE_NAME: "Image.gz"
-    KERNEL_IMAGE_TYPE: ""
-    # Increase the hangcheck timer for our spilling tests which bump up against
-    # the .5s default.
-    FREEDRENO_HANGCHECK_MS: 2000
-    DEVICE_TYPE: sm8350-hdk
-    DTB: sm8350-hdk
-    GPU_VERSION: freedreno-a660
-    RUNNER_TAG: mesa-ci-x86-64-lava-sm8350-hdk
-    VK_DRIVER: freedreno
-
 # 6 devices (2023-07-06)
 .a630-test:
   extends:
@@ -310,7 +354,10 @@
     FDO_CI_CONCURRENT: 10
     BM_KERNEL: cheza-kernel
     BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init"
+    DEVICE_TYPE: sdm845-cheza-r3
     GPU_VERSION: freedreno-a630
+    FORCE_KERNEL_TAG: "v6.4.12-for-mesa-ci-f6b4ad45f48d"  # 6.6 is slow and unstable
+    KERNEL_IMAGE_BASE: https://${S3_HOST}/mesa-lava/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
   timeout: 20m
   tags:
     - google-freedreno-cheza

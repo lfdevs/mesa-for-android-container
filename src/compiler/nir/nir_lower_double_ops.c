@@ -451,6 +451,28 @@ lower_mod(nir_builder *b, nir_def *src0, nir_def *src1)
 }
 
 static nir_def *
+lower_minmax(nir_builder *b, nir_op cmp, nir_def *src0, nir_def *src1)
+{
+   b->exact = true;
+   nir_def *src1_is_nan = nir_fneu(b, src1, src1);
+   nir_def *cmp_res = nir_build_alu2(b, cmp, src0, src1);
+   b->exact = false;
+   nir_def *take_src0 = nir_ior(b, src1_is_nan, cmp_res);
+   return nir_bcsel(b, take_src0, src0, src1);
+}
+
+static nir_def *
+lower_sat(nir_builder *b, nir_def *src)
+{
+   b->exact = true;
+   /* This will get lowered again if nir_lower_dminmax is set */
+   nir_def *sat = nir_fclamp(b, src, nir_imm_double(b, 0),
+                             nir_imm_double(b, 1));
+   b->exact = false;
+   return sat;
+}
+
+static nir_def *
 lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
                             const nir_shader *softfp64,
                             nir_lower_doubles_options options)
@@ -658,6 +680,11 @@ nir_lower_doubles_op_to_options_mask(nir_op opcode)
       return nir_lower_dsub;
    case nir_op_fdiv:
       return nir_lower_ddiv;
+   case nir_op_fmin:
+   case nir_op_fmax:
+      return nir_lower_dminmax;
+   case nir_op_fsat:
+      return nir_lower_dsat;
    default:
       return 0;
    }
@@ -730,10 +757,14 @@ lower_doubles_instr(nir_builder *b, nir_instr *instr, void *_data)
       return lower_fract(b, src);
    case nir_op_fround_even:
       return lower_round_even(b, src);
+   case nir_op_fsat:
+      return lower_sat(b, src);
 
    case nir_op_fdiv:
    case nir_op_fsub:
-   case nir_op_fmod: {
+   case nir_op_fmod:
+   case nir_op_fmin:
+   case nir_op_fmax: {
       nir_def *src1 = nir_mov_alu(b, alu->src[1],
                                   alu->def.num_components);
       switch (alu->op) {
@@ -743,6 +774,10 @@ lower_doubles_instr(nir_builder *b, nir_instr *instr, void *_data)
          return nir_fadd(b, src, nir_fneg(b, src1));
       case nir_op_fmod:
          return lower_mod(b, src, src1);
+      case nir_op_fmin:
+         return lower_minmax(b, nir_op_flt, src, src1);
+      case nir_op_fmax:
+         return lower_minmax(b, nir_op_fge, src, src1);
       default:
          unreachable("unhandled opcode");
       }

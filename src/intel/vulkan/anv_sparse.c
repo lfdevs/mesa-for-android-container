@@ -50,22 +50,17 @@ sparse_debug(const char *format, ...)
 
 static void
 dump_anv_vm_bind(struct anv_device *device,
-                 struct anv_sparse_binding_data *sparse,
                  const struct anv_vm_bind *bind)
 {
-   if (!INTEL_DEBUG(DEBUG_SPARSE))
-      return;
-
   sparse_debug("[%s] ", bind->op == ANV_VM_BIND ? " bind " : "unbind");
 
    if (bind->bo)
       sparse_debug("bo:%04u ", bind->bo->gem_handle);
    else
       sparse_debug("bo:---- ");
-   sparse_debug("res_offset:%08"PRIx64" size:%08"PRIx64" "
+   sparse_debug("address:%016"PRIx64" size:%08"PRIx64" "
                 "mem_offset:%08"PRIx64"\n",
-                bind->address - sparse->address, bind->size,
-                bind->bo_offset);
+                bind->address, bind->size, bind->bo_offset);
 }
 
 static void
@@ -276,6 +271,399 @@ anv_sparse_get_standard_image_block_shape(enum isl_format format,
    return vk_extent3d_el_to_px(block_shape, layout);
 }
 
+/* Adds "bind_op" to the list in "submit", while also trying to check if we
+ * can just extend the last operation instead.
+ */
+static VkResult
+anv_sparse_submission_add(struct anv_device *device,
+                          struct anv_sparse_submission *submit,
+                          struct anv_vm_bind *bind_op)
+{
+   struct anv_vm_bind *prev_bind = submit->binds_len == 0 ? NULL :
+                                    &submit->binds[submit->binds_len - 1];
+
+   if (prev_bind &&
+       bind_op->op == prev_bind->op &&
+       bind_op->bo == prev_bind->bo &&
+       bind_op->address == prev_bind->address + prev_bind->size &&
+       (bind_op->bo_offset == prev_bind->bo_offset + prev_bind->size ||
+        prev_bind->bo == NULL)) {
+      prev_bind->size += bind_op->size;
+      return VK_SUCCESS;
+   }
+
+   if (submit->binds_len < submit->binds_capacity) {
+      submit->binds[submit->binds_len++] = *bind_op;
+      return VK_SUCCESS;
+   }
+
+   int new_capacity = MAX2(32, submit->binds_capacity * 2);
+   struct anv_vm_bind *new_binds =
+      vk_realloc(&device->vk.alloc, submit->binds,
+                 new_capacity * sizeof(*new_binds), 8,
+                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!new_binds)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   new_binds[submit->binds_len] = *bind_op;
+
+   submit->binds = new_binds;
+   submit->binds_len++;
+   submit->binds_capacity = new_capacity;
+
+   return VK_SUCCESS;
+}
+
+/* We really want to try to have all the page tables on as few BOs as possible
+ * to benefit from cache locality and to keep the i915.ko relocation lists
+ * small. On the other hand, we don't want to waste memory on unused space.
+ */
+#define ANV_TRTT_PAGE_TABLE_BO_SIZE (2 * 1024 * 1024)
+
+static VkResult
+trtt_make_page_table_bo(struct anv_device *device, struct anv_bo **bo)
+{
+   VkResult result;
+   struct anv_trtt *trtt = &device->trtt;
+
+   result = anv_device_alloc_bo(device, "trtt-page-table",
+                                ANV_TRTT_PAGE_TABLE_BO_SIZE, 0, 0, bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   if (trtt->num_page_table_bos < trtt->page_table_bos_capacity) {
+      trtt->page_table_bos[trtt->num_page_table_bos++] = *bo;
+   } else {
+
+      int new_capacity = MAX2(8, trtt->page_table_bos_capacity * 2);
+      struct anv_bo **new_page_table_bos =
+         vk_realloc(&device->vk.alloc, trtt->page_table_bos,
+                    new_capacity * sizeof(*trtt->page_table_bos), 8,
+                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      if (!new_page_table_bos) {
+         anv_device_release_bo(device, *bo);
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      new_page_table_bos[trtt->num_page_table_bos] = *bo;
+
+      trtt->page_table_bos = new_page_table_bos;
+      trtt->page_table_bos_capacity = new_capacity;
+      trtt->num_page_table_bos++;
+   }
+
+   trtt->cur_page_table_bo = *bo;
+   trtt->next_page_table_bo_offset = 0;
+
+   sparse_debug("new number of page table BOs: %d\n",
+                trtt->num_page_table_bos);
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+trtt_get_page_table_bo(struct anv_device *device, struct anv_bo **bo,
+                       uint64_t *bo_addr)
+{
+   struct anv_trtt *trtt = &device->trtt;
+   VkResult result;
+
+   if (!trtt->cur_page_table_bo) {
+      result = trtt_make_page_table_bo(device, bo);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   *bo = trtt->cur_page_table_bo;
+   *bo_addr = trtt->cur_page_table_bo->offset +
+              trtt->next_page_table_bo_offset;
+
+   trtt->next_page_table_bo_offset += 4096;
+   if (trtt->next_page_table_bo_offset >= ANV_TRTT_PAGE_TABLE_BO_SIZE)
+      trtt->cur_page_table_bo = NULL;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+anv_trtt_init_context_state(struct anv_queue *queue)
+{
+   struct anv_device *device = queue->device;
+   struct anv_trtt *trtt = &device->trtt;
+
+   struct drm_syncobj_create create = {
+      .handle = 0,
+      .flags = 0,
+   };
+   if (intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create))
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   assert(create.handle != 0);
+   trtt->timeline_handle = create.handle;
+
+   struct anv_bo *l3_bo;
+   VkResult result = trtt_get_page_table_bo(device, &l3_bo, &trtt->l3_addr);
+   if (result != VK_SUCCESS)
+      return result;
+
+   trtt->l3_mirror = vk_zalloc(&device->vk.alloc, 4096, 8,
+                                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!trtt->l3_mirror) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return result;
+   }
+
+   /* L3 has 512 entries, so we can have up to 512 L2 tables. */
+   trtt->l2_mirror = vk_zalloc(&device->vk.alloc, 512 * 4096, 8,
+                               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!trtt->l2_mirror) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto fail_free_l3;
+   }
+
+   result = anv_genX(device->info, init_trtt_context_state)(queue);
+
+   return result;
+
+fail_free_l3:
+   vk_free(&device->vk.alloc, trtt->l3_mirror);
+   return result;
+}
+
+static void
+anv_trtt_bind_list_add_entry(struct anv_trtt_bind *binds, int *binds_len,
+                             uint64_t pte_addr, uint64_t entry_addr)
+{
+   binds[*binds_len] = (struct anv_trtt_bind) {
+      .pte_addr = pte_addr,
+      .entry_addr = entry_addr,
+   };
+   (*binds_len)++;
+}
+
+/* For L3 and L2 pages, null and invalid entries are indicated by bits 1 and 0
+ * respectively. For L1 entries, the hardware compares the addresses against
+ * what we program to the GFX_TRTT_NULL and GFX_TRTT_INVAL registers.
+ */
+#define ANV_TRTT_L3L2_NULL_ENTRY (1 << 1)
+#define ANV_TRTT_L3L2_INVALID_ENTRY (1 << 0)
+
+/* Adds elements to the anv_trtt_bind structs passed. This doesn't write the
+ * entries to the HW yet.
+ */
+static VkResult
+anv_trtt_bind_add(struct anv_device *device,
+                  uint64_t trtt_addr, uint64_t dest_addr,
+                  struct anv_trtt_submission *s)
+{
+   VkResult result = VK_SUCCESS;
+   struct anv_trtt *trtt = &device->trtt;
+   bool is_null_bind = dest_addr == ANV_TRTT_L1_NULL_TILE_VAL;
+
+   int l3_index = (trtt_addr >> 35) & 0x1FF;
+   int l2_index = (trtt_addr >> 26) & 0x1FF;
+   int l1_index = (trtt_addr >> 16) & 0x3FF;
+
+   uint64_t l2_addr = trtt->l3_mirror[l3_index];
+   if (l2_addr == ANV_TRTT_L3L2_NULL_ENTRY && is_null_bind) {
+      return VK_SUCCESS;
+   } else if (l2_addr == 0 || l2_addr == ANV_TRTT_L3L2_NULL_ENTRY) {
+      if (is_null_bind) {
+         trtt->l3_mirror[l3_index] = ANV_TRTT_L3L2_NULL_ENTRY;
+
+         anv_trtt_bind_list_add_entry(s->l3l2_binds, &s->l3l2_binds_len,
+               trtt->l3_addr + l3_index * sizeof(uint64_t),
+               ANV_TRTT_L3L2_NULL_ENTRY);
+
+         return VK_SUCCESS;
+      }
+
+      struct anv_bo *l2_bo;
+      result = trtt_get_page_table_bo(device, &l2_bo, &l2_addr);
+      if (result != VK_SUCCESS)
+         return result;
+
+      trtt->l3_mirror[l3_index] = l2_addr;
+
+      anv_trtt_bind_list_add_entry(s->l3l2_binds, &s->l3l2_binds_len,
+            trtt->l3_addr + l3_index * sizeof(uint64_t), l2_addr);
+   }
+   assert(l2_addr != 0 && l2_addr != ANV_TRTT_L3L2_NULL_ENTRY);
+
+   /* The first page in the l2_mirror corresponds to l3_index=0 and so on. */
+   uint64_t l1_addr = trtt->l2_mirror[l3_index * 512 + l2_index];
+   if (l1_addr == ANV_TRTT_L3L2_NULL_ENTRY && is_null_bind) {
+      return VK_SUCCESS;
+   } else if (l1_addr == 0 || l1_addr == ANV_TRTT_L3L2_NULL_ENTRY) {
+      if (is_null_bind) {
+         trtt->l2_mirror[l3_index * 512 + l2_index] =
+            ANV_TRTT_L3L2_NULL_ENTRY;
+
+         anv_trtt_bind_list_add_entry(s->l3l2_binds, &s->l3l2_binds_len,
+               l2_addr + l2_index * sizeof(uint64_t),
+               ANV_TRTT_L3L2_NULL_ENTRY);
+
+         return VK_SUCCESS;
+      }
+
+      struct anv_bo *l1_bo;
+      result = trtt_get_page_table_bo(device, &l1_bo, &l1_addr);
+      if (result != VK_SUCCESS)
+         return result;
+
+      trtt->l2_mirror[l3_index * 512 + l2_index] = l1_addr;
+
+      anv_trtt_bind_list_add_entry(s->l3l2_binds, &s->l3l2_binds_len,
+            l2_addr + l2_index * sizeof(uint64_t), l1_addr);
+   }
+   assert(l1_addr != 0 && l1_addr != ANV_TRTT_L3L2_NULL_ENTRY);
+
+   anv_trtt_bind_list_add_entry(s->l1_binds, &s->l1_binds_len,
+            l1_addr + l1_index * sizeof(uint32_t), dest_addr);
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+anv_sparse_bind_trtt(struct anv_device *device,
+                     struct anv_sparse_submission *sparse_submit)
+{
+   struct anv_trtt *trtt = &device->trtt;
+   VkResult result;
+
+   /* TR-TT submission needs a queue even when the API entry point doesn't
+    * give one, such as resource creation. */
+   if (!sparse_submit->queue)
+      sparse_submit->queue = trtt->queue;
+
+   /* These capacities are conservative estimations. For L1 binds the
+    * number will match exactly unless we skip NULL binds due to L2 already
+    * being NULL. For L3/L2 things are harder to estimate, but the resulting
+    * numbers are so small that a little overestimation won't hurt.
+    *
+    * We have assertions below to catch estimation errors.
+    */
+   int l3l2_binds_capacity = 1;
+   int l1_binds_capacity = 0;
+   for (int b = 0; b < sparse_submit->binds_len; b++) {
+      assert(sparse_submit->binds[b].size % (64 * 1024) == 0);
+      int pages = sparse_submit->binds[b].size / (64 * 1024);
+      l1_binds_capacity += pages;
+      l3l2_binds_capacity += (pages / 1024 + 1) * 2;
+   }
+
+   STACK_ARRAY(struct anv_trtt_bind, l3l2_binds, l3l2_binds_capacity);
+   STACK_ARRAY(struct anv_trtt_bind, l1_binds, l1_binds_capacity);
+   struct anv_trtt_submission trtt_submit = {
+      .sparse = sparse_submit,
+      .l3l2_binds = l3l2_binds,
+      .l1_binds = l1_binds,
+      .l3l2_binds_len = 0,
+      .l1_binds_len = 0,
+   };
+
+   pthread_mutex_lock(&trtt->mutex);
+
+   if (!trtt->l3_addr)
+      anv_trtt_init_context_state(sparse_submit->queue);
+
+   assert(trtt->l3_addr);
+
+   for (int b = 0; b < sparse_submit->binds_len; b++) {
+      struct anv_vm_bind *vm_bind = &sparse_submit->binds[b];
+      for (size_t i = 0; i < vm_bind->size; i += 64 * 1024) {
+         uint64_t trtt_addr = vm_bind->address + i;
+         uint64_t dest_addr =
+            (vm_bind->op == ANV_VM_BIND && vm_bind->bo) ?
+               vm_bind->bo->offset + vm_bind->bo_offset + i :
+               ANV_TRTT_L1_NULL_TILE_VAL;
+
+         result = anv_trtt_bind_add(device, trtt_addr, dest_addr,
+                                    &trtt_submit);
+         if (result != VK_SUCCESS)
+            goto out;
+      }
+   }
+
+   assert(trtt_submit.l3l2_binds_len <= l3l2_binds_capacity);
+   assert(trtt_submit.l1_binds_len <= l1_binds_capacity);
+
+   sparse_debug("trtt_binds: num_vm_binds:%02d l3l2:%04d l1:%04d\n",
+                sparse_submit->binds_len, trtt_submit.l3l2_binds_len,
+                trtt_submit.l1_binds_len);
+
+   if (trtt_submit.l3l2_binds_len || trtt_submit.l1_binds_len)
+      result = anv_genX(device->info, write_trtt_entries)(&trtt_submit);
+
+out:
+   pthread_mutex_unlock(&trtt->mutex);
+   STACK_ARRAY_FINISH(l1_binds);
+   STACK_ARRAY_FINISH(l3l2_binds);
+   return result;
+}
+
+static VkResult
+anv_sparse_bind_vm_bind(struct anv_device *device,
+                        struct anv_sparse_submission *submit)
+{
+   struct anv_queue *queue = submit->queue;
+   VkResult result;
+
+   if (!queue)
+      assert(submit->wait_count == 0 && submit->signal_count == 0);
+
+   /* TODO: make both the syncs and signals be passed as part of the vm_bind
+    * ioctl so they can be waited asynchronously. For now this doesn't matter
+    * as we're doing synchronous vm_bind, but later when we make it async this
+    * will make a difference.
+    */
+   result = vk_sync_wait_many(&device->vk, submit->wait_count, submit->waits,
+                              VK_SYNC_WAIT_COMPLETE, INT64_MAX);
+   if (result != VK_SUCCESS)
+      return vk_queue_set_lost(&queue->vk, "vk_sync_wait failed");
+
+   /* FIXME: here we were supposed to issue a single vm_bind ioctl by calling
+    * vm_bind(device, num_binds, binds), but for an unknown reason some
+    * shader-related tests fail when we do that, so work around it for now.
+    * See: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/746
+    */
+   for (int b = 0; b < submit->binds_len; b++) {
+      struct anv_sparse_submission s = {
+         .queue = submit->queue,
+         .binds = &submit->binds[b],
+         .binds_len = 1,
+         .binds_capacity = 1,
+         .wait_count = 0,
+         .signal_count = 0,
+      };
+      int rc = device->kmd_backend->vm_bind(device, &s);
+      if (rc)
+         return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   }
+
+   for (uint32_t i = 0; i < submit->signal_count; i++) {
+      struct vk_sync_signal *s = &submit->signals[i];
+      result = vk_sync_signal(&device->vk, s->sync, s->signal_value);
+      if (result != VK_SUCCESS)
+         return vk_queue_set_lost(&queue->vk, "vk_sync_signal failed");
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult
+anv_sparse_bind(struct anv_device *device,
+                struct anv_sparse_submission *submit)
+{
+   if (INTEL_DEBUG(DEBUG_SPARSE)) {
+      for (int b = 0; b < submit->binds_len; b++)
+         dump_anv_vm_bind(device, &submit->binds[b]);
+   }
+
+   return device->physical->sparse_uses_trtt ?
+            anv_sparse_bind_trtt(device, submit) :
+            anv_sparse_bind_vm_bind(device, submit);
+}
+
 VkResult
 anv_init_sparse_bindings(struct anv_device *device,
                          uint64_t size_,
@@ -285,6 +673,9 @@ anv_init_sparse_bindings(struct anv_device *device,
                          struct anv_address *out_address)
 {
    uint64_t size = align64(size_, ANV_SPARSE_BLOCK_SIZE);
+
+   if (device->physical->sparse_uses_trtt)
+      alloc_flags |= ANV_BO_ALLOC_TRTT;
 
    sparse->address = anv_vma_alloc(device, size, ANV_SPARSE_BLOCK_SIZE,
                                    alloc_flags,
@@ -302,12 +693,18 @@ anv_init_sparse_bindings(struct anv_device *device,
       .size = size,
       .op = ANV_VM_BIND,
    };
-   dump_anv_vm_bind(device, sparse, &bind);
-   int rc = device->kmd_backend->vm_bind(device, 1, &bind);
-   if (rc) {
+   struct anv_sparse_submission submit = {
+      .queue = NULL,
+      .binds = &bind,
+      .binds_len = 1,
+      .binds_capacity = 1,
+      .wait_count = 0,
+      .signal_count = 0,
+   };
+   VkResult res = anv_sparse_bind(device, &submit);
+   if (res != VK_SUCCESS) {
       anv_vma_free(device, sparse->vma_heap, sparse->address, sparse->size);
-      return vk_errorf(device, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                       "failed to bind sparse buffer");
+      return res;
    }
 
    return VK_SUCCESS;
@@ -330,11 +727,17 @@ anv_free_sparse_bindings(struct anv_device *device,
       .size = sparse->size,
       .op = ANV_VM_UNBIND,
    };
-   dump_anv_vm_bind(device, sparse, &unbind);
-   int ret = device->kmd_backend->vm_bind(device, 1, &unbind);
-   if (ret)
-      return vk_errorf(device, VK_ERROR_UNKNOWN,
-                       "failed to unbind vm for sparse resource\n");
+   struct anv_sparse_submission submit = {
+      .queue = NULL,
+      .binds = &unbind,
+      .binds_len = 1,
+      .binds_capacity = 1,
+      .wait_count = 0,
+      .signal_count = 0,
+   };
+   VkResult res = anv_sparse_bind(device, &submit);
+   if (res != VK_SUCCESS)
+      return res;
 
    anv_vma_free(device, sparse->vma_heap, sparse->address, sparse->size);
 
@@ -409,10 +812,25 @@ anv_sparse_calc_image_format_properties(struct anv_physical_device *pdevice,
       if (pdevice->info.verx10 >= 125 && isl_format_is_yuv(surf->format))
          is_known_nonstandard_format = true;
 
+      /* The standard block shapes (and by extension, the tiling formats they
+       * require) are simply incompatible with getting a 2D view of a 3D
+       * image.
+       */
+      if (surf->usage & ISL_SURF_USAGE_2D_3D_COMPATIBLE_BIT)
+         is_known_nonstandard_format = true;
+
       is_standard = granularity.width == std_shape.width &&
                     granularity.height == std_shape.height &&
                     granularity.depth == std_shape.depth;
 
+      /* TODO: dEQP seems to care about the block shapes being standard even
+       * for the cases where is_known_nonstandard_format is true. Luckily as
+       * of today all of those cases are NotSupported but sooner or later we
+       * may end up getting a failure.
+       * Notice that in practice we report these cases as having the mip tail
+       * starting on mip level 0, so the reported block shapes are irrelevant
+       * since non-opaque binds are not supported. Still, dEQP seems to care.
+       */
       assert(is_standard || is_known_nonstandard_format);
    }
 
@@ -573,26 +991,23 @@ vk_bind_to_anv_vm_bind(struct anv_sparse_binding_data *sparse,
 VkResult
 anv_sparse_bind_resource_memory(struct anv_device *device,
                                 struct anv_sparse_binding_data *sparse,
-                                const VkSparseMemoryBind *vk_bind)
+                                const VkSparseMemoryBind *vk_bind,
+                                struct anv_sparse_submission *submit)
 {
    struct anv_vm_bind bind = vk_bind_to_anv_vm_bind(sparse, vk_bind);
 
-   dump_anv_vm_bind(device, sparse, &bind);
-   int rc = device->kmd_backend->vm_bind(device, 1, &bind);
-   if (rc) {
-      return vk_errorf(device, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                       "failed to bind sparse buffer");
-   }
+   if (vk_bind->size % ANV_SPARSE_BLOCK_SIZE != 0)
+      return vk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
-   return VK_SUCCESS;
+   return anv_sparse_submission_add(device, submit, &bind);
 }
 
 VkResult
 anv_sparse_bind_image_memory(struct anv_queue *queue,
                              struct anv_image *image,
-                             const VkSparseImageMemoryBind *bind)
+                             const VkSparseImageMemoryBind *bind,
+                             struct anv_sparse_submission *submit)
 {
-   VkResult ret = VK_SUCCESS;
    struct anv_device *device = queue->device;
    VkImageAspectFlags aspect = bind->subresource.aspectMask;
    uint32_t mip_level = bind->subresource.mipLevel;
@@ -656,22 +1071,12 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
     * they're guaranteed to be contiguous, so we calculate how many blocks
     * that is and how big is each block to figure the bind size of a whole
     * line.
-    *
-    * TODO: if we're binding mip_level 0 and bind_extent_el.width is the total
-    * line, the whole rectangle is contiguous so we could do this with a
-    * single bind instead of per-line. We should figure out how common this is
-    * and consider implementing this special-case.
     */
    uint64_t line_bind_size_in_blocks = bind_extent_el.width /
                                        block_shape_el.width;
    uint64_t line_bind_size = line_bind_size_in_blocks * block_size_B;
    assert(line_bind_size_in_blocks != 0);
    assert(line_bind_size != 0);
-
-   const int binds_array_len = (bind_extent_el.depth / block_shape_el.depth) *
-                               (bind_extent_el.height / block_shape_el.height);
-   STACK_ARRAY(struct anv_vm_bind, binds, binds_array_len);
-   int num_binds = 0;
 
    uint64_t memory_offset = bind->memoryOffset;
    for (uint32_t z = bind_offset_el.z;
@@ -711,31 +1116,17 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
          assert(opaque_bind.resourceOffset % block_size_B == 0);
          assert(opaque_bind.size % block_size_B == 0);
 
-         assert(num_binds < binds_array_len);
-         binds[num_binds] = vk_bind_to_anv_vm_bind(sparse_data,
-                                                   &opaque_bind);
-         dump_anv_vm_bind(device, sparse_data, &binds[num_binds]);
-         num_binds++;
+         struct anv_vm_bind anv_bind = vk_bind_to_anv_vm_bind(sparse_data,
+                                                              &opaque_bind);
+         VkResult result = anv_sparse_submission_add(device, submit,
+                                                     &anv_bind);
+         if (result != VK_SUCCESS)
+            return result;
       }
    }
 
-   /* FIXME: here we were supposed to issue a single vm_bind ioctl by calling
-    * vm_bind(device, num_binds, binds), but for an unknown reason some
-    * shader-related tests fail when we do that, so work around it for now.
-    */
-   for (int b = 0; b < num_binds; b++) {
-      int rc = device->kmd_backend->vm_bind(device, 1, &binds[b]);
-      if (rc) {
-         ret = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-         break;
-      }
-   }
-
-   STACK_ARRAY_FINISH(binds);
-
-   sparse_debug("\n=== [%s:%d] [%s] END num_binds:%d\n",
-                __FILE__, __LINE__, __func__, num_binds);
-   return ret;
+   sparse_debug("\n=== [%s:%d] [%s] END\n", __FILE__, __LINE__, __func__);
+   return VK_SUCCESS;
 }
 
 VkResult
@@ -838,5 +1229,79 @@ anv_sparse_image_check_support(struct anv_physical_device *pdevice,
          return VK_ERROR_FORMAT_NOT_SUPPORTED;
    }
 
+   /* These YUV formats are considered by Vulkan to be compressed 2x1 blocks.
+    * We don't need to support them since they're compressed. On Gfx12 we
+    * can't even have Tile64 for them. Once we do support these formats we'll
+    * have to report the correct block shapes because dEQP cares about them,
+    * and we'll have to adjust for the fact that ISL treats these as 16bpp 1x1
+    * blocks instead of 32bpp 2x1 compressed blocks (as block shapes are
+    * reported in units of compressed blocks).
+    */
+   if (vk_format == VK_FORMAT_G8B8G8R8_422_UNORM ||
+       vk_format == VK_FORMAT_B8G8R8G8_422_UNORM)
+      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+
    return VK_SUCCESS;
+}
+
+static VkResult
+anv_trtt_garbage_collect_batches(struct anv_device *device)
+{
+   struct anv_trtt *trtt = &device->trtt;
+
+   if (trtt->timeline_val % 8 != 7)
+      return VK_SUCCESS;
+
+   uint64_t cur_timeline_val = 0;
+   struct drm_syncobj_timeline_array array = {
+      .handles = (uintptr_t)&trtt->timeline_handle,
+      .points = (uintptr_t)&cur_timeline_val,
+      .count_handles = 1,
+      .flags = 0,
+   };
+   if (intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_QUERY, &array))
+      return vk_error(device, VK_ERROR_UNKNOWN);
+
+   list_for_each_entry_safe(struct anv_trtt_batch_bo, trtt_bbo,
+                            &trtt->in_flight_batches, link) {
+      if (trtt_bbo->timeline_val > cur_timeline_val)
+         return VK_SUCCESS;
+
+      anv_trtt_batch_bo_free(device, trtt_bbo);
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult
+anv_trtt_batch_bo_new(struct anv_device *device, uint32_t batch_size,
+                      struct anv_trtt_batch_bo **out_trtt_bbo)
+{
+   struct anv_trtt *trtt = &device->trtt;
+   VkResult result;
+
+   anv_trtt_garbage_collect_batches(device);
+
+   struct anv_trtt_batch_bo *trtt_bbo =
+      vk_alloc(&device->vk.alloc, sizeof(*trtt_bbo), 8,
+               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!trtt_bbo)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   result = anv_bo_pool_alloc(&device->batch_bo_pool, batch_size,
+                              &trtt_bbo->bo);
+   if (result != VK_SUCCESS)
+      goto out;
+
+   trtt_bbo->size = batch_size;
+   trtt_bbo->timeline_val = ++trtt->timeline_val;
+
+   list_addtail(&trtt_bbo->link, &trtt->in_flight_batches);
+
+   *out_trtt_bbo = trtt_bbo;
+
+   return VK_SUCCESS;
+out:
+   vk_free(&device->vk.alloc, trtt_bbo);
+   return result;
 }

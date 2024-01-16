@@ -12,6 +12,7 @@
 # We're run from the root of the repo, make a helper var for our paths
 BM=$CI_PROJECT_DIR/install/bare-metal
 CI_COMMON=$CI_PROJECT_DIR/install/common
+CI_INSTALL=$CI_PROJECT_DIR/install
 
 # Runner config checks
 if [ -z "$BM_SERIAL" ]; then
@@ -60,8 +61,8 @@ if [ -z "$BM_ROOTFS" ]; then
   exit 1
 fi
 
-if [ -z "$BM_BOOTFS" ]; then
-  echo "Must set /boot files for the TFTP boot in the job's variables"
+if [ -z "$BM_BOOTFS" ] && { [ -z "$BM_KERNEL" ] || [ -z "$BM_DTB" ]; } ; then
+  echo "Must set /boot files for the TFTP boot in the job's variables or set kernel and dtb"
   exit 1
 fi
 
@@ -94,23 +95,50 @@ fi
 date +'%F %T'
 
 # If BM_BOOTFS is a file, assume it is a tarball and uncompress it
-if [ -f $BM_BOOTFS ]; then
+if [ -f "${BM_BOOTFS}" ]; then
   mkdir -p /tmp/bootfs
   tar xf $BM_BOOTFS -C /tmp/bootfs
   BM_BOOTFS=/tmp/bootfs
+fi
+
+# If BM_KERNEL and BM_DTS is present
+if [ -n "${FORCE_KERNEL_TAG}" ]; then
+  if [ -z "${BM_KERNEL}" ] || [ -z "${BM_DTB}" ]; then
+    echo "This machine cannot be tested with external kernel since BM_KERNEL or BM_DTB missing!"
+    exit 1
+  fi
+
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/${BM_KERNEL}" -o "${BM_KERNEL}"
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/${BM_DTB}.dtb" -o "${BM_DTB}.dtb"
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/modules.tar.zst" -o modules.tar.zst
 fi
 
 date +'%F %T'
 
 # Install kernel modules (it could be either in /lib/modules or
 # /usr/lib/modules, but we want to install in the latter)
-[ -d $BM_BOOTFS/usr/lib/modules ] && rsync -a $BM_BOOTFS/usr/lib/modules/ /nfs/usr/lib/modules/
-[ -d $BM_BOOTFS/lib/modules ] && rsync -a $BM_BOOTFS/lib/modules/ /nfs/lib/modules/
+if [ -n "${FORCE_KERNEL_TAG}" ]; then
+  tar --keep-directory-symlink --zstd -xf modules.tar.zst -C /nfs/
+  rm modules.tar.zst &
+elif [ -n "${BM_BOOTFS}" ]; then
+  [ -d $BM_BOOTFS/usr/lib/modules ] && rsync -a $BM_BOOTFS/usr/lib/modules/ /nfs/usr/lib/modules/
+  [ -d $BM_BOOTFS/lib/modules ] && rsync -a $BM_BOOTFS/lib/modules/ /nfs/lib/modules/
+else
+  echo "No modules!"
+fi
+
 
 date +'%F %T'
 
 # Install kernel image + bootloader files
-rsync -aL --delete $BM_BOOTFS/boot/ /tftp/
+if [ -n "${FORCE_KERNEL_TAG}" ] || [ -z "$BM_BOOTFS" ]; then
+  mv "${BM_KERNEL}" "${BM_DTB}.dtb" /tftp/
+else  # BM_BOOTFS
+  rsync -aL --delete $BM_BOOTFS/boot/ /tftp/
+fi
 
 date +'%F %T'
 
@@ -142,7 +170,6 @@ LABEL primary
 EOF
 
 # Create the rootfs in the NFS directory
-mkdir -p /nfs/results
 . $BM/rootfs-setup.sh /nfs
 
 date +'%F %T'
@@ -155,8 +182,19 @@ if [ -n "$BM_BOOTCONFIG" ]; then
 fi
 
 set +e
+STRUCTURED_LOG_FILE=job_detail.json
+python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update dut_job_type "${DEVICE_TYPE}"
+python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update farm "${FARM}"
 ATTEMPTS=3
+first_attempt=True
 while [ $((ATTEMPTS--)) -gt 0 ]; do
+  python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --create-dut-job dut_name "${CI_RUNNER_DESCRIPTION}"
+  # Update subtime time to CI_JOB_STARTED_AT only for the first run
+  if [ "$first_attempt" = "True" ]; then
+    python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update-dut-time submit "${CI_JOB_STARTED_AT}"
+  else
+    python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update-dut-time submit
+  fi
   python3 $BM/poe_run.py \
           --dev="$BM_SERIAL" \
           --powerup="$BM_POWERUP" \
@@ -166,10 +204,14 @@ while [ $((ATTEMPTS--)) -gt 0 ]; do
 
   if [ $ret -eq 2 ]; then
     echo "Did not detect boot sequence, retrying..."
+    python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --close-dut-job
+    first_attempt=False
   else
     ATTEMPTS=0
   fi
 done
+python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --close-dut-job
+python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --close
 set -e
 
 date +'%F %T'
@@ -177,6 +219,10 @@ date +'%F %T'
 # Bring artifacts back from the NFS dir to the build dir where gitlab-runner
 # will look for them.
 cp -Rp /nfs/results/. results/
+if [ -f "${STRUCTURED_LOG_FILE}" ]; then
+  cp -p ${STRUCTURED_LOG_FILE} results/
+  echo "Structured log file is available at ${ARTIFACTS_BASE_URL}/results/${STRUCTURED_LOG_FILE}"
+fi
 
 date +'%F %T'
 

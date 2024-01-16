@@ -37,13 +37,6 @@ if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled')
   pipe_loader_link_with += libgalliumvlwinsys
 endif
 
-if with_ld_version_script
-  pipe_loader_link_args += [
-    '-Wl,--version-script', join_paths(meson.current_source_dir(), 'pipe.sym')
-  ]
-  pipe_loader_link_deps += files('pipe.sym')
-endif
-
 pipe_loader_install_dir = join_paths(get_option('libdir'), 'gallium-pipe')
 
 _kmsro_targets = [
@@ -70,21 +63,48 @@ pipe_loaders = [
 ]
 
 foreach x : pipe_loaders
-  if x[0]
-    shared_library(
-      'pipe_@0@'.format(x[1]),
-      'pipe_@0@.c'.format(x[1]),
-      c_args : [pipe_loader_comp_args, '-DPIPE_LOADER_DYNAMIC=1'],
-      cpp_args : [pipe_loader_comp_args],
-      gnu_symbol_visibility : 'hidden',
-      link_args : pipe_loader_link_args,
-      link_depends : pipe_loader_link_deps,
-      include_directories : pipe_loader_incs,
-      link_with : [pipe_loader_link_with, x[3]],
-      dependencies : [idep_mesautil, idep_nir, dep_thread, x[2]],
-      name_prefix : '',
-      install : true,
-      install_dir : pipe_loader_install_dir,
-    )
+  if not x[0]
+    continue
   endif
+
+  pipe_sym_config = configuration_data()
+
+  foreach d : [[x[1] in ['r300', 'r600', 'radeonsi'], 'radeon_drm_winsys_create'],
+               [x[1] == 'radeonsi', 'amdgpu_winsys_create'],
+               [x[1] == 'radeonsi' and with_llvm, 'ac_init_shared_llvm_once'],
+               [x[1] != 'swrast', 'driver_descriptor'],
+               [x[1] == 'swrast', 'swrast_driver_descriptor']]
+    if d[0]
+      pipe_sym_config.set(d[1], d[1] + ';')
+    else
+      pipe_sym_config.set(d[1], '')
+    endif
+  endforeach
+
+  pipe_sym = configure_file(input : 'pipe.sym.in', output : 'pipe_@0@.sym'.format(x[1]), configuration : pipe_sym_config)
+
+  cur_pipe_loader_link_args = pipe_loader_link_args
+  cur_pipe_loader_link_deps = pipe_loader_link_deps
+  if with_ld_version_script
+    cur_pipe_loader_link_args += [
+      '-Wl,--version-script', join_paths(meson.current_build_dir(), 'pipe_@0@.sym'.format(x[1]))
+    ]
+    cur_pipe_loader_link_deps += pipe_sym
+  endif
+
+  shared_library(
+    'pipe_@0@'.format(x[1]),
+    'pipe_@0@.c'.format(x[1]),
+    c_args : [pipe_loader_comp_args, '-DPIPE_LOADER_DYNAMIC=1'],
+    cpp_args : [pipe_loader_comp_args],
+    gnu_symbol_visibility : 'hidden',
+    link_args : cur_pipe_loader_link_args,
+    link_depends : cur_pipe_loader_link_deps,
+    include_directories : pipe_loader_incs,
+    link_with : [pipe_loader_link_with, x[3]],
+    dependencies : [idep_mesautil, idep_nir, dep_thread, x[2]],
+    name_prefix : '',
+    install : true,
+    install_dir : pipe_loader_install_dir,
+  )
 endforeach

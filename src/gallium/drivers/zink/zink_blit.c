@@ -416,7 +416,7 @@ zink_blit(struct pipe_context *pctx,
    ctx->unordered_blitting = !(info->render_condition_enable && ctx->render_condition_active) &&
                              zink_screen(ctx->base.screen)->info.have_KHR_dynamic_rendering &&
                              !needs_present_readback &&
-                             zink_get_cmdbuf(ctx, src, dst) == ctx->batch.state->barrier_cmdbuf;
+                             zink_get_cmdbuf(ctx, src, dst) == ctx->batch.state->reordered_cmdbuf;
    VkCommandBuffer cmdbuf = ctx->batch.state->cmdbuf;
    VkPipeline pipeline = ctx->gfx_pipeline_state.pipeline;
    bool in_rp = ctx->batch.in_rp;
@@ -427,7 +427,7 @@ zink_blit(struct pipe_context *pctx,
    bool rp_tc_info_updated = ctx->rp_tc_info_updated;
    if (ctx->unordered_blitting) {
       /* for unordered blit, swap the unordered cmdbuf for the main one for the whole op to avoid conditional hell */
-      ctx->batch.state->cmdbuf = ctx->batch.state->barrier_cmdbuf;
+      ctx->batch.state->cmdbuf = ctx->batch.state->reordered_cmdbuf;
       ctx->batch.in_rp = false;
       ctx->rp_changed = true;
       ctx->queries_disabled = true;

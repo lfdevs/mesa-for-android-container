@@ -140,7 +140,7 @@ do_dead_code(exec_list *instructions)
                }
             }
 
-            if (entry->var->type->is_subroutine())
+            if (glsl_type_is_subroutine(entry->var->type))
                continue;
          }
 

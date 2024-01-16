@@ -9,27 +9,68 @@
 #include "nvk_device_memory.h"
 #include "nvk_physical_device.h"
 
-uint32_t
-nvk_get_buffer_alignment(UNUSED const struct nv_device_info *info,
+static uint32_t
+nvk_get_buffer_alignment(const struct nvk_physical_device *pdev,
                          VkBufferUsageFlags2KHR usage_flags,
                          VkBufferCreateFlags create_flags)
 {
    uint32_t alignment = 16;
 
    if (usage_flags & VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR)
-      alignment = MAX2(alignment, NVK_MIN_UBO_ALIGNMENT);
+      alignment = MAX2(alignment, nvk_min_cbuf_alignment(&pdev->info));
 
    if (usage_flags & VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR)
       alignment = MAX2(alignment, NVK_MIN_SSBO_ALIGNMENT);
 
    if (usage_flags & (VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR |
                       VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR))
-      alignment = MAX2(alignment, NVK_MIN_UBO_ALIGNMENT);
+      alignment = MAX2(alignment, NVK_MIN_TEXEL_BUFFER_ALIGNMENT);
 
-   if (create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)
+   if (create_flags & (VK_BUFFER_CREATE_SPARSE_BINDING_BIT |
+                       VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT))
       alignment = MAX2(alignment, 4096);
 
    return alignment;
+}
+
+static uint64_t
+nvk_get_bda_replay_addr(const VkBufferCreateInfo *pCreateInfo)
+{
+   uint64_t addr = 0;
+   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO: {
+         const VkBufferOpaqueCaptureAddressCreateInfo *bda = (void *)ext;
+         if (bda->opaqueCaptureAddress != 0) {
+#ifdef NDEBUG
+            return bda->opaqueCaptureAddress;
+#else
+            assert(addr == 0 || bda->opaqueCaptureAddress == addr);
+            addr = bda->opaqueCaptureAddress;
+#endif
+         }
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT: {
+         const VkBufferDeviceAddressCreateInfoEXT *bda = (void *)ext;
+         if (bda->deviceAddress != 0) {
+#ifdef NDEBUG
+            return bda->deviceAddress;
+#else
+            assert(addr == 0 || bda->deviceAddress == addr);
+            addr = bda->deviceAddress;
+#endif
+         }
+         break;
+      }
+
+      default:
+         break;
+      }
+   }
+
+   return addr;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -50,9 +91,10 @@ nvk_CreateBuffer(VkDevice device,
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    if (buffer->vk.size > 0 &&
-       (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)) {
+       (buffer->vk.create_flags & (VK_BUFFER_CREATE_SPARSE_BINDING_BIT |
+                                   VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT))) {
       const uint32_t alignment =
-         nvk_get_buffer_alignment(&nvk_device_physical(dev)->info,
+         nvk_get_buffer_alignment(nvk_device_physical(dev),
                                   buffer->vk.usage,
                                   buffer->vk.create_flags);
       assert(alignment >= 4096);
@@ -60,9 +102,22 @@ nvk_CreateBuffer(VkDevice device,
 
       const bool sparse_residency =
          buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
+      const bool bda_capture_replay =
+         buffer->vk.create_flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT;
 
-      buffer->addr = nouveau_ws_alloc_vma(dev->ws_dev, buffer->vma_size_B,
-                                          alignment, sparse_residency);
+      uint64_t bda_replay_addr = 0;
+      if (bda_capture_replay)
+         bda_replay_addr = nvk_get_bda_replay_addr(pCreateInfo);
+
+      buffer->addr = nouveau_ws_alloc_vma(dev->ws_dev, bda_replay_addr,
+                                          buffer->vma_size_B,
+                                          alignment, bda_capture_replay,
+                                          sparse_residency);
+      if (buffer->addr == 0) {
+         vk_buffer_destroy(&dev->vk, pAllocator, &buffer->vk);
+         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                          "Sparse VMA allocation failed");
+      }
    }
 
    *pBuffer = nvk_buffer_to_handle(buffer);
@@ -84,10 +139,12 @@ nvk_DestroyBuffer(VkDevice device,
    if (buffer->vma_size_B > 0) {
       const bool sparse_residency =
          buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
+      const bool bda_capture_replay =
+         buffer->vk.create_flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT;
 
       nouveau_ws_bo_unbind_vma(dev->ws_dev, buffer->addr, buffer->vma_size_B);
       nouveau_ws_free_vma(dev->ws_dev, buffer->addr, buffer->vma_size_B,
-                          sparse_residency);
+                          bda_capture_replay, sparse_residency);
    }
 
    vk_buffer_destroy(&dev->vk, pAllocator, &buffer->vk);
@@ -102,14 +159,14 @@ nvk_GetDeviceBufferMemoryRequirements(
    VK_FROM_HANDLE(nvk_device, dev, device);
 
    const uint32_t alignment =
-      nvk_get_buffer_alignment(&nvk_device_physical(dev)->info,
+      nvk_get_buffer_alignment(nvk_device_physical(dev),
                                pInfo->pCreateInfo->usage,
                                pInfo->pCreateInfo->flags);
 
    pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
       .size = align64(pInfo->pCreateInfo->size, alignment),
       .alignment = alignment,
-      .memoryTypeBits = BITFIELD_MASK(dev->pdev->mem_type_cnt),
+      .memoryTypeBits = BITFIELD_MASK(dev->pdev->mem_type_count),
    };
 
    vk_foreach_struct_const(ext, pMemoryRequirements->pNext) {

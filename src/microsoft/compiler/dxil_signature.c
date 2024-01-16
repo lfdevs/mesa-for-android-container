@@ -61,7 +61,8 @@ get_interpolation(nir_variable *var)
    if (var->data.patch)
       return DXIL_INTERP_UNDEFINED;
 
-   if (glsl_type_is_integer(glsl_without_array_or_matrix(var->type)))
+   if (glsl_type_is_integer(glsl_without_array_or_matrix(var->type)) ||
+       glsl_type_is_64bit(glsl_without_array_or_matrix(var->type)))
       return DXIL_INTERP_CONSTANT;
 
    if (var->data.sample) {
@@ -147,7 +148,7 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
    info->rows = 1;
    if (info->kind == DXIL_SEM_TARGET) {
       info->start_row = info->index;
-      info->cols = (uint8_t)glsl_get_components(type);
+      info->cols = 4;
    } else if (is_depth ||
               (info->kind == DXIL_SEM_PRIMITIVE_ID && is_gs_input) ||
               info->kind == DXIL_SEM_COVERAGE ||
@@ -425,7 +426,7 @@ append_semantic_index_to_table(struct dxil_psv_sem_index_table *table, uint32_t 
          i += j - 1;
    }
    uint32_t retval = table->size;
-   assert(table->size + num_rows <= 80);
+   assert(table->size + num_rows <= ARRAY_SIZE(table->data));
    for (unsigned i = 0; i < num_rows; ++i)
       table->data[table->size++] = index + i;
    return retval;
@@ -570,8 +571,22 @@ get_input_signature_group(struct dxil_module *mod,
       get_semantics(var, &semantic, s->info.stage);
       mod->inputs[num_inputs].sysvalue = semantic.sysvalue_name;
       nir_variable *base_var = var;
-      if (var->data.location_frac)
-         base_var = nir_find_variable_with_location(s, modes, var->data.location);
+      if (var->data.location_frac) {
+         /* Note: Specifically search for a variable that has space for these additional components */
+         nir_foreach_variable_with_modes(test_var, s, modes) {
+            if (var->data.location == test_var->data.location) {
+               /* Variables should be sorted such that we're only looking for an already-emitted variable */
+               if (test_var == var)
+                  break;
+               base_var = test_var;
+               if (test_var->data.location_frac == 0 &&
+                   glsl_get_component_slots(
+                      nir_is_arrayed_io(test_var, s->info.stage) ?
+                      glsl_get_array_element(test_var->type) : test_var->type) <= var->data.location_frac)
+                  break;
+            }
+         }
+      }
       if (base_var != var)
          /* Combine fractional vars into any already existing row */
          get_additional_semantic_info(s, var, &semantic,
@@ -591,7 +606,7 @@ get_input_signature_group(struct dxil_module *mod,
                                  semantic.start_row + semantic.rows);
 
       ++num_inputs;
-      assert(num_inputs < VARYING_SLOT_MAX);
+      assert(num_inputs < VARYING_SLOT_MAX * 4);
    }
    return num_inputs;
 }
@@ -654,8 +669,15 @@ process_output_signature(struct dxil_module *mod, nir_shader *s)
          mod->outputs[num_outputs].sysvalue = out_sysvalue_name(var);
       }
       nir_variable *base_var = var;
-      if (var->data.location_frac)
+      if (var->data.location_frac) {
+         if (s->info.stage == MESA_SHADER_FRAGMENT) {
+            /* Fragment shader outputs are all either scalars, or must be declared as a single 4-component vector.
+             * Any attempt to declare partial vectors split across multiple variables is ignored.
+             */
+            continue;
+         }
          base_var = nir_find_variable_with_location(s, nir_var_shader_out, var->data.location);
+      }
       if (base_var != var &&
           base_var->data.stream == var->data.stream)
          /* Combine fractional vars into any already existing row */
@@ -849,7 +871,7 @@ get_signature_metadata(struct dxil_module *mod,
    if (num_elements == 0)
       return NULL;
 
-   const struct dxil_mdnode *nodes[VARYING_SLOT_MAX];
+   const struct dxil_mdnode *nodes[VARYING_SLOT_MAX * 4];
    for (unsigned i = 0; i < num_elements; ++i) {
       nodes[i] = fill_SV_param_nodes(mod, i, &recs[i], &psvs[i], is_input);
    }

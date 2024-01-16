@@ -878,7 +878,7 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
 
    /* Compile the NIR shader */
    struct panfrost_compile_inputs inputs = {
-      .gpu_id = dev->gpu_id,
+      .gpu_id = panfrost_device_gpu_id(dev),
       .is_blend = true,
       .blend.nr_samples = key.nr_samples,
    };
@@ -899,7 +899,7 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
 #else
    NIR_PASS_V(nir, pan_lower_framebuffer, rt_formats,
               pan_raw_format_mask_midgard(rt_formats), MAX2(key.nr_samples, 1),
-              dev->gpu_id < 0x700);
+              panfrost_device_gpu_id(dev) < 0x700);
 #endif
 
    GENX(pan_shader_compile)(nir, &inputs, &variant->binary, &info);

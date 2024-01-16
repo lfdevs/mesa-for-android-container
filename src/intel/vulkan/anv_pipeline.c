@@ -144,6 +144,7 @@ anv_shader_stage_to_nir(struct anv_device *device,
    const bool rt_enabled = ANV_SUPPORT_RT && pdevice->info.has_ray_tracing;
    const struct spirv_to_nir_options spirv_options = {
       .caps = {
+         .cooperative_matrix = anv_has_cooperative_matrix(pdevice),
          .demote_to_helper_invocation = true,
          .derivative_group = true,
          .descriptor_array_dynamic_indexing = true,
@@ -935,6 +936,54 @@ anv_nir_compute_dynamic_push_bits(nir_shader *shader)
 }
 
 static void
+anv_fixup_subgroup_size(struct anv_device *device, struct shader_info *info)
+{
+   switch (info->stage) {
+   case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_TASK:
+   case MESA_SHADER_MESH:
+      break;
+   default:
+      return;
+   }
+
+   unsigned local_size = info->workgroup_size[0] *
+                         info->workgroup_size[1] *
+                         info->workgroup_size[2];
+
+   /* Games don't always request full subgroups when they should,
+    * which can cause bugs, as they may expect bigger size of the
+    * subgroup than we choose for the execution.
+    */
+   if (device->physical->instance->assume_full_subgroups &&
+       info->uses_wide_subgroup_intrinsics &&
+       info->subgroup_size == SUBGROUP_SIZE_API_CONSTANT &&
+       local_size &&
+       local_size % BRW_SUBGROUP_SIZE == 0)
+      info->subgroup_size = SUBGROUP_SIZE_FULL_SUBGROUPS;
+
+   /* If the client requests that we dispatch full subgroups but doesn't
+    * allow us to pick a subgroup size, we have to smash it to the API
+    * value of 32.  Performance will likely be terrible in this case but
+    * there's nothing we can do about that.  The client should have chosen
+    * a size.
+    */
+   if (info->subgroup_size == SUBGROUP_SIZE_FULL_SUBGROUPS)
+      info->subgroup_size =
+         device->physical->instance->assume_full_subgroups != 0 ?
+         device->physical->instance->assume_full_subgroups : BRW_SUBGROUP_SIZE;
+
+   /* Cooperative matrix extension requires that all invocations in a subgroup
+    * be active. As a result, when the application does not request a specific
+    * subgroup size, we must use SIMD32.
+    */
+   if (info->stage == MESA_SHADER_COMPUTE && info->cs.has_cooperative_matrix &&
+       info->subgroup_size < SUBGROUP_SIZE_REQUIRE_8) {
+      info->subgroup_size = BRW_SUBGROUP_SIZE;
+   }
+}
+
+static void
 anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
                        void *mem_ctx,
                        struct anv_pipeline_stage *stage,
@@ -975,6 +1024,12 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
        pipeline->type == ANV_PIPELINE_GRAPHICS_LIB) {
       NIR_PASS(_, nir, anv_nir_lower_multiview, view_mask,
                use_primitive_replication);
+   }
+
+   if (nir->info.stage == MESA_SHADER_COMPUTE && nir->info.cs.has_cooperative_matrix) {
+      anv_fixup_subgroup_size(pipeline->device, &nir->info);
+      NIR_PASS(_, nir, brw_nir_lower_cmat, nir->info.subgroup_size);
+      NIR_PASS_V(nir, nir_lower_indirect_derefs, nir_var_function_temp, 16);
    }
 
    /* The patch control points are delivered through a push constant when
@@ -1520,6 +1575,7 @@ anv_pipeline_compile_fs(const struct brw_compiler *compiler,
       .prog_data = &fs_stage->prog_data.wm,
 
       .allow_spilling = true,
+      .max_polygons = UCHAR_MAX,
    };
 
    if (prev_stage && prev_stage->stage == MESA_SHADER_MESH) {
@@ -1529,9 +1585,11 @@ anv_pipeline_compile_fs(const struct brw_compiler *compiler,
 
    fs_stage->code = brw_compile_fs(compiler, &params);
 
-   fs_stage->num_stats = (uint32_t)fs_stage->prog_data.wm.dispatch_8 +
+   fs_stage->num_stats = (uint32_t)!!fs_stage->prog_data.wm.dispatch_multi +
+                         (uint32_t)fs_stage->prog_data.wm.dispatch_8 +
                          (uint32_t)fs_stage->prog_data.wm.dispatch_16 +
                          (uint32_t)fs_stage->prog_data.wm.dispatch_32;
+   assert(fs_stage->num_stats <= ARRAY_SIZE(fs_stage->stats));
 }
 
 static void
@@ -1640,7 +1698,8 @@ anv_pipeline_add_executables(struct anv_pipeline *pipeline,
          (const struct brw_wm_prog_data *)bin->prog_data;
       struct brw_compile_stats *stats = bin->stats;
 
-      if (wm_prog_data->dispatch_8) {
+      if (wm_prog_data->dispatch_8 ||
+          wm_prog_data->dispatch_multi) {
          anv_pipeline_add_executable(pipeline, stage, stats++, 0);
       }
 
@@ -1811,7 +1870,7 @@ anv_graphics_pipeline_load_cached_shaders(struct anv_graphics_base_pipeline *pip
                                           struct vk_pipeline_cache *cache,
                                           struct anv_pipeline_stage *stages,
                                           bool link_optimize,
-                                          VkPipelineCreationFeedbackEXT *pipeline_feedback)
+                                          VkPipelineCreationFeedback *pipeline_feedback)
 {
    struct anv_device *device = pipeline->base.device;
    unsigned cache_hits = 0, found = 0, imported = 0;
@@ -1854,6 +1913,7 @@ anv_graphics_pipeline_load_cached_shaders(struct anv_graphics_base_pipeline *pip
             continue;
 
          pipeline->shaders[s] = anv_shader_bin_ref(stages[s].imported.bin);
+         pipeline->source_hashes[s] = stages[s].source_hash;
          imported++;
       }
    }
@@ -1958,45 +2018,6 @@ anv_graphics_pipeline_load_nir(struct anv_graphics_base_pipeline *pipeline,
 }
 
 static void
-anv_fixup_subgroup_size(struct anv_device *device, struct shader_info *info)
-{
-   switch (info->stage) {
-   case MESA_SHADER_COMPUTE:
-   case MESA_SHADER_TASK:
-   case MESA_SHADER_MESH:
-      break;
-   default:
-      return;
-   }
-
-   unsigned local_size = info->workgroup_size[0] *
-                         info->workgroup_size[1] *
-                         info->workgroup_size[2];
-
-   /* Games don't always request full subgroups when they should,
-    * which can cause bugs, as they may expect bigger size of the
-    * subgroup than we choose for the execution.
-    */
-   if (device->physical->instance->assume_full_subgroups &&
-       info->uses_wide_subgroup_intrinsics &&
-       info->subgroup_size == SUBGROUP_SIZE_API_CONSTANT &&
-       local_size &&
-       local_size % BRW_SUBGROUP_SIZE == 0)
-      info->subgroup_size = SUBGROUP_SIZE_FULL_SUBGROUPS;
-
-   /* If the client requests that we dispatch full subgroups but doesn't
-    * allow us to pick a subgroup size, we have to smash it to the API
-    * value of 32.  Performance will likely be terrible in this case but
-    * there's nothing we can do about that.  The client should have chosen
-    * a size.
-    */
-   if (info->subgroup_size == SUBGROUP_SIZE_FULL_SUBGROUPS)
-      info->subgroup_size =
-         device->physical->instance->assume_full_subgroups != 0 ?
-         device->physical->instance->assume_full_subgroups : BRW_SUBGROUP_SIZE;
-}
-
-static void
 anv_pipeline_nir_preprocess(struct anv_pipeline *pipeline,
                             struct anv_pipeline_stage *stage)
 {
@@ -2042,7 +2063,7 @@ anv_pipeline_nir_preprocess(struct anv_pipeline *pipeline,
 
 static void
 anv_fill_pipeline_creation_feedback(const struct anv_graphics_base_pipeline *pipeline,
-                                    VkPipelineCreationFeedbackEXT *pipeline_feedback,
+                                    VkPipelineCreationFeedback *pipeline_feedback,
                                     const VkGraphicsPipelineCreateInfo *info,
                                     struct anv_pipeline_stage *stages)
 {
@@ -2095,7 +2116,7 @@ static VkResult
 anv_graphics_pipeline_compile(struct anv_graphics_base_pipeline *pipeline,
                               struct anv_pipeline_stage *stages,
                               struct vk_pipeline_cache *cache,
-                              VkPipelineCreationFeedbackEXT *pipeline_feedback,
+                              VkPipelineCreationFeedback *pipeline_feedback,
                               const VkGraphicsPipelineCreateInfo *info,
                               const struct vk_graphics_pipeline_state *state)
 {
@@ -2678,18 +2699,6 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
    return VK_SUCCESS;
 }
 
-static VkPipelineCreateFlags2KHR
-get_pipeline_flags(VkPipelineCreateFlags flags, const void *pNext)
-{
-   const VkPipelineCreateFlags2CreateInfoKHR *flags2 =
-      vk_find_struct_const(pNext, PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR);
-
-   if (flags2)
-      return flags2->flags;
-
-   return (VkPipelineCreateFlags2KHR)flags;
-}
-
 static VkResult
 anv_compute_pipeline_create(struct anv_device *device,
                             struct vk_pipeline_cache *cache,
@@ -2709,8 +2718,7 @@ anv_compute_pipeline_create(struct anv_device *device,
 
    result = anv_pipeline_init(&pipeline->base, device,
                               ANV_PIPELINE_COMPUTE,
-                              get_pipeline_flags(pCreateInfo->flags,
-                                                 pCreateInfo->pNext),
+                              vk_compute_pipeline_create_flags(pCreateInfo),
                               pAllocator);
    if (result != VK_SUCCESS) {
       vk_free2(&device->vk.alloc, pAllocator, pipeline);
@@ -2756,7 +2764,7 @@ VkResult anv_CreateComputePipelines(
    unsigned i;
    for (i = 0; i < count; i++) {
       const VkPipelineCreateFlags2KHR flags =
-         get_pipeline_flags(pCreateInfos[i].flags, pCreateInfos[i].pNext);
+         vk_compute_pipeline_create_flags(&pCreateInfos[i]);
       VkResult res = anv_compute_pipeline_create(device, pipeline_cache,
                                                  &pCreateInfos[i],
                                                  pAllocator, &pPipelines[i]);
@@ -3013,8 +3021,8 @@ anv_graphics_lib_pipeline_create(struct anv_device *device,
                                  VkPipeline *pPipeline)
 {
    struct anv_pipeline_stage stages[ANV_GRAPHICS_SHADER_STAGE_COUNT] = {};
-   VkPipelineCreationFeedbackEXT pipeline_feedback = {
-      .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT,
+   VkPipelineCreationFeedback pipeline_feedback = {
+      .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
    };
    int64_t pipeline_start = os_time_get_nano();
 
@@ -3022,7 +3030,7 @@ anv_graphics_lib_pipeline_create(struct anv_device *device,
    VkResult result;
 
    const VkPipelineCreateFlags2KHR flags =
-      get_pipeline_flags(pCreateInfo->flags, pCreateInfo->pNext);
+      vk_graphics_pipeline_create_flags(pCreateInfo);
    assert(flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR);
 
    const VkPipelineLibraryCreateInfoKHR *libs_info =
@@ -3039,7 +3047,7 @@ anv_graphics_lib_pipeline_create(struct anv_device *device,
                               pAllocator);
    if (result != VK_SUCCESS) {
       vk_free2(&device->vk.alloc, pAllocator, pipeline);
-      if (result == VK_PIPELINE_COMPILE_REQUIRED_EXT)
+      if (result == VK_PIPELINE_COMPILE_REQUIRED)
          *pPipeline = VK_NULL_HANDLE;
       return result;
    }
@@ -3065,7 +3073,8 @@ anv_graphics_lib_pipeline_create(struct anv_device *device,
 
    result = vk_graphics_pipeline_state_fill(&device->vk,
                                             &pipeline->state, pCreateInfo,
-                                            NULL /* sp_info */,
+                                            NULL /* driver_rp */,
+                                            0 /* driver_rp_flags */,
                                             &pipeline->all_state, NULL, 0, NULL);
    if (result != VK_SUCCESS) {
       anv_pipeline_finish(&pipeline->base.base, device);
@@ -3122,8 +3131,8 @@ anv_graphics_pipeline_create(struct anv_device *device,
                              VkPipeline *pPipeline)
 {
    struct anv_pipeline_stage stages[ANV_GRAPHICS_SHADER_STAGE_COUNT] = {};
-   VkPipelineCreationFeedbackEXT pipeline_feedback = {
-      .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT,
+   VkPipelineCreationFeedback pipeline_feedback = {
+      .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
    };
    int64_t pipeline_start = os_time_get_nano();
 
@@ -3131,7 +3140,7 @@ anv_graphics_pipeline_create(struct anv_device *device,
    VkResult result;
 
    const VkPipelineCreateFlags2KHR flags =
-      get_pipeline_flags(pCreateInfo->flags, pCreateInfo->pNext);
+      vk_graphics_pipeline_create_flags(pCreateInfo);
    assert((flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR) == 0);
 
    const VkPipelineLibraryCreateInfoKHR *libs_info =
@@ -3181,7 +3190,8 @@ anv_graphics_pipeline_create(struct anv_device *device,
    }
 
    result = vk_graphics_pipeline_state_fill(&device->vk, &state, pCreateInfo,
-                                            NULL /* sp_info */,
+                                            NULL /* driver_rp */,
+                                            0 /* driver_rp_flags */,
                                             &all, NULL, 0, NULL);
    if (result != VK_SUCCESS) {
       anv_pipeline_finish(&pipeline->base.base, device);
@@ -3268,7 +3278,7 @@ VkResult anv_CreateGraphicsPipelines(
       assert(pCreateInfos[i].sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
 
       const VkPipelineCreateFlags2KHR flags =
-         get_pipeline_flags(pCreateInfos[i].flags, pCreateInfos[i].pNext);
+         vk_graphics_pipeline_create_flags(&pCreateInfos[i]);
       VkResult res;
       if (flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR) {
          res = anv_graphics_lib_pipeline_create(device, pipeline_cache,
@@ -4020,8 +4030,7 @@ anv_ray_tracing_pipeline_create(
 
    result = anv_pipeline_init(&pipeline->base, device,
                               ANV_PIPELINE_RAY_TRACING,
-                              get_pipeline_flags(pCreateInfo->flags,
-                                                 pCreateInfo->pNext),
+                              vk_rt_pipeline_create_flags(pCreateInfo),
                               pAllocator);
    if (result != VK_SUCCESS) {
       vk_free2(&device->vk.alloc, pAllocator, pipeline);
@@ -4137,7 +4146,7 @@ anv_CreateRayTracingPipelinesKHR(
    unsigned i;
    for (i = 0; i < createInfoCount; i++) {
       const VkPipelineCreateFlags2KHR flags =
-         get_pipeline_flags(pCreateInfos[i].flags, pCreateInfos[i].pNext);
+         vk_rt_pipeline_create_flags(&pCreateInfos[i]);
       VkResult res = anv_ray_tracing_pipeline_create(_device, pipeline_cache,
                                                      &pCreateInfos[i],
                                                      pAllocator, &pPipelines[i]);
@@ -4186,10 +4195,16 @@ VkResult anv_GetPipelineExecutablePropertiesKHR(
 
          unsigned simd_width = exe->stats.dispatch_width;
          if (stage == MESA_SHADER_FRAGMENT) {
-            WRITE_STR(props->name, "%s%d %s",
-                      simd_width ? "SIMD" : "vec",
-                      simd_width ? simd_width : 4,
-                      _mesa_shader_stage_to_string(stage));
+            if (exe->stats.max_polygons > 1)
+               WRITE_STR(props->name, "SIMD%dx%d %s",
+                         exe->stats.max_polygons,
+                         simd_width / exe->stats.max_polygons,
+                         _mesa_shader_stage_to_string(stage));
+            else
+               WRITE_STR(props->name, "%s%d %s",
+                         simd_width ? "SIMD" : "vec",
+                         simd_width ? simd_width : 4,
+                         _mesa_shader_stage_to_string(stage));
          } else {
             WRITE_STR(props->name, "%s", _mesa_shader_stage_to_string(stage));
          }

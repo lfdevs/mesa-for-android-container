@@ -201,8 +201,13 @@ vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *con
       context->desc.h264enc.rate_ctrl[0].max_qp = 51;
       context->desc.h264enc.rate_ctrl[0].min_qp = 0;
       context->desc.h264enc.enable_vui = false;
+      context->desc.h264enc.intra_refresh.mode = INTRA_REFRESH_MODE_NONE;
+      context->desc.h264enc.intra_refresh.offset = 0;
+      context->desc.h264enc.intra_refresh.region_size = 0;
+      context->desc.h264enc.intra_refresh.need_sequence_header = 0;
    }
 
+   context->desc.h264enc.ip_period = h264->ip_period;
    context->desc.h264enc.intra_idr_period =
       h264->intra_idr_period != 0 ? h264->intra_idr_period : PIPE_DEFAULT_INTRA_IDR_PERIOD;
    context->gop_coeff = ((1024 + context->desc.h264enc.intra_idr_period - 1) /
@@ -211,6 +216,8 @@ vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *con
       context->gop_coeff = VL_VA_ENC_GOP_COEFF;
    context->desc.h264enc.gop_size = context->desc.h264enc.intra_idr_period * context->gop_coeff;
    context->desc.h264enc.seq.pic_order_cnt_type = h264->seq_fields.bits.pic_order_cnt_type;
+   context->desc.h264enc.seq.log2_max_frame_num_minus4 = h264->seq_fields.bits.log2_max_frame_num_minus4;
+   context->desc.h264enc.seq.log2_max_pic_order_cnt_lsb_minus4 = h264->seq_fields.bits.log2_max_pic_order_cnt_lsb_minus4;
    context->desc.h264enc.seq.vui_parameters_present_flag = h264->vui_parameters_present_flag;
    if (h264->vui_parameters_present_flag) {
       context->desc.h264enc.seq.vui_flags.aspect_ratio_info_present_flag =
@@ -222,8 +229,27 @@ vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *con
          h264->vui_fields.bits.timing_info_present_flag;
       num_units_in_tick = h264->num_units_in_tick;
       time_scale = h264->time_scale;
-   } else
+      context->desc.h264enc.seq.vui_flags.fixed_frame_rate_flag =
+         h264->vui_fields.bits.fixed_frame_rate_flag;
+      context->desc.h264enc.seq.vui_flags.low_delay_hrd_flag =
+         h264->vui_fields.bits.low_delay_hrd_flag;
+      context->desc.h264enc.seq.vui_flags.bitstream_restriction_flag =
+         h264->vui_fields.bits.bitstream_restriction_flag;
+      context->desc.h264enc.seq.vui_flags.motion_vectors_over_pic_boundaries_flag =
+         h264->vui_fields.bits.motion_vectors_over_pic_boundaries_flag;
+      context->desc.h264enc.seq.log2_max_mv_length_vertical =
+            h264->vui_fields.bits.log2_max_mv_length_vertical;
+      context->desc.h264enc.seq.log2_max_mv_length_horizontal =
+            h264->vui_fields.bits.log2_max_mv_length_horizontal;
+   } else {
       context->desc.h264enc.seq.vui_flags.timing_info_present_flag = 0;
+      context->desc.h264enc.seq.vui_flags.fixed_frame_rate_flag = 0;
+      context->desc.h264enc.seq.vui_flags.low_delay_hrd_flag = 0;
+      context->desc.h264enc.seq.vui_flags.bitstream_restriction_flag = 0;
+      context->desc.h264enc.seq.vui_flags.motion_vectors_over_pic_boundaries_flag = 0;
+      context->desc.h264enc.seq.log2_max_mv_length_vertical = 0;
+      context->desc.h264enc.seq.log2_max_mv_length_horizontal = 0;
+   }
 
    if (!context->desc.h264enc.seq.vui_flags.timing_info_present_flag) {
       /* if not present, set default value */
@@ -325,32 +351,33 @@ vlVaHandleVAEncMiscParameterTypeFrameRateH264(vlVaContext *context, VAEncMiscPar
    return VA_STATUS_SUCCESS;
 }
 
-static void parseEncHrdParamsH264(struct vl_rbsp *rbsp)
+static void parseEncHrdParamsH264(struct vl_rbsp *rbsp, pipe_h264_enc_hrd_params* hrd_params)
 {
-   unsigned i, cpb_cnt_minus1;
+   unsigned i;
 
-   cpb_cnt_minus1 = vl_rbsp_ue(rbsp);
-   vl_rbsp_u(rbsp, 4); /* bit_rate_scale */
-   vl_rbsp_u(rbsp, 4); /* cpb_size_scale */
-   for (i = 0; i <= cpb_cnt_minus1; ++i) {
-      vl_rbsp_ue(rbsp); /* bit_rate_value_minus1[i] */
-      vl_rbsp_ue(rbsp); /* cpb_size_value_minus1[i] */
-      vl_rbsp_u(rbsp, 1); /* cbr_flag[i] */
+   hrd_params->cpb_cnt_minus1 = vl_rbsp_ue(rbsp);
+   hrd_params->bit_rate_scale = vl_rbsp_u(rbsp, 4);
+   hrd_params->cpb_size_scale = vl_rbsp_u(rbsp, 4);
+   for (i = 0; i <= hrd_params->cpb_cnt_minus1; ++i) {
+      hrd_params->bit_rate_value_minus1[i] = vl_rbsp_ue(rbsp);
+      hrd_params->cpb_size_value_minus1[i] = vl_rbsp_ue(rbsp);
+      hrd_params->cbr_flag[i] = vl_rbsp_u(rbsp, 1);
    }
-   vl_rbsp_u(rbsp, 5); /* initial_cpb_removal_delay_length_minus1 */
-   vl_rbsp_u(rbsp, 5); /* cpb_removal_delay_length_minus1 */
-   vl_rbsp_u(rbsp, 5); /* dpb_output_delay_length_minus1 */
-   vl_rbsp_u(rbsp, 5); /* time_offset_length */
+   hrd_params->initial_cpb_removal_delay_length_minus1 = vl_rbsp_u(rbsp, 5);
+   hrd_params->cpb_removal_delay_length_minus1 = vl_rbsp_u(rbsp, 5);
+   hrd_params->dpb_output_delay_length_minus1 = vl_rbsp_u(rbsp, 5);
+   hrd_params->time_offset_length = vl_rbsp_u(rbsp, 5);
 }
 
 static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
 {
    unsigned i, profile_idc, num_ref_frames_in_pic_order_cnt_cycle;
-   unsigned nal_hrd_parameters_present_flag, vcl_hrd_parameters_present_flag;
 
    profile_idc = vl_rbsp_u(rbsp, 8);
 
-   vl_rbsp_u(rbsp, 8); /* constraint_set_flags */
+   context->desc.h264enc.seq.enc_constraint_set_flags =
+      vl_rbsp_u(rbsp, 6); /* constraint_set_flags */
+   vl_rbsp_u(rbsp, 2); /* reserved_zero_2bits */
    vl_rbsp_u(rbsp, 8); /* level_idc */
 
    vl_rbsp_ue(rbsp); /* seq_parameter_set_id */
@@ -372,11 +399,11 @@ static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
          return; /* TODO */
    }
 
-   vl_rbsp_ue(rbsp); /* log2_max_frame_num_minus4 */
-   vl_rbsp_ue(rbsp); /* pic_order_cnt_type */
+   context->desc.h264enc.seq.log2_max_frame_num_minus4 = vl_rbsp_ue(rbsp); /* log2_max_frame_num_minus4 */
+   context->desc.h264enc.seq.pic_order_cnt_type = vl_rbsp_ue(rbsp); /* pic_order_cnt_type */
 
    if (context->desc.h264enc.seq.pic_order_cnt_type == 0)
-      vl_rbsp_ue(rbsp); /* log2_max_pic_order_cnt_lsb_minus4 */
+      context->desc.h264enc.seq.log2_max_pic_order_cnt_lsb_minus4 = vl_rbsp_ue(rbsp); /* log2_max_pic_order_cnt_lsb_minus4 */
    else if (context->desc.h264enc.seq.pic_order_cnt_type == 1) {
       vl_rbsp_u(rbsp, 1); /* delta_pic_order_always_zero_flag */
       vl_rbsp_se(rbsp); /* offset_for_non_ref_pic */
@@ -405,14 +432,16 @@ static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
    if (context->desc.h264enc.seq.vui_parameters_present_flag) {
       context->desc.h264enc.seq.vui_flags.aspect_ratio_info_present_flag = vl_rbsp_u(rbsp, 1);
       if (context->desc.h264enc.seq.vui_flags.aspect_ratio_info_present_flag) {
-         if (vl_rbsp_u(rbsp, 8) == 255) { /* aspect_ratio_idc == Extended_SAR */
-            vl_rbsp_u(rbsp, 16); /* sar_width */
-            vl_rbsp_u(rbsp, 16); /* sar_height */
+         context->desc.h264enc.seq.aspect_ratio_idc = vl_rbsp_u(rbsp, 8);
+         if (context->desc.h264enc.seq.aspect_ratio_idc == 255 /* Extended_SAR */) {
+            context->desc.h264enc.seq.sar_width = vl_rbsp_u(rbsp, 16);
+            context->desc.h264enc.seq.sar_height = vl_rbsp_u(rbsp, 16);
          }
       }
 
-      if (vl_rbsp_u(rbsp, 1)) /* overscan_info_present_flag */
-         vl_rbsp_u(rbsp, 1); /* overscan_appropriate_flag */
+      context->desc.h264enc.seq.vui_flags.overscan_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.overscan_info_present_flag)
+         context->desc.h264enc.seq.vui_flags.overscan_appropriate_flag = vl_rbsp_u(rbsp, 1);
 
       context->desc.h264enc.seq.vui_flags.video_signal_type_present_flag = vl_rbsp_u(rbsp, 1);
       if (context->desc.h264enc.seq.vui_flags.video_signal_type_present_flag) {
@@ -432,33 +461,36 @@ static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
          context->desc.h264enc.seq.chroma_sample_loc_type_bottom_field = vl_rbsp_ue(rbsp);
       }
 
-      if (vl_rbsp_u(rbsp, 1)) { /* timing_info_present_flag */
-         vl_rbsp_u(rbsp, 32); /* num_units_in_tick */
-         vl_rbsp_u(rbsp, 32); /* time_scale */
-         vl_rbsp_u(rbsp, 1); /* fixed_frame_rate_flag */
+      context->desc.h264enc.seq.vui_flags.timing_info_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.timing_info_present_flag) {
+         context->desc.h264enc.seq.num_units_in_tick = vl_rbsp_u(rbsp, 32);
+         context->desc.h264enc.seq.time_scale = vl_rbsp_u(rbsp, 32);
+         context->desc.h264enc.seq.vui_flags.fixed_frame_rate_flag = vl_rbsp_u(rbsp, 1);
       }
 
-      nal_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
-      if (nal_hrd_parameters_present_flag)
-         parseEncHrdParamsH264(rbsp);
+      context->desc.h264enc.seq.vui_flags.nal_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.nal_hrd_parameters_present_flag)
+         parseEncHrdParamsH264(rbsp, &context->desc.h264enc.seq.nal_hrd_parameters);
 
-      vcl_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
-      if (vcl_hrd_parameters_present_flag)
-         parseEncHrdParamsH264(rbsp);
+      context->desc.h264enc.seq.vui_flags.vcl_hrd_parameters_present_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.vcl_hrd_parameters_present_flag)
+         parseEncHrdParamsH264(rbsp, &context->desc.h264enc.seq.vcl_hrd_parameters);
 
-      if (nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag)
-         vl_rbsp_u(rbsp, 1); /* low_delay_hrd_flag */
+      if (context->desc.h264enc.seq.vui_flags.nal_hrd_parameters_present_flag ||
+          context->desc.h264enc.seq.vui_flags.vcl_hrd_parameters_present_flag)
+         context->desc.h264enc.seq.vui_flags.low_delay_hrd_flag = vl_rbsp_u(rbsp, 1);
 
-      vl_rbsp_u(rbsp, 1); /* pic_struct_present_flag */
+      context->desc.h264enc.seq.vui_flags.pic_struct_present_flag = vl_rbsp_u(rbsp, 1);
 
-      if (vl_rbsp_u(rbsp, 1)) { /* bitstream_restriction_flag */
-         vl_rbsp_u(rbsp, 1); /* motion_vectors_over_pic_boundaries_flag */
-         vl_rbsp_ue(rbsp); /* max_bytes_per_pic_denom */
-         vl_rbsp_ue(rbsp); /* max_bits_per_mb_denom */
-         vl_rbsp_ue(rbsp); /* log2_max_mv_length_horizontal */
-         vl_rbsp_ue(rbsp); /* log2_max_mv_length_vertical */
+      context->desc.h264enc.seq.vui_flags.bitstream_restriction_flag = vl_rbsp_u(rbsp, 1);
+      if (context->desc.h264enc.seq.vui_flags.bitstream_restriction_flag) {
+         context->desc.h264enc.seq.vui_flags.motion_vectors_over_pic_boundaries_flag = vl_rbsp_u(rbsp, 1);
+         context->desc.h264enc.seq.max_bytes_per_pic_denom = vl_rbsp_ue(rbsp);
+         context->desc.h264enc.seq.max_bits_per_mb_denom = vl_rbsp_ue(rbsp);
+         context->desc.h264enc.seq.log2_max_mv_length_horizontal = vl_rbsp_ue(rbsp);
+         context->desc.h264enc.seq.log2_max_mv_length_vertical = vl_rbsp_ue(rbsp);
          context->desc.h264enc.seq.max_num_reorder_frames = vl_rbsp_ue(rbsp);
-         vl_rbsp_ue(rbsp); /* max_dec_frame_buffering */
+         context->desc.h264enc.seq.max_dec_frame_buffering = vl_rbsp_ue(rbsp);
       }
    }
 }

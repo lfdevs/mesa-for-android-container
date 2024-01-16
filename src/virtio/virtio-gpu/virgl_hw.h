@@ -767,6 +767,8 @@ struct virgl_caps_v2 {
         uint32_t num_video_caps;
         struct virgl_video_caps video_caps[32];
         uint32_t max_uniform_block_size;
+        uint32_t max_tcs_outputs;
+        uint32_t max_tes_outputs;
 };
 
 union virgl_caps {

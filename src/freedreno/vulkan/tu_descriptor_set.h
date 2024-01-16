@@ -93,14 +93,10 @@ struct tu_pipeline_layout
    {
       struct tu_descriptor_set_layout *layout;
       uint32_t size;
-      uint32_t dynamic_offset_start;
    } set[MAX_SETS];
-
-   bool independent_sets;
 
    uint32_t num_sets;
    uint32_t push_constant_size;
-   uint32_t dynamic_offset_size;
 
    unsigned char sha1[20];
 };

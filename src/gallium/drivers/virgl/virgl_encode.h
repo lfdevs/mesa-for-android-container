@@ -343,6 +343,14 @@ void virgl_encode_end_frame(struct virgl_context *ctx,
                             struct virgl_video_codec *cdc,
                             struct virgl_video_buffer *buf);
 
+int virgl_encode_clear_surface(struct virgl_context *ctx,
+                               struct pipe_surface *surf,
+                               unsigned buffers,
+                               const union pipe_color_union *color,
+                               unsigned dstx, unsigned dsty,
+                               unsigned width, unsigned height,
+                               bool render_condition_enabled);
+
 enum virgl_formats pipe_to_virgl_format(enum pipe_format format);
 enum pipe_format virgl_to_pipe_format(enum virgl_formats format);
 #endif

@@ -11,6 +11,7 @@
 #include "pool.h"
 
 struct agx_meta_cache {
+   struct agx_device *dev;
    struct agx_pool pool;
 
    /* Map from agx_meta_key to agx_meta_shader */

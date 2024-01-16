@@ -28,7 +28,7 @@
 
 #include "vk_util.h"
 
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "pan_earlyzs.h"
 #include "pan_encoder.h"
 #include "pan_pool.h"
@@ -829,10 +829,10 @@ panvk_per_arch(emit_tiler_context)(const struct panvk_device *dev,
    const struct panfrost_device *pdev = &dev->physical_device->pdev;
 
    pan_pack(descs->cpu + pan_size(TILER_CONTEXT), TILER_HEAP, cfg) {
-      cfg.size = pdev->tiler_heap->size;
+      cfg.size = panfrost_bo_size(pdev->tiler_heap);
       cfg.base = pdev->tiler_heap->ptr.gpu;
       cfg.bottom = pdev->tiler_heap->ptr.gpu;
-      cfg.top = pdev->tiler_heap->ptr.gpu + pdev->tiler_heap->size;
+      cfg.top = pdev->tiler_heap->ptr.gpu + panfrost_bo_size(pdev->tiler_heap);
    }
 
    pan_pack(descs->cpu, TILER_CONTEXT, cfg) {

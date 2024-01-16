@@ -348,42 +348,45 @@ BEGIN_TEST(optimize.add_lshl)
       Temp vadd = bld.vadd32(bld.def(v1), shift, Operand(inputs[1]));
       writeout(1, bld.vadd32(bld.def(v1), sadd, vadd));
 
-      //~gfx8! s1: %lshl2 = s_lshl_b32 %a, 3
+      //~gfx8! s1: %lshl2, s1: %_:scc = s_lshl_b32 %a, 3
       //~gfx8! v1: %res2,  s2: %_ = v_add_co_u32 %lshl2, %b
       //~gfx(9|10)! v1: %res2 = v_lshl_add_u32 %a, 3, %b
       //! p_unit_test 2, %res2
-      Temp lshl =
-         bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), Operand(inputs[0]), Operand::c32(3u));
+      Temp lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc),
+                           Operand(inputs[0]), Operand::c32(3u));
       writeout(2, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
-      //~gfx8! s1: %lshl3 = s_lshl_b32 (is24bit)%a, 7
+      //~gfx8! s1: %lshl3, s1: %_:scc = s_lshl_b32 (is24bit)%a, 7
       //~gfx8! v1: %res3, s2: %_ = v_add_co_u32 %lshl3, %b
       //~gfx(9|10)! v1: %res3 = v_lshl_add_u32 (is24bit)%a, 7, %b
       //! p_unit_test 3, %res3
       Operand a_24bit = Operand(inputs[0]);
       a_24bit.set24bit(true);
-      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), a_24bit, Operand::c32(7u));
+      lshl =
+         bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), a_24bit, Operand::c32(7u));
       writeout(3, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
-      //! s1: %lshl4 = s_lshl_b32 (is24bit)%a, 3
+      //! s1: %lshl4, s1: %_:scc = s_lshl_b32 (is24bit)%a, 3
       //~gfx(8|9)! v1: %res4, s2: %carry = v_add_co_u32 %lshl4, %b
       //~gfx10! v1: %res4, s2: %carry = v_add_co_u32_e64 %lshl4, %b
       //! p_unit_test 4, %carry
-      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), a_24bit, Operand::c32(3u));
+      lshl =
+         bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), a_24bit, Operand::c32(3u));
       Temp carry = bld.vadd32(bld.def(v1), lshl, Operand(inputs[1]), true).def(1).getTemp();
       writeout(4, carry);
 
-      //~gfx8! s1: %lshl5 = s_lshl_b32 (is24bit)%a, (is24bit)%a
+      //~gfx8! s1: %lshl5, s1: %_:scc = s_lshl_b32 (is24bit)%a, (is24bit)%a
       //~gfx8! v1: %res5, s2: %_ = v_add_co_u32 %lshl5, %b
       //~gfx(9|10)! v1: %res5 = v_lshl_add_u32 (is24bit)%a, (is24bit)%a, %b
       //! p_unit_test 5, %res5
-      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), a_24bit, a_24bit);
+      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), a_24bit, a_24bit);
       writeout(5, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
       //~gfx8! v1: %res6 = v_mad_u32_u24 (is24bit)%a, 8, %b
       //~gfx(9|10)! v1: %res6 = v_lshl_add_u32 (is24bit)%a, 3, %b
       //! p_unit_test 6, %res6
-      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), a_24bit, Operand::c32(3u));
+      lshl =
+         bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), a_24bit, Operand::c32(3u));
       writeout(6, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
       //~gfx8! v1: %res7 = v_mad_u32_u24 (is16bit)%a, 16, %b
@@ -391,7 +394,8 @@ BEGIN_TEST(optimize.add_lshl)
       //! p_unit_test 7, %res7
       Operand a_16bit = Operand(inputs[0]);
       a_16bit.set16bit(true);
-      lshl = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), a_16bit, Operand::c32(4u));
+      lshl =
+         bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), a_16bit, Operand::c32(4u));
       writeout(7, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
       finish_opt_test();
@@ -676,12 +680,12 @@ BEGIN_TEST(optimize.const_comparison_ordering)
    src0 = bld.vopc(aco_opcode::v_cmp_neq_f32, bld.def(bld.lm), inputs[0], inputs[0]);
    writeout(13, bld.sop2(aco_opcode::s_or_b64, bld.def(bld.lm), bld.def(s1, scc), src0, src1));
 
-   //! s2: %tmp14_0 = v_cmp_lt_f64 -1, %a
-   //! s2: %tmp14_1 = v_cmp_neq_f64 %a, %a
+   //! s2: %tmp14_0 = v_cmp_lt_f64 -1, %c
+   //! s2: %tmp14_1 = v_cmp_neq_f64 %c, %c
    //! s2: %res14, s1: %_:scc = s_or_b64 %tmp14_1, %tmp14_0
    //! p_unit_test 14, %res14
-   src1 = bld.vopc(aco_opcode::v_cmp_lt_f64, bld.def(bld.lm), Operand::c64(nan64), inputs[0]);
-   src0 = bld.vopc(aco_opcode::v_cmp_neq_f64, bld.def(bld.lm), inputs[0], inputs[0]);
+   src1 = bld.vopc(aco_opcode::v_cmp_lt_f64, bld.def(bld.lm), Operand::c64(nan64), inputs[2]);
+   src0 = bld.vopc(aco_opcode::v_cmp_neq_f64, bld.def(bld.lm), inputs[2], inputs[2]);
    writeout(14, bld.sop2(aco_opcode::s_or_b64, bld.def(bld.lm), bld.def(s1, scc), src0, src1));
 
    finish_opt_test();

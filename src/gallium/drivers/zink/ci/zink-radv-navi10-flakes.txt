@@ -11,6 +11,8 @@ spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader.*
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_srgb8_alpha8_astc_12x10_khr.renderbuffer_to_cubemap
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x8_khr_rgba32ui.cubemap_to_cubemap
 
+dEQP-GLES31.functional.image_load_store.buffer.atomic.comp_swap_r32ui_return_value
+
 spec@arb_shader_image_load_store@shader-mem-barrier
 spec@arb_shader_image_load_store@shader-mem-barrier@Fragment shader/'coherent' qualifier memory barrier test/modulus=128
 spec@arb_shader_image_load_store@shader-mem-barrier@Fragment shader/'coherent' qualifier memory barrier test/modulus=16

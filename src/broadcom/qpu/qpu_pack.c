@@ -496,10 +496,7 @@ v3d_qpu_flags_pack(const struct v3d_device_info *devinfo,
 #define OP_MASK(val) BITFIELD64_BIT(val)
 #define OP_RANGE(bot, top) BITFIELD64_RANGE(bot, top - bot + 1)
 #define ANYMUX OP_RANGE(0, 7)
-/* FIXME: right now ussing BITFIELD64_RANGE to set the last bit raises a
- * warning when building with clang using the shift-count-overflow option
- */
-#define ANYOPMASK ~0ull
+#define ANYOPMASK OP_RANGE(0, 63)
 
 struct opcode_desc {
         uint8_t opcode_first;

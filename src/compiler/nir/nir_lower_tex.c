@@ -1,4 +1,5 @@
 /*
+ * Copyright © 2023 Valve Corporation
  * Copyright © 2015 Broadcom
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -243,6 +244,77 @@ lower_rect_tex_scale(nir_builder *b, nir_tex_instr *tex)
       nir_def *coords =
          tex->src[coord_index].src.ssa;
       nir_src_rewrite(&tex->src[coord_index].src, nir_fmul(b, coords, scale));
+   }
+}
+
+static void
+lower_1d(nir_builder *b, nir_tex_instr *tex)
+{
+   b->cursor = nir_before_instr(&tex->instr);
+
+   nir_def *coords = nir_steal_tex_src(tex, nir_tex_src_coord);
+   nir_def *offset = nir_steal_tex_src(tex, nir_tex_src_offset);
+   nir_def *ddx = nir_steal_tex_src(tex, nir_tex_src_ddx);
+   nir_def *ddy = nir_steal_tex_src(tex, nir_tex_src_ddy);
+
+   /* Add in 2D sources to become a 2D operation */
+   tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+
+   if (coords) {
+      /* We want to fetch texel 0 along the Y-axis. To do so, we sample at 0.5
+       * to get texel 0 with correct handling of wrap modes.
+       */
+      nir_def *y = nir_imm_floatN_t(b, tex->op == nir_texop_txf ? 0.0 : 0.5,
+                                    coords->bit_size);
+
+      tex->coord_components++;
+
+      if (tex->is_array && tex->op != nir_texop_lod) {
+         assert(tex->coord_components == 3);
+
+         nir_def *x = nir_channel(b, coords, 0);
+         nir_def *idx = nir_channel(b, coords, 1);
+         coords = nir_vec3(b, x, y, idx);
+      } else {
+         assert(tex->coord_components == 2);
+         coords = nir_vec2(b, coords, y);
+      }
+
+      nir_tex_instr_add_src(tex, nir_tex_src_coord, coords);
+   }
+
+   if (offset) {
+      nir_tex_instr_add_src(tex, nir_tex_src_offset,
+                            nir_pad_vector_imm_int(b, offset, 0, 2));
+   }
+
+   if (ddx || ddy) {
+      nir_tex_instr_add_src(tex, nir_tex_src_ddx,
+                            nir_pad_vector_imm_int(b, ddx, 0, 2));
+
+      nir_tex_instr_add_src(tex, nir_tex_src_ddy,
+                            nir_pad_vector_imm_int(b, ddy, 0, 2));
+   }
+
+   /* Handle destination component mismatch for txs. */
+   if (tex->op == nir_texop_txs) {
+      b->cursor = nir_after_instr(&tex->instr);
+
+      nir_def *dst;
+      if (tex->is_array) {
+         assert(tex->def.num_components == 2);
+         tex->def.num_components = 3;
+
+         /* For array, we take .xz to skip the newly added height */
+         dst = nir_channels(b, &tex->def, (1 << 0) | (1 << 2));
+      } else {
+         assert(tex->def.num_components == 1);
+         tex->def.num_components = 2;
+
+         dst = nir_channel(b, &tex->def, 0);
+      }
+
+      nir_def_rewrite_uses_after(&tex->def, dst, dst->parent_instr);
    }
 }
 
@@ -1494,6 +1566,12 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          else
             lower_rect(b, tex);
 
+         progress = true;
+      }
+
+      if (tex->sampler_dim == GLSL_SAMPLER_DIM_1D &&
+          (options->lower_1d || (tex->is_shadow && options->lower_1d_shadow))) {
+         lower_1d(b, tex);
          progress = true;
       }
 

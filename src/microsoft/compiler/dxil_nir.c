@@ -1443,6 +1443,7 @@ static int
 variable_location_cmp(const nir_variable* a, const nir_variable* b)
 {
    // Sort by stream, driver_location, location, location_frac, then index
+   // If all else is equal, sort full vectors before partial ones
    unsigned a_location = a->data.location;
    if (a_location >= VARYING_SLOT_PATCH0)
       a_location -= VARYING_SLOT_PATCH0;
@@ -1459,7 +1460,9 @@ variable_location_cmp(const nir_variable* a, const nir_variable* b)
                   a_location - b_location :
                   a->data.location_frac != b->data.location_frac ?
                      a->data.location_frac - b->data.location_frac :
-                     a->data.index - b->data.index;
+                     a->data.index != b->data.index ?
+                        a->data.index - b->data.index :
+                        glsl_get_component_slots(b->type) - glsl_get_component_slots(a->type);
 }
 
 /* Order varyings according to driver location */
@@ -1503,7 +1506,10 @@ dxil_sort_ps_outputs(nir_shader* s)
 
    unsigned driver_loc = 0;
    nir_foreach_variable_with_modes(var, s, nir_var_shader_out) {
-      var->data.driver_location = driver_loc++;
+      /* Fractional vars should use the same driver_location as the base. These will
+       * get fully merged during signature processing.
+       */
+      var->data.driver_location = var->data.location_frac ? driver_loc - 1 : driver_loc++;
    }
 }
 
@@ -2584,6 +2590,18 @@ guess_image_format_for_var(nir_shader *s, nir_variable *var)
    return true;
 }
 
+static void
+update_intrinsic_format_and_type(nir_intrinsic_instr *intr, nir_variable *var)
+{
+   nir_intrinsic_set_format(intr, var->data.image.format);
+   nir_alu_type alu_type =
+      nir_get_nir_type_for_glsl_base_type(glsl_get_sampler_result_type(glsl_without_array(var->type)));
+   if (nir_intrinsic_has_src_type(intr))
+      nir_intrinsic_set_src_type(intr, alu_type);
+   else if (nir_intrinsic_has_dest_type(intr))
+      nir_intrinsic_set_dest_type(intr, alu_type);
+}
+
 static bool
 update_intrinsic_formats(nir_builder *b, nir_intrinsic_instr *intr,
                          void *data)
@@ -2594,7 +2612,7 @@ update_intrinsic_formats(nir_builder *b, nir_intrinsic_instr *intr,
    if (deref) {
       nir_variable *var = nir_deref_instr_get_variable(deref);
       if (var)
-         nir_intrinsic_set_format(intr, var->data.image.format);
+         update_intrinsic_format_and_type(intr, var);
       return var != NULL;
    }
 
@@ -2605,7 +2623,7 @@ update_intrinsic_formats(nir_builder *b, nir_intrinsic_instr *intr,
    nir_foreach_variable_with_modes(var, b->shader, nir_var_image) {
       if (var->data.binding <= binding &&
           var->data.binding + aoa_size(var->type) > binding) {
-         nir_intrinsic_set_format(intr, var->data.image.format);
+         update_intrinsic_format_and_type(intr, var);
          return true;
       }
    }

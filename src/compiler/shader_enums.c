@@ -28,6 +28,7 @@
 
 #include "shader_enums.h"
 #include "util/macros.h"
+#include "util/u_debug.h"
 
 #define ENUM(x) [x] = #x
 #define NAME(val) ((((val) < ARRAY_SIZE(names)) && names[(val)]) ? names[(val)] : "UNKNOWN")
@@ -332,6 +333,7 @@ gl_system_value_name(gl_system_value sysval)
      ENUM(SYSTEM_VALUE_SAMPLE_ID),
      ENUM(SYSTEM_VALUE_SAMPLE_POS),
      ENUM(SYSTEM_VALUE_SAMPLE_MASK_IN),
+     ENUM(SYSTEM_VALUE_LAYER_ID),
      ENUM(SYSTEM_VALUE_HELPER_INVOCATION),
      ENUM(SYSTEM_VALUE_COLOR0),
      ENUM(SYSTEM_VALUE_COLOR1),
@@ -430,21 +432,6 @@ gl_frag_result_name(gl_frag_result result)
    };
    STATIC_ASSERT(ARRAY_SIZE(names) == FRAG_RESULT_MAX);
    return NAME(result);
-}
-
-unsigned
-num_mesh_vertices_per_primitive(unsigned prim)
-{
-   switch (prim) {
-      case MESA_PRIM_POINTS:
-         return 1;
-      case MESA_PRIM_LINES:
-         return 2;
-      case MESA_PRIM_TRIANGLES:
-         return 3;
-      default:
-         unreachable("invalid mesh shader primitive type");
-   }
 }
 
 const char *

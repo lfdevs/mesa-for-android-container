@@ -169,11 +169,11 @@ def main():
     # per entry point.
     try:
         if args.out_h:
-            with open(args.out_h, 'w') as f:
+            with open(args.out_h, 'w', encoding='utf-8') as f:
                 f.write(TEMPLATE_H.render(entrypoints=entrypoints,
                                           filename=os.path.basename(__file__)))
         if args.out_c:
-            with open(args.out_c, 'w') as f:
+            with open(args.out_c, 'w', encoding='utf-8') as f:
                 f.write(TEMPLATE_C.render(entrypoints=entrypoints,
                                           filename=os.path.basename(__file__)))
     except Exception:

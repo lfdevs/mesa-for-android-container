@@ -313,7 +313,7 @@ emit_tex(struct lp_build_nir_context *bld_base,
    params->type = bld_base->base.type;
    params->texel[0] = bld->sampler->emit_fetch_texel(bld->sampler,
                                                      &bld->bld_base.base,
-                                                     PIPE_TEXTURE_2D,
+                                                     TGSI_TEXTURE_2D,
                                                      params->texture_index,
                                                      params->coords[0],
                                                      params->derivs ? params->derivs[0] : derivs,

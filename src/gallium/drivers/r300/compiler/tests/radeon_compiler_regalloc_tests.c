@@ -88,6 +88,8 @@ static void tex_1d_swizzle(struct test_result *result)
 	c.AllocateHwInputs = dummy_allocate_hw_inputs;
 
 	test_runner_rc_regalloc(result, &c.Base, "regalloc_tex_1d_swizzle.test");
+
+	destroy_compiler(&c.Base);
 }
 
 unsigned radeon_compiler_regalloc_run_tests()

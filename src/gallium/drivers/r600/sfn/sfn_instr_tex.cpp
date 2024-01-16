@@ -677,9 +677,9 @@ TexInstr::emit_tex_txs(nir_tex_instr *tex,
    if (tex->sampler_dim == GLSL_SAMPLER_DIM_BUF) {
       if (shader.chip_class() >= ISA_CC_EVERGREEN) {
          shader.emit_instruction(new QueryBufferSizeInstr(
-            dest, {0, 7, 7, 7}, tex->sampler_index + R600_MAX_CONST_BUFFERS));
+            dest, {0, 7, 7, 7}, tex->texture_index + R600_MAX_CONST_BUFFERS));
       } else {
-         int id = 2 * tex->sampler_index + (512 + R600_BUFFER_INFO_OFFSET / 16) + 1;
+         int id = 2 * tex->texture_index + (512 + R600_BUFFER_INFO_OFFSET / 16) + 1;
          auto src = vf.uniform(id, 1, R600_BUFFER_INFO_CONST_BUFFER);
          shader.emit_instruction(
             new AluInstr(op1_mov, dest[0], src, AluInstr::last_write));
@@ -895,8 +895,6 @@ bool
 TexInstr::emit_tex_lod(nir_tex_instr *tex, Inputs& src, Shader& shader)
 {
    auto& vf = shader.value_factory();
-   auto sampler = get_sampler_id(tex->sampler_index, src.sampler_deref);
-   assert(!sampler.indirect && "Indirect sampler selection not yet supported");
 
    auto dst = shader.value_factory().dest_vec4(tex->def, pin_group);
 

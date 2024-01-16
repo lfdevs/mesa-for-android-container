@@ -69,12 +69,6 @@ write_image_view_desc(struct nvk_descriptor_set *set,
          assert(view->planes[plane].storage_desc_index > 0);
          assert(view->planes[plane].storage_desc_index < (1 << 20));
 
-         /* The nv50 compiler currently does some whacky stuff with images.
-          * For now, just assert that we never do storage on 3D images and
-          * that our descriptor index is at most 11 bits.
-          */
-         assert(view->planes[plane].storage_desc_index < (1 << 11));
-
          desc[plane].image_index = view->planes[plane].storage_desc_index;
       } else {
          for (uint8_t plane = 0; plane < plane_count; plane++) {
@@ -385,6 +379,7 @@ nvk_CreateDescriptorPool(VkDevice _device,
                          VkDescriptorPool *pDescriptorPool)
 {
    VK_FROM_HANDLE(nvk_device, dev, _device);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_descriptor_pool *pool;
    uint64_t size = sizeof(struct nvk_descriptor_pool);
    uint64_t bo_size = 0;
@@ -400,10 +395,11 @@ nvk_CreateDescriptorPool(VkDevice _device,
           mutable_info && i < mutable_info->mutableDescriptorTypeListCount)
             type_list = &mutable_info->pMutableDescriptorTypeLists[i];
 
-      uint32_t stride, align;
-      nvk_descriptor_stride_align_for_type(pCreateInfo->pPoolSizes[i].type,
-                                           type_list, &stride, &align);
-      max_align = MAX2(max_align, align);
+      uint32_t stride, alignment;
+      nvk_descriptor_stride_align_for_type(pdev,
+                                           pCreateInfo->pPoolSizes[i].type,
+                                           type_list, &stride, &alignment);
+      max_align = MAX2(max_align, alignment);
    }
 
    for (unsigned i = 0; i < pCreateInfo->poolSizeCount; ++i) {
@@ -412,9 +408,10 @@ nvk_CreateDescriptorPool(VkDevice _device,
           mutable_info && i < mutable_info->mutableDescriptorTypeListCount)
             type_list = &mutable_info->pMutableDescriptorTypeLists[i];
 
-      uint32_t stride, align;
-      nvk_descriptor_stride_align_for_type(pCreateInfo->pPoolSizes[i].type,
-                                           type_list, &stride, &align);
+      uint32_t stride, alignment;
+      nvk_descriptor_stride_align_for_type(pdev,
+                                           pCreateInfo->pPoolSizes[i].type,
+                                           type_list, &stride, &alignment);
       bo_size += MAX2(stride, max_align) *
                  pCreateInfo->pPoolSizes[i].descriptorCount;
    }
@@ -427,7 +424,7 @@ nvk_CreateDescriptorPool(VkDevice _device,
     * conservative here.)  Allocate enough extra space that we can chop it
     * into maxSets pieces and align each one of them to 32B.
     */
-   bo_size += NVK_MIN_UBO_ALIGNMENT * pCreateInfo->maxSets;
+   bo_size += nvk_min_cbuf_alignment(&pdev->info) * pCreateInfo->maxSets;
 
    uint64_t entries_size = sizeof(struct nvk_descriptor_pool_entry) *
                            pCreateInfo->maxSets;
@@ -466,6 +463,7 @@ nvk_descriptor_set_create(struct nvk_device *dev,
                           uint32_t variable_count,
                           struct nvk_descriptor_set **out_set)
 {
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_descriptor_set *set;
 
    uint32_t mem_size = sizeof(struct nvk_descriptor_set) +
@@ -483,10 +481,12 @@ nvk_descriptor_set_create(struct nvk_device *dev,
 
    if (layout->binding_count > 0 &&
        (layout->binding[layout->binding_count - 1].flags &
-        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)) {
+        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)) {
       uint32_t stride = layout->binding[layout->binding_count-1].stride;
       set->size += stride * variable_count;
    }
+
+   set->size = align64(set->size, nvk_min_cbuf_alignment(&pdev->info));
 
    if (set->size > 0) {
       if (pool->current_offset + set->size > pool->size)
@@ -496,10 +496,11 @@ nvk_descriptor_set_create(struct nvk_device *dev,
       set->addr = pool->bo->offset + pool->current_offset;
    }
 
+   assert(pool->current_offset % nvk_min_cbuf_alignment(&pdev->info) == 0);
    pool->entries[pool->entry_count].offset = pool->current_offset;
    pool->entries[pool->entry_count].size = set->size;
    pool->entries[pool->entry_count].set = set;
-   pool->current_offset += ALIGN(set->size, NVK_MIN_UBO_ALIGNMENT);
+   pool->current_offset += set->size;
    pool->entry_count++;
 
    vk_descriptor_set_layout_ref(&layout->vk);
@@ -515,7 +516,7 @@ nvk_descriptor_set_create(struct nvk_device *dev,
 
       uint32_t array_size = layout->binding[b].array_size;
       if (layout->binding[b].flags &
-          VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)
+          VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
          array_size = variable_count;
 
       for (uint32_t j = 0; j < array_size; j++)

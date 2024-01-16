@@ -121,7 +121,7 @@ intrastage_match(ir_variable *a,
    bool interface_type_match =
       (prog->IsES ?
        a->get_interface_type() == b->get_interface_type() :
-       a->get_interface_type()->compare_no_precision(b->get_interface_type()));
+       glsl_type_compare_no_precision(a->get_interface_type(), b->get_interface_type()));
 
    /* Types must match. */
    if (!interface_type_match) {
@@ -153,12 +153,12 @@ intrastage_match(ir_variable *a,
 
    bool type_match = (match_precision ?
                       a->type == b->type :
-                      a->type->compare_no_precision(b->type));
+                      glsl_type_compare_no_precision(a->type, b->type));
 
    /* If a block is an array then it must match across the shader.
     * Unsized arrays are also processed and matched agaist sized arrays.
     */
-   if (!type_match && (b->type->is_array() || a->type->is_array()) &&
+   if (!type_match && (glsl_type_is_array(b->type) || glsl_type_is_array(a->type)) &&
        (b->is_interface_instance() || a->is_interface_instance()) &&
        !validate_intrastage_arrays(prog, b, a, match_precision))
       return false;
@@ -209,9 +209,9 @@ interstage_match(struct gl_shader_program *prog, ir_variable *producer,
     * making sure the types are equal.
     */
    if ((consumer->is_interface_instance() &&
-        consumer_instance_type->is_array()) ||
+        glsl_type_is_array(consumer_instance_type)) ||
        (producer->is_interface_instance() &&
-        producer->type->is_array())) {
+        glsl_type_is_array(producer->type))) {
       if (consumer_instance_type != producer->type)
          return false;
    }
@@ -261,7 +261,7 @@ public:
       } else {
          const struct hash_entry *entry =
             _mesa_hash_table_search(ht,
-               glsl_get_type_name(var->get_interface_type()->without_array()));
+               glsl_get_type_name(glsl_without_array(var->get_interface_type())));
          return entry ? (ir_variable *) entry->data : NULL;
       }
    }
@@ -283,7 +283,7 @@ public:
          _mesa_hash_table_insert(ht, ralloc_strdup(mem_ctx, location_str), var);
       } else {
          _mesa_hash_table_insert(ht,
-            glsl_get_type_name(var->get_interface_type()->without_array()), var);
+            glsl_get_type_name(glsl_without_array(var->get_interface_type())), var);
       }
    }
 

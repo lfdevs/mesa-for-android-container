@@ -180,8 +180,7 @@ lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_def **coords,
        tex->is_array && tex->op != nir_texop_lod)
       progress |= lower_array_layer_round_even(b, tex, coords);
 
-   if (tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE &&
-       !(tex->sampler_dim == GLSL_SAMPLER_DIM_1D && options->gfx_level == GFX9))
+   if (tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE)
       return progress;
 
    int ddx_idx = nir_tex_instr_src_index(tex, nir_tex_src_ddx);
@@ -189,33 +188,7 @@ lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_def **coords,
    nir_src *ddx = ddx_idx >= 0 ? &tex->src[ddx_idx].src : NULL;
    nir_src *ddy = ddy_idx >= 0 ? &tex->src[ddy_idx].src : NULL;
 
-   if (tex->sampler_dim == GLSL_SAMPLER_DIM_1D) {
-      nir_def *y =
-         nir_imm_floatN_t(b, tex->op == nir_texop_txf ? 0.0 : 0.5, (*coords)->bit_size);
-      if (tex->is_array && (*coords)->num_components > 1) {
-         nir_def *x = nir_channel(b, *coords, 0);
-         nir_def *idx = nir_channel(b, *coords, 1);
-         *coords = nir_vec3(b, x, y, idx);
-      } else {
-         *coords = nir_vec2(b, *coords, y);
-      }
-
-      int offset_src = nir_tex_instr_src_index(tex, nir_tex_src_offset);
-      if (offset_src >= 0) {
-         nir_src *offset = &tex->src[offset_src].src;
-         nir_def *zero = nir_imm_intN_t(b, 0, offset->ssa->bit_size);
-         nir_src_rewrite(offset, nir_vec2(b, offset->ssa, zero));
-      }
-
-      if (ddx || ddy) {
-         nir_def *def = nir_vec2(b, ddx->ssa, nir_imm_floatN_t(b, 0.0, ddx->ssa->bit_size));
-         nir_src_rewrite(ddx, def);
-         def = nir_vec2(b, ddy->ssa, nir_imm_floatN_t(b, 0.0, ddy->ssa->bit_size));
-         nir_src_rewrite(ddy, def);
-      }
-   } else if (tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) {
-      prepare_cube_coords(b, tex, coords, ddx, ddy, options);
-   }
+   prepare_cube_coords(b, tex, coords, ddx, ddy, options);
 
    return true;
 }
@@ -363,8 +336,6 @@ move_tex_coords(struct move_tex_coords_state *state, nir_function_impl *impl, ni
 
    int coord_base = 0;
    unsigned linear_vgpr_size = tex->coord_components;
-   if (tex->sampler_dim == GLSL_SAMPLER_DIM_1D && state->options->gfx_level == GFX9)
-      linear_vgpr_size++;
    if (tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE && tex->is_array)
       linear_vgpr_size--; /* cube array layer and face are combined */
    for (unsigned i = 0; i < tex->num_srcs; i++) {

@@ -356,8 +356,6 @@ spec@arb_viewport_array@display-list,Fail
 
 KHR-GL46.geometry_shader.rendering.rendering.triangles_with_adjacency_input_line_strip_output_triangle_strip_adjacency_drawcall,Fail
 KHR-GL46.geometry_shader.rendering.rendering.triangles_with_adjacency_input_triangle_strip_output_triangle_strip_adjacency_drawcall,Fail
-KHR-GL46.sparse_texture_tests.SparseTextureAllocation,Fail
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Fail
 KHR-GL46.texture_size_promotion.functional,Fail
 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_depth24_stencil8,Fail
 dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_nearest.greater_or_equal_depth24_stencil8,Fail

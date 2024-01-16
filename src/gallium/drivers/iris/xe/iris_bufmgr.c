@@ -31,7 +31,7 @@ bool
 iris_xe_init_global_vm(struct iris_bufmgr *bufmgr, uint32_t *vm_id)
 {
    struct drm_xe_vm_create create = {
-      .flags = DRM_XE_VM_CREATE_SCRATCH_PAGE,
+      .flags = DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE,
    };
    if (intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_VM_CREATE, &create))
       return false;
@@ -48,32 +48,4 @@ iris_xe_destroy_global_vm(struct iris_bufmgr *bufmgr)
    };
    return intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_VM_DESTROY,
                       &destroy) == 0;
-}
-
-/*
- * Xe kmd has fixed caching modes for each heap, only scanout bos can change
- * it.
- */
-enum iris_mmap_mode
-iris_xe_bo_flags_to_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap,
-                              unsigned flags)
-{
-   const struct intel_device_info *devinfo = iris_bufmgr_get_device_info(bufmgr);
-
-   /* TODO: might be different for MTL/platforms without LLC */
-   switch (heap) {
-   case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
-      /* TODO: Can vary on current placement?! */
-      return IRIS_MMAP_WC;
-   case IRIS_HEAP_DEVICE_LOCAL:
-      if (!intel_vram_all_mappable(devinfo))
-         return IRIS_MMAP_NONE;
-      return IRIS_MMAP_WC;
-   case IRIS_HEAP_SYSTEM_MEMORY:
-      if (flags & BO_ALLOC_SCANOUT)
-         return IRIS_MMAP_WC;
-      return IRIS_MMAP_WB;
-   default:
-      return IRIS_MMAP_NONE;
-   }
 }

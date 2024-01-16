@@ -57,10 +57,17 @@ void vlVaHandlePictureParameterBufferMJPEG(vlVaDriver *drv, vlVaContext *context
 
    context->desc.mjpeg.picture_parameter.num_components = mjpeg->num_components;
 
+#if VA_CHECK_VERSION(1, 21, 0)
+   context->desc.mjpeg.picture_parameter.crop_x = mjpeg->crop_rectangle.x;
+   context->desc.mjpeg.picture_parameter.crop_y = mjpeg->crop_rectangle.y;
+   context->desc.mjpeg.picture_parameter.crop_width = mjpeg->crop_rectangle.width;
+   context->desc.mjpeg.picture_parameter.crop_height = mjpeg->crop_rectangle.height;
+#else
    context->desc.mjpeg.picture_parameter.crop_x = mjpeg->va_reserved[0] & 0xffff;
    context->desc.mjpeg.picture_parameter.crop_y = (mjpeg->va_reserved[0] >> 16) & 0xffff;
    context->desc.mjpeg.picture_parameter.crop_width = mjpeg->va_reserved[1] & 0xffff;
    context->desc.mjpeg.picture_parameter.crop_height = (mjpeg->va_reserved[1] >> 16) & 0xffff;
+#endif
 
 }
 

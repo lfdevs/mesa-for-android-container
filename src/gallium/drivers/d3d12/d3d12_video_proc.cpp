@@ -659,7 +659,7 @@ d3d12_video_processor_create_command_objects(struct d3d12_video_processor *pD3D1
     }
 
     hr = pD3D12Proc->m_pD3D12Screen->dev->CreateFence(0,
-         D3D12_FENCE_FLAG_NONE,
+         D3D12_FENCE_FLAG_SHARED,
          IID_PPV_ARGS(&pD3D12Proc->m_spFence));
 
     if (FAILED(hr)) {

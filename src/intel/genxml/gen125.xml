@@ -13,6 +13,13 @@
     <exclude name="MEDIA_STATE_FLUSH" />
     <exclude name="MEDIA_VFE_STATE" />
   </import>
+  <enum name="L1_CACHE_CONTROL" prefix="L1CC">
+    <value name="WBP" value="0" />
+    <value name="UC" value="1" />
+    <value name="WB" value="2" />
+    <value name="WT" value="3" />
+    <value name="WS" value="4" />
+  </enum>
   <enum name="PREF_SLM_ALLOCATION_SIZE">
     <value name="SLM_ENCODES_0K" value="8" />
     <value name="SLM_ENCODES_16K" value="9" />
@@ -23,42 +30,16 @@
     <value name="SLM_ENCODES_192K" value="14" />
     <value name="SLM_ENCODES_256K" value="15" />
   </enum>
-  <struct name="CPS_STATE" length="8">
-    <field name="MinCPSizeX" start="0" end="10" type="s3.7" />
-    <field name="Statistics Enable" start="11" end="11" type="bool" />
-    <field name="Coarse Pixel Shading Mode" start="12" end="13" type="uint">
-      <value name="CPS_MODE_NONE" value="0" />
-      <value name="CPS_MODE_CONSTANT" value="1" />
-      <value name="CPS_MODE_RADIAL" value="2" />
-    </field>
-    <field name="ScaleAxis" start="14" end="14" type="uint">
-      <value name="X axis" value="0" />
-      <value name="Y axis" value="1" />
-    </field>
-    <field name="MinCPSizeY" start="15" end="25" type="s3.7" />
-    <field name="Combiner1 Opcode for CPsize" start="26" end="28" type="uint">
-      <value name="PASSTHROUGH" value="0" />
-      <value name="OVERRIDE" value="1" />
-      <value name="HIGH_QUALITY" value="2" />
-      <value name="LOW_QUALITY" value="3" />
-      <value name="RELATIVE" value="4" />
-    </field>
-    <field name="Combiner0 Opcode for CPsize" start="29" end="31" type="uint">
-      <value name="PASSTHROUGH" value="0" />
-      <value name="OVERRIDE" value="1" />
-      <value name="HIGH_QUALITY" value="2" />
-      <value name="LOW_QUALITY" value="3" />
-      <value name="RELATIVE" value="4" />
-    </field>
-    <field name="MaxCPSizeX" start="32" end="42" type="s3.7" />
-    <field name="MaxCPSizeY" start="48" end="58" type="s3.7" />
-    <field name="Y_Focal" start="64" end="79" type="int" />
-    <field name="X_Focal" start="96" end="111" type="int" />
-    <field name="My" start="128" end="159" type="uint" />
-    <field name="Mx" start="160" end="191" type="uint" />
-    <field name="Rmin" start="192" end="223" type="uint" />
-    <field name="Aspect" start="224" end="255" type="uint" />
-  </struct>
+  <enum name="STATE_SURFACE_TYPE">
+    <value name="SURFTYPE_1D" value="0" />
+    <value name="SURFTYPE_2D" value="1" />
+    <value name="SURFTYPE_3D" value="2" />
+    <value name="SURFTYPE_CUBE" value="3" />
+    <value name="SURFTYPE_BUFFER" value="4" />
+    <value name="SURFTYPE_RES5" value="5" />
+    <value name="SURFTYPE_SCRATCH" value="6" />
+    <value name="SURFTYPE_NULL" value="7" />
+  </enum>
   <struct name="INTERFACE_DESCRIPTOR_DATA" length="8">
     <field name="Kernel Start Pointer" start="6" end="31" type="offset" />
     <field name="Software Exception Enable" start="71" end="71" type="bool" />
@@ -118,6 +99,116 @@
     </field>
     <field name="BTD Mode" start="191" end="191" type="uint" />
     <field name="Preferred SLM Allocation Size" start="192" end="195" type="uint" />
+  </struct>
+  <struct name="POSTSYNC_DATA" length="5">
+    <field name="Operation" start="0" end="1" type="uint" default="0">
+      <value name="No Write" value="0" />
+      <value name="Write Immediate Data" value="1" />
+      <value name="Write Timestamp" value="3" />
+    </field>
+    <field name="HDC Pipeline Flush" start="2" end="2" type="bool" />
+    <field name="L3 flush" start="3" end="3" type="bool" />
+    <field name="MOCS" start="4" end="10" type="uint" nonzero="true" />
+    <field name="Destination Address" start="32" end="95" type="address" />
+    <field name="Immediate Data" start="96" end="159" type="uint" />
+  </struct>
+  <struct name="COMPUTE_WALKER_BODY" length="38">
+    <field name="Indirect Data Length" start="32" end="48" type="uint" />
+    <field name="L3 prefetch disable" start="49" end="49" type="bool" />
+    <field name="Partition Type" start="62" end="63" type="uint">
+      <value name="PartitionX" value="1" />
+      <value name="PartitionY" value="2" />
+      <value name="PartitionZ" value="3" />
+    </field>
+    <field name="Indirect Data Start Address" start="70" end="95" type="offset" />
+    <field name="Message SIMD" start="113" end="114" type="uint">
+      <value name="SIMD8" value="0" />
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="Tile Layout" start="115" end="117" type="uint">
+      <value name="Linear" value="0" />
+      <value name="TileY 32bpe" value="1" />
+      <value name="TileY 64bpe" value="2" />
+      <value name="TileY 128bpe" value="3" />
+    </field>
+    <field name="Walk Order" start="118" end="120" type="uint">
+      <value name="Walk 012" value="0" />
+      <value name="Walk 021" value="1" />
+      <value name="Walk 102" value="2" />
+      <value name="Walk 120" value="3" />
+      <value name="Walk 201" value="4" />
+      <value name="Walk 210" value="5" />
+    </field>
+    <field name="Emit Inline Parameter" start="121" end="121" type="bool" />
+    <field name="Emit Local" start="122" end="124" type="uint">
+      <value name="Emit None" value="0" />
+      <value name="Emit X" value="1" />
+      <value name="Emit XY" value="3" />
+      <value name="Emit XYZ" value="7" />
+    </field>
+    <field name="Generate Local ID" start="125" end="125" type="bool" />
+    <field name="SIMD Size" start="126" end="127" type="uint">
+      <value name="SIMD8" value="0" />
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="Execution Mask" start="128" end="159" type="uint" />
+    <field name="Local X Maximum" start="160" end="169" type="uint" />
+    <field name="Local Y Maximum" start="170" end="179" type="uint" />
+    <field name="Local Z Maximum" start="180" end="189" type="uint" />
+    <field name="Thread Group ID X Dimension" start="192" end="223" type="uint" />
+    <field name="Thread Group ID Y Dimension" start="224" end="255" type="uint" />
+    <field name="Thread Group ID Z Dimension" start="256" end="287" type="uint" />
+    <field name="Thread Group ID Starting X" start="288" end="319" type="uint" />
+    <field name="Thread Group ID Starting Y" start="320" end="351" type="uint" />
+    <field name="Thread Group ID Starting Z" start="352" end="383" type="uint" />
+    <field name="Partition ID" start="384" end="415" type="uint" />
+    <field name="Partition Size" start="416" end="447" type="uint" />
+    <field name="Preempt X" start="448" end="479" type="uint" />
+    <field name="Preempt Y" start="480" end="511" type="uint" />
+    <field name="Preempt Z" start="512" end="543" type="uint" />
+    <field name="Interface Descriptor" start="544" end="799" type="INTERFACE_DESCRIPTOR_DATA" />
+    <field name="Post Sync" start="800" end="959" type="POSTSYNC_DATA" />
+    <group count="8" start="960" size="32">
+      <field name="Inline Data" start="0" end="31" type="uint" />
+    </group>
+  </struct>
+  <struct name="CPS_STATE" length="8">
+    <field name="MinCPSizeX" start="0" end="10" type="s3.7" />
+    <field name="Statistics Enable" start="11" end="11" type="bool" />
+    <field name="Coarse Pixel Shading Mode" start="12" end="13" type="uint">
+      <value name="CPS_MODE_NONE" value="0" />
+      <value name="CPS_MODE_CONSTANT" value="1" />
+      <value name="CPS_MODE_RADIAL" value="2" />
+    </field>
+    <field name="ScaleAxis" start="14" end="14" type="uint">
+      <value name="X axis" value="0" />
+      <value name="Y axis" value="1" />
+    </field>
+    <field name="MinCPSizeY" start="15" end="25" type="s3.7" />
+    <field name="Combiner1 Opcode for CPsize" start="26" end="28" type="uint">
+      <value name="PASSTHROUGH" value="0" />
+      <value name="OVERRIDE" value="1" />
+      <value name="HIGH_QUALITY" value="2" />
+      <value name="LOW_QUALITY" value="3" />
+      <value name="RELATIVE" value="4" />
+    </field>
+    <field name="Combiner0 Opcode for CPsize" start="29" end="31" type="uint">
+      <value name="PASSTHROUGH" value="0" />
+      <value name="OVERRIDE" value="1" />
+      <value name="HIGH_QUALITY" value="2" />
+      <value name="LOW_QUALITY" value="3" />
+      <value name="RELATIVE" value="4" />
+    </field>
+    <field name="MaxCPSizeX" start="32" end="42" type="s3.7" />
+    <field name="MaxCPSizeY" start="48" end="58" type="s3.7" />
+    <field name="Y_Focal" start="64" end="79" type="int" />
+    <field name="X_Focal" start="96" end="111" type="int" />
+    <field name="My" start="128" end="159" type="uint" />
+    <field name="Mx" start="160" end="191" type="uint" />
+    <field name="Rmin" start="192" end="223" type="uint" />
+    <field name="Aspect" start="224" end="255" type="uint" />
   </struct>
   <struct name="MI_MATH_ALU_INSTRUCTION" length="1">
     <field name="Operand 2" start="0" end="9" type="uint" prefix="MI_ALU">
@@ -188,18 +279,6 @@
       <value name="STOREIND" value="0x181" />
     </field>
   </struct>
-  <struct name="POSTSYNC_DATA" length="5">
-    <field name="Operation" start="0" end="1" type="uint" default="0">
-      <value name="No Write" value="0" />
-      <value name="Write Immediate Data" value="1" />
-      <value name="Write Timestamp" value="3" />
-    </field>
-    <field name="HDC Pipeline Flush" start="2" end="2" type="bool" />
-    <field name="L3 flush" start="3" end="3" type="bool" />
-    <field name="MOCS" start="4" end="10" type="uint" nonzero="true" />
-    <field name="Destination Address" start="32" end="95" type="address" />
-    <field name="Immediate Data" start="96" end="159" type="uint" />
-  </struct>
   <struct name="RENDER_SURFACE_STATE" length="16">
     <field name="Cube Face Enable - Positive Z" start="0" end="0" type="bool" />
     <field name="Cube Face Enable - Negative Z" start="1" end="1" type="bool" />
@@ -238,16 +317,7 @@
     </field>
     <field name="Surface Format" start="18" end="26" type="uint" />
     <field name="Surface Array" start="28" end="28" type="bool" />
-    <field name="Surface Type" start="29" end="31" type="uint">
-      <value name="SURFTYPE_1D" value="0" />
-      <value name="SURFTYPE_2D" value="1" />
-      <value name="SURFTYPE_3D" value="2" />
-      <value name="SURFTYPE_CUBE" value="3" />
-      <value name="SURFTYPE_BUFFER" value="4" />
-      <value name="SURFTYPE_STRBUF" value="5" />
-      <value name="SURFTYPE_SCRATCH" value="6" />
-      <value name="SURFTYPE_NULL" value="7" />
-    </field>
+    <field name="Surface Type" start="29" end="31" type="STATE_SURFACE_TYPE" />
     <field name="Surface QPitch" start="32" end="46" type="uint" />
     <field name="Sample Tap Discard Disable" start="47" end="47" type="bool" />
     <field name="Double Fetch Disable" start="49" end="49" type="bool" />
@@ -285,13 +355,7 @@
     <field name="Surface Min LOD" start="164" end="167" type="uint" />
     <field name="Mip Tail Start LOD" start="168" end="171" type="uint" />
     <field name="Coherency Type" start="174" end="174" type="mbz" />
-    <field name="L1 Cache Control" start="176" end="178" type="uint" prefix="L1CC">
-      <value name="WBP" value="0" />
-      <value name="UC" value="1" />
-      <value name="WB" value="2" />
-      <value name="WT" value="3" />
-      <value name="WS" value="4" />
-    </field>
+    <field name="L1 Cache Control" start="176" end="178" type="L1_CACHE_CONTROL" />
     <field name="EWA Disable For Cube" start="180" end="180" type="bool" />
     <field name="Y Offset" start="181" end="183" type="uint" />
     <field name="X Offset" start="185" end="191" type="uint" />
@@ -384,6 +448,33 @@
     <field name="UAV Coherency Required" start="9" end="9" type="bool" />
     <field name="Indirect Parameter Enable" start="10" end="10" type="bool" />
     <field name="Extended Parameters Present" start="11" end="11" type="uint" />
+    <field name="TBIMR Enable" start="13" end="13" type="uint" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="3" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Primitive Topology Type" start="32" end="37" type="3D_Prim_Topo_Type" />
+    <field name="Vertex Access Type" start="40" end="40" type="uint">
+      <value name="SEQUENTIAL" value="0" />
+      <value name="RANDOM" value="1" />
+    </field>
+    <field name="End Offset Enable" start="41" end="41" type="bool" />
+    <field name="Vertex Count Per Instance" start="64" end="95" type="uint" />
+    <field name="Start Vertex Location" start="96" end="127" type="uint" />
+    <field name="Instance Count" start="128" end="159" type="uint" />
+    <field name="Start Instance Location" start="160" end="191" type="uint" />
+    <field name="Base Vertex Location" start="192" end="223" type="int" />
+    <field name="Extended Parameter 0" start="224" end="255" type="uint" />
+    <field name="Extended Parameter 1" start="256" end="287" type="uint" />
+    <field name="Extended Parameter 2" start="288" end="319" type="uint" />
+  </instruction>
+  <instruction name="3DPRIMITIVE_EXTENDED" bias="2" length="10" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="8" />
+    <field name="Predicate Enable" start="8" end="8" type="bool" />
+    <field name="UAV Coherency Required" start="9" end="9" type="bool" />
+    <field name="Indirect Parameter Enable" start="10" end="10" type="bool" />
+    <field name="Extended Parameters Present" start="11" end="11" type="bool" default="1" />
+    <field name="TBIMR Enable" start="13" end="13" type="uint" />
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0" />
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="3" />
     <field name="Command SubType" start="27" end="28" type="uint" default="3" />
@@ -915,6 +1006,7 @@
       <value name="POSOFFSET_CENTROID" value="2" />
       <value name="POSOFFSET_SAMPLE" value="3" />
     </field>
+    <field name="Dual SIMD8 Dispatch Enable" start="197" end="197" type="bool" />
     <field name="Render Target Resolve Type" start="198" end="199" type="uint">
       <value name="RESOLVE_DISABLED" value="0" />
       <value name="RESOLVE_PARTIAL" value="1" />
@@ -922,6 +1014,7 @@
       <value name="RESOLVE_FULL" value="3" />
     </field>
     <field name="Render Target Fast Clear Enable" start="200" end="200" type="bool" />
+    <field name="Overlapping Subspans Enable" start="201" end="201" type="bool" />
     <field name="Push Constant Enable" start="203" end="203" type="bool" />
     <field name="Maximum Number of Threads Per PSD" start="215" end="223" type="uint" />
     <field name="Dispatch GRF Start Register For Constant/Setup Data 2" start="224" end="230" type="uint" />
@@ -1154,6 +1247,20 @@
     <group count="8" start="64" size="32">
       <field name="Inline Data" start="0" end="31" type="uint" />
     </group>
+  </instruction>
+  <instruction name="3DSTATE_TBIMR_TILE_PASS_INFO" bias="2" length="4">
+    <field name="DWord Length" start="0" end="7" type="uint" default="2" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="110" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Tile Rectangle Height" start="32" end="46" type="uint" />
+    <field name="Tile Rectangle Width" start="48" end="62" type="uint" />
+    <field name="Vertical Tile Count" start="64" end="79" type="uint" />
+    <field name="Horizontal Tile Count" start="80" end="95" type="uint" />
+    <field name="Walk Pattern" start="96" end="96" type="uint" />
+    <field name="Tile Box Check" start="98" end="98" type="uint" />
+    <field name="TBIMR Batch Size" start="99" end="101" type="uint" />
   </instruction>
   <instruction name="3DSTATE_TE" bias="2" length="4" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="2" />
@@ -1542,6 +1649,40 @@
       <field name="Inline Data" start="0" end="31" type="uint" />
     </group>
   </instruction>
+  <instruction name="EXECUTE_INDIRECT_DISPATCH" bias="2" length="44">
+    <field name="DWord Length" start="0" end="7" type="uint" default="42" />
+    <field name="Predicate Enable" start="8" end="8" type="bool" />
+    <field name="MOCS" start="12" end="15" type="uint" nonzero="true" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="1" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="4" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Max Count" start="32" end="63" type="uint" />
+    <field name="Count Buffer Indirect Enable" start="64" end="64" type="bool" />
+    <field name="Count Buffer Address" start="66" end="127" type="address" />
+    <field name="Argument Buffer Start Address" start="130" end="191" type="address" />
+    <field name="COMPUTE_WALKER_BODY" start="192" end="1407" type="COMPUTE_WALKER_BODY" />
+  </instruction>
+  <instruction name="EXECUTE_INDIRECT_DRAW" bias="2" length="6" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="4" />
+    <field name="Predicate Enable" start="8" end="8" type="bool" />
+    <field name="TBIMR Enabled" start="9" end="9" type="uint" />
+    <field name="Argument Format" start="10" end="11" type="uint">
+      <value name="DRAW" value="0" />
+      <value name="DRAWINDEXED" value="1" />
+      <value name="MESH_3D" value="2" />
+      <value name="MESH_1D" value="3" />
+    </field>
+    <field name="MOCS" start="12" end="15" type="uint" nonzero="true" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="4" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Max Count" start="32" end="63" type="uint" />
+    <field name="Count Buffer Indirect Enable" start="64" end="64" type="bool" />
+    <field name="Count Buffer Address" start="66" end="127" type="address" />
+    <field name="Argument Buffer Start Address" start="130" end="191" type="address" />
+  </instruction>
   <instruction name="HCP_FQM_STATE" bias="2" length="34" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="5" />
@@ -1625,6 +1766,7 @@
     </field>
     <field name="Media Sampler DOP Clock Gate Enable" start="4" end="4" type="bool" />
     <field name="Force Media Awake" start="5" end="5" type="bool" />
+    <field name="Systolic Mode Enable" start="7" end="7" type="bool" />
     <field name="Mask Bits" start="8" end="15" type="uint" />
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="4" />
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1" />
@@ -1980,12 +2122,23 @@
     <field name="Destination Depth/Stencil Resource" start="498" end="498" type="bool" />
     <field name="Destination Array Index" start="501" end="511" type="uint" />
   </instruction>
+  <register name="BCS_AUX_TABLE_BASE_ADDR" length="2" num="0x4240">
+    <field name="Address" start="0" end="63" type="uint" />
+  </register>
   <register name="BCS_CCS_AUX_INV" length="1" num="0x4248">
     <field name="Aux Inv" start="0" end="0" type="bool" />
   </register>
   <register name="CHICKEN_RASTER_1" length="1" num="0x6204">
     <field name="AA Line Quality Fix" start="5" end="5" type="bool" />
     <field name="AA Line Quality Fix Mask" start="21" end="21" type="bool" />
+  </register>
+  <register name="CHICKEN_RASTER_2" length="1" num="0x6208">
+    <field name="TBIMR Batch Size Override" start="1" end="1" type="bool" />
+    <field name="TBIMR Open Batch Enable" start="4" end="4" type="bool" />
+    <field name="TBIMR Fast Clip" start="5" end="5" type="bool" />
+    <field name="TBIMR Batch Size Override Mask" start="17" end="17" type="bool" />
+    <field name="TBIMR Open Batch Enable Mask" start="20" end="20" type="bool" />
+    <field name="TBIMR Fast Clip Mask" start="21" end="21" type="bool" />
   </register>
   <register name="COMMON_SLICE_CHICKEN1" length="1" num="0x7010">
     <field name="HIZ Plane Optimization disable bit" start="9" end="9" type="bool" />

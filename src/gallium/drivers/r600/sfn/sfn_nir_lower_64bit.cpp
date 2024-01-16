@@ -391,7 +391,7 @@ nir_def *
 LowerSplit64BitVar::split_load_deref_array(nir_intrinsic_instr *intr, nir_src& index)
 {
    auto old_var = nir_intrinsic_get_var(intr, 0);
-   unsigned old_components = old_var->type->without_array()->components();
+   unsigned old_components = glsl_get_components(glsl_without_array(old_var->type));
 
    assert(old_components > 2 && old_components <= 4);
 
@@ -416,7 +416,7 @@ LowerSplit64BitVar::split_store_deref_array(nir_intrinsic_instr *intr,
                                             nir_deref_instr *deref)
 {
    auto old_var = nir_intrinsic_get_var(intr, 0);
-   unsigned old_components = old_var->type->without_array()->components();
+   unsigned old_components = glsl_get_components(glsl_without_array(old_var->type));
 
    assert(old_components > 2 && old_components <= 4);
 
@@ -453,7 +453,7 @@ LowerSplit64BitVar::split_store_deref_var(nir_intrinsic_instr *intr,
                                           UNUSED nir_deref_instr *deref)
 {
    auto old_var = nir_intrinsic_get_var(intr, 0);
-   unsigned old_components = old_var->type->without_array()->components();
+   unsigned old_components = glsl_get_components(glsl_without_array(old_var->type));
 
    assert(old_components > 2 && old_components <= 4);
 
@@ -481,7 +481,7 @@ LowerSplit64BitVar::split_load_deref_var(nir_intrinsic_instr *intr)
 {
    auto old_var = nir_intrinsic_get_var(intr, 0);
    auto vars = get_var_pair(old_var);
-   unsigned old_components = old_var->type->components();
+   unsigned old_components = glsl_get_components(old_var->type);
 
    nir_deref_instr *deref1 = nir_build_deref_var(b, vars.first);
    auto *load1 = nir_load_deref(b, deref1);
@@ -499,18 +499,18 @@ LowerSplit64BitVar::get_var_pair(nir_variable *old_var)
 {
    auto split_vars = m_varmap.find(old_var->data.driver_location);
 
-   assert(old_var->type->without_array()->components() > 2);
+   assert(glsl_get_components(glsl_without_array(old_var->type)) > 2);
 
    if (split_vars == m_varmap.end()) {
       auto var1 = nir_variable_clone(old_var, b->shader);
       auto var2 = nir_variable_clone(old_var, b->shader);
 
       var1->type = glsl_dvec_type(2);
-      var2->type = glsl_dvec_type(old_var->type->without_array()->components() - 2);
+      var2->type = glsl_dvec_type(glsl_get_components(glsl_without_array(old_var->type)) - 2);
 
-      if (old_var->type->is_array()) {
-         var1->type = glsl_array_type(var1->type, old_var->type->array_size(), 0);
-         var2->type = glsl_array_type(var2->type, old_var->type->array_size(), 0);
+      if (glsl_type_is_array(old_var->type)) {
+         var1->type = glsl_array_type(var1->type, glsl_array_size(old_var->type), 0);
+         var2->type = glsl_array_type(var2->type, glsl_array_size(old_var->type), 0);
       }
 
       if (old_var->data.mode == nir_var_shader_in ||
@@ -838,9 +838,9 @@ Lower64BitToVec2::filter(const nir_instr *instr) const
          if (nir_src_bit_size(intr->src[1]) == 64)
             return true;
          auto var = nir_intrinsic_get_var(intr, 0);
-         if (var->type->without_array()->bit_size() == 64)
+         if (glsl_get_bit_size(glsl_without_array(var->type)) == 64)
             return true;
-         return (var->type->without_array()->components() != intr->num_components);
+         return (glsl_get_components(glsl_without_array(var->type)) != intr->num_components);
       }
       case nir_intrinsic_store_global:
          return nir_src_bit_size(intr->src[0]) == 64;
@@ -951,15 +951,15 @@ Lower64BitToVec2::load_deref_64_to_vec2(nir_intrinsic_instr *intr)
 {
    auto deref = nir_instr_as_deref(intr->src[0].ssa->parent_instr);
    auto var = nir_intrinsic_get_var(intr, 0);
-   unsigned components = var->type->without_array()->components();
-   if (var->type->without_array()->bit_size() == 64) {
+   unsigned components = glsl_get_components(glsl_without_array(var->type));
+   if (glsl_get_bit_size(glsl_without_array(var->type)) == 64) {
       components *= 2;
       if (deref->deref_type == nir_deref_type_var) {
          var->type = glsl_vec_type(components);
       } else if (deref->deref_type == nir_deref_type_array) {
 
          var->type =
-            glsl_array_type(glsl_vec_type(components), var->type->array_size(), 0);
+            glsl_array_type(glsl_vec_type(components), glsl_array_size(var->type), 0);
 
       } else {
          nir_print_shader(b->shader, stderr);
@@ -970,7 +970,7 @@ Lower64BitToVec2::load_deref_64_to_vec2(nir_intrinsic_instr *intr)
    if (deref->deref_type == nir_deref_type_array) {
       auto deref_array = nir_instr_as_deref(deref->parent.ssa->parent_instr);
       deref_array->type = var->type;
-      deref->type = deref_array->type->without_array();
+      deref->type = glsl_without_array(deref_array->type);
    }
 
    intr->num_components = components;
@@ -985,15 +985,15 @@ Lower64BitToVec2::store_64_to_vec2(nir_intrinsic_instr *intr)
    auto deref = nir_instr_as_deref(intr->src[0].ssa->parent_instr);
    auto var = nir_intrinsic_get_var(intr, 0);
 
-   unsigned components = var->type->without_array()->components();
+   unsigned components = glsl_get_components(glsl_without_array(var->type));
    unsigned wrmask = nir_intrinsic_write_mask(intr);
-   if (var->type->without_array()->bit_size() == 64) {
+   if (glsl_get_bit_size(glsl_without_array(var->type)) == 64) {
       components *= 2;
       if (deref->deref_type == nir_deref_type_var) {
          var->type = glsl_vec_type(components);
       } else if (deref->deref_type == nir_deref_type_array) {
          var->type =
-            glsl_array_type(glsl_vec_type(components), var->type->array_size(), 0);
+            glsl_array_type(glsl_vec_type(components), glsl_array_size(var->type), 0);
       } else {
          nir_print_shader(b->shader, stderr);
          assert(0 && "Only lowring of var and array derefs supported\n");
@@ -1003,7 +1003,7 @@ Lower64BitToVec2::store_64_to_vec2(nir_intrinsic_instr *intr)
    if (deref->deref_type == nir_deref_type_array) {
       auto deref_array = nir_instr_as_deref(deref->parent.ssa->parent_instr);
       deref_array->type = var->type;
-      deref->type = deref_array->type->without_array();
+      deref->type = glsl_without_array(deref_array->type);
    }
    intr->num_components = components;
    nir_intrinsic_set_write_mask(intr, wrmask == 1 ? 3 : 0xf);

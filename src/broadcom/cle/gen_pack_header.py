@@ -26,7 +26,7 @@ import xml.parsers.expat
 import re
 import sys
 
-license =  """/* Generated code, see v3d_packet_v21.xml, v3d_packet_v33.xml and gen_pack_header.py */
+license =  """/* Generated code, see vc4_packet.xml, v3d_packet.xml and gen_pack_header.py */
 """
 
 pack_header = """%(license)s

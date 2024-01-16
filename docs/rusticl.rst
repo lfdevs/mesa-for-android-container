@@ -30,7 +30,7 @@ To build Rusticl you need to satisfy the following build dependencies:
 The minimum versions to build Rusticl are:
 
 -  Rust: 1.66
--  Meson: 1.2.0
+-  Meson: 1.3.1
 -  Bindgen: 0.62.0
 -  LLVM: 11.0.0 (recommended: 15.0.0)
 -  Clang: 11.0.0 (recommended: 15.0.0)
@@ -86,7 +86,7 @@ that add new features should be ran against the appropriate conformance
 tests.
 
 Also, make sure the formatting is in order before submitting code. That
-can easily be done via ``git ls-files */{lib,app}.rs | xargs rustfmt``.
+can easily be done via ``git ls-files */{lib,main}.rs | xargs rustfmt``.
 
 When submitting Merge Requests or filing bugs related to Rusticl, make
 sure to add the ``Rusticl`` label so people subscribed to that Label get

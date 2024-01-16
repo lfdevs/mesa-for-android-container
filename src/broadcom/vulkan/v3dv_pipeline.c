@@ -33,9 +33,7 @@
 #include "nir/nir_serialize.h"
 
 #include "util/u_atomic.h"
-#include "util/u_prim.h"
 #include "util/os_time.h"
-#include "util/u_helpers.h"
 
 #include "vk_nir_convert_ycbcr.h"
 #include "vk_pipeline.h"
@@ -176,6 +174,7 @@ static const struct spirv_to_nir_options default_spirv_options =  {
       .physical_storage_buffer_address = true,
       .workgroup_memory_explicit_layout = true,
       .image_read_without_format = true,
+      .demote_to_helper_invocation = true,
     },
    .ubo_addr_format = nir_address_format_32bit_index_offset,
    .ssbo_addr_format = nir_address_format_32bit_index_offset,
@@ -2211,7 +2210,7 @@ pipeline_add_multiview_gs(struct v3dv_pipeline *pipeline,
    nir->info.outputs_written = vs_nir->info.outputs_written |
                                (1ull << VARYING_SLOT_LAYER);
 
-   uint32_t vertex_count = u_vertices_per_prim(pipeline->topology);
+   uint32_t vertex_count = mesa_vertices_per_prim(pipeline->topology);
    nir->info.gs.input_primitive =
       multiview_gs_input_primitive_from_pipeline(pipeline);
    nir->info.gs.output_primitive =

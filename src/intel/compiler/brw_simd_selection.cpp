@@ -104,7 +104,8 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
 
          unsigned max_threads = state.devinfo->max_cs_workgroup_threads;
 
-         if (simd > 0 && state.compiled[simd - 1] &&
+         const unsigned min_simd = state.devinfo->ver >= 20 ? 1 : 0;
+         if (simd > min_simd && state.compiled[simd - 1] &&
             workgroup_size <= (width / 2)) {
             state.error[simd] = "Workgroup size already fits in smaller SIMD";
             return false;
@@ -120,12 +121,17 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
        *
        * TODO: Use performance_analysis and drop this rule.
        */
-      if (width == 32) {
+      if (width == 32 && state.devinfo->ver < 20) {
          if (!INTEL_DEBUG(DEBUG_DO32) && (state.compiled[0] || state.compiled[1])) {
             state.error[simd] = "SIMD32 not required (use INTEL_DEBUG=do32 to force)";
             return false;
          }
       }
+   }
+
+   if (width == 8 && state.devinfo->ver >= 20) {
+      state.error[simd] = "SIMD8 not supported on Xe2+";
+      return false;
    }
 
    if (width == 32 && cs_prog_data && cs_prog_data->base.ray_queries > 0) {

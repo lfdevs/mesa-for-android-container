@@ -62,7 +62,7 @@ is_copy_mov(const struct v3d_device_info *devinfo, struct qinst *inst)
                 return false;
         }
 
-        if (devinfo->ver <= 42) {
+        if (devinfo->ver == 42) {
                 switch (inst->src[0].file) {
                 case QFILE_MAGIC:
                         /* No copy propagating from R3/R4/R5 -- the MOVs from

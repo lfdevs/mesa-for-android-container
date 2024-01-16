@@ -29,7 +29,7 @@
 
 #include "draw_private.h"
 #include "draw_context.h"
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 #include "draw_llvm.h"
 #endif
 
@@ -225,7 +225,7 @@ tgsi_gs_run(struct draw_geometry_shader *shader,
 }
 
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 
 /*
  * Fetch the vertex attribute values for one primitive.
@@ -639,7 +639,7 @@ draw_geometry_shader_run(struct draw_geometry_shader *shader,
    shader->input = input;
    shader->input_info = input_info;
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (shader->draw->llvm) {
       for (int i = 0; i < shader->num_vertex_streams; i++) {
          shader->gs_output[i] = output_verts[i].verts;
@@ -776,13 +776,13 @@ struct draw_geometry_shader *
 draw_create_geometry_shader(struct draw_context *draw,
                             const struct pipe_shader_state *state)
 {
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    bool use_llvm = draw->llvm != NULL;
    struct llvm_geometry_shader *llvm_gs = NULL;
 #endif
    struct draw_geometry_shader *gs;
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (use_llvm) {
       llvm_gs = CALLOC_STRUCT(llvm_geometry_shader);
 
@@ -826,7 +826,7 @@ draw_create_geometry_shader(struct draw_context *draw,
    /* setup the defaults */
    gs->max_out_prims = 0;
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (use_llvm) {
       /* TODO: change the input array to handle the following
          vector length, instead of the currently hardcoded
@@ -886,7 +886,7 @@ draw_create_geometry_shader(struct draw_context *draw,
 
    gs->machine = draw->gs.tgsi.machine;
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (use_llvm) {
       int vector_size = gs->vector_length * sizeof(float);
       gs->gs_input = align_malloc(sizeof(struct draw_gs_inputs), 16);
@@ -949,7 +949,7 @@ draw_delete_geometry_shader(struct draw_context *draw,
    if (!dgs) {
       return;
    }
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    if (draw->llvm) {
       struct llvm_geometry_shader *shader = llvm_geometry_shader(dgs);
       struct draw_gs_llvm_variant_list_item *li, *next;
@@ -987,7 +987,7 @@ draw_delete_geometry_shader(struct draw_context *draw,
 }
 
 
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
 void
 draw_gs_set_current_variant(struct draw_geometry_shader *shader,
                             struct draw_gs_llvm_variant *variant)

@@ -2,12 +2,14 @@ use crate::api::icd::*;
 use crate::api::types::DeleteContextCB;
 use crate::core::device::*;
 use crate::core::format::*;
+use crate::core::gl::*;
 use crate::core::memory::*;
 use crate::core::util::*;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::pipe::resource::*;
 use mesa_rust::pipe::screen::ResourceType;
+use mesa_rust_gen::*;
 use mesa_rust_util::properties::Properties;
 use rusticl_opencl_gen::*;
 
@@ -26,6 +28,7 @@ pub struct Context {
     pub properties: Properties<cl_context_properties>,
     pub dtors: Mutex<Vec<DeleteContextCB>>,
     pub svm_ptrs: Mutex<BTreeMap<*const c_void, Layout>>,
+    pub gl_ctx_manager: Option<GLCtxManager>,
 }
 
 impl_cl_type_trait!(cl_context, Context, CL_INVALID_CONTEXT);
@@ -34,6 +37,7 @@ impl Context {
     pub fn new(
         devs: Vec<&'static Device>,
         properties: Properties<cl_context_properties>,
+        gl_ctx_manager: Option<GLCtxManager>,
     ) -> Arc<Context> {
         Arc::new(Self {
             base: CLObjectBase::new(),
@@ -41,6 +45,7 @@ impl Context {
             properties: properties,
             dtors: Mutex::new(Vec::new()),
             svm_ptrs: Mutex::new(BTreeMap::new()),
+            gl_ctx_manager: gl_ctx_manager,
         })
     }
 
@@ -57,13 +62,17 @@ impl Context {
             let mut resource = None;
 
             if !user_ptr.is_null() && !copy {
-                resource = dev
-                    .screen()
-                    .resource_create_buffer_from_user(adj_size, user_ptr)
+                resource = dev.screen().resource_create_buffer_from_user(
+                    adj_size,
+                    user_ptr,
+                    PIPE_BIND_GLOBAL,
+                )
             }
 
             if resource.is_none() {
-                resource = dev.screen().resource_create_buffer(adj_size, res_type)
+                resource = dev
+                    .screen()
+                    .resource_create_buffer(adj_size, res_type, PIPE_BIND_GLOBAL)
             }
 
             let resource = resource.ok_or(CL_OUT_OF_RESOURCES);
@@ -199,6 +208,40 @@ impl Context {
 
     pub fn remove_svm_ptr(&self, ptr: *const c_void) -> Option<Layout> {
         self.svm_ptrs.lock().unwrap().remove(&ptr)
+    }
+
+    pub fn import_gl_buffer(
+        &self,
+        handle: u32,
+        modifier: u64,
+        image_type: cl_mem_object_type,
+        gl_target: cl_GLenum,
+        format: pipe_format,
+        gl_props: GLMemProps,
+    ) -> CLResult<HashMap<&'static Device, Arc<PipeResource>>> {
+        let mut res = HashMap::new();
+        let target = cl_mem_type_to_texture_target_gl(image_type, gl_target);
+
+        for dev in &self.devs {
+            let resource = dev
+                .screen()
+                .resource_import_dmabuf(
+                    handle,
+                    modifier,
+                    target,
+                    format,
+                    gl_props.stride,
+                    gl_props.width,
+                    gl_props.height,
+                    gl_props.depth,
+                    gl_props.array_size,
+                )
+                .ok_or(CL_OUT_OF_RESOURCES)?;
+
+            res.insert(*dev, Arc::new(resource));
+        }
+
+        Ok(res)
     }
 }
 

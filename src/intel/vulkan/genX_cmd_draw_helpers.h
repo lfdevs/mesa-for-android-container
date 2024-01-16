@@ -108,7 +108,8 @@ update_dirty_vbs_for_gfx8_vb_flush(struct anv_cmd_buffer *cmd_buffer,
 #if GFX_VER == 9
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
 
    uint64_t vb_used = dyn->vi->bindings_valid;

@@ -1,17 +1,50 @@
+.intel-common-rules:
+  stage: intel
+  rules:
+    - changes: &intel_common_file_list
+        - src/intel/*
+        - src/intel/blorp/**/*
+        - src/intel/common/**/*
+        - src/intel/compiler/**/*
+        - src/intel/dev/**/*
+        - src/intel/ds/**/*
+        - src/intel/genxml/**/*
+        - src/intel/isl/**/*
+        - src/intel/nullhw-layer/**/*
+        - src/intel/perf/**/*
+        - src/intel/tools/**/*
+        - src/intel/ci/gitlab-ci.yml
+        - src/intel/ci/gitlab-ci-inc.yml
+        - src/intel/ci/deqp-$DEQP_SUITE.toml
+        - src/intel/ci/$GPU_VERSION-fails.txt
+        - src/intel/ci/$GPU_VERSION-flakes.txt
+        - src/intel/ci/$GPU_VERSION-skips.txt
+        - src/intel/ci/$PIGLIT_TRACES_FILE
+      when: on_success
+
+.intel-common-manual-rules:
+  stage: intel
+  rules:
+    - changes:
+        *intel_common_file_list
+      when: manual
+
 .i915g-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.gl-rules, rules]
+    - !reference [.intel-common-rules, rules]
     - changes: &i915g_file_list
-      - src/gallium/drivers/i915/**/*
-      - src/gallium/winsys/i915/**/*
-      - src/intel/**/*
+        - src/gallium/drivers/i915/**/*
+        - src/gallium/winsys/i915/**/*
       when: on_success
 
 .i915g-manual-rules:
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
         *i915g_file_list
@@ -20,18 +53,20 @@
 .crocus-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.anholt-farm-rules, rules]
     - !reference [.gl-rules, rules]
+    - !reference [.intel-common-rules, rules]
     - changes: &crocus_file_list
-      - src/gallium/drivers/crocus/**/*
-      - src/gallium/winsys/crocus/**/*
-      - src/intel/**/*
+        - src/gallium/drivers/crocus/**/*
+        - src/gallium/winsys/crocus/**/*
       when: on_success
 
 .crocus-manual-rules:
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.anholt-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
@@ -41,19 +76,21 @@
 .iris-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.gl-rules, rules]
+    - !reference [.intel-common-rules, rules]
     - changes: &iris_file_list
-      - src/gallium/drivers/iris/**/*
-      - src/gallium/winsys/iris/**/*
-      - src/intel/**/*
+        - src/gallium/drivers/iris/**/*
+        - src/gallium/winsys/iris/**/*
       when: on_success
 
 .iris-manual-rules:
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
@@ -67,6 +104,7 @@
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.performance-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -84,54 +122,130 @@
 .anv-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/intel/**/*
+    - !reference [.intel-common-rules, rules]
+    - changes: &anv_file_list
+        - src/intel/vulkan/**/*
       when: on_success
 
 .anv-manual-rules:
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
+    - !reference [.intel-common-manual-rules, rules]
     - changes:
-      - src/intel/**/*
+        *anv_file_list
       when: manual
 
 .hasvk-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.anholt-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
-    - changes:
-      - src/intel/**/*
+    - !reference [.intel-common-rules, rules]
+    - changes: &hasvk_file_list
+        - src/intel/vulkan_hasvk/**/*
       when: on_success
 
 .hasvk-manual-rules:
   stage: intel
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.anholt-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
+    - !reference [.intel-common-manual-rules, rules]
     - changes:
-      - src/intel/**/*
+        *hasvk_file_list
       when: manual
 
 # ruleset to trigger on changes affecting either anv or iris, for jobs using both (piglit, skqp)
 .intel-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.iris-rules, rules]
     - !reference [.anv-rules, rules]
 
 .intel-manual-rules:
   stage: intel
   rules:
+    - !reference [.test, rules]
     - !reference [.iris-manual-rules, rules]
     - !reference [.anv-manual-rules, rules]
+
+
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-cb317-1h-c3z6-dedede
+.lava-acer-cb317-1h-c3z6-dedede:x86_64:
+  variables:
+    DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
+    FDO_CI_CONCURRENT: 3
+    GPU_VERSION: iris-jsl
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
+
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-C523NA-A20057-coral
+.lava-asus-C523NA-A20057-coral:x86_64:
+  variables:
+    DEVICE_TYPE: asus-C523NA-A20057-coral
+    FDO_CI_CONCURRENT: 5
+    GPU_VERSION: iris-apl
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
+
+# Status: https://lava.collabora.dev/scheduler/device_type/hp-x360-12b-ca0010nr-n4020-octopus
+.lava-hp-x360-12b-ca0010nr-n4020-octopus:x86_64:
+  variables:
+    DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
+    FDO_CI_CONCURRENT: 3
+    GPU_VERSION: iris-glk
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
+
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-cx9400-volteer
+.lava-asus-cx9400-volteer:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: asus-cx9400-volteer
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: anv-tgl
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
+
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-C433TA-AJ0005-rammus
+.lava-asus-C433TA-AJ0005-rammus:x86_64:
+  variables:
+    DEVICE_TYPE: asus-C433TA-AJ0005-rammus
+    FDO_CI_CONCURRENT: 5
+    GPU_VERSION: iris-amly
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
+
+# Status: https://lava.collabora.dev/scheduler/device_type/hp-x360-14-G1-sona
+.lava-hp-x360-14-G1-sona:x86_64:
+  variables:
+    DEVICE_TYPE: hp-x360-14-G1-sona
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: iris-kbl
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
+
+# Status: https://lava.collabora.dev/scheduler/device_type/dell-latitude-5400-8665U-sarien
+.lava-dell-latitude-5400-8665U-sarien:x86_64:
+  variables:
+    DEVICE_TYPE: dell-latitude-5400-8665U-sarien
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: iris-whl
+    RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
+
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-C436FA-Flip-hatch
+.lava-asus-C436FA-Flip-hatch:x86_64:
+  variables:
+    DEVICE_TYPE: asus-C436FA-Flip-hatch
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: iris-cml
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
 
 
 .intel-common-test:
@@ -164,15 +278,10 @@
     - .intel-rules
 
 ## ANV only
-# 15; 10 i5 boards + 5 i7 boards (2023-01-17)
 .anv-tgl-test:
   extends:
     - .anv-test
-  variables:
-    DEVICE_TYPE: asus-cx9400-volteer
-    GPU_VERSION: anv-tgl
-    FDO_CI_CONCURRENT: 9
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
+    - .lava-asus-cx9400-volteer:x86_64
 
 .anv-angle-test:
   extends:
@@ -185,75 +294,37 @@
     HWCI_START_XORG: 1
 
 ## Iris only
-# 5 boards
 .iris-apl-test:
   extends:
     - .iris-test
-  variables:
-    DEVICE_TYPE: asus-C523NA-A20057-coral
-    GPU_VERSION: iris-apl
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
-    FDO_CI_CONCURRENT: 5
+    - .lava-asus-C523NA-A20057-coral:x86_64
 
-# 4 boards
 .iris-glk-test:
   extends:
     - .iris-test
-  variables:
-    DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
-    GPU_VERSION: iris-glk
-    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
-    FDO_CI_CONCURRENT: 3
+    - .lava-hp-x360-12b-ca0010nr-n4020-octopus:x86_64
 
-# 5 boards, manual for now due to the GPU being occasionally stuck
 .iris-amly-test:
   extends:
     - .iris-test
-    - .iris-manual-rules
-  variables:
-    DEVICE_TYPE: asus-C433TA-AJ0005-rammus
-    GPU_VERSION: iris-amly
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
-    FDO_CI_CONCURRENT: 5
+    - .iris-manual-rules  # GPU being occasionally stuck
+    - .lava-asus-C433TA-AJ0005-rammus:x86_64
 
-# 6 boards
 .iris-kbl-test:
   extends:
     - .iris-test
-  variables:
-    DEVICE_TYPE: hp-x360-14-G1-sona
-    GPU_VERSION: iris-kbl
-    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
-    FDO_CI_CONCURRENT: 9
+    - .lava-hp-x360-14-G1-sona:x86_64
 
-# 5 boards
 .iris-whl-test:
   extends:
     - .iris-test
-  variables:
-    DEVICE_TYPE: dell-latitude-5400-8665U-sarien
-    GPU_VERSION: iris-whl
-    RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
-    FDO_CI_CONCURRENT: 9
+    - .lava-dell-latitude-5400-8665U-sarien:x86_64
 
-# 5 boards
 .iris-cml-test:
   extends:
     - .iris-test
     - .iris-manual-rules    # Devices have too often network problems and fail to boot.
-  variables:
-    DEVICE_TYPE: asus-C436FA-Flip-hatch
-    GPU_VERSION: iris-cml
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
-    FDO_CI_CONCURRENT: 9
-
-# 8 boards
-.jsl-test:
-  variables:
-    DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
-    GPU_VERSION: iris-jsl
-    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
-    FDO_CI_CONCURRENT: 3
+    - .lava-asus-C436FA-Flip-hatch:x86_64
 
 .iris-whl-deqp:
   extends:
@@ -269,7 +340,7 @@
     EGL_PLATFORM: surfaceless
     PIGLIT_REPLAY_DEVICE_NAME: "gl-${GPU_VERSION}"
     PIGLIT_RESULTS: "${GPU_VERSION}-${PIGLIT_PROFILES}"
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-iris.yml"
+    PIGLIT_TRACES_FILE: traces-iris.yml
 
 .iris-whl-traces:
   variables:

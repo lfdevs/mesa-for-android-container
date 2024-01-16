@@ -806,44 +806,50 @@ BEGIN_TEST(assembler.gfx11.vinterp)
    Operand op2(bld.tmp(v1));
    op2.setFixed(PhysReg(256 + 30));
 
+   //! llvm_version: #llvm_ver
+   fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
+
    //>> v_interp_p10_f32 v42, v10, v20, v30 wait_exp:7              ; cd00072a 047a290a
    bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2);
 
    //! v_interp_p10_f32 v42, v10, v20, v30 wait_exp:6              ; cd00062a 047a290a
    bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6);
 
-   //! v_interp_p2_f32 v42, v10, v20, v30                          ; cd01002a 047a290a
+   //; if llvm_ver >= 18:
+   //;    insert_pattern('v_interp_p2_f32 v42, v10, v20, v30 wait_exp:0               ; cd01002a 047a290a')
+   //; else:
+   //;    insert_pattern('v_interp_p2_f32 v42, v10, v20, v30                          ; cd01002a 047a290a')
    bld.vinterp_inreg(aco_opcode::v_interp_p2_f32_inreg, dst, op0, op1, op2, 0);
 
-   //! v_interp_p10_f32 v42, -v10, v20, v30                        ; cd00002a 247a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0)
+   //! v_interp_p10_f32 v42, -v10, v20, v30 wait_exp:6             ; cd00062a 247a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6)
       ->vinterp_inreg()
       .neg[0] = true;
 
-   //! v_interp_p10_f32 v42, v10, -v20, v30                        ; cd00002a 447a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0)
+   //! v_interp_p10_f32 v42, v10, -v20, v30 wait_exp:6             ; cd00062a 447a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6)
       ->vinterp_inreg()
       .neg[1] = true;
 
-   //! v_interp_p10_f32 v42, v10, v20, -v30                        ; cd00002a 847a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0)
+   //! v_interp_p10_f32 v42, v10, v20, -v30 wait_exp:6             ; cd00062a 847a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6)
       ->vinterp_inreg()
       .neg[2] = true;
 
-   //! v_interp_p10_f16_f32 v42, v10, v20, v30 op_sel:[1,0,0,0]    ; cd02082a 047a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, dst, op0, op1, op2, 0, 0x1);
+   //! v_interp_p10_f16_f32 v42, v10, v20, v30 op_sel:[1,0,0,0] wait_exp:6 ; cd020e2a 047a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, dst, op0, op1, op2, 6, 0x1);
 
-   //! v_interp_p2_f16_f32 v42, v10, v20, v30 op_sel:[0,1,0,0]     ; cd03102a 047a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, dst, op0, op1, op2, 0, 0x2);
+   //! v_interp_p2_f16_f32 v42, v10, v20, v30 op_sel:[0,1,0,0] wait_exp:6 ; cd03162a 047a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, dst, op0, op1, op2, 6, 0x2);
 
-   //! v_interp_p10_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,1,0] ; cd04202a 047a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_rtz_f16_f32_inreg, dst, op0, op1, op2, 0, 0x4);
+   //! v_interp_p10_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,1,0] wait_exp:6 ; cd04262a 047a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_rtz_f16_f32_inreg, dst, op0, op1, op2, 6, 0x4);
 
-   //! v_interp_p2_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,0,1] ; cd05402a 047a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p2_rtz_f16_f32_inreg, dst, op0, op1, op2, 0, 0x8);
+   //! v_interp_p2_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,0,1] wait_exp:6 ; cd05462a 047a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p2_rtz_f16_f32_inreg, dst, op0, op1, op2, 6, 0x8);
 
-   //! v_interp_p10_f32 v42, v10, v20, v30 clamp                   ; cd00802a 047a290a
-   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0)
+   //! v_interp_p10_f32 v42, v10, v20, v30 clamp wait_exp:6        ; cd00862a 047a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6)
       ->vinterp_inreg()
       .clamp = true;
 
@@ -860,26 +866,35 @@ BEGIN_TEST(assembler.gfx11.ldsdir)
    Operand op(bld.tmp(s1));
    op.setFixed(m0);
 
+   //! llvm_version: #llvm_ver
+   fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
+
    //>> lds_direct_load v42 wait_vdst:15                            ; ce1f002a
    bld.ldsdir(aco_opcode::lds_direct_load, dst, op)->ldsdir().wait_vdst = 15;
 
    //! lds_direct_load v42 wait_vdst:6                             ; ce16002a
    bld.ldsdir(aco_opcode::lds_direct_load, dst, op)->ldsdir().wait_vdst = 6;
 
-   //! lds_direct_load v42                                         ; ce10002a
+   //; if llvm_ver >= 18:
+   //;    insert_pattern('lds_direct_load v42 wait_vdst:0                             ; ce10002a')
+   //; else:
+   //;    insert_pattern('lds_direct_load v42                                         ; ce10002a')
    bld.ldsdir(aco_opcode::lds_direct_load, dst, op)->ldsdir().wait_vdst = 0;
 
    //! lds_param_load v42, attr56.x wait_vdst:8                    ; ce08e02a
    bld.ldsdir(aco_opcode::lds_param_load, dst, op, 56, 0)->ldsdir().wait_vdst = 8;
 
-   //! lds_param_load v42, attr56.x                                ; ce00e02a
+   //; if llvm_ver >= 18:
+   //;    insert_pattern('lds_param_load v42, attr56.x wait_vdst:0                    ; ce00e02a')
+   //; else:
+   //;    insert_pattern('lds_param_load v42, attr56.x                                ; ce00e02a')
    bld.ldsdir(aco_opcode::lds_param_load, dst, op, 56, 0)->ldsdir().wait_vdst = 0;
 
-   //! lds_param_load v42, attr34.y                                ; ce00892a
-   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 34, 1)->ldsdir().wait_vdst = 0;
+   //! lds_param_load v42, attr34.y wait_vdst:8                    ; ce08892a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 34, 1)->ldsdir().wait_vdst = 8;
 
-   //! lds_param_load v42, attr12.z                                ; ce00322a
-   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 12, 2)->ldsdir().wait_vdst = 0;
+   //! lds_param_load v42, attr12.z wait_vdst:8                    ; ce08322a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 12, 2)->ldsdir().wait_vdst = 8;
 
    finish_assembler_test();
 END_TEST
@@ -910,7 +925,7 @@ BEGIN_TEST(assembler.gfx11.vop12c_v128)
    fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
 
    //>> BB0:
-   //; if llvm_ver >= 16:
+   //; if llvm_ver == 16:
    //;    insert_pattern('v_mul_f16_e32 v0, v1, v2 ; Error: VGPR_32_Lo128: unknown register 128 ; 6a000501')
    //; else:
    //;    insert_pattern('v_mul_f16_e32 v0, v1, v2                                    ; 6a000501')

@@ -1,4 +1,4 @@
-# Copyright © 
+# Copyright ©
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -73,6 +73,7 @@ rusticl_files = files(
   'core/queue.rs',
   'core/util.rs',
   'core/version.rs',
+  'core/gl.rs',
 )
 
 rusticl_args = [
@@ -98,9 +99,16 @@ if rustc.version().version_compare('>=1.72')
   ]
 endif
 
+if with_platform_x11
+  rusticl_args += [
+    '--cfg', 'glx',
+  ]
+endif
+
 rusticl_gen_args = [
   # can't do anything about it anyway
   '-Aclippy::all',
+  '-Aimproper_ctypes',
   # Some bindgen versions assume `unsafe_op_in_unsafe_fn`
   '-Aunused_unsafe',
   '-Anon_camel_case_types',
@@ -160,8 +168,12 @@ rusticl_opencl_bindings_rs = rust.bindgen(
   include_directories : [
     inc_include,
   ],
+  dependencies : [
+    dep_x11,
+  ],
   c_args : [
     rusticl_bindgen_c_args,
+    pre_args,
     cl_c_args,
   ],
   args : [
@@ -175,16 +187,59 @@ rusticl_opencl_bindings_rs = rust.bindgen(
     '--raw-line', 'unsafe impl std::marker::Sync for _cl_image_desc {}',
     '--allowlist-type', 'cl_.*',
     '--allowlist-var', 'CL_.*',
+    # needed for gl_sharing extension
+    '--allowlist-var', 'GL_.*',
+    '--allowlist-var', 'MESA_GLINTEROP_.*',
+    '--allowlist-type', 'PFNEGLGETPROCADDRESSPROC',
+    '--allowlist-type', 'PFNGLXGETPROCADDRESSPROC',
+    '--allowlist-type', 'PFNMESAGLINTEROP.*',
     # some info types need to be strongly typed so we can implement various get_infos
-    '--new-type-alias-deref', 'cl_(mem|image|pipe)_info',
+    '--new-type-alias-deref', 'cl_(mem|image|pipe|gl_texture)_info',
     '--new-type-alias-deref', 'cl_kernel_(arg|work_group)_info',
     '--new-type-alias-deref', 'cl_(event|profiling)_info',
+    # turn gl interop enums into constfields so we can compare with rust types
+    '--constified-enum', 'MESA_GLINTEROP_.*',
   ],
 )
 
 rusticl_opencl_gen = static_library(
   'rusticl_opencl_gen',
   rusticl_opencl_bindings_rs,
+  gnu_symbol_visibility : 'hidden',
+  rust_crate_type : 'rlib',
+  rust_args : [
+    rusticl_gen_args,
+  ],
+)
+
+rusticl_llvm_bindings_rs = rust.bindgen(
+  input : 'rusticl_llvm_bindings.hpp',
+  output : 'rusticl_llvm_bindings.rs',
+  c_args : [
+    rusticl_bindgen_c_args,
+    pre_args,
+  ],
+  dependencies : [
+    dep_clang,
+    dep_llvm,
+    dep_llvmspirvlib,
+  ],
+  args : [
+    # we want to limit what to generate bindings for
+    '--generate', 'constructors,functions,types',
+    # and all types will be opaque
+    '--opaque-type', '.*',
+    # LLVM/Clang/Translator stuff, only used for build-id
+    # also only use functions from very basic header files, otherwise bindgen might crash :')
+    '--allowlist-function', 'clang::getClangFullVersion',
+    '--allowlist-function', 'llvm::LLVMContext::LLVMContext',
+    '--allowlist-function', 'llvm::writeSpirv',
+  ],
+)
+
+rusticl_llvm_gen = static_library(
+  'rusticl_llvm_gen',
+  rusticl_llvm_bindings_rs,
   gnu_symbol_visibility : 'hidden',
   rust_crate_type : 'rlib',
   rust_args : [
@@ -234,6 +289,25 @@ rusticl_mesa_bindings_inline_wrapper = static_library(
   ],
 )
 
+rusticl_libc_bindings_rs = rust.bindgen(
+  input : 'rusticl_libc_bindings.h',
+  output : 'rusticl_libc_bindings.rs',
+  dependencies: [
+    dep_valgrind,
+  ],
+  c_args : [
+    rusticl_bindgen_c_args,
+    pre_args,
+  ],
+  args : [
+    rusticl_bindgen_args,
+    '--allowlist-function',     'close',
+    '--allowlist-function',     'dlsym',
+    '--allowlist-function',     'free',
+    '--allowlist-function',     'malloc',
+  ]
+)
+
 rusticl_mesa_bindings_rs = rust.bindgen(
   input : 'rusticl_mesa_bindings.h',
   output : 'rusticl_mesa_bindings.rs',
@@ -253,10 +327,6 @@ rusticl_mesa_bindings_rs = rust.bindgen(
   ],
   args : [
     rusticl_bindgen_args,
-    # libc
-    '--allowlist-function',     'free',
-    '--allowlist-function',     'malloc',
-
     # mesa utils
     '--allowlist-function',     'blob_.*',
     '--allowlist-function',     'disk_cache_.*',
@@ -312,6 +382,9 @@ rusticl_mesa_bindings_rs = rust.bindgen(
     # rusticl C functions
     '--allowlist-function',     'rusticl_.*',
     '--allowlist-function',     'std(err|out)_ptr',
+
+    # winsys
+    '--allowlist-var',          'WINSYS_HANDLE_TYPE_.*',
   ],
 )
 
@@ -337,6 +410,16 @@ libmesa_rust_gen = static_library(
   ],
 )
 
+libc_rust_gen = static_library(
+  'libc_rust_gen',
+  rusticl_libc_bindings_rs,
+  gnu_symbol_visibility : 'hidden',
+  rust_crate_type : 'rlib',
+  rust_args : [
+    rusticl_gen_args,
+  ],
+)
+
 libmesa_rust_util = static_library(
   'mesa_rust_util',
   [libmesa_rust_util_files],
@@ -356,6 +439,7 @@ libmesa_rust = static_library(
     rusticl_args,
   ],
   link_with : [
+    libc_rust_gen,
     libmesa_rust_gen,
     libmesa_rust_util,
     rusticl_mesa_bindings_inline_wrapper,
@@ -363,10 +447,9 @@ libmesa_rust = static_library(
   ]
 )
 
-rusticl_proc_macros = shared_library(
+rusticl_proc_macros = rust.proc_macro(
   'rusticl_proc_macros',
   [rusticl_proc_macros_files],
-  rust_crate_type : 'proc-macro',
   rust_args : [
     rusticl_args,
   ],
@@ -381,9 +464,11 @@ librusticl = static_library(
     rusticl_args,
   ],
   link_with : [
+    libc_rust_gen,
     libmesa_rust,
     libmesa_rust_gen,
     libmesa_rust_util,
+    rusticl_llvm_gen,
     rusticl_opencl_gen,
     rusticl_proc_macros,
   ],

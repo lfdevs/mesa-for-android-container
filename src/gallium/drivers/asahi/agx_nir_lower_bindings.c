@@ -7,24 +7,11 @@
 #include "compiler/glsl_types.h"
 #include "compiler/nir/nir_builder.h"
 #include "agx_state.h"
+#include "nir.h"
+#include "nir_builder_opcodes.h"
+#include "nir_intrinsics.h"
 #include "nir_intrinsics_indices.h"
-
-#define AGX_TEXTURE_DESC_STRIDE 24
-
-/*
- * Construct a bindless handle corresponding to an index into the binding
- * tables. Our driver ABI maps everything to a table addressed by u0_u1, with
- * indices mapped 1:1 with the binding table. So we want the bindless handle
- * (u0_u1, index) which is encoded in NIR as (0, index).
- */
-static nir_def *
-index_to_handle(nir_builder *b, nir_def *index)
-{
-   nir_def *table = nir_imm_int(b, 0);
-   nir_def *offset = nir_imul_imm(b, index, AGX_TEXTURE_DESC_STRIDE);
-
-   return nir_vec2(b, table, offset);
-}
+#include "shader_enums.h"
 
 /*
  * Lower binding table textures and images to texture state registers and (if
@@ -34,11 +21,53 @@ index_to_handle(nir_builder *b, nir_def *index)
  *    1. Textures
  *    2. Images (read/write interleaved)
  */
+
+/*
+ * We support the following merged shader stages:
+ *
+ *    VS/GS
+ *    VS/TCS
+ *    TES/GS
+ *
+ * TCS and GS are always merged. So, we lower TCS and GS samplers to bindless
+ * and let VS and TES have exclusive binding table access.
+ *
+ * This could be optimized but it should be good enough for now.
+ */
+static bool
+agx_stage_needs_bindless(enum pipe_shader_type stage)
+{
+   switch (stage) {
+   case MESA_SHADER_TESS_CTRL:
+   case MESA_SHADER_GEOMETRY:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
+lower_sampler(nir_builder *b, nir_tex_instr *tex)
+{
+   if (!nir_tex_instr_need_sampler(tex))
+      return false;
+
+   nir_def *index = nir_steal_tex_src(tex, nir_tex_src_sampler_offset);
+   if (!index)
+      index = nir_imm_int(b, tex->sampler_index);
+
+   nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle,
+                         nir_load_sampler_handle_agx(b, index));
+   return true;
+}
+
 static bool
 lower(nir_builder *b, nir_instr *instr, void *data)
 {
-   bool *internal_bindless = data;
-   bool force_bindless = agx_nir_needs_texture_crawl(instr);
+   bool *uses_bindless_samplers = data;
+   bool progress = false;
+   bool force_bindless = agx_nir_needs_texture_crawl(instr) ||
+                         agx_stage_needs_bindless(b->shader->info.stage);
    b->cursor = nir_before_instr(instr);
 
    if (instr->type == nir_instr_type_intrinsic) {
@@ -54,6 +83,7 @@ lower(nir_builder *b, nir_instr *instr, void *data)
          CASE(image_load)
          CASE(image_store)
          CASE(image_size)
+         CASE(image_samples)
          CASE(image_atomic)
          CASE(image_atomic_swap)
       default:
@@ -67,11 +97,12 @@ lower(nir_builder *b, nir_instr *instr, void *data)
       /* Remap according to the driver layout */
       unsigned offset = BITSET_LAST_BIT(b->shader->info.textures_used);
 
-      /* For reads and image_size, we use the texture descriptor which is first.
+      /* For reads and queries, we use the texture descriptor which is first.
        * Writes and atomics use the PBE descriptor.
        */
       if (intr->intrinsic != nir_intrinsic_image_load &&
-          intr->intrinsic != nir_intrinsic_image_size)
+          intr->intrinsic != nir_intrinsic_image_size &&
+          intr->intrinsic != nir_intrinsic_image_samples)
          offset++;
 
       /* If we can determine statically that the image fits in texture state
@@ -96,16 +127,31 @@ lower(nir_builder *b, nir_instr *instr, void *data)
       if (nir_intrinsic_has_atomic_op(intr))
          nir_intrinsic_set_atomic_op(intr, op);
 
-      *internal_bindless = true;
+      /* The driver uploads enough null texture/PBE descriptors for robustness
+       * given the shader limit, but we still need to clamp since we're lowering
+       * to bindless so the hardware doesn't know the limit.
+       *
+       * The GL spec says out-of-bounds image indexing is undefined, but
+       * faulting is not acceptable for robustness.
+       */
+      index =
+         nir_umin(b, index, nir_imm_int(b, b->shader->info.num_images - 1));
 
       index = nir_iadd_imm(b, nir_imul_imm(b, index, 2), offset);
-      nir_src_rewrite(&intr->src[0], index_to_handle(b, index));
+      nir_src_rewrite(&intr->src[0], nir_load_texture_handle_agx(b, index));
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
 
+      if (agx_stage_needs_bindless(b->shader->info.stage) &&
+          lower_sampler(b, tex)) {
+
+         progress = true;
+         *uses_bindless_samplers = true;
+      }
+
       /* Nothing to do for "real" bindless */
       if (nir_tex_instr_src_index(tex, nir_tex_src_texture_handle) >= 0)
-         return false;
+         return progress;
 
       /* Textures are mapped 1:1, so if we can prove it fits in a texture state
        * register, use the texture state register.
@@ -113,23 +159,26 @@ lower(nir_builder *b, nir_instr *instr, void *data)
       if (tex->texture_index < AGX_NUM_TEXTURE_STATE_REGS &&
           nir_tex_instr_src_index(tex, nir_tex_src_texture_offset) == -1 &&
           !force_bindless)
-         return false;
+         return progress;
 
       /* Otherwise, lower to bindless. Could be optimized. */
       nir_def *index = nir_steal_tex_src(tex, nir_tex_src_texture_offset);
       if (!index)
          index = nir_imm_int(b, tex->texture_index);
 
-      *internal_bindless = true;
+      /* As above */
+      index =
+         nir_umin(b, index, nir_imm_int(b, b->shader->info.num_textures - 1));
+
       nir_tex_instr_add_src(tex, nir_tex_src_texture_handle,
-                            index_to_handle(b, index));
+                            nir_load_texture_handle_agx(b, index));
    }
 
-   return false;
+   return true;
 }
 
 bool
-agx_nir_lower_bindings(nir_shader *shader, bool *internal_bindless)
+agx_nir_lower_bindings(nir_shader *shader, bool *uses_bindless_samplers)
 {
    /* First lower index to offset so we can lower more naturally */
    bool progress = nir_lower_tex(
@@ -142,6 +191,6 @@ agx_nir_lower_bindings(nir_shader *shader, bool *internal_bindless)
 
    progress |= nir_shader_instructions_pass(
       shader, lower, nir_metadata_block_index | nir_metadata_dominance,
-      internal_bindless);
+      uses_bindless_samplers);
    return progress;
 }

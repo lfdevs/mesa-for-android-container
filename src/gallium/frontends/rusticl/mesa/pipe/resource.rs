@@ -2,6 +2,7 @@ use mesa_rust_gen::*;
 
 use std::ptr;
 
+#[derive(PartialEq, Eq, Hash)]
 pub struct PipeResource {
     pipe: *mut pipe_resource,
     pub is_user: bool,

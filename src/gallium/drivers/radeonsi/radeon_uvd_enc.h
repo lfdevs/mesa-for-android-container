@@ -303,7 +303,32 @@ typedef struct ruvd_enc_feedback_buffer_s {
    uint32_t feedback_data_size;
 } ruvd_enc_feedback_buffer_t;
 
-typedef void (*radeon_uvd_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer **handle,
+typedef struct ruvd_enc_vui_info_s
+{
+   uint32_t vui_parameters_present_flag;
+   struct {
+      uint32_t aspect_ratio_info_present_flag : 1;
+      uint32_t timing_info_present_flag : 1;
+      uint32_t video_signal_type_present_flag : 1;
+      uint32_t colour_description_present_flag : 1;
+      uint32_t chroma_loc_info_present_flag : 1;
+   } flags;
+   uint32_t aspect_ratio_idc;
+   uint32_t sar_width;
+   uint32_t sar_height;
+   uint32_t num_units_in_tick;
+   uint32_t time_scale;
+   uint32_t video_format;
+   uint32_t video_full_range_flag;
+   uint32_t colour_primaries;
+   uint32_t transfer_characteristics;
+   uint32_t matrix_coefficients;
+   uint32_t chroma_sample_loc_type_top_field;
+   uint32_t chroma_sample_loc_type_bottom_field;
+   uint32_t max_num_reorder_frames;
+} ruvd_enc_vui_info;
+
+typedef void (*radeon_uvd_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer_lean **handle,
                                           struct radeon_surf **surface);
 
 struct pipe_video_codec *radeon_uvd_create_encoder(struct pipe_context *context,
@@ -339,6 +364,7 @@ struct radeon_uvd_enc_pic {
    unsigned bit_depth_chroma_minus8;
    unsigned nal_unit_type;
    unsigned max_num_merge_cand;
+   ruvd_enc_vui_info vui_info;
 
    bool not_referenced;
    bool is_iframe;
@@ -380,11 +406,11 @@ struct radeon_uvd_encoder {
 
    radeon_uvd_enc_get_buffer get_buffer;
 
-   struct pb_buffer *handle;
+   struct pb_buffer_lean *handle;
    struct radeon_surf *luma;
    struct radeon_surf *chroma;
 
-   struct pb_buffer *bs_handle;
+   struct pb_buffer_lean *bs_handle;
    unsigned bs_size;
 
    unsigned cpb_num;

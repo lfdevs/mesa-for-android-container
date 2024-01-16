@@ -242,6 +242,19 @@ invalid_values(const struct brw_isa_info *isa, const brw_inst *inst)
       break;
    }
 
+   if (error_msg.str)
+      return error_msg;
+
+   if (devinfo->ver >= 12) {
+      unsigned group_size = 1 << brw_inst_exec_size(devinfo, inst);
+      unsigned qtr_ctrl = brw_inst_qtr_control(devinfo, inst);
+      unsigned nib_ctrl = brw_inst_nib_control(devinfo, inst);
+
+      unsigned chan_off = (qtr_ctrl * 2 + nib_ctrl) << 2;
+      ERROR_IF(chan_off % group_size != 0,
+               "The execution size must be a factor of the chosen offset");
+   }
+
    if (inst_is_send(isa, inst))
       return error_msg;
 
@@ -687,7 +700,10 @@ general_restrictions_based_on_operand_types(const struct brw_isa_info *isa,
       return error_msg;
 
    if (devinfo->ver >= 11) {
-      if (num_sources == 3) {
+      /* A register type of B or UB for DPAS actually means 4 bytes packed into
+       * a D or UD, so it is allowed.
+       */
+      if (num_sources == 3 && brw_inst_opcode(isa, inst) != BRW_OPCODE_DPAS) {
          ERROR_IF(brw_reg_type_to_size(brw_inst_3src_a1_src1_type(devinfo, inst)) == 1 ||
                   brw_reg_type_to_size(brw_inst_3src_a1_src2_type(devinfo, inst)) == 1,
                   "Byte data type is not supported for src1/2 register regioning. This includes "
@@ -2468,6 +2484,153 @@ instruction_restrictions(const struct brw_isa_info *isa,
          ERROR_IF(src_type != dst_type,
                   "CSEL source type must match destination type");
       }
+   }
+
+   if (brw_inst_opcode(isa, inst) == BRW_OPCODE_DPAS) {
+      ERROR_IF(brw_inst_dpas_3src_sdepth(devinfo, inst) != BRW_SYSTOLIC_DEPTH_8,
+               "Systolic depth must be 8.");
+
+      const unsigned sdepth = 8;
+
+      const enum brw_reg_type dst_type =
+         brw_inst_dpas_3src_dst_type(devinfo, inst);
+      const enum brw_reg_type src0_type =
+         brw_inst_dpas_3src_src0_type(devinfo, inst);
+      const enum brw_reg_type src1_type =
+         brw_inst_dpas_3src_src1_type(devinfo, inst);
+      const enum brw_reg_type src2_type =
+         brw_inst_dpas_3src_src2_type(devinfo, inst);
+
+      const enum gfx12_sub_byte_precision src1_sub_byte =
+         brw_inst_dpas_3src_src1_subbyte(devinfo, inst);
+
+      if (src1_type != BRW_REGISTER_TYPE_B && src1_type != BRW_REGISTER_TYPE_UB) {
+         ERROR_IF(src1_sub_byte != BRW_SUB_BYTE_PRECISION_NONE,
+                  "Sub-byte precision must be None for source type larger than Byte.");
+      } else {
+         ERROR_IF(src1_sub_byte != BRW_SUB_BYTE_PRECISION_NONE &&
+                  src1_sub_byte != BRW_SUB_BYTE_PRECISION_4BIT &&
+                  src1_sub_byte != BRW_SUB_BYTE_PRECISION_2BIT,
+                  "Invalid sub-byte precision.");
+      }
+
+      const enum gfx12_sub_byte_precision src2_sub_byte =
+         brw_inst_dpas_3src_src2_subbyte(devinfo, inst);
+
+      if (src2_type != BRW_REGISTER_TYPE_B && src2_type != BRW_REGISTER_TYPE_UB) {
+         ERROR_IF(src2_sub_byte != BRW_SUB_BYTE_PRECISION_NONE,
+                  "Sub-byte precision must be None.");
+      } else {
+         ERROR_IF(src2_sub_byte != BRW_SUB_BYTE_PRECISION_NONE &&
+                  src2_sub_byte != BRW_SUB_BYTE_PRECISION_4BIT &&
+                  src2_sub_byte != BRW_SUB_BYTE_PRECISION_2BIT,
+                  "Invalid sub-byte precision.");
+      }
+
+      const unsigned src1_bits_per_element =
+         (8 * brw_reg_type_to_size(src1_type)) >>
+         brw_inst_dpas_3src_src1_subbyte(devinfo, inst);
+
+      const unsigned src2_bits_per_element =
+         (8 * brw_reg_type_to_size(src2_type)) >>
+         brw_inst_dpas_3src_src2_subbyte(devinfo, inst);
+
+      /* The MAX2(1, ...) is just to prevent possible division by 0 later. */
+      const unsigned ops_per_chan =
+         MAX2(1, 32 / MAX2(src1_bits_per_element, src2_bits_per_element));
+
+      ERROR_IF(brw_inst_exec_size(devinfo, inst) != BRW_EXECUTE_8,
+               "DPAS execution size must be 8.");
+
+      const unsigned exec_size = 8;
+
+      const unsigned dst_subnr  = brw_inst_dpas_3src_dst_subreg_nr(devinfo, inst);
+      const unsigned src0_subnr = brw_inst_dpas_3src_src0_subreg_nr(devinfo, inst);
+      const unsigned src1_subnr = brw_inst_dpas_3src_src1_subreg_nr(devinfo, inst);
+      const unsigned src2_subnr = brw_inst_dpas_3src_src2_subreg_nr(devinfo, inst);
+
+      /* Until HF is supported as dst type, this is effectively subnr == 0. */
+      ERROR_IF(dst_subnr % exec_size != 0,
+               "Destination subregister offset must be a multiple of ExecSize.");
+
+      /* Until HF is supported as src0 type, this is effectively subnr == 0. */
+      ERROR_IF(src0_subnr % exec_size != 0,
+               "Src0 subregister offset must be a multiple of ExecSize.");
+
+      ERROR_IF(src1_subnr != 0,
+               "Src1 subregister offsets must be 0.");
+
+      /* In nearly all cases, this effectively requires that src2.subnr be
+       * 0. It is only when src1 is 8 bits and src2 is 2 or 4 bits that the
+       * ops_per_chan value can allow non-zero src2.subnr.
+       */
+      ERROR_IF(src2_subnr % (sdepth * ops_per_chan) != 0,
+               "Src2 subregister offset must be a multiple of SystolicDepth "
+               "times OPS_PER_CHAN.");
+
+      ERROR_IF(dst_subnr * type_sz(dst_type) >= REG_SIZE,
+               "Destination subregister specifies next register.");
+
+      ERROR_IF(src0_subnr * type_sz(src0_type) >= REG_SIZE,
+               "Src0 subregister specifies next register.");
+
+      ERROR_IF((src1_subnr * type_sz(src1_type) * src1_bits_per_element) / 8 >= REG_SIZE,
+               "Src1 subregister specifies next register.");
+
+      ERROR_IF((src2_subnr * type_sz(src2_type) * src2_bits_per_element) / 8 >= REG_SIZE,
+               "Src2 subregister specifies next register.");
+
+      if (brw_inst_3src_atomic_control(devinfo, inst)) {
+         /* FINISHME: When we start emitting DPAS with Atomic set, figure out
+          * a way to validate it. Also add a test in test_eu_validate.cpp.
+          */
+         ERROR_IF(true,
+                  "When instruction option Atomic is used it must be follwed by a "
+                  "DPAS instruction.");
+      }
+
+      if (brw_inst_dpas_3src_exec_type(devinfo, inst) ==
+          BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT) {
+         ERROR_IF(dst_type != BRW_REGISTER_TYPE_F,
+                  "DPAS destination type must be F.");
+         ERROR_IF(src0_type != BRW_REGISTER_TYPE_F,
+                  "DPAS src0 type must be F.");
+         ERROR_IF(src1_type != BRW_REGISTER_TYPE_HF,
+                  "DPAS src1 type must be HF.");
+         ERROR_IF(src2_type != BRW_REGISTER_TYPE_HF,
+                  "DPAS src2 type must be HF.");
+      } else {
+         ERROR_IF(dst_type != BRW_REGISTER_TYPE_D &&
+                  dst_type != BRW_REGISTER_TYPE_UD,
+                  "DPAS destination type must be D or UD.");
+         ERROR_IF(src0_type != BRW_REGISTER_TYPE_D &&
+                  src0_type != BRW_REGISTER_TYPE_UD,
+                  "DPAS src0 type must be D or UD.");
+         ERROR_IF(src1_type != BRW_REGISTER_TYPE_B &&
+                  src1_type != BRW_REGISTER_TYPE_UB,
+                  "DPAS src1 base type must be B or UB.");
+         ERROR_IF(src2_type != BRW_REGISTER_TYPE_B &&
+                  src2_type != BRW_REGISTER_TYPE_UB,
+                  "DPAS src2 base type must be B or UB.");
+
+         if (brw_reg_type_is_unsigned_integer(dst_type)) {
+            ERROR_IF(!brw_reg_type_is_unsigned_integer(src0_type) ||
+                     !brw_reg_type_is_unsigned_integer(src1_type) ||
+                     !brw_reg_type_is_unsigned_integer(src2_type),
+                     "If any source datatype is signed, destination datatype "
+                     "must be signed.");
+         }
+      }
+
+      /* FINISHME: Additional restrictions mentioned in the Bspec that are not
+       * yet enforced here:
+       *
+       *    - General Accumulator registers access is not supported. This is
+       *      currently enforced in brw_dpas_three_src (brw_eu_emit.c).
+       *
+       *    - Given any combination of datatypes in the sources of a DPAS
+       *      instructions, the boundaries of a register should not be crossed.
+       */
    }
 
    return error_msg;

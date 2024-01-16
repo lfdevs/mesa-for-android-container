@@ -14,14 +14,14 @@
 static void si_pm4_set_reg_custom(struct si_pm4_state *state, unsigned reg, uint32_t val,
                                   unsigned opcode, unsigned idx);
 
-static bool opcode_is_packed(unsigned opcode)
+static bool opcode_is_pairs_packed(unsigned opcode)
 {
    return opcode == PKT3_SET_CONTEXT_REG_PAIRS_PACKED ||
           opcode == PKT3_SET_SH_REG_PAIRS_PACKED ||
           opcode == PKT3_SET_SH_REG_PAIRS_PACKED_N;
 }
 
-static unsigned packed_opcode_to_unpacked(unsigned opcode)
+static unsigned pairs_packed_opcode_to_regular(unsigned opcode)
 {
    switch (opcode) {
    case PKT3_SET_CONTEXT_REG_PAIRS_PACKED:
@@ -33,15 +33,15 @@ static unsigned packed_opcode_to_unpacked(unsigned opcode)
    }
 }
 
-static unsigned unpacked_opcode_to_packed(struct si_pm4_state *state, unsigned opcode)
+static unsigned regular_opcode_to_pairs(struct si_pm4_state *state, unsigned opcode)
 {
-   if (state->screen->info.has_set_pairs_packets) {
-      switch (opcode) {
-      case PKT3_SET_CONTEXT_REG:
-         return PKT3_SET_CONTEXT_REG_PAIRS_PACKED;
-      case PKT3_SET_SH_REG:
-         return PKT3_SET_SH_REG_PAIRS_PACKED;
-      }
+   const struct radeon_info *info = &state->screen->info;
+
+   switch (opcode) {
+   case PKT3_SET_CONTEXT_REG:
+      return info->has_set_context_pairs_packed ? PKT3_SET_CONTEXT_REG_PAIRS_PACKED : opcode;
+   case PKT3_SET_SH_REG:
+      return info->has_set_sh_pairs_packed ? PKT3_SET_SH_REG_PAIRS_PACKED : opcode;
    }
 
    return opcode;
@@ -90,7 +90,7 @@ static unsigned get_packed_reg_count(struct si_pm4_state *state)
 
 void si_pm4_finalize(struct si_pm4_state *state)
 {
-   if (opcode_is_packed(state->last_opcode)) {
+   if (opcode_is_pairs_packed(state->last_opcode)) {
       unsigned reg_count = get_packed_reg_count(state);
       unsigned reg_dw_offset0 = get_packed_reg_dw_offsetN(state, 0);
 
@@ -114,7 +114,7 @@ void si_pm4_finalize(struct si_pm4_state *state)
 
       if (all_consecutive) {
          assert(state->ndw - state->last_pm4 == 2 + 3 * (reg_count + state->packed_is_padded) / 2);
-         state->pm4[state->last_pm4] = PKT3(packed_opcode_to_unpacked(state->last_opcode),
+         state->pm4[state->last_pm4] = PKT3(pairs_packed_opcode_to_regular(state->last_opcode),
                                             reg_count, 0);
          state->pm4[state->last_pm4 + 1] = reg_dw_offset0;
          for (unsigned i = 0; i < reg_count; i++)
@@ -140,10 +140,6 @@ void si_pm4_finalize(struct si_pm4_state *state)
                }
             }
          }
-
-         /* All SET_*_PAIRS* packets on the gfx queue must set RESET_FILTER_CAM. */
-         if (!state->is_compute_queue)
-            state->pm4[state->last_pm4] |= PKT3_RESET_FILTER_CAM_S(1);
 
          /* If it's a packed SET_SH packet, use the *_N variant when possible. */
          if (state->last_opcode == PKT3_SET_SH_REG_PAIRS_PACKED && reg_count <= 14) {
@@ -194,9 +190,14 @@ static void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
 {
    unsigned count;
    count = state->ndw - state->last_pm4 - 2;
-   state->pm4[state->last_pm4] = PKT3(state->last_opcode, count, predicate);
+   /* All SET_*_PAIRS* packets on the gfx queue must set RESET_FILTER_CAM. */
+   bool reset_filter_cam = !state->is_compute_queue &&
+                           opcode_is_pairs_packed(state->last_opcode);
 
-   if (opcode_is_packed(state->last_opcode)) {
+   state->pm4[state->last_pm4] = PKT3(state->last_opcode, count, predicate) |
+                                 PKT3_RESET_FILTER_CAM_S(reset_filter_cam);
+
+   if (opcode_is_pairs_packed(state->last_opcode)) {
       if (packed_prev_is_reg_value0(state)) {
          /* Duplicate the first register at the end to make the number of registers aligned to 2. */
          si_pm4_set_reg_custom(state, get_packed_reg_dw_offsetN(state, 0) * 4,
@@ -212,13 +213,15 @@ static void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
 static void si_pm4_set_reg_custom(struct si_pm4_state *state, unsigned reg, uint32_t val,
                                   unsigned opcode, unsigned idx)
 {
-   bool is_packed = opcode_is_packed(opcode);
+   bool is_packed = opcode_is_pairs_packed(opcode);
    reg >>= 2;
 
    assert(state->max_dw);
    assert(state->ndw + 2 <= state->max_dw);
 
    if (is_packed) {
+      assert(idx == 0);
+
       if (opcode != state->last_opcode) {
          si_pm4_cmd_begin(state, opcode); /* reserve space for the header */
          state->ndw++; /* reserve space for the register count, it will be set at the end */
@@ -280,7 +283,7 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
       return;
    }
 
-   opcode = unpacked_opcode_to_packed(state, opcode);
+   opcode = regular_opcode_to_pairs(state, opcode);
 
    si_pm4_set_reg_custom(state, reg, val, opcode, 0);
 }

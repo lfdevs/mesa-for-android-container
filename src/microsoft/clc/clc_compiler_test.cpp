@@ -1577,14 +1577,24 @@ TEST_F(ComputeTest, image)
 
 TEST_F(ComputeTest, image_two_reads)
 {
+   // Note: unnecessary control flow is present so that nir_opt_dead_cf kicks in, causing
+   // nir_rematerialize_derefs_in_use_blocks to run. The duplicated uses ensure that the
+   // per-var-deref processing works correctly.
    const char* kernel_source =
-   "__kernel void main_test(image2d_t image, int is_float, __global float* output)\n\
-   {\n\
-      if (is_float)\n\
-         output[get_global_id(0)] = read_imagef(image, (int2)(0, 0)).x;\n\
-      else \n\
-         output[get_global_id(0)] = (float)read_imagei(image, (int2)(0, 0)).x;\n\
-   }\n";
+   R"(__kernel void main_test(image2d_t image, int is_float, __global float* output)
+   {
+      int x = get_global_id(0);
+      if (is_float)
+         x = get_global_id(0);
+      if (is_float)
+         output[x] = read_imagef(image, (int2)(0, 0)).x;
+      else
+         output[x] = (float)read_imagei(image, (int2)(0, 0)).x;
+      if (is_float)
+         output[x] = read_imagef(image, (int2)(0, 0)).x;
+      else
+         output[x] = (float)read_imagei(image, (int2)(0, 0)).x;
+   })";
    Shader shader = compile(std::vector<const char*>({ kernel_source }));
    validate(shader);
 }

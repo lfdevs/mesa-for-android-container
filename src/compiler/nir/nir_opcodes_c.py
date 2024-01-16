@@ -67,7 +67,7 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd
 %                 else:
 <%                   dst_t = src_t %>
 %                 endif
-%              elif src_t == 'bool' and dst_t in ['int', 'uint', 'bool']:
+%              elif src_t == 'bool' and dst_t in ['int', 'uint']:
 %                 if dst_t == 'int':
 <%                   continue %>
 %                 else:

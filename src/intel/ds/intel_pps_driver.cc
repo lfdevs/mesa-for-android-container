@@ -342,4 +342,21 @@ uint64_t IntelDriver::gpu_timestamp() const
    return intel_device_info_timebase_scale(&perf->devinfo, timestamp);
 }
 
+bool IntelDriver::cpu_gpu_timestamp(uint64_t &cpu_timestamp,
+                                    uint64_t &gpu_timestamp) const
+{
+   if (!intel_gem_read_correlate_cpu_gpu_timestamp(drm_device.fd,
+                                                   perf->devinfo.kmd_type,
+                                                   INTEL_ENGINE_CLASS_RENDER, 0,
+                                                   CLOCK_BOOTTIME,
+                                                   &cpu_timestamp,
+                                                   &gpu_timestamp,
+                                                   NULL))
+      return false;
+
+   gpu_timestamp =
+      intel_device_info_timebase_scale(&perf->devinfo, gpu_timestamp);
+   return true;
+}
+
 } // namespace pps

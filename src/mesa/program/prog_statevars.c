@@ -1617,22 +1617,28 @@ _mesa_optimize_state_parameters(struct gl_constants *consts,
          gl_state_index16 state = STATE_NOT_STATE_VAR;
          unsigned num_lights = 0;
 
-         for (unsigned state_iter = STATE_LIGHTPROD_ARRAY_FRONT;
+         for (gl_state_index state_iter = STATE_LIGHTPROD_ARRAY_FRONT;
               state_iter <= STATE_LIGHTPROD_ARRAY_TWOSIDE; state_iter++) {
             unsigned num_attribs, base_attrib, attrib_incr;
 
-            if (state_iter == STATE_LIGHTPROD_ARRAY_FRONT)  {
+            switch (state_iter) {
+            case STATE_LIGHTPROD_ARRAY_FRONT:
                num_attribs = 3;
                base_attrib = MAT_ATTRIB_FRONT_AMBIENT;
                attrib_incr = 2;
-            } else if (state_iter == STATE_LIGHTPROD_ARRAY_BACK) {
+               break;
+            case STATE_LIGHTPROD_ARRAY_BACK:
                num_attribs = 3;
                base_attrib = MAT_ATTRIB_BACK_AMBIENT;
                attrib_incr = 2;
-            } else if (state_iter == STATE_LIGHTPROD_ARRAY_TWOSIDE) {
+               break;
+            case STATE_LIGHTPROD_ARRAY_TWOSIDE:
                num_attribs = 6;
                base_attrib = MAT_ATTRIB_FRONT_AMBIENT;
                attrib_incr = 1;
+               break;
+            default:
+               unreachable("unexpected state-var");
             }
 
             /* Find all attributes for one light. */

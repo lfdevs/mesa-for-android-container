@@ -307,6 +307,7 @@ def get_features(is_point_release: bool) -> typing.Generator[str, None, None]:
             for line in f:
                 yield line.rstrip()
         p.unlink()
+        subprocess.run(['git', 'add', p])
     else:
         yield "None"
 
@@ -330,7 +331,7 @@ def update_release_notes_index(version: str) -> None:
             new_relnotes.append(f'   {version} <relnotes/{version}>\n')
         new_relnotes.append(line)
 
-    with relnotes_index_path.open('w') as f:
+    with relnotes_index_path.open('w', encoding='utf-8') as f:
         for line in new_relnotes:
             f.write(line)
 
@@ -356,7 +357,7 @@ async def main() -> None:
     )
 
     final = pathlib.Path('docs') / 'relnotes' / f'{this_version}.rst'
-    with final.open('wt') as f:
+    with final.open('wt', encoding='utf-8') as f:
         try:
             f.write(TEMPLATE.render(
                 bugfix=is_point_release,

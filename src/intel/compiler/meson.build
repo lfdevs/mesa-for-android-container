@@ -57,6 +57,7 @@ libintel_compiler_files = files(
   'brw_fs.h',
   'brw_fs_live_variables.cpp',
   'brw_fs_live_variables.h',
+  'brw_fs_lower_dpas.cpp',
   'brw_fs_lower_pack.cpp',
   'brw_fs_lower_regioning.cpp',
   'brw_fs_nir.cpp',
@@ -88,6 +89,7 @@ libintel_compiler_files = files(
   'brw_nir_blockify_uniform_loads.c',
   'brw_nir_clamp_per_vertex_loads.c',
   'brw_nir_lower_conversions.c',
+  'brw_nir_lower_cooperative_matrix.c',
   'brw_nir_lower_cs_intrinsics.c',
   'brw_nir_lower_alpha_to_coverage.c',
   'brw_nir_lower_intersection_shader.c',
@@ -194,6 +196,7 @@ if with_tests
     executable(
       'intel_compiler_tests',
       files(
+        'test_predicated_break.cpp',
         'test_eu_compact.cpp',
         'test_eu_validate.cpp',
         'test_fs_cmod_propagation.cpp',

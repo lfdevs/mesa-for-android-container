@@ -48,15 +48,15 @@ TEST_F(ir_variable_constructor, interface)
    void *mem_ctx = ralloc_context(NULL);
 
    static const glsl_struct_field f[] = {
-      glsl_struct_field(glsl_type::vec(4), "v")
+      glsl_struct_field(glsl_vec_type(4), "v")
    };
 
    const glsl_type *const iface =
-      glsl_type::get_interface_instance(f,
-                                        ARRAY_SIZE(f),
-                                        GLSL_INTERFACE_PACKING_STD140,
-                                        false,
-                                        "simple_interface");
+      glsl_interface_type(f,
+                          ARRAY_SIZE(f),
+                          GLSL_INTERFACE_PACKING_STD140,
+                          false,
+                          "simple_interface");
 
    static const char name[] = "named_instance";
 
@@ -76,18 +76,17 @@ TEST_F(ir_variable_constructor, interface_array)
    void *mem_ctx = ralloc_context(NULL);
 
    static const glsl_struct_field f[] = {
-      glsl_struct_field(glsl_type::vec(4), "v")
+      glsl_struct_field(glsl_vec_type(4), "v")
    };
 
    const glsl_type *const iface =
-      glsl_type::get_interface_instance(f,
-                                        ARRAY_SIZE(f),
-                                        GLSL_INTERFACE_PACKING_STD140,
-                                        false,
-                                        "simple_interface");
+      glsl_interface_type(f,
+                          ARRAY_SIZE(f),
+                          GLSL_INTERFACE_PACKING_STD140,
+                          false,
+                          "simple_interface");
 
-   const glsl_type *const interface_array =
-      glsl_type::get_array_instance(iface, 2);
+   const glsl_type *const interface_array = glsl_array_type(iface, 2, 0);
 
    static const char name[] = "array_instance";
 

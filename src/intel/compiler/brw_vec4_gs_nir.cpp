@@ -43,7 +43,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       const unsigned input_array_stride = prog_data->urb_read_length * 2;
 
       /* Make up a type...we have no way of knowing... */
-      const glsl_type *const type = glsl_type::ivec(instr->num_components);
+      const glsl_type *const type = glsl_ivec_type(instr->num_components);
 
       src = src_reg(ATTR, input_array_stride * vertex +
                     nir_intrinsic_base(instr) + offset_reg,

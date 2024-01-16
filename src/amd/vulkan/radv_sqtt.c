@@ -24,8 +24,11 @@
 #include <inttypes.h>
 
 #include "radv_cs.h"
+#include "radv_debug.h"
 #include "radv_private.h"
 #include "sid.h"
+
+#include "vk_common_entrypoints.h"
 
 #define SQTT_BUFFER_ALIGN_SHIFT 12
 
@@ -33,6 +36,12 @@ bool
 radv_is_instruction_timing_enabled(void)
 {
    return debug_get_bool_option("RADV_THREAD_TRACE_INSTRUCTION_TIMING", true);
+}
+
+bool
+radv_sqtt_queue_events_enabled(void)
+{
+   return debug_get_bool_option("RADV_THREAD_TRACE_QUEUE_EVENTS", true);
 }
 
 static uint32_t
@@ -79,7 +88,7 @@ radv_emit_wait_for_idle(const struct radv_device *device, struct radeon_cmdbuf *
 {
    const enum radv_queue_family qf = radv_ip_to_queue_family(family);
    enum rgp_flush_bits sqtt_flush_bits = 0;
-   si_cs_emit_cache_flush(
+   radv_cs_emit_cache_flush(
       device->ws, cs, device->physical_device->rad_info.gfx_level, NULL, 0, qf,
       (family == RADV_QUEUE_COMPUTE ? RADV_CMD_FLAG_CS_PARTIAL_FLUSH
                                     : (RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH)) |
@@ -479,6 +488,141 @@ radv_emit_inhibit_clockgating(const struct radv_device *device, struct radeon_cm
    }
 }
 
+VkResult
+radv_sqtt_acquire_gpu_timestamp(struct radv_device *device, struct radeon_winsys_bo **gpu_timestamp_bo,
+                                uint32_t *gpu_timestamp_offset, void **gpu_timestamp_ptr)
+{
+   struct radeon_winsys *ws = device->ws;
+
+   simple_mtx_lock(&device->sqtt_timestamp_mtx);
+
+   if (device->sqtt_timestamp.offset + 8 > device->sqtt_timestamp.size) {
+      struct radeon_winsys_bo *bo;
+      uint64_t new_size;
+      VkResult result;
+      uint8_t *map;
+
+      new_size = MAX2(4096, 2 * device->sqtt_timestamp.size);
+
+      result = ws->buffer_create(ws, new_size, 8, RADEON_DOMAIN_GTT,
+                                 RADEON_FLAG_CPU_ACCESS | RADEON_FLAG_NO_INTERPROCESS_SHARING, RADV_BO_PRIORITY_SCRATCH,
+                                 0, &bo);
+      if (result != VK_SUCCESS) {
+         simple_mtx_unlock(&device->sqtt_timestamp_mtx);
+         return result;
+      }
+
+      map = device->ws->buffer_map(bo);
+      if (!map) {
+         ws->buffer_destroy(ws, bo);
+         simple_mtx_unlock(&device->sqtt_timestamp_mtx);
+         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      }
+
+      if (device->sqtt_timestamp.bo) {
+         struct radv_sqtt_timestamp *new_timestamp;
+
+         new_timestamp = malloc(sizeof(*new_timestamp));
+         if (!new_timestamp) {
+            ws->buffer_destroy(ws, bo);
+            simple_mtx_unlock(&device->sqtt_timestamp_mtx);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+
+         memcpy(new_timestamp, &device->sqtt_timestamp, sizeof(*new_timestamp));
+         list_add(&new_timestamp->list, &device->sqtt_timestamp.list);
+      }
+
+      device->sqtt_timestamp.bo = bo;
+      device->sqtt_timestamp.size = new_size;
+      device->sqtt_timestamp.offset = 0;
+      device->sqtt_timestamp.map = map;
+   }
+
+   *gpu_timestamp_bo = device->sqtt_timestamp.bo;
+   *gpu_timestamp_offset = device->sqtt_timestamp.offset;
+   *gpu_timestamp_ptr = device->sqtt_timestamp.map + device->sqtt_timestamp.offset;
+
+   device->sqtt_timestamp.offset += 8;
+
+   simple_mtx_unlock(&device->sqtt_timestamp_mtx);
+
+   return VK_SUCCESS;
+}
+
+static void
+radv_sqtt_reset_timestamp(struct radv_device *device)
+{
+   struct radeon_winsys *ws = device->ws;
+
+   simple_mtx_lock(&device->sqtt_timestamp_mtx);
+
+   list_for_each_entry_safe (struct radv_sqtt_timestamp, ts, &device->sqtt_timestamp.list, list) {
+      ws->buffer_destroy(ws, ts->bo);
+      list_del(&ts->list);
+      free(ts);
+   }
+
+   device->sqtt_timestamp.offset = 0;
+
+   simple_mtx_unlock(&device->sqtt_timestamp_mtx);
+}
+
+static bool
+radv_sqtt_init_queue_event(struct radv_device *device)
+{
+   VkCommandPool cmd_pool;
+   VkResult result;
+
+   const VkCommandPoolCreateInfo create_gfx_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .queueFamilyIndex = RADV_QUEUE_GENERAL, /* Graphics queue is always the first queue. */
+   };
+
+   result = vk_common_CreateCommandPool(radv_device_to_handle(device), &create_gfx_info, NULL, &cmd_pool);
+   if (result != VK_SUCCESS)
+      return false;
+
+   device->sqtt_command_pool[0] = vk_command_pool_from_handle(cmd_pool);
+
+   if (!(device->instance->debug_flags & RADV_DEBUG_NO_COMPUTE_QUEUE)) {
+      const VkCommandPoolCreateInfo create_comp_info = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+         .queueFamilyIndex = RADV_QUEUE_COMPUTE,
+      };
+
+      result = vk_common_CreateCommandPool(radv_device_to_handle(device), &create_comp_info, NULL, &cmd_pool);
+      if (result != VK_SUCCESS)
+         return false;
+
+      device->sqtt_command_pool[1] = vk_command_pool_from_handle(cmd_pool);
+   }
+
+   simple_mtx_init(&device->sqtt_command_pool_mtx, mtx_plain);
+
+   simple_mtx_init(&device->sqtt_timestamp_mtx, mtx_plain);
+   list_inithead(&device->sqtt_timestamp.list);
+
+   return true;
+}
+
+static void
+radv_sqtt_finish_queue_event(struct radv_device *device)
+{
+   struct radeon_winsys *ws = device->ws;
+
+   if (device->sqtt_timestamp.bo)
+      ws->buffer_destroy(ws, device->sqtt_timestamp.bo);
+
+   simple_mtx_destroy(&device->sqtt_timestamp_mtx);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(device->sqtt_command_pool); i++)
+      vk_common_DestroyCommandPool(radv_device_to_handle(device),
+                                   vk_command_pool_to_handle(device->sqtt_command_pool[i]), NULL);
+
+   simple_mtx_destroy(&device->sqtt_command_pool_mtx);
+}
+
 static bool
 radv_sqtt_init_bo(struct radv_device *device)
 {
@@ -607,6 +751,9 @@ radv_sqtt_init(struct radv_device *device)
    if (!radv_sqtt_init_bo(device))
       return false;
 
+   if (!radv_sqtt_init_queue_event(device))
+      return false;
+
    if (!radv_device_acquire_performance_counters(device))
       return false;
 
@@ -624,6 +771,7 @@ radv_sqtt_finish(struct radv_device *device)
    struct radeon_winsys *ws = device->ws;
 
    radv_sqtt_finish_bo(device);
+   radv_sqtt_finish_queue_event(device);
 
    for (unsigned i = 0; i < 2; i++) {
       if (device->sqtt.start_cs[i])
@@ -810,6 +958,7 @@ radv_reset_sqtt_trace(struct radv_device *device)
 {
    struct ac_sqtt *sqtt = &device->sqtt;
    struct rgp_clock_calibration *clock_calibration = &sqtt->rgp_clock_calibration;
+   struct rgp_queue_event *queue_event = &sqtt->rgp_queue_event;
 
    /* Clear clock calibration records. */
    simple_mtx_lock(&clock_calibration->lock);
@@ -819,6 +968,26 @@ radv_reset_sqtt_trace(struct radv_device *device)
       free(record);
    }
    simple_mtx_unlock(&clock_calibration->lock);
+
+   /* Clear queue event records. */
+   simple_mtx_lock(&queue_event->lock);
+   list_for_each_entry_safe (struct rgp_queue_event_record, record, &queue_event->record, list) {
+      list_del(&record->list);
+      free(record);
+   }
+   queue_event->record_count = 0;
+   simple_mtx_unlock(&queue_event->lock);
+
+   /* Clear timestamps. */
+   radv_sqtt_reset_timestamp(device);
+
+   /* Clear timed cmdbufs. */
+   simple_mtx_lock(&device->sqtt_command_pool_mtx);
+   for (unsigned i = 0; i < ARRAY_SIZE(device->sqtt_command_pool); i++) {
+      vk_common_TrimCommandPool(radv_device_to_handle(device), vk_command_pool_to_handle(device->sqtt_command_pool[i]),
+                                0);
+   }
+   simple_mtx_unlock(&device->sqtt_command_pool_mtx);
 }
 
 static VkResult
@@ -828,17 +997,17 @@ radv_get_calibrated_timestamps(struct radv_device *device, uint64_t *cpu_timesta
    uint64_t max_deviation;
    VkResult result;
 
-   const VkCalibratedTimestampInfoEXT timestamp_infos[2] = {{
-                                                               .sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT,
-                                                               .timeDomain = VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
+   const VkCalibratedTimestampInfoKHR timestamp_infos[2] = {{
+                                                               .sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_KHR,
+                                                               .timeDomain = VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR,
                                                             },
                                                             {
-                                                               .sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT,
-                                                               .timeDomain = VK_TIME_DOMAIN_DEVICE_EXT,
+                                                               .sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_KHR,
+                                                               .timeDomain = VK_TIME_DOMAIN_DEVICE_KHR,
                                                             }};
 
    result =
-      radv_GetCalibratedTimestampsEXT(radv_device_to_handle(device), 2, timestamp_infos, timestamps, &max_deviation);
+      radv_GetCalibratedTimestampsKHR(radv_device_to_handle(device), 2, timestamp_infos, timestamps, &max_deviation);
    if (result != VK_SUCCESS)
       return result;
 
@@ -859,4 +1028,57 @@ radv_sqtt_sample_clocks(struct radv_device *device)
       return false;
 
    return ac_sqtt_add_clock_calibration(&device->sqtt, cpu_timestamp, gpu_timestamp);
+}
+
+VkResult
+radv_sqtt_get_timed_cmdbuf(struct radv_queue *queue, struct radeon_winsys_bo *timestamp_bo, uint32_t timestamp_offset,
+                           VkPipelineStageFlags2 timestamp_stage, VkCommandBuffer *pcmdbuf)
+{
+   struct radv_device *device = queue->device;
+   enum radv_queue_family queue_family = queue->state.qf;
+   VkCommandBuffer cmdbuf;
+   uint64_t timestamp_va;
+   VkResult result;
+
+   assert(queue_family == RADV_QUEUE_GENERAL || queue_family == RADV_QUEUE_COMPUTE);
+
+   simple_mtx_lock(&device->sqtt_command_pool_mtx);
+
+   const VkCommandBufferAllocateInfo alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = vk_command_pool_to_handle(device->sqtt_command_pool[queue_family]),
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+   };
+
+   result = vk_common_AllocateCommandBuffers(radv_device_to_handle(device), &alloc_info, &cmdbuf);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   const VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+   };
+
+   result = radv_BeginCommandBuffer(cmdbuf, &begin_info);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   radeon_check_space(device->ws, radv_cmd_buffer_from_handle(cmdbuf)->cs, 28);
+
+   timestamp_va = radv_buffer_get_va(timestamp_bo) + timestamp_offset;
+
+   radv_cs_add_buffer(device->ws, radv_cmd_buffer_from_handle(cmdbuf)->cs, timestamp_bo);
+
+   radv_write_timestamp(radv_cmd_buffer_from_handle(cmdbuf), timestamp_va, timestamp_stage);
+
+   result = radv_EndCommandBuffer(cmdbuf);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   *pcmdbuf = cmdbuf;
+
+fail:
+   simple_mtx_unlock(&device->sqtt_command_pool_mtx);
+   return result;
 }

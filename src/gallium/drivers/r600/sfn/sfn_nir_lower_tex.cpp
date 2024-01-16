@@ -126,7 +126,7 @@ r600_nir_lower_int_tg4(nir_shader *shader)
 
    nir_foreach_uniform_variable(var, shader)
    {
-      if (var->type->is_sampler()) {
+      if (glsl_type_is_sampler(var->type)) {
          if (glsl_base_type_is_integer(var->type->sampled_type)) {
             need_lowering = true;
          }

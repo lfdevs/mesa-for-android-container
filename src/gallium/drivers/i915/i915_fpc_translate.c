@@ -859,8 +859,8 @@ i915_translate_token(struct i915_fp_compile *p,
       } else if (token->FullDeclaration.Declaration.File ==
                  TGSI_FILE_TEMPORARY) {
          if (token->FullDeclaration.Range.Last >= I915_MAX_TEMPORARY) {
-            i915_program_error(p, "Exceeded %d max TGSI temps",
-                               I915_MAX_TEMPORARY);
+            i915_program_error(p, "Exceeded max TGSI temps (%d/%d)",
+                               token->FullDeclaration.Range.Last + 1, I915_MAX_TEMPORARY);
          } else {
             uint32_t i;
             for (i = token->FullDeclaration.Range.First;

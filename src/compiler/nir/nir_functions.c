@@ -289,6 +289,7 @@ nir_inline_functions(nir_shader *shader)
 struct lower_link_state {
    struct hash_table *shader_var_remap;
    const nir_shader *link_shader;
+   unsigned printf_index_offset;
 };
 
 static bool
@@ -333,6 +334,23 @@ lower_calls_vars_instr(struct nir_builder *b,
       new_func = nir_shader_get_function_for_name(state->link_shader, ncall->callee->name);
       if (new_func)
          ncall->callee = nir_function_clone(b->shader, new_func);
+      break;
+   }
+   case nir_instr_type_intrinsic: {
+      /* Reindex the offset of the printf intrinsic by the number of already
+       * present printfs in the shader where functions are linked into.
+       */
+      if (state->printf_index_offset == 0)
+         return false;
+
+      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+      if (intrin->intrinsic != nir_intrinsic_printf)
+         return false;
+
+      b->cursor = nir_before_instr(instr);
+      nir_src_rewrite(&intrin->src[0],
+                      nir_iadd_imm(b, intrin->src[0].ssa,
+                                      state->printf_index_offset));
       break;
    }
    default:
@@ -396,6 +414,7 @@ nir_link_shader_functions(nir_shader *shader,
    struct lower_link_state state = {
       .shader_var_remap = copy_vars,
       .link_shader = link_shader,
+      .printf_index_offset = shader->printf_info_count,
    };
    /* do progress passes inside the pass */
    do {
@@ -411,6 +430,27 @@ nir_link_shader_functions(nir_shader *shader,
       }
       overall_progress |= progress;
    } while (progress);
+
+   if (overall_progress && link_shader->printf_info_count > 0) {
+      shader->printf_info = reralloc(shader, shader->printf_info,
+                                     u_printf_info,
+                                     shader->printf_info_count +
+                                     link_shader->printf_info_count);
+
+      for (unsigned i = 0; i < link_shader->printf_info_count; i++){
+         const u_printf_info *src_info = &link_shader->printf_info[i];
+         u_printf_info *dst_info = &shader->printf_info[shader->printf_info_count++];
+
+         dst_info->num_args = src_info->num_args;
+         dst_info->arg_sizes = ralloc_array(shader, unsigned, dst_info->num_args);
+         memcpy(dst_info->arg_sizes, src_info->arg_sizes,
+                sizeof(dst_info->arg_sizes[0]) * dst_info->num_args);
+
+         dst_info->string_size = src_info->string_size;
+         dst_info->strings = ralloc_size(shader, dst_info->string_size);
+         memcpy(dst_info->strings, src_info->strings, dst_info->string_size);
+      }
+   }
 
    ralloc_free(ra_ctx);
 

@@ -282,7 +282,76 @@ d3d12_video_nalu_writer_hevc::write_sps_bytes(d3d12_video_encoder_bitstream *pBi
     pBitstream->put_bits(1, pSPS->sps_temporal_mvp_enabled_flag);
     pBitstream->put_bits(1, pSPS->strong_intra_smoothing_enabled_flag);
     pBitstream->put_bits(1, pSPS->vui_parameters_present_flag);
-    assert (pSPS->vui_parameters_present_flag == 0);
+
+    pBitstream->put_bits(1, pSPS->vui.aspect_ratio_info_present_flag);
+    if (pSPS->vui.aspect_ratio_info_present_flag) {
+        pBitstream->put_bits(8, pSPS->vui.aspect_ratio_idc);
+        if (pSPS->vui.aspect_ratio_idc == 255) {
+            pBitstream->put_bits(16, pSPS->vui.sar_width);
+            pBitstream->put_bits(16, pSPS->vui.sar_height);
+        }
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.overscan_info_present_flag);
+    if (pSPS->vui.overscan_info_present_flag) {
+        pBitstream->put_bits(1, pSPS->vui.overscan_appropriate_flag);
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.video_signal_type_present_flag);
+    if (pSPS->vui.video_signal_type_present_flag) {
+        pBitstream->put_bits(3, pSPS->vui.video_format);
+        pBitstream->put_bits(1, pSPS->vui.video_full_range_flag);
+        pBitstream->put_bits(1, pSPS->vui.colour_description_present_flag);
+        if (pSPS->vui.colour_description_present_flag) {
+            pBitstream->put_bits(8, pSPS->vui.colour_primaries);
+            pBitstream->put_bits(8, pSPS->vui.transfer_characteristics);
+            pBitstream->put_bits(8, pSPS->vui.matrix_coeffs);
+        }
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.chroma_loc_info_present_flag);
+    if (pSPS->vui.chroma_loc_info_present_flag) {
+        pBitstream->exp_Golomb_ue(pSPS->vui.chroma_sample_loc_type_top_field);
+        pBitstream->exp_Golomb_ue(pSPS->vui.chroma_sample_loc_type_bottom_field);
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.neutral_chroma_indication_flag);
+    pBitstream->put_bits(1, pSPS->vui.field_seq_flag);
+    pBitstream->put_bits(1, pSPS->vui.frame_field_info_present_flag);
+    pBitstream->put_bits(1, pSPS->vui.default_display_window_flag);
+    if (pSPS->vui.default_display_window_flag) {
+        pBitstream->exp_Golomb_ue(pSPS->vui.def_disp_win_left_offset);
+        pBitstream->exp_Golomb_ue(pSPS->vui.def_disp_win_right_offset);
+        pBitstream->exp_Golomb_ue(pSPS->vui.def_disp_win_top_offset);
+        pBitstream->exp_Golomb_ue(pSPS->vui.def_disp_win_bottom_offset);
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.timing_info_present_flag);
+    if (pSPS->vui.timing_info_present_flag) {
+        pBitstream->put_bits(16, pSPS->vui.num_units_in_tick >> 16);
+        pBitstream->put_bits(16, pSPS->vui.num_units_in_tick & 0xffff);
+        pBitstream->put_bits(16, pSPS->vui.time_scale >> 16);
+        pBitstream->put_bits(16, pSPS->vui.time_scale & 0xffff);
+        pBitstream->put_bits(1, pSPS->vui.poc_proportional_to_timing_flag);
+        if (pSPS->vui.poc_proportional_to_timing_flag) {
+            pBitstream->exp_Golomb_ue(pSPS->vui.num_ticks_poc_diff_one_minus1);
+        }
+
+        assert(pSPS->vui.hrd_parameters_present_flag == 0);
+        pBitstream->put_bits(1, 0); // hrd_parameters_present_flag = 0 until implementing HRD params
+    }
+
+    pBitstream->put_bits(1, pSPS->vui.bitstream_restriction_flag);
+    if (pSPS->vui.bitstream_restriction_flag) {
+        pBitstream->put_bits(1, pSPS->vui.tiles_fixed_structure_flag);
+        pBitstream->put_bits(1, pSPS->vui.motion_vectors_over_pic_boundaries_flag);
+        pBitstream->put_bits(1, pSPS->vui.restricted_ref_pic_lists_flag);
+        pBitstream->exp_Golomb_ue(pSPS->vui.min_spatial_segmentation_idc);
+        pBitstream->exp_Golomb_ue(pSPS->vui.max_bytes_per_pic_denom);
+        pBitstream->exp_Golomb_ue(pSPS->vui.max_bits_per_min_cu_denom);
+        pBitstream->exp_Golomb_ue(pSPS->vui.log2_max_mv_length_horizontal);
+        pBitstream->exp_Golomb_ue(pSPS->vui.log2_max_mv_length_vertical);
+    }
 
     //  pSps_extension_flag
     pBitstream->put_bits(1, 0);

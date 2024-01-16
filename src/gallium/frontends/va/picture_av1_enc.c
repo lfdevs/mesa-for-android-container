@@ -111,6 +111,10 @@ VAStatus vlVaHandleVAEncSequenceParameterBufferTypeAV1(vlVaDriver *drv, vlVaCont
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
       getEncParamPresetAV1(context);
+      context->desc.av1enc.intra_refresh.mode = INTRA_REFRESH_MODE_NONE;
+      context->desc.av1enc.intra_refresh.offset = 0;
+      context->desc.av1enc.intra_refresh.region_size = 0;
+      context->desc.av1enc.intra_refresh.need_sequence_header = 0;
    }
 
    context->desc.av1enc.seq.tier = av1->seq_tier;

@@ -12,7 +12,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer *buf,
+bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer_lean *buf,
                                 unsigned usage)
 {
    return sctx->ws->cs_is_buffer_referenced(&sctx->gfx_cs, buf, usage);
@@ -144,7 +144,7 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
 
 bool si_alloc_resource(struct si_screen *sscreen, struct si_resource *res)
 {
-   struct pb_buffer *old_buf, *new_buf;
+   struct pb_buffer_lean *old_buf, *new_buf;
 
    /* Allocate a new resource. */
    new_buf = sscreen->ws->buffer_create(sscreen->ws, res->bo_size, 1 << res->bo_alignment_log2,
@@ -184,8 +184,14 @@ bool si_alloc_resource(struct si_screen *sscreen, struct si_resource *res)
       fprintf(stderr, "\n");
    }
 
-   if (res->b.b.flags & SI_RESOURCE_FLAG_CLEAR)
-      si_screen_clear_buffer(sscreen, &res->b.b, 0, res->bo_size, 0, SI_OP_SYNC_AFTER);
+   if (res->b.b.flags & SI_RESOURCE_FLAG_CLEAR) {
+      struct si_context *ctx = si_get_aux_context(&sscreen->aux_context.general);
+      uint32_t value = 0;
+
+      si_clear_buffer(ctx, &res->b.b, 0, res->bo_size, &value, 4, SI_OP_SYNC_AFTER,
+                      SI_COHERENCY_SHADER, SI_AUTO_SELECT_CLEAR_METHOD);
+      si_put_aux_context_flush(&sscreen->aux_context.general);
+   }
 
    return true;
 }
@@ -634,7 +640,7 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
 
 struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
                                                    const struct pipe_resource *templ,
-                                                   struct pb_buffer *imported_buf,
+                                                   struct pb_buffer_lean *imported_buf,
                                                    uint64_t offset)
 {
    if (offset + templ->width0 > imported_buf->size)

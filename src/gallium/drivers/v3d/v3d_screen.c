@@ -54,9 +54,10 @@ v3d_screen_get_name(struct pipe_screen *pscreen)
 
         if (!screen->name) {
                 screen->name = ralloc_asprintf(screen,
-                                               "V3D %d.%d",
+                                               "V3D %d.%d.%d",
                                                screen->devinfo.ver / 10,
-                                               screen->devinfo.ver % 10);
+                                               screen->devinfo.ver % 10,
+                                               screen->devinfo.rev);
         }
 
         return screen->name;
@@ -153,7 +154,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_POLYGON_OFFSET_CLAMP:
-                return screen->devinfo.ver >= 41;
+                return screen->devinfo.ver >= 42;
 
 
         case PIPE_CAP_TEXTURE_QUERY_LOD:
@@ -182,20 +183,18 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return PIPE_TEXTURE_TRANSFER_BLIT;
 
         case PIPE_CAP_COMPUTE:
-                return screen->has_csd && screen->devinfo.ver >= 41;
+                return screen->has_csd && screen->devinfo.ver >= 42;
 
         case PIPE_CAP_GENERATE_MIPMAP:
                 return v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_TFU);
 
         case PIPE_CAP_INDEP_BLEND_ENABLE:
-                return screen->devinfo.ver >= 40;
+                return 1;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
                 return V3D_NON_COHERENT_ATOM_SIZE;
 
         case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
-                if (screen->devinfo.ver < 40)
-                        return 0;
                 return 4;
 
         case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
@@ -218,15 +217,9 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT:
                 return 0;
         case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
-                if (screen->devinfo.ver >= 40)
-                        return 0;
-                else
-                        return 1;
+                return 0;
         case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
-                if (screen->devinfo.ver >= 40)
-                        return 1;
-                else
-                        return 0;
+                return 1;
 
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
         case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
@@ -240,18 +233,13 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
                 /* Texturing. */
         case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
-                if (screen->devinfo.ver < 40)
-                        return 2048;
-                else if (screen->nonmsaa_texture_size_limit)
+                if (screen->nonmsaa_texture_size_limit)
                         return 7680;
                 else
                         return V3D_MAX_IMAGE_DIMENSION;
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-                if (screen->devinfo.ver < 40)
-                        return 12;
-                else
-                        return V3D_MAX_MIP_LEVELS;
+                return V3D_MAX_MIP_LEVELS;
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
                 return V3D_MAX_ARRAY_LAYERS;
 
@@ -303,6 +291,9 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
         case PIPE_CAP_IMAGE_STORE_FORMATTED:
                 return false;
+
+        case PIPE_CAP_NATIVE_FENCE_FD:
+                return true;
 
         default:
                 return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -361,7 +352,7 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type s
                         return 0;
                 break;
         case PIPE_SHADER_GEOMETRY:
-                if (screen->devinfo.ver < 41)
+                if (screen->devinfo.ver < 42)
                         return 0;
                 break;
         default:
@@ -454,7 +445,7 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type s
 
         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
                 if (screen->has_cache_flush) {
-                        if (screen->devinfo.ver < 41)
+                        if (screen->devinfo.ver < 42)
                                 return 0;
                         else
                                 return PIPE_MAX_SHADER_IMAGES;
@@ -939,7 +930,7 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
                 v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH);
         screen->has_perfmon = v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_PERFMON);
 
-        v3d_fence_init(screen);
+        v3d_fence_screen_init(screen);
 
         v3d_process_debug_variable();
 

@@ -144,12 +144,10 @@ UNROLL_TEST_INSERT(iadd,     int,   0,     24,   4,
                    ige,      iadd,  false, TRUE, 6, 0)
 UNROLL_TEST_INSERT(iadd_rev, int,   0,     24,   4,
                    ilt,      iadd,  true,  TRUE, 7, 0)
-#ifndef __s390x__
 UNROLL_TEST_INSERT(fadd,     float, 0.0,   24.0, 4.0,
                    fge,      fadd,  false, TRUE, 6, 0)
 UNROLL_TEST_INSERT(fadd_rev, float, 0.0,   24.0, 4.0,
                    flt,      fadd,  true,  TRUE, 7, 0)
-#endif
 UNROLL_TEST_INSERT(imul,     int,   1,     81,   3,
                    ige,      imul,  false, TRUE, 4, 0)
 UNROLL_TEST_INSERT(imul_rev, int,   1,     81,   3,

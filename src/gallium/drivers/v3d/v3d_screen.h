@@ -102,7 +102,7 @@ struct pipe_screen *v3d_screen_create(int fd,
                                       struct renderonly *ro);
 
 void
-v3d_fence_init(struct v3d_screen *screen);
+v3d_fence_screen_init(struct v3d_screen *screen);
 
 #ifdef ENABLE_SHADER_CACHE
 void

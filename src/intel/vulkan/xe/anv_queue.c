@@ -63,6 +63,22 @@ create_engine(struct anv_device *device,
       &physical->queue.families[queue_family_index];
    const struct intel_query_engine_info *engines = physical->engine_info;
    struct drm_xe_engine_class_instance *instances;
+   const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
+   const VkQueueGlobalPriorityKHR priority = queue_priority ?
+                                             queue_priority->globalPriority :
+                                             VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+
+   /* As per spec, the driver implementation may deny requests to acquire
+    * a priority above the default priority (MEDIUM) if the caller does not
+    * have sufficient privileges. In this scenario VK_ERROR_NOT_PERMITTED_KHR
+    * is returned.
+    */
+   if (physical->max_context_priority >= VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
+      if (priority > physical->max_context_priority)
+         return vk_error(device, VK_ERROR_NOT_PERMITTED_KHR);
+   }
 
    instances = vk_alloc(&device->vk.alloc,
                         sizeof(*instances) * queue_family->queueCount, 8,
@@ -83,12 +99,18 @@ create_engine(struct anv_device *device,
    }
 
    assert(device->vm_id != 0);
+   struct drm_xe_ext_set_property ext = {
+      .base.name = DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY,
+      .property = DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY,
+      .value = anv_vk_priority_to_drm_sched_priority(priority),
+   };
    struct drm_xe_exec_queue_create create = {
          /* Allows KMD to pick one of those engines for the submission queue */
          .instances = (uintptr_t)instances,
          .vm_id = device->vm_id,
          .width = 1,
          .num_placements = count,
+         .extensions = (uintptr_t)&ext,
    };
    int ret = intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC_QUEUE_CREATE, &create);
    vk_free(&device->vk.alloc, instances);
@@ -100,38 +122,7 @@ create_engine(struct anv_device *device,
    else
       queue->exec_queue_id = create.exec_queue_id;
 
-   const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority =
-      vk_find_struct_const(pCreateInfo->pNext,
-                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
-   const VkQueueGlobalPriorityKHR priority = queue_priority ?
-                                             queue_priority->globalPriority :
-                                             VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
-
-   /* As per spec, the driver implementation may deny requests to acquire
-    * a priority above the default priority (MEDIUM) if the caller does not
-    * have sufficient privileges. In this scenario VK_ERROR_NOT_PERMITTED_KHR
-    * is returned.
-    */
-   if (physical->max_context_priority >= VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
-      if (priority > physical->max_context_priority)
-         goto priority_error;
-
-      struct drm_xe_exec_queue_set_property exec_queue_property = {
-         .exec_queue_id = create.exec_queue_id,
-         .property = XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY,
-         .value = anv_vk_priority_to_drm_sched_priority(priority),
-      };
-      ret = intel_ioctl(device->fd, DRM_XE_EXEC_QUEUE_SET_PROPERTY,
-                        &exec_queue_property);
-      if (ret && priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR)
-         goto priority_error;
-   }
-
    return VK_SUCCESS;
-
-priority_error:
-   anv_xe_destroy_engine(device, queue);
-   return vk_error(device, VK_ERROR_NOT_PERMITTED_KHR);
 }
 
 VkResult

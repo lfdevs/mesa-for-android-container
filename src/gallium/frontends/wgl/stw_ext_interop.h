@@ -40,6 +40,6 @@ stw_interop_export_object(struct stw_context *ctx,
 int
 stw_interop_flush_objects(struct stw_context *ctx,
                           unsigned count, struct mesa_glinterop_export_in *objects,
-                          GLsync *sync);
+                          struct mesa_glinterop_flush_out *out);
 
 #endif /* STW_EXT_INTEROP_H */

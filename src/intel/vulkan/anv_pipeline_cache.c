@@ -123,13 +123,15 @@ anv_shader_bin_create(struct anv_device *device,
 
    int rv_count = 0;
    struct brw_shader_reloc_value reloc_values[6];
-   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
+   assert((device->physical->va.indirect_descriptor_pool.addr & 0xffffffff) == 0);
+   assert((device->physical->va.internal_surface_state_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH,
       .value = device->physical->indirect_descriptors ?
-               (device->physical->va.descriptor_pool.addr >> 32) :
-               (device->physical->va.binding_table_pool.addr >> 32),
+               (device->physical->va.indirect_descriptor_pool.addr >> 32) :
+               (device->physical->va.internal_surface_state_pool.addr >> 32),
    };
+   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
@@ -218,7 +220,14 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
    blob_write_bytes(blob, shader->kernel.map, shader->kernel_size);
 
    blob_write_uint32(blob, shader->prog_data_size);
-   blob_write_bytes(blob, shader->prog_data, shader->prog_data_size);
+
+   union brw_any_prog_data prog_data;
+   assert(shader->prog_data_size <= sizeof(prog_data));
+   memcpy(&prog_data, shader->prog_data, shader->prog_data_size);
+   prog_data.base.relocs = NULL;
+   prog_data.base.param = NULL;
+   blob_write_bytes(blob, &prog_data, shader->prog_data_size);
+
    blob_write_bytes(blob, shader->prog_data->relocs,
                     shader->prog_data->num_relocs *
                     sizeof(shader->prog_data->relocs[0]));

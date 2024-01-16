@@ -318,6 +318,8 @@ EXTENSIONS = [
               alias="demote",
               features=True,
               conditions=["$feats.shaderDemoteToHelperInvocation"]),
+    Extension("VK_KHR_shader_float_controls",
+              alias="float_controls")
 ]
 
 # constructor: Versions(device_version(major, minor, patch), struct_version(major, minor))
@@ -792,12 +794,12 @@ if __name__ == "__main__":
     lookup = TemplateLookup()
     lookup.put_string("helpers", include_template)
 
-    with open(header_path, "w") as header_file:
+    with open(header_path, "w", encoding='utf-8') as header_file:
         header = Template(header_code, lookup=lookup).render(extensions=extensions, versions=versions, registry=registry).strip()
         header = replace_code(header, replacement)
         print(header, file=header_file)
 
-    with open(impl_path, "w") as impl_file:
+    with open(impl_path, "w", encoding='utf-8') as impl_file:
         impl = Template(impl_code, lookup=lookup).render(extensions=extensions, versions=versions, registry=registry).strip()
         impl = replace_code(impl, replacement)
         print(impl, file=impl_file)

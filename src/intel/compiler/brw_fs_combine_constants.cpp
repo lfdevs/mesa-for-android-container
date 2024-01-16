@@ -35,6 +35,7 @@
  */
 
 #include "brw_fs.h"
+#include "brw_fs_builder.h"
 #include "brw_cfg.h"
 #include "util/half_float.h"
 
@@ -1591,14 +1592,61 @@ fs_visitor::opt_combine_constants()
       }
    }
 
+   bool rebuild_cfg = false;
+
    /* Insert MOVs to load the constant values into GRFs. */
    for (int i = 0; i < table.len; i++) {
       struct imm *imm = &table.imm[i];
+
       /* Insert it either before the instruction that generated the immediate
        * or after the last non-control flow instruction of the common ancestor.
        */
-      exec_node *n = (imm->inst ? imm->inst :
-                      imm->block->last_non_control_flow_inst()->next);
+      exec_node *n;
+      bblock_t *insert_block;
+      if (imm->inst != nullptr) {
+         n = imm->inst;
+         insert_block = imm->block;
+      } else {
+         if (imm->block->start()->opcode == BRW_OPCODE_DO) {
+            /* DO blocks are weird. They can contain only the single DO
+             * instruction. As a result, MOV instructions cannot be added to
+             * the DO block.
+             */
+            bblock_t *next_block = imm->block->next();
+            if (next_block->starts_with_control_flow()) {
+               /* This is the difficult case. This occurs for code like
+                *
+                *    do {
+                *       do {
+                *          ...
+                *       } while (...);
+                *    } while (...);
+                *
+                * when the MOV instructions need to be inserted between the
+                * two DO instructions.
+                *
+                * To properly handle this scenario, a new block would need to
+                * be inserted. Doing so would require modifying arbitrary many
+                * CONTINUE, BREAK, and WHILE instructions to point to the new
+                * block.
+                *
+                * It is unlikely that this would ever be correct. Instead,
+                * insert the MOV instructions in the known wrong place and
+                * rebuild the CFG at the end of the pass.
+                */
+               insert_block = imm->block;
+               n = insert_block->last_non_control_flow_inst()->next;
+
+               rebuild_cfg = true;
+            } else {
+               insert_block = next_block;
+               n = insert_block->start();
+            }
+         } else {
+            insert_block = imm->block;
+            n = insert_block->last_non_control_flow_inst()->next;
+         }
+      }
 
       /* From the BDW and CHV PRM, 3D Media GPGPU, Special Restrictions:
        *
@@ -1613,7 +1661,7 @@ fs_visitor::opt_combine_constants()
        * both HF slots within a DWord with the constant.
        */
       const uint32_t width = devinfo->ver == 8 && imm->is_half_float ? 2 : 1;
-      const fs_builder ibld = bld.at(imm->block, n).exec_all().group(width, 0);
+      const fs_builder ibld = fs_builder(this, width).at(insert_block, n).exec_all();
 
       fs_reg reg(VGRF, imm->nr);
       reg.offset = imm->subreg_offset;
@@ -1785,8 +1833,16 @@ fs_visitor::opt_combine_constants()
       }
    }
 
+   if (rebuild_cfg) {
+      delete cfg;
+      cfg = NULL;
+      calculate_cfg();
+   }
+
    ralloc_free(const_ctx);
-   invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+
+   invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES |
+                       (rebuild_cfg ? DEPENDENCY_BLOCKS : DEPENDENCY_NOTHING));
 
    return true;
 }

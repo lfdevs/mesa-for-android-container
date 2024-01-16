@@ -295,6 +295,10 @@ st_update_rasterizer(struct st_context *st)
          raster->cull_face |= PIPE_FACE_BACK;
    }
 
+   /* Disable two-sided colors if back faces are culled. */
+   if (raster->cull_face & PIPE_FACE_BACK)
+      raster->light_twoside = 0;
+
    /* _NEW_TRANSFORM */
    raster->depth_clip_near = !ctx->Transform.DepthClampNear;
    raster->depth_clip_far = !ctx->Transform.DepthClampFar;

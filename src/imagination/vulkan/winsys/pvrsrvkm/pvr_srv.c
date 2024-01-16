@@ -140,7 +140,7 @@ static VkResult pvr_srv_heap_init(
 {
    pvr_dev_addr_t base_address;
    uint32_t log2_page_size;
-   uint64_t reserved_size;
+   uint64_t carveout_size;
    VkResult result;
    uint64_t size;
 
@@ -150,7 +150,7 @@ static VkResult pvr_srv_heap_init(
                                      NULL,
                                      &base_address,
                                      &size,
-                                     &reserved_size,
+                                     &carveout_size,
                                      &log2_page_size);
    if (result != VK_SUCCESS)
       return result;
@@ -159,7 +159,7 @@ static VkResult pvr_srv_heap_init(
                                  base_address,
                                  size,
                                  base_address,
-                                 reserved_size,
+                                 carveout_size,
                                  log2_page_size,
                                  static_data_offsets,
                                  &srv_heap->base);
@@ -342,7 +342,7 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
 
    result =
       pvr_winsys_helper_allocate_static_memory(&srv_ws->base,
-                                               pvr_srv_heap_alloc_reserved,
+                                               pvr_srv_heap_alloc_carveout,
                                                &srv_ws->general_heap.base,
                                                &srv_ws->pds_heap.base,
                                                &srv_ws->usc_heap.base,

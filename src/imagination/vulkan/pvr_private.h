@@ -1330,7 +1330,7 @@ pvr_stage_mask(VkPipelineStageFlags2 stage_mask)
 }
 
 static inline enum pvr_pipeline_stage_bits
-pvr_stage_mask_src(VkPipelineStageFlags2KHR stage_mask)
+pvr_stage_mask_src(VkPipelineStageFlags2 stage_mask)
 {
    /* If the source is bottom of pipe, all stages will need to be waited for. */
    if (stage_mask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT)
@@ -1340,7 +1340,7 @@ pvr_stage_mask_src(VkPipelineStageFlags2KHR stage_mask)
 }
 
 static inline enum pvr_pipeline_stage_bits
-pvr_stage_mask_dst(VkPipelineStageFlags2KHR stage_mask)
+pvr_stage_mask_dst(VkPipelineStageFlags2 stage_mask)
 {
    /* If the destination is top of pipe, all stages should be blocked by prior
     * commands.

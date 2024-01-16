@@ -23,7 +23,7 @@ struct nvk_pipeline {
 
    enum nvk_pipeline_type type;
 
-   struct nvk_shader shaders[MESA_SHADER_STAGES];
+   struct nvk_shader *shaders[MESA_SHADER_STAGES];
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_pipeline, base, VkPipeline,

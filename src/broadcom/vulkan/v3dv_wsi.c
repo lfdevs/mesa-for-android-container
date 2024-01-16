@@ -27,6 +27,7 @@
 #include "vk_util.h"
 #include "wsi_common.h"
 #include "wsi_common_drm.h"
+#include "wsi_common_entrypoints.h"
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 v3dv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
@@ -41,6 +42,51 @@ v3dv_wsi_can_present_on_device(VkPhysicalDevice _pdevice, int fd)
    V3DV_FROM_HANDLE(v3dv_physical_device, pdevice, _pdevice);
    assert(pdevice->display_fd != -1);
    return wsi_common_drm_devices_equal(fd, pdevice->display_fd);
+}
+
+
+static void
+filter_surface_capabilities(VkSurfaceKHR _surface,
+                            VkSurfaceCapabilitiesKHR *caps)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
+
+   /* Display images must be linear so they are restricted. This would
+    * affect sampling usages too, but we don't restrict those since we
+    * support on-the-fly conversion to UIF when sampling for simple 2D
+    * images at a performance penalty.
+    */
+   if (surface->platform == VK_ICD_WSI_PLATFORM_DISPLAY)
+      caps->supportedUsageFlags &= ~VK_IMAGE_USAGE_STORAGE_BIT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkSurfaceKHR                                surface,
+    VkSurfaceCapabilitiesKHR*                   pSurfaceCapabilities)
+{
+   VkResult result;
+   result = wsi_GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice,
+                                                        surface,
+                                                        pSurfaceCapabilities);
+   filter_surface_capabilities(surface, pSurfaceCapabilities);
+   return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceCapabilities2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
+    VkSurfaceCapabilities2KHR*                  pSurfaceCapabilities)
+{
+   VkResult result;
+   result = wsi_GetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice,
+                                                         pSurfaceInfo,
+                                                         pSurfaceCapabilities);
+   filter_surface_capabilities(pSurfaceInfo->surface,
+                               &pSurfaceCapabilities->surfaceCapabilities);
+   return result;
 }
 
 VkResult

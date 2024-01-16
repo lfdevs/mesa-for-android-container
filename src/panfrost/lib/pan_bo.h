@@ -30,6 +30,8 @@
 #include "util/list.h"
 #include "panfrost-job.h"
 
+#include "kmod/pan_kmod.h"
+
 /* Flags for allocated memory */
 
 /* This memory region is executable */
@@ -49,6 +51,10 @@
 /* BO is shared across processes (imported or exported) and therefore cannot be
  * cached locally */
 #define PAN_BO_SHARED (1 << 4)
+
+/* BO might be exported at some point. PAN_BO_SHAREABLE does not imply
+ * PAN_BO_SHARED if the BO has not been exported yet */
+#define PAN_BO_SHAREABLE (1 << 5)
 
 /* GPU access flags */
 
@@ -95,15 +101,13 @@ struct panfrost_bo {
    /* Atomic reference count */
    int32_t refcnt;
 
+   /* Kernel representation of a buffer object. */
+   struct pan_kmod_bo *kmod_bo;
+
    struct panfrost_device *dev;
 
    /* Mapping for the entire object (all levels) */
    struct panfrost_ptr ptr;
-
-   /* Size of all entire trees */
-   size_t size;
-
-   int gem_handle;
 
    uint32_t flags;
 
@@ -116,6 +120,18 @@ struct panfrost_bo {
    /* Human readable description of the BO for debugging. */
    const char *label;
 };
+
+static inline size_t
+panfrost_bo_size(struct panfrost_bo *bo)
+{
+   return bo->kmod_bo->size;
+}
+
+static inline size_t
+panfrost_bo_handle(struct panfrost_bo *bo)
+{
+   return bo->kmod_bo->handle;
+}
 
 bool panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns,
                       bool wait_readers);

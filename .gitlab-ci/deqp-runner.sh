@@ -132,6 +132,9 @@ if [ -n "$VK_DRIVER" ] && [ -z "$DEQP_SUITE" ]; then
 fi
 
 # Set the path to VK validation layer settings (in case it ends up getting loaded)
+# Note: If you change the format of this filename, look through the rest of the
+# tree for other places that need to be kept in sync (e.g.
+# src/gallium/drivers/zink/ci/gitlab-ci-inc.yml)
 export VK_LAYER_SETTINGS_PATH=$INSTALL/$GPU_VERSION-validation-settings.txt
 
 report_load() {
@@ -166,7 +169,7 @@ fi
 
 uncollapsed_section_switch deqp "deqp: deqp-runner"
 
-echo "deqp $(cat /deqp/version)"
+cat /deqp/version-log
 
 set +e
 if [ -z "$DEQP_SUITE" ]; then
@@ -183,6 +186,10 @@ if [ -z "$DEQP_SUITE" ]; then
         -- \
         $DEQP_OPTIONS
 else
+    # If you change the format of the suite toml filenames or the
+    # $GPU_VERSION-{fails,flakes,skips}.txt filenames, look through the rest
+    # of the tree for other places that need to be kept in sync (e.g.
+    # src/**/ci/gitlab-ci*.yml)
     deqp-runner \
         suite \
         --suite $INSTALL/deqp-$DEQP_SUITE.toml \
@@ -223,7 +230,7 @@ deqp-runner junit \
    --results $RESULTS/failures.csv \
    --output $RESULTS/junit.xml \
    --limit 50 \
-   --template "See https://$CI_PROJECT_ROOT_NAMESPACE.pages.freedesktop.org/-/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/results/{{testcase}}.xml"
+   --template "See $ARTIFACTS_BASE_URL/results/{{testcase}}.xml"
 
 # Report the flakes to the IRC channel for monitoring (if configured):
 if [ -n "$FLAKES_CHANNEL" ]; then

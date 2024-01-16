@@ -223,7 +223,7 @@ radv_cp_wait_mem(struct radeon_cmdbuf *cs, const enum radv_queue_family qf, cons
       radeon_emit(cs, mask); /* mask */
       radeon_emit(cs, 4);    /* poll interval */
    } else if (qf == RADV_QUEUE_TRANSFER) {
-      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_POLL_REGMEM, 0, 0) | op << 28 | SDMA_POLL_MEM);
+      radeon_emit(cs, SDMA_PACKET(SDMA_OPCODE_POLL_REGMEM, 0, 0) | op << 28 | SDMA_POLL_MEM);
       radeon_emit(cs, va);
       radeon_emit(cs, va >> 32);
       radeon_emit(cs, ref);
@@ -250,7 +250,7 @@ radv_cs_write_data_head(const struct radv_device *device, struct radeon_cmdbuf *
       /* Vulkan transfer queues don't support conditional rendering, so we can ignore predication here.
        * Furthermore, we can ignore the engine selection here, it is meaningless to the SDMA.
        */
-      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_WRITE, SDMA_WRITE_SUB_OPCODE_LINEAR, 0));
+      radeon_emit(cs, SDMA_PACKET(SDMA_OPCODE_WRITE, SDMA_WRITE_SUB_OPCODE_LINEAR, 0));
       radeon_emit(cs, va);
       radeon_emit(cs, va >> 32);
       radeon_emit(cs, count - 1);

@@ -327,7 +327,7 @@ TEST_F(geometry_builtin, inputs_have_explicit_location)
          EXPECT_FALSE(var->data.explicit_location);
          EXPECT_EQ(-1, var->data.location);
 
-         ASSERT_TRUE(var->type->is_array());
+         ASSERT_TRUE(glsl_type_is_array(var->type));
 
          const glsl_type *const instance_type = var->type->fields.array;
 

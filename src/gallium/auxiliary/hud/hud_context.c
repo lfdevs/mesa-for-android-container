@@ -762,7 +762,7 @@ void
 hud_run(struct hud_context *hud, struct cso_context *cso,
         struct pipe_resource *tex)
 {
-   struct pipe_context *pipe = cso ? cso_get_pipe_context(cso) : NULL;
+   struct pipe_context *pipe = cso ? cso->pipe : NULL;
 
    /* If "cso" is the recording or drawing context or NULL, execute
     * the operation. Otherwise, don't do anything.
@@ -1703,7 +1703,7 @@ hud_set_draw_context(struct hud_context *hud, struct cso_context *cso,
                      struct st_context *st,
                      hud_st_invalidate_state_func st_invalidate_state)
 {
-   struct pipe_context *pipe = cso_get_pipe_context(cso);
+   struct pipe_context *pipe = cso->pipe;
 
    assert(!hud->pipe);
    hud->pipe = pipe;
@@ -1916,7 +1916,7 @@ hud_create(struct cso_context *cso, struct hud_context *share,
 
       if (context_id == record_ctx) {
          assert(!share->record_pipe);
-         hud_set_record_context(share, cso_get_pipe_context(cso));
+         hud_set_record_context(share, cso->pipe);
       }
 
       if (context_id == draw_ctx) {
@@ -1927,7 +1927,7 @@ hud_create(struct cso_context *cso, struct hud_context *share,
       return share;
    }
 
-   struct pipe_screen *screen = cso_get_pipe_context(cso)->screen;
+   struct pipe_screen *screen = cso->pipe->screen;
    struct hud_context *hud;
    unsigned i;
    unsigned default_period_ms = 500;/* default period (1/2 second) */
@@ -1974,8 +1974,7 @@ hud_create(struct cso_context *cso, struct hud_context *share,
       return NULL;
 
    /* font (the context is only used for the texture upload) */
-   if (!util_font_create(cso_get_pipe_context(cso),
-                         UTIL_FONT_FIXED_8X13, &hud->font)) {
+   if (!util_font_create(cso->pipe, UTIL_FONT_FIXED_8X13, &hud->font)) {
       FREE(hud);
       return NULL;
    }
@@ -2050,7 +2049,7 @@ hud_create(struct cso_context *cso, struct hud_context *share,
 #endif
 
    if (record_ctx == 0)
-      hud_set_record_context(hud, cso_get_pipe_context(cso));
+      hud_set_record_context(hud, cso->pipe);
    if (draw_ctx == 0)
       hud_set_draw_context(hud, cso, st, st_invalidate_state);
 
@@ -2065,7 +2064,7 @@ hud_create(struct cso_context *cso, struct hud_context *share,
 void
 hud_destroy(struct hud_context *hud, struct cso_context *cso)
 {
-   if (!cso || hud->record_pipe == cso_get_pipe_context(cso))
+   if (!cso || hud->record_pipe == cso->pipe)
       hud_unset_record_context(hud);
 
    if (!cso || hud->cso == cso)

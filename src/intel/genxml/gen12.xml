@@ -602,6 +602,70 @@
       <field name="RTAI Offset" start="0" end="3" type="uint" />
     </group>
   </instruction>
+  <instruction name="3DSTATE_PS" bias="2" length="12" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="10" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="32" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer 0" start="38" end="95" type="offset" />
+    <field name="Software Exception Enable" start="103" end="103" type="bool" />
+    <field name="Mask Stack Exception Enable" start="107" end="107" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Rounding Mode" start="110" end="111" type="uint">
+      <value name="RTNE" value="0" />
+      <value name="RU" value="1" />
+      <value name="RD" value="2" />
+      <value name="RTZ" value="3" />
+    </field>
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="113" end="113" type="uint">
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="114" end="121" type="uint" />
+    <field name="Single Precision Denormal Mode" start="122" end="122" type="uint">
+      <value name="Flushed to Zero" value="0" />
+      <value name="Retained" value="1" />
+    </field>
+    <field name="Sampler Count" start="123" end="125" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Vector Mask Enable" start="126" end="126" type="bool" />
+    <field name="Single Program Flow" start="127" end="127" type="bool" />
+    <field name="Per Thread Scratch Space" start="128" end="131" type="uint" />
+    <field name="Scratch Space Base Pointer" start="138" end="191" type="address" />
+    <field name="8 Pixel Dispatch Enable" start="192" end="192" type="bool" />
+    <field name="16 Pixel Dispatch Enable" start="193" end="193" type="bool" />
+    <field name="32 Pixel Dispatch Enable" start="194" end="194" type="bool" />
+    <field name="Position XY Offset Select" start="195" end="196" type="uint">
+      <value name="POSOFFSET_NONE" value="0" />
+      <value name="POSOFFSET_CENTROID" value="2" />
+      <value name="POSOFFSET_SAMPLE" value="3" />
+    </field>
+    <field name="Dual SIMD8 Dispatch Enable" start="197" end="197" type="bool" />
+    <field name="Render Target Resolve Type" start="198" end="199" type="uint">
+      <value name="RESOLVE_DISABLED" value="0" />
+      <value name="RESOLVE_PARTIAL" value="1" />
+      <value name="FAST_CLEAR_0" value="2" />
+      <value name="RESOLVE_FULL" value="3" />
+    </field>
+    <field name="Render Target Fast Clear Enable" start="200" end="200" type="bool" />
+    <field name="Overlapping Subspans Enable" start="201" end="201" type="bool" />
+    <field name="Push Constant Enable" start="203" end="203" type="bool" />
+    <field name="Maximum Number of Threads Per PSD" start="215" end="223" type="uint" />
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 2" start="224" end="230" type="uint" />
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 1" start="232" end="238" type="uint" />
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 0" start="240" end="246" type="uint" />
+    <field name="Kernel Start Pointer 1" start="262" end="319" type="offset" />
+    <field name="Kernel Start Pointer 2" start="326" end="383" type="offset" />
+  </instruction>
   <instruction name="3DSTATE_SF" bias="2" length="4" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="2" />
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="19" />
@@ -1368,6 +1432,25 @@
   <register name="GFX_CCS_AUX_INV" length="1" num="0x4208">
     <field name="Aux Inv" start="0" end="0" type="bool" />
   </register>
+  <register name="GFX_TRTT_CR" length="1" num="0x4400">
+    <field name="TR-TT Enable" start="0" end="0" type="bool" />
+  </register>
+  <register name="GFX_TRTT_INVAL" length="1" num="0x4414">
+    <field name="Invalid Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="GFX_TRTT_L3_BASE_HIGH" length="1" num="0x440C">
+    <field name="TR-VA L3 Pointer Upper Address" start="0" end="15" type="uint" />
+  </register>
+  <register name="GFX_TRTT_L3_BASE_LOW" length="1" num="0x4408">
+    <field name="TR-VA L3 Pointer Lower Address" start="12" end="31" type="uint" />
+  </register>
+  <register name="GFX_TRTT_NULL" length="1" num="0x4410">
+    <field name="Null Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="GFX_TRTT_VA_RANGE" length="1" num="0x4404">
+    <field name="TR-VA Data Value" start="0" end="3" type="uint" />
+    <field name="TR-VA Mask Value" start="4" end="7" type="uint" />
+  </register>
   <register name="HIZ_CHICKEN" length="1" num="0x7018">
     <field name="HZ Depth Test LE/GE Optimization Disable" start="13" end="13" type="bool" />
     <field name="HZ Depth Test LE/GE Optimization Disable Mask" start="29" end="29" type="bool" />
@@ -1463,5 +1546,11 @@
     <field name="SFBE Done" start="25" end="25" type="bool" />
     <field name="PSS Done" start="26" end="26" type="bool" />
     <field name="AMFS Done" start="27" end="27" type="bool" />
+  </register>
+  <register name="VD0_AUX_TABLE_BASE_ADDR" length="2" num="0x4210">
+    <field name="Address" start="0" end="63" type="uint" />
+  </register>
+  <register name="VD0_CCS_AUX_INV" length="1" num="0x4218">
+    <field name="Aux Inv" start="0" end="0" type="bool" />
   </register>
 </genxml>

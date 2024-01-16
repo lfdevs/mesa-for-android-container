@@ -265,7 +265,7 @@ struct block_data {
 class fs_copy_prop_dataflow
 {
 public:
-   fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
+   fs_copy_prop_dataflow(linear_ctx *lin_ctx, cfg_t *cfg,
                          const fs_live_variables &live,
                          struct acp *out_acp);
 
@@ -274,7 +274,6 @@ public:
 
    void dump_block_data() const UNUSED;
 
-   void *mem_ctx;
    cfg_t *cfg;
    const fs_live_variables &live;
 
@@ -286,31 +285,33 @@ public:
 };
 } /* anonymous namespace */
 
-fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
+fs_copy_prop_dataflow::fs_copy_prop_dataflow(linear_ctx *lin_ctx, cfg_t *cfg,
                                              const fs_live_variables &live,
                                              struct acp *out_acp)
-   : mem_ctx(mem_ctx), cfg(cfg), live(live)
+   : cfg(cfg), live(live)
 {
-   bd = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
+   bd = linear_zalloc_array(lin_ctx, struct block_data, cfg->num_blocks);
 
    num_acp = 0;
    foreach_block (block, cfg)
       num_acp += out_acp[block->num].length();
 
-   acp = rzalloc_array(mem_ctx, struct acp_entry *, num_acp);
-
    bitset_words = BITSET_WORDS(num_acp);
+
+   foreach_block (block, cfg) {
+      bd[block->num].livein = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].liveout = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].copy = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].kill = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].undef = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].reachin = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+      bd[block->num].exec_mismatch = linear_zalloc_array(lin_ctx, BITSET_WORD, bitset_words);
+   }
+
+   acp = linear_zalloc_array(lin_ctx, struct acp_entry *, num_acp);
 
    int next_acp = 0;
    foreach_block (block, cfg) {
-      bd[block->num].livein = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].liveout = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].copy = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].kill = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].undef = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].reachin = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[block->num].exec_mismatch = rzalloc_array(bd, BITSET_WORD, bitset_words);
-
       for (auto iter = out_acp[block->num].begin();
            iter != out_acp[block->num].end(); ++iter) {
          acp[next_acp] = *iter;
@@ -659,7 +660,8 @@ instruction_requires_packed_data(fs_inst *inst)
 static bool
 try_copy_propagate(const brw_compiler *compiler, fs_inst *inst,
                    acp_entry *entry, int arg,
-                   const brw::simple_allocator &alloc)
+                   const brw::simple_allocator &alloc,
+                   uint8_t max_polygons)
 {
    if (inst->src[arg].file != VGRF)
       return false;
@@ -801,6 +803,17 @@ try_copy_propagate(const brw_compiler *compiler, fs_inst *inst,
        (reg_offset(inst->dst) % REG_SIZE) != (reg_offset(entry->src) % REG_SIZE))
       return false;
 
+   /* The <8;8,0> regions used for FS attributes in multipolygon
+    * dispatch mode could violate regioning restrictions, don't copy
+    * propagate them in such cases.
+    */
+   if (entry->src.file == ATTR && max_polygons > 1 &&
+       (has_dst_aligned_region_restriction(devinfo, inst, dst_type) ||
+	instruction_requires_packed_data(inst) ||
+	(inst->is_3src(compiler) && arg == 2) ||
+	entry->dst.type != inst->src[arg].type))
+      return false;
+
    /* Bail if the source FIXED_GRF region of the copy cannot be trivially
     * composed with the source region of the instruction -- E.g. because the
     * copy uses some extended stride greater than 4 not supported natively by
@@ -913,7 +926,6 @@ try_copy_propagate(const brw_compiler *compiler, fs_inst *inst,
           * type.  If we got here, then we can just change the source and
           * destination types of the instruction and keep going.
           */
-         assert(inst->can_change_types());
          for (int i = 0; i < inst->sources; i++) {
             inst->src[i].type = entry->dst.type;
          }
@@ -1262,9 +1274,10 @@ can_propagate_from(fs_inst *inst)
  * list.
  */
 static bool
-opt_copy_propagation_local(const brw_compiler *compiler, void *copy_prop_ctx,
+opt_copy_propagation_local(const brw_compiler *compiler, linear_ctx *lin_ctx,
                            bblock_t *block, struct acp &acp,
-                           const brw::simple_allocator &alloc)
+                           const brw::simple_allocator &alloc,
+                           uint8_t max_polygons)
 {
    bool progress = false;
 
@@ -1284,7 +1297,8 @@ opt_copy_propagation_local(const brw_compiler *compiler, void *copy_prop_ctx,
                   break;
                }
             } else {
-               if (try_copy_propagate(compiler, inst, *iter, i, alloc)) {
+               if (try_copy_propagate(compiler, inst, *iter, i, alloc,
+                                      max_polygons)) {
                   instruction_progress = true;
                   break;
                }
@@ -1342,7 +1356,7 @@ opt_copy_propagation_local(const brw_compiler *compiler, void *copy_prop_ctx,
        * operand of another instruction, add it to the ACP.
        */
       if (can_propagate_from(inst)) {
-         acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
+         acp_entry *entry = linear_zalloc(lin_ctx, acp_entry);
          entry->dst = inst->dst;
          entry->src = inst->src[0];
          entry->size_written = inst->size_written;
@@ -1364,17 +1378,16 @@ opt_copy_propagation_local(const brw_compiler *compiler, void *copy_prop_ctx,
                  inst->src[i].is_contiguous())) {
                const brw_reg_type t = i < inst->header_size ?
                   BRW_REGISTER_TYPE_UD : inst->src[i].type;
-               acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
-               entry->dst = byte_offset(retype(inst->dst, t), offset);
-               entry->src = retype(inst->src[i], t);
-               entry->size_written = size_written;
-               entry->size_read = inst->size_read(i);
-               entry->opcode = inst->opcode;
-               entry->force_writemask_all = inst->force_writemask_all;
-               if (!entry->dst.equals(inst->src[i])) {
+               fs_reg dst = byte_offset(retype(inst->dst, t), offset);
+               if (!dst.equals(inst->src[i])) {
+                  acp_entry *entry = linear_zalloc(lin_ctx, acp_entry);
+                  entry->dst = dst;
+                  entry->src = retype(inst->src[i], t);
+                  entry->size_written = size_written;
+                  entry->size_read = inst->size_read(i);
+                  entry->opcode = inst->opcode;
+                  entry->force_writemask_all = inst->force_writemask_all;
                   acp.add(entry);
-               } else {
-                  ralloc_free(entry);
                }
             }
             offset += size_written;
@@ -1390,6 +1403,7 @@ fs_visitor::opt_copy_propagation()
 {
    bool progress = false;
    void *copy_prop_ctx = ralloc_context(NULL);
+   linear_ctx *lin_ctx = linear_context(copy_prop_ctx);
    struct acp out_acp[cfg->num_blocks];
 
    const fs_live_variables &live = live_analysis.require();
@@ -1398,8 +1412,9 @@ fs_visitor::opt_copy_propagation()
     * the set of copies available at the end of the block.
     */
    foreach_block (block, cfg) {
-      progress = opt_copy_propagation_local(compiler, copy_prop_ctx, block,
-                                            out_acp[block->num], alloc) || progress;
+      progress = opt_copy_propagation_local(compiler, lin_ctx, block,
+                                            out_acp[block->num], alloc,
+                                            max_polygons) || progress;
 
       /* If the destination of an ACP entry exists only within this block,
        * then there's no need to keep it for dataflow analysis.  We can delete
@@ -1422,7 +1437,7 @@ fs_visitor::opt_copy_propagation()
    }
 
    /* Do dataflow analysis for those available copies. */
-   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, live, out_acp);
+   fs_copy_prop_dataflow dataflow(lin_ctx, cfg, live, out_acp);
 
    /* Next, re-run local copy propagation, this time with the set of copies
     * provided by the dataflow analysis available at the start of a block.
@@ -1438,7 +1453,8 @@ fs_visitor::opt_copy_propagation()
          }
       }
 
-      progress = opt_copy_propagation_local(compiler, copy_prop_ctx, block, in_acp, alloc) ||
+      progress = opt_copy_propagation_local(compiler, lin_ctx, block,
+                                            in_acp, alloc, max_polygons) ||
                  progress;
    }
 

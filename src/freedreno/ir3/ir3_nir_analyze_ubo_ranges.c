@@ -594,6 +594,7 @@ ir3_nir_lower_load_const_instr(nir_builder *b, nir_instr *in_instr, void *data)
    }
 
    unsigned num_components = instr->num_components;
+   unsigned bit_size = instr->def.bit_size;
    if (instr->def.bit_size == 16) {
       /* We can't do 16b loads -- either from LDC (32-bit only in any of our
        * traces, and disasm that doesn't look like it really supports it) or
@@ -602,6 +603,7 @@ ir3_nir_lower_load_const_instr(nir_builder *b, nir_instr *in_instr, void *data)
        * Instead, we'll load 32b from a UBO and unpack from there.
        */
       num_components = DIV_ROUND_UP(num_components, 2);
+      bit_size = 32;
    }
    unsigned base = nir_intrinsic_base(instr);
    nir_def *index = nir_imm_int(b, const_state->constant_data_ubo);
@@ -609,7 +611,7 @@ ir3_nir_lower_load_const_instr(nir_builder *b, nir_instr *in_instr, void *data)
       nir_iadd_imm(b, instr->src[0].ssa, base);
 
    nir_def *result =
-      nir_load_ubo(b, num_components, 32, index, offset,
+      nir_load_ubo(b, num_components, bit_size, index, offset,
                    .align_mul = nir_intrinsic_align_mul(instr),
                    .align_offset = nir_intrinsic_align_offset(instr),
                    .range_base = base, .range = nir_intrinsic_range(instr));

@@ -217,10 +217,16 @@ gather_ps_store_output(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_sta
 
    s->output_types[slot] = type;
 
-   /* Keep color output instruction if not exported in nir. */
-   if (!s->options->no_color_export ||
-       (slot < FRAG_RESULT_DATA0 && slot != FRAG_RESULT_COLOR)) {
+   /* Keep output instruction if not exported in nir. */
+   if (!s->options->no_color_export && !s->options->no_depth_export) {
       nir_instr_remove(&intrin->instr);
+   } else {
+      if (slot >= FRAG_RESULT_DATA0 && !s->options->no_color_export) {
+         nir_instr_remove(&intrin->instr);
+      } else if ((slot == FRAG_RESULT_DEPTH || slot == FRAG_RESULT_STENCIL ||
+                  slot == FRAG_RESULT_SAMPLE_MASK) && !s->options->no_depth_export) {
+         nir_instr_remove(&intrin->instr);
+      }
    }
 
    return true;
@@ -755,9 +761,12 @@ export_ps_outputs(nir_builder *b, lower_ps_state *s)
 
    emit_ps_color_clamp_and_alpha_test(b, s);
 
-   emit_ps_mrtz_export(b, s);
+   if (!s->options->no_depth_export)
+      emit_ps_mrtz_export(b, s);
 
-   /* When non-monolithic shader, RADV export mrtz in main part and export color in epilog. */
+   /* When non-monolithic shader, RADV export mrtz in main part (except on
+    * RDNA3 for alpha to coverage) and export color in epilog.
+    */
    if (s->options->no_color_export)
       return;
 

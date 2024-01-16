@@ -64,35 +64,22 @@ struct panfrost_vtable {
    void (*prepare_shader)(struct panfrost_compiled_shader *,
                           struct panfrost_pool *, bool);
 
-   /* Emits a thread local storage descriptor */
-   void (*emit_tls)(struct panfrost_batch *);
-
-   /* Emits a framebuffer descriptor */
-   void (*emit_fbd)(struct panfrost_batch *, const struct pan_fb_info *);
-
-   /* Emits a fragment job */
-   mali_ptr (*emit_fragment_job)(struct panfrost_batch *,
-                                 const struct pan_fb_info *);
-
    /* General destructor */
    void (*screen_destroy)(struct pipe_screen *);
 
-   /* Preload framebuffer */
-   void (*preload)(struct panfrost_batch *, struct pan_fb_info *);
-
-   /* Initialize a Gallium context */
-   void (*context_init)(struct pipe_context *pipe);
+   /* Populate context vtable */
+   void (*context_populate_vtbl)(struct pipe_context *pipe);
 
    /* Device-dependent initialization of a panfrost_batch */
    void (*init_batch)(struct panfrost_batch *batch);
+
+   /* Device-dependent submission of a panfrost_batch */
+   int (*submit_batch)(struct panfrost_batch *batch, struct pan_fb_info *fb);
 
    /* Get blend shader */
    struct pan_blend_shader_variant *(*get_blend_shader)(
       const struct panfrost_device *, const struct pan_blend_state *,
       nir_alu_type, nir_alu_type, unsigned rt);
-
-   /* Initialize the polygon list */
-   void (*init_polygon_list)(struct panfrost_batch *);
 
    /* Shader compilation methods */
    const nir_shader_compiler_options *(*get_compiler_options)(void);

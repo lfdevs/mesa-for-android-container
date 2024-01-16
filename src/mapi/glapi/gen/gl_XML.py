@@ -661,6 +661,7 @@ class gl_function( gl_item ):
         assert not alias or not element.get('marshal_sync')
         assert not alias or not element.get('marshal_call_before')
         assert not alias or not element.get('marshal_call_after')
+        assert not alias or not element.get('deprecated')
 
         if name in static_data.functions:
             self.static_entry_points.append(name)

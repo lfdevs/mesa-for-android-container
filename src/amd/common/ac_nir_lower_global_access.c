@@ -8,6 +8,20 @@
 #include "nir.h"
 #include "nir_builder.h"
 
+static bool
+is_u2u64(nir_scalar scalar)
+{
+   if (nir_scalar_is_alu(scalar) && nir_scalar_alu_op(scalar) == nir_op_u2u64)
+      return true;
+
+   if (nir_scalar_is_alu(scalar) && nir_scalar_alu_op(scalar) == nir_op_pack_64_2x32_split) {
+      nir_scalar src1 = nir_scalar_chase_alu_src(scalar, 1);
+      return nir_scalar_is_const(src1) && nir_scalar_as_uint(src1) == 0;
+   }
+
+   return false;
+}
+
 static nir_def *
 try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
                       nir_def **out_offset)
@@ -23,8 +37,11 @@ try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
       nir_scalar src = i ? src1 : src0;
       if (nir_scalar_is_const(src)) {
          *out_const += nir_scalar_as_uint(src);
-      } else if (nir_scalar_is_alu(src) && nir_scalar_alu_op(src) == nir_op_u2u64) {
+      } else if (is_u2u64(src)) {
          nir_scalar offset_scalar = nir_scalar_chase_alu_src(src, 0);
+         if (offset_scalar.def->bit_size != 32)
+            continue;
+
          nir_def *offset = nir_channel(b, offset_scalar.def, offset_scalar.comp);
          if (*out_offset)
             *out_offset = nir_iadd(b, *out_offset, offset);

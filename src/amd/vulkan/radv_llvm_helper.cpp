@@ -25,7 +25,7 @@
 
 #include <list>
 class radv_llvm_per_thread_info {
- public:
+public:
    radv_llvm_per_thread_info(enum radeon_family arg_family, enum ac_target_machine_options arg_tm_options,
                              unsigned arg_wave_size)
        : family(arg_family), tm_options(arg_tm_options), wave_size(arg_wave_size), passes(NULL)
@@ -62,7 +62,7 @@ class radv_llvm_per_thread_info {
    }
    struct ac_llvm_compiler llvm_info;
 
- private:
+private:
    enum radeon_family family;
    enum ac_target_machine_options tm_options;
    unsigned wave_size;

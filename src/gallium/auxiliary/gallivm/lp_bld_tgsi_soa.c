@@ -41,7 +41,6 @@
 #include "util/u_debug.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_exec.h"
 #include "tgsi/tgsi_info.h"
@@ -1169,7 +1168,7 @@ emit_fetch_gs_input(
       /*
        * A fixed 6 should do as well (which is what we allocate).
        */
-      int index_limit = u_vertices_per_prim(info->properties[TGSI_PROPERTY_GS_INPUT_PRIM]);
+      int index_limit = mesa_vertices_per_prim(info->properties[TGSI_PROPERTY_GS_INPUT_PRIM]);
       vertex_index = get_indirect_index(bld,
                                         reg->Register.File,
                                         reg->Dimension.Index,

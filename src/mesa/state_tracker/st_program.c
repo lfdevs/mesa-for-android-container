@@ -35,6 +35,7 @@
 
 #include "main/hash.h"
 #include "main/mtypes.h"
+#include "nir/pipe_nir.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
 #include "program/prog_to_nir.h"
@@ -496,7 +497,6 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
 
    assert(state->type == PIPE_SHADER_IR_NIR);
    nir_shader *nir = state->ir.nir;
-   struct shader_info info = nir->info;
    gl_shader_stage stage = nir->info.stage;
 
    if (ST_DEBUG & DEBUG_PRINT_IR) {
@@ -522,16 +522,10 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
       shader = pipe->create_fs_state(pipe, state);
       break;
    case MESA_SHADER_COMPUTE: {
-      struct pipe_compute_state cs = {0};
-      cs.ir_type = state->type;
-      cs.static_shared_mem = info.shared_size;
-
-      if (state->type == PIPE_SHADER_IR_NIR)
-         cs.prog = state->ir.nir;
-      else
-         cs.prog = state->tokens;
-
-      shader = pipe->create_compute_state(pipe, &cs);
+      /* We'd like to use this for all stages but we need to rework streamout in
+       * gallium first.
+       */
+      shader = pipe_shader_from_nir(pipe, nir);
       break;
    }
    default:

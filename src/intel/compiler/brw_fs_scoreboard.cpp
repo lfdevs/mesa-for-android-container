@@ -55,6 +55,7 @@
  */
 
 #include "brw_fs.h"
+#include "brw_fs_builder.h"
 #include "brw_cfg.h"
 
 using namespace brw;
@@ -127,16 +128,21 @@ namespace {
          return TGL_PIPE_NONE;
       else if (devinfo->verx10 < 125)
          return TGL_PIPE_FLOAT;
+      else if (inst->is_math() && devinfo->ver >= 20)
+         return TGL_PIPE_MATH;
       else if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT ||
                inst->opcode == SHADER_OPCODE_BROADCAST ||
-               inst->opcode == SHADER_OPCODE_SHUFFLE ||
-               (inst->opcode == SHADER_OPCODE_SEL_EXEC &&
-                type_sz(inst->dst.type) > 4))
+               inst->opcode == SHADER_OPCODE_SHUFFLE)
          return TGL_PIPE_INT;
       else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
          return TGL_PIPE_FLOAT;
-      else if (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
-               is_dword_multiply) {
+      else if (devinfo->ver >= 20 && type_sz(inst->dst.type) >= 8 &&
+               brw_reg_type_is_floating_point(inst->dst.type)) {
+         assert(devinfo->has_64bit_float);
+         return TGL_PIPE_LONG;
+      } else if (devinfo->ver < 20 &&
+                 (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
+                  is_dword_multiply)) {
          assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
                 devinfo->has_integer_dword_mul);
          return TGL_PIPE_LONG;
@@ -747,7 +753,7 @@ namespace {
       }
 
    private:
-      dependency grf_deps[BRW_MAX_GRF];
+      dependency grf_deps[XE2_MAX_GRF];
       dependency addr_dep;
       dependency accum_dep;
 
@@ -1011,8 +1017,8 @@ namespace {
       const ordered_address jp = p ? ordered_address(p, jps[ip].jp[IDX(p)]) :
                                      ordered_address();
       const bool is_ordered = ordered_unit(devinfo, inst, IDX(TGL_PIPE_ALL));
-      const bool uses_math_pipe =
-         inst->is_math() ||
+      const bool is_unordered_math =
+         (inst->is_math() && devinfo->ver < 20) ||
          (devinfo->has_64bit_float_via_math_pipe &&
           (get_exec_type(inst) == BRW_REGISTER_TYPE_DF ||
            inst->dst.type == BRW_REGISTER_TYPE_DF));
@@ -1024,7 +1030,8 @@ namespace {
       for (unsigned i = 0; i < inst->sources; i++) {
          const dependency rd_dep =
             (inst->is_payload(i) ||
-             uses_math_pipe) ? dependency(TGL_SBID_SRC, ip, exec_all) :
+             inst->opcode == BRW_OPCODE_DPAS ||
+             is_unordered_math) ? dependency(TGL_SBID_SRC, ip, exec_all) :
             is_ordered ? dependency(TGL_REGDIST_SRC, jp, exec_all) :
             dependency::done;
 
@@ -1227,7 +1234,10 @@ namespace {
    {
       /* XXX - Use bin-packing algorithm to assign hardware SBIDs optimally in
        *       shaders with a large number of SEND messages.
+       *
+       * XXX - Use 32 SBIDs on Xe2+ while in large GRF mode.
        */
+      const unsigned num_sbids = 16;
 
       /* Allocate an unordered dependency ID to hardware SBID translation
        * table with as many entries as instructions there are in the shader,
@@ -1246,7 +1256,7 @@ namespace {
             const dependency &dep = deps0[ip][i];
 
             if (dep.unordered && ids[dep.id] == ~0u)
-               ids[dep.id] = (next_id++) & 0xf;
+               ids[dep.id] = (next_id++) & (num_sbids - 1);
 
             add_dependency(ids, deps1[ip], dep);
          }

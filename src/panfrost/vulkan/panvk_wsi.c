@@ -50,7 +50,7 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
    if (result != VK_SUCCESS)
       return result;
 
-   physical_device->wsi_device.supports_modifiers = false;
+   physical_device->wsi_device.supports_modifiers = true;
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 

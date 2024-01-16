@@ -1154,7 +1154,7 @@ static bool
 anv_graphics_pipeline_load_cached_shaders(struct anv_graphics_pipeline *pipeline,
                                           struct vk_pipeline_cache *cache,
                                           struct anv_pipeline_stage *stages,
-                                          VkPipelineCreationFeedbackEXT *pipeline_feedback)
+                                          VkPipelineCreationFeedback *pipeline_feedback)
 {
    unsigned found = 0;
    unsigned cache_hits = 0;
@@ -1277,7 +1277,7 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
    VkResult result;
 
-   VkPipelineCreationFeedbackEXT pipeline_feedback = {
+   VkPipelineCreationFeedback pipeline_feedback = {
       .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
    };
    int64_t pipeline_start = os_time_get_nano();
@@ -1869,7 +1869,8 @@ anv_graphics_pipeline_create(struct anv_device *device,
    struct vk_graphics_pipeline_all_state all;
    struct vk_graphics_pipeline_state state = { };
    result = vk_graphics_pipeline_state_fill(&device->vk, &state, pCreateInfo,
-                                            NULL /* sp_info */,
+                                            NULL /* driver_rp */,
+                                            0 /* driver_rp_flags */,
                                             &all, NULL, 0, NULL);
    if (result != VK_SUCCESS) {
       vk_free2(&device->vk.alloc, pAllocator, pipeline);

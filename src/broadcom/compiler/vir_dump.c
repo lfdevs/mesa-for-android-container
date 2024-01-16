@@ -182,11 +182,6 @@ vir_print_reg(struct v3d_compile *c, const struct qinst *inst,
                 break;
         }
 
-        case QFILE_VPM:
-                fprintf(stderr, "vpm%d.%d",
-                        reg.index / 4, reg.index % 4);
-                break;
-
         case QFILE_TEMP:
                 fprintf(stderr, "t%d", reg.index);
                 break;
@@ -197,9 +192,6 @@ static void
 vir_dump_sig_addr(const struct v3d_device_info *devinfo,
                   const struct v3d_qpu_instr *instr)
 {
-        if (devinfo->ver < 41)
-                return;
-
         if (!instr->sig_magic)
                 fprintf(stderr, ".rf%d", instr->sig_addr);
         else {

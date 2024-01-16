@@ -33,7 +33,7 @@
  */
 
 #include "context.h"
-#include "marshal_generated.h"
+#include "glthread_marshal.h"
 #include "vbo/vbo_util.h"
 #include "util/half_float.h"
 

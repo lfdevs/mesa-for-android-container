@@ -26,7 +26,7 @@
 
 #include "util/u_debug.h"
 
-#ifdef LLVM_AVAILABLE
+#if LLVM_AVAILABLE
 #if defined(_MSC_VER) && defined(restrict)
 #undef restrict
 #endif
@@ -266,7 +266,7 @@ fail:
 #endif
 }
 
-#ifdef LLVM_AVAILABLE
+#if LLVM_AVAILABLE
 std::pair<bool, size_t>
 disasm_instr(amd_gfx_level gfx_level, LLVMDisasmContextRef disasm, uint32_t* binary,
              unsigned exec_size, size_t pos, char* outline, unsigned outline_size)
@@ -391,7 +391,7 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
 bool
 check_print_asm_support(Program* program)
 {
-#ifdef LLVM_AVAILABLE
+#if LLVM_AVAILABLE
    if (program->gfx_level >= GFX8) {
       /* LLVM disassembler only supports GFX8+ */
       const char* name = ac_get_llvm_processor_name(program->family);
@@ -422,7 +422,7 @@ check_print_asm_support(Program* program)
 bool
 print_asm(Program* program, std::vector<uint32_t>& binary, unsigned exec_size, FILE* output)
 {
-#ifdef LLVM_AVAILABLE
+#if LLVM_AVAILABLE
    if (program->gfx_level >= GFX8) {
       return print_asm_llvm(program, binary, exec_size, output);
    }

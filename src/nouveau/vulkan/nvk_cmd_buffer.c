@@ -16,6 +16,7 @@
 #include "nvk_pipeline.h"
 
 #include "vk_pipeline_layout.h"
+#include "vk_synchronization.h"
 
 #include "nouveau_context.h"
 
@@ -23,6 +24,7 @@
 
 #include "nvk_cl906f.h"
 #include "nvk_cl90b5.h"
+#include "nvk_cla097.h"
 #include "nvk_cla0c0.h"
 #include "nvk_clc597.h"
 
@@ -157,13 +159,10 @@ nvk_cmd_buffer_new_push(struct nvk_cmd_buffer *cmd)
 }
 
 void
-nvk_cmd_buffer_push_indirect_buffer(struct nvk_cmd_buffer *cmd,
-                                    struct nvk_buffer *buffer,
-                                    uint64_t offset, uint64_t range)
+nvk_cmd_buffer_push_indirect(struct nvk_cmd_buffer *cmd,
+                             uint64_t addr, uint32_t range)
 {
    nvk_cmd_buffer_flush_push(cmd);
-
-   uint64_t addr = nvk_buffer_address(buffer, offset);
 
    struct nvk_cmd_push push = {
       .addr = addr,
@@ -330,7 +329,193 @@ nvk_CmdExecuteCommands(VkCommandBuffer commandBuffer,
    }
 }
 
-#include "nvk_cl9097.h"
+enum nvk_barrier {
+   NVK_BARRIER_RENDER_WFI              = 1 << 0,
+   NVK_BARRIER_COMPUTE_WFI             = 1 << 1,
+   NVK_BARRIER_FLUSH_SHADER_DATA       = 1 << 2,
+   NVK_BARRIER_INVALIDATE_SHADER_DATA  = 1 << 3,
+   NVK_BARRIER_INVALIDATE_TEX_DATA     = 1 << 4,
+   NVK_BARRIER_INVALIDATE_CONSTANT     = 1 << 5,
+   NVK_BARRIER_INVALIDATE_MME_DATA     = 1 << 6,
+};
+
+static enum nvk_barrier
+nvk_barrier_flushes_waits(VkPipelineStageFlags2 stages,
+                          VkAccessFlags2 access)
+{
+   stages = vk_expand_src_stage_flags2(stages);
+   access = vk_filter_src_access_flags2(stages, access);
+
+   enum nvk_barrier barriers = 0;
+
+   if (access & VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT) {
+      barriers |= NVK_BARRIER_FLUSH_SHADER_DATA;
+
+      if (vk_pipeline_stage_flags2_has_graphics_shader(stages))
+         barriers |= NVK_BARRIER_RENDER_WFI;
+
+      if (vk_pipeline_stage_flags2_has_compute_shader(stages))
+         barriers |= NVK_BARRIER_COMPUTE_WFI;
+   }
+
+   if (access & (VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                 VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT))
+      barriers |= NVK_BARRIER_RENDER_WFI;
+
+   if ((access & VK_ACCESS_2_TRANSFER_WRITE_BIT) &&
+       (stages & (VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+                  VK_PIPELINE_STAGE_2_BLIT_BIT |
+                  VK_PIPELINE_STAGE_2_CLEAR_BIT)))
+      barriers |= NVK_BARRIER_RENDER_WFI;
+
+   return barriers;
+}
+
+static enum nvk_barrier
+nvk_barrier_invalidates(VkPipelineStageFlags2 stages,
+                        VkAccessFlags2 access)
+{
+   stages = vk_expand_dst_stage_flags2(stages);
+   access = vk_filter_dst_access_flags2(stages, access);
+
+   enum nvk_barrier barriers = 0;
+
+   if (access & (VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT |
+                 VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT |
+                 VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT))
+      barriers |= NVK_BARRIER_INVALIDATE_MME_DATA;
+
+   if (access & (VK_ACCESS_2_UNIFORM_READ_BIT |
+                VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT))
+      barriers |= NVK_BARRIER_INVALIDATE_SHADER_DATA |
+                  NVK_BARRIER_INVALIDATE_CONSTANT;
+
+   if (access & (VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT |
+                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT))
+      barriers |= NVK_BARRIER_INVALIDATE_TEX_DATA;
+
+   if (access & VK_ACCESS_2_SHADER_STORAGE_READ_BIT)
+      barriers |= NVK_BARRIER_INVALIDATE_SHADER_DATA;
+
+   if ((access & VK_ACCESS_2_TRANSFER_READ_BIT) &&
+       (stages & (VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+                  VK_PIPELINE_STAGE_2_BLIT_BIT)))
+      barriers |= NVK_BARRIER_INVALIDATE_TEX_DATA;
+
+   return barriers;
+}
+
+void
+nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
+                       const VkDependencyInfo *dep,
+                       bool wait)
+{
+   enum nvk_barrier barriers = 0;
+
+   for (uint32_t i = 0; i < dep->memoryBarrierCount; i++) {
+      const VkMemoryBarrier2 *bar = &dep->pMemoryBarriers[i];
+      barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
+                                            bar->srcAccessMask);
+   }
+
+   for (uint32_t i = 0; i < dep->bufferMemoryBarrierCount; i++) {
+      const VkBufferMemoryBarrier2 *bar = &dep->pBufferMemoryBarriers[i];
+      barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
+                                            bar->srcAccessMask);
+   }
+
+   for (uint32_t i = 0; i < dep->imageMemoryBarrierCount; i++) {
+      const VkImageMemoryBarrier2 *bar = &dep->pImageMemoryBarriers[i];
+      barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
+                                            bar->srcAccessMask);
+   }
+
+   if (!barriers)
+      return;
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
+
+   if (barriers & NVK_BARRIER_FLUSH_SHADER_DATA) {
+      assert(barriers & (NVK_BARRIER_RENDER_WFI | NVK_BARRIER_COMPUTE_WFI));
+      if (barriers & NVK_BARRIER_RENDER_WFI) {
+         P_IMMD(p, NVA097, INVALIDATE_SHADER_CACHES, {
+            .data = DATA_TRUE,
+            .flush_data = FLUSH_DATA_TRUE,
+         });
+      }
+
+      if (barriers & NVK_BARRIER_COMPUTE_WFI) {
+         P_IMMD(p, NVA0C0, INVALIDATE_SHADER_CACHES, {
+            .data = DATA_TRUE,
+            .flush_data = FLUSH_DATA_TRUE,
+         });
+      }
+   } else if (barriers & NVK_BARRIER_RENDER_WFI) {
+      /* If this comes from a vkCmdSetEvent, we don't need to wait */
+      if (wait)
+         P_IMMD(p, NVA097, WAIT_FOR_IDLE, 0);
+   } else {
+      /* Compute WFI only happens when shader data is flushed */
+      assert(!(barriers & NVK_BARRIER_COMPUTE_WFI));
+   }
+}
+
+void
+nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
+                        uint32_t dep_count,
+                        const VkDependencyInfo *deps)
+{
+   enum nvk_barrier barriers = 0;
+
+   for (uint32_t d = 0; d < dep_count; d++) {
+      const VkDependencyInfo *dep = &deps[d];
+
+      for (uint32_t i = 0; i < dep->memoryBarrierCount; i++) {
+         const VkMemoryBarrier2 *bar = &dep->pMemoryBarriers[i];
+         barriers |= nvk_barrier_invalidates(bar->dstStageMask,
+                                             bar->dstAccessMask);
+      }
+
+      for (uint32_t i = 0; i < dep->bufferMemoryBarrierCount; i++) {
+         const VkBufferMemoryBarrier2 *bar = &dep->pBufferMemoryBarriers[i];
+         barriers |= nvk_barrier_invalidates(bar->dstStageMask,
+                                             bar->dstAccessMask);
+      }
+
+      for (uint32_t i = 0; i < dep->imageMemoryBarrierCount; i++) {
+         const VkImageMemoryBarrier2 *bar = &dep->pImageMemoryBarriers[i];
+         barriers |= nvk_barrier_invalidates(bar->dstStageMask,
+                                             bar->dstAccessMask);
+      }
+   }
+
+   if (!barriers)
+      return;
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
+
+   if (barriers & NVK_BARRIER_INVALIDATE_TEX_DATA) {
+      P_IMMD(p, NVA097, INVALIDATE_TEXTURE_DATA_CACHE_NO_WFI, {
+         .lines = LINES_ALL,
+      });
+   }
+
+   if (barriers & (NVK_BARRIER_INVALIDATE_SHADER_DATA &
+                   NVK_BARRIER_INVALIDATE_CONSTANT)) {
+      P_IMMD(p, NVA097, INVALIDATE_SHADER_CACHES_NO_WFI, {
+         .global_data = (barriers & NVK_BARRIER_INVALIDATE_SHADER_DATA) != 0,
+         .constant = (barriers & NVK_BARRIER_INVALIDATE_CONSTANT) != 0,
+      });
+   }
+
+   if (barriers & (NVK_BARRIER_INVALIDATE_MME_DATA)) {
+      __push_immd(p, SUBC_NV9097, NV906F_SET_REFERENCE, 0);
+
+      if (nvk_cmd_buffer_device(cmd)->pdev->info.cls_eng3d >= TURING_A)
+         P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+   }
+}
 
 VKAPI_ATTR void VKAPI_CALL
 nvk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
@@ -338,13 +523,8 @@ nvk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
 
-   /* TODO: We don't need to WFI all the time, do we? */
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
-   P_IMMD(p, NV9097, WAIT_FOR_IDLE, 0);
-
-   P_IMMD(p, NV9097, INVALIDATE_TEXTURE_DATA_CACHE, {
-      .lines = LINES_ALL,
-   });
+   nvk_cmd_flush_wait_dep(cmd, pDependencyInfo, true);
+   nvk_cmd_invalidate_deps(cmd, 1, pDependencyInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -357,8 +537,10 @@ nvk_CmdBindPipeline(VkCommandBuffer commandBuffer,
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
 
    for (unsigned s = 0; s < ARRAY_SIZE(pipeline->shaders); s++) {
-      if (pipeline->shaders[s].slm_size)
-         nvk_device_ensure_slm(dev, pipeline->shaders[s].slm_size);
+      if(!pipeline->shaders[s])
+         continue;
+      if (pipeline->shaders[s]->info.slm_size)
+         nvk_device_ensure_slm(dev, pipeline->shaders[s]->info.slm_size);
    }
 
    switch (pipelineBindPoint) {
@@ -399,6 +581,7 @@ nvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
 
       if (desc->sets[set_idx] != set) {
          desc->root.sets[set_idx] = nvk_descriptor_set_addr(set);
+         desc->set_sizes[set_idx] = set->size;
          desc->sets[set_idx] = set;
          desc->sets_dirty |= BITFIELD_BIT(set_idx);
 
@@ -499,6 +682,9 @@ void
 nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
                                       struct nvk_descriptor_state *desc)
 {
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
    VkResult result;
 
    if (!desc->push_dirty)
@@ -509,7 +695,7 @@ nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
       uint64_t push_set_addr;
       result = nvk_cmd_buffer_upload_data(cmd, push_set->data,
                                           sizeof(push_set->data),
-                                          NVK_MIN_UBO_ALIGNMENT,
+                                          min_cbuf_alignment,
                                           &push_set_addr);
       if (unlikely(result != VK_SUCCESS)) {
          vk_command_buffer_set_error(&cmd->vk, result);
@@ -517,7 +703,64 @@ nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
       }
 
       desc->root.sets[set_idx] = push_set_addr;
+      desc->set_sizes[set_idx] = sizeof(push_set->data);
    }
+}
+
+bool
+nvk_cmd_buffer_get_cbuf_descriptor(struct nvk_cmd_buffer *cmd,
+                                   const struct nvk_descriptor_state *desc,
+                                   const struct nvk_cbuf *cbuf,
+                                   struct nvk_buffer_address *desc_out)
+{
+   switch (cbuf->type) {
+   case NVK_CBUF_TYPE_INVALID:
+      *desc_out = (struct nvk_buffer_address) { .size = 0 };
+      return true;
+
+   case NVK_CBUF_TYPE_ROOT_DESC:
+      unreachable("The caller should handle root descriptors");
+      return false;
+
+   case NVK_CBUF_TYPE_DESC_SET:
+      *desc_out = (struct nvk_buffer_address) {
+         .base_addr = desc->root.sets[cbuf->desc_set],
+         .size = desc->set_sizes[cbuf->desc_set],
+      };
+      return true;
+
+   case NVK_CBUF_TYPE_DYNAMIC_UBO:
+      *desc_out = desc->root.dynamic_buffers[cbuf->dynamic_idx];
+      return true;
+
+   case NVK_CBUF_TYPE_UBO_DESC: {
+      if (desc->sets[cbuf->desc_set] != NULL)
+         return false;
+
+      struct nvk_push_descriptor_set *push = desc->push[cbuf->desc_set];
+      if (push == NULL)
+         return false;
+
+      assert(cbuf->desc_offset < NVK_PUSH_DESCRIPTOR_SET_SIZE);
+      void *desc = &push->data[cbuf->desc_offset];
+      *desc_out = *(struct nvk_buffer_address *)desc;
+      return true;
+   }
+
+   default:
+      unreachable("Invalid cbuf type");
+   }
+}
+
+uint64_t
+nvk_cmd_buffer_get_cbuf_descriptor_addr(struct nvk_cmd_buffer *cmd,
+                                        const struct nvk_descriptor_state *desc,
+                                        const struct nvk_cbuf *cbuf)
+{
+   assert(cbuf->type == NVK_CBUF_TYPE_UBO_DESC);
+
+   assert(cbuf->desc_offset < desc->set_sizes[cbuf->desc_set]);
+   return desc->root.sets[cbuf->desc_set] + cbuf->desc_offset;
 }
 
 void
@@ -562,150 +805,3 @@ nvk_CmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
    nvk_push_descriptor_set_update_template(push_set, set_layout, template,
                                            pData);
 }
-
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdBindTransformFeedbackBuffersEXT(VkCommandBuffer commandBuffer,
-                                       uint32_t firstBinding,
-                                       uint32_t bindingCount,
-                                       const VkBuffer *pBuffers,
-                                       const VkDeviceSize *pOffsets,
-                                       const VkDeviceSize *pSizes)
-{
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-
-   for (uint32_t i = 0; i < bindingCount; i++) {
-      VK_FROM_HANDLE(nvk_buffer, buffer, pBuffers[i]);
-      uint32_t idx = firstBinding + i;
-      uint64_t size = pSizes ? pSizes[i] : VK_WHOLE_SIZE;
-      struct nvk_addr_range addr_range =
-         nvk_buffer_addr_range(buffer, pOffsets[i], size);
-      assert(addr_range.range <= UINT32_MAX);
-
-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-
-      P_MTHD(p, NV9097, SET_STREAM_OUT_BUFFER_ENABLE(idx));
-      P_NV9097_SET_STREAM_OUT_BUFFER_ENABLE(p, idx, V_TRUE);
-      P_NV9097_SET_STREAM_OUT_BUFFER_ADDRESS_A(p, idx, addr_range.addr >> 32);
-      P_NV9097_SET_STREAM_OUT_BUFFER_ADDRESS_B(p, idx, addr_range.addr);
-      P_NV9097_SET_STREAM_OUT_BUFFER_SIZE(p, idx, (uint32_t)addr_range.range);
-   }
-
-   // TODO: do we need to SET_STREAM_OUT_BUFFER_ENABLE V_FALSE ?
-}
-
-void
-nvk_mme_xfb_counter_load(struct mme_builder *b)
-{
-   struct mme_value buffer = mme_load(b);
-
-   struct mme_value counter;
-   if (b->devinfo->cls_eng3d >= TURING_A) {
-      struct mme_value64 counter_addr = mme_load_addr64(b);
-
-      mme_tu104_read_fifoed(b, counter_addr, mme_imm(1));
-      mme_free_reg(b, counter_addr.lo);
-      mme_free_reg(b, counter_addr.hi);
-
-      counter = mme_load(b);
-   } else {
-      counter = mme_load(b);
-   }
-
-   mme_mthd_arr(b, NV9097_SET_STREAM_OUT_BUFFER_LOAD_WRITE_POINTER(0), buffer);
-   mme_emit(b, counter);
-
-   mme_free_reg(b, counter);
-   mme_free_reg(b, buffer);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdBeginTransformFeedbackEXT(VkCommandBuffer commandBuffer,
-                                 uint32_t firstCounterBuffer,
-                                 uint32_t counterBufferCount,
-                                 const VkBuffer *pCounterBuffers,
-                                 const VkDeviceSize *pCounterBufferOffsets)
-{
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   const uint32_t max_buffers = 4;
-
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + 2 * max_buffers);
-
-   P_IMMD(p, NV9097, SET_STREAM_OUTPUT, ENABLE_TRUE);
-   for (uint32_t i = 0; i < max_buffers; ++i) {
-      P_IMMD(p, NV9097, SET_STREAM_OUT_BUFFER_LOAD_WRITE_POINTER(i), 0);
-   }
-
-   for (uint32_t i = 0; i < counterBufferCount; ++i) {
-      if (pCounterBuffers[i] == VK_NULL_HANDLE)
-         continue;
-
-      VK_FROM_HANDLE(nvk_buffer, buffer, pCounterBuffers[i]);
-      // index of counter buffer corresponts to index of transform buffer
-      uint32_t cb_idx = firstCounterBuffer + i;
-      uint64_t offset = pCounterBufferOffsets ? pCounterBufferOffsets[i] : 0;
-      uint64_t cb_addr = nvk_buffer_address(buffer, offset);
-
-      if (nvk_cmd_buffer_device(cmd)->pdev->info.cls_eng3d >= TURING_A) {
-         struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
-         P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
-         P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_XFB_COUNTER_LOAD));
-         /* The STREAM_OUT_BUFFER_LOAD_WRITE_POINTER registers are 8 dword stride */
-         P_INLINE_DATA(p, cb_idx * 8);
-         P_INLINE_DATA(p, cb_addr >> 32);
-         P_INLINE_DATA(p, cb_addr);
-      } else {
-         struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
-         /* Stall the command streamer */
-         __push_immd(p, SUBC_NV9097, NV906F_SET_REFERENCE, 0);
-
-         P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_XFB_COUNTER_LOAD));
-         /* The STREAM_OUT_BUFFER_LOAD_WRITE_POINTER registers are 8 dword stride */
-         P_INLINE_DATA(p, cb_idx * 8);
-         nv_push_update_count(p, 1);
-         nvk_cmd_buffer_push_indirect_buffer(cmd, buffer, offset, 4);
-      }
-   }
-}
-
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdEndTransformFeedbackEXT(VkCommandBuffer commandBuffer,
-                               uint32_t firstCounterBuffer,
-                               uint32_t counterBufferCount,
-                               const VkBuffer *pCounterBuffers,
-                               const VkDeviceSize *pCounterBufferOffsets)
-{
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-
-   for (uint32_t i = 0; i < counterBufferCount; ++i) {
-      if (pCounterBuffers[i] == VK_NULL_HANDLE)
-         continue;
-
-      VK_FROM_HANDLE(nvk_buffer, buffer, pCounterBuffers[i]);
-      uint64_t offset = pCounterBufferOffsets ? pCounterBufferOffsets[i] : 0;
-      uint64_t cb_addr = nvk_buffer_address(buffer, offset);
-
-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-      P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
-      P_NV9097_SET_REPORT_SEMAPHORE_A(p, cb_addr >> 32);
-      P_NV9097_SET_REPORT_SEMAPHORE_B(p, cb_addr);
-      P_NV9097_SET_REPORT_SEMAPHORE_C(p, 0);
-      P_NV9097_SET_REPORT_SEMAPHORE_D(p, {
-         .operation = OPERATION_REPORT_ONLY,
-         .pipeline_location = PIPELINE_LOCATION_STREAMING_OUTPUT,
-         .report = REPORT_STREAMING_BYTE_COUNT,
-         .structure_size = STRUCTURE_SIZE_ONE_WORD,
-      });
-   }
-
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, counterBufferCount ? 4 : 2);
-   P_IMMD(p, NV9097, SET_STREAM_OUTPUT, ENABLE_FALSE);
-
-   // TODO: this probably needs to move to CmdPipelineBarrier
-   if (counterBufferCount > 0) {
-      P_MTHD(p, NVA0C0, INVALIDATE_SHADER_CACHES_NO_WFI);
-      P_NVA0C0_INVALIDATE_SHADER_CACHES_NO_WFI(p, {
-         .constant = CONSTANT_TRUE
-      });
-   }
-}
-

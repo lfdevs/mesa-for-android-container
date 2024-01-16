@@ -42,6 +42,8 @@ class PanfrostDriver : public Driver {
    uint64_t next() override;
    uint32_t gpu_clock_id() const override;
    uint64_t gpu_timestamp() const override;
+   bool cpu_gpu_timestamp(uint64_t &cpu_timestamp,
+                          uint64_t &gpu_timestamp) const override;
 
    uint64_t last_dump_ts = 0;
 

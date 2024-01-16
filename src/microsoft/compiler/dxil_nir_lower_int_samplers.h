@@ -24,7 +24,6 @@
 #ifndef DXIL_NIR_LOWER_INT_SAMPLERS_H
 #define DXIL_NIR_LOWER_INT_SAMPLERS_H
 
-#include "pipe/p_state.h"
 #include "nir.h"
 
 #ifdef __cplusplus
@@ -38,12 +37,23 @@ typedef struct {
    unsigned swizzle_a:3;
 } dxil_texture_swizzle_state;
 
+enum dxil_tex_wrap {
+   DXIL_TEX_WRAP_REPEAT,
+   DXIL_TEX_WRAP_CLAMP,
+   DXIL_TEX_WRAP_CLAMP_TO_EDGE,
+   DXIL_TEX_WRAP_CLAMP_TO_BORDER,
+   DXIL_TEX_WRAP_MIRROR_REPEAT,
+   DXIL_TEX_WRAP_MIRROR_CLAMP,
+   DXIL_TEX_WRAP_MIRROR_CLAMP_TO_EDGE,
+   DXIL_TEX_WRAP_MIRROR_CLAMP_TO_BORDER,
+};
+
 typedef struct {
    float border_color[4];
    float lod_bias;
    float min_lod, max_lod;
    int last_level;
-   uint8_t wrap[3];
+   uint8_t wrap[3]; /* enum dxil_tex_wrap */
    uint8_t is_int_sampler:1;
    uint8_t is_nonnormalized_coords:1;
    uint8_t is_linear_filtering:1;

@@ -34,6 +34,7 @@ void state_pool_free_list_only_test(void)
 {
    const unsigned num_threads = 8;
    const unsigned states_per_thread = 1 << 12;
+   const uint32_t _1Gb = 1024 * 1024 * 1024;
 
    struct anv_physical_device physical_device = { };
    struct anv_device device = {};
@@ -44,7 +45,14 @@ void state_pool_free_list_only_test(void)
    device.kmd_backend = anv_kmd_backend_get(INTEL_KMD_TYPE_STUB);
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache, &device);
-   anv_state_pool_init(&state_pool, &device, "test", 4096, 0, 4096);
+   anv_state_pool_init(&state_pool, &device,
+                       &(struct anv_state_pool_params) {
+                          .name         = "test",
+                          .base_address = 4096,
+                          .start_offset = 0,
+                          .block_size   = 4096,
+                          .max_size     = _1Gb,
+                       });
 
    /* Grab one so a zero offset is impossible */
    anv_state_pool_alloc(&state_pool, 16, 16);

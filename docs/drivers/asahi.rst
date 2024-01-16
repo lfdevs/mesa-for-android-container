@@ -357,3 +357,8 @@ concepts used in PowerVR GPUs appear in AGX.
    Image Synthesis Processor
       The Image Synthesis Processor is responsible for the rasterization stage
       of the rendering pipeline.
+
+   PBE
+   Pixel BackEnd
+      Hardware unit which writes to color attachements and images. Also the
+      name for a descriptor passed to :term:`PBE` instructions.

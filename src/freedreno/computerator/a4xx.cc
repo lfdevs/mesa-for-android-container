@@ -345,7 +345,8 @@ a4xx_init(struct fd_device *dev, const struct fd_dev_id *dev_id)
    };
 
    struct ir3_compiler_options compiler_options = {};
-   a4xx_backend->compiler = ir3_compiler_create(dev, dev_id, &compiler_options);
+   a4xx_backend->compiler =
+      ir3_compiler_create(dev, dev_id, fd_dev_info_raw(dev_id), &compiler_options);
    a4xx_backend->dev = dev;
 
    return &a4xx_backend->base;

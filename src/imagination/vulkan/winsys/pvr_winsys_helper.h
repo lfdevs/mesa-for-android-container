@@ -41,9 +41,9 @@ struct pvr_winsys_heap;
 struct pvr_winsys_static_data_offsets;
 struct pvr_winsys_vma;
 
-typedef VkResult (*const heap_alloc_reserved_func)(
+typedef VkResult (*const heap_alloc_carveout_func)(
    struct pvr_winsys_heap *const heap,
-   const pvr_dev_addr_t reserved_dev_addr,
+   const pvr_dev_addr_t carveout_dev_addr,
    uint64_t size,
    uint64_t alignment,
    struct pvr_winsys_vma **vma_out);
@@ -64,7 +64,7 @@ void pvr_winsys_helper_heap_free(struct pvr_winsys_vma *const vma);
 
 VkResult pvr_winsys_helper_allocate_static_memory(
    struct pvr_winsys *const ws,
-   heap_alloc_reserved_func heap_alloc_reserved,
+   heap_alloc_carveout_func heap_alloc_carveout,
    struct pvr_winsys_heap *const general_heap,
    struct pvr_winsys_heap *const pds_heap,
    struct pvr_winsys_heap *const usc_heap,

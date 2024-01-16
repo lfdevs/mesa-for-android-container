@@ -32,9 +32,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-last,Fail
 spec@arb_draw_indirect@arb_draw_indirect-api-errors,Crash
-spec@arb_clear_texture@arb_clear_texture-integer,Fail
-spec@arb_explicit_attrib_location@overlapping-locations-input-attribs api,Crash
-spec@arb_explicit_attrib_location@overlapping-locations-input-attribs shader,Crash
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 spec@arb_get_program_binary@restore-sso-program,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
@@ -139,8 +136,6 @@ spec@arb_texture_stencil8@texwrap formats@GL_STENCIL_INDEX8,Fail
 spec@arb_texture_stencil8@texwrap formats@GL_STENCIL_INDEX8- NPOT,Fail
 spec@arb_texture_stencil8@texwrap formats@GL_STENCIL_INDEX8- swizzled,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
-spec@arb_vertex_attrib_64bit@arb_vertex_attrib_64bit-overlapping-locations api,Crash
-spec@arb_vertex_attrib_64bit@arb_vertex_attrib_64bit-overlapping-locations shader,Crash
 spec@arb_vertex_program@arb_vertex_program-matrix-property-bindings,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 spec@ext_framebuffer_multisample@accuracy 16 srgb depthstencil,Fail
@@ -166,8 +161,6 @@ spec@ext_framebuffer_multisample@sample-alpha-to-one 2,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-one 4,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-one 6,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-one 8,Fail
-spec@ext_texture_integer@fbo_integer_precision_clear,Fail
-spec@ext_texture_integer@fbo_integer_readpixels_sint_uint,Fail
 spec@ext_texture_integer@texwrap formats,Fail
 spec@ext_texture_integer@texwrap formats offset,Fail
 spec@ext_texture_integer@texwrap formats offset@GL_ALPHA16I_EXT,Fail
@@ -408,9 +401,25 @@ spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Fail
 spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Fail
 spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Fail
 spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Fail
-spec@nv_copy_image@nv_copy_image-formats,Crash
 wgl@wgl-multi-context-single-window,Fail
 
 # remove this after https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/843
 # is merged and piglit is updated
 spec@arb_vertex_program@arb_vertex_program-property-bindings,Fail
+
+# Needs https://github.com/KhronosGroup/SPIRV-Tools/pull/5477,
+# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/850,
+# and CI changes to glue them together
+spec@arb_gpu_shader5@arb_gpu_shader5-xfb-streams-without-invocations spirv,Fail
+
+# WARP bug: submitting an indirect draw with a count buffer modifies the arg buffer to zero
+# entries between >= dynamic count and < static max count
+spec@arb_query_buffer_object@coherency,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_FRAGMENT_SHADER_INVOCATIONS,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_PRIMITIVES_GENERATED,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_PRIMITIVES_SUBMITTED,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_SAMPLES_PASSED,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_TIMESTAMP,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_TIME_ELAPSED,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_VERTEX_SHADER_INVOCATIONS,Fail
+spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_VERTICES_SUBMITTED,Fail

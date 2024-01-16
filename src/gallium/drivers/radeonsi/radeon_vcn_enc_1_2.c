@@ -34,6 +34,7 @@
 #define RENCODE_IB_PARAM_VIDEO_BITSTREAM_BUFFER    0x0000000e
 #define RENCODE_IB_PARAM_FEEDBACK_BUFFER           0x00000010
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU        0x00000020
+#define RENCODE_IB_PARAM_QP_MAP                    0x00000021
 #define RENCODE_IB_PARAM_ENCODE_STATISTICS         0x00000024
 
 #define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL        0x00100001
@@ -718,7 +719,8 @@ static void radeon_enc_nalu_pps_hevc(struct radeon_encoder *enc)
    radeon_enc_code_se(enc, 0x0);
    radeon_enc_code_fixed_bits(enc, enc->enc_pic.hevc_spec_misc.constrained_intra_pred_flag, 1);
    radeon_enc_code_fixed_bits(enc, 0x0, 1);
-   if (enc->enc_pic.rc_session_init.rate_control_method == RENCODE_RATE_CONTROL_METHOD_NONE)
+   if (enc->enc_pic.rc_session_init.rate_control_method == RENCODE_RATE_CONTROL_METHOD_NONE &&
+       enc->enc_pic.enc_qp_map.qp_map_type == RENCODE_QP_MAP_TYPE_NONE)
       radeon_enc_code_fixed_bits(enc, 0x0, 1);
    else {
       radeon_enc_code_fixed_bits(enc, 0x1, 1);
@@ -1176,14 +1178,10 @@ static void radeon_enc_feedback(struct radeon_encoder *enc)
 
 static void radeon_enc_intra_refresh(struct radeon_encoder *enc)
 {
-   enc->enc_pic.intra_ref.intra_refresh_mode = RENCODE_INTRA_REFRESH_MODE_NONE;
-   enc->enc_pic.intra_ref.offset = 0;
-   enc->enc_pic.intra_ref.region_size = 0;
-
    RADEON_ENC_BEGIN(enc->cmd.intra_refresh);
-   RADEON_ENC_CS(enc->enc_pic.intra_ref.intra_refresh_mode);
-   RADEON_ENC_CS(enc->enc_pic.intra_ref.offset);
-   RADEON_ENC_CS(enc->enc_pic.intra_ref.region_size);
+   RADEON_ENC_CS(enc->enc_pic.intra_refresh.intra_refresh_mode);
+   RADEON_ENC_CS(enc->enc_pic.intra_refresh.offset);
+   RADEON_ENC_CS(enc->enc_pic.intra_refresh.region_size);
    RADEON_ENC_END();
 }
 
@@ -1272,6 +1270,19 @@ static void radeon_enc_encode_statistics(struct radeon_encoder *enc)
    RADEON_ENC_END();
 }
 
+static void radeon_enc_qp_map(struct radeon_encoder *enc)
+{
+   if (enc->enc_pic.enc_qp_map.qp_map_type == RENCODE_QP_MAP_TYPE_NONE)
+      return;
+   enc->enc_pic.enc_qp_map.qp_map_pitch = 0;
+
+   RADEON_ENC_BEGIN(enc->cmd.enc_qp_map);
+   RADEON_ENC_CS(enc->enc_pic.enc_qp_map.qp_map_type);
+   RADEON_ENC_READWRITE(enc->roi->res->buf, enc->roi->res->domains, 0);
+   RADEON_ENC_CS(enc->enc_pic.enc_qp_map.qp_map_pitch);
+   RADEON_ENC_END();
+}
+
 static void radeon_enc_op_init(struct radeon_encoder *enc)
 {
    RADEON_ENC_BEGIN(RENCODE_IB_OP_INITIALIZE);
@@ -1354,7 +1365,7 @@ static void radeon_enc_headers_h264(struct radeon_encoder *enc)
    enc->nalu_aud(enc);
    if (enc->enc_pic.layer_ctrl.num_temporal_layers > 1)
       enc->nalu_prefix(enc);
-   if (enc->enc_pic.is_idr) {
+   if (enc->enc_pic.is_idr || enc->enc_pic.need_sequence_header) {
       if (enc->enc_pic.layer_ctrl.num_temporal_layers > 1)
          enc->nalu_sei(enc);
       enc->nalu_sps(enc);
@@ -1368,7 +1379,7 @@ static void radeon_enc_headers_h264(struct radeon_encoder *enc)
 static void radeon_enc_headers_hevc(struct radeon_encoder *enc)
 {
    enc->nalu_aud(enc);
-   if (enc->enc_pic.is_idr) {
+   if (enc->enc_pic.is_idr || enc->enc_pic.need_sequence_header) {
       enc->nalu_vps(enc);
       enc->nalu_pps(enc);
       enc->nalu_sps(enc);
@@ -1389,6 +1400,7 @@ static void encode(struct radeon_encoder *enc)
    enc->bitstream(enc);
    enc->feedback(enc);
    enc->intra_refresh(enc);
+   enc->qp_map(enc);
 
    enc->op_preset(enc);
    enc->op_enc(enc);
@@ -1548,6 +1560,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->session_init = radeon_enc_session_init;
    enc->encode_statistics = radeon_enc_encode_statistics;
    enc->nalu_aud = radeon_enc_nalu_aud;
+   enc->qp_map = radeon_enc_qp_map;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
       enc->slice_control = radeon_enc_slice_control;
@@ -1595,6 +1608,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->cmd.enc_params_h264 = RENCODE_H264_IB_PARAM_ENCODE_PARAMS;
    enc->cmd.deblocking_filter_h264 = RENCODE_H264_IB_PARAM_DEBLOCKING_FILTER;
    enc->cmd.enc_statistics = RENCODE_IB_PARAM_ENCODE_STATISTICS;
+   enc->cmd.enc_qp_map = RENCODE_IB_PARAM_QP_MAP;
 
    enc->enc_pic.session_info.interface_version =
       ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |

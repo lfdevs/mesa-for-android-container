@@ -393,7 +393,7 @@ For patches that either need to be nominated after they've landed in
 main, or that are known ahead of time to not not apply cleanly to a
 stable branch (such as due to a rename), using a GitLab MR is most
 appropriate. The MR should be based on and target the
-``staging/**year.quarter**`` branch, not on the ``year.quarter`` branch,
+``staging/year.quarter`` branch, not on the ``year.quarter`` branch,
 per the stable branch policy. Assigning the MR to release maintainer for
 said branch or mentioning them is helpful, but not required.
 
@@ -408,6 +408,15 @@ Documentation patches
 
 Our documentation is written as `reStructuredText`_ files in the
 :file:`docs` folder, and built using `Sphinx`_.
+
+.. code-block:: sh
+
+   # Install dependencies (adapt for your distro)
+   apk add coreutils graphviz py3-clang clang-dev musl-dev linux-headers
+   pip3 install sphinx===5.1.1 mako===1.2.3 hawkmoth===0.16.0
+
+   # Build docs
+   sphinx-build -W -b html docs docs-html/
 
 The preferred language of the documentation is US English. This
 doesn't mean that everyone is expected to pay close attention to

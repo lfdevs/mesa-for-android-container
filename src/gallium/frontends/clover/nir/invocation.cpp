@@ -74,12 +74,12 @@ static void debug_function(void *private_data,
 static void
 clover_arg_size_align(const glsl_type *type, unsigned *size, unsigned *align)
 {
-   if (type == glsl_type::sampler_type || type->is_image()) {
+   if (glsl_type_is_sampler(type) || glsl_type_is_image(type)) {
       *size = 0;
       *align = 1;
    } else {
-      *size = type->cl_size();
-      *align = type->cl_alignment();
+      *size = glsl_get_cl_size(type);
+      *align = glsl_get_cl_alignment(type);
    }
 }
 
@@ -264,9 +264,9 @@ nir_shader *clover::nir::load_libclc_nir(const device &dev, std::string &r_log)
 static bool
 can_remove_var(nir_variable *var, void *data)
 {
-   return !(var->type->is_sampler() ||
-            var->type->is_texture() ||
-            var->type->is_image());
+   return !(glsl_type_is_sampler(var->type) ||
+            glsl_type_is_texture(var->type) ||
+            glsl_type_is_image(var->type));
 }
 
 binary clover::nir::spirv_to_nir(const binary &mod, const device &dev,

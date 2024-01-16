@@ -9,6 +9,7 @@ libasahi_agx_files = files(
   'agx_insert_waits.c',
   'agx_nir_fence_images.c',
   'agx_nir_lower_address.c',
+  'agx_nir_lower_cull_distance.c',
   'agx_nir_lower_frag_sidefx.c',
   'agx_nir_lower_sample_mask.c',
   'agx_nir_lower_discard_zs_emit.c',
@@ -17,6 +18,7 @@ libasahi_agx_files = files(
   'agx_nir_lower_layer.c',
   'agx_nir_lower_load_mask.c',
   'agx_nir_lower_shared_bitsize.c',
+  'agx_nir_lower_subgroups.c',
   'agx_nir_opt_preamble.c',
   'agx_lower_64bit.c',
   'agx_lower_parallel_copy.c',
@@ -86,7 +88,7 @@ idep_agx_builder_h = declare_dependency(
 
 libasahi_compiler = static_library(
   'asahi_compiler',
-  [libasahi_agx_files, agx_opcodes_c, agx_nir_algebraic_c],
+  [libasahi_agx_files, libagx_shaders, agx_opcodes_c, agx_nir_algebraic_c],
   dependencies: [idep_nir, idep_agx_opcodes_h, idep_agx_builder_h, idep_agx_pack],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',

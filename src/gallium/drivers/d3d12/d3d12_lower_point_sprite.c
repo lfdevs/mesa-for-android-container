@@ -241,7 +241,7 @@ d3d12_lower_point_sprite(nir_shader *shader,
    struct lower_state state;
    bool progress = false;
 
-   assert(shader->info.gs.output_primitive == GL_POINTS);
+   assert(shader->info.gs.output_primitive == MESA_PRIM_POINTS);
 
    memset(&state, 0, sizeof(state));
    find_outputs(shader, &state);
@@ -300,7 +300,7 @@ d3d12_lower_point_sprite(nir_shader *shader,
                                   nir_metadata_dominance);
    }
 
-   shader->info.gs.output_primitive = GL_TRIANGLE_STRIP;
+   shader->info.gs.output_primitive = MESA_PRIM_TRIANGLE_STRIP;
    shader->info.gs.vertices_out = shader->info.gs.vertices_out * 4 /
       util_bitcount(shader->info.gs.active_stream_mask);
    shader->info.gs.active_stream_mask = 1;

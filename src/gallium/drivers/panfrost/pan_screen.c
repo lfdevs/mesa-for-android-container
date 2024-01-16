@@ -109,8 +109,8 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
    bool has_mrt = (dev->arch >= 5);
 
    /* Only kernel drivers >= 1.1 can allocate HEAP BOs */
-   bool has_heap = dev->kernel_version->version_major > 1 ||
-                   dev->kernel_version->version_minor >= 1;
+   bool has_heap = panfrost_device_kmod_version_major(dev) > 1 ||
+                   panfrost_device_kmod_version_minor(dev) >= 1;
 
    switch (param) {
    case PIPE_CAP_NPOT_TEXTURES:
@@ -143,7 +143,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return true;
 
    case PIPE_CAP_ANISOTROPIC_FILTER:
-      return dev->revision >= dev->model->min_rev_anisotropic;
+      return panfrost_device_gpu_rev(dev) >= dev->model->min_rev_anisotropic;
 
    /* Compile side is done for Bifrost, Midgard TODO. Needs some kernel
     * work to turn on, since CYCLE_COUNT_START needs to be issued. In
@@ -180,10 +180,8 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_INT64:
       return 1;
 
-   /* We need this for OES_copy_image, but currently there are some awful
-    * interactions with AFBC that need to be worked out. */
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
-      return 0;
+      return 1;
 
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
       return PIPE_MAX_SO_BUFFERS;
@@ -807,7 +805,7 @@ panfrost_get_disk_shader_cache(struct pipe_screen *pscreen)
 static int
 panfrost_get_screen_fd(struct pipe_screen *pscreen)
 {
-   return pan_device(pscreen)->fd;
+   return panfrost_device_fd(pan_device(pscreen));
 }
 
 int
@@ -851,7 +849,8 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
 
    /* Bail early on unsupported hardware */
    if (dev->model == NULL) {
-      debug_printf("panfrost: Unsupported model %X", dev->gpu_id);
+      debug_printf("panfrost: Unsupported model %X",
+                   panfrost_device_gpu_id(dev));
       panfrost_destroy_screen(&(screen->base));
       return NULL;
    }

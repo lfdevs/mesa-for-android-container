@@ -77,6 +77,8 @@ static void test_runner_rc_optimize(struct test_result * result)
 	}
 
 	test_check(result, pass);
+
+	destroy_compiler(&c);
 }
 
 unsigned radeon_compiler_optimize_run_tests()

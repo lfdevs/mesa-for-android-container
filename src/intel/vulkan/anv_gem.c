@@ -36,10 +36,9 @@
 
 void *
 anv_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
-             uint64_t size, VkMemoryPropertyFlags property_flags)
+             uint64_t size)
 {
-   void *map = device->kmd_backend->gem_mmap(device, bo, offset, size,
-                                             property_flags);
+   void *map = device->kmd_backend->gem_mmap(device, bo, offset, size);
 
    if (map != MAP_FAILED)
       VG(VALGRIND_MALLOCLIKE_BLOCK(map, size, 0, 1));

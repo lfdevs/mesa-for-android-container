@@ -159,7 +159,6 @@ struct st_context
    bool force_specialized_compute_transfer;
    bool force_persample_in_shader;
    bool has_shareable_shaders;
-   bool has_half_float_packing;
    bool has_multi_draw_indirect;
    bool has_indirect_partial_stride;
    bool has_occlusion_query;

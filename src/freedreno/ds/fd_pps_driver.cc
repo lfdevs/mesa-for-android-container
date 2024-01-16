@@ -483,7 +483,7 @@ FreedrenoDriver::init_perfcnt()
    for (const auto &countable : countables)
       countable.resolve();
 
-   info = fd_dev_info(dev_id);
+   info = fd_dev_info_raw(dev_id);
 
    io = fd_dt_find_io();
    if (!io) {
@@ -708,6 +708,13 @@ uint64_t
 FreedrenoDriver::gpu_timestamp() const
 {
    return perfetto::base::GetBootTimeNs().count();
+}
+
+bool
+FreedrenoDriver::cpu_gpu_timestamp(uint64_t &, uint64_t &) const
+{
+   /* Not supported */
+   return false;
 }
 
 } // namespace pps

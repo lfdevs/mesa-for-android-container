@@ -184,29 +184,37 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       ps.VectorMaskEnable       = prog_data->uses_vmask;
 
       ps.BindingTableEntryCount = GFX_VER == 9 ? 1 : 0;
+#if GFX_VER < 20
       ps.PushConstantEnable     = prog_data->base.nr_params > 0 ||
                                   prog_data->base.ubo_ranges[0].length;
+#endif
 
       ps.DispatchGRFStartRegisterForConstantSetupData0 =
          brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
       ps.DispatchGRFStartRegisterForConstantSetupData1 =
          brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 1);
+#if GFX_VER < 20
       ps.DispatchGRFStartRegisterForConstantSetupData2 =
          brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 2);
+#endif
 
       ps.KernelStartPointer0 = state->kernel->kernel.offset +
          brw_wm_prog_data_prog_offset(prog_data, ps, 0);
       ps.KernelStartPointer1 = state->kernel->kernel.offset +
          brw_wm_prog_data_prog_offset(prog_data, ps, 1);
+#if GFX_VER < 20
       ps.KernelStartPointer2 = state->kernel->kernel.offset +
          brw_wm_prog_data_prog_offset(prog_data, ps, 2);
+#endif
 
       ps.MaximumNumberofThreadsPerPSD = device->info->max_threads_per_psd - 1;
    }
 
    anv_batch_emit(batch, GENX(3DSTATE_PS_EXTRA), psx) {
       psx.PixelShaderValid = true;
+#if GFX_VER < 20
       psx.AttributeEnable = prog_data->num_varying_inputs > 0;
+#endif
       psx.PixelShaderIsPerSample = prog_data->persample_dispatch;
       psx.PixelShaderComputedDepthMode = prog_data->computed_depth_mode;
       psx.PixelShaderComputesStencil = prog_data->computed_stencil;
@@ -216,6 +224,9 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       struct anv_state cc_state =
          anv_state_stream_alloc(state->dynamic_state_stream,
                                 4 * GENX(CC_VIEWPORT_length), 32);
+      if (cc_state.map == NULL)
+         return;
+
       struct GENX(CC_VIEWPORT) cc_viewport = {
          .MinimumDepth = 0.0f,
          .MaximumDepth = 1.0f,
@@ -381,16 +392,23 @@ genX(emit_simple_shader_init)(struct anv_simple_shader *state)
 struct anv_state
 genX(simple_shader_alloc_push)(struct anv_simple_shader *state, uint32_t size)
 {
+   struct anv_state s;
+
    if (state->kernel->stage == MESA_SHADER_FRAGMENT) {
-      return anv_state_stream_alloc(state->dynamic_state_stream,
-                                    size, ANV_UBO_ALIGNMENT);
+      s = anv_state_stream_alloc(state->dynamic_state_stream,
+                                 size, ANV_UBO_ALIGNMENT);
    } else {
 #if GFX_VERx10 >= 125
-      return anv_state_stream_alloc(state->general_state_stream, align(size, 64), 64);
+      s = anv_state_stream_alloc(state->general_state_stream, align(size, 64), 64);
 #else
-      return anv_state_stream_alloc(state->dynamic_state_stream, size, 64);
+      s = anv_state_stream_alloc(state->dynamic_state_stream, size, 64);
 #endif
    }
+
+   if (s.map == NULL)
+      anv_batch_set_error(state->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+
+   return s;
 }
 
 /** Get the address of allocated push constant data by
@@ -434,6 +452,8 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
       struct anv_state vs_data_state =
          anv_state_stream_alloc(state->dynamic_state_stream,
                                 9 * sizeof(uint32_t), 32);
+      if (vs_data_state.map == NULL)
+         return;
 
       float x0 = 0.0f, x1 = MIN2(num_threads, 8192);
       float y0 = 0.0f, y1 = DIV_ROUND_UP(num_threads, 8192);
@@ -513,8 +533,8 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
          prim.VertexCountPerInstance   = 3;
          prim.InstanceCount            = 1;
       }
+      genX(batch_emit_post_3dprimitive_was)(batch, device, _3DPRIM_RECTLIST, 3);
       genX(emit_breakpoint)(batch, device, false);
-      genX(batch_emit_dummy_post_sync_op)(batch, device, _3DPRIM_RECTLIST, 3);
    } else {
       const struct intel_device_info *devinfo = device->info;
       const struct brw_cs_prog_data *prog_data =
@@ -603,6 +623,9 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
       struct anv_state iface_desc_state =
          anv_state_stream_alloc(state->dynamic_state_stream,
                                 GENX(INTERFACE_DESCRIPTOR_DATA_length) * 4, 64);
+      if (iface_desc_state.map == NULL)
+         return;
+
       struct GENX(INTERFACE_DESCRIPTOR_DATA) iface_desc = {
          .KernelStartPointer                    = state->kernel->kernel.offset +
                                                   brw_cs_prog_data_prog_offset(prog_data,

@@ -67,9 +67,9 @@
 #include "drm-uapi/panfrost_drm.h"
 
 #include "pan_blend.h"
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "pan_device.h"
-#include "pan_scoreboard.h"
+#include "pan_jc.h"
 #include "pan_texture.h"
 #include "panvk_mempool.h"
 #include "panvk_varyings.h"
@@ -199,6 +199,7 @@ enum panvk_debug_flags {
    PANVK_DEBUG_AFBC = 1 << 4,
    PANVK_DEBUG_LINEAR = 1 << 5,
    PANVK_DEBUG_DUMP = 1 << 6,
+   PANVK_DEBUG_NO_KNOWN_WARN = 1 << 7,
 };
 
 struct panvk_instance {
@@ -263,7 +264,7 @@ struct panvk_batch {
    struct list_head node;
    struct util_dynarray jobs;
    struct util_dynarray event_ops;
-   struct pan_scoreboard scoreboard;
+   struct pan_jc jc;
    struct {
       const struct panvk_framebuffer *info;
       struct panfrost_ptr desc;

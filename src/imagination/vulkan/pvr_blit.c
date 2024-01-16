@@ -211,8 +211,8 @@ static void pvr_setup_transfer_surface(struct pvr_device *device,
    }
 }
 
-void pvr_CmdBlitImage2KHR(VkCommandBuffer commandBuffer,
-                          const VkBlitImageInfo2KHR *pBlitImageInfo)
+void pvr_CmdBlitImage2(VkCommandBuffer commandBuffer,
+                          const VkBlitImageInfo2 *pBlitImageInfo)
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    PVR_FROM_HANDLE(pvr_image, src, pBlitImageInfo->srcImage);
@@ -687,8 +687,8 @@ static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
    return true;
 }
 
-void pvr_CmdCopyImage2KHR(VkCommandBuffer commandBuffer,
-                          const VkCopyImageInfo2KHR *pCopyImageInfo)
+void pvr_CmdCopyImage2(VkCommandBuffer commandBuffer,
+                          const VkCopyImageInfo2 *pCopyImageInfo)
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    PVR_FROM_HANDLE(pvr_image, src, pCopyImageInfo->srcImage);
@@ -885,9 +885,9 @@ pvr_copy_buffer_to_image_region(struct pvr_cmd_buffer *const cmd_buffer,
                                                  flags);
 }
 
-void pvr_CmdCopyBufferToImage2KHR(
+void pvr_CmdCopyBufferToImage2(
    VkCommandBuffer commandBuffer,
-   const VkCopyBufferToImageInfo2KHR *pCopyBufferToImageInfo)
+   const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
 {
    PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferToImageInfo->srcBuffer);
    PVR_FROM_HANDLE(pvr_image, dst, pCopyBufferToImageInfo->dstImage);
@@ -1354,7 +1354,7 @@ void pvr_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
                               false);
 }
 
-void pvr_CmdCopyBuffer2KHR(VkCommandBuffer commandBuffer,
+void pvr_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
                            const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
    PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferInfo->srcBuffer);
@@ -2264,7 +2264,7 @@ void pvr_CmdClearAttachments(VkCommandBuffer commandBuffer,
                          false);
 }
 
-void pvr_CmdResolveImage2KHR(VkCommandBuffer commandBuffer,
+void pvr_CmdResolveImage2(VkCommandBuffer commandBuffer,
                              const VkResolveImageInfo2 *pResolveImageInfo)
 {
    PVR_FROM_HANDLE(pvr_image, src, pResolveImageInfo->srcImage);

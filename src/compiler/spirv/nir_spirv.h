@@ -148,6 +148,10 @@ nir_shader *spirv_to_nir(const uint32_t *words, size_t word_count,
                          const struct spirv_to_nir_options *options,
                          const nir_shader_compiler_options *nir_options);
 
+bool
+spirv_library_to_nir_builder(FILE *fp, const uint32_t *words, size_t word_count,
+                             const struct spirv_to_nir_options *options);
+
 #ifdef __cplusplus
 }
 #endif

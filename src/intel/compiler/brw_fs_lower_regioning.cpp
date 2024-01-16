@@ -253,8 +253,10 @@ namespace {
    has_invalid_src_region(const intel_device_info *devinfo, const fs_inst *inst,
                           unsigned i)
    {
-      if (is_send(inst) || inst->is_math() || inst->is_control_source(i))
+      if (is_send(inst) || inst->is_math() || inst->is_control_source(i) ||
+          inst->opcode == BRW_OPCODE_DPAS) {
          return false;
+      }
 
       /* Empirical testing shows that Broadwell has a bug affecting half-float
        * MAD instructions when any of its sources has a non-zero offset, such

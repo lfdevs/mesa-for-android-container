@@ -156,7 +156,7 @@ vk_set_physical_device_features_1_0(struct vk_features *all_features,
 #endif
 
 #endif
-""", output_encoding='utf-8')
+""")
 
 TEMPLATE_C = Template(COPYRIGHT + """
 /* This file generated from ${filename}, don't edit directly. */
@@ -335,7 +335,7 @@ vk_set_physical_device_features_1_0(struct vk_features *all_features,
       all_features->${flag} = true;
 % endfor
 }
-""", output_encoding='utf-8')
+""")
 
 def get_pdev_features(doc):
     _type = doc.find(".types/type[@name='VkPhysicalDeviceFeatures']")
@@ -457,9 +457,9 @@ def main():
     }
 
     try:
-        with open(args.out_c, 'wb') as f:
+        with open(args.out_c, 'w', encoding='utf-8') as f:
             f.write(TEMPLATE_C.render(**environment))
-        with open(args.out_h, 'wb') as f:
+        with open(args.out_h, 'w', encoding='utf-8') as f:
             f.write(TEMPLATE_H.render(**environment))
     except Exception:
         # In the event there's an error, this uses some helpers from mako

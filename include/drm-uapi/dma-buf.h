@@ -20,7 +20,7 @@
 #ifndef _DMA_BUF_UAPI_H_
 #define _DMA_BUF_UAPI_H_
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__managarm__)
 
 #include <linux/types.h>
 

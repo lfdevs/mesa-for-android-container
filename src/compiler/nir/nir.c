@@ -30,13 +30,12 @@
 #include <limits.h>
 #include <math.h>
 #include "util/half_float.h"
+#include "util/macros.h"
 #include "util/u_math.h"
 #include "util/u_qsort.h"
 #include "nir_builder.h"
 #include "nir_control_flow_private.h"
 #include "nir_worklist.h"
-
-#include "main/menums.h" /* BITFIELD64_MASK */
 
 #ifndef NDEBUG
 uint32_t nir_debug = 0;
@@ -319,7 +318,7 @@ nir_create_variable_with_location(nir_shader *shader, nir_variable_mode mode, in
    /* Only supporting non-array, or arrayed-io types, because otherwise we don't
     * know how much to increment num_inputs/outputs
     */
-   assert(glsl_get_length(type) <= 1);
+   assert(glsl_type_is_vector_or_scalar(type) || glsl_type_is_unsized_array(type));
 
    const char *name;
    switch (mode) {
@@ -503,6 +502,9 @@ nir_function_create(nir_shader *shader, const char *name)
    func->is_preamble = false;
    func->dont_inline = false;
    func->should_inline = false;
+
+   /* Only meaningful for shader libraries, so don't export by default. */
+   func->is_exported = false;
 
    return func;
 }
@@ -2193,6 +2195,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_sample_pos_or_center;
    case SYSTEM_VALUE_SAMPLE_MASK_IN:
       return nir_intrinsic_load_sample_mask_in;
+   case SYSTEM_VALUE_LAYER_ID:
+      return nir_intrinsic_load_layer_id;
    case SYSTEM_VALUE_LOCAL_INVOCATION_ID:
       return nir_intrinsic_load_local_invocation_id;
    case SYSTEM_VALUE_LOCAL_INVOCATION_INDEX:
@@ -2346,6 +2350,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_SAMPLE_POS_OR_CENTER;
    case nir_intrinsic_load_sample_mask_in:
       return SYSTEM_VALUE_SAMPLE_MASK_IN;
+   case nir_intrinsic_load_layer_id:
+      return SYSTEM_VALUE_LAYER_ID;
    case nir_intrinsic_load_local_invocation_id:
       return SYSTEM_VALUE_LOCAL_INVOCATION_ID;
    case nir_intrinsic_load_local_invocation_index:
@@ -2844,16 +2850,6 @@ nir_op_is_vec(nir_op op)
    default:
       return false;
    }
-}
-
-bool
-nir_alu_instr_channel_used(const nir_alu_instr *instr, unsigned src,
-                           unsigned channel)
-{
-   if (nir_op_infos[instr->op].input_sizes[src] > 0)
-      return channel < nir_op_infos[instr->op].input_sizes[src];
-
-   return channel < instr->def.num_components;
 }
 
 nir_component_mask_t
@@ -3375,7 +3371,7 @@ nir_remove_varying(nir_intrinsic_instr *intr, gl_shader_stage next_shader)
  * This marks the output store instruction as not feeding fixed-function
  * logic. If the instruction has no other use, it's removed.
  */
-void
+bool
 nir_remove_sysval_output(nir_intrinsic_instr *intr)
 {
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
@@ -3385,8 +3381,10 @@ nir_remove_sysval_output(nir_intrinsic_instr *intr)
       /* Demote the store instruction. */
       sem.no_sysval_output = true;
       nir_intrinsic_set_io_semantics(intr, sem);
+      return false;
    } else {
       nir_instr_remove(&intr->instr);
+      return true;
    }
 }
 
@@ -3398,4 +3396,20 @@ nir_remove_non_entrypoints(nir_shader *nir)
          exec_node_remove(&func->node);
    }
    assert(exec_list_length(&nir->functions) == 1);
+}
+
+void
+nir_remove_non_exported(nir_shader *nir)
+{
+   nir_foreach_function_safe(func, nir) {
+      if (!func->is_exported)
+         exec_node_remove(&func->node);
+   }
+}
+
+unsigned
+nir_static_workgroup_size(const nir_shader *s)
+{
+   return s->info.workgroup_size[0] * s->info.workgroup_size[1] *
+          s->info.workgroup_size[2];
 }

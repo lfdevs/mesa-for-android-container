@@ -42,6 +42,10 @@
 #define rotl32(x,r) (((x) << (r)) | ((x) >> (32 - (r))))
 #define rotl64(x,r) (((x) << (r)) | ((x) >> (64 - (r))))
 
+EMU_SQE_REG(SP);
+EMU_SQE_REG(STACK0);
+EMU_CONTROL_REG(DRAW_STATE_SET_HDR);
+
 /**
  * AFUC emulator.  Currently only supports a6xx
  *
@@ -212,38 +216,66 @@ emu_instr(struct emu *emu, struct afuc_instr *instr)
    case OPC_CWRITE: {
       uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
       uint32_t src2 = emu_get_gpr_reg(emu, instr->src2);
+      uint32_t reg = src2 + instr->immed;
 
-      if (instr->bit == 0x4) {
-         emu_set_gpr_reg(emu, instr->src2, src2 + instr->immed);
-      } else if (instr->bit && !emu->quiet) {
-         printf("unhandled flags: %x\n", instr->bit);
+      if (instr->preincrement) {
+         emu_set_gpr_reg(emu, instr->src2, reg);
       }
 
-      emu_set_control_reg(emu, src2 + instr->immed, src1);
+      emu_set_control_reg(emu, reg, src1);
+
+      for (unsigned i = 0; i < instr->sds; i++) {
+         uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
+
+         /* TODO: There is likely a DRAW_STATE_SET_BASE register on a6xx, as
+          * there is on a7xx, and we should be writing that instead of setting
+          * the base directly.
+          */
+         if (reg == emu_reg_offset(&DRAW_STATE_SET_HDR))
+            emu_set_draw_state_base(emu, i, src1);
+      }
       break;
    }
    case OPC_CREAD: {
       uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
 
-      if (instr->bit == 0x4) {
+      if (instr->preincrement) {
          emu_set_gpr_reg(emu, instr->src1, src1 + instr->immed);
-      } else if (instr->bit && !emu->quiet) {
-         printf("unhandled flags: %x\n", instr->bit);
       }
 
       emu_set_gpr_reg(emu, instr->dst,
                       emu_get_control_reg(emu, src1 + instr->immed));
       break;
    }
+   case OPC_SWRITE: {
+      uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
+      uint32_t src2 = emu_get_gpr_reg(emu, instr->src2);
+
+      if (instr->preincrement) {
+         emu_set_gpr_reg(emu, instr->src2, src2 + instr->immed);
+      }
+
+      emu_set_sqe_reg(emu, src2 + instr->immed, src1);
+      break;
+   }
+   case OPC_SREAD: {
+      uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
+
+      if (instr->preincrement) {
+         emu_set_gpr_reg(emu, instr->src1, src1 + instr->immed);
+      }
+
+      emu_set_gpr_reg(emu, instr->dst,
+                      emu_get_sqe_reg(emu, src1 + instr->immed));
+      break;
+   }
    case OPC_LOAD: {
       uintptr_t addr = load_store_addr(emu, instr->src1) +
             instr->immed;
 
-      if (instr->bit == 0x4) {
+      if (instr->preincrement) {
          uint32_t src1 = emu_get_gpr_reg(emu, instr->src1);
          emu_set_gpr_reg(emu, instr->src1, src1 + instr->immed);
-      } else if (instr->bit && !emu->quiet) {
-         printf("unhandled flags: %x\n", instr->bit);
       }
 
       uint32_t val = emu_mem_read_dword(emu, addr);
@@ -256,11 +288,9 @@ emu_instr(struct emu *emu, struct afuc_instr *instr)
       uintptr_t addr = load_store_addr(emu, instr->src2) +
             instr->immed;
 
-      if (instr->bit == 0x4) {
+      if (instr->preincrement) {
          uint32_t src2 = emu_get_gpr_reg(emu, instr->src2);
          emu_set_gpr_reg(emu, instr->src2, src2 + instr->immed);
-      } else if (instr->bit && !emu->quiet) {
-         printf("unhandled flags: %x\n", instr->bit);
       }
 
       uint32_t val = emu_get_gpr_reg(emu, instr->src1);
@@ -291,20 +321,24 @@ emu_instr(struct emu *emu, struct afuc_instr *instr)
       break;
    }
    case OPC_RET: {
-      assert(emu->call_stack_idx > 0);
+      unsigned sp = emu_get_reg32(emu, &SP);
+      assert(sp > 0);
 
       /* counter-part to 'call' instruction, also has a delay slot: */
-      emu->branch_target = emu->call_stack[--emu->call_stack_idx];
+      emu->branch_target = emu_get_sqe_reg(emu, emu_reg_offset(&STACK0) + sp - 1);
+      emu_set_reg32(emu, &SP, sp - 1);
 
       break;
    }
    case OPC_CALL: {
-      assert(emu->call_stack_idx < ARRAY_SIZE(emu->call_stack));
+      unsigned sp = emu_get_reg32(emu, &SP);
+      assert(sp + emu_reg_offset(&STACK0) < ARRAY_SIZE(emu->sqe_regs.val));
 
       /* call looks to have same delay-slot behavior as branch/etc, so
        * presumably the return PC is two instructions later:
        */
-      emu->call_stack[emu->call_stack_idx++] = emu->gpr_regs.pc + 2;
+      emu_set_sqe_reg(emu, emu_reg_offset(&STACK0) + sp, emu->gpr_regs.pc + 2);
+      emu_set_reg32(emu, &SP, sp + 1);
       emu->branch_target = instr->literal;
 
       break;

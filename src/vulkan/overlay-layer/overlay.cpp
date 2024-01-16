@@ -1225,8 +1225,8 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
                                           VK_SUBPASS_CONTENTS_INLINE);
 
    /* Create/Resize vertex & index buffers */
-   size_t vertex_size = ALIGN(draw_data->TotalVtxCount * sizeof(ImDrawVert), device_data->properties.limits.nonCoherentAtomSize);
-   size_t index_size = ALIGN(draw_data->TotalIdxCount * sizeof(ImDrawIdx), device_data->properties.limits.nonCoherentAtomSize);
+   size_t vertex_size = align_uintptr(draw_data->TotalVtxCount * sizeof(ImDrawVert), device_data->properties.limits.nonCoherentAtomSize);
+   size_t index_size = align_uintptr(draw_data->TotalIdxCount * sizeof(ImDrawIdx), device_data->properties.limits.nonCoherentAtomSize);
    if (draw->vertex_buffer_size < vertex_size) {
       CreateOrResizeBuffer(device_data,
                            &draw->vertex_buffer,
@@ -2469,7 +2469,7 @@ static VkResult overlay_QueueSubmit(
    return device_data->vtable.QueueSubmit(queue, submitCount, pSubmits, fence);
 }
 
-static VkResult overlay_QueueSubmit2KHR(
+static VkResult overlay_QueueSubmit2(
     VkQueue                                     queue,
     uint32_t                                    submitCount,
     const VkSubmitInfo2*                        pSubmits,
@@ -2506,7 +2506,7 @@ static VkResult overlay_QueueSubmit2KHR(
       }
    }
 
-   return device_data->vtable.QueueSubmit2KHR(queue, submitCount, pSubmits, fence);
+   return device_data->vtable.QueueSubmit2(queue, submitCount, pSubmits, fence);
 }
 
 static VkResult overlay_CreateDevice(
@@ -2691,7 +2691,7 @@ static const struct {
    ADD_HOOK(AcquireNextImage2KHR),
 
    ADD_HOOK(QueueSubmit),
-   ADD_HOOK(QueueSubmit2KHR),
+   ADD_HOOK(QueueSubmit2),
 
    ADD_HOOK(CreateDevice),
    ADD_HOOK(DestroyDevice),

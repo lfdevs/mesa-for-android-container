@@ -23,12 +23,21 @@
 #ifndef R600_ASM_H
 #define R600_ASM_H
 
-#include "r600_pipe.h"
+#include "util/format/u_format.h"
+#include "util/list.h"
+#include "amd_family.h"
 #include "r600_isa.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define R600_ASM_ERR(fmt, args...) \
+	fprintf(stderr, "EE %s:%d %s - " fmt, __FILE__, __LINE__, __func__, ##args)
 
 struct r600_bytecode_alu_src {
 	unsigned			sel;
@@ -331,10 +340,6 @@ void r600_bytecode_alu_read(struct r600_bytecode *bc,
 int r600_load_ar(struct r600_bytecode *bc, bool for_src);
 
 int cm_bytecode_add_cf_end(struct r600_bytecode *bc);
-
-void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
-				      unsigned count,
-				      const struct pipe_vertex_element *elements);
 
 /* r700_asm.c */
 void r700_bytecode_cf_vtx_build(uint32_t *bytecode,

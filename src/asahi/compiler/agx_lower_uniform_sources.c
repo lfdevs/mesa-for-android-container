@@ -47,6 +47,8 @@ should_lower(enum agx_opcode op, agx_index uniform, unsigned src_index)
    case AGX_OPCODE_SAMPLE_MASK:
    case AGX_OPCODE_ITER:
    case AGX_OPCODE_ITERPROJ:
+   case AGX_OPCODE_STACK_LOAD:
+   case AGX_OPCODE_STACK_STORE:
       return true;
    default:
       return false;

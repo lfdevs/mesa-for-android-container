@@ -52,7 +52,7 @@ if with_gallium_zink and not with_platform_android
     libdri_c_args += '-DKOPPER_LIB_NAMES="libEGL and libGLX"'
   endif
   files_libdri += files('kopper.c')
-  deps_for_libdri += idep_vulkan_wsi_defines
+  deps_for_libdri += vulkan_wsi_deps
 endif
 
 if with_gallium_softpipe

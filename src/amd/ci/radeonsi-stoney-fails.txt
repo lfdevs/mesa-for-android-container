@@ -233,3 +233,9 @@ spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@arb_viewport_array@display-list,Fail
 # since transition XORG -> WESTON
 glx@glx_arb_sync_control@waitformsc,Fail
+
+# remove these after updating piglit:
+spec@arb_fragment_layer_viewport@layer-gs-writes-out-of-range,Fail
+spec@arb_fragment_layer_viewport@layer-vs-write-simple,Fail
+spec@arb_fragment_layer_viewport@layer-gs-write-simple,Fail
+spec@arb_fragment_layer_viewport@layer-vs-gs-write-simple,Fail

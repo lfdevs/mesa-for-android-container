@@ -99,6 +99,8 @@ struct tu_program_state
 
       struct tu_program_descriptor_linkage link[MESA_SHADER_STAGES];
 
+      unsigned dynamic_descriptor_offsets[MAX_SETS];
+
       bool per_view_viewport;
 };
 
@@ -184,8 +186,6 @@ struct tu_graphics_lib_pipeline {
       nir_shader *nir;
       struct tu_shader_key key;
    } shaders[MESA_SHADER_FRAGMENT + 1];
-
-   struct ir3_shader_key ir3_key;
 
    /* Used to stitch together an overall layout for the final pipeline. */
    struct tu_descriptor_set_layout *layouts[MAX_SETS];

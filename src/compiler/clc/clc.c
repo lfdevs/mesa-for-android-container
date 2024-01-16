@@ -24,7 +24,6 @@
 #include "nir/nir.h"
 #include "nir/nir_serialize.h"
 #include "glsl_types.h"
-#include "nir_types.h"
 #include "clc.h"
 #include "clc_helpers.h"
 #include "nir_clc_helpers.h"
@@ -33,18 +32,19 @@
 
 #include <stdlib.h>
 
-enum clc_debug_flags {
-   CLC_DEBUG_DUMP_SPIRV = 1 << 0,
-   CLC_DEBUG_VERBOSE = 1 << 1,
-};
-
 static const struct debug_named_value clc_debug_options[] = {
    { "dump_spirv",  CLC_DEBUG_DUMP_SPIRV, "Dump spirv blobs" },
+   { "dump_llvm",  CLC_DEBUG_DUMP_LLVM, "Dump LLVM blobs" },
    { "verbose",  CLC_DEBUG_VERBOSE, NULL },
    DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(debug_clc, "CLC_DEBUG", clc_debug_options, 0)
+
+uint64_t clc_debug_flags(void)
+{
+   return debug_get_option_debug_clc();
+}
 
 static void
 clc_print_kernels_info(const struct clc_parsed_spirv *obj)

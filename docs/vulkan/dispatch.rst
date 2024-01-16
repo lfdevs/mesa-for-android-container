@@ -273,7 +273,7 @@ which wrap these functions because those have to be exposed as actual
 symbols from the ``.so`` or ``.dll`` as part of the loader interface.  It
 also has to provide its own ``drv_GetInstanceProcAddr()`` because it needs
 to pass the supported instance extension table to
-:cpp:func:`vk_instance_get_proc_addr`.  The runtime will provide
+:c:func:`vk_instance_get_proc_addr`.  The runtime will provide
 ``vk_common_GetDeviceProcAddr()`` implementations.
 
 

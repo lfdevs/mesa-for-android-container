@@ -7,7 +7,9 @@
 #include "asahi/compiler/agx_internal_formats.h"
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"
+#include "util/bitset.h"
 #include "util/u_math.h"
+#include "shader_enums.h"
 
 static bool
 is_rgb10_a2(const struct util_format_description *desc)
@@ -111,14 +113,14 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    if (intr->intrinsic != nir_intrinsic_load_input)
       return false;
 
-   struct agx_vbufs *vbufs = data;
+   struct agx_attribute *attribs = data;
    b->cursor = nir_before_instr(instr);
 
    nir_src *offset_src = nir_get_io_offset_src(intr);
    assert(nir_src_is_const(*offset_src) && "no attribute indirects");
    unsigned index = nir_intrinsic_base(intr) + nir_src_as_uint(*offset_src);
 
-   struct agx_attribute attrib = vbufs->attributes[index];
+   struct agx_attribute attrib = attribs[index];
    uint32_t stride = attrib.stride;
    uint16_t offset = attrib.src_offset;
 
@@ -158,9 +160,16 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    /* Calculate the element to fetch the vertex for. Divide the instance ID by
     * the divisor for per-instance data. Divisor=0 specifies per-vertex data.
     */
-   nir_def *el = (attrib.divisor == 0)
-                    ? nir_load_vertex_id(b)
-                    : nir_udiv_imm(b, nir_load_instance_id(b), attrib.divisor);
+   nir_def *el;
+   if (attrib.divisor) {
+      el = nir_udiv_imm(b, nir_load_instance_id(b), attrib.divisor);
+      el = nir_iadd(b, el, nir_load_base_instance(b));
+
+      BITSET_SET(b->shader->info.system_values_read,
+                 SYSTEM_VALUE_BASE_INSTANCE);
+   } else {
+      el = nir_load_vertex_id(b);
+   }
 
    nir_def *base = nir_load_vbo_base_agx(b, nir_imm_int(b, attrib.buf));
 
@@ -253,9 +262,9 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
 }
 
 bool
-agx_nir_lower_vbo(nir_shader *shader, struct agx_vbufs *vbufs)
+agx_nir_lower_vbo(nir_shader *shader, struct agx_attribute *attribs)
 {
    assert(shader->info.stage == MESA_SHADER_VERTEX);
    return nir_shader_instructions_pass(
-      shader, pass, nir_metadata_block_index | nir_metadata_dominance, vbufs);
+      shader, pass, nir_metadata_block_index | nir_metadata_dominance, attribs);
 }

@@ -26,11 +26,7 @@
 
 #pragma once
 
-#ifndef _WIN32
 #include <wsl/winadapter.h>
-#else
-#include <unknwn.h>
-#endif
 
 #define D3D12_IGNORE_SDK_LAYERS
 #ifndef _GAMING_XBOX

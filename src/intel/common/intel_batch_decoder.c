@@ -784,11 +784,52 @@ decode_ps_kern(struct intel_batch_decode_ctx *ctx,
 }
 
 static void
+decode_ps_kern_xe2(struct intel_batch_decode_ctx *ctx,
+                     struct intel_group *inst, const uint32_t *p)
+{
+   uint64_t ksp[2] = {0, 0};
+   bool enabled[2] = {false, false};
+   int width[2] = {0, 0};
+
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
+      if (strncmp(iter.name, "Kernel Start Pointer ",
+                  strlen("Kernel Start Pointer ")) == 0) {
+         int idx = iter.name[strlen("Kernel Start Pointer ")] - '0';
+         ksp[idx] = strtol(iter.value, NULL, 16);
+      } else if (strcmp(iter.name, "Kernel 0 Enable") == 0) {
+         enabled[0] = strcmp(iter.value, "true") == 0;
+      } else if (strcmp(iter.name, "Kernel 1 Enable") == 0) {
+         enabled[1] = strcmp(iter.value, "true") == 0;
+      } else if (strcmp(iter.name, "Kernel[0] : SIMD Width") == 0) {
+         width[0] = strncmp(iter.value, "0 ", 2) == 0 ? 16 : 32;
+      } else if (strcmp(iter.name, "Kernel[1] : SIMD Width") == 0) {
+         width[1] = strncmp(iter.value, "0 ", 2) == 0 ? 16 : 32;
+      }
+   }
+
+   for (int i = 0; i < 2; i++) {
+      if (enabled[i])
+         ctx_disassemble_program(ctx, ksp[i], "FS",
+                                 width[i] == 16 ?
+                                 "SIMD16 fragment shader" :
+                                 "SIMD32 fragment shader");
+   }
+
+   if (enabled[0] || enabled[1])
+      fprintf(ctx->fp, "\n");
+}
+
+static void
 decode_ps_kernels(struct intel_batch_decode_ctx *ctx,
                   const uint32_t *p)
 {
    struct intel_group *inst = intel_ctx_find_instruction(ctx, p);
-   decode_ps_kern(ctx, inst, p);
+   if (ctx->devinfo.ver >= 20)
+      decode_ps_kern_xe2(ctx, inst, p);
+   else
+      decode_ps_kern(ctx, inst, p);
 }
 
 static void
@@ -1611,6 +1652,7 @@ intel_print_batch(struct intel_batch_decode_ctx *ctx,
          }
 
          if (!strcmp(inst->name, "3DPRIMITIVE") ||
+             !strcmp(inst->name, "3DPRIMITIVE_EXTENDED") ||
              !strcmp(inst->name, "GPGPU_WALKER") ||
              !strcmp(inst->name, "3DSTATE_WM_HZ_OP") ||
              !strcmp(inst->name, "COMPUTE_WALKER")) {

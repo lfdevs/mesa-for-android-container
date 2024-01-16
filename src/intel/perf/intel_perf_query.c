@@ -46,8 +46,6 @@
 #define MI_FREQ_OFFSET_BYTES          (256)
 #define MI_PERF_COUNTERS_OFFSET_BYTES (260)
 
-#define ALIGN(x, y) (((x) + (y)-1) & ~((y)-1))
-
 #define MAP_READ  (1 << 0)
 #define MAP_WRITE (1 << 1)
 

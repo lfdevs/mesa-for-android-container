@@ -175,6 +175,10 @@ void
 nir_phi_builder_value_set_block_def(struct nir_phi_builder_value *val,
                                     nir_block *block, nir_def *def)
 {
+   if (def != NEEDS_PHI) {
+      assert(def->bit_size == val->bit_size);
+      assert(def->num_components == val->num_components);
+   }
    _mesa_hash_table_insert(&val->ht, INDEX_TO_KEY(block->index), def);
 }
 

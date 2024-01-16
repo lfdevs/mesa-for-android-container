@@ -29,6 +29,18 @@
 #include "util/set.h"
 #include "util/u_math.h"
 
+static bool
+is_array_deref_of_vec(nir_deref_instr *deref)
+{
+   if (deref->deref_type != nir_deref_type_array &&
+       deref->deref_type != nir_deref_type_array_wildcard)
+      return false;
+
+   nir_deref_instr *parent = nir_deref_instr_parent(deref);
+   return glsl_type_is_vector_or_scalar(parent->type);
+}
+
+
 static struct set *
 get_complex_used_vars(nir_shader *shader, void *mem_ctx)
 {
@@ -871,6 +883,10 @@ split_array_access_impl(nir_function_impl *impl,
                                                        path.path[i + 1]);
                }
             }
+
+            if (is_array_deref_of_vec(deref))
+               new_deref = nir_build_deref_follower(&b, new_deref, deref);
+
             assert(new_deref->type == deref->type);
 
             /* Rewrite the deref source to point to the split one */
@@ -1104,6 +1120,13 @@ mark_deref_used(nir_deref_instr *deref,
       get_vec_var_usage(var, var_usage_map, true, mem_ctx);
    if (!usage)
       return;
+
+   if (is_array_deref_of_vec(deref)) {
+      if (comps_read)
+         comps_read = usage->all_comps;
+      if (comps_written)
+         comps_written = usage->all_comps;
+   }
 
    usage->comps_read |= comps_read & usage->all_comps;
    usage->comps_written |= comps_written & usage->all_comps;
@@ -1516,7 +1539,8 @@ shrink_vec_var_access_impl(nir_function_impl *impl,
                        deref->deref_type == nir_deref_type_array_wildcard) {
                nir_deref_instr *parent = nir_deref_instr_parent(deref);
                assert(glsl_type_is_array(parent->type) ||
-                      glsl_type_is_matrix(parent->type));
+                      glsl_type_is_matrix(parent->type) ||
+                      glsl_type_is_vector(parent->type));
                deref->type = glsl_get_array_element(parent->type);
             }
             break;

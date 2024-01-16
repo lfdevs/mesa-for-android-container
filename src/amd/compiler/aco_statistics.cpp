@@ -531,11 +531,15 @@ collect_preasm_stats(Program* program)
       program->statistics[aco_statistic_instructions] += block.instructions.size();
 
       for (aco_ptr<Instruction>& instr : block.instructions) {
-         if (instr->isSOPP() && instr->sopp().block != -1)
+         bool is_branch = instr->isSOPP() && instr->sopp().block != -1;
+         if (is_branch)
             program->statistics[aco_statistic_branches]++;
 
-         if (instr->opcode == aco_opcode::p_constaddr)
-            program->statistics[aco_statistic_instructions] += 2;
+         if (instr->isVALU() || instr->isVINTRP())
+            program->statistics[aco_statistic_valu]++;
+         if (instr->isSALU() && !instr->isSOPP() &&
+             instr_info.classes[(int)instr->opcode] != instr_class::waitcnt)
+            program->statistics[aco_statistic_salu]++;
 
          if ((instr->isVMEM() || instr->isScratch() || instr->isGlobal()) &&
              !instr->operands.empty()) {
@@ -544,6 +548,8 @@ collect_preasm_stats(Program* program)
                              { return should_form_clause(instr.get(), other); }))
                program->statistics[aco_statistic_vmem_clauses]++;
             vmem_clause.insert(instr.get());
+
+            program->statistics[aco_statistic_vmem]++;
          } else {
             vmem_clause.clear();
          }
@@ -554,6 +560,8 @@ collect_preasm_stats(Program* program)
                              { return should_form_clause(instr.get(), other); }))
                program->statistics[aco_statistic_smem_clauses]++;
             smem_clause.insert(instr.get());
+
+            program->statistics[aco_statistic_smem]++;
          } else {
             smem_clause.clear();
          }

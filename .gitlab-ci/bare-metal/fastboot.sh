@@ -96,22 +96,30 @@ else
   popd
 fi
 
-# Make the combined kernel image and dtb for passing to fastboot.  For normal
-# Mesa development, we build the kernel and store it in the docker container
-# that this script is running in.
-#
-# However, container builds are expensive, so when you're hacking on the
-# kernel, it's nice to be able to skip the half hour container build and plus
-# moving that container to the runner.  So, if BM_KERNEL+BM_DTB are URLs,
-# fetch them instead of looking in the container.
 if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       "$BM_KERNEL" -o kernel
+  # FIXME: modules should be supplied too
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       "$BM_DTB" -o dtb
 
   cat kernel dtb > Image.gz-dtb
+
+elif [ -n "${FORCE_KERNEL_TAG}" ]; then
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/${BM_KERNEL}" -o kernel
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/modules.tar.zst" -o modules.tar.zst
+
+  if [ -n "$BM_DTB" ]; then
+    curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+	"${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/${BM_DTB}.dtb" -o dtb
+  fi
+
+  cat kernel dtb > Image.gz-dtb || echo "No DTB available, using pure kernel."
   rm kernel
+  tar --keep-directory-symlink --zstd -xf modules.tar.zst -C "$BM_ROOTFS/"
+  rm modules.tar.zst &
 else
   cat /baremetal-files/"$BM_KERNEL" /baremetal-files/"$BM_DTB".dtb > Image.gz-dtb
   cp /baremetal-files/"$BM_DTB".dtb dtb

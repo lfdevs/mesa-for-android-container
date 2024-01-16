@@ -47,6 +47,8 @@
 #define ANV_GENERATED_FLAG_COUNT      BITFIELD_BIT(4)
 /* Whether the generation shader writes to the ring buffer */
 #define ANV_GENERATED_FLAG_RING_MODE  BITFIELD_BIT(5)
+/* Whether TBIMR tile-based rendering shall be enabled. */
+#define ANV_GENERATED_FLAG_TBIMR      BITFIELD_BIT(6)
 
 struct PACKED anv_generated_indirect_draw_params {
    /* Draw ID buffer address (only used on Gfx9) */

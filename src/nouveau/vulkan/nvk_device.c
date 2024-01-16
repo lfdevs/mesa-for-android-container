@@ -67,7 +67,7 @@ nvk_slm_area_ensure(struct nvk_device *dev,
    /* The hardware seems to require this alignment for
     * NV9097_SET_SHADER_LOCAL_MEMORY_E_DEFAULT_SIZE_PER_WARP
     */
-   bytes_per_warp = ALIGN(bytes_per_warp, 0x200);
+   bytes_per_warp = align64(bytes_per_warp, 0x200);
 
    uint64_t bytes_per_mp = bytes_per_warp * dev->pdev->info.max_warps_per_mp;
    uint64_t bytes_per_tpc = bytes_per_mp * dev->pdev->info.mp_per_tpc;
@@ -75,7 +75,7 @@ nvk_slm_area_ensure(struct nvk_device *dev,
    /* The hardware seems to require this alignment for
     * NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_A_SIZE_LOWER.
     */
-   bytes_per_tpc = ALIGN(bytes_per_tpc, 0x8000);
+   bytes_per_tpc = align64(bytes_per_tpc, 0x8000);
 
    /* nvk_slm_area::bytes_per_mp only ever increases so we can check this
     * outside the lock and exit early in the common case.  We only need to
@@ -92,7 +92,7 @@ nvk_slm_area_ensure(struct nvk_device *dev,
    /* The hardware seems to require this alignment for
     * NV9097_SET_SHADER_LOCAL_MEMORY_D_SIZE_LOWER.
     */
-   size = ALIGN(size, 0x20000);
+   size = align64(size, 0x20000);
 
    struct nouveau_ws_bo *bo =
       nouveau_ws_bo_new(dev->ws_dev, size, 0,

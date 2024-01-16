@@ -38,14 +38,6 @@ builtin_types_c = custom_target(
   depend_files : files('builtin_types.py'),
 )
 
-builtin_types_cpp_h = custom_target(
-  'builtin_types_cpp.h',
-  input : 'builtin_types_cpp_h.py',
-  output : 'builtin_types_cpp.h',
-  command : [prog_python, '@INPUT@', '@OUTPUT@'],
-  depend_files : files('builtin_types.py'),
-)
-
 float64_glsl_file = files('glsl/float64.glsl')
 
 astc_decoder_glsl_file = files('glsl/astc_decoder.glsl')
@@ -53,8 +45,6 @@ astc_decoder_glsl_file = files('glsl/astc_decoder.glsl')
 files_libcompiler = files(
   'glsl_types.c',
   'glsl_types.h',
-  'glsl_types_impl.h',
-  'nir_types.h',
   'shader_enums.c',
   'shader_enums.h',
   'shader_info.h',
@@ -70,8 +60,8 @@ ir_expression_operation_h = custom_target(
 
 libcompiler = static_library(
   'compiler',
-  [files_libcompiler, ir_expression_operation_h, builtin_types_h, builtin_types_c, builtin_types_cpp_h],
-  include_directories : [inc_mapi, inc_mesa, inc_compiler, inc_include, inc_src, inc_gallium, inc_gallium_aux],
+  [files_libcompiler, ir_expression_operation_h, builtin_types_h, builtin_types_c],
+  include_directories : [inc_compiler, inc_include, inc_src],
   c_args : [c_msvc_compat_args, no_override_init_args],
   cpp_args : [cpp_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
@@ -80,7 +70,7 @@ libcompiler = static_library(
 )
 
 idep_compiler = declare_dependency(
-  sources : [ir_expression_operation_h, builtin_types_h, builtin_types_cpp_h],
+  sources : [ir_expression_operation_h, builtin_types_h],
   include_directories : inc_compiler,
   link_with : libcompiler,
 )

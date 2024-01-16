@@ -29,5 +29,5 @@ if len(sys.argv) < 2:
 
 output = sys.argv[1]
 
-with open(output, 'w') as f:
+with open(output, 'w', encoding='utf-8') as f:
     f.write(Template(template).render(BUILTIN_TYPES=BUILTIN_TYPES))

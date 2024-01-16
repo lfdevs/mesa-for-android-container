@@ -37,7 +37,6 @@
 #include "util/u_debug.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_prim.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
@@ -656,7 +655,7 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
    if (procType == PIPE_SHADER_GEOMETRY) {
       unsigned input_primitive =
             info->properties[TGSI_PROPERTY_GS_INPUT_PRIM];
-      int num_verts = u_vertices_per_prim(input_primitive);
+      int num_verts = mesa_vertices_per_prim(input_primitive);
       int j;
       info->file_count[TGSI_FILE_INPUT] = num_verts;
       info->file_max[TGSI_FILE_INPUT] =

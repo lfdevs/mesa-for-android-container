@@ -74,7 +74,7 @@ vec4_tcs_visitor::setup_payload()
 void
 vec4_tcs_visitor::emit_prolog()
 {
-   invocation_id = src_reg(this, glsl_type::uint_type);
+   invocation_id = src_reg(this, glsl_uint_type());
    emit(TCS_OPCODE_GET_INSTANCE_ID, dst_reg(invocation_id));
 
    /* HS threads are dispatched with the dispatch mask set to 0xFF.
@@ -113,7 +113,7 @@ vec4_tcs_visitor::emit_thread_end()
        * using the input URB handles.
        */
       if (tcs_prog_data->instances > 1) {
-         dst_reg header = dst_reg(this, glsl_type::uvec4_type);
+         dst_reg header = dst_reg(this, glsl_uvec4_type());
          emit(TCS_OPCODE_CREATE_BARRIER_HEADER, header);
          emit(SHADER_OPCODE_BARRIER, dst_null_ud(), src_reg(header));
       }
@@ -135,7 +135,7 @@ vec4_tcs_visitor::emit_thread_end()
           */
          const bool is_unpaired = i == key->input_vertices - 1;
 
-         dst_reg header(this, glsl_type::uvec4_type);
+         dst_reg header(this, glsl_uvec4_type());
          emit(TCS_OPCODE_RELEASE_INPUT, header, brw_imm_ud(i),
               brw_imm_ud(is_unpaired));
       }
@@ -156,11 +156,11 @@ vec4_tcs_visitor::emit_input_urb_read(const dst_reg &dst,
                                       const src_reg &indirect_offset)
 {
    vec4_instruction *inst;
-   dst_reg temp(this, glsl_type::ivec4_type);
+   dst_reg temp(this, glsl_ivec4_type());
    temp.type = dst.type;
 
    /* Set up the message header to reference the proper parts of the URB */
-   dst_reg header = dst_reg(this, glsl_type::uvec4_type);
+   dst_reg header = dst_reg(this, glsl_uvec4_type());
    inst = emit(VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS, header, vertex_index,
                indirect_offset);
    inst->force_writemask_all = true;
@@ -193,7 +193,7 @@ vec4_tcs_visitor::emit_output_urb_read(const dst_reg &dst,
    vec4_instruction *inst;
 
    /* Set up the message header to reference the proper parts of the URB */
-   dst_reg header = dst_reg(this, glsl_type::uvec4_type);
+   dst_reg header = dst_reg(this, glsl_uvec4_type());
    inst = emit(VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS, header,
                brw_imm_ud(dst.writemask << first_component), indirect_offset);
    inst->force_writemask_all = true;
@@ -205,7 +205,7 @@ vec4_tcs_visitor::emit_output_urb_read(const dst_reg &dst,
 
    if (first_component) {
       /* Read into a temporary and copy with a swizzle and writemask. */
-      read->dst = retype(dst_reg(this, glsl_type::ivec4_type), dst.type);
+      read->dst = retype(dst_reg(this, glsl_ivec4_type()), dst.type);
       emit(MOV(dst, swizzle(src_reg(read->dst),
                             BRW_SWZ_COMP_INPUT(first_component))));
    }
@@ -220,7 +220,7 @@ vec4_tcs_visitor::emit_urb_write(const src_reg &value,
    if (writemask == 0)
       return;
 
-   src_reg message(this, glsl_type::uvec4_type, 2);
+   src_reg message(this, glsl_uvec4_type(), 2);
    vec4_instruction *inst;
 
    inst = emit(VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS, dst_reg(message),
@@ -308,7 +308,7 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       if (nir_intrinsic_memory_scope(instr) != SCOPE_NONE)
          vec4_visitor::nir_emit_intrinsic(instr);
       if (nir_intrinsic_execution_scope(instr) == SCOPE_WORKGROUP) {
-         dst_reg header = dst_reg(this, glsl_type::uvec4_type);
+         dst_reg header = dst_reg(this, glsl_uvec4_type());
          emit(TCS_OPCODE_CREATE_BARRIER_HEADER, header);
          emit(SHADER_OPCODE_BARRIER, dst_null_ud(), src_reg(header));
       }
@@ -447,9 +447,10 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    }
 
    if (is_scalar) {
+      const unsigned dispatch_width = devinfo->ver >= 20 ? 16 : 8;
       fs_visitor v(compiler, &params->base, &key->base,
-                   &prog_data->base.base, nir, 8, params->base.stats != NULL,
-                   debug_enabled);
+                   &prog_data->base.base, nir, dispatch_width,
+                   params->base.stats != NULL, debug_enabled);
       if (!v.run_tcs()) {
          params->base.error_str =
             ralloc_strdup(params->base.mem_ctx, v.fail_msg);
@@ -469,7 +470,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
                                         nir->info.name));
       }
 
-      g.generate_code(v.cfg, 8, v.shader_stats,
+      g.generate_code(v.cfg, dispatch_width, v.shader_stats,
                       v.performance_analysis.require(), params->base.stats);
 
       g.add_const_data(nir->constant_data, nir->constant_data_size);

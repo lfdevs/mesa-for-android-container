@@ -51,10 +51,10 @@ TEST(LODClamp, Decode)
       if (lod_cases[i].inexact)
          continue;
 
-      uint8_t cl[4] = {0};
-      memcpy(cl, &lod_cases[i].encoded, sizeof(lod_cases[i].encoded));
+      uint32_t cl;
+      memcpy(&cl, &lod_cases[i].encoded, sizeof(lod_cases[i].encoded));
 
-      ASSERT_EQ(__gen_unpack_lod(cl, 0, 10), lod_cases[i].f);
+      ASSERT_EQ(__gen_unpack_lod(&cl, 0, 10), lod_cases[i].f);
    }
 }
 

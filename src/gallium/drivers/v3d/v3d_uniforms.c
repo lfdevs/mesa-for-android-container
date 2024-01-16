@@ -28,9 +28,9 @@
 #include "compiler/v3d_compiler.h"
 
 /* We don't expect that the packets we use in this file change across across
- * hw versions, so we just include directly the v33 header
+ * hw versions, so we just include directly the v42 header
  */
-#include "broadcom/cle/v3d_packet_v33_pack.h"
+#include "broadcom/cle/v3d_packet_v42_pack.h"
 
 static uint32_t
 get_texrect_scale(struct v3d_texture_stateobj *texstate,
@@ -122,54 +122,6 @@ get_image_size(struct v3d_shaderimg_stateobj *shaderimg,
         default:
                 unreachable("Bad texture size field");
         }
-}
-
-/**
- *  Writes the V3D 3.x P0 (CFG_MODE=1) texture parameter.
- *
- * Some bits of this field are dependent on the type of sample being done by
- * the shader, while other bits are dependent on the sampler state.  We OR the
- * two together here.
- */
-static void
-write_texture_p0(struct v3d_job *job,
-                 struct v3d_cl_out **uniforms,
-                 struct v3d_texture_stateobj *texstate,
-                 uint32_t unit,
-                 uint32_t shader_data)
-{
-        struct pipe_sampler_state *psampler = texstate->samplers[unit];
-        struct v3d_sampler_state *sampler = v3d_sampler_state(psampler);
-
-        cl_aligned_u32(uniforms, shader_data | sampler->p0);
-}
-
-/** Writes the V3D 3.x P1 (CFG_MODE=1) texture parameter. */
-static void
-write_texture_p1(struct v3d_job *job,
-                 struct v3d_cl_out **uniforms,
-                 struct v3d_texture_stateobj *texstate,
-                 uint32_t data)
-{
-        /* Extract the texture unit from the top bits, and the compiler's
-         * packed p1 from the bottom.
-         */
-        uint32_t unit = data >> 5;
-        uint32_t p1 = data & 0x1f;
-
-        struct pipe_sampler_view *psview = texstate->textures[unit];
-        struct v3d_sampler_view *sview = v3d_sampler_view(psview);
-
-        struct V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1 unpacked = {
-                .texture_state_record_base_address = texstate->texture_state[unit],
-        };
-
-        uint32_t packed;
-        V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1_pack(&job->indirect,
-                                                         (uint8_t *)&packed,
-                                                         &unpacked);
-
-        cl_aligned_u32(uniforms, p1 | packed | sview->p1);
 }
 
 /** Writes the V3D 4.x TMU configuration parameter 0. */
@@ -328,11 +280,6 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
                                            &v3d->shaderimg[stage], data);
                         break;
 
-                case QUNIFORM_TEXTURE_CONFIG_P1:
-                        write_texture_p1(job, &uniforms, texstate,
-                                         data);
-                        break;
-
                 case QUNIFORM_TEXRECT_SCALE_X:
                 case QUNIFORM_TEXRECT_SCALE_Y:
                         cl_aligned_u32(&uniforms,
@@ -437,13 +384,7 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
                         break;
 
                 default:
-                        assert(quniform_contents_is_texture_p0(uinfo->contents[i]));
-
-                        write_texture_p0(job, &uniforms, texstate,
-                                         uinfo->contents[i] -
-                                         QUNIFORM_TEXTURE_CONFIG_P0_0,
-                                         data);
-                        break;
+                        unreachable("Unknown QUNIFORM");
 
                 }
 #if 0

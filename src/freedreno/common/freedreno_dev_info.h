@@ -168,6 +168,9 @@ struct fd_dev_info {
       bool supports_double_threadsize;
 
       bool has_sampler_minmax;
+
+      bool broken_ds_ubwc_quirk;
+
       struct {
          uint32_t PC_POWER_CNTL;
          uint32_t TPL1_DBG_ECO_CNTL;
@@ -198,6 +201,14 @@ struct fd_dev_info {
        * _something_, observed in blob's disassembly.
        */
       bool stsc_duplication_quirk;
+
+      /* Whether there is CP_EVENT_WRITE7::WRITE_SAMPLE_COUNT */
+      bool has_event_write_sample_count;
+
+      /* Blob executes a special compute dispatch at the start of each
+       * command buffers. We copy this dispatch as is.
+       */
+      bool cmdbuf_start_a725_quirk;
    } a7xx;
 };
 
@@ -225,12 +236,16 @@ fd_dev_gpu_id(const struct fd_dev_id *id)
    return id->gpu_id;
 }
 
-const struct fd_dev_info * fd_dev_info(const struct fd_dev_id *id);
+/* Unmodified dev info as defined in freedreno_devices.py */
+const struct fd_dev_info *fd_dev_info_raw(const struct fd_dev_id *id);
+
+/* Final dev info with dbg options and everything else applied.  */
+const struct fd_dev_info fd_dev_info(const struct fd_dev_id *id);
 
 static uint8_t
 fd_dev_gen(const struct fd_dev_id *id)
 {
-   return fd_dev_info(id)->chip;
+   return fd_dev_info_raw(id)->chip;
 }
 
 static inline bool
@@ -251,6 +266,9 @@ fd_dev_64b(const struct fd_dev_id *id)
 #define A6XX_CCU_GMEM_COLOR_SIZE (16 * 1024)
 
 const char * fd_dev_name(const struct fd_dev_id *id);
+
+void
+fd_dev_info_apply_dbg_options(struct fd_dev_info *info);
 
 #ifdef __cplusplus
 } /* end of extern "C" */

@@ -17,6 +17,11 @@ spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
+spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
+spec@arb_fragment_layer_viewport@layer-gs-write-simple,Fail
+spec@arb_fragment_layer_viewport@layer-gs-writes-out-of-range,Fail
+spec@arb_fragment_layer_viewport@layer-vs-gs-write-simple,Fail
+spec@arb_fragment_layer_viewport@layer-vs-write-simple,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail

@@ -392,12 +392,6 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
       last_trace_id = map[0];
 
    if (chunk->gfx_end != chunk->gfx_begin) {
-      if (chunk->gfx_begin == 0) {
-         if (ctx->cs_preamble_state)
-            ac_parse_ib(f, ctx->cs_preamble_state->pm4, ctx->cs_preamble_state->ndw, NULL, 0,
-                        "IB2: Init config", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
-      }
-
       if (scs->flushed) {
          ac_parse_ib(f, scs->gfx.ib + chunk->gfx_begin, chunk->gfx_end - chunk->gfx_begin,
                      &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
@@ -941,7 +935,7 @@ static void si_print_annotated_shader(struct si_shader *shader, struct ac_wave_i
 static void si_dump_annotated_shaders(struct si_context *sctx, FILE *f)
 {
    struct ac_wave_info waves[AC_MAX_WAVES_PER_CHIP];
-   unsigned num_waves = ac_get_wave_info(sctx->gfx_level, waves);
+   unsigned num_waves = ac_get_wave_info(sctx->gfx_level, &sctx->screen->info, waves);
 
    fprintf(f, COLOR_CYAN "The number of active waves = %u" COLOR_RESET "\n\n", num_waves);
 
@@ -1082,6 +1076,27 @@ void si_check_vm_faults(struct si_context *sctx, struct radeon_saved_cs *saved, 
 
    fprintf(stderr, "Detected a VM fault, exiting...\n");
    exit(0);
+}
+
+void si_gather_context_rolls(struct si_context *sctx)
+{
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
+   uint32_t **ibs = alloca(sizeof(ibs[0]) * (cs->num_prev + 1));
+   uint32_t *ib_dw_sizes = alloca(sizeof(ib_dw_sizes[0]) * (cs->num_prev + 1));
+
+   for (unsigned i = 0; i < cs->num_prev; i++) {
+      struct radeon_cmdbuf_chunk *chunk = &cs->prev[i];
+
+      ibs[i] = chunk->buf;
+      ib_dw_sizes[i] = chunk->cdw;
+   }
+
+   ibs[cs->num_prev] = cs->current.buf;
+   ib_dw_sizes[cs->num_prev] = cs->current.cdw;
+
+   FILE *f = fopen(sctx->screen->context_roll_log_filename, "a");
+   ac_gather_context_rolls(f, ibs, ib_dw_sizes, cs->num_prev + 1, &sctx->screen->info);
+   fclose(f);
 }
 
 void si_init_debug_functions(struct si_context *sctx)

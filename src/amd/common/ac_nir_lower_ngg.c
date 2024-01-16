@@ -284,7 +284,7 @@ summarize_repack(nir_builder *b, nir_def *packed_counts, unsigned num_lds_dwords
     *
     * If the v_dot instruction can't be used, we left-shift the packed bytes.
     * This will shift out the unneeded bytes and shift in zeroes instead,
-    * then we sum them using v_sad_u8.
+    * then we sum them using v_msad_u8.
     */
 
    nir_def *lane_id = nir_load_subgroup_invocation(b);
@@ -302,7 +302,7 @@ summarize_repack(nir_builder *b, nir_def *packed_counts, unsigned num_lds_dwords
          return nir_udot_4x8_uadd(b, packed, dot_op, nir_imm_int(b, 0));
       } else {
          nir_def *sad_op = nir_ishl(b, nir_ishl(b, packed, shift), shift);
-         return nir_sad_u8x4(b, sad_op, nir_imm_int(b, 0), nir_imm_int(b, 0));
+         return nir_msad_4x8(b, sad_op, nir_imm_int(b, 0), nir_imm_int(b, 0));
       }
    } else if (num_lds_dwords == 2) {
       nir_def *dot_op = !use_dot ? NULL : nir_ushr(b, nir_ushr(b, nir_imm_int64(b, 0x0101010101010101), shift), shift);
@@ -317,8 +317,8 @@ summarize_repack(nir_builder *b, nir_def *packed_counts, unsigned num_lds_dwords
          return nir_udot_4x8_uadd(b, packed_dw1, nir_unpack_64_2x32_split_y(b, dot_op), sum);
       } else {
          nir_def *sad_op = nir_ishl(b, nir_ishl(b, nir_pack_64_2x32_split(b, packed_dw0, packed_dw1), shift), shift);
-         nir_def *sum = nir_sad_u8x4(b, nir_unpack_64_2x32_split_x(b, sad_op), nir_imm_int(b, 0), nir_imm_int(b, 0));
-         return nir_sad_u8x4(b, nir_unpack_64_2x32_split_y(b, sad_op), nir_imm_int(b, 0), sum);
+         nir_def *sum = nir_msad_4x8(b, nir_unpack_64_2x32_split_x(b, sad_op), nir_imm_int(b, 0), nir_imm_int(b, 0));
+         return nir_msad_4x8(b, nir_unpack_64_2x32_split_y(b, sad_op), nir_imm_int(b, 0), sum);
       }
    } else {
       unreachable("Unimplemented NGG wave count");
@@ -2611,6 +2611,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
    uint64_t export_outputs = shader->info.outputs_written | VARYING_BIT_POS;
    if (options->kill_pointsize)
       export_outputs &= ~VARYING_BIT_PSIZ;
+   if (options->kill_layer)
+      export_outputs &= ~VARYING_BIT_LAYER;
 
    const bool wait_attr_ring = must_wait_attr_ring(options->gfx_level, options->has_param_exports);
    if (wait_attr_ring)
@@ -3122,6 +3124,8 @@ ngg_gs_export_vertices(nir_builder *b, nir_def *max_num_out_vtx, nir_def *tid_in
    uint64_t export_outputs = b->shader->info.outputs_written | VARYING_BIT_POS;
    if (s->options->kill_pointsize)
       export_outputs &= ~VARYING_BIT_PSIZ;
+   if (s->options->kill_layer)
+      export_outputs &= ~VARYING_BIT_LAYER;
 
    const bool wait_attr_ring = must_wait_attr_ring(s->options->gfx_level, s->options->has_param_exports);
    if (wait_attr_ring)
@@ -3513,7 +3517,7 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
 
    if (!options->can_cull) {
       nir_gs_count_vertices_and_primitives(shader, state.const_out_vtxcnt,
-                                           state.const_out_prmcnt, 4u);
+                                           state.const_out_prmcnt, NULL, 4u);
       state.output_compile_time_known =
          state.const_out_vtxcnt[0] == shader->info.gs.vertices_out &&
          state.const_out_prmcnt[0] != -1;
@@ -4913,7 +4917,7 @@ ac_nir_lower_ngg_ms(nir_shader *shader,
                     bool fast_launch_2)
 {
    unsigned vertices_per_prim =
-      num_mesh_vertices_per_primitive(shader->info.mesh.primitive_type);
+      mesa_vertices_per_prim(shader->info.mesh.primitive_type);
 
    uint64_t per_vertex_outputs =
       shader->info.outputs_written & ~shader->info.per_primitive_outputs & ~SPECIAL_MS_OUT_MASK;

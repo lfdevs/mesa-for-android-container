@@ -1,27 +1,40 @@
 .zink-common-rules:
   rules:
+    - !reference [.test, rules]
     - !reference [.gl-rules, rules]
-    - changes:
-      - src/gallium/drivers/zink/**/*
+    - changes: &zink_files_list
+        - src/gallium/drivers/zink/*
+        - src/gallium/drivers/zink/nir_to_spirv/*
+        - src/gallium/drivers/zink/ci/gitlab-ci.yml
+        - src/gallium/drivers/zink/ci/gitlab-ci-inc.yml
+        - src/gallium/drivers/zink/ci/deqp-$DEQP_SUITE.toml
+        - src/gallium/drivers/zink/ci/$GPU_VERSION-fails.txt
+        - src/gallium/drivers/zink/ci/$GPU_VERSION-flakes.txt
+        - src/gallium/drivers/zink/ci/$GPU_VERSION-skips.txt
+        - src/gallium/drivers/zink/ci/$GPU_VERSION-validation-settings.txt
+        - src/gallium/drivers/zink/ci/$PIGLIT_TRACES_FILE
       when: on_success
 
 .zink-common-manual-rules:
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.gl-manual-rules, rules]
     - changes:
-      - src/gallium/drivers/zink/**/*
+        *zink_files_list
       when: manual
 
 .zink-lvp-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.lavapipe-rules, rules]
     - !reference [.zink-common-rules, rules]
 
 .zink-anv-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.anv-rules, rules]
     - !reference [.zink-common-rules, rules]
 
@@ -29,12 +42,14 @@
   stage: layered-backends
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.anv-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
 
 .zink-anv-rules-restricted:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.anv-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -42,6 +57,7 @@
 .zink-turnip-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-turnip-rules, rules]
     - !reference [.zink-common-rules, rules]
   variables:
@@ -51,12 +67,14 @@
   stage: layered-backends
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.collabora-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
 
 .zink-radv-rules:
   stage: layered-backends
   rules:
+    - !reference [.test, rules]
     - !reference [.radv-valve-rules, rules]
     - !reference [.zink-common-rules, rules]
 
@@ -64,10 +82,11 @@
   stage: layered-backends
   retry: !reference [.scheduled_pipeline-rules, retry]
   rules:
+    - !reference [.test, rules]
     - !reference [.radv-valve-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
     - changes:
-      - .gitlab-ci/container/build-piglit.sh
+        - .gitlab-ci/container/build-piglit.sh
       when: manual
 
 .zink-test:

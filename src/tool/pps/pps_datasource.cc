@@ -245,8 +245,14 @@ void add_timestamp(perfetto::protos::pbzero::ClockSnapshot *event, const Driver 
       return;
 
    // Send a correlation event between GPU & CPU timestamps
-   uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
-   uint64_t gpu_ts = driver->gpu_timestamp();
+   uint64_t cpu_ts, gpu_ts;
+
+   // Try to use the optimized driver correlation if available, otherwise do a
+   // separate CPU & GPU sample
+   if (!driver->cpu_gpu_timestamp(cpu_ts, gpu_ts)) {
+      cpu_ts = perfetto::base::GetBootTimeNs().count();
+      gpu_ts = driver->gpu_timestamp();
+   }
 
    {
       auto clock = event->add_clocks();

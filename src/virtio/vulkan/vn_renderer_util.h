@@ -8,8 +8,9 @@
 
 #include "vn_renderer.h"
 
-/* for suballocations of short-lived shmems, not thread-safe */
+/* for suballocations of short-lived shmems, thread-safe */
 struct vn_renderer_shmem_pool {
+   mtx_t mutex;
    size_t min_alloc_size;
 
    struct vn_renderer_shmem *shmem;

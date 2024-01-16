@@ -83,7 +83,7 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
    /* Wa_16013994831 - Disable preemption during streamout. */
    if (intel_needs_workaround(device->info, 16013994831))
-      genX(batch_set_preemption)(batch, device->info, false);
+      genX(batch_set_preemption)(batch, device->info, _3D, false);
 #endif
 
    anv_batch_emit(batch, GENX(3DSTATE_SBE), sbe) {
@@ -174,7 +174,7 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
     * state is not combined with other state changes.
     */
    if (intel_needs_workaround(device->info, 16011411144))
-      genx_batch_emit_pipe_control(batch, device->info, ANV_PIPE_CS_STALL_BIT);
+      genx_batch_emit_pipe_control(batch, device->info, _3D, ANV_PIPE_CS_STALL_BIT);
 
    anv_batch_emit(batch, GENX(3DSTATE_SO_BUFFER), sob) {
 #if GFX_VER < 12
@@ -200,7 +200,7 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
    /* Wa_16011411144: also CS_STALL after touching SO_BUFFER change */
    if (intel_needs_workaround(device->info, 16011411144))
-      genx_batch_emit_pipe_control(batch, device->info, ANV_PIPE_CS_STALL_BIT);
+      genx_batch_emit_pipe_control(batch, device->info, _3D, ANV_PIPE_CS_STALL_BIT);
 
    dw = anv_batch_emitn(batch, 5, GENX(3DSTATE_SO_DECL_LIST),
                         .StreamtoBufferSelects0 = (1 << 0),
@@ -216,7 +216,7 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
 #if GFX_VERx10 == 125
       /* Wa_14015946265: Send PC with CS stall after SO_DECL. */
-      genx_batch_emit_pipe_control(batch, device->info, ANV_PIPE_CS_STALL_BIT);
+      genx_batch_emit_pipe_control(batch, device->info, _3D, ANV_PIPE_CS_STALL_BIT);
 #endif
 
    anv_batch_emit(batch, GENX(3DSTATE_STREAMOUT), so) {
@@ -236,12 +236,12 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
       prim.StartInstanceLocation    = 0;
       prim.BaseVertexLocation       = 0;
    }
-   genX(emit_breakpoint)(batch, device, false);
 
-#if GFX_VERx10 == 125
-   genX(batch_emit_dummy_post_sync_op)(batch, device, _3DPRIM_POINTLIST,
-                                       size / bs);
-#endif
+   genX(batch_emit_post_3dprimitive_was)(batch,
+                                         device,
+                                         _3DPRIM_POINTLIST, size / bs);
+
+   genX(emit_breakpoint)(batch, device, false);
 }
 
 void
@@ -256,7 +256,7 @@ genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
 
    const struct intel_l3_config *cfg = intel_get_default_l3_config(device->info);
    genX(emit_l3_config)(batch, device, cfg);
-   genX(emit_pipeline_select)(batch, _3D);
+   genX(emit_pipeline_select)(batch, _3D, device);
 
    emit_common_so_memcpy(batch, device, cfg);
 }
@@ -273,7 +273,7 @@ void
 genX(emit_so_memcpy_end)(struct anv_memcpy_state *state)
 {
    if (intel_device_info_is_dg2(state->device->info))
-      genX(batch_set_preemption)(state->batch, state->device->info, true);
+      genX(batch_set_preemption)(state->batch, state->device->info, _3D, true);
 
    anv_batch_emit(state->batch, GENX(MI_BATCH_BUFFER_END), end);
 

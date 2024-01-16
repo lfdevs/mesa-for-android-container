@@ -35,9 +35,8 @@ panfrost_translate_swizzle_4(const unsigned char swizzle[4])
    unsigned out = 0;
 
    for (unsigned i = 0; i < 4; ++i) {
-      unsigned translated =
-         (swizzle[i] > PIPE_SWIZZLE_1) ? PIPE_SWIZZLE_0 : swizzle[i];
-      out |= (translated << (3 * i));
+      assert(swizzle[i] <= PIPE_SWIZZLE_1);
+      out |= (swizzle[i] << (3 * i));
    }
 
    return out;
@@ -75,10 +74,7 @@ unsigned
 panfrost_format_to_bifrost_blend(const struct panfrost_device *dev,
                                  enum pipe_format format, bool dithered)
 {
-   mali_pixel_format pixfmt =
-      (dev->arch >= 7)
-         ? panfrost_blendable_formats_v7[format].bifrost[dithered]
-         : panfrost_blendable_formats_v6[format].bifrost[dithered];
+   mali_pixel_format pixfmt = dev->blendable_formats[format].bifrost[dithered];
 
    return pixfmt ?: dev->formats[format].hw;
 }

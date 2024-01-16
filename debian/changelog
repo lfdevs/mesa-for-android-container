@@ -1,3 +1,14 @@
+mesa (24.0.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * patches: Drop the zink reverts.
+  * rules: Modify video-codecs option to build all codecs. Thanks,
+    Safir Secerovic!
+  * control, rules: Bump debhelper-compat to 13, drop dh_missing
+    override as it's the default now.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 16 Jan 2024 19:15:45 +0200
+
 mesa (23.3.3-2) unstable; urgency=medium
 
   * rules: Drop virtio from armel again, regression due to cleanup.

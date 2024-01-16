@@ -108,7 +108,8 @@ vulkan_runtime_files = files(
   'vk_sync_dummy.h',
   'vk_sync_timeline.c',
   'vk_sync_timeline.h',
-  'vk_synchronization2.c',
+  'vk_synchronization.c',
+  'vk_synchronization.h',
   'vk_texcompress_etc2.c',
   'vk_texcompress_etc2.h',
   'vk_video.c',
@@ -120,10 +121,13 @@ vulkan_runtime_files = files(
 vulkan_runtime_deps = [
   vulkan_wsi_deps,
   idep_mesautil,
-  idep_nir,
-  idep_vtn,
+  idep_nir_headers,
   idep_vulkan_util,
 ]
+
+if with_vk_compiler
+  vulkan_runtime_deps += [idep_nir, idep_vtn]
+endif
 
 if dep_libdrm.found()
   vulkan_runtime_files += files('vk_drm_syncobj.c', 'vk_drm_syncobj.h')
@@ -218,6 +222,18 @@ vk_physical_device_properties = custom_target(
   depend_files : vk_physical_device_properties_gen_depend_files,
 )
 
+vk_synchronization_helpers = custom_target(
+  'vk_synchronization_helpers',
+  input : [vk_synchronization_helpers_gen, vk_api_xml],
+  output : 'vk_synchronization_helpers.c',
+  command : [
+    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
+    '--out-c', '@OUTPUT0@',
+    '--beta', with_vulkan_beta.to_string()
+  ],
+  depend_files : vk_synchronization_helpers_gen_depend_files,
+)
+
 vk_format_info = custom_target(
   'vk_format_info',
   input : ['vk_format_info_gen.py', vk_api_xml],
@@ -233,8 +249,9 @@ libvulkan_runtime = static_library(
   [vulkan_runtime_files, vk_common_entrypoints,
    vk_cmd_queue, vk_cmd_enqueue_entrypoints,
    vk_dispatch_trampolines, vk_physical_device_features,
-   vk_physical_device_properties, vk_format_info],
-  include_directories : [inc_include, inc_src, inc_gallium],
+   vk_physical_device_properties, vk_synchronization_helpers,
+   vk_format_info],
+  include_directories : [inc_include, inc_src],
   dependencies : vulkan_runtime_deps,
   c_args : c_msvc_compat_args,
   gnu_symbol_visibility : 'hidden',

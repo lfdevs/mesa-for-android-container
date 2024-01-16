@@ -10,6 +10,7 @@ files_asahi = files(
   'agx_pipe.c',
   'agx_nir_lower_sysvals.c',
   'agx_nir_lower_bindings.c',
+  'agx_nir_lower_point_size.c',
   'agx_query.c',
   'agx_state.c',
   'agx_streamout.c',
@@ -18,11 +19,11 @@ files_asahi = files(
 
 libasahi = static_library(
   'asahi',
-  files_asahi,
+  [files_asahi],
   include_directories : [inc_gallium_aux, inc_gallium, inc_include, inc_src],
   c_args : [c_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm],
+  dependencies : [idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm, idep_mesaclc],
 )
 
 driver_asahi = declare_dependency(

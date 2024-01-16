@@ -101,10 +101,10 @@ vec4_visitor::nir_emit_if(nir_if *if_stmt)
 
    nir_emit_cf_list(&if_stmt->then_list);
 
-   /* note: if the else is empty, dead CF elimination will remove it */
-   emit(BRW_OPCODE_ELSE);
-
-   nir_emit_cf_list(&if_stmt->else_list);
+   if (!nir_cf_list_is_empty_block(&if_stmt->else_list)) {
+      emit(BRW_OPCODE_ELSE);
+      nir_emit_cf_list(&if_stmt->else_list);
+   }
 
    emit(BRW_OPCODE_ENDIF);
 }
@@ -430,7 +430,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       dest = get_nir_def(instr->def);
 
       src = src_reg(ATTR, nir_intrinsic_base(instr) + load_offset,
-                    glsl_type::uvec4_type);
+                    glsl_uvec4_type());
       src = retype(src, dest.type);
 
       /* Swizzle source based on component layout qualifier */
@@ -469,7 +469,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg lod = brw_imm_d(0);
       int param_base = inst->base_mrf;
       int writemask = WRITEMASK_X;
-      emit(MOV(dst_reg(MRF, param_base, glsl_type::int_type, writemask), lod));
+      emit(MOV(dst_reg(MRF, param_base, glsl_int_type(), writemask), lod));
 
       emit(inst);
       break;
@@ -645,7 +645,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
           * per-channel and add the base UBO index; we have to select a value
           * from any live channel.
           */
-         surf_index = src_reg(this, glsl_type::uint_type);
+         surf_index = src_reg(this, glsl_uint_type());
          emit(MOV(dst_reg(surf_index), get_nir_src(instr->src[0], nir_type_int32,
                                                    instr->num_components)));
          surf_index = emit_uniformize(surf_index);
@@ -677,7 +677,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
             }
          }
       } else {
-         offset_reg = src_reg(this, glsl_type::uint_type);
+         offset_reg = src_reg(this, glsl_uint_type());
          emit(MOV(dst_reg(offset_reg),
                   get_nir_src(instr->src[1], nir_type_uint32, 1)));
       }
@@ -686,14 +686,14 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       if (push_reg.file != BAD_FILE) {
          packed_consts = push_reg;
       } else if (instr->def.bit_size == 32) {
-         packed_consts = src_reg(this, glsl_type::vec4_type);
+         packed_consts = src_reg(this, glsl_vec4_type());
          emit_pull_constant_load_reg(dst_reg(packed_consts),
                                      surf_index,
                                      offset_reg,
                                      NULL, NULL /* before_block/inst */);
          prog_data->base.has_ubo_pull = true;
       } else {
-         src_reg temp = src_reg(this, glsl_type::dvec4_type);
+         src_reg temp = src_reg(this, glsl_dvec4_type());
          src_reg temp_float = retype(temp, BRW_REGISTER_TYPE_F);
 
          emit_pull_constant_load_reg(dst_reg(temp_float),
@@ -706,7 +706,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
                                      surf_index, offset_reg, NULL, NULL);
          prog_data->base.has_ubo_pull = true;
 
-         packed_consts = src_reg(this, glsl_type::dvec4_type);
+         packed_consts = src_reg(this, glsl_dvec4_type());
          shuffle_64bit_data(dst_reg(packed_consts), temp, false);
       }
 
@@ -741,7 +741,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_shader_clock: {
       /* We cannot do anything if there is an event, so ignore it for now */
       const src_reg shader_clock = get_timestamp();
-      const enum brw_reg_type type = brw_type_for_base_type(glsl_type::uvec2_type);
+      const enum brw_reg_type type = brw_type_for_base_type(glsl_uvec2_type());
 
       dest = get_nir_def(instr->def, type);
       emit(MOV(dest, shader_clock));
@@ -858,9 +858,9 @@ vec4_visitor::emit_conversion_from_double(dst_reg dst, src_reg src)
       unreachable("Unknown conversion");
    }
 
-   dst_reg temp = dst_reg(this, glsl_type::dvec4_type);
+   dst_reg temp = dst_reg(this, glsl_dvec4_type());
    emit(MOV(temp, src));
-   dst_reg temp2 = dst_reg(this, glsl_type::dvec4_type);
+   dst_reg temp2 = dst_reg(this, glsl_dvec4_type());
    emit(op, temp2, src_reg(temp));
 
    emit(VEC4_OPCODE_PICK_LOW_32BIT, retype(temp2, dst.type), src_reg(temp2));
@@ -870,8 +870,8 @@ vec4_visitor::emit_conversion_from_double(dst_reg dst, src_reg src)
 void
 vec4_visitor::emit_conversion_to_double(dst_reg dst, src_reg src)
 {
-   dst_reg tmp_dst = dst_reg(src_reg(this, glsl_type::dvec4_type));
-   src_reg tmp_src = retype(src_reg(this, glsl_type::vec4_type), src.type);
+   dst_reg tmp_dst = dst_reg(src_reg(this, glsl_dvec4_type()));
+   src_reg tmp_src = retype(src_reg(this, glsl_vec4_type()), src.type);
    emit(MOV(dst_reg(tmp_src), src));
    emit(VEC4_OPCODE_TO_DOUBLE, tmp_dst, tmp_src);
    emit(MOV(dst, src_reg(tmp_dst)));
@@ -1267,7 +1267,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
        * XOR instruction.  However, empirical experiments and Curro's reading
        * of the simulator source both indicate that it's safe.
        */
-      src_reg tmp = src_reg(this, glsl_type::ivec4_type);
+      src_reg tmp = src_reg(this, glsl_ivec4_type());
       inst = emit(XOR(dst_reg(tmp), op[0], op[1]));
       inst->predicate = BRW_PREDICATE_NORMAL;
       inst->conditional_mod = BRW_CONDITIONAL_L;
@@ -1325,7 +1325,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_fceil: {
-      src_reg tmp = src_reg(this, glsl_type::float_type);
+      src_reg tmp = src_reg(this, glsl_float_type());
       tmp.swizzle = brw_swizzle_for_size(nir_src_num_components(instr->src[0].src));
 
       op[0].negate = !op[0].negate;
@@ -1355,9 +1355,9 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_fquantize2f16: {
       /* See also vec4_visitor::emit_pack_half_2x16() */
-      src_reg tmp16 = src_reg(this, glsl_type::uvec4_type);
-      src_reg tmp32 = src_reg(this, glsl_type::vec4_type);
-      src_reg zero = src_reg(this, glsl_type::vec4_type);
+      src_reg tmp16 = src_reg(this, glsl_uvec4_type());
+      src_reg tmp32 = src_reg(this, glsl_vec4_type());
+      src_reg zero = src_reg(this, glsl_vec4_type());
 
       /* Check for denormal */
       src_reg abs_src0 = op[0];
@@ -1432,9 +1432,9 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
           * so we can then move from there to the result using align16 again
           * to honor the original writemask.
           */
-         dst_reg temp = dst_reg(this, glsl_type::dvec4_type);
+         dst_reg temp = dst_reg(this, glsl_dvec4_type());
          emit(CMP(temp, op[0], op[1], conditional_mod));
-         dst_reg result = dst_reg(this, glsl_type::bvec4_type);
+         dst_reg result = dst_reg(this, glsl_bvec4_type());
          emit(VEC4_OPCODE_PICK_LOW_32BIT, result, src_reg(temp));
          emit(MOV(dst, src_reg(result)));
       }
@@ -1529,12 +1529,12 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       unreachable("not reached");
 
    case nir_op_pack_uvec2_to_uint: {
-      dst_reg tmp1 = dst_reg(this, glsl_type::uint_type);
+      dst_reg tmp1 = dst_reg(this, glsl_uint_type());
       tmp1.writemask = WRITEMASK_X;
       op[0].swizzle = BRW_SWIZZLE_YYYY;
       emit(SHL(tmp1, op[0], src_reg(brw_imm_ud(16u))));
 
-      dst_reg tmp2 = dst_reg(this, glsl_type::uint_type);
+      dst_reg tmp2 = dst_reg(this, glsl_uint_type());
       tmp2.writemask = WRITEMASK_X;
       op[0].swizzle = BRW_SWIZZLE_XXXX;
       emit(AND(tmp2, op[0], src_reg(brw_imm_ud(0xffffu))));
@@ -1544,8 +1544,8 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    }
 
    case nir_op_pack_64_2x32_split: {
-      dst_reg result = dst_reg(this, glsl_type::dvec4_type);
-      dst_reg tmp = dst_reg(this, glsl_type::uvec4_type);
+      dst_reg result = dst_reg(this, glsl_dvec4_type());
+      dst_reg tmp = dst_reg(this, glsl_uvec4_type());
       emit(MOV(tmp, retype(op[0], BRW_REGISTER_TYPE_UD)));
       emit(VEC4_OPCODE_SET_LOW_32BIT, result, src_reg(tmp));
       emit(MOV(tmp, retype(op[1], BRW_REGISTER_TYPE_UD)));
@@ -1558,9 +1558,9 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_unpack_64_2x32_split_y: {
       enum opcode oper = (instr->op == nir_op_unpack_64_2x32_split_x) ?
          VEC4_OPCODE_PICK_LOW_32BIT : VEC4_OPCODE_PICK_HIGH_32BIT;
-      dst_reg tmp = dst_reg(this, glsl_type::dvec4_type);
+      dst_reg tmp = dst_reg(this, glsl_dvec4_type());
       emit(MOV(tmp, op[0]));
-      dst_reg tmp2 = dst_reg(this, glsl_type::uvec4_type);
+      dst_reg tmp2 = dst_reg(this, glsl_uvec4_type());
       emit(oper, tmp2, src_reg(tmp));
       emit(MOV(dst, src_reg(tmp2)));
       break;
@@ -1716,7 +1716,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          inst->conditional_mod = BRW_CONDITIONAL_NZ;
 
          /* AND each high 32-bit channel with 0x80000000u */
-         dst_reg tmp = dst_reg(this, glsl_type::uvec4_type);
+         dst_reg tmp = dst_reg(this, glsl_uvec4_type());
          emit(VEC4_OPCODE_PICK_HIGH_32BIT, tmp, op[0]);
          emit(AND(tmp, src_reg(tmp), brw_imm_ud(0x80000000u)));
 
@@ -1752,7 +1752,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_ffma:
       if (type_sz(dst.type) == 8) {
-         dst_reg mul_dst = dst_reg(this, glsl_type::dvec4_type);
+         dst_reg mul_dst = dst_reg(this, glsl_dvec4_type());
          emit(MUL(mul_dst, op[1], op[0]));
          inst = emit(ADD(dst, src_reg(mul_dst), op[2]));
       } else {
@@ -1832,7 +1832,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    if (devinfo->ver <= 5 &&
        (instr->instr.pass_flags & BRW_NIR_BOOLEAN_MASK) ==
        BRW_NIR_BOOLEAN_NEEDS_RESOLVE) {
-      dst_reg masked = dst_reg(this, glsl_type::int_type);
+      dst_reg masked = dst_reg(this, glsl_int_type());
       masked.writemask = dst.writemask;
       emit(AND(masked, src_reg(dst), brw_imm_d(1)));
       src_reg masked_neg = src_reg(masked);
@@ -1908,13 +1908,13 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
          case nir_texop_samples_identical:
             coordinate = get_nir_src(instr->src[i].src, BRW_REGISTER_TYPE_D,
                                      src_size);
-            coord_type = glsl_type::ivec(src_size);
+            coord_type = glsl_ivec_type(src_size);
             break;
 
          default:
             coordinate = get_nir_src(instr->src[i].src, BRW_REGISTER_TYPE_F,
                                      src_size);
-            coord_type = glsl_type::vec(src_size);
+            coord_type = glsl_vec_type(src_size);
             break;
          }
          break;
@@ -2124,7 +2124,7 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
              * the whole vec4 and then mask off everything except .y
              */
             mcs.swizzle = BRW_SWIZZLE_XXXX;
-            emit(MOV(dst_reg(MRF, param_base + 1, glsl_type::uint_type, WRITEMASK_Y),
+            emit(MOV(dst_reg(MRF, param_base + 1, glsl_uint_type(), WRITEMASK_Y),
                      mcs));
          }
          inst->mlen++;
@@ -2168,7 +2168,7 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
                      shadow_comparator));
          }
 
-         emit(MOV(dst_reg(MRF, param_base + 1, glsl_type::ivec2_type, WRITEMASK_XY),
+         emit(MOV(dst_reg(MRF, param_base + 1, glsl_ivec2_type(), WRITEMASK_XY),
                   offset_value));
          inst->mlen++;
          break;
@@ -2204,7 +2204,7 @@ vec4_visitor::emit_mcs_fetch(const glsl_type *coordinate_type,
 {
    vec4_instruction *inst =
       new(mem_ctx) vec4_instruction(SHADER_OPCODE_TXF_MCS,
-                                    dst_reg(this, glsl_type::uvec4_type));
+                                    dst_reg(this, glsl_uvec4_type()));
    inst->base_mrf = 2;
    inst->src[1] = surface;
    inst->src[2] = brw_imm_ud(0); /* sampler */
@@ -2280,7 +2280,7 @@ vec4_visitor::shuffle_64bit_data(dst_reg dst, src_reg src, bool for_write,
 
    /* Resolve swizzle in src */
    if (src.swizzle != BRW_SWIZZLE_XYZW) {
-      dst_reg data = dst_reg(this, glsl_type::dvec4_type);
+      dst_reg data = dst_reg(this, glsl_dvec4_type());
       bld.emit(mov_op, data, src);
       src = src_reg(data);
    }

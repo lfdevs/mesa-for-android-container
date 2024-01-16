@@ -25,10 +25,12 @@
 
 #include "st_interop.h"
 #include "st_cb_texture.h"
+#include "st_cb_flush.h"
 #include "st_texture.h"
 
 #include "bufferobj.h"
 #include "texobj.h"
+#include "teximage.h"
 #include "syncobj.h"
 
 int
@@ -54,8 +56,11 @@ st_interop_query_device_info(struct st_context *st,
                                                                 out->driver_data_size,
                                                                 out->driver_data);
 
-   /* Instruct the caller that we support up-to version two of the interface */
-   out->version = MIN2(out->version, 2);
+   if (out->version >= 3 && screen->get_device_uuid)
+      screen->get_device_uuid(screen, out->device_uuid);
+
+   /* Instruct the caller that we support up-to version three of the interface */
+   out->version = MIN2(out->version, 3);
 
    return MESA_GLINTEROP_SUCCESS;
 }
@@ -163,6 +168,12 @@ lookup_object(struct gl_context *ctx,
          out->view_numlevels = 1;
          out->view_minlayer = 0;
          out->view_numlayers = 1;
+
+         if (out->version >= 2) {
+           out->width = rb->Width;
+           out->height = rb->Height;
+           out->depth = MAX2(1, rb->Depth);
+         }
       }
    } else {
       /* Texture objects.
@@ -230,6 +241,15 @@ lookup_object(struct gl_context *ctx,
             out->view_numlevels = obj->Attrib.NumLevels;
             out->view_minlayer = obj->Attrib.MinLayer;
             out->view_numlayers = obj->Attrib.NumLayers;
+
+            if (out->version >= 2) {
+               const GLuint face = _mesa_tex_target_to_face(in->target);;
+               struct gl_texture_image *image = obj->Image[face][in->miplevel];
+
+               out->width = image->Width;
+               out->height = image->Height;
+               out->depth = image->Depth;
+            }
          }
       }
    }
@@ -288,9 +308,13 @@ st_interop_export_object(struct st_context *st,
    }
 
    memset(&whandle, 0, sizeof(whandle));
-   
+
    if (need_export_dmabuf) {
       whandle.type = WINSYS_HANDLE_TYPE_FD;
+
+      /* OpenCL requires explicit flushes. */
+      if (out->version >= 2)
+         usage |= PIPE_HANDLE_USAGE_EXPLICIT_FLUSH;
 
       success = screen->resource_get_handle(screen, st->pipe, res, &whandle,
                                             usage);
@@ -305,6 +329,11 @@ st_interop_export_object(struct st_context *st,
 #else
       out->win32_handle = whandle.handle;
 #endif
+
+      if (out->version >= 2) {
+         out->modifier = whandle.modifier;
+         out->stride = whandle.stride;
+      }
    }
 
    simple_mtx_unlock(&ctx->Shared->Mutex);
@@ -312,9 +341,9 @@ st_interop_export_object(struct st_context *st,
    if (res->target == PIPE_BUFFER)
       out->buf_offset += whandle.offset;
 
-   /* Instruct the caller that we support up-to version one of the interface */
-   in->version = 1;
-   out->version = 1;
+   /* Instruct the caller of the version of the interface we support */
+   in->version = MIN2(in->version, 2);
+   out->version = MIN2(out->version, 2);
 
    return MESA_GLINTEROP_SUCCESS;
 }
@@ -334,8 +363,8 @@ flush_object(struct gl_context *ctx,
 
    ctx->pipe->flush_resource(ctx->pipe, res);
 
-   /* Instruct the caller that we support up-to version one of the interface */
-   in->version = 1;
+   /* Instruct the caller of the version of the interface we support */
+   in->version = MIN2(in->version, 2);
 
    return MESA_GLINTEROP_SUCCESS;
 }
@@ -343,9 +372,10 @@ flush_object(struct gl_context *ctx,
 int
 st_interop_flush_objects(struct st_context *st,
                          unsigned count, struct mesa_glinterop_export_in *objects,
-                         GLsync *sync)
+                         struct mesa_glinterop_flush_out *out)
 {
    struct gl_context *ctx = st->ctx;
+   bool flush_out_struct = false;
 
    /* Wait for glthread to finish to get up-to-date GL object lookups. */
    _mesa_glthread_finish(st->ctx);
@@ -355,6 +385,9 @@ st_interop_flush_objects(struct st_context *st,
    for (unsigned i = 0; i < count; ++i) {
       int ret = flush_object(ctx, &objects[i]);
 
+      if (objects[i].version >= 2)
+         flush_out_struct = true;
+
       if (ret != MESA_GLINTEROP_SUCCESS) {
          simple_mtx_unlock(&ctx->Shared->Mutex);
          return ret;
@@ -363,8 +396,21 @@ st_interop_flush_objects(struct st_context *st,
 
    simple_mtx_unlock(&ctx->Shared->Mutex);
 
-   if (count > 0 && sync) {
-      *sync = _mesa_fence_sync(ctx, GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+   if (count > 0 && out) {
+      if (flush_out_struct) {
+         if (out->sync) {
+            *out->sync = _mesa_fence_sync(ctx, GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+         }
+         if (out->fence_fd) {
+            struct pipe_fence_handle *fence = NULL;
+            ctx->pipe->flush(ctx->pipe, &fence, PIPE_FLUSH_FENCE_FD | PIPE_FLUSH_ASYNC);
+            *out->fence_fd = ctx->screen->fence_get_fd(ctx->screen, fence);
+         }
+         out->version = MIN2(out->version, 1);
+      } else {
+         GLsync *sync = (GLsync *)out;
+         *sync = _mesa_fence_sync(ctx, GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+      }
    }
 
    return MESA_GLINTEROP_SUCCESS;

@@ -77,7 +77,7 @@ public:
    {
       foreach_in_list_safe(assignment_entry, entry, this->assignments) {
 	 if (entry->lhs == var) {
-	    if (var->type->is_scalar() || var->type->is_vector()) {
+	    if (glsl_type_is_scalar(var->type) || glsl_type_is_vector(var->type)) {
 	       if (debug)
 		  printf("used %s (0x%01x - 0x%01x)\n", entry->lhs->name,
 			 entry->unused, used & 0xf);
@@ -199,8 +199,8 @@ process_assignment(linear_ctx *lin_ctx, ir_assignment *ir, exec_list *assignment
    /* If it's a vector type, we can do per-channel elimination of
     * use of the RHS.
     */
-   if (deref_var && (deref_var->var->type->is_scalar() ||
-                     deref_var->var->type->is_vector())) {
+   if (deref_var && (glsl_type_is_scalar(deref_var->var->type) ||
+                     glsl_type_is_vector(deref_var->var->type))) {
 
       if (debug)
          printf("looking for %s.0x%01x to remove\n", var->name,

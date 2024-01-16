@@ -84,7 +84,6 @@ private:
    bool m_fs_write_all{false};
    bool m_uses_discard{false};
    bool m_gs_prim_id_input{false};
-   int m_ps_prim_id_input{0};
    Register *m_sample_id_reg{nullptr};
    Register *m_sample_mask_reg{nullptr};
    Register *m_helper_invocation{nullptr};

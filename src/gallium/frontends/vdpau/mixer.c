@@ -478,7 +478,7 @@ vlVdpVideoMixerUpdateDeinterlaceFilter(vlVdpVideoMixer *vmixer)
       vmixer->deint.filter = MALLOC(sizeof(struct vl_deint_filter));
       vmixer->deint.enabled = vl_deint_filter_init(vmixer->deint.filter, pipe,
             vmixer->video_width, vmixer->video_height,
-            vmixer->skip_chroma_deint, vmixer->deint.spatial);
+            vmixer->skip_chroma_deint, vmixer->deint.spatial, false);
       if (!vmixer->deint.enabled) {
          FREE(vmixer->deint.filter);
       }

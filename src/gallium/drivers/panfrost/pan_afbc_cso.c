@@ -22,6 +22,7 @@
  */
 
 #include "pan_afbc_cso.h"
+#include "nir/pipe_nir.h"
 #include "nir_builder.h"
 #include "pan_context.h"
 #include "pan_resource.h"
@@ -290,8 +291,7 @@ panfrost_afbc_get_shaders(struct panfrost_context *ctx,
       nir_shader *nir =                                                        \
          panfrost_afbc_create_##name##_shader(screen, __VA_ARGS__);            \
       nir->info.num_ubos = 1;                                                  \
-      struct pipe_compute_state cso = {PIPE_SHADER_IR_NIR, nir};               \
-      shader->name##_cso = pctx->create_compute_state(pctx, &cso);             \
+      shader->name##_cso = pipe_shader_from_nir(pctx, nir);                    \
    }
 
    COMPILE_SHADER(size, key.bpp, key.align);

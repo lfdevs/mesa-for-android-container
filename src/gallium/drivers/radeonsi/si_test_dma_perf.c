@@ -119,7 +119,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
 
          void *compute_shader = NULL;
          if (test_cs) {
-            compute_shader = si_create_dma_compute_shader(ctx, cs_dwords_per_thread,
+            compute_shader = si_create_dma_compute_shader(sctx, cs_dwords_per_thread,
                                               cache_policy == L2_STREAM, is_copy);
          }
 

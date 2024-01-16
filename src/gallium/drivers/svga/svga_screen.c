@@ -101,7 +101,7 @@ svga_get_name( struct pipe_screen *pscreen )
 #else
    build = "build: RELEASE;";
 #endif
-#ifdef DRAW_LLVM_AVAILABLE
+#if DRAW_LLVM_AVAILABLE
    llvm = "LLVM;";
 #endif
 

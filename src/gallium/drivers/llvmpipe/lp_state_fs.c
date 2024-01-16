@@ -1051,6 +1051,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
    params.consts_ptr = consts_ptr;
    params.system_values = &system_values;
    params.inputs = interp->inputs;
+   params.num_inputs = interp->num_attribs - 1;
    params.context_type = context_type;
    params.context_ptr = context_ptr;
    params.resources_type = resources_type;

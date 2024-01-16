@@ -26,8 +26,9 @@
 
 #include "sfn_scheduler.h"
 
+#include "../r600_isa.h"
+
 #include "amd_family.h"
-#include "r600_isa.h"
 #include "sfn_alu_defines.h"
 #include "sfn_debug.h"
 #include "sfn_instr_alugroup.h"

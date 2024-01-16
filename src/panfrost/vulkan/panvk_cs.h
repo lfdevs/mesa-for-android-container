@@ -29,7 +29,7 @@
 #include <vulkan/vulkan.h>
 
 #include "compiler/shader_enums.h"
-#include "pan_cs.h"
+#include "pan_desc.h"
 #include "panfrost-job.h"
 
 #include "vk_util.h"

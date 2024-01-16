@@ -26,7 +26,6 @@
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
 
-#include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_serialize.h"
 #include "nir/tgsi_to_nir.h"

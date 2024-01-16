@@ -111,7 +111,7 @@ foreach ver : v3d_versions
     'v3dv-v' + ver,
     [files_per_version, v3d_xml_pack, v3dv_entrypoints[0]],
     include_directories : [
-      inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
+      inc_src, inc_include, inc_broadcom,
       inc_util,
     ],
     c_args : [v3dv_flags, '-DV3D_VERSION=' + ver],
@@ -124,7 +124,7 @@ libvulkan_broadcom = shared_library(
   'vulkan_broadcom',
   [libv3dv_files, v3dv_entrypoints, sha1_h],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_broadcom, inc_util,
+    inc_include, inc_src, inc_broadcom, inc_util,
   ],
   link_with : [
     libbroadcom_cle,

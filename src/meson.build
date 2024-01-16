@@ -91,6 +91,9 @@ endif
 if with_gallium_etnaviv
   subdir('etnaviv')
 endif
+if system_has_kms_drm
+  subdir('virtio')
+endif
 if with_gallium_freedreno or with_freedreno_vk or with_tools.contains('freedreno')
   subdir('freedreno')
 endif
@@ -100,9 +103,9 @@ endif
 if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('panfrost')
 endif
-if with_gallium_virgl or with_virtio_vk
-  subdir('virtio')
-endif
+#if with_gallium_virgl or with_virtio_vk
+#  subdir('virtio')
+#endif
 if with_microsoft_clc or with_gallium_d3d12 or with_spirv_to_dxil or with_microsoft_vk
   subdir('microsoft')
 endif

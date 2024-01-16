@@ -92,8 +92,9 @@ dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth24
 dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8
 dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_linear.equal_depth24_stencil8
 dEQP-GLES31.functional.fbo.no_attachments.size.16x16
-dEQP-GLES31.functional.texture.specification.teximage3d_depth.depth24_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth24_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth32f_stencil8_cube_array
+dEQP-GLES31.functional.texture.specification.tex(sub)?image3d_depth.depth(24|32f)_stencil8_cube_array
 
 dEQP-GLES31.functional.image_load_store.buffer.atomic.comp_swap_r32i_return_value
+
+# First noticed in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/50933832
+spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs

@@ -15,6 +15,7 @@ nvk_files = files(
   'nvk_cmd_meta.c',
   'nvk_cmd_pool.c',
   'nvk_cmd_pool.h',
+  'nvk_codegen.c',
   'nvk_compute_pipeline.c',
   'nvk_descriptor_set.h',
   'nvk_descriptor_set.c',
@@ -74,6 +75,7 @@ nvk_entrypoints = custom_target(
 
 nvk_deps = [
   dep_libdrm,
+  idep_nak,
   idep_nil,
   idep_nir,
   idep_nouveau_mme,
@@ -124,7 +126,7 @@ nouveau_icd = custom_target(
   output : 'nouveau_icd.@0@.json'.format(host_machine.cpu()),
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.3', '--xml', '@INPUT1@',
+    '--api-version', '1.1', '--xml', '@INPUT1@',
     '--lib-path', join_paths(icd_lib_path, icd_file_name),
     '--out', '@OUTPUT@',
   ],
@@ -142,7 +144,7 @@ if meson.version().version_compare('>= 0.58')
     output : _dev_icdname,
     command : [
       prog_python, '@INPUT0@',
-      '--api-version', '1.3', '--xml', '@INPUT1@',
+      '--api-version', '1.1', '--xml', '@INPUT1@',
       '--lib-path', meson.current_build_dir() / icd_file_name,
       '--out', '@OUTPUT@',
     ],

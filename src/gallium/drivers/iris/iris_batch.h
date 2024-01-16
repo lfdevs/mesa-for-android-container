@@ -212,6 +212,8 @@ struct iris_batch {
 
    /** Batch wrapper structure for perfetto */
    struct intel_ds_queue ds;
+
+   uint8_t num_3d_primitives_emitted;
 };
 
 void iris_init_batches(struct iris_context *ice);

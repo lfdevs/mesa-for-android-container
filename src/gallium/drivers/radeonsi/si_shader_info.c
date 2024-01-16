@@ -7,7 +7,6 @@
 #include "si_pipe.h"
 #include "si_shader_internal.h"
 #include "util/mesa-sha1.h"
-#include "util/u_prim.h"
 #include "sid.h"
 #include "nir.h"
 
@@ -27,14 +26,14 @@ static struct si_shader_profile profiles[] =
    {
       /* Viewperf/Medical */
       {0x4dce4331, 0x38f778d5, 0x1b75a717, 0x3e454fb9, 0xeb1527f0},
-      SI_PROFILE_PS_NO_BINNING,
+      SI_PROFILE_GFX9_GFX10_PS_NO_BINNING,
    },
    {
       /* Viewperf/Medical, a shader with a divergent loop doesn't benefit from Wave32,
        * probably due to interpolation performance.
        */
       {0x29f0f4a0, 0x0672258d, 0x47ccdcfd, 0x31e67dcc, 0xdcb1fda8},
-      SI_PROFILE_WAVE64,
+      SI_PROFILE_GFX10_WAVE64,
    },
    {
       /* Viewperf/Creo */
@@ -259,6 +258,22 @@ static void scan_io_usage(const nir_shader *nir, struct si_shader_info *info,
    /* VS doesn't have semantics. */
    if (nir->info.stage != MESA_SHADER_VERTEX || !is_input)
       semantic = nir_intrinsic_io_semantics(intr).location;
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT && is_input) {
+      /* The PARAM_GEN input shouldn't be scanned. */
+      if (nir_intrinsic_io_semantics(intr).no_varying)
+         return;
+
+      /* Gather color PS inputs. We can only get here after lowering colors in monolithic
+       * shaders. This must match what we do for nir_intrinsic_load_color0/1.
+       */
+      if (semantic == VARYING_SLOT_COL0 || semantic == VARYING_SLOT_COL1 ||
+          semantic == VARYING_SLOT_BFC0 || semantic == VARYING_SLOT_BFC1) {
+         unsigned index = semantic == VARYING_SLOT_COL1 || semantic == VARYING_SLOT_BFC1;
+         info->colors_read |= mask << (index * 4);
+         return;
+      }
+   }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT && !is_input) {
       /* Never use FRAG_RESULT_COLOR directly. */
@@ -527,6 +542,14 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
          }
          break;
       }
+      case nir_intrinsic_load_vector_arg_amd:
+         /* Non-monolithic lowered PS can have this. We need to record color usage. */
+         if (nir_intrinsic_flags(intr) & SI_VECTOR_ARG_IS_COLOR) {
+            /* The channel can be between 0 and 7. */
+            unsigned chan = SI_GET_VECTOR_ARG_COLOR_COMPONENT(nir_intrinsic_flags(intr));
+            info->colors_read |= BITFIELD_BIT(chan);
+         }
+         break;
       case nir_intrinsic_load_barycentric_at_offset:   /* uses center */
       case nir_intrinsic_load_barycentric_at_sample:   /* uses center */
          if (nir_intrinsic_interp_mode(intr) == INTERP_MODE_FLAT)
@@ -629,7 +652,8 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    info->uses_grid_size = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_NUM_WORKGROUPS);
    info->uses_tg_size = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_NUM_SUBGROUPS) ||
                         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_LOCAL_INVOCATION_INDEX) ||
-                        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SUBGROUP_ID);
+                        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SUBGROUP_ID) ||
+                        si_should_clear_lds(sscreen, nir);
    info->uses_variable_block_size = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_WORKGROUP_SIZE);
    info->uses_drawid = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID);
    info->uses_primid = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
@@ -642,6 +666,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    info->uses_persp_centroid = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
    info->uses_persp_center = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
    info->uses_sampleid = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID);
+   info->uses_layer_id = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_LAYER_ID);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       info->writes_z = nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH);
@@ -746,14 +771,20 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
             info->patch_outputs_written |= 1ull << ac_shader_io_get_unique_index_patch(semantic);
          } else if ((semantic <= VARYING_SLOT_VAR31 || semantic >= VARYING_SLOT_VAR0_16BIT) &&
                     semantic != VARYING_SLOT_EDGE) {
-            info->outputs_written |= 1ull << si_shader_io_get_unique_index(semantic);
-
             /* Ignore outputs that are not passed from VS to PS. */
             if (semantic != VARYING_SLOT_POS &&
                 semantic != VARYING_SLOT_PSIZ &&
-                semantic != VARYING_SLOT_CLIP_VERTEX) {
+                semantic != VARYING_SLOT_CLIP_VERTEX &&
+                semantic != VARYING_SLOT_LAYER) {
                info->outputs_written_before_ps |= 1ull
                                                   << si_shader_io_get_unique_index(semantic);
+            }
+
+            /* LAYER and VIEWPORT have no effect if they don't feed the rasterizer. */
+            if (semantic != VARYING_SLOT_LAYER &&
+                semantic != VARYING_SLOT_VIEWPORT) {
+               info->outputs_written_before_tes_gs |=
+                  BITFIELD64_BIT(si_shader_io_get_unique_index(semantic));
             }
          }
       }
@@ -772,8 +803,8 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_TESS_CTRL ||
        nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      info->esgs_vertex_stride = util_last_bit64(info->outputs_written) * 16;
-      info->lshs_vertex_stride = info->esgs_vertex_stride;
+      info->esgs_vertex_stride = info->lshs_vertex_stride =
+         util_last_bit64(info->outputs_written_before_tes_gs) * 16;
 
       /* Add 1 dword to reduce LDS bank conflicts, so that each vertex
        * will start on a different bank. (except for the maximum 32*16).
@@ -797,7 +828,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
       info->gsvs_vertex_size = info->num_outputs * 16;
       info->max_gsvs_emit_size = info->gsvs_vertex_size * info->base.gs.vertices_out;
       info->gs_input_verts_per_prim =
-         u_vertices_per_prim((enum mesa_prim)info->base.gs.input_primitive);
+         mesa_vertices_per_prim(info->base.gs.input_primitive);
    }
 
    info->clipdist_mask = info->writes_clipvertex ? SI_USER_CLIP_PLANE_MASK :

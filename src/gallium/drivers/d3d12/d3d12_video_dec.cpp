@@ -27,10 +27,18 @@
 #include "d3d12_screen.h"
 #include "d3d12_surface.h"
 #include "d3d12_video_dec.h"
+#if VIDEO_CODEC_H264DEC
 #include "d3d12_video_dec_h264.h"
+#endif
+#if VIDEO_CODEC_H265DEC
 #include "d3d12_video_dec_hevc.h"
+#endif
+#if VIDEO_CODEC_AV1DEC
 #include "d3d12_video_dec_av1.h"
+#endif
+#if VIDEO_CODEC_VP9DEC
 #include "d3d12_video_dec_vp9.h"
+#endif
 #include "d3d12_video_buffer.h"
 #include "d3d12_residency.h"
 
@@ -346,37 +354,43 @@ d3d12_video_decoder_store_upper_layer_references(struct d3d12_video_decoder *pD3
                                                  struct pipe_video_buffer *target,
                                                  struct pipe_picture_desc *picture)
 {
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    pD3D12Dec->m_pCurrentDecodeTarget = target;
    switch (pD3D12Dec->m_d3d12DecProfileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          pipe_h264_picture_desc *pPicControlH264 = (pipe_h264_picture_desc *) picture;
          pD3D12Dec->m_pCurrentReferenceTargets = pPicControlH264->ref;
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          pipe_h265_picture_desc *pPicControlHevc = (pipe_h265_picture_desc *) picture;
          pD3D12Dec->m_pCurrentReferenceTargets = pPicControlHevc->ref;
       } break;
-
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          pipe_av1_picture_desc *pPicControlAV1 = (pipe_av1_picture_desc *) picture;
          pD3D12Dec->m_pCurrentReferenceTargets = pPicControlAV1->ref;
       } break;
-
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          pipe_vp9_picture_desc *pPicControlVP9 = (pipe_vp9_picture_desc *) picture;
          pD3D12Dec->m_pCurrentReferenceTargets = pPicControlVP9->ref;
       } break;
-
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 }
 
 /**
@@ -821,7 +835,7 @@ d3d12_video_decoder_create_command_objects(const struct d3d12_screen *pD3D12Scre
       return false;
    }
 
-   hr = pD3D12Screen->dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pD3D12Dec->m_spFence));
+   hr = pD3D12Screen->dev->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&pD3D12Dec->m_spFence));
    if (FAILED(hr)) {
       debug_printf(
          "[d3d12_video_decoder] d3d12_video_decoder_create_command_objects - Call to CreateFence failed with HR %x\n",
@@ -1061,44 +1075,48 @@ d3d12_video_decoder_prepare_for_decode_frame(struct d3d12_video_decoder *pD3D12D
 
    // If decoded needs reference_only entries in the dpb, use the reference_only allocation for current frame
    // otherwise, use the standard output resource
-   ID3D12Resource *pCurrentFrameDPBEntry = fReferenceOnly ? *ppRefOnlyOutTexture2D : *ppOutTexture2D;
-   uint32_t currentFrameDPBEntrySubresource = fReferenceOnly ? *pRefOnlyOutSubresourceIndex : *pOutSubresourceIndex;
-
+   [[maybe_unused]] ID3D12Resource *pCurrentFrameDPBEntry = fReferenceOnly ? *ppRefOnlyOutTexture2D : *ppOutTexture2D;
+   [[maybe_unused]] uint32_t currentFrameDPBEntrySubresource = fReferenceOnly ? *pRefOnlyOutSubresourceIndex : *pOutSubresourceIndex;
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    switch (pD3D12Dec->m_d3d12DecProfileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          d3d12_video_decoder_prepare_current_frame_references_h264(pD3D12Dec,
                                                                    pCurrentFrameDPBEntry,
                                                                    currentFrameDPBEntrySubresource);
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          d3d12_video_decoder_prepare_current_frame_references_hevc(pD3D12Dec,
                                                                    pCurrentFrameDPBEntry,
                                                                    currentFrameDPBEntrySubresource);
       } break;
-
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          d3d12_video_decoder_prepare_current_frame_references_av1(pD3D12Dec,
                                                                   pCurrentFrameDPBEntry,
                                                                   currentFrameDPBEntrySubresource);
       } break;
-
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          d3d12_video_decoder_prepare_current_frame_references_vp9(pD3D12Dec,
                                                                   pCurrentFrameDPBEntry,
                                                                   currentFrameDPBEntrySubresource);
       } break;
-
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
-
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
    return true;
 }
 
@@ -1200,32 +1218,38 @@ d3d12_video_decoder_reconfigure_dpb(struct d3d12_video_decoder *pD3D12Dec,
 void
 d3d12_video_decoder_refresh_dpb_active_references(struct d3d12_video_decoder *pD3D12Dec)
 {
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    switch (pD3D12Dec->m_d3d12DecProfileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          d3d12_video_decoder_refresh_dpb_active_references_h264(pD3D12Dec);
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          d3d12_video_decoder_refresh_dpb_active_references_hevc(pD3D12Dec);
       } break;
-
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          d3d12_video_decoder_refresh_dpb_active_references_av1(pD3D12Dec);
       } break;
-
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          d3d12_video_decoder_refresh_dpb_active_references_vp9(pD3D12Dec);
       } break;
-
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 }
 
 void
@@ -1237,32 +1261,38 @@ d3d12_video_decoder_get_frame_info(
    *pMaxDPB = 0;
    isInterlaced = false;
 
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    switch (pD3D12Dec->m_d3d12DecProfileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          d3d12_video_decoder_get_frame_info_h264(pD3D12Dec, pWidth, pHeight, pMaxDPB, isInterlaced);
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          d3d12_video_decoder_get_frame_info_hevc(pD3D12Dec, pWidth, pHeight, pMaxDPB, isInterlaced);
       } break;
-
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          d3d12_video_decoder_get_frame_info_av1(pD3D12Dec, pWidth, pHeight, pMaxDPB, isInterlaced);
       } break;
-
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          d3d12_video_decoder_get_frame_info_vp9(pD3D12Dec, pWidth, pHeight, pMaxDPB, &isInterlaced);
       } break;
-
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 
    if (pD3D12Dec->m_ConfigDecoderSpecificFlags & d3d12_video_decode_config_specific_flag_alignment_height) {
       const uint32_t AlignmentMask = 31;
@@ -1278,6 +1308,7 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
    struct d3d12_video_buffer *pD3D12VideoBuffer   // input argument, target video buffer
 )
 {
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    assert(picture);
    assert(codec);
    struct d3d12_video_decoder *pD3D12Dec = (struct d3d12_video_decoder *) codec;
@@ -1289,6 +1320,7 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
    auto &inFlightResources = pD3D12Dec->m_inflightResourcesPool[d3d12_video_decoder_pool_current_index(pD3D12Dec)];
    inFlightResources.qp_matrix_frame_argument_enabled = false;
    switch (profileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          size_t dxvaPicParamsBufferSize = sizeof(DXVA_PicParams_H264);
@@ -1311,7 +1343,8 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
             true;   // We don't have a way of knowing from the pipe params so send always
          d3d12_video_decoder_store_dxva_qmatrix_in_qmatrix_buffer(codec, &dxvaQmatrixH264, dxvaQMatrixBufferSize);
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          size_t dxvaPicParamsBufferSize = sizeof(DXVA_PicParams_HEVC);
@@ -1331,6 +1364,8 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
                                                                    inFlightResources.qp_matrix_frame_argument_enabled);
          d3d12_video_decoder_store_dxva_qmatrix_in_qmatrix_buffer(codec, &dxvaQmatrixHEVC, dxvaQMatrixBufferSize);
       } break;
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          size_t dxvaPicParamsBufferSize = sizeof(DXVA_PicParams_AV1);
@@ -1343,6 +1378,8 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
          d3d12_video_decoder_store_dxva_picparams_in_picparams_buffer(codec, &dxvaPicParamsAV1, dxvaPicParamsBufferSize);
          inFlightResources.qp_matrix_frame_argument_enabled = false;
       } break;
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          size_t dxvaPicParamsBufferSize = sizeof(DXVA_PicParams_VP9);
@@ -1353,11 +1390,13 @@ d3d12_video_decoder_store_converted_dxva_picparams_from_pipe_input(
          d3d12_video_decoder_store_dxva_picparams_in_picparams_buffer(codec, &dxvaPicParamsVP9, dxvaPicParamsBufferSize);
          inFlightResources.qp_matrix_frame_argument_enabled = false;
       } break;
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 }
 
 void
@@ -1365,41 +1404,49 @@ d3d12_video_decoder_prepare_dxva_slices_control(
    struct d3d12_video_decoder *pD3D12Dec,   // input argument, current decoder
    struct pipe_picture_desc *picture)
 {
-   auto &inFlightResources = pD3D12Dec->m_inflightResourcesPool[d3d12_video_decoder_pool_current_index(pD3D12Dec)];
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
+   [[maybe_unused]] auto &inFlightResources = pD3D12Dec->m_inflightResourcesPool[d3d12_video_decoder_pool_current_index(pD3D12Dec)];
    d3d12_video_decode_profile_type profileType =
       d3d12_video_decoder_convert_pipe_video_profile_to_profile_type(pD3D12Dec->base.profile);
    switch (profileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
       {
          d3d12_video_decoder_prepare_dxva_slices_control_h264(pD3D12Dec,
                                                               inFlightResources.m_SliceControlBuffer,
                                                               (struct pipe_h264_picture_desc *) picture);
       } break;
-
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          d3d12_video_decoder_prepare_dxva_slices_control_hevc(pD3D12Dec,
                                                               inFlightResources.m_SliceControlBuffer,
                                                               (struct pipe_h265_picture_desc *) picture);
       } break;
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
       {
          d3d12_video_decoder_prepare_dxva_slices_control_av1(pD3D12Dec,
                                                              inFlightResources.m_SliceControlBuffer,
                                                              (struct pipe_av1_picture_desc *) picture);
       } break;
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          d3d12_video_decoder_prepare_dxva_slices_control_vp9(pD3D12Dec,
                                                              inFlightResources.m_SliceControlBuffer,
                                                              (struct pipe_vp9_picture_desc *) picture);
       } break;
-
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 }
 
 void
@@ -1435,17 +1482,37 @@ d3d12_video_decoder_supports_aot_dpb(D3D12_FEATURE_DATA_VIDEO_DECODE_SUPPORT dec
                                      d3d12_video_decode_profile_type profileType)
 {
    bool supportedProfile = false;
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    switch (profileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
-      case d3d12_video_decode_profile_type_hevc:
-      case d3d12_video_decode_profile_type_av1:
-      case d3d12_video_decode_profile_type_vp9:
+      {
          supportedProfile = true;
-         break;
+      } break;
+#endif
+#if VIDEO_CODEC_H265DEC
+      case d3d12_video_decode_profile_type_hevc:
+      {
+         supportedProfile = true;
+      } break;
+#endif
+#if VIDEO_CODEC_AV1DEC
+      case d3d12_video_decode_profile_type_av1:
+      {
+         supportedProfile = true;
+      } break;
+#endif
+#if VIDEO_CODEC_VP9DEC
+      case d3d12_video_decode_profile_type_vp9:
+      {
+         supportedProfile = true;
+      } break;
+#endif
       default:
          supportedProfile = false;
          break;
    }
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 
    return (decodeSupport.DecodeTier >= D3D12_VIDEO_DECODE_TIER_2) && supportedProfile;
 }
@@ -1505,9 +1572,13 @@ d3d12_video_decoder_convert_pipe_video_profile_to_d3d12_profile(enum pipe_video_
 GUID
 d3d12_video_decoder_resolve_profile(d3d12_video_decode_profile_type profileType, DXGI_FORMAT decode_format)
 {
+#if D3D12_VIDEO_ANY_DECODER_ENABLED
    switch (profileType) {
+#if VIDEO_CODEC_H264DEC
       case d3d12_video_decode_profile_type_h264:
          return D3D12_VIDEO_DECODE_PROFILE_H264;
+#endif
+#if VIDEO_CODEC_H265DEC
       case d3d12_video_decode_profile_type_hevc:
       {
          switch (decode_format) {
@@ -1521,9 +1592,13 @@ d3d12_video_decoder_resolve_profile(d3d12_video_decode_profile_type profileType,
             } break;
          }
       } break;
+#endif
+#if VIDEO_CODEC_AV1DEC
       case d3d12_video_decode_profile_type_av1:
          return D3D12_VIDEO_DECODE_PROFILE_AV1_PROFILE0;
          break;
+#endif
+#if VIDEO_CODEC_VP9DEC
       case d3d12_video_decode_profile_type_vp9:
       {
          switch (decode_format) {
@@ -1537,11 +1612,15 @@ d3d12_video_decoder_resolve_profile(d3d12_video_decode_profile_type profileType,
             } break;
          }
       } break;
+#endif
       default:
       {
          unreachable("Unsupported d3d12_video_decode_profile_type");
       } break;
    }
+#else
+   return {};
+#endif // D3D12_VIDEO_ANY_DECODER_ENABLED
 }
 
 bool

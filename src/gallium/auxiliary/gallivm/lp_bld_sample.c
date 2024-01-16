@@ -166,7 +166,7 @@ lp_sampler_static_texture_state_image(struct lp_static_texture_state *state,
    state->pot_width = util_is_power_of_two_or_zero(resource->width0);
    state->pot_height = util_is_power_of_two_or_zero(resource->height0);
    state->pot_depth = util_is_power_of_two_or_zero(resource->depth0);
-   state->level_zero_only = 0;
+   state->level_zero_only = view->u.tex.level == 0;
 
    /*
     * the layer / element / level parameters are all either dynamic
@@ -1116,11 +1116,11 @@ lp_build_linear_mip_levels(struct lp_build_sample_context *bld,
 /**
  * A helper function that factorizes this common pattern.
  */
-static LLVMValueRef
-load_mip(struct gallivm_state *gallivm,
-         LLVMTypeRef ptr_type,
-         LLVMValueRef offsets,
-         LLVMValueRef index1)
+LLVMValueRef
+lp_sample_load_mip_value(struct gallivm_state *gallivm,
+                         LLVMTypeRef ptr_type,
+                         LLVMValueRef offsets,
+                         LLVMValueRef index1)
 {
    LLVMValueRef zero = lp_build_const_int32(gallivm, 0);
    LLVMValueRef indexes[2] = {zero, index1};
@@ -1139,8 +1139,8 @@ LLVMValueRef
 lp_build_get_mipmap_level(struct lp_build_sample_context *bld,
                           LLVMValueRef level)
 {
-   LLVMValueRef mip_offset = load_mip(bld->gallivm, bld->mip_offsets_type,
-                                      bld->mip_offsets, level);
+   LLVMValueRef mip_offset = lp_sample_load_mip_value(bld->gallivm, bld->mip_offsets_type,
+                                                      bld->mip_offsets, level);
    LLVMBuilderRef builder = bld->gallivm->builder;
    LLVMValueRef data_ptr =
       LLVMBuildGEP2(builder,
@@ -1162,16 +1162,16 @@ lp_build_get_mip_offsets(struct lp_build_sample_context *bld,
    LLVMValueRef offsets, offset1;
 
    if (bld->num_mips == 1) {
-      offset1 = load_mip(bld->gallivm, bld->mip_offsets_type, bld->mip_offsets, level);
+      offset1 = lp_sample_load_mip_value(bld->gallivm, bld->mip_offsets_type, bld->mip_offsets, level);
       offsets = lp_build_broadcast_scalar(&bld->int_coord_bld, offset1);
    } else if (bld->num_mips == bld->coord_bld.type.length / 4) {
       offsets = bld->int_coord_bld.undef;
       for (unsigned i = 0; i < bld->num_mips; i++) {
          LLVMValueRef indexi = lp_build_const_int32(bld->gallivm, i);
-         offset1 = load_mip(bld->gallivm, bld->mip_offsets_type,
-                            bld->mip_offsets,
-                            LLVMBuildExtractElement(builder, level,
-                                                    indexi, ""));
+         offset1 = lp_sample_load_mip_value(bld->gallivm, bld->mip_offsets_type,
+                                            bld->mip_offsets,
+                                            LLVMBuildExtractElement(builder, level,
+                                                                    indexi, ""));
          LLVMValueRef indexo = lp_build_const_int32(bld->gallivm, 4 * i);
          offsets = LLVMBuildInsertElement(builder, offsets, offset1,
                                           indexo, "");
@@ -1184,10 +1184,10 @@ lp_build_get_mip_offsets(struct lp_build_sample_context *bld,
       offsets = bld->int_coord_bld.undef;
       for (unsigned i = 0; i < bld->num_mips; i++) {
          LLVMValueRef indexi = lp_build_const_int32(bld->gallivm, i);
-         offset1 = load_mip(bld->gallivm, bld->mip_offsets_type,
-                            bld->mip_offsets,
-                            LLVMBuildExtractElement(builder, level,
-                                                    indexi, ""));
+         offset1 = lp_sample_load_mip_value(bld->gallivm, bld->mip_offsets_type,
+                                            bld->mip_offsets,
+                                            LLVMBuildExtractElement(builder, level,
+                                                                    indexi, ""));
          offsets = LLVMBuildInsertElement(builder, offsets, offset1,
                                           indexi, "");
       }
@@ -1332,7 +1332,7 @@ lp_build_get_level_stride_vec(struct lp_build_sample_context *bld,
    LLVMValueRef stride, stride1;
 
    if (bld->num_mips == 1) {
-      stride1 = load_mip(bld->gallivm, stride_type, stride_array, level);
+      stride1 = lp_sample_load_mip_value(bld->gallivm, stride_type, stride_array, level);
       stride = lp_build_broadcast_scalar(&bld->int_coord_bld, stride1);
    } else if (bld->num_mips == bld->coord_bld.type.length / 4) {
       LLVMValueRef stride1;
@@ -1340,9 +1340,9 @@ lp_build_get_level_stride_vec(struct lp_build_sample_context *bld,
       stride = bld->int_coord_bld.undef;
       for (unsigned i = 0; i < bld->num_mips; i++) {
          LLVMValueRef indexi = lp_build_const_int32(bld->gallivm, i);
-         stride1 = load_mip(bld->gallivm, stride_type, stride_array,
-                            LLVMBuildExtractElement(builder, level,
-                                                    indexi, ""));
+         stride1 = lp_sample_load_mip_value(bld->gallivm, stride_type, stride_array,
+                                            LLVMBuildExtractElement(builder, level,
+                                                                    indexi, ""));
          LLVMValueRef indexo = lp_build_const_int32(bld->gallivm, 4 * i);
          stride = LLVMBuildInsertElement(builder, stride, stride1, indexo, "");
       }
@@ -1355,9 +1355,9 @@ lp_build_get_level_stride_vec(struct lp_build_sample_context *bld,
       stride = bld->int_coord_bld.undef;
       for (unsigned i = 0; i < bld->coord_bld.type.length; i++) {
          LLVMValueRef indexi = lp_build_const_int32(bld->gallivm, i);
-         stride1 = load_mip(bld->gallivm, stride_type, stride_array,
-                            LLVMBuildExtractElement(builder, level,
-                                                    indexi, ""));
+         stride1 = lp_sample_load_mip_value(bld->gallivm, stride_type, stride_array,
+                                            LLVMBuildExtractElement(builder, level,
+                                                                    indexi, ""));
          stride = LLVMBuildInsertElement(builder, stride, stride1, indexi, "");
       }
    }

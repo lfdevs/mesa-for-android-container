@@ -610,10 +610,11 @@ a6xx_init(struct fd_device *dev, const struct fd_dev_id *dev_id)
    };
 
    struct ir3_compiler_options compiler_options = {};
-   a6xx_backend->compiler = ir3_compiler_create(dev, dev_id, &compiler_options);
+   a6xx_backend->compiler =
+      ir3_compiler_create(dev, dev_id, fd_dev_info_raw(dev_id), &compiler_options);
    a6xx_backend->dev = dev;
 
-   a6xx_backend->info = fd_dev_info(dev_id);
+   a6xx_backend->info = fd_dev_info_raw(dev_id);
 
    a6xx_backend->control_mem =
       fd_bo_new(dev, 0x1000, 0, "control");

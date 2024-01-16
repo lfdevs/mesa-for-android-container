@@ -50,89 +50,26 @@ void set_parent(uint32_t child, uint32_t parent)
    DEREF(REF(uint32_t)(addr)) = parent;
 }
 
-uint32_t
-encode_sbt_offset_and_flags(uint32_t src)
-{
-   uint32_t flags = src >> 24;
-   uint32_t ret = src & 0xffffffu;
-   if ((flags & VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR) != 0)
-      ret |= RADV_INSTANCE_FORCE_OPAQUE;
-   if ((flags & VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR) == 0)
-      ret |= RADV_INSTANCE_NO_FORCE_NOT_OPAQUE;
-   if ((flags & VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR) != 0)
-      ret |= RADV_INSTANCE_TRIANGLE_FACING_CULL_DISABLE;
-   if ((flags & VK_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR) != 0)
-      ret |= RADV_INSTANCE_TRIANGLE_FLIP_FACING;
-   return ret;
-}
-
-void
-encode_leaf_node(uint32_t type, uint64_t src_node, uint64_t dst_node)
-{
-   switch (type) {
-   case radv_ir_node_triangle: {
-      radv_ir_triangle_node src = DEREF(REF(radv_ir_triangle_node)(src_node));
-      REF(radv_bvh_triangle_node) dst = REF(radv_bvh_triangle_node)(dst_node);
-
-      DEREF(dst).coords = src.coords;
-      DEREF(dst).triangle_id = src.triangle_id;
-      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
-      DEREF(dst).id = src.id;
-      break;
-   }
-   case radv_ir_node_aabb: {
-      radv_ir_aabb_node src = DEREF(REF(radv_ir_aabb_node)(src_node));
-      REF(radv_bvh_aabb_node) dst = REF(radv_bvh_aabb_node)(dst_node);
-
-      DEREF(dst).primitive_id = src.primitive_id;
-      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
-      break;
-   }
-   case radv_ir_node_instance: {
-      radv_ir_instance_node src = DEREF(REF(radv_ir_instance_node)(src_node));
-      REF(radv_bvh_instance_node) dst = REF(radv_bvh_instance_node)(dst_node);
-      uint32_t bvh_offset = DEREF(REF(radv_accel_struct_header)(src.base_ptr)).bvh_offset;
-
-      DEREF(dst).bvh_ptr = addr_to_node(src.base_ptr + bvh_offset);
-      DEREF(dst).custom_instance_and_mask = src.custom_instance_and_mask;
-      DEREF(dst).sbt_offset_and_flags = encode_sbt_offset_and_flags(src.sbt_offset_and_flags);
-      DEREF(dst).instance_id = src.instance_id;
-      DEREF(dst).bvh_offset = bvh_offset;
-
-      mat4 transform = mat4(src.otw_matrix);
-
-      mat4 inv_transform = transpose(inverse(transpose(transform)));
-      DEREF(dst).wto_matrix = mat3x4(inv_transform);
-      DEREF(dst).otw_matrix = mat3x4(transform);
-      break;
-   }
-   }
-}
-
 void
 main()
 {
    /* Revert the order so we start at the root */
    uint32_t global_id = DEREF(args.header).ir_internal_node_count - 1 - gl_GlobalInvocationID.x;
 
-   uint32_t intermediate_leaf_node_size;
    uint32_t output_leaf_node_size;
    switch (args.geometry_type) {
    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
-      intermediate_leaf_node_size = SIZEOF(radv_ir_triangle_node);
       output_leaf_node_size = SIZEOF(radv_bvh_triangle_node);
       break;
    case VK_GEOMETRY_TYPE_AABBS_KHR:
-      intermediate_leaf_node_size = SIZEOF(radv_ir_aabb_node);
       output_leaf_node_size = SIZEOF(radv_bvh_aabb_node);
       break;
    default: /* instances */
-      intermediate_leaf_node_size = SIZEOF(radv_ir_instance_node);
       output_leaf_node_size = SIZEOF(radv_bvh_instance_node);
       break;
    }
 
-   uint32_t intermediate_leaf_nodes_size = args.leaf_node_count * intermediate_leaf_node_size;
+   uint32_t intermediate_leaf_nodes_size = args.leaf_node_count * SIZEOF(radv_ir_node);
    uint32_t dst_leaf_offset =
       id_to_offset(RADV_BVH_ROOT_NODE) + SIZEOF(radv_bvh_box32_node);
    uint32_t dst_internal_offset = dst_leaf_offset + args.leaf_node_count * output_leaf_node_size;
@@ -233,10 +170,8 @@ main()
             REF(radv_ir_box_node) child_node = REF(radv_ir_box_node)OFFSET(args.intermediate_bvh, offset);
             DEREF(child_node).bvh_offset = dst_offset;
          } else {
-            uint32_t child_index = offset / intermediate_leaf_node_size;
+            uint32_t child_index = offset / SIZEOF(radv_ir_node);
             dst_offset = dst_leaf_offset + child_index * output_leaf_node_size;
-
-            encode_leaf_node(type, args.intermediate_bvh + offset, args.output_bvh + dst_offset);
          }
 
          radv_aabb child_aabb =

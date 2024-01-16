@@ -667,7 +667,10 @@ enum pipe_swizzle {
    PIPE_SWIZZLE_W,
    PIPE_SWIZZLE_0,
    PIPE_SWIZZLE_1,
+
+   /* Non-existent format channel, not used for swizzle operations. */
    PIPE_SWIZZLE_NONE,
+
    PIPE_SWIZZLE_MAX, /**< Number of enums counter (must be last) */
 };
 

@@ -35,7 +35,8 @@
 #include "nir/tgsi_to_nir.h"
 #include "compiler/v3d_compiler.h"
 #include "v3d_context.h"
-#include "broadcom/cle/v3d_packet_v33_pack.h"
+/* packets here are the same across V3D versions. */
+#include "broadcom/cle/v3d_packet_v42_pack.h"
 
 static struct v3d_compiled_shader *
 v3d_get_compiled_shader(struct v3d_context *v3d,
@@ -136,7 +137,7 @@ v3d_set_transform_feedback_outputs(struct v3d_uncompiled_shader *so,
                 while (vpm_size) {
                         uint32_t write_size = MIN2(vpm_size, 1 << 4);
 
-                        struct V3D33_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC unpacked = {
+                        struct V3D42_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC unpacked = {
                                 /* We need the offset from the coordinate shader's VPM
                                  * output block, which has the [X, Y, Z, W, Xs, Ys]
                                  * values at the start.
@@ -151,7 +152,7 @@ v3d_set_transform_feedback_outputs(struct v3d_uncompiled_shader *so,
                                so->num_tf_specs != 0);
 
                         assert(so->num_tf_specs != ARRAY_SIZE(so->tf_specs));
-                        V3D33_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_pack(NULL,
+                        V3D42_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_pack(NULL,
                                                                        (void *)&so->tf_specs[so->num_tf_specs],
                                                                        &unpacked);
 
@@ -166,7 +167,7 @@ v3d_set_transform_feedback_outputs(struct v3d_uncompiled_shader *so,
                         assert(unpacked.first_shaded_vertex_value_to_output != 8 ||
                                so->num_tf_specs != 0);
 
-                        V3D33_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_pack(NULL,
+                        V3D42_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_pack(NULL,
                                                                        (void *)&so->tf_specs_psiz[so->num_tf_specs],
                                                                        &unpacked);
                         so->num_tf_specs++;
@@ -559,7 +560,6 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
         assert(key->num_tex_used == key->num_samplers_used);
         for (int i = 0; i < texstate->num_textures; i++) {
                 struct pipe_sampler_view *sampler = texstate->textures[i];
-                struct v3d_sampler_view *v3d_sampler = v3d_sampler_view(sampler);
 
                 if (!sampler)
                         continue;
@@ -573,27 +573,16 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
                  */
                 if (key->sampler[i].return_size == 16) {
                         key->sampler[i].return_channels = 2;
-                } else if (devinfo->ver > 40) {
-                        key->sampler[i].return_channels = 4;
                 } else {
-                        key->sampler[i].return_channels =
-                                v3d_get_tex_return_channels(devinfo,
-                                                            sampler->format);
+                        key->sampler[i].return_channels = 4;
                 }
 
-                if (key->sampler[i].return_size == 32 && devinfo->ver < 40) {
-                        memcpy(key->tex[i].swizzle,
-                               v3d_sampler->swizzle,
-                               sizeof(v3d_sampler->swizzle));
-                } else {
-                        /* For 16-bit returns, we let the sampler state handle
-                         * the swizzle.
-                         */
-                        key->tex[i].swizzle[0] = PIPE_SWIZZLE_X;
-                        key->tex[i].swizzle[1] = PIPE_SWIZZLE_Y;
-                        key->tex[i].swizzle[2] = PIPE_SWIZZLE_Z;
-                        key->tex[i].swizzle[3] = PIPE_SWIZZLE_W;
-                }
+                /* We let the sampler state handle the swizzle.
+                 */
+                key->tex[i].swizzle[0] = PIPE_SWIZZLE_X;
+                key->tex[i].swizzle[1] = PIPE_SWIZZLE_Y;
+                key->tex[i].swizzle[2] = PIPE_SWIZZLE_Z;
+                key->tex[i].swizzle[3] = PIPE_SWIZZLE_W;
         }
 }
 

@@ -98,6 +98,8 @@ union agx_varyings {
 struct agx_uncompiled_shader_info {
    uint64_t inputs_flat_shaded;
    uint64_t inputs_linear_shaded;
+   uint8_t cull_distance_size;
+   bool has_edgeflags;
 };
 
 struct agx_shader_info {
@@ -121,6 +123,9 @@ struct agx_shader_info {
    /* Does the shader write point size? */
    bool writes_psiz;
 
+   /* Does the shader potentially draw to a nonzero viewport? */
+   bool nonzero_viewport;
+
    /* Does the shader write layer and/or viewport index? Written together */
    bool writes_layer_viewport;
 
@@ -138,6 +143,12 @@ struct agx_shader_info {
 
    /* Shader is incompatible with triangle merging */
    bool disable_tri_merging;
+
+   /* Reads draw ID system value */
+   bool uses_draw_id;
+
+   /* Reads base vertex/instance */
+   bool uses_base_param;
 
    /* Shader uses txf, requiring a workaround sampler in the given location */
    bool uses_txf;
@@ -213,6 +224,9 @@ struct agx_shader_key {
     */
    bool needs_g13x_coherency;
 
+   /* Library routines to link against */
+   const nir_shader *libagx;
+
    union {
       struct agx_vs_shader_key vs;
       struct agx_fs_shader_key fs;
@@ -222,13 +236,16 @@ struct agx_shader_key {
 /* Texture backend flags */
 #define AGX_TEXTURE_FLAG_NO_CLAMP (1 << 0)
 
-bool agx_nir_lower_texture_early(nir_shader *s);
+bool agx_nir_lower_texture_early(nir_shader *s, bool support_lod_bias);
 
-void agx_preprocess_nir(nir_shader *nir, bool support_lod_bias,
+void agx_preprocess_nir(nir_shader *nir, const nir_shader *libagx,
                         bool allow_mediump,
                         struct agx_uncompiled_shader_info *out);
 
 bool agx_nir_lower_discard_zs_emit(nir_shader *s);
+
+void agx_nir_lower_cull_distance_fs(struct nir_shader *s,
+                                    unsigned nr_distances);
 
 bool agx_nir_needs_texture_crawl(nir_instr *instr);
 
@@ -285,7 +302,7 @@ static const nir_shader_compiler_options agx_nir_options = {
       (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
    .lower_int64_options =
       (nir_lower_int64_options) ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),
-   .lower_doubles_options = nir_lower_dmod,
+   .lower_doubles_options = (nir_lower_doubles_options)(~0),
    .lower_fquantize2f16 = true,
 };
 

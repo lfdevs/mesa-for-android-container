@@ -415,6 +415,8 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
    case nir_intrinsic_quad_swap_horizontal:
    case nir_intrinsic_quad_swap_vertical:
    case nir_intrinsic_quad_swap_diagonal:
+   case nir_intrinsic_quad_vote_any:
+   case nir_intrinsic_quad_vote_all:
    case nir_intrinsic_load_deref:
    case nir_intrinsic_load_shared:
    case nir_intrinsic_load_shared2_amd:
@@ -613,9 +615,12 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_ray_triangle_vertex_positions:
    case nir_intrinsic_cmat_extract:
    case nir_intrinsic_cmat_muladd_amd:
+   case nir_intrinsic_dpas_intel:
    case nir_intrinsic_isberd_nv:
    case nir_intrinsic_al2p_nv:
    case nir_intrinsic_ald_nv:
+   case nir_intrinsic_ipa_nv:
+   case nir_intrinsic_ldtram_nv:
    case nir_intrinsic_printf:
       is_divergent = true;
       break;

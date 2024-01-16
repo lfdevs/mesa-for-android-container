@@ -32,6 +32,20 @@ bool vl_codec_supported(struct pipe_screen *screen,
                         enum pipe_video_profile profile,
                         bool encode)
 {
+   static_assert(PIPE_VIDEO_PROFILE_MAX == 26, "Update table below when adding new video profiles");
+   if (profile == PIPE_VIDEO_PROFILE_AV1_MAIN) {
+      if (encode) {
+         if (!VIDEO_CODEC_AV1ENC)
+            return false;
+      } else if (!VIDEO_CODEC_AV1DEC) {
+         return false;
+      }
+   }
+   if (profile == PIPE_VIDEO_PROFILE_VP9_PROFILE0 ||
+       profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2) {
+      if (!VIDEO_CODEC_VP9DEC)
+         return false;
+   }
    if (profile == PIPE_VIDEO_PROFILE_VC1_SIMPLE ||
        profile == PIPE_VIDEO_PROFILE_VC1_MAIN ||
        profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED) {

@@ -117,14 +117,14 @@ VK_DEFINE_HANDLE_CASTS(vk_physical_device, base, VkPhysicalDevice,
 
 /** Initialize a vk_physical_device
  *
- * @param[out] physical_device      The physical device to initialize
- * @param[in]  instance             The instance which is the parent of this
- *                                  physical device
- * @param[in]  supported_extensions Table of all device extensions supported
- *                                  by this physical device
- * @param[in]  supported_features   Table of all features supported by this
- *                                  physical device
- * @param[in]  dispatch_table       Physical-device-level dispatch table
+ * :param physical_device:      |out| The physical device to initialize
+ * :param instance:             |in|  The instance which is the parent of this
+ *                                    physical device
+ * :param supported_extensions: |in|  Table of all device extensions supported
+ *                                    by this physical device
+ * :param supported_features:   |in|  Table of all features supported by this
+ *                                    physical device
+ * :param dispatch_table:       |in|  Physical-device-level dispatch table
  */
 VkResult MUST_CHECK
 vk_physical_device_init(struct vk_physical_device *physical_device,
@@ -136,7 +136,7 @@ vk_physical_device_init(struct vk_physical_device *physical_device,
 
 /** Tears down a vk_physical_device
  *
- * @param[out] physical_device   The physical device to tear down
+ * :param physical_device:      |out| The physical device to tear down
  */
 void
 vk_physical_device_finish(struct vk_physical_device *physical_device);

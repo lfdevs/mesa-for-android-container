@@ -166,15 +166,17 @@ struct InstrPred {
          }
       }
 
-      if (a->opcode == aco_opcode::v_readfirstlane_b32)
-         return a->pass_flags == b->pass_flags;
-
       if (a->isVALU()) {
          VALU_instruction& aV = a->valu();
          VALU_instruction& bV = b->valu();
          if (aV.abs != bV.abs || aV.neg != bV.neg || aV.clamp != bV.clamp || aV.omod != bV.omod ||
              aV.opsel != bV.opsel || aV.opsel_lo != bV.opsel_lo || aV.opsel_hi != bV.opsel_hi)
             return false;
+
+         if (a->opcode == aco_opcode::v_permlane16_b32 ||
+             a->opcode == aco_opcode::v_permlanex16_b32 ||
+             a->opcode == aco_opcode::v_readfirstlane_b32)
+            return aV.pass_flags == bV.pass_flags;
       }
       if (a->isDPP16()) {
          DPP16_instruction& aDPP = a->dpp16();

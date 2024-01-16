@@ -507,6 +507,13 @@ fd4_size2indextype(unsigned index_size)
    return INDEX4_SIZE_32_BIT;
 }
 
+/* Convert 19.2MHz RBBM always-on timer ticks to ns */
+static inline uint64_t
+ticks_to_ns(uint64_t ts)
+{
+   return ts * (1000000000 / 19200000);
+}
+
 #ifdef __cplusplus
 }
 #endif

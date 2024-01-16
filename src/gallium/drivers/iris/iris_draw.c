@@ -182,59 +182,6 @@ iris_update_draw_parameters(struct iris_context *ice,
 }
 
 static void
-iris_indirect_draw_vbo(struct iris_context *ice,
-                       const struct pipe_draw_info *dinfo,
-                       unsigned drawid_offset,
-                       const struct pipe_draw_indirect_info *dindirect,
-                       const struct pipe_draw_start_count_bias *draw)
-{
-   struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
-   struct pipe_draw_info info = *dinfo;
-   struct pipe_draw_indirect_info indirect = *dindirect;
-
-   iris_emit_buffer_barrier_for(batch, iris_resource_bo(indirect.buffer),
-                                IRIS_DOMAIN_VF_READ);
-
-   if (indirect.indirect_draw_count) {
-      struct iris_bo *draw_count_bo =
-         iris_resource_bo(indirect.indirect_draw_count);
-      iris_emit_buffer_barrier_for(batch, draw_count_bo,
-                                   IRIS_DOMAIN_OTHER_READ);
-
-      if (ice->state.predicate == IRIS_PREDICATE_STATE_USE_BIT) {
-         /* Upload MI_PREDICATE_RESULT to GPR15.*/
-         batch->screen->vtbl.load_register_reg64(batch, CS_GPR(15), MI_PREDICATE_RESULT);
-      }
-   }
-
-   const uint64_t orig_dirty = ice->state.dirty;
-   const uint64_t orig_stage_dirty = ice->state.stage_dirty;
-
-   for (int i = 0; i < indirect.draw_count; i++) {
-      iris_batch_maybe_flush(batch, 1500);
-
-      iris_update_draw_parameters(ice, &info, drawid_offset + i, &indirect, draw);
-
-      batch->screen->vtbl.upload_render_state(ice, batch, &info, drawid_offset + i, &indirect, draw);
-
-      ice->state.dirty &= ~IRIS_ALL_DIRTY_FOR_RENDER;
-      ice->state.stage_dirty &= ~IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
-
-      indirect.offset += indirect.stride;
-   }
-
-   if (indirect.indirect_draw_count &&
-       ice->state.predicate == IRIS_PREDICATE_STATE_USE_BIT) {
-      /* Restore MI_PREDICATE_RESULT. */
-      batch->screen->vtbl.load_register_reg64(batch, MI_PREDICATE_RESULT, CS_GPR(15));
-   }
-
-   /* Put this back for post-draw resolves, we'll clear it again after. */
-   ice->state.dirty = orig_dirty;
-   ice->state.stage_dirty = orig_stage_dirty;
-}
-
-static void
 iris_simple_draw_vbo(struct iris_context *ice,
                      const struct pipe_draw_info *draw,
                      unsigned drawid_offset,
@@ -248,6 +195,64 @@ iris_simple_draw_vbo(struct iris_context *ice,
    iris_update_draw_parameters(ice, draw, drawid_offset, indirect, sc);
 
    batch->screen->vtbl.upload_render_state(ice, batch, draw, drawid_offset, indirect, sc);
+}
+
+static void
+iris_indirect_draw_vbo(struct iris_context *ice,
+                       const struct pipe_draw_info *dinfo,
+                       unsigned drawid_offset,
+                       const struct pipe_draw_indirect_info *dindirect,
+                       const struct pipe_draw_start_count_bias *draw)
+{
+   struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
+   struct pipe_draw_info info = *dinfo;
+   struct pipe_draw_indirect_info indirect = *dindirect;
+   const bool use_predicate =
+      ice->state.predicate == IRIS_PREDICATE_STATE_USE_BIT;
+
+   const uint64_t orig_dirty = ice->state.dirty;
+   const uint64_t orig_stage_dirty = ice->state.stage_dirty;
+
+   if (iris_execute_indirect_draw_supported(ice, &indirect, &info)) {
+      iris_batch_maybe_flush(batch, 1500);
+
+      iris_update_draw_parameters(ice, &info, drawid_offset, &indirect, draw);
+
+      batch->screen->vtbl.upload_indirect_render_state(ice, &info, &indirect, draw);
+   } else {
+      iris_emit_buffer_barrier_for(batch, iris_resource_bo(indirect.buffer),
+                                 IRIS_DOMAIN_VF_READ);
+
+      if (indirect.indirect_draw_count) {
+         struct iris_bo *draw_count_bo =
+            iris_resource_bo(indirect.indirect_draw_count);
+         iris_emit_buffer_barrier_for(batch, draw_count_bo,
+                                    IRIS_DOMAIN_OTHER_READ);
+      }
+
+      if (use_predicate) {
+         /* Upload MI_PREDICATE_RESULT to GPR15.*/
+         batch->screen->vtbl.load_register_reg64(batch, CS_GPR(15), MI_PREDICATE_RESULT);
+      }
+
+      for (int i = 0; i < indirect.draw_count; i++) {
+         iris_simple_draw_vbo(ice, &info, drawid_offset + i, &indirect, draw);
+
+         ice->state.dirty &= ~IRIS_ALL_DIRTY_FOR_RENDER;
+         ice->state.stage_dirty &= ~IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
+
+         indirect.offset += indirect.stride;
+      }
+
+      if (use_predicate) {
+         /* Restore MI_PREDICATE_RESULT. */
+         batch->screen->vtbl.load_register_reg64(batch, MI_PREDICATE_RESULT, CS_GPR(15));
+      }
+   }
+
+   /* Put this back for post-draw resolves, we'll clear it again after. */
+   ice->state.dirty = orig_dirty;
+   ice->state.stage_dirty = orig_stage_dirty;
 }
 
 /**

@@ -90,6 +90,8 @@
 void
 fs_visitor::validate()
 {
+   cfg->validate(_mesa_shader_stage_to_abbrev(stage));
+
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       switch (inst->opcode) {
       case SHADER_OPCODE_SEND:

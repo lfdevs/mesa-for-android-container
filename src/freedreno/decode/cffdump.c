@@ -337,7 +337,7 @@ handle_file(const char *filename, int start, int end, int draw)
             options.dev_id.gpu_id = gpu_id;
             printl(2, "gpu_id: %d\n", options.dev_id.gpu_id);
 
-            options.info = fd_dev_info(&options.dev_id);
+            options.info = fd_dev_info_raw(&options.dev_id);
             if (!options.info)
                break;
 
@@ -350,7 +350,7 @@ handle_file(const char *filename, int start, int end, int draw)
             options.dev_id.chip_id = parse_chip_id(ps.buf);
             printl(2, "chip_id: 0x%" PRIx64 "\n", options.dev_id.chip_id);
 
-            options.info = fd_dev_info(&options.dev_id);
+            options.info = fd_dev_info_raw(&options.dev_id);
             if (!options.info)
                break;
 

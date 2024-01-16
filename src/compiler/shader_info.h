@@ -342,6 +342,11 @@ typedef struct shader_info {
    bool workgroup_size_variable:1;
 
    /**
+    * Whether the shader uses printf instructions.
+    */
+   bool uses_printf:1;
+
+   /**
      * Set if this shader uses legacy (DX9 or ARB assembly) math rules.
      *
      * From the ARB_fragment_program specification:
@@ -386,10 +391,10 @@ typedef struct shader_info {
 
       struct {
          /** The output primitive type */
-         uint16_t output_primitive;
+         enum mesa_prim output_primitive;
 
          /** The input primitive type */
-         uint16_t input_primitive;
+         enum mesa_prim input_primitive;
 
          /** The maximum number of vertices the geometry shader might write. */
          uint16_t vertices_out;
@@ -415,18 +420,17 @@ typedef struct shader_info {
          bool color_is_dual_source:1;
 
          /**
-          * True if this fragment shader requires helper invocations.  This
-          * can be caused by the use of ALU derivative ops, texture
-          * instructions which do implicit derivatives, and the use of quad
-          * subgroup operations.
+          * True if this fragment shader requires full quad invocations.
           */
-         bool needs_quad_helper_invocations:1;
+         bool require_full_quads:1;
 
          /**
-          * True if this fragment shader requires helper invocations for
-          * all subgroup operations, not just quad ops and derivatives.
+          * True if this fragment shader requires helper invocations.  This
+          * can be caused by the use of ALU derivative ops, texture
+          * instructions which do implicit derivatives, the use of quad
+          * subgroup operations or if the shader requires full quads.
           */
-         bool needs_all_helper_invocations:1;
+         bool needs_quad_helper_invocations:1;
 
          /**
           * Whether any inputs are declared with the "sample" qualifier.
@@ -588,7 +592,7 @@ typedef struct shader_info {
 
          uint16_t max_vertices_out;
          uint16_t max_primitives_out;
-         uint16_t primitive_type;  /* GL_POINTS, GL_LINES or GL_TRIANGLES. */
+         enum mesa_prim primitive_type; /* POINTS, LINES or TRIANGLES. */
 
          /* TODO: remove this when we stop supporting NV_mesh_shader. */
          bool nv;

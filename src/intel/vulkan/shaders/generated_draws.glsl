@@ -31,6 +31,7 @@ void gfx11_write_draw(uint item_idx, uint cmd_idx, uint draw_id)
 {
    bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
    bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+   bool use_tbimr = (params.flags & ANV_GENERATED_FLAG_TBIMR) != 0;
    uint indirect_data_offset = draw_id * params.indirect_data_stride / 4;
 
    if (is_indexed) {
@@ -44,6 +45,7 @@ void gfx11_write_draw(uint item_idx, uint cmd_idx, uint draw_id)
       write_3DPRIMITIVE_EXTENDED(cmd_idx,
                                  is_predicated,
                                  is_indexed,
+                                 use_tbimr,
                                  index_count,
                                  first_index,
                                  instance_count,
@@ -62,6 +64,7 @@ void gfx11_write_draw(uint item_idx, uint cmd_idx, uint draw_id)
       write_3DPRIMITIVE_EXTENDED(cmd_idx,
                                  is_predicated,
                                  is_indexed,
+                                 use_tbimr,
                                  vertex_count,
                                  first_vertex,
                                  instance_count,

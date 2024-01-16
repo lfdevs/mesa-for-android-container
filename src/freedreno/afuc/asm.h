@@ -90,6 +90,7 @@ parse_bit(const char *str)
 }
 
 unsigned parse_control_reg(const char *name);
+unsigned parse_sqe_reg(const char *name);
 
 /* string trailing ':' off label: */
 static inline const char *

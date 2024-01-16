@@ -67,18 +67,16 @@ tu_env_init(void);
 VkResult
 __vk_startup_errorf(struct tu_instance *instance,
                     VkResult error,
-                    bool force_print,
                     const char *file,
                     int line,
                     const char *format,
-                    ...) PRINTFLIKE(6, 7);
+                    ...) PRINTFLIKE(5, 6);
 
 /* Prints startup errors if TU_DEBUG=startup is set or on a debug driver
  * build.
  */
 #define vk_startup_errorf(instance, error, format, ...) \
    __vk_startup_errorf(instance, error, \
-                       TU_DEBUG(STARTUP), \
                        __FILE__, __LINE__, format, ##__VA_ARGS__)
 
 void

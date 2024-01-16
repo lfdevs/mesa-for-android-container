@@ -61,7 +61,7 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t bo_sz)
                               pool->base.label);
    }
 
-   if (bo->size == pool->base.slab_size)
+   if (panfrost_bo_size(bo) == pool->base.slab_size)
       util_dynarray_append(&pool->bos, struct panfrost_bo *, bo);
    else
       util_dynarray_append(&pool->big_bos, struct panfrost_bo *, bo);
@@ -149,7 +149,7 @@ panvk_pool_get_bo_handles(struct panvk_pool *pool, uint32_t *handles)
 {
    unsigned idx = 0;
    util_dynarray_foreach(&pool->bos, struct panfrost_bo *, bo) {
-      assert((*bo)->gem_handle > 0);
-      handles[idx++] = (*bo)->gem_handle;
+      assert(panfrost_bo_handle(*bo) > 0);
+      handles[idx++] = panfrost_bo_handle(*bo);
    }
 }

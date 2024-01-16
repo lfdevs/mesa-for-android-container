@@ -141,7 +141,7 @@ struct pvr_drm_device_config {
 /* This is the list of supported DRM render/display driver configs. */
 static const struct pvr_drm_device_config pvr_drm_configs[] = {
    DEF_CONFIG("mediatek,mt8173-gpu", "mediatek-drm"),
-   DEF_CONFIG("ti,am62-gpu", "ti,am65x-dss"),
+   DEF_CONFIG("ti,am62-gpu", "ti,am625-dss"),
 };
 
 #undef DEF_CONFIG
@@ -1240,17 +1240,6 @@ vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName)
    return pvr_GetInstanceProcAddr(instance, pName);
 }
 
-/* With version 4+ of the loader interface the ICD should expose
- * vk_icdGetPhysicalDeviceProcAddr().
- */
-PUBLIC
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-vk_icdGetPhysicalDeviceProcAddr(VkInstance _instance, const char *pName)
-{
-   PVR_FROM_HANDLE(pvr_instance, instance, _instance);
-   return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
-}
-
 VkResult pvr_pds_compute_shader_create_and_upload(
    struct pvr_device *device,
    struct pvr_pds_compute_shader_program *program,
@@ -2089,7 +2078,8 @@ VkResult pvr_AllocateMemory(VkDevice _device,
    vk_foreach_struct_const (ext, pAllocateInfo->pNext) {
       switch ((unsigned)ext->sType) {
       case VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA:
-         type = PVR_WINSYS_BO_TYPE_DISPLAY;
+         if (device->ws->display_fd >= 0)
+            type = PVR_WINSYS_BO_TYPE_DISPLAY;
          break;
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
          fd_info = (void *)ext;
@@ -2980,47 +2970,6 @@ void pvr_DestroyFramebuffer(VkDevice _device,
    pvr_bo_suballoc_free(framebuffer->ppp_state_bo);
    vk_object_base_finish(&framebuffer->base);
    vk_free2(&device->vk.alloc, pAllocator, framebuffer);
-}
-
-PUBLIC VKAPI_ATTR VkResult VKAPI_CALL
-vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion)
-{
-   /* For the full details on loader interface versioning, see
-    * <https://github.com/KhronosGroup/Vulkan-LoaderAndValidationLayers/blob/master/loader/LoaderAndLayerInterface.md>.
-    * What follows is a condensed summary, to help you navigate the large and
-    * confusing official doc.
-    *
-    *   - Loader interface v0 is incompatible with later versions. We don't
-    *     support it.
-    *
-    *   - In loader interface v1:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdGetInstanceProcAddr(). The ICD must statically expose this
-    *         entrypoint.
-    *       - The ICD must statically expose no other Vulkan symbol unless it
-    *         is linked with -Bsymbolic.
-    *       - Each dispatchable Vulkan handle created by the ICD must be
-    *         a pointer to a struct whose first member is VK_LOADER_DATA. The
-    *         ICD must initialize VK_LOADER_DATA.loadMagic to ICD_LOADER_MAGIC.
-    *       - The loader implements vkCreate{PLATFORM}SurfaceKHR() and
-    *         vkDestroySurfaceKHR(). The ICD must be capable of working with
-    *         such loader-managed surfaces.
-    *
-    *    - Loader interface v2 differs from v1 in:
-    *       - The first ICD entrypoint called by the loader is
-    *         vk_icdNegotiateLoaderICDInterfaceVersion(). The ICD must
-    *         statically expose this entrypoint.
-    *
-    *    - Loader interface v3 differs from v2 in:
-    *        - The ICD must implement vkCreate{PLATFORM}SurfaceKHR(),
-    *          vkDestroySurfaceKHR(), and other API which uses VKSurfaceKHR,
-    *          because the loader no longer does so.
-    *
-    *    - Loader interface v4 differs from v3 in:
-    *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    */
-   *pSupportedVersion = MIN2(*pSupportedVersion, 4u);
-   return VK_SUCCESS;
 }
 
 static uint32_t

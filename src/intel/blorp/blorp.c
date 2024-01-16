@@ -302,6 +302,7 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
       .prog_data = wm_prog_data,
 
       .use_rep_send = use_repclear,
+      .max_polygons = 1,
    };
 
    return brw_compile_fs(compiler, &params);

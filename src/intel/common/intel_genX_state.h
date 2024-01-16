@@ -117,11 +117,50 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
       enable_32 = false;
    }
 
-   assert(enable_8 || enable_16 || enable_32);
+   assert(enable_8 || enable_16 || enable_32 ||
+          (GFX_VER >= 12 && prog_data->dispatch_multi));
+   assert(!prog_data->dispatch_multi ||
+          (GFX_VER >= 12 && !enable_8));
 
-   ps->_8PixelDispatchEnable = enable_8;
+#if GFX_VER >= 20
+   if (prog_data->dispatch_multi) {
+      ps->Kernel0Enable = true;
+      ps->Kernel0SIMDWidth = (prog_data->dispatch_multi == 32 ?
+                              PS_SIMD32 : PS_SIMD16);
+      ps->Kernel0MaximumPolysperThread =
+         prog_data->max_polygons - 1;
+      switch (prog_data->dispatch_multi /
+              prog_data->max_polygons) {
+      case 8:
+         ps->Kernel0PolyPackingPolicy = POLY_PACK8_FIXED;
+         break;
+      case 16:
+         ps->Kernel0PolyPackingPolicy = POLY_PACK16_FIXED;
+         break;
+      default:
+         unreachable("Invalid polygon width");
+      }
+
+   } else if (enable_16) {
+      ps->Kernel0Enable = true;
+      ps->Kernel0SIMDWidth = PS_SIMD16;
+      ps->Kernel0PolyPackingPolicy = POLY_PACK16_FIXED;
+   }
+
+   if (enable_32) {
+      ps->Kernel1Enable = true;
+      ps->Kernel1SIMDWidth = PS_SIMD32;
+
+   } else if (enable_16 && prog_data->dispatch_multi == 16) {
+      ps->Kernel1Enable = true;
+      ps->Kernel1SIMDWidth = PS_SIMD16;
+   }
+#else
+   ps->_8PixelDispatchEnable = enable_8 ||
+      (GFX_VER == 12 && prog_data->dispatch_multi);
    ps->_16PixelDispatchEnable = enable_16;
    ps->_32PixelDispatchEnable = enable_32;
+#endif
 }
 
 #endif
@@ -131,8 +170,8 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
 UNUSED static int
 preferred_slm_allocation_size(const struct intel_device_info *devinfo)
 {
-   if (intel_needs_workaround(devinfo, 14017245111))
-      return SLM_ENCODES_96K;
+   if (devinfo->platform == INTEL_PLATFORM_LNL && devinfo->revision == 0)
+      return SLM_ENCODES_128K;
 
    return 0;
 }

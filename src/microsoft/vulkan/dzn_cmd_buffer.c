@@ -2900,13 +2900,15 @@ dzn_cmd_buffer_blit_issue_barriers(struct dzn_cmd_buffer *cmdbuf,
                                                              D3D12_BARRIER_LAYOUT_RENDER_TARGET,
                                                              &dst_range);
       } else {
+         VkImageLayout dst_new_layout = (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ?
+                                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
          dzn_cmd_buffer_queue_image_range_layout_transition(cmdbuf, src, &src_range,
                                                             src_layout,
                                                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                                             DZN_QUEUE_TRANSITION_FLUSH);
          dzn_cmd_buffer_queue_image_range_layout_transition(cmdbuf, dst, &dst_range,
                                                             dst_layout,
-                                                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                            dst_new_layout,
                                                             DZN_QUEUE_TRANSITION_FLUSH);
       }
    } else {
@@ -2916,12 +2918,14 @@ dzn_cmd_buffer_blit_issue_barriers(struct dzn_cmd_buffer *cmdbuf,
                                        D3D12_BARRIER_LAYOUT_RENDER_TARGET, *restore_dst_layout,
                                        &dst_range);
       } else {
+         VkImageLayout dst_new_layout = (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ?
+                                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
          dzn_cmd_buffer_queue_image_range_layout_transition(cmdbuf, src, &src_range,
                                                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                                             src_layout,
                                                             DZN_QUEUE_TRANSITION_FLUSH);
          dzn_cmd_buffer_queue_image_range_layout_transition(cmdbuf, dst, &dst_range,
-                                                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                            dst_new_layout,
                                                             dst_layout,
                                                             DZN_QUEUE_TRANSITION_FLUSH);
       }
@@ -4186,7 +4190,7 @@ dzn_CmdCopyImage2(VkCommandBuffer commandBuffer,
       const VkImageCopy2 *region = &info->pRegions[i];
 
       dzn_foreach_aspect(aspect, region->srcSubresource.aspectMask) {
-         for (uint32_t l = 0; l < region->srcSubresource.layerCount; l++)
+         for (uint32_t l = 0; l < MAX2(region->srcSubresource.layerCount, region->dstSubresource.layerCount); l++)
             dzn_cmd_buffer_copy_img_chunk(cmdbuf, info, &tmp_desc, &tmp_loc, i, aspect, l);
       }
    }

@@ -147,7 +147,7 @@ find_device(void)
    dev.pipe = fd_pipe_new(dev.dev, FD_PIPE_3D);
 
    dev.dev_id = fd_pipe_dev_id(dev.pipe);
-   if (!fd_dev_info(dev.dev_id))
+   if (!fd_dev_info_raw(dev.dev_id))
       err(1, "unknown device");
 
    printf("device: %s\n", fd_dev_name(dev.dev_id));

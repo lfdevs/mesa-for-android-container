@@ -212,7 +212,7 @@ format_minimum_alignment(const struct panfrost_device *dev,
       return 16;
 
    if (dev->arch < 7)
-      return 63;
+      return 64;
 
    switch (format) {
    /* For v7+, NV12/NV21/I420 have a looser alignment requirement of 16 bytes */

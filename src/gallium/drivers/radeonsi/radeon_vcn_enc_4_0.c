@@ -146,6 +146,7 @@ static void radeon_enc_session_init(struct radeon_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.session_init.pre_encode_chroma_enabled);
    RADEON_ENC_CS(enc->enc_pic.session_init.slice_output_enabled);
    RADEON_ENC_CS(enc->enc_pic.session_init.display_remote);
+   RADEON_ENC_CS(0);
    RADEON_ENC_END();
 }
 
@@ -389,6 +390,8 @@ static void radeon_enc_spec_misc_av1(struct radeon_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.disable_cdf_update);
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.disable_frame_end_update_cdf);
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.num_tiles_per_picture);
+   RADEON_ENC_CS(0);
+   RADEON_ENC_CS(0);
    RADEON_ENC_END();
 }
 
@@ -860,7 +863,7 @@ static void radeon_enc_obu_instruction(struct radeon_encoder *enc)
    radeon_enc_av1_bs_instruction_type(enc, RENCODE_AV1_BITSTREAM_INSTRUCTION_COPY, 0);
 
    radeon_enc_av1_temporal_delimiter(enc);
-   if (enc->enc_pic.need_av1_seq)
+   if (enc->enc_pic.need_av1_seq || enc->enc_pic.need_sequence_header)
       radeon_enc_av1_sequence_header(enc);
 
    /* if others OBU types are needed such as meta data, then they need to be byte aligned and added here

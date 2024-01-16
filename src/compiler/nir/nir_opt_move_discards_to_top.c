@@ -170,6 +170,8 @@ opt_move_discards_to_top_impl(nir_function_impl *impl)
             case nir_intrinsic_quad_swap_horizontal:
             case nir_intrinsic_quad_swap_vertical:
             case nir_intrinsic_quad_swap_diagonal:
+            case nir_intrinsic_quad_vote_all:
+            case nir_intrinsic_quad_vote_any:
             case nir_intrinsic_quad_swizzle_amd:
                consider_discards = false;
                break;
