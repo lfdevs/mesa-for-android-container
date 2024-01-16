@@ -1,3 +1,12 @@
+mesa (23.3.3-2) unstable; urgency=medium
+
+  * rules: Drop virtio from armel again, regression due to cleanup.
+    (Closes: #1060849)
+  * rules: Drop mips64el from LLVM_ARCHS, as llvm-17-dev is still not
+    available. (Closes: #1060779)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 16 Jan 2024 14:00:26 +0200
+
 mesa (23.3.3-1) unstable; urgency=medium
 
   * New upstream release.

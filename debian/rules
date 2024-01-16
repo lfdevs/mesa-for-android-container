@@ -42,7 +42,7 @@ confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA = -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 
-LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
+LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
 RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32
 VALGRIND_ARCHS = amd64 arm64 armhf i386 mips64el powerpc ppc64 ppc64el s390x
 WINE_ARCHS     = amd64 arm64 armel armhf i386
@@ -111,7 +111,12 @@ else
 		VULKAN_DRIVERS += amd
 		confflags_GALLIUM += -Ddraw-use-llvm=false
 	else
+	  # drop virtio from armel, it doesn't build
+	  ifneq (,$(filter $(DEB_HOST_ARCH), armel))
+		VULKAN_DRIVERS += amd swrast
+	  else
 		VULKAN_DRIVERS += amd swrast virtio
+	  endif
 	endif
 
 	VULKAN_LAYERS += device-select intel-nullhw overlay
