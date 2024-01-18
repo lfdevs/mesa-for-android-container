@@ -441,7 +441,7 @@ nir_alu_srcs_negative_equal(const nir_alu_instr *alu1,
    } else {
       alu1_actual_src = alu1->src[src1].src;
 
-      for (unsigned i = 0; i < nir_ssa_alu_instr_src_components(alu1, src1); i++)
+      for (unsigned i = 0; i < nir_src_num_components(alu1_actual_src); i++)
          alu1_swizzle[i] = i;
    }
 
@@ -458,7 +458,7 @@ nir_alu_srcs_negative_equal(const nir_alu_instr *alu1,
    } else {
       alu2_actual_src = alu2->src[src2].src;
 
-      for (unsigned i = 0; i < nir_ssa_alu_instr_src_components(alu2, src2); i++)
+      for (unsigned i = 0; i < nir_src_num_components(alu2_actual_src); i++)
          alu2_swizzle[i] = i;
    }
 

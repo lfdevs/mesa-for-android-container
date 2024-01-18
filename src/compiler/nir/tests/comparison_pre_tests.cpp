@@ -579,3 +579,95 @@ TEST_F(comparison_pre_test, non_scalar_add_result)
 
    EXPECT_FALSE(nir_opt_comparison_pre_impl(bld.impl));
 }
+
+TEST_F(comparison_pre_test, multi_comps_load)
+{
+   /* Before:
+    *
+    * vec1 32 ssa_0 = load_ubo (...)
+    * vec4 32 ssa_1 = load_ubo (...)
+    * vec1 1  ssa_2 = flt ssa_0, ssa_1.w
+    *
+    * if ssa_2 {
+    *    vec1 32 ssa_3 = fneg ssa_1.x
+    *    vec1 32 ssa_4 = fadd ssa_0, ssa_3
+    * } else {
+    * }
+    */
+   nir_def *ssa_0 = nir_load_ubo(&bld, 1, 32,
+                                 nir_imm_int(&bld, 0),
+                                 nir_imm_int(&bld, 0));
+   nir_def *ssa_1 = nir_load_ubo(&bld, 4, 32,
+                                 nir_imm_int(&bld, 1),
+                                 nir_imm_int(&bld, 0));
+
+   nir_alu_instr *flt = nir_alu_instr_create(bld.shader, nir_op_flt);
+   flt->src[0].src = nir_src_for_ssa(ssa_0);
+   flt->src[1].src = nir_src_for_ssa(ssa_1);
+   memcpy(&flt->src[0].swizzle, xxxx, sizeof(xxxx));
+   memcpy(&flt->src[1].swizzle, wwww, sizeof(wwww));
+   nir_builder_alu_instr_finish_and_insert(&bld, flt);
+   flt->def.num_components = 1;
+   nir_def *ssa_2 = &flt->def;
+
+   nir_if *nif = nir_push_if(&bld, ssa_2);
+   {
+      nir_alu_instr *fneg = nir_alu_instr_create(bld.shader, nir_op_fneg);
+      fneg->src[0].src = nir_src_for_ssa(ssa_1);
+      memcpy(&fneg->src[0].swizzle, xxxx, sizeof(xxxx));
+      nir_builder_alu_instr_finish_and_insert(&bld, fneg);
+      fneg->def.num_components = 1;
+      nir_def *ssa_3 = &fneg->def;
+
+      nir_fadd(&bld, ssa_0, ssa_3);
+   }
+   nir_pop_if(&bld, nif);
+
+   EXPECT_FALSE(nir_opt_comparison_pre_impl(bld.impl));
+}
+
+TEST_F(comparison_pre_test, multi_comps_load2)
+{
+   /* Before:
+    *
+    * vec1 32 ssa_0 = load_ubo (...)
+    * vec4 32 ssa_1 = load_ubo (...)
+    * vec1 1  ssa_2 = flt ssa_0, ssa_1.x
+    *
+    * if ssa_2 {
+    *    vec1 32 ssa_3 = fneg ssa_1.w
+    *    vec1 32 ssa_4 = fadd ssa_0, ssa_3
+    * } else {
+    * }
+    */
+   nir_def *ssa_0 = nir_load_ubo(&bld, 1, 32,
+                                 nir_imm_int(&bld, 0),
+                                 nir_imm_int(&bld, 0));
+   nir_def *ssa_1 = nir_load_ubo(&bld, 4, 32,
+                                 nir_imm_int(&bld, 1),
+                                 nir_imm_int(&bld, 0));
+
+   nir_alu_instr *flt = nir_alu_instr_create(bld.shader, nir_op_flt);
+   flt->src[0].src = nir_src_for_ssa(ssa_0);
+   flt->src[1].src = nir_src_for_ssa(ssa_1);
+   memcpy(&flt->src[0].swizzle, xxxx, sizeof(xxxx));
+   memcpy(&flt->src[1].swizzle, xxxx, sizeof(xxxx));
+   nir_builder_alu_instr_finish_and_insert(&bld, flt);
+   flt->def.num_components = 1;
+   nir_def *ssa_2 = &flt->def;
+
+   nir_if *nif = nir_push_if(&bld, ssa_2);
+   {
+      nir_alu_instr *fneg = nir_alu_instr_create(bld.shader, nir_op_fneg);
+      fneg->src[0].src = nir_src_for_ssa(ssa_1);
+      memcpy(&fneg->src[0].swizzle, wwww, sizeof(wwww));
+      nir_builder_alu_instr_finish_and_insert(&bld, fneg);
+      fneg->def.num_components = 1;
+      nir_def *ssa_3 = &fneg->def;
+
+      nir_fadd(&bld, ssa_0, ssa_3);
+   }
+   nir_pop_if(&bld, nif);
+
+   EXPECT_FALSE(nir_opt_comparison_pre_impl(bld.impl));
+}

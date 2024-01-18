@@ -728,7 +728,7 @@ intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_addre
    if (!success && (main_inc_addr - main_address) > 0) {
       /* If the mapping failed, remove the mapped portion. */
       remove_mapping_locked(ctx, main_address,
-                            main_size_B - (main_inc_addr - main_address),
+                            main_inc_addr - main_address,
                             false /* reset_refcount */, &state_changed);
    }
    pthread_mutex_unlock(&ctx->mutex);

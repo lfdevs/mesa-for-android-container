@@ -514,7 +514,7 @@ panvk_fill_non_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_descriptor_state *desc_state = &bind_point_state->desc_state;
    const struct panvk_pipeline *pipeline = bind_point_state->pipeline;
 
-   for (unsigned s = 0; s < pipeline->layout->num_sets; s++) {
+   for (unsigned s = 0; s < pipeline->layout->vk.set_count; s++) {
       const struct panvk_descriptor_set *set = desc_state->sets[s];
 
       if (!set)

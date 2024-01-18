@@ -1479,6 +1479,7 @@ struct anv_gfx_dynamic_state {
       bool     RenderingDisable;
       uint32_t RenderStreamSelect;
       uint32_t ReorderMode;
+      uint32_t ForceRendering;
    } so;
 
    /* 3DSTATE_SAMPLE_MASK */

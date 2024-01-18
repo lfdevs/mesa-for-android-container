@@ -160,6 +160,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_OVERRIDE_COMPUTE_SHADER_VERSION(0)
       DRI_CONF_RADV_OVERRIDE_RAY_TRACING_SHADER_VERSION(0)
       DRI_CONF_RADV_SSBO_NON_UNIFORM(false)
+      DRI_CONF_RADV_FORCE_ACTIVE_ACCEL_STRUCT_LEAVES(false)
       DRI_CONF_RADV_APP_LAYER()
    DRI_CONF_SECTION_END
 };
@@ -251,6 +252,9 @@ radv_init_dri_options(struct radv_instance *instance)
 
    instance->drirc.vk_require_etc2 = driQueryOptionb(&instance->drirc.options, "vk_require_etc2");
    instance->drirc.vk_require_astc = driQueryOptionb(&instance->drirc.options, "vk_require_astc");
+
+   instance->drirc.force_active_accel_struct_leaves =
+      driQueryOptionb(&instance->drirc.options, "radv_force_active_accel_struct_leaves");
 }
 
 static const struct vk_instance_extension_table radv_instance_extensions_supported = {

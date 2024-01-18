@@ -68,6 +68,10 @@ debian/x86_64_build-base:
     - .debian-container
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
+  rules:
+    # python-test requires debian/x86_64_build, which requires this job
+    - !reference [python-test, rules]
+    - !reference [.container, rules]
 
 .use-debian/x86_64_build-base:
   extends:
@@ -88,9 +92,9 @@ debian/x86_64_build:
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build ${DEBIAN_BUILD_TAG}
   rules:
-    - !reference [.use-debian/x86_64_build-base, rules]
     # python-test requires this job
     - !reference [python-test, rules]
+    - !reference [.use-debian/x86_64_build-base, rules]
 
 .use-debian/x86_64_build:
   extends:

@@ -1606,12 +1606,6 @@ radv_cs_emit_cp_dma(struct radv_device *device, struct radeon_cmdbuf *cs, bool p
    /* Sync flags. */
    if (flags & CP_DMA_SYNC)
       header |= S_411_CP_SYNC(1);
-   else {
-      if (device->physical_device->rad_info.gfx_level >= GFX9)
-         command |= S_415_DISABLE_WR_CONFIRM_GFX9(1);
-      else
-         command |= S_415_DISABLE_WR_CONFIRM_GFX6(1);
-   }
 
    if (flags & CP_DMA_RAW_WAIT)
       command |= S_415_RAW_WAIT(1);

@@ -1055,8 +1055,7 @@ static int
 dest_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
                const brw_inst *inst)
 {
-   uint32_t reg_file =
-      reg_file = brw_inst_dpas_3src_dst_reg_file(devinfo, inst);
+   uint32_t reg_file = brw_inst_dpas_3src_dst_reg_file(devinfo, inst);
 
    if (reg(file, reg_file, brw_inst_dpas_3src_dst_reg_nr(devinfo, inst)) == -1)
       return 0;
@@ -1551,8 +1550,7 @@ static int
 src0_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
                const brw_inst *inst)
 {
-   uint32_t reg_file =
-      reg_file = brw_inst_dpas_3src_src0_reg_file(devinfo, inst);
+   uint32_t reg_file = brw_inst_dpas_3src_src0_reg_file(devinfo, inst);
 
    if (reg(file, reg_file, brw_inst_dpas_3src_src0_reg_nr(devinfo, inst)) == -1)
       return 0;
@@ -1573,8 +1571,7 @@ static int
 src1_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
                const brw_inst *inst)
 {
-   uint32_t reg_file =
-      reg_file = brw_inst_dpas_3src_src1_reg_file(devinfo, inst);
+   uint32_t reg_file = brw_inst_dpas_3src_src1_reg_file(devinfo, inst);
 
    if (reg(file, reg_file, brw_inst_dpas_3src_src1_reg_nr(devinfo, inst)) == -1)
       return 0;
@@ -1595,8 +1592,7 @@ static int
 src2_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
                const brw_inst *inst)
 {
-   uint32_t reg_file =
-      reg_file = brw_inst_dpas_3src_src2_reg_file(devinfo, inst);
+   uint32_t reg_file = brw_inst_dpas_3src_src2_reg_file(devinfo, inst);
 
    if (reg(file, reg_file, brw_inst_dpas_3src_src2_reg_nr(devinfo, inst)) == -1)
       return 0;

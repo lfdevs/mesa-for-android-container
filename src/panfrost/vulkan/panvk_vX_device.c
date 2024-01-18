@@ -121,7 +121,7 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
    }
 
    if (debug & PANVK_DEBUG_TRACE)
-      pandecode_next_frame(0);
+      pandecode_next_frame(pdev->decode_ctx);
 
    batch->issued = true;
 }

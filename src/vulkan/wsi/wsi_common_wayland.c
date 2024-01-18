@@ -2262,7 +2262,8 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
     */
    if (wsi_wl_surface->chain &&
        wsi_swapchain_to_handle(&wsi_wl_surface->chain->base) != pCreateInfo->oldSwapchain) {
-      return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+      result = VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+      goto fail;
    }
    if (pCreateInfo->oldSwapchain) {
       VK_FROM_HANDLE(wsi_wl_swapchain, old_chain, pCreateInfo->oldSwapchain);
@@ -2376,16 +2377,20 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       uint64_t *drm_modifiers_copy =
          vk_alloc(pAllocator, sizeof(*drm_modifiers) * num_drm_modifiers, 8,
                   VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!drm_modifiers_copy)
-         goto fail;
+      if (!drm_modifiers_copy) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail_free_wl_chain;
+      }
 
       typed_memcpy(drm_modifiers_copy, drm_modifiers, num_drm_modifiers);
       chain->drm_modifiers = drm_modifiers_copy;
    }
 
    if (chain->wsi_wl_surface->display->wp_presentation_notwrapped) {
-      if (!wsi_init_pthread_cond_monotonic(&chain->present_ids.list_advanced))
-         goto fail;
+      if (!wsi_init_pthread_cond_monotonic(&chain->present_ids.list_advanced)) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail_free_wl_chain;
+      }
       pthread_mutex_init(&chain->present_ids.lock, NULL);
 
       wl_list_init(&chain->present_ids.outstanding_list);
@@ -2403,7 +2408,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       result = wsi_wl_image_init(chain, &chain->images[i],
                                  pCreateInfo, pAllocator);
       if (result != VK_SUCCESS)
-         goto fail_image_init;
+         goto fail_free_wl_images;
       chain->images[i].busy = false;
    }
 
@@ -2411,14 +2416,15 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
 
    return VK_SUCCESS;
 
-fail_image_init:
+fail_free_wl_images:
    wsi_wl_swapchain_images_free(chain);
-
+fail_free_wl_chain:
    wsi_wl_swapchain_chain_free(chain, pAllocator);
 fail:
    vk_free(pAllocator, chain);
    wsi_wl_surface->chain = NULL;
 
+   assert(result != VK_SUCCESS);
    return result;
 }
 

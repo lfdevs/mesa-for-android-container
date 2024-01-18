@@ -46,18 +46,35 @@ static bool issignaling(float x)
 }
 #endif
 
-/* Sanity test our test values */
-TEST(half_to_float_test, nan_test)
+/* The sign of the bit for signaling is different on some old processors
+ * (PA-RISC, old MIPS without IEEE-754-2008 support).
+ *
+ * Disable the tests on those platforms, because it's not clear how to
+ * correctly handle NaNs when the CPU and GPU differ in their convention.
+ */
+#if DETECT_ARCH_HPPA || ((DETECT_ARCH_MIPS || DETECT_ARCH_MIPS64) && !defined __mips_nan2008)
+#define IEEE754_2008_NAN 0
+#else
+#define IEEE754_2008_NAN 1
+#endif
+
+/* Sanity test our inf test values */
+TEST(half_to_float_test, inf_test)
 {
    EXPECT_TRUE(isinf(TEST_POS_INF));
    EXPECT_TRUE(isinf(TEST_NEG_INF));
+}
 
+/* Make sure that our 32-bit float nan test value we're using is a
+ * non-signaling NaN.
+ */
+#if IEEE754_2008_NAN
+TEST(half_to_float_test, nan_test)
+#else
+TEST(half_to_float_test, DISABLED_nan_test)
+#endif
+{
    EXPECT_TRUE(isnan(TEST_NAN));
-   /* Make sure that our 32-bit float nan test value we're using is a
-    * non-signaling NaN.  The sign of the bit for signaling was apparently
-    * different on some old processors (PA-RISC, MIPS?).  This test value should
-    * cover Intel, ARM, and PPC, for sure.
-    */
    EXPECT_FALSE(issignaling(TEST_NAN));
 }
 
@@ -82,12 +99,20 @@ test_half_to_float_limits(float (*func)(uint16_t))
 }
 
 /* Test the optionally HW instruction-using path. */
+#if IEEE754_2008_NAN
 TEST(half_to_float_test, half_to_float_test)
+#else
+TEST(half_to_float_test, DISABLED_half_to_float_test)
+#endif
 {
    test_half_to_float_limits(_mesa_half_to_float);
 }
 
+#if IEEE754_2008_NAN
 TEST(half_to_float_test, half_to_float_slow_test)
+#else
+TEST(half_to_float_test, DISABLED_half_to_float_slow_test)
+#endif
 {
    test_half_to_float_limits(_mesa_half_to_float_slow);
 }

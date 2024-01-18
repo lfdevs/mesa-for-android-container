@@ -3841,15 +3841,17 @@ process_sequence(struct rendering_state *state,
       }
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_NV: {
          uint32_t *data = input;
-         cmd_size += token->pushconstantSize;
+         cmd_size += token->pushconstantSize + sizeof(VkPushConstantsInfoKHR);
          if (max_size < size + cmd_size)
             abort();
-         cmd->u.push_constants.layout = token->pushconstantPipelineLayout;
-         cmd->u.push_constants.stage_flags = token->pushconstantShaderStageFlags;
-         cmd->u.push_constants.offset = token->pushconstantOffset;
-         cmd->u.push_constants.size = token->pushconstantSize;
-         cmd->u.push_constants.values = (void*)cmdptr;
-         memcpy(cmd->u.push_constants.values, data, token->pushconstantSize);
+         cmd->u.push_constants2_khr.push_constants_info = (void*)cmdptr;
+         VkPushConstantsInfoKHR *pci = cmd->u.push_constants2_khr.push_constants_info;
+         pci->layout = token->pushconstantPipelineLayout;
+         pci->stageFlags = token->pushconstantShaderStageFlags;
+         pci->offset = token->pushconstantOffset;
+         pci->size = token->pushconstantSize;
+         pci->pValues = (void*)((uint8_t*)cmdptr + sizeof(VkPushConstantsInfoKHR));
+         memcpy((void*)pci->pValues, data, token->pushconstantSize);
          break;
       }
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_NV: {

@@ -398,7 +398,6 @@ struct panvk_pipeline_layout {
    unsigned num_dyn_ubos;
    unsigned num_dyn_ssbos;
    uint32_t num_imgs;
-   uint32_t num_sets;
 
    struct {
       uint32_t size;

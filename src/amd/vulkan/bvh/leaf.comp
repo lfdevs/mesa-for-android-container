@@ -87,6 +87,14 @@ main(void)
       is_active = build_instance(bounds, src_ptr, dst_ptr, global_id);
    }
 
+#if ALWAYS_ACTIVE
+   if (!is_active && args.geom_data.geometry_type != VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+      bounds.min = vec3(0.0);
+      bounds.max = vec3(0.0);
+      is_active = true;
+   }
+#endif
+
    if (is_active) {
       REF(radv_ir_node) ir_node = INDEX(radv_ir_node, args.ir, primitive_id);
       DEREF(ir_node).aabb = bounds;

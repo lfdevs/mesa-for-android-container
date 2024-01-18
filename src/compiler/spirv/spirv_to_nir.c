@@ -156,7 +156,7 @@ vtn_dump_shader(struct vtn_builder *b, const char *path, const char *prefix)
    if (len < 0 || len >= sizeof(filename))
       return;
 
-   FILE *f = fopen(filename, "w");
+   FILE *f = fopen(filename, "wb");
    if (f == NULL)
       return;
 

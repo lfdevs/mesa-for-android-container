@@ -458,6 +458,11 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
 {
    bool supported = true;
 
+   /* Requires split sampler support, which the driver doesn't support, yet. */
+   if (!util_format_is_compressed(format) &&
+       util_format_get_blocksizebits(format) > 32)
+      return false;
+
    if (fmt == TEXTURE_FORMAT_ETC1)
       supported = VIV_FEATURE(screen, chipFeatures, ETC1_TEXTURE_COMPRESSION);
 
@@ -498,6 +503,10 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
    const uint32_t fmt = translate_pe_format(format);
 
    if (fmt == ETNA_NO_MATCH)
+      return false;
+
+   /* Requires split target support, which the driver doesn't support, yet. */
+   if (util_format_get_blocksizebits(format) > 32)
       return false;
 
    if (sample_count > 1) {

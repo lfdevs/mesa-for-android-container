@@ -2404,7 +2404,7 @@ lvp_nv_dgc_token_to_cmd_type(const VkIndirectCommandsLayoutTokenNV *token)
          assert(!"unknown token type!");
          break;
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_NV:
-         return VK_CMD_PUSH_CONSTANTS;
+         return VK_CMD_PUSH_CONSTANTS2_KHR;
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_NV:
          return VK_CMD_BIND_INDEX_BUFFER;
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_NV:
@@ -2447,7 +2447,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetGeneratedCommandsMemoryRequirementsNV(
          size += sizeof(*cmd->u.bind_vertex_buffers2.sizes) + sizeof(*cmd->u.bind_vertex_buffers2.strides);
          break;
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_NV:
-         size += token->pushconstantSize;
+         size += token->pushconstantSize + sizeof(VkPushConstantsInfoKHR);
          break;
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SHADER_GROUP_NV:
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_NV:
