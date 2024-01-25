@@ -9,6 +9,8 @@
 
 set -ex
 
+DEQP_RUNNER_VERSION=0.18.0
+
 if [ -n "${DEQP_RUNNER_GIT_TAG}${DEQP_RUNNER_GIT_REV}" ]; then
     # Build and install from source
     DEQP_RUNNER_CARGO_ARGS="--git ${DEQP_RUNNER_GIT_URL:-https://gitlab.freedesktop.org/anholt/deqp-runner.git}"
@@ -22,7 +24,7 @@ if [ -n "${DEQP_RUNNER_GIT_TAG}${DEQP_RUNNER_GIT_REV}" ]; then
     DEQP_RUNNER_CARGO_ARGS="${DEQP_RUNNER_CARGO_ARGS} ${EXTRA_CARGO_ARGS}"
 else
     # Install from package registry
-    DEQP_RUNNER_CARGO_ARGS="--version 0.16.0 ${EXTRA_CARGO_ARGS} -- deqp-runner"
+    DEQP_RUNNER_CARGO_ARGS="--version ${DEQP_RUNNER_VERSION} ${EXTRA_CARGO_ARGS} -- deqp-runner"
 fi
 
 if [ -z "$ANDROID_NDK_HOME" ]; then
@@ -33,7 +35,7 @@ if [ -z "$ANDROID_NDK_HOME" ]; then
 else
     mkdir -p /deqp-runner
     pushd /deqp-runner
-    git clone --branch v0.18.0 --depth 1 https://gitlab.freedesktop.org/anholt/deqp-runner.git deqp-runner-git
+    git clone --branch v${DEQP_RUNNER_VERSION} --depth 1 https://gitlab.freedesktop.org/anholt/deqp-runner.git deqp-runner-git
     pushd deqp-runner-git
 
     cargo install --locked  \

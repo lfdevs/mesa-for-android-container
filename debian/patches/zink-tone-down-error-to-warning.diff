@@ -1,0 +1,13 @@
+diff --git a/src/gallium/drivers/zink/zink_instance.py b/src/gallium/drivers/zink/zink_instance.py
+index 0fbd14e5a58..4c46e465030 100644
+--- a/src/gallium/drivers/zink/zink_instance.py
++++ b/src/gallium/drivers/zink/zink_instance.py
+@@ -256,7 +256,7 @@ zink_create_instance(struct zink_screen *screen, bool display_dev)
+ 
+    VkResult err = vk_CreateInstance(&ici, NULL, &screen->instance);
+    if (err != VK_SUCCESS) {
+-      mesa_loge("ZINK: vkCreateInstance failed (%s)", vk_Result_to_str(err));
++      mesa_logw("ZINK: vkCreateInstance failed (%s)", vk_Result_to_str(err));
+       return false;
+    }
+ 

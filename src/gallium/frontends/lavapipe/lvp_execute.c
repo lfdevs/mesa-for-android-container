@@ -501,6 +501,7 @@ static void emit_state(struct rendering_state *state)
    if (state->vb_strides_dirty) {
       for (unsigned i = 0; i < state->velem.count; i++)
          state->velem.velems[i].src_stride = state->vb_strides[state->velem.velems[i].vertex_buffer_index];
+      state->ve_dirty = true;
       state->vb_strides_dirty = false;
    }
 
@@ -3872,7 +3873,7 @@ process_sequence(struct rendering_state *state,
       }
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_NV: {
          VkBindVertexBufferIndirectCommandNV *data = input;
-         cmd_size += sizeof(*cmd->u.bind_vertex_buffers.buffers) + sizeof(*cmd->u.bind_vertex_buffers.offsets);
+         cmd_size += sizeof(*cmd->u.bind_vertex_buffers2.buffers) + sizeof(*cmd->u.bind_vertex_buffers2.offsets);
          cmd_size += sizeof(*cmd->u.bind_vertex_buffers2.sizes) + sizeof(*cmd->u.bind_vertex_buffers2.strides);
          if (max_size < size + cmd_size)
             abort();
@@ -3881,12 +3882,20 @@ process_sequence(struct rendering_state *state,
          cmd->u.bind_vertex_buffers2.binding_count = 1;
 
          cmd->u.bind_vertex_buffers2.buffers = (void*)cmdptr;
-         cmd->u.bind_vertex_buffers2.offsets = (void*)(cmdptr + sizeof(*cmd->u.bind_vertex_buffers2.buffers));
+         uint32_t alloc_offset = sizeof(*cmd->u.bind_vertex_buffers2.buffers);
+
+         cmd->u.bind_vertex_buffers2.offsets = (void*)(cmdptr + alloc_offset);
+         alloc_offset += sizeof(*cmd->u.bind_vertex_buffers2.offsets);
+
+         cmd->u.bind_vertex_buffers2.sizes = (void*)(cmdptr + alloc_offset);
+         alloc_offset += sizeof(*cmd->u.bind_vertex_buffers2.sizes);
+
          cmd->u.bind_vertex_buffers2.offsets[0] = 0;
          cmd->u.bind_vertex_buffers2.buffers[0] = data->bufferAddress ? get_buffer(state, (void*)(uintptr_t)data->bufferAddress, (size_t*)&cmd->u.bind_vertex_buffers2.offsets[0]) : VK_NULL_HANDLE;
+         cmd->u.bind_vertex_buffers2.sizes[0] = data->size;
 
          if (token->vertexDynamicStride) {
-            cmd->u.bind_vertex_buffers2.strides = (void*)(cmdptr + sizeof(*cmd->u.bind_vertex_buffers2.buffers) + sizeof(*cmd->u.bind_vertex_buffers2.offsets) + sizeof(*cmd->u.bind_vertex_buffers2.sizes));
+            cmd->u.bind_vertex_buffers2.strides = (void*)(cmdptr + alloc_offset);
             cmd->u.bind_vertex_buffers2.strides[0] = data->stride;
          } else {
             cmd->u.bind_vertex_buffers2.strides = NULL;

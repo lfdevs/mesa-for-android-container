@@ -346,6 +346,7 @@ vn_ring_destroy(struct vn_ring *ring)
       vk_free(alloc, submit);
 
    vn_cs_encoder_fini(&ring->upload);
+   vn_renderer_shmem_unref(ring->instance->renderer, ring->shmem);
 
    mtx_destroy(&ring->mutex);
 

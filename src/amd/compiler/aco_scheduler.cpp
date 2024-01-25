@@ -1087,6 +1087,9 @@ schedule_block(sched_ctx& ctx, Program* program, Block* block, live& live_vars)
    for (unsigned idx = 0; idx < block->instructions.size(); idx++) {
       Instruction* current = block->instructions[idx].get();
 
+      if (current->opcode == aco_opcode::p_logical_end)
+         break;
+
       if (block->kind & block_kind_export_end && current->isEXP() && ctx.schedule_pos_exports) {
          unsigned target = current->exp().dest;
          if (target >= V_008DFC_SQ_EXP_POS && target < V_008DFC_SQ_EXP_PRIM) {

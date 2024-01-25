@@ -118,7 +118,6 @@ nir_options = {
    .lower_uadd_carry = true,
    .lower_usub_borrow = true,
    .lower_mul_high = true,
-   .lower_rotate = true,
    .lower_pack_half_2x16 = true,
    .lower_pack_unorm_4x8 = true,
    .lower_pack_snorm_4x8 = true,

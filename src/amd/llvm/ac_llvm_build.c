@@ -2989,7 +2989,7 @@ LLVMValueRef ac_build_ds_swizzle(struct ac_llvm_context *ctx, LLVMValueRef src, 
    return LLVMBuildBitCast(ctx->builder, ret, src_type, "");
 }
 
-static LLVMValueRef ac_build_wwm(struct ac_llvm_context *ctx, LLVMValueRef src)
+static LLVMValueRef ac_build_mode(struct ac_llvm_context *ctx, LLVMValueRef src, const char *mode)
 {
    LLVMTypeRef src_type = LLVMTypeOf(src);
    unsigned bitsize = ac_get_elem_bits(ctx, src_type);
@@ -3002,13 +3002,23 @@ static LLVMValueRef ac_build_wwm(struct ac_llvm_context *ctx, LLVMValueRef src)
       src = LLVMBuildZExt(ctx->builder, src, ctx->i32, "");
 
    ac_build_type_name_for_intr(LLVMTypeOf(src), type, sizeof(type));
-   snprintf(name, sizeof(name), "llvm.amdgcn.wwm.%s", type);
+   snprintf(name, sizeof(name), "llvm.amdgcn.%s.%s", mode, type);
    ret = ac_build_intrinsic(ctx, name, LLVMTypeOf(src), (LLVMValueRef[]){src}, 1, 0);
 
    if (bitsize < 32)
       ret = LLVMBuildTrunc(ctx->builder, ret, ac_to_integer_type(ctx, src_type), "");
 
    return LLVMBuildBitCast(ctx->builder, ret, src_type, "");
+}
+
+static LLVMValueRef ac_build_wwm(struct ac_llvm_context *ctx, LLVMValueRef src)
+{
+   return ac_build_mode(ctx, src, "wwm");
+}
+
+LLVMValueRef ac_build_wqm(struct ac_llvm_context *ctx, LLVMValueRef src)
+{
+   return ac_build_mode(ctx, src, "wqm");
 }
 
 static LLVMValueRef ac_build_set_inactive(struct ac_llvm_context *ctx, LLVMValueRef src,

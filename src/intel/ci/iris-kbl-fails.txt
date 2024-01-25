@@ -27,17 +27,6 @@ glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
 # Version = 3.3
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 
-# Xorg has disabled indirect rendering contexts.
-glx@glx_ext_import_context@free context,Fail
-glx@glx_ext_import_context@get context id,Fail
-glx@glx_ext_import_context@get current display,Fail
-glx@glx_ext_import_context@import context- multi process,Fail
-glx@glx_ext_import_context@import context- single process,Fail
-glx@glx_ext_import_context@imported context has same context id,Fail
-glx@glx_ext_import_context@make current- multi process,Fail
-glx@glx_ext_import_context@make current- single process,Fail
-glx@glx_ext_import_context@query context info,Fail
-
 spec@!opengl 1.0@rasterpos,Fail
 
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
@@ -95,9 +84,6 @@ spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 # piglit: error: SBC did not change after second SwapBuffers: 0
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
-
-# test binary not built
-spec@egl_ext_protected_content@conformance,Fail
 
 # Failed blit src(0,0;1,1) - dst(0,0;2147483647,2147483647)
 # Failed blit src(0,0;40,40) - dst(0,0;134217727,134217727)

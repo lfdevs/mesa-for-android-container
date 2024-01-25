@@ -1255,6 +1255,11 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->has_async_compute_threadgroup_bug = info->family == CHIP_ICELAND ||
                                              info->family == CHIP_TONGA;
 
+   /* GFX7 CP requires 32 bytes alignment for the indirect buffer arguments on
+    * the compute queue.
+    */
+   info->has_async_compute_align32_bug = info->gfx_level == GFX7;
+
    /* Support for GFX10.3 was added with F32_ME_FEATURE_VERSION_31 but the
     * feature version wasn't bumped.
     */

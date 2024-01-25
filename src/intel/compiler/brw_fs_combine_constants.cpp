@@ -1834,6 +1834,16 @@ fs_visitor::opt_combine_constants()
    }
 
    if (rebuild_cfg) {
+      /* When the CFG is initially built, the instructions are removed from
+       * the list of instructions stored in fs_visitor -- the same exec_node
+       * is used for membership in that list and in a block list.  So we need
+       * to pull them back before rebuilding the CFG.
+       */
+      assert(exec_list_length(&instructions) == 0);
+      foreach_block(block, cfg) {
+         exec_list_append(&instructions, &block->instructions);
+      }
+
       delete cfg;
       cfg = NULL;
       calculate_cfg();

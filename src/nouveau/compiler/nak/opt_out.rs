@@ -24,7 +24,7 @@ fn try_combine_outs(emit: &mut Instr, cut: &Instr) -> bool {
         return false;
     }
 
-    if emit.stream != emit.stream {
+    if emit.stream != cut.stream {
         return false;
     }
 

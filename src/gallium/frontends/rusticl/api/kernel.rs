@@ -535,10 +535,13 @@ fn enqueue_ndrange_kernel(
     let device_bits = q.device.address_bits();
     let device_max = u64::MAX >> (u64::BITS - device_bits);
 
+    let mut threads = 0;
     for i in 0..work_dim as usize {
         let lws = local_work_size[i];
         let gws = global_work_size[i];
         let gwo = global_work_offset[i];
+
+        threads *= lws;
 
         // CL_INVALID_WORK_ITEM_SIZE if the number of work-items specified in any of
         // local_work_size[0], … local_work_size[work_dim - 1] is greater than the corresponding
@@ -580,6 +583,14 @@ fn enqueue_ndrange_kernel(
         }
     }
 
+    // CL_INVALID_WORK_GROUP_SIZE if local_work_size is specified and the total number of work-items
+    // in the work-group computed as local_work_size[0] × … local_work_size[work_dim - 1] is greater
+    // than the value specified by CL_KERNEL_WORK_GROUP_SIZE in the Kernel Object Device Queries
+    // table.
+    if threads != 0 && threads > k.max_threads_per_block(q.device) {
+        return Err(CL_INVALID_WORK_GROUP_SIZE);
+    }
+
     // If global_work_size is NULL, or the value in any passed dimension is 0 then the kernel
     // command will trivially succeed after its event dependencies are satisfied and subsequently
     // update its completion event.
@@ -598,7 +609,6 @@ fn enqueue_ndrange_kernel(
     create_and_queue(q, CL_COMMAND_NDRANGE_KERNEL, evs, event, false, cb)
 
     //• CL_INVALID_WORK_GROUP_SIZE if local_work_size is specified and is not consistent with the required number of sub-groups for kernel in the program source.
-    //• CL_INVALID_WORK_GROUP_SIZE if local_work_size is specified and the total number of work-items in the work-group computed as local_work_size[0] × … local_work_size[work_dim - 1] is greater than the value specified by CL_KERNEL_WORK_GROUP_SIZE in the Kernel Object Device Queries table.
     //• CL_MISALIGNED_SUB_BUFFER_OFFSET if a sub-buffer object is specified as the value for an argument that is a buffer object and the offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue. This error code
     //• CL_INVALID_IMAGE_SIZE if an image object is specified as an argument value and the image dimensions (image width, height, specified or compute row and/or slice pitch) are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if an image object is specified as an argument value and the image format (image channel order and data type) is not supported by device associated with queue.

@@ -63,7 +63,6 @@ spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec3-vec
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr,Fail
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr-loop,Fail
-spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_sample_shading@ignore-centroid-qualifier 2,Fail
@@ -82,11 +81,8 @@ spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -s
 
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
-spec@egl_chromium_sync_control@conformance,Fail
-spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
-spec@egl_mesa_configless_context@basic,Fail
 
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 2,Fail
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 4,Fail

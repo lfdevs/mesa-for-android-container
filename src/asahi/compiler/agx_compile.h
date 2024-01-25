@@ -292,7 +292,6 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_hadd = true,
    .vectorize_io = true,
    .use_interpolated_input_intrinsics = true,
-   .lower_rotate = true,
    .has_isub = true,
    .support_16bit_alu = true,
    .max_unroll_iterations = 32,

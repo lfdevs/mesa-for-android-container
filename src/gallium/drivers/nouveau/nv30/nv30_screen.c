@@ -477,7 +477,6 @@ static const nir_shader_compiler_options nv30_base_compiler_options = {
    .lower_flrp64 = true,
    .lower_fmod = true,
    .lower_fpow = true, /* In hardware as of nv40 FS */
-   .lower_rotate = true,
    .lower_uniforms_to_ubo = true,
    .lower_vector_cmp = true,
    .force_indirect_unrolling = nir_var_all,

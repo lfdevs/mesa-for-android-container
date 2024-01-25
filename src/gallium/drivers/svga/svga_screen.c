@@ -737,7 +737,6 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    .lower_fdph = true,                                                        \
    .lower_flrp64 = true,                                                      \
    .lower_ldexp = true,                                                       \
-   .lower_rotate = true,                                                      \
    .lower_uniforms_to_ubo = true,                                             \
    .lower_vector_cmp = true,                                                  \
    .lower_cs_local_index_to_id = true,                                        \

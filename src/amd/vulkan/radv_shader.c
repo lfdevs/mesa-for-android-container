@@ -94,7 +94,6 @@ get_nir_options_for_stage(struct radv_physical_device *device, gl_shader_stage s
       .lower_ffma64 = split_fma,
       .lower_fpow = true,
       .lower_mul_2x32_64 = true,
-      .lower_rotate = true,
       .lower_iadd_sat = device->rad_info.gfx_level <= GFX8,
       .lower_hadd = true,
       .lower_mul_32x16 = true,
@@ -1344,14 +1343,14 @@ radv_replay_shader_arena_block(struct radv_device *device, const struct radv_ser
       if (!hole->freelist.prev)
          continue;
 
-      if (hole->offset + hole->size < src->offset)
-         continue;
-
       uint32_t hole_begin = hole->offset;
       uint32_t hole_end = hole->offset + hole->size;
 
+      if (hole_end < block_end)
+         continue;
+
       /* If another allocated block overlaps the current replay block, allocation is impossible */
-      if (block_begin > hole_begin || (hole_end < block_end && hole_end >= block_begin))
+      if (hole_begin > block_begin)
          return NULL;
 
       union radv_shader_arena_block *block = insert_block(device, hole, block_begin - hole_begin, src->size, NULL);

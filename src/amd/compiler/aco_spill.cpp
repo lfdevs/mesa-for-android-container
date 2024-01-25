@@ -1938,7 +1938,7 @@ spill(Program* program, live& live_vars)
    /* calculate extra VGPRs required for spilling SGPRs */
    if (demand.sgpr > sgpr_limit) {
       unsigned sgpr_spills = demand.sgpr - sgpr_limit;
-      extra_vgprs = DIV_ROUND_UP(sgpr_spills, program->wave_size) + 1;
+      extra_vgprs = DIV_ROUND_UP(sgpr_spills * 2, program->wave_size) + 1;
    }
    /* add extra SGPRs required for spilling VGPRs */
    if (demand.vgpr + extra_vgprs > vgpr_limit) {
@@ -1949,7 +1949,7 @@ spill(Program* program, live& live_vars)
       if (demand.sgpr + extra_sgprs > sgpr_limit) {
          /* re-calculate in case something has changed */
          unsigned sgpr_spills = demand.sgpr + extra_sgprs - sgpr_limit;
-         extra_vgprs = DIV_ROUND_UP(sgpr_spills, program->wave_size) + 1;
+         extra_vgprs = DIV_ROUND_UP(sgpr_spills * 2, program->wave_size) + 1;
       }
    }
    /* the spiller has to target the following register demand */

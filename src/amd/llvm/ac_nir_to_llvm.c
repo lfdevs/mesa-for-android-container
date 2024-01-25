@@ -3402,21 +3402,26 @@ static bool visit_intrinsic(struct ac_nir_context *ctx, nir_intrinsic_instr *ins
    case nir_intrinsic_quad_broadcast: {
       unsigned lane = nir_src_as_uint(instr->src[1]);
       result = ac_build_quad_swizzle(&ctx->ac, get_src(ctx, instr->src[0]), lane, lane, lane, lane);
+      result = ac_build_wqm(&ctx->ac, result);
       break;
    }
    case nir_intrinsic_quad_swap_horizontal:
       result = ac_build_quad_swizzle(&ctx->ac, get_src(ctx, instr->src[0]), 1, 0, 3, 2);
+      result = ac_build_wqm(&ctx->ac, result);
       break;
    case nir_intrinsic_quad_swap_vertical:
       result = ac_build_quad_swizzle(&ctx->ac, get_src(ctx, instr->src[0]), 2, 3, 0, 1);
+      result = ac_build_wqm(&ctx->ac, result);
       break;
    case nir_intrinsic_quad_swap_diagonal:
       result = ac_build_quad_swizzle(&ctx->ac, get_src(ctx, instr->src[0]), 3, 2, 1, 0);
+      result = ac_build_wqm(&ctx->ac, result);
       break;
    case nir_intrinsic_quad_swizzle_amd: {
       uint32_t mask = nir_intrinsic_swizzle_mask(instr);
       result = ac_build_quad_swizzle(&ctx->ac, get_src(ctx, instr->src[0]), mask & 0x3,
                                      (mask >> 2) & 0x3, (mask >> 4) & 0x3, (mask >> 6) & 0x3);
+      result = ac_build_wqm(&ctx->ac, result);
       break;
    }
    case nir_intrinsic_masked_swizzle_amd: {

@@ -3686,25 +3686,48 @@ radv_emit_guardband_state(struct radv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_GUARDBAND;
 }
 
+/* Bind an internal index buffer for GPUs that hang with 0-sized index buffers to handle robustness2
+ * which requires 0 for out-of-bounds access.
+ */
+static void
+radv_handle_zero_index_buffer_bug(struct radv_cmd_buffer *cmd_buffer, uint64_t *index_va, uint32_t *remaining_indexes)
+{
+   const uint32_t zero = 0;
+   uint32_t offset;
+
+   if (!radv_cmd_buffer_upload_data(cmd_buffer, sizeof(uint32_t), &zero, &offset)) {
+      vk_command_buffer_set_error(&cmd_buffer->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return;
+   }
+
+   *index_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + offset;
+   *remaining_indexes = 1;
+}
+
 static void
 radv_emit_index_buffer(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    struct radv_cmd_state *state = &cmd_buffer->state;
+   uint32_t max_index_count = state->max_index_count;
+   uint64_t index_va = state->index_va;
 
    /* With indirect generated commands the index buffer bind may be part of the
     * indirect command buffer, in which case the app may not have bound any yet. */
    if (state->index_type < 0)
       return;
 
-   if (state->max_index_count || !cmd_buffer->device->physical_device->rad_info.has_zero_index_buffer_bug) {
-      radeon_emit(cs, PKT3(PKT3_INDEX_BASE, 1, 0));
-      radeon_emit(cs, state->index_va);
-      radeon_emit(cs, state->index_va >> 32);
-
-      radeon_emit(cs, PKT3(PKT3_INDEX_BUFFER_SIZE, 0, 0));
-      radeon_emit(cs, state->max_index_count);
+   /* Handle indirect draw calls with NULL index buffer if the GPU doesn't support them. */
+   if (!max_index_count && cmd_buffer->device->physical_device->rad_info.has_zero_index_buffer_bug) {
+      radv_handle_zero_index_buffer_bug(cmd_buffer, &index_va, &max_index_count);
    }
+
+   radeon_emit(cs, PKT3(PKT3_INDEX_BASE, 1, 0));
+   radeon_emit(cs, index_va);
+   radeon_emit(cs, index_va >> 32);
+
+   radeon_emit(cs, PKT3(PKT3_INDEX_BUFFER_SIZE, 0, 0));
+   radeon_emit(cs, max_index_count);
 
    cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_INDEX_BUFFER;
 }
@@ -8279,24 +8302,6 @@ radv_emit_userdata_task(struct radv_cmd_buffer *cmd_buffer, uint32_t x, uint32_t
    }
 }
 
-/* Bind an internal index buffer for GPUs that hang with 0-sized index buffers to handle robustness2
- * which requires 0 for out-of-bounds access.
- */
-static void
-radv_handle_zero_index_buffer_bug(struct radv_cmd_buffer *cmd_buffer, uint64_t *index_va, uint32_t *remaining_indexes)
-{
-   const uint32_t zero = 0;
-   uint32_t offset;
-
-   if (!radv_cmd_buffer_upload_data(cmd_buffer, sizeof(uint32_t), &zero, &offset)) {
-      vk_command_buffer_set_error(&cmd_buffer->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
-      return;
-   }
-
-   *index_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + offset;
-   *remaining_indexes = 1;
-}
-
 ALWAYS_INLINE static void
 radv_emit_draw_packets_indexed(struct radv_cmd_buffer *cmd_buffer, const struct radv_draw_info *info,
                                uint32_t drawCount, const VkMultiDrawIndexedInfoEXT *minfo, uint32_t stride,
@@ -9659,11 +9664,39 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, const struct radv
       }
 
       if (radv_cmd_buffer_uses_mec(cmd_buffer)) {
+         uint64_t indirect_va = info->va;
+
          radv_cs_emit_compute_predication(&cmd_buffer->state, cs, cmd_buffer->mec_inv_pred_va,
                                           &cmd_buffer->mec_inv_pred_emitted, 4 /* DISPATCH_INDIRECT size */);
+
+         if (cmd_buffer->device->physical_device->rad_info.has_async_compute_align32_bug &&
+             cmd_buffer->qf == RADV_QUEUE_COMPUTE && !radv_is_aligned(indirect_va, 32)) {
+            const uint64_t unaligned_va = indirect_va;
+            UNUSED void *ptr;
+            uint32_t offset;
+
+            if (!radv_cmd_buffer_upload_alloc_aligned(cmd_buffer, sizeof(VkDispatchIndirectCommand), 32, &offset, &ptr))
+               return;
+
+            indirect_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + offset;
+
+            for (uint32_t i = 0; i < 3; i++) {
+               const uint64_t src_va = unaligned_va + i * 4;
+               const uint64_t dst_va = indirect_va + i * 4;
+
+               radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
+               radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_SRC_MEM) | COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) |
+                                  COPY_DATA_WR_CONFIRM);
+               radeon_emit(cs, src_va);
+               radeon_emit(cs, src_va >> 32);
+               radeon_emit(cs, dst_va);
+               radeon_emit(cs, dst_va >> 32);
+            }
+         }
+
          radeon_emit(cs, PKT3(PKT3_DISPATCH_INDIRECT, 2, 0) | PKT3_SHADER_TYPE_S(1));
-         radeon_emit(cs, info->va);
-         radeon_emit(cs, info->va >> 32);
+         radeon_emit(cs, indirect_va);
+         radeon_emit(cs, indirect_va >> 32);
          radeon_emit(cs, dispatch_initiator);
       } else {
          radeon_emit(cs, PKT3(PKT3_SET_BASE, 2, 0) | PKT3_SHADER_TYPE_S(1));

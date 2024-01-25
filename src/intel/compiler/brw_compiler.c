@@ -122,6 +122,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
    compiler->indirect_ubos_use_sampler = true;
 
    compiler->lower_dpas = devinfo->verx10 < 125 ||
+      intel_device_info_is_mtl(devinfo) ||
       debug_get_bool_option("INTEL_LOWER_DPAS", false);
 
    /* There is no vec4 mode on Gfx10+, and we don't use it at all on Gfx8+. */
@@ -191,7 +192,8 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->has_bfm = devinfo->ver >= 7;
       nir_options->has_bfi = devinfo->ver >= 7;
 
-      nir_options->lower_rotate = devinfo->ver < 11;
+      nir_options->has_rotate16 = devinfo->ver >= 11;
+      nir_options->has_rotate32 = devinfo->ver >= 11;
       nir_options->lower_bitfield_reverse = devinfo->ver < 7;
       nir_options->lower_find_lsb = devinfo->ver < 7;
       nir_options->lower_ifind_msb = devinfo->ver < 7;
@@ -248,6 +250,10 @@ brw_get_compiler_config_value(const struct brw_compiler *compiler)
 
    insert_u64_bit(&config, compiler->precise_trig);
    bits++;
+   insert_u64_bit(&config, compiler->lower_dpas);
+   bits++;
+   insert_u64_bit(&config, compiler->mesh.mue_compaction);
+   bits++;
 
    uint64_t mask = DEBUG_DISK_CACHE_MASK;
    bits += util_bitcount64(mask);
@@ -264,6 +270,12 @@ brw_get_compiler_config_value(const struct brw_compiler *compiler)
       insert_u64_bit(&config, (intel_simd & bit) != 0);
       mask &= ~bit;
    }
+
+   mask = 3;
+   bits += util_bitcount64(mask);
+
+   u_foreach_bit64(bit, mask)
+      insert_u64_bit(&config, (compiler->mesh.mue_header_packing & (1ULL << bit)) != 0);
 
    assert(bits <= util_bitcount64(UINT64_MAX));
 

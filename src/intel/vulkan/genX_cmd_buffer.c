@@ -394,6 +394,23 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
       anv_image_hiz_op(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
                        0, base_layer, layer_count, ISL_AUX_OP_AMBIGUATE);
    }
+
+#if GFX_VER == 12
+   /* Depth/Stencil writes by the render pipeline to D16 & S8 formats use a
+    * different pairing bit for the compression cache line. This means that
+    * there is potential for aliasing with the wrong cache if you use another
+    * format OR a piece of HW that does not use the same pairing. To avoid
+    * this, flush the tile cache as the compression data does not live in the
+    * color/depth cache.
+    */
+   if (image->planes[depth_plane].aux_usage == ISL_AUX_USAGE_HIZ_CCS &&
+       final_needs_depth && !initial_depth_valid &&
+       anv_image_format_is_d16_or_s8(image)) {
+      anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT,
+                                "D16 or S8 HIZ-CCS flush");
+   }
+#endif
 }
 
 /* Transitions a HiZ-enabled depth buffer from one layout to another. Unless
@@ -448,6 +465,19 @@ transition_stencil_buffer(struct anv_cmd_buffer *cmd_buffer,
                              level, base_layer, level_layer_count,
                              clear_rect, 0 /* Stencil clear value */);
       }
+   }
+
+   /* Depth/Stencil writes by the render pipeline to D16 & S8 formats use a
+    * different pairing bit for the compression cache line. This means that
+    * there is potential for aliasing with the wrong cache if you use another
+    * format OR a piece of HW that does not use the same pairing. To avoid
+    * this, flush the tile cache as the compression data does not live in the
+    * color/depth cache.
+    */
+   if (anv_image_format_is_d16_or_s8(image)) {
+      anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT,
+                                "D16 or S8 HIZ-CCS flush");
    }
 #endif
 }
@@ -6661,23 +6691,23 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
        */
       btd.PerDSSMemoryBackedBufferSize = 6;
       btd.MemoryBackedBufferBasePointer = (struct anv_address) { .bo = device->btd_fifo_bo };
-      if (pipeline->scratch_size > 0) {
+      if (pipeline->base.scratch_size > 0) {
          struct anv_bo *scratch_bo =
             anv_scratch_pool_alloc(device,
                                    &device->scratch_pool,
                                    MESA_SHADER_COMPUTE,
-                                   pipeline->scratch_size);
+                                   pipeline->base.scratch_size);
          anv_reloc_list_add_bo(cmd_buffer->batch.relocs,
                                scratch_bo);
          uint32_t scratch_surf =
             anv_scratch_pool_get_surf(cmd_buffer->device,
                                       &device->scratch_pool,
-                                      pipeline->scratch_size);
+                                      pipeline->base.scratch_size);
          btd.ScratchSpaceBuffer = scratch_surf >> 4;
       }
    }
 
-   genX(cmd_buffer_ensure_cfe_state)(cmd_buffer, pipeline->scratch_size);
+   genX(cmd_buffer_ensure_cfe_state)(cmd_buffer, pipeline->base.scratch_size);
 
    const struct brw_cs_prog_data *cs_prog_data =
       brw_cs_prog_data_const(device->rt_trampoline->prog_data);

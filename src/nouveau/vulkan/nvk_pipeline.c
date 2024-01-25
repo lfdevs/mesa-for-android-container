@@ -32,6 +32,11 @@ nvk_pipeline_free(struct nvk_device *dev,
                   struct nvk_pipeline *pipeline,
                   const VkAllocationCallbacks *pAllocator)
 {
+   for (uint32_t s = 0; s < ARRAY_SIZE(pipeline->shaders); s++) {
+      if (pipeline->shaders[s] != NULL)
+         vk_pipeline_cache_object_unref(&dev->vk, &pipeline->shaders[s]->base);
+   }
+
    vk_object_free(&dev->vk, pAllocator, pipeline);
 }
 

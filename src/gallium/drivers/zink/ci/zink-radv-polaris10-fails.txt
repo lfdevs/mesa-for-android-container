@@ -62,7 +62,6 @@ spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec3-vec
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr,Fail
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr-loop,Fail
-spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_sample_shading@ignore-centroid-qualifier 2,Fail
@@ -81,11 +80,8 @@ spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,F
 
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
-spec@egl_chromium_sync_control@conformance,Fail
-spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
-spec@egl_mesa_configless_context@basic,Fail
 
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 2,Fail
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 4,Fail
@@ -451,8 +447,6 @@ dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth24_stencil
 dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth32f_stencil8_cube_array,Fail
 dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth24_stencil8_cube_array,Fail
 
-object namespace pollution@vertex-array with glgetteximage,Crash
-object namespace pollution@vertex-array with gltexsubimage2d,Crash
 spec@!opengl 1.1@getteximage-depth,Fail
 spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_1D-GL_DEPTH_COMPONENT,Fail
 spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_1D-GL_DEPTH_COMPONENT16,Fail
@@ -497,7 +491,6 @@ spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizz
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@Basic,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@discard,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@fb resize,Fail
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@glScissor,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@glViewport,Fail
 spec@arb_sample_locations@test,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: false,Fail

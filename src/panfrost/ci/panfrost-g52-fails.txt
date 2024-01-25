@@ -1,15 +1,6 @@
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail
-glx@glx_ext_import_context@free context,Fail
-glx@glx_ext_import_context@get context id,Fail
-glx@glx_ext_import_context@get current display,Fail
-glx@glx_ext_import_context@import context- multi process,Fail
-glx@glx_ext_import_context@import context- single process,Fail
-glx@glx_ext_import_context@imported context has same context id,Fail
-glx@glx_ext_import_context@make current- multi process,Fail
-glx@glx_ext_import_context@make current- single process,Fail
-glx@glx_ext_import_context@query context info,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
@@ -161,7 +152,6 @@ spec@arb_uniform_buffer_object@rendering-offset,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance,Fail
-spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
@@ -358,7 +348,6 @@ spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect,Crash
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect_projvec4,Crash
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drectshadow,Crash
 spec@glsl-es-3.00@execution@varying-struct-centroid_gles3,Fail
-spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@khr_texture_compression_astc@miptree-gles hdr,Fail
 spec@khr_texture_compression_astc@miptree-gles hdr@HDR Profile,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail

@@ -356,7 +356,7 @@ vn_CreatePipelineLayout(VkDevice device,
       }
    }
 
-   layout->has_push_constant_ranges = pCreateInfo->pPushConstantRanges > 0;
+   layout->has_push_constant_ranges = pCreateInfo->pushConstantRangeCount > 0;
 
    VkPipelineLayout layout_handle = vn_pipeline_layout_to_handle(layout);
    vn_async_vkCreatePipelineLayout(dev->primary_ring, device, pCreateInfo,
@@ -1220,6 +1220,31 @@ vn_graphics_pipeline_state_fill(
       /* Defer setting the flag until all its state is filled. */
       state->gpl.fragment_output = true;
    }
+
+   /* After direct_gpl states collection, check the final state to validate
+    * VkPipelineLayout in case of being the final layout in linked pipeline.
+    *
+    * From the Vulkan 1.3.275 spec:
+    *    VUID-VkGraphicsPipelineCreateInfo-layout-06602
+    *
+    *    If the pipeline requires fragment shader state or pre-rasterization
+    *    shader state, layout must be a valid VkPipelineLayout handle
+    */
+   if ((state->gpl.fragment_shader && !is_raster_statically_disabled) ||
+       state->gpl.pre_raster_shaders)
+      valid.self.pipeline_layout = true;
+
+   /* Pipeline Derivatives
+    *
+    *    VUID-VkGraphicsPipelineCreateInfo-flags-07984
+    *
+    *    If flags contains the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag, and
+    *    basePipelineIndex is -1, basePipelineHandle must be a valid graphics
+    *    VkPipeline handle
+    */
+   if ((info->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) &&
+       info->basePipelineIndex == -1)
+      valid.self.base_pipeline_handle = true;
 
    *out_fix_desc = (struct vn_graphics_pipeline_fix_desc) {
       .self = {

@@ -7,7 +7,7 @@
 
 variables:
    DEBIAN_X86_64_BUILD_BASE_IMAGE: "debian/x86_64_build-base"
-   DEBIAN_BASE_TAG: "2024-01-10-deb-fix"
+   DEBIAN_BASE_TAG: "2024-01-14-runner24"
 
    DEBIAN_X86_64_BUILD_IMAGE_PATH: "debian/x86_64_build"
    DEBIAN_BUILD_TAG: "2024-01-04-find"
@@ -18,14 +18,14 @@ variables:
    DEBIAN_X86_64_TEST_IMAGE_VK_PATH: "debian/x86_64_test-vk"
    DEBIAN_X86_64_TEST_ANDROID_IMAGE_PATH: "debian/x86_64_test-android"
 
-   DEBIAN_X86_64_TEST_ANDROID_TAG: "2024-01-04-default"
-   DEBIAN_X86_64_TEST_GL_TAG: "2024-01-04-default"
-   DEBIAN_X86_64_TEST_VK_TAG: "2024-01-04-default"
+   DEBIAN_X86_64_TEST_ANDROID_TAG: "2024-01-14-runner24"
+   DEBIAN_X86_64_TEST_GL_TAG: "2024-01-14-check24"
+   DEBIAN_X86_64_TEST_VK_TAG: "2024-01-14-check24"
 
    ALPINE_X86_64_BUILD_TAG: "2023-01-07-libdrm2_4_119"
    ALPINE_X86_64_LAVA_SSH_TAG: "2023-06-26-first-version"
    FEDORA_X86_64_BUILD_TAG: "2024-01-06-libdrm"
-   KERNEL_ROOTFS_TAG: "2024-01-10-default"
+   KERNEL_ROOTFS_TAG: "2024-01-14-runner24"
    KERNEL_TAG: "v6.6.4-for-mesa-ci-e4f4c500f7fb"
    KERNEL_REPO: "gfx-ci/linux"
    PKG_REPO_REV: "67f2c46b"

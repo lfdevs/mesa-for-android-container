@@ -20,9 +20,3 @@ KHR-GL30.transform_feedback.draw_xfb_stream_instanced_test,Fail
 KHR-GL31.transform_feedback.capture_special_interleaved_test,Crash
 KHR-GL31.transform_feedback.draw_xfb_stream_instanced_test,Fail
 KHR-GL32.transform_feedback.draw_xfb_stream_instanced_test,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.basic-single-stream-interleaved-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.basic-single-stream-separate-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail

@@ -227,7 +227,6 @@ const nir_shader_compiler_options v3dv_nir_options = {
    .lower_ldexp = true,
    .lower_mul_high = true,
    .lower_wpos_pntc = false,
-   .lower_rotate = true,
    .lower_to_scalar = true,
    .lower_device_index_to_zero = true,
    .lower_fquantize2f16 = true,

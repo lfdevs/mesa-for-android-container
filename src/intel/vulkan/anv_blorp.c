@@ -1884,7 +1884,7 @@ anv_fast_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
        * experiment shows that flusing the data cache helps to resolve the
        * corruption.
        */
-      unsigned wa_flush = intel_device_info_is_dg2(cmd_buffer->device->info) ?
+      unsigned wa_flush = cmd_buffer->device->info->verx10 >= 125 ?
                           ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0;
       anv_add_pending_pipe_bits(cmd_buffer,
                                 ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |

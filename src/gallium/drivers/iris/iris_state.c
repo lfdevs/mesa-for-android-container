@@ -9631,6 +9631,22 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
                                  PIPE_CONTROL_CS_STALL, NULL, 0, 0);
    }
 
+   batch_mark_sync_for_pipe_control(batch, flags);
+
+#if INTEL_NEEDS_WA_14010840176
+   /* "If the intention of “constant cache invalidate” is
+    *  to invalidate the L1 cache (which can cache constants), use “HDC
+    *  pipeline flush” instead of Constant Cache invalidate command."
+    *
+    * "If L3 invalidate is needed, the w/a should be to set state invalidate
+    * in the pipe control command, in addition to the HDC pipeline flush."
+    */
+   if (flags & PIPE_CONTROL_CONST_CACHE_INVALIDATE) {
+      flags &= ~PIPE_CONTROL_CONST_CACHE_INVALIDATE;
+      flags |= PIPE_CONTROL_FLUSH_HDC | PIPE_CONTROL_STATE_CACHE_INVALIDATE;
+   }
+#endif
+
    /* Emit --------------------------------------------------------------- */
 
    if (INTEL_DEBUG(DEBUG_PIPE_CONTROL)) {
@@ -9666,7 +9682,6 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
               imm, reason);
    }
 
-   batch_mark_sync_for_pipe_control(batch, flags);
    iris_batch_sync_region_start(batch);
 
    const bool trace_pc =

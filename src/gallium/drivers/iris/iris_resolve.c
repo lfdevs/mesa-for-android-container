@@ -703,7 +703,7 @@ iris_hiz_exec(struct iris_context *ice,
    /* A data cache flush is not suggested by HW docs, but we found it to fix
     * a number of failures.
     */
-   unsigned wa_flush = intel_device_info_is_dg2(batch->screen->devinfo) &&
+   unsigned wa_flush = devinfo->verx10 >= 125 &&
                        res->aux.usage == ISL_AUX_USAGE_HIZ_CCS ?
                        PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
 

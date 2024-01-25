@@ -48,10 +48,7 @@ dEQP-GLES2.functional.texture.mipmap.cube.projected.linear_nearest,Fail
 wayland-dEQP-EGL.functional.create_context.no_config,Fail
 wayland-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail
 wayland-dEQP-EGL.functional.render.multi_context.gles2.rgb888_window,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_pbuffer,Fail
 wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb888_window,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_srgb,Fail
 wayland-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb,Fail
 wayland-dEQP-EGL.functional.wide_color.window_fp16_default_colorspace,Fail
 
@@ -106,11 +103,8 @@ spec@arb_fragment_program_shadow@txp-shadow2d,Fail
 spec@arb_fragment_program_shadow@txp-shadow2drect,Fail
 spec@arb_framebuffer_srgb@arb_framebuffer_srgb-srgb_conformance,Fail
 spec@arb_framebuffer_srgb@framebuffer-srgb,Fail
-spec@arb_occlusion_query2@render,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
-spec@arb_occlusion_query@occlusion_query_meta_fragments,Fail
-spec@arb_occlusion_query@occlusion_query_meta_save,Fail
 spec@arb_pixel_buffer_object@cubemap npot pbo,Fail
 spec@arb_pixel_buffer_object@cubemap pbo,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
@@ -183,7 +177,6 @@ spec@ati_fragment_shader@ati_fragment_shader-render-default,Fail
 spec@ati_fragment_shader@ati_fragment_shader-render-notexture,Fail
 spec@ati_fragment_shader@ati_fragment_shader-render-sources,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
-spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
@@ -234,7 +227,6 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416,Fail
-spec@ext_occlusion_query_boolean@any-samples,Fail
 spec@ext_packed_depth_stencil@depth_stencil texture,Fail
 spec@ext_packed_depth_stencil@fbo-blit-d24s8,Fail
 spec@ext_packed_depth_stencil@fbo-depth-gl_depth24_stencil8-blit,Fail
@@ -621,7 +613,6 @@ spec@!opengl 1.5@depth-tex-compare,Fail
 spec@!opengl 2.0@early-z,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
-spec@!opengl 2.0@occlusion-query-discard,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2 back2@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2,Fail

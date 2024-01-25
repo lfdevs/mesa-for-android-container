@@ -1224,7 +1224,6 @@ zink_screen_init_compiler(struct zink_screen *screen)
       .lower_ldexp = true,
 
       .lower_mul_high = true,
-      .lower_rotate = true,
       .lower_uadd_carry = true,
       .lower_usub_borrow = true,
       .lower_uadd_sat = true,

@@ -1395,7 +1395,6 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		.lower_insert_byte = true,
 		.lower_insert_word = true,
 		.lower_ldexp = true,
-		.lower_rotate = true,
 		/* due to a bug in the shader compiler, some loops hang
 		 * if they are not unrolled, see:
 		 *    https://bugs.freedesktop.org/show_bug.cgi?id=86720

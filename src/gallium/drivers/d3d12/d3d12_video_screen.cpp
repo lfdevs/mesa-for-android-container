@@ -1718,6 +1718,7 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
       case PIPE_VIDEO_CAP_ENC_MAX_TILE_ROWS:
       case PIPE_VIDEO_CAP_ENC_MAX_TILE_COLS:
       case PIPE_VIDEO_CAP_ENC_INTRA_REFRESH_MAX_DURATION:
+      case PIPE_VIDEO_CAP_ENC_INTRA_REFRESH:
       case PIPE_VIDEO_CAP_ENC_H264_DISABLE_DBK_FILTER_MODES_SUPPORTED:
       case PIPE_VIDEO_CAP_ENC_H264_SUPPORTS_CABAC_ENCODE:
       case PIPE_VIDEO_CAP_ENC_ROI:
@@ -1768,6 +1769,14 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
                   return maxReferencesPerFrame;
                } else if (param == PIPE_VIDEO_CAP_ENC_INTRA_REFRESH_MAX_DURATION) {
                   return maxIRDuration;
+               } else if (param == PIPE_VIDEO_CAP_ENC_INTRA_REFRESH) {
+                  return (maxIRDuration == 0) ? 0 :
+                         (PIPE_VIDEO_ENC_INTRA_REFRESH_ROW |
+                          PIPE_VIDEO_ENC_INTRA_REFRESH_ADAPTIVE |
+                          PIPE_VIDEO_ENC_INTRA_REFRESH_CYCLIC |
+                          PIPE_VIDEO_ENC_INTRA_REFRESH_P_FRAME |
+                          PIPE_VIDEO_ENC_INTRA_REFRESH_B_FRAME |
+                          PIPE_VIDEO_ENC_INTRA_REFRESH_MULTI_REF);
                } else if (param == PIPE_VIDEO_CAP_ENC_SUPPORTS_MAX_FRAME_SIZE) {
                   return isRCMaxFrameSizeSupported;
                } else if (param == PIPE_VIDEO_CAP_ENC_HEVC_FEATURE_FLAGS) {
