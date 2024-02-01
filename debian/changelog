@@ -1,3 +1,9 @@
+mesa (24.0.0-1) experimental; urgency=medium
+
+  * New upstream release. (Closes: #1059782)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 01 Feb 2024 09:34:09 +0200
+
 mesa (24.0.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.
@@ -22,6 +28,13 @@ mesa (24.0.0~rc1-1) experimental; urgency=medium
     override as it's the default now.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 16 Jan 2024 19:15:45 +0200
+
+mesa (23.3.5-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Drop zink reverts, gtk4 autopkgtest got fixed.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 01 Feb 2024 09:20:35 +0200
 
 mesa (23.3.4-1) unstable; urgency=medium
 

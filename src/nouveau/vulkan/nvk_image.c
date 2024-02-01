@@ -189,7 +189,7 @@ nvk_GetPhysicalDeviceImageFormatProperties2(
 {
    VK_FROM_HANDLE(nvk_physical_device, pdev, physicalDevice);
 
-   const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
+   const VkPhysicalDeviceExternalImageFormatInfo *external_info =
       vk_find_struct_const(pImageFormatInfo->pNext,
                            PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO);
 

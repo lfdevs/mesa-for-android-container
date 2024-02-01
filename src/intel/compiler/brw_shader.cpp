@@ -29,6 +29,7 @@
 #include "brw_vec4_tes.h"
 #include "dev/intel_debug.h"
 #include "util/macros.h"
+#include "util/u_debug.h"
 
 enum brw_reg_type
 brw_type_for_base_type(const struct glsl_type *type)
@@ -1230,7 +1231,7 @@ void
 backend_shader::dump_instructions(const char *name) const
 {
    FILE *file = stderr;
-   if (name && geteuid() != 0) {
+   if (name && __normal_user()) {
       file = fopen(name, "w");
       if (!file)
          file = stderr;

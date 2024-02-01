@@ -104,6 +104,9 @@ out:
    if (!use_heap) {
       struct fd_pipe *pipe = fd_pipe_new(dev, FD_PIPE_3D);
 
+      if (!pipe)
+         goto fail;
+
       /* Userspace fences don't appear to be reliable enough (missing some
        * cache flushes?) on older gens, so limit sub-alloc heaps to a6xx+
        * for now:
@@ -119,6 +122,10 @@ out:
    }
 
    return dev;
+
+fail:
+   fd_device_del(dev);
+   return NULL;
 }
 
 /* like fd_device_new() but creates it's own private dup() of the fd

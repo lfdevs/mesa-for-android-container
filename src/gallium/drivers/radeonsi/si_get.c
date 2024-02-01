@@ -575,12 +575,9 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
    /* Return the capability of Video Post Processor.
     * Have to determine the HW version of VPE.
     * Have to check the HW limitation and
+    * Check if the VPE exists and is valid
     */
-   if (entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
-      /* Check if the VPE exists and is valid */
-      if (!sscreen->info.ip[AMD_IP_VPE].num_queues) {
-          return false;
-      }
+   if (sscreen->info.ip[AMD_IP_VPE].num_queues && entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
 
       switch(param) {
       case PIPE_VIDEO_CAP_SUPPORTED:
@@ -808,7 +805,7 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
          else
             return 0;
       case PIPE_VIDEO_CAP_EFC_SUPPORTED:
-         return ((sscreen->info.family >= CHIP_RENOIR) &&
+         return ((sscreen->info.family > CHIP_RENOIR) &&
                  !(sscreen->debug_flags & DBG(NO_EFC)));
 
       case PIPE_VIDEO_CAP_ENC_MAX_REFERENCES_PER_FRAME:
@@ -1011,7 +1008,7 @@ static bool si_vid_is_format_supported(struct pipe_screen *screen, enum pipe_for
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
 
-   if (entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
+   if (sscreen->info.ip[AMD_IP_VPE].num_queues && entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
       /* Todo:
        * Unable to confirm whether it is asking for an input or output type
        * Have to modify va frontend for solving this problem

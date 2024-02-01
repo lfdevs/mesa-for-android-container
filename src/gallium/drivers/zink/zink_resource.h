@@ -44,7 +44,8 @@ zink_screen_resource_init(struct pipe_screen *pscreen);
 
 void
 zink_context_resource_init(struct pipe_context *pctx);
-
+void
+zink_screen_buffer_unmap(struct pipe_screen *pscreen, struct pipe_transfer *ptrans);
 void
 zink_get_depth_stencil_resources(struct pipe_resource *res,
                                  struct zink_resource **out_z,

@@ -1344,6 +1344,7 @@ lower_int64_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
    default:
       unreachable("Unsupported intrinsic");
    }
+   return NULL;
 }
 
 static bool

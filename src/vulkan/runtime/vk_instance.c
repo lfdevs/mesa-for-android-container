@@ -197,7 +197,7 @@ vk_instance_init(struct vk_instance *instance,
 
    instance->trace_mode = parse_debug_string(getenv("MESA_VK_TRACE"), trace_options);
    instance->trace_frame = (uint32_t)debug_get_num_option("MESA_VK_TRACE_FRAME", 0xFFFFFFFF);
-   instance->trace_trigger_file = getenv("MESA_VK_TRACE_TRIGGER");
+   instance->trace_trigger_file = secure_getenv("MESA_VK_TRACE_TRIGGER");
 
    vk_compiler_cache_init();
 

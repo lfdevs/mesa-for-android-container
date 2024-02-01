@@ -3374,7 +3374,7 @@ panfrost_create_sampler_view(struct pipe_context *pctx,
       rzalloc(pctx, struct panfrost_sampler_view);
 
    pan_legalize_afbc_format(ctx, pan_resource(texture), template->format,
-                            false);
+                            false, false);
 
    pipe_reference(NULL, &texture->reference);
 

@@ -551,7 +551,8 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
             cum += pps->column_width_minus1[4 * i + 2] + 1;
             tile.ColumnPosition[i].CtbPos3i = cum;
 
-            if ((4 * i + 3) == pps->num_tile_columns_minus1)
+            if ((4 * i + 3) >= MIN2(pps->num_tile_columns_minus1,
+                                    ARRAY_SIZE(pps->column_width_minus1)))
                break;
 
             cum += pps->column_width_minus1[4 * i + 3] + 1;

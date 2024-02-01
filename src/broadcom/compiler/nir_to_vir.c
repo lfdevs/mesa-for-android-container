@@ -3026,6 +3026,46 @@ emit_ldunifa(struct v3d_compile *c, struct qreg *result)
         c->current_unifa_offset += 4;
 }
 
+/* Checks if the value of a nir src is derived from a nir register */
+static bool
+nir_src_derived_from_reg(nir_src src)
+{
+        nir_def *def = src.ssa;
+        if (nir_load_reg_for_def(def))
+                return true;
+
+        nir_instr *parent = def->parent_instr;
+        switch (parent->type) {
+        case nir_instr_type_alu: {
+                nir_alu_instr *alu = nir_instr_as_alu(parent);
+                int num_srcs = nir_op_infos[alu->op].num_inputs;
+                for (int i = 0; i < num_srcs; i++) {
+                        if (nir_src_derived_from_reg(alu->src[i].src))
+                                return true;
+                }
+                return false;
+        }
+        case nir_instr_type_intrinsic: {
+                nir_intrinsic_instr *intr = nir_instr_as_intrinsic(parent);
+                int num_srcs = nir_intrinsic_infos[intr->intrinsic].num_srcs;
+                for (int i = 0; i < num_srcs; i++) {
+                        if (nir_src_derived_from_reg(intr->src[i]))
+                                return true;
+                }
+                return false;
+        }
+        case nir_instr_type_load_const:
+        case nir_instr_type_undef:
+                return false;
+        default:
+                /* By default we assume it may come from a register, the above
+                 * cases should be able to handle the majority of situations
+                 * though.
+                 */
+                return true;
+        };
+}
+
 static bool
 ntq_emit_load_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
 {
@@ -3047,6 +3087,24 @@ ntq_emit_load_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
         nir_src offset = is_uniform ? instr->src[0] : instr->src[1];
         if (nir_src_is_divergent(offset))
                 return false;
+
+        /* Emitting loads from unifa may not be safe under non-uniform control
+         * flow. It seems the address that is used to write to the unifa
+         * register is taken from the first lane and if that lane is disabled
+         * by control flow then the value we read may be bogus and lead to
+         * invalid memory accesses on follow-up ldunifa instructions. However,
+         * ntq_store_def only emits conditional writes for nir registersas long
+         * we can be certain that the offset isn't derived from a load_reg we
+         * should be fine.
+         *
+         * The following CTS test can be used to trigger the problem, which
+         * causes a GMP violations in the sim without this check:
+         * dEQP-VK.subgroups.ballot_broadcast.graphics.subgroupbroadcastfirst_int
+         */
+        if (vir_in_nonuniform_control_flow(c) &&
+            nir_src_derived_from_reg(offset)) {
+                return false;
+        }
 
         /* We can only use unifa with SSBOs if they are read-only. Otherwise
          * ldunifa won't see the shader writes to that address (possibly
@@ -3220,34 +3278,6 @@ emit_load_local_invocation_index(struct v3d_compile *c)
 {
         return vir_SHR(c, c->cs_payload[1],
                        vir_uniform_ui(c, 32 - c->local_invocation_index_bits));
-}
-
-/* Various subgroup operations rely on the A flags, so this helper ensures that
- * A flags represents currently active lanes in the subgroup.
- */
-static void
-set_a_flags_for_subgroup(struct v3d_compile *c)
-{
-        /* MSF returns 0 for disabled lanes in compute shaders so
-         * PUSHZ will set A=1 for disabled lanes. We want the inverse
-         * of this but we don't have any means to negate the A flags
-         * directly, but we can do it by repeating the same operation
-         * with NORZ (A = ~A & ~Z).
-         */
-        assert(c->s->info.stage == MESA_SHADER_COMPUTE);
-        vir_set_pf(c, vir_MSF_dest(c, vir_nop_reg()), V3D_QPU_PF_PUSHZ);
-        vir_set_uf(c, vir_MSF_dest(c, vir_nop_reg()), V3D_QPU_UF_NORZ);
-
-        /* If we are under non-uniform control flow we also need to
-         * AND the A flags with the current execute mask.
-         */
-        if (vir_in_nonuniform_control_flow(c)) {
-                const uint32_t bidx = c->cur_block->index;
-                vir_set_uf(c, vir_XOR_dest(c, vir_nop_reg(),
-                                           c->execute,
-                                           vir_uniform_ui(c, bidx)),
-                           V3D_QPU_UF_ANDZ);
-        }
 }
 
 static void
@@ -3737,10 +3767,23 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 break;
 
         case nir_intrinsic_elect: {
-                set_a_flags_for_subgroup(c);
-                struct qreg first = vir_FLAFIRST(c);
+                struct qreg first;
+                if (vir_in_nonuniform_control_flow(c)) {
+                        /* Sets A=1 for lanes enabled in the execution mask */
+                        vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute),
+                                   V3D_QPU_PF_PUSHZ);
+                        /* Updates A ANDing with lanes enabled in MSF */
+                        vir_set_uf(c, vir_MSF_dest(c, vir_nop_reg()),
+                                   V3D_QPU_UF_ANDNZ);
+                        first = vir_FLAFIRST(c);
+                } else {
+                        /* Sets A=1 for inactive lanes */
+                        vir_set_pf(c, vir_MSF_dest(c, vir_nop_reg()),
+                                   V3D_QPU_PF_PUSHZ);
+                        first = vir_FLNAFIRST(c);
+                }
 
-                /* Produce a boolean result from Flafirst */
+                /* Produce a boolean result */
                 vir_set_pf(c, vir_XOR_dest(c, vir_nop_reg(),
                                            first, vir_uniform_ui(c, 1)),
                                            V3D_QPU_PF_PUSHZ);
@@ -3957,19 +4000,27 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
                      c->execute,
                      vir_uniform_ui(c, else_block->index));
 
+        /* Set the flags for taking the THEN block */
+        vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute),
+                   V3D_QPU_PF_PUSHZ);
+
         /* Jump to ELSE if nothing is active for THEN (unless THEN block is
          * so small it won't pay off), otherwise fall through.
          */
         bool is_cheap = exec_list_is_singular(&if_stmt->then_list) &&
                         is_cheap_block(nir_if_first_then_block(if_stmt));
         if (!is_cheap) {
-                vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute), V3D_QPU_PF_PUSHZ);
                 vir_BRANCH(c, V3D_QPU_BRANCH_COND_ALLNA);
                 vir_link_blocks(c->cur_block, else_block);
         }
         vir_link_blocks(c->cur_block, then_block);
 
-        /* Process the THEN block. */
+        /* Process the THEN block.
+         *
+         * Notice we don't call ntq_activate_execute_for_block here on purpose:
+         * c->execute is already set up to be 0 for lanes that must take the
+         * THEN block.
+         */
         vir_set_emit_block(c, then_block);
         ntq_emit_cf_list(c, &if_stmt->then_list);
 

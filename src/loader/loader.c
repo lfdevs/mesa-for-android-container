@@ -675,7 +675,7 @@ loader_get_driver_for_fd(int fd)
     * user's problem, but this allows vc4 simulator to run on an i965 host,
     * and may be useful for some touch testing of i915 on an i965 host.
     */
-   if (geteuid() == getuid()) {
+   if (__normal_user()) {
       const char *override = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
       if (override)
          return strdup(override);
@@ -780,7 +780,7 @@ loader_open_driver_lib(const char *driver_name,
    const char *search_paths, *next, *end;
 
    search_paths = NULL;
-   if (geteuid() == getuid() && search_path_vars) {
+   if (__normal_user() && search_path_vars) {
       for (int i = 0; search_path_vars[i] != NULL; i++) {
          search_paths = getenv(search_path_vars[i]);
          if (search_paths)

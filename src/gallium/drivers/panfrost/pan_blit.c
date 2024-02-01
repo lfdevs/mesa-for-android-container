@@ -106,11 +106,11 @@ panfrost_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
    /* Legalize here because it could trigger a recursive blit otherwise */
    struct panfrost_resource *src = pan_resource(info->src.resource);
    enum pipe_format src_view_format = util_format_linear(info->src.format);
-   pan_legalize_afbc_format(ctx, src, src_view_format, false);
+   pan_legalize_afbc_format(ctx, src, src_view_format, false, false);
 
    struct panfrost_resource *dst = pan_resource(info->dst.resource);
    enum pipe_format dst_view_format = util_format_linear(info->dst.format);
-   pan_legalize_afbc_format(ctx, dst, dst_view_format, true);
+   pan_legalize_afbc_format(ctx, dst, dst_view_format, true, false);
 
    panfrost_blit_no_afbc_legalization(pipe, info);
 }

@@ -556,33 +556,32 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
                 (ctx.info[block->index].exec[0].second & mask_type_global));
 
          int num;
-         Temp cond, exit_cond;
-         if (instr->operands[0].isConstant()) {
+         Operand src;
+         Temp exit_cond;
+         if (instr->operands[0].isConstant() && !(block->kind & block_kind_top_level)) {
             assert(instr->operands[0].constantValue() == -1u);
             /* transition to exact and set exec to zero */
             exit_cond = bld.tmp(s1);
-            cond =
-               bld.sop1(Builder::s_and_saveexec, bld.def(bld.lm), bld.scc(Definition(exit_cond)),
-                        Definition(exec, bld.lm), Operand::zero(), Operand(exec, bld.lm));
+            src = bld.sop1(Builder::s_and_saveexec, bld.def(bld.lm), bld.scc(Definition(exit_cond)),
+                           Definition(exec, bld.lm), Operand::zero(), Operand(exec, bld.lm));
 
             num = ctx.info[block->index].exec.size() - 2;
             if (!(ctx.info[block->index].exec.back().second & mask_type_exact)) {
-               ctx.info[block->index].exec.back().first = Operand(cond);
+               ctx.info[block->index].exec.back().first = src;
                ctx.info[block->index].exec.emplace_back(Operand(bld.lm), mask_type_exact);
             }
          } else {
             /* demote_if: transition to exact */
             if (block->kind & block_kind_top_level && ctx.info[block->index].exec.size() == 2 &&
                 ctx.info[block->index].exec.back().second & mask_type_global) {
-               /* We don't need to actually copy anything into exact, since the s_andn2
+               /* We don't need to actually copy anything into exec, since the s_andn2
                 * instructions later will do that.
                 */
                ctx.info[block->index].exec.pop_back();
             } else {
                transition_to_Exact(ctx, bld, block->index);
             }
-            assert(instr->operands[0].isTemp());
-            cond = instr->operands[0].getTemp();
+            src = instr->operands[0];
             num = ctx.info[block->index].exec.size() - 1;
          }
 
@@ -590,7 +589,7 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
             if (ctx.info[block->index].exec[i].second & mask_type_exact) {
                Instruction* andn2 =
                   bld.sop2(Builder::s_andn2, bld.def(bld.lm), bld.def(s1, scc),
-                           get_exec_op(ctx.info[block->index].exec[i].first), cond);
+                           get_exec_op(ctx.info[block->index].exec[i].first), src);
                if (i == (int)ctx.info[block->index].exec.size() - 1)
                   andn2->definitions[0] = Definition(exec, bld.lm);
 

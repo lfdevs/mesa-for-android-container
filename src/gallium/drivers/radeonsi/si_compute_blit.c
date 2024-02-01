@@ -535,7 +535,10 @@ void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resour
    if (!sctx->cs_ubyte_to_ushort)
       sctx->cs_ubyte_to_ushort = si_create_ubyte_to_ushort_compute_shader(sctx);
 
-   enum si_coherency coher = SI_COHERENCY_SHADER;
+   /* Use COHERENCY_NONE to get SI_CONTEXT_WB_L2 automatically used in
+    * si_launch_grid_internal_ssbos.
+    */
+   enum si_coherency coher = SI_COHERENCY_NONE;
 
    si_improve_sync_flags(sctx, dst, src, &flags);
 

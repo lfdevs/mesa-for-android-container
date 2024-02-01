@@ -1767,18 +1767,11 @@ anv_image_finish(struct anv_image *image)
     * mapping.
     */
    for (int p = 0; p < image->n_planes; ++p) {
-      if (!image->planes[p].aux_ccs_mapped)
-         continue;
-
-      const struct anv_address main_addr =
-         anv_image_address(image,
-                           &image->planes[p].primary_surface.memory_range);
-      const struct isl_surf *surf =
-         &image->planes[p].primary_surface.isl;
-
-      intel_aux_map_del_mapping(device->aux_map_ctx,
-                                anv_address_physical(main_addr),
-                                surf->size_B);
+      if (image->planes[p].aux_tt.mapped) {
+         intel_aux_map_del_mapping(device->aux_map_ctx,
+                                   image->planes[p].aux_tt.addr,
+                                   image->planes[p].aux_tt.size);
+      }
    }
 
    if (image->from_gralloc) {
@@ -2246,6 +2239,38 @@ void anv_GetDeviceImageSparseMemoryRequirements(
    anv_image_finish(&image);
 }
 
+static bool
+anv_image_map_aux_tt(struct anv_device *device,
+                     struct anv_image *image, uint32_t plane)
+{
+   const struct anv_address main_addr = anv_image_address(
+      image, &image->planes[plane].primary_surface.memory_range);
+   struct anv_bo *bo = main_addr.bo;
+   assert(bo != NULL);
+
+   if (anv_address_allows_aux_map(device, main_addr)) {
+      const struct anv_address aux_addr =
+         anv_image_address(image,
+                           &image->planes[plane].compr_ctrl_memory_range);
+      const struct isl_surf *surf =
+         &image->planes[plane].primary_surface.isl;
+      const uint64_t format_bits =
+         intel_aux_map_format_bits_for_isl_surf(surf);
+      if (intel_aux_map_add_mapping(device->aux_map_ctx,
+                                    anv_address_physical(main_addr),
+                                    anv_address_physical(aux_addr),
+                                    surf->size_B, format_bits)) {
+         image->planes[plane].aux_tt.addr = anv_address_physical(main_addr);
+         image->planes[plane].aux_tt.size = surf->size_B;
+         image->planes[plane].aux_tt.mapped = true;
+         return true;
+      }
+   }
+
+   return false;
+
+}
+
 static VkResult
 anv_bind_image_memory(struct anv_device *device,
                       const VkBindImageMemoryInfo *bind_info)
@@ -2377,25 +2402,9 @@ anv_bind_image_memory(struct anv_device *device,
            (bo->alloc_flags & ANV_BO_ALLOC_IMPORTED)))
          continue;
 
-      /* Add the plane to the aux map when applicable. */
-      const struct anv_address main_addr = anv_image_address(
-         image, &image->planes[p].primary_surface.memory_range);
-      if (anv_address_allows_aux_map(device, main_addr)) {
-         const struct anv_address aux_addr =
-            anv_image_address(image,
-                              &image->planes[p].compr_ctrl_memory_range);
-         const struct isl_surf *surf =
-            &image->planes[p].primary_surface.isl;
-         const uint64_t format_bits =
-            intel_aux_map_format_bits_for_isl_surf(surf);
-         image->planes[p].aux_ccs_mapped =
-            intel_aux_map_add_mapping(device->aux_map_ctx,
-                                      anv_address_physical(main_addr),
-                                      anv_address_physical(aux_addr),
-                                      surf->size_B, format_bits);
-         if (image->planes[p].aux_ccs_mapped)
-            continue;
-      }
+      /* If the AUX-TT mapping succeeds, there is nothing else to do. */
+      if (device->info->has_aux_map && anv_image_map_aux_tt(device, image, p))
+         continue;
 
       /* Do nothing prior to gfx12. There are no special requirements. */
       if (device->info->ver < 12)

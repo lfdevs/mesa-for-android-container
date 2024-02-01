@@ -283,7 +283,7 @@ panfrost_set_shader_images(struct pipe_context *pctx,
        */
       if (drm_is_afbc(rsrc->image.layout.modifier)) {
          pan_resource_modifier_convert(
-            ctx, rsrc, DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
+            ctx, rsrc, DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED, true,
             "Shader image");
       }
 

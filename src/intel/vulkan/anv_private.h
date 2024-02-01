@@ -406,8 +406,8 @@ enum anv_bo_alloc_flags {
    /** Has an address which is visible to the client */
    ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS =  (1 << 8),
 
-   /** This BO will be dedicated to a buffer or an image */
-   ANV_BO_ALLOC_DEDICATED =               (1 << 9),
+   /** Align the BO's virtual address to match AUX-TT requirements */
+   ANV_BO_ALLOC_AUX_TT_ALIGNED =          (1 << 9),
 
    /** This buffer is allocated from local memory and should be cpu visible */
    ANV_BO_ALLOC_LOCAL_MEM_CPU_VISIBLE =   (1 << 10),
@@ -3087,214 +3087,42 @@ enum anv_query_bits {
 
 /* PIPE_CONTROL bits that should be set only in Media/GPGPU RCS mode.
  * For more details see genX(emit_apply_pipe_flushes).
+ *
+ * Documentation says that untyped L1 dataport cache flush is controlled by
+ * HDC pipeline flush in 3D mode according to HDC_CHICKEN0 register:
+ *
+ * BSpec 47112: PIPE_CONTROL::HDC Pipeline Flush:
+ *
+ *    "When the "Pipeline Select" mode in PIPELINE_SELECT command is set to
+ *     "3D", HDC Pipeline Flush can also flush/invalidate the LSC Untyped L1
+ *     cache based on the programming of HDC_Chicken0 register bits 13:11."
+ *
+ *    "When the 'Pipeline Select' mode is set to 'GPGPU', the LSC Untyped L1
+ *     cache flush is controlled by 'Untyped Data-Port Cache Flush' bit in the
+ *     PIPE_CONTROL command."
+ *
+ *    As part of Wa_22010960976 & Wa_14013347512, i915 is programming
+ *    HDC_CHICKEN0[11:13] = 0 ("Untyped L1 is flushed, for both 3D Pipecontrol
+ *    Dataport flush, and UAV coherency barrier event"). So there is no need
+ *    to set "Untyped Data-Port Cache" in 3D mode.
+ *
+ * On MTL the HDC_CHICKEN0 default values changed to match what was programmed
+ * by Wa_22010960976 & Wa_14013347512 on DG2, but experiments show that the
+ * change runs a bit deeper. Even manually writing to the HDC_CHICKEN0
+ * register to force L1 untyped flush with HDC pipeline flush has no effect on
+ * MTL.
+ *
+ * It seems like the HW change completely disconnected L1 untyped flush from
+ * HDC pipeline flush with no way to bring that behavior back. So leave the L1
+ * untyped flush active in 3D mode on all platforms since it doesn't seems to
+ * cause issues there too.
+ *
+ * Maybe we'll have some GPGPU only bits here at some point.
  */
-#define ANV_PIPE_GPGPU_BITS ( \
-   (GFX_VERx10 >= 125 ? ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT : 0))
+#define ANV_PIPE_GPGPU_BITS (0)
 
 enum intel_ds_stall_flag
 anv_pipe_flush_bit_to_ds_stall_flag(enum anv_pipe_bits bits);
-
-static inline enum anv_pipe_bits
-anv_pipe_flush_bits_for_access_flags(struct anv_device *device,
-                                     VkAccessFlags2 flags)
-{
-   enum anv_pipe_bits pipe_bits = 0;
-
-   u_foreach_bit64(b, flags) {
-      switch ((VkAccessFlags2)BITFIELD64_BIT(b)) {
-      case VK_ACCESS_2_SHADER_WRITE_BIT:
-      case VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT:
-      case VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR:
-         /* We're transitioning a buffer that was previously used as write
-          * destination through the data port. To make its content available
-          * to future operations, flush the hdc pipeline.
-          */
-         pipe_bits |= ANV_PIPE_HDC_PIPELINE_FLUSH_BIT;
-         pipe_bits |= ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT:
-         /* We're transitioning a buffer that was previously used as render
-          * target. To make its content available to future operations, flush
-          * the render target cache.
-          */
-         pipe_bits |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT:
-         /* We're transitioning a buffer that was previously used as depth
-          * buffer. To make its content available to future operations, flush
-          * the depth cache.
-          */
-         pipe_bits |= ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_TRANSFER_WRITE_BIT:
-         /* We're transitioning a buffer that was previously used as a
-          * transfer write destination. Generic write operations include color
-          * & depth operations as well as buffer operations like :
-          *     - vkCmdClearColorImage()
-          *     - vkCmdClearDepthStencilImage()
-          *     - vkCmdBlitImage()
-          *     - vkCmdCopy*(), vkCmdUpdate*(), vkCmdFill*()
-          *
-          * Most of these operations are implemented using Blorp which writes
-          * through the render target, so flush that cache to make it visible
-          * to future operations. And for depth related operations we also
-          * need to flush the depth cache.
-          */
-         pipe_bits |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
-         pipe_bits |= ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_MEMORY_WRITE_BIT:
-         /* We're transitioning a buffer for generic write operations. Flush
-          * all the caches.
-          */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
-         break;
-      case VK_ACCESS_2_HOST_WRITE_BIT:
-         /* We're transitioning a buffer for access by CPU. Invalidate
-          * all the caches. Since data and tile caches don't have invalidate,
-          * we are forced to flush those as well.
-          */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
-         pipe_bits |= ANV_PIPE_INVALIDATE_BITS;
-         break;
-      case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
-      case VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT:
-         /* We're transitioning a buffer written either from VS stage or from
-          * the command streamer (see CmdEndTransformFeedbackEXT), we just
-          * need to stall the CS.
-          *
-          * Streamout writes apparently bypassing L3, in order to make them
-          * visible to the destination, we need to invalidate the other
-          * caches.
-          */
-         pipe_bits |= ANV_PIPE_CS_STALL_BIT | ANV_PIPE_INVALIDATE_BITS;
-         break;
-      default:
-         break; /* Nothing to do */
-      }
-   }
-
-   return pipe_bits;
-}
-
-static inline enum anv_pipe_bits
-anv_pipe_invalidate_bits_for_access_flags(struct anv_device *device,
-                                          VkAccessFlags2 flags)
-{
-   enum anv_pipe_bits pipe_bits = 0;
-
-   u_foreach_bit64(b, flags) {
-      switch ((VkAccessFlags2)BITFIELD64_BIT(b)) {
-      case VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT:
-         /* Indirect draw commands take a buffer as input that we're going to
-          * read from the command streamer to load some of the HW registers
-          * (see genX_cmd_buffer.c:load_indirect_parameters). This requires a
-          * command streamer stall so that all the cache flushes have
-          * completed before the command streamer loads from memory.
-          */
-         pipe_bits |=  ANV_PIPE_CS_STALL_BIT;
-         /* Indirect draw commands also set gl_BaseVertex & gl_BaseIndex
-          * through a vertex buffer, so invalidate that cache.
-          */
-         pipe_bits |= ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
-         /* For CmdDipatchIndirect, we also load gl_NumWorkGroups through a
-          * UBO from the buffer, so we need to invalidate constant cache.
-          */
-         pipe_bits |= ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT;
-         pipe_bits |= ANV_PIPE_DATA_CACHE_FLUSH_BIT;
-         /* Tile cache flush needed For CmdDipatchIndirect since command
-          * streamer and vertex fetch aren't L3 coherent.
-          */
-         pipe_bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_INDEX_READ_BIT:
-      case VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT:
-         /* We transitioning a buffer to be used for as input for vkCmdDraw*
-          * commands, so we invalidate the VF cache to make sure there is no
-          * stale data when we start rendering.
-          */
-         pipe_bits |= ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
-         break;
-      case VK_ACCESS_2_UNIFORM_READ_BIT:
-      case VK_ACCESS_2_SHADER_BINDING_TABLE_READ_BIT_KHR:
-         /* We transitioning a buffer to be used as uniform data. Because
-          * uniform is accessed through the data port & sampler, we need to
-          * invalidate the texture cache (sampler) & constant cache (data
-          * port) to avoid stale data.
-          */
-         pipe_bits |= ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT;
-         if (device->physical->compiler->indirect_ubos_use_sampler) {
-            pipe_bits |= ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
-         } else {
-            pipe_bits |= ANV_PIPE_HDC_PIPELINE_FLUSH_BIT;
-            pipe_bits |= ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT;
-         }
-         break;
-      case VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT:
-      case VK_ACCESS_2_TRANSFER_READ_BIT:
-      case VK_ACCESS_2_SHADER_SAMPLED_READ_BIT:
-         /* Transitioning a buffer to be read through the sampler, so
-          * invalidate the texture cache, we don't want any stale data.
-          */
-         pipe_bits |= ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
-         break;
-      case VK_ACCESS_2_SHADER_READ_BIT:
-         /* Same as VK_ACCESS_2_UNIFORM_READ_BIT and
-          * VK_ACCESS_2_SHADER_SAMPLED_READ_BIT cases above
-          */
-         pipe_bits |= ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT |
-                      ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
-         if (!device->physical->compiler->indirect_ubos_use_sampler) {
-            pipe_bits |= ANV_PIPE_HDC_PIPELINE_FLUSH_BIT;
-            pipe_bits |= ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT;
-         }
-         break;
-      case VK_ACCESS_2_MEMORY_READ_BIT:
-         /* Transitioning a buffer for generic read, invalidate all the
-          * caches.
-          */
-         pipe_bits |= ANV_PIPE_INVALIDATE_BITS;
-         break;
-      case VK_ACCESS_2_MEMORY_WRITE_BIT:
-         /* Generic write, make sure all previously written things land in
-          * memory.
-          */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
-         break;
-      case VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT:
-      case VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT:
-         /* Transitioning a buffer for conditional rendering or transform
-          * feedback. We'll load the content of this buffer into HW registers
-          * using the command streamer, so we need to stall the command
-          * streamer , so we need to stall the command streamer to make sure
-          * any in-flight flush operations have completed.
-          */
-         pipe_bits |= ANV_PIPE_CS_STALL_BIT;
-         pipe_bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
-         pipe_bits |= ANV_PIPE_DATA_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_HOST_READ_BIT:
-         /* We're transitioning a buffer that was written by CPU.  Flush
-          * all the caches.
-          */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
-         break;
-      case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
-         /* We're transitioning a buffer to be written by the streamout fixed
-          * function. This one is apparently not L3 coherent, so we need a
-          * tile cache flush to make sure any previous write is not going to
-          * create WaW hazards.
-          */
-         pipe_bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
-         break;
-      case VK_ACCESS_2_SHADER_STORAGE_READ_BIT:
-      default:
-         break; /* Nothing to do */
-      }
-   }
-
-   return pipe_bits;
-}
 
 #define VK_IMAGE_ASPECT_PLANES_BITS_ANV ( \
    VK_IMAGE_ASPECT_PLANE_0_BIT | \
@@ -4968,7 +4796,16 @@ struct anv_image {
        */
       bool can_non_zero_fast_clear;
 
-      bool aux_ccs_mapped;
+      struct {
+         /** Whether the image has CCS data mapped through AUX-TT. */
+         bool mapped;
+
+         /** Main address of the mapping. */
+         uint64_t addr;
+
+         /** Size of the mapping. */
+         uint64_t size;
+      } aux_tt;
    } planes[3];
 
    struct anv_image_memory_range vid_dmv_top_surface;
@@ -5232,14 +5069,7 @@ anv_bo_allows_aux_map(const struct anv_device *device,
    if (device->aux_map_ctx == NULL)
       return false;
 
-   /* Technically, we really only care about what offset the image is bound
-    * into on the BO, but we don't have that information here. As a heuristic,
-    * rely on the BO offset instead.
-    */
-   if (bo->offset % intel_aux_map_get_alignment(device->aux_map_ctx) != 0)
-      return false;
-
-   return true;
+   return (bo->alloc_flags & ANV_BO_ALLOC_AUX_TT_ALIGNED) != 0;
 }
 
 static inline bool

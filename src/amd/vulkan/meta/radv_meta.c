@@ -296,7 +296,7 @@ meta_free(void *_device, void *data)
 static bool
 radv_builtin_cache_path(char *path)
 {
-   char *xdg_cache_home = getenv("XDG_CACHE_HOME");
+   char *xdg_cache_home = secure_getenv("XDG_CACHE_HOME");
    const char *suffix = "/radv_builtin_shaders";
    const char *suffix2 = "/.cache/radv_builtin_shaders";
    struct passwd pwd, *result;

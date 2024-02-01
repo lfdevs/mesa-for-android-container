@@ -65,7 +65,7 @@ panfrost_batch_add_surface(struct panfrost_batch *batch,
 {
    if (surf) {
       struct panfrost_resource *rsrc = pan_resource(surf->texture);
-      pan_legalize_afbc_format(batch->ctx, rsrc, surf->format, true);
+      pan_legalize_afbc_format(batch->ctx, rsrc, surf->format, true, false);
       panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_FRAGMENT);
    }
 }

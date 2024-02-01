@@ -1501,7 +1501,7 @@ zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state
    }
 
    if (bs->dd.db_xfer)
-      pipe_buffer_unmap(&bs->ctx->base, bs->dd.db_xfer);
+      zink_screen_buffer_unmap(&screen->base, bs->dd.db_xfer);
    bs->dd.db_xfer = NULL;
    if (bs->dd.db)
       screen->base.resource_destroy(&screen->base, &bs->dd.db->base.b);
@@ -1593,7 +1593,7 @@ zink_batch_descriptor_init(struct zink_screen *screen, struct zink_batch_state *
       if (!pres)
          return false;
       bs->dd.db = zink_resource(pres);
-      bs->dd.db_map = pipe_buffer_map(&bs->ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE | PIPE_MAP_PERSISTENT | PIPE_MAP_THREAD_SAFE, &bs->dd.db_xfer);
+      bs->dd.db_map = pipe_buffer_map(&bs->ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE | PIPE_MAP_PERSISTENT | PIPE_MAP_COHERENT | PIPE_MAP_THREAD_SAFE, &bs->dd.db_xfer);
    }
    return true;
 }

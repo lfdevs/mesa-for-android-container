@@ -172,6 +172,7 @@ zink_context_destroy(struct pipe_context *pctx)
    while (bs) {
       struct zink_batch_state *bs_next = bs->next;
       zink_clear_batch_state(ctx, bs);
+      bs->ctx = NULL;
       /* restore link as we insert them into the screens free_batch_states
        * list below
        */

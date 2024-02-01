@@ -1085,7 +1085,8 @@ radv_GetDeviceFaultInfoEXT(VkDevice _device, VkDeviceFaultCountsEXT *pFaultCount
          .addressPrecision = 4096, /* 4K page granularity */
       };
 
-      strncpy(pFaultInfo->description, "A GPUVM fault has been detected", sizeof(pFaultInfo->description));
+      if (pFaultInfo)
+         strncpy(pFaultInfo->description, "A GPUVM fault has been detected", sizeof(pFaultInfo->description));
 
       if (device->physical_device->rad_info.gfx_level >= GFX10) {
          addr_fault_info.addressType = G_00A130_RW(fault_info.status) ? VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT

@@ -177,7 +177,7 @@ _mesa_get_shader_capture_path(void)
    static const char *path = NULL;
 
    if (!read_env_var) {
-      path = getenv("MESA_SHADER_CAPTURE_PATH");
+      path = secure_getenv("MESA_SHADER_CAPTURE_PATH");
       read_env_var = true;
 
 #if ANDROID_SHADER_CAPTURE
@@ -1971,7 +1971,7 @@ _mesa_dump_shader_source(const gl_shader_stage stage, const char *source,
    if (!path_exists)
       return;
 
-   dump_path = getenv("MESA_SHADER_DUMP_PATH");
+   dump_path = secure_getenv("MESA_SHADER_DUMP_PATH");
    if (!dump_path) {
       path_exists = false;
       return;

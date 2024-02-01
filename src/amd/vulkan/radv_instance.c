@@ -297,7 +297,7 @@ static const struct vk_instance_extension_table radv_instance_extensions_support
 static void
 radv_handle_legacy_sqtt_trigger(struct vk_instance *instance)
 {
-   char *trigger_file = getenv("RADV_THREAD_TRACE_TRIGGER");
+   char *trigger_file = secure_getenv("RADV_THREAD_TRACE_TRIGGER");
    if (trigger_file) {
       instance->trace_trigger_file = trigger_file;
       instance->trace_mode |= RADV_TRACE_MODE_RGP;

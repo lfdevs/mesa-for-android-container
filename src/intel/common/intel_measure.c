@@ -108,7 +108,7 @@ intel_measure_init(struct intel_measure_device *device)
          *sep = '\0';
       }
 
-      if (filename && !__check_suid()) {
+      if (filename && __normal_user()) {
          filename += 5;
          config.file = fopen(filename, "w");
          if (!config.file) {

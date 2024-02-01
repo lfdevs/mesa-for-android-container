@@ -2020,7 +2020,8 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
       break;
    case aco_opcode::s_not_b32:
    case aco_opcode::s_not_b64:
-      if (ctx.info[instr->operands[0].tempId()].is_uniform_bool()) {
+      if (!instr->operands[0].isTemp()) {
+      } else if (ctx.info[instr->operands[0].tempId()].is_uniform_bool()) {
          ctx.info[instr->definitions[0].tempId()].set_uniform_bitwise();
          ctx.info[instr->definitions[1].tempId()].set_scc_invert(
             ctx.info[instr->operands[0].tempId()].temp);

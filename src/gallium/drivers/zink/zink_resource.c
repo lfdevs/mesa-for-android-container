@@ -2840,6 +2840,16 @@ do_transfer_unmap(struct zink_screen *screen, struct zink_transfer *trans)
    unmap_resource(screen, res);
 }
 
+void
+zink_screen_buffer_unmap(struct pipe_screen *pscreen, struct pipe_transfer *ptrans)
+{
+   struct zink_screen *screen = zink_screen(pscreen);
+   struct zink_transfer *trans = (struct zink_transfer *)ptrans;
+   if (trans->base.b.usage & PIPE_MAP_ONCE && !trans->staging_res)
+      do_transfer_unmap(screen, trans);
+   transfer_unmap(NULL, ptrans);
+}
+
 static void
 zink_buffer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
 {

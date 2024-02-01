@@ -4010,7 +4010,6 @@ VkResult anv_AllocateMemory(
 
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
          dedicated_info = (void *)ext;
-         alloc_flags |= ANV_BO_ALLOC_DEDICATED;
          break;
 
       case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO: {
@@ -4057,6 +4056,20 @@ VkResult anv_AllocateMemory(
 
    if (mem->vk.alloc_flags & VK_MEMORY_PROPERTY_PROTECTED_BIT)
       alloc_flags |= ANV_BO_ALLOC_PROTECTED;
+
+   /* For now, always allocated AUX-TT aligned memory, regardless of dedicated
+    * allocations. An application can for example, suballocate a large
+    * VkDeviceMemory and try to bind an image created with a CCS modifier. In
+    * that case we cannot disable CCS if the alignment doesn´t meet the AUX-TT
+    * requirements, so we need to ensure both the VkDeviceMemory and the
+    * alignment reported through vkGetImageMemoryRequirements() meet the
+    * AUX-TT requirement.
+    *
+    * TODO: when we enable EXT_descriptor_buffer, we'll be able to drop the
+    * AUX-TT alignment for that type of allocation.
+    */
+   if (device->info->has_aux_map)
+      alloc_flags |= ANV_BO_ALLOC_AUX_TT_ALIGNED;
 
    /* Anything imported or exported is EXTERNAL. Apply implicit sync to be
     * compatible with clients relying on implicit fencing. This matches the

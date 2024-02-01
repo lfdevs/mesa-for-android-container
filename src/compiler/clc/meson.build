@@ -125,7 +125,13 @@ _libmesaclc = static_library(
                  idep_mesautil, dep_spirv_tools, idep_vtn]
 )
 
+_idep_mesaclc_link_args = []
+if _shared_llvm
+  _idep_mesaclc_link_args += cc.get_supported_link_arguments('-fPIC')
+endif
+
 idep_mesaclc = declare_dependency(
   link_with : _libmesaclc,
   include_directories : include_directories('.'),
+  link_args : _idep_mesaclc_link_args,
 )

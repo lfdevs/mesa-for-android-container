@@ -47,6 +47,7 @@ radv_tex_wrap(VkSamplerAddressMode address_mode)
       unreachable("illegal tex wrap mode");
       break;
    }
+   return 0;
 }
 
 static unsigned
@@ -73,6 +74,7 @@ radv_tex_compare(VkCompareOp op)
       unreachable("illegal compare mode");
       break;
    }
+   return 0;
 }
 
 static unsigned

@@ -201,7 +201,7 @@ _vtn_fail(struct vtn_builder *b, const char *file, unsigned line,
                file, line, fmt, args);
    va_end(args);
 
-   const char *dump_path = getenv("MESA_SPIRV_FAIL_DUMP_PATH");
+   const char *dump_path = secure_getenv("MESA_SPIRV_FAIL_DUMP_PATH");
    if (dump_path)
       vtn_dump_shader(b, dump_path, "fail");
 
@@ -6929,7 +6929,7 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
       return NULL;
    }
 
-   const char *dump_path = getenv("MESA_SPIRV_DUMP_PATH");
+   const char *dump_path = secure_getenv("MESA_SPIRV_DUMP_PATH");
    if (dump_path)
       vtn_dump_shader(b, dump_path, "spirv");
 

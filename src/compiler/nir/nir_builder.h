@@ -1604,6 +1604,7 @@ nir_build_deref_follower(nir_builder *b, nir_deref_instr *parent,
    default:
       unreachable("Invalid deref instruction type");
    }
+   return NULL;
 }
 
 static inline nir_def *

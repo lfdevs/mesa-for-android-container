@@ -133,7 +133,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
 
    ir3_shader_debug = debug_get_option_ir3_shader_debug();
    ir3_shader_override_path =
-      !__check_suid() ? debug_get_option_ir3_shader_override_path() : NULL;
+      __normal_user() ? debug_get_option_ir3_shader_override_path() : NULL;
 
    if (ir3_shader_override_path) {
       ir3_shader_debug |= IR3_DBG_NOCACHE;
