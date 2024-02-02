@@ -970,8 +970,13 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
       crb.add(SP_DITHER_CNTL(CHIP, .dword = dither_cntl));
    }
 
-   crb.add(A6XX_RB_SRGB_CNTL(.dword = subpass->srgb_cntl));
-   crb.add(A6XX_SP_SRGB_CNTL(.dword = subpass->srgb_cntl));
+   uint32_t srgb_cntl = subpass->srgb_cntl;
+   if (cmd->state.override_srgb_cntl)
+      srgb_cntl = cmd->state.srgb_cntl;
+
+   crb.add(A6XX_RB_SRGB_CNTL(.dword = srgb_cntl));
+   crb.add(A6XX_SP_SRGB_CNTL(.dword = srgb_cntl));
+
    unsigned layers = MAX2(fb->layers, util_logbase2(subpass->multiview_mask) + 1);
    crb.add(GRAS_CL_ARRAY_SIZE(CHIP, layers - 1));
 }
@@ -4214,6 +4219,7 @@ static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
    tu_cs_discard_entries(&cmd_buffer->draw_epilogue_cs);
    tu_cs_begin(&cmd_buffer->draw_epilogue_cs);
 
+   cmd_buffer->state.override_srgb_cntl = false;
    cmd_buffer->state.pass = NULL;
    cmd_buffer->state.subpass = NULL;
    cmd_buffer->state.framebuffer = NULL;
@@ -7167,6 +7173,18 @@ tu_feedback_invalidate(struct tu_cmd_buffer *cmd)
                             TU_STAGE_BR, TU_STAGE_BR, true);
 }
 
+// vksubpass_begin_info_valve extension to allow overriding srgb_cntl for a
+// subpass
+#define VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO_VALVE                           \
+   (VkStructureType) 1000109099
+#define VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO_VALVE_cast                      \
+   struct vksubpass_begin_info_valve
+struct vksubpass_begin_info_valve {
+   VkStructureType sType;
+   const void *pNext;
+   uint32_t srgb_cntl;
+};
+
 template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
@@ -7187,6 +7205,16 @@ tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
    const struct VkRenderPassAttachmentBeginInfo *pAttachmentInfo =
       vk_find_struct_const(pRenderPassBegin->pNext,
                            RENDER_PASS_ATTACHMENT_BEGIN_INFO);
+   const struct vksubpass_begin_info_valve *begin_info_valve =
+      vk_find_struct_const(pSubpassBeginInfo->pNext,
+                           SUBPASS_BEGIN_INFO_VALVE);
+
+   if (begin_info_valve) {
+      cmd->state.override_srgb_cntl = true;
+      cmd->state.srgb_cntl = begin_info_valve->srgb_cntl;
+   } else {
+      cmd->state.override_srgb_cntl = false;
+   }
 
    cmd->state.pass = pass;
    cmd->state.subpass = pass->subpasses;
@@ -7517,6 +7545,8 @@ tu_CmdBeginRendering(VkCommandBuffer commandBuffer,
       cmd->patchpoints_ctx = ralloc_context(NULL);
 
    if (!resuming) {
+      // gabe: no subpassinfo avail here?
+      // TODO: How should srgb_cntl overriding be handled?
       tu_emit_subpass_begin<CHIP>(cmd);
    } else {
       /* Even resuming vkCmdBeginRendering resets RT and input attachment locations, so we have to re-emit them. */
@@ -7701,6 +7731,16 @@ tu_CmdNextSubpass2(VkCommandBuffer commandBuffer,
       vk_common_CmdNextSubpass2(commandBuffer, pSubpassBeginInfo,
                                 pSubpassEndInfo);
       return;
+   }
+
+   const struct vksubpass_begin_info_valve *begin_info_valve =
+      vk_find_struct_const(pSubpassBeginInfo->pNext,
+                           SUBPASS_BEGIN_INFO_VALVE);
+   if (begin_info_valve) {
+      cmd->state.override_srgb_cntl = true;
+      cmd->state.srgb_cntl = begin_info_valve->srgb_cntl;
+   } else {
+      cmd->state.override_srgb_cntl = false;
    }
 
    const struct tu_subpass *subpass = cmd->state.subpass++;
