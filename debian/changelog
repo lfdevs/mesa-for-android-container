@@ -1,3 +1,10 @@
+mesa (24.0.0-2) experimental; urgency=medium
+
+  * clc-build-fix.diff: Attempt to fix a regression that made requiring
+    llvmspirvlib mandatory.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 08 Feb 2024 17:20:59 +0200
+
 mesa (24.0.0-1) experimental; urgency=medium
 
   * New upstream release. (Closes: #1059782)
