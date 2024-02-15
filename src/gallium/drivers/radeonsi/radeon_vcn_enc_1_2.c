@@ -1392,10 +1392,21 @@ static void radeon_enc_headers_hevc(struct radeon_encoder *enc)
 
 static void encode(struct radeon_encoder *enc)
 {
+   unsigned i;
+
    enc->before_encode(enc);
    enc->session_info(enc);
    enc->total_task_size = 0;
    enc->task_info(enc, enc->need_feedback);
+
+   if (enc->need_rate_control) {
+      i = 0;
+      do {
+         enc->enc_pic.temporal_id = i;
+         enc->layer_select(enc);
+         enc->rc_layer_init(enc);
+      } while (++i < enc->enc_pic.num_temporal_layers);
+   }
 
    enc->encode_headers(enc);
    enc->ctx(enc);

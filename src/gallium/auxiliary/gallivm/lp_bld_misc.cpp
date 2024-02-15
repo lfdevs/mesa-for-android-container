@@ -416,6 +416,13 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * so we do not use llvm::sys::getHostCPUFeatures to detect cpu features
     * but using util_get_cpu_caps() instead.
     */
+#if DETECT_ARCH_X86_64
+   /*
+    * Without this, on some "buggy" qemu cpu setup, LLVM could crash
+    * if LLVM detects the wrong CPU type.
+    */
+   MAttrs.push_back("+64bit");
+#endif
    MAttrs.push_back(util_get_cpu_caps()->has_sse    ? "+sse"    : "-sse"   );
    MAttrs.push_back(util_get_cpu_caps()->has_sse2   ? "+sse2"   : "-sse2"  );
    MAttrs.push_back(util_get_cpu_caps()->has_sse3   ? "+sse3"   : "-sse3"  );

@@ -309,7 +309,7 @@ create_bci(struct zink_screen *screen, const struct pipe_resource *templ, unsign
       bci.usage |= VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT;
 
    if (templ->flags & PIPE_RESOURCE_FLAG_SPARSE)
-      bci.flags |= VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+      bci.flags |= VK_BUFFER_CREATE_SPARSE_BINDING_BIT | VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
    return bci;
 }
 

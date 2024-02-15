@@ -80,6 +80,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_DISABLE_FCV(false)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
+      DRI_CONF_ANV_FORCE_FILTER_ADDR_ROUNDING(false)
       DRI_CONF_ANV_FP64_WORKAROUND_ENABLED(false)
       DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(4)
       DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(100)
@@ -2462,6 +2463,8 @@ anv_init_dri_options(struct anv_instance *instance)
             driQueryOptionb(&instance->dri_options, "limit_trig_input_range");
     instance->sample_mask_out_opengl_behaviour =
             driQueryOptionb(&instance->dri_options, "anv_sample_mask_out_opengl_behaviour");
+    instance->force_filter_addr_rounding =
+            driQueryOptionb(&instance->dri_options, "anv_force_filter_addr_rounding");
     instance->lower_depth_range_rate =
             driQueryOptionf(&instance->dri_options, "lower_depth_range_rate");
     instance->no_16bit =

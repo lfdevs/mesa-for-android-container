@@ -329,6 +329,13 @@ dri2_drm_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
       if (dri2_surf->color_buffers[i].age > 0)
          dri2_surf->color_buffers[i].age++;
 
+   /* Flushing must be done before get_back_bo to make sure glthread's
+    * unmarshalling thread is idle otherwise it might concurrently
+    * call get_back_bo (eg: through dri2_drm_image_get_buffers).
+    */
+   dri2_flush_drawable_for_swapbuffers(disp, draw);
+   dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
+
    /* Make sure we have a back buffer in case we're swapping without
     * ever rendering. */
    if (get_back_bo(dri2_surf) < 0)
@@ -337,9 +344,6 @@ dri2_drm_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    dri2_surf->current = dri2_surf->back;
    dri2_surf->current->age = 1;
    dri2_surf->back = NULL;
-
-   dri2_flush_drawable_for_swapbuffers(disp, draw);
-   dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
 
    return EGL_TRUE;
 }

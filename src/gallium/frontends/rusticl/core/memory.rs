@@ -501,6 +501,11 @@ impl Mem {
             ..Default::default()
         };
 
+        // it's kinda not supported, but we want to know if anything actually hits this as it's
+        // certainly not tested by the CL CTS.
+        if mem_type != CL_MEM_OBJECT_BUFFER {
+            assert_eq!(gl_mem_props.offset, 0);
+        }
         Ok(Arc::new(Self {
             base: CLObjectBase::new(),
             context: context,
@@ -508,7 +513,7 @@ impl Mem {
             mem_type: mem_type,
             flags: flags,
             size: gl_mem_props.size(),
-            offset: 0,
+            offset: gl_mem_props.offset as usize,
             host_ptr: ptr::null_mut(),
             image_format: image_format,
             pipe_format: pipe_format,

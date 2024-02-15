@@ -1042,23 +1042,23 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
 {
    struct radeon_encoder *enc = (struct radeon_encoder *)encoder;
    struct vl_video_buffer *vid_buf = (struct vl_video_buffer *)source;
-   bool need_rate_control = false;
+   enc->need_rate_control = false;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
       struct pipe_h264_enc_picture_desc *pic = (struct pipe_h264_enc_picture_desc *)picture;
-      need_rate_control =
+      enc->need_rate_control =
          (enc->enc_pic.rc_layer_init[0].target_bit_rate != pic->rate_ctrl[0].target_bitrate) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_num != pic->rate_ctrl[0].frame_rate_num) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_den != pic->rate_ctrl[0].frame_rate_den);
    } else if (u_reduce_video_profile(picture->profile) == PIPE_VIDEO_FORMAT_HEVC) {
       struct pipe_h265_enc_picture_desc *pic = (struct pipe_h265_enc_picture_desc *)picture;
-      need_rate_control =
+      enc->need_rate_control =
          (enc->enc_pic.rc_layer_init[0].target_bit_rate != pic->rc.target_bitrate) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_num != pic->rc.frame_rate_num) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_den != pic->rc.frame_rate_den);
    } else if (u_reduce_video_profile(picture->profile) == PIPE_VIDEO_FORMAT_AV1) {
       struct pipe_av1_enc_picture_desc *pic = (struct pipe_av1_enc_picture_desc *)picture;
-      need_rate_control =
+      enc->need_rate_control =
          (enc->enc_pic.rc_layer_init[0].target_bit_rate != pic->rc[0].target_bitrate) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_num != pic->rc[0].frame_rate_num) ||
          (enc->enc_pic.rc_layer_init[0].frame_rate_den != pic->rc[0].frame_rate_den);
@@ -1113,23 +1113,22 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
 
    enc->need_feedback = false;
 
-   if (!enc->stream_handle || need_rate_control) {
+   if (!enc->stream_handle) {
       struct rvid_buffer fb;
-      if (!enc->stream_handle) {
-         enc->stream_handle = si_vid_alloc_stream_handle();
-         enc->si = CALLOC_STRUCT(rvid_buffer);
-         if (!enc->si ||
-             !enc->stream_handle ||
-             !si_vid_create_buffer(enc->screen, enc->si, 128 * 1024, PIPE_USAGE_STAGING)) {
-            RVID_ERR("Can't create session buffer.\n");
-            goto error;
-         }
+      enc->stream_handle = si_vid_alloc_stream_handle();
+      enc->si = CALLOC_STRUCT(rvid_buffer);
+      if (!enc->si ||
+          !enc->stream_handle ||
+          !si_vid_create_buffer(enc->screen, enc->si, 128 * 1024, PIPE_USAGE_STAGING)) {
+         RVID_ERR("Can't create session buffer.\n");
+         goto error;
       }
       si_vid_create_buffer(enc->screen, &fb, 4096, PIPE_USAGE_STAGING);
       enc->fb = &fb;
       enc->begin(enc);
       flush(enc);
       si_vid_destroy_buffer(&fb);
+      enc->need_rate_control = false;
    }
 
    return;

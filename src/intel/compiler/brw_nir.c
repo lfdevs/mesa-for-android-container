@@ -1685,6 +1685,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    OPT(nir_opt_move, nir_move_comparisons);
    OPT(nir_opt_dead_cf);
 
+   bool divergence_analysis_dirty = false;
    NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
    NIR_PASS_V(nir, nir_divergence_analysis);
 
@@ -1710,11 +1711,19 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
       if (OPT(nir_lower_int64))
          brw_nir_optimize(nir, is_scalar, devinfo);
+
+      divergence_analysis_dirty = true;
    }
 
    /* Do this only after the last opt_gcm. GCM will undo this lowering. */
-   if (nir->info.stage == MESA_SHADER_FRAGMENT)
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      if (divergence_analysis_dirty) {
+         NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
+         NIR_PASS_V(nir, nir_divergence_analysis);
+      }
+
       OPT(brw_nir_lower_non_uniform_barycentric_at_sample);
+   }
 
    /* Clean up LCSSA phis */
    OPT(nir_opt_remove_phis);

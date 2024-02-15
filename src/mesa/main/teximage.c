@@ -7101,14 +7101,14 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
             if (!st_SetTextureStorageForMemoryObject(ctx, texObj,
                                                      memObj, 1, width,
                                                      height, depth,
-                                                     offset)) {
+                                                     offset, func)) {
 
                _mesa_init_teximage_fields(ctx, texImage, 0, 0, 0, 0,
                                           internalformat, texFormat);
             }
          } else {
             if (!st_AllocTextureStorage(ctx, texObj, 1,
-                                        width, height, depth)) {
+                                        width, height, depth, func)) {
                /* tidy up the texture image state. strictly speaking,
                 * we're allowed to just leave this in whatever state we
                 * like, but being tidy is good.

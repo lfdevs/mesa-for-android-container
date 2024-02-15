@@ -940,7 +940,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return screen->info.feats.features.shaderCullDistance;
 
    case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
-      return screen->info.feats.features.sparseBinding ? ZINK_SPARSE_BUFFER_PAGE_SIZE : 0;
+      return screen->info.feats.features.sparseResidencyBuffer ? ZINK_SPARSE_BUFFER_PAGE_SIZE : 0;
 
    /* Sparse texture */
    case PIPE_CAP_MAX_SPARSE_TEXTURE_SIZE:

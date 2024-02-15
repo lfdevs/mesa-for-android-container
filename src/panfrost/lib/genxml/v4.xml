@@ -992,12 +992,16 @@
     <field name="Job Task Split" size="4" start="0:26" type="uint"/>
   </struct>
 
+  <struct name="Compute Padding" size="2">
+  </struct>
+
   <!-- Compute job also covers vertex and geometry operations -->
   <aggregate name="Compute Job" align="64">
     <section name="Header" offset="0" type="Job Header"/>
     <section name="Invocation" offset="32" type="Invocation"/>
     <section name="Parameters" offset="40" type="Compute Job Parameters"/>
     <section name="Draw" offset="64" type="Draw"/>
+    <section name="Compute padding" offset="184" type="Compute Padding"/>
   </aggregate>
 
   <struct name="Primitive Size">

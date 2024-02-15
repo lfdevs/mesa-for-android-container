@@ -5506,7 +5506,8 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    if (!is_copy_only && !is_compute_only) {
       pipe_buffer_write_nooverlap(&ctx->base, ctx->dummy_vertex_buffer, 0, sizeof(data), data);
       pipe_buffer_write_nooverlap(&ctx->base, ctx->dummy_xfb_buffer, 0, sizeof(data), data);
-      reapply_color_write(ctx);
+      if (screen->info.have_EXT_color_write_enable)
+         reapply_color_write(ctx);
 
       /* set on startup just to avoid validation errors if a draw comes through without
       * a tess shader later

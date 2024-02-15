@@ -1,3 +1,20 @@
+# should be fixed with kernel 6.8
+spec@ext_external_objects@vk-depth-display@D32S8,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 10 A2 UINT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 10 A2 UNORM optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 5 A1 UNORM optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 INT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 SFLOAT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 UINT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 32 INT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 32 UINT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 4 UNORM optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 INT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 SRGB optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 UINT optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 UNORM optimal: Failed to create texture from GL memory object.,Fail
+spec@ext_external_objects@vk-stencil-display@D32S8,Fail
+
 KHR-GL46.gpu_shader_fp64.fp64.max_uniform_components,Fail
 KHR-GL46.shader_image_load_store.basic-allFormats-store,Fail
 KHR-GL46.shader_image_load_store.basic-allTargets-store,Fail

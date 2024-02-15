@@ -315,8 +315,17 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
     * of entries, so we need to discount the space for constants for all of
     * them.  See 3DSTATE_URB_ALLOC_MESH and 3DSTATE_URB_ALLOC_TASK.
     */
-   const unsigned push_constant_kb = devinfo->mesh_max_constant_urb_size_kb;
+   unsigned push_constant_kb = devinfo->mesh_max_constant_urb_size_kb;
+   /* 3DSTATE_URB_ALLOC_MESH_BODY says
+    *
+    *    MESH URB Starting Address SliceN
+    *       This field specifies the offset (from the start of the URB memory
+    *       in slices beyond Slice0) of the MESH URB allocation, specified in
+    *       multiples of 8 KB.
+    */
+   push_constant_kb = ALIGN(push_constant_kb, 8);
    total_urb_kb -= push_constant_kb;
+   const unsigned total_urb_avail_mesh_task_kb = total_urb_kb;
 
    /* TODO(mesh): Take push constant size as parameter instead of considering always
     * the max? */
@@ -338,55 +347,68 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
       if (task_urb_share_percentage >= 0) {
          task_urb_share = task_urb_share_percentage / 100.0f;
       } else {
-         task_urb_share = 1.0f * r.task_entry_size_64b /
-                          (r.task_entry_size_64b + r.mesh_entry_size_64b);
+         task_urb_share = (float)r.task_entry_size_64b / (r.task_entry_size_64b + r.mesh_entry_size_64b);
       }
    }
 
-   const unsigned one_task_urb_kb = ALIGN(r.task_entry_size_64b * 64, 1024) / 1024;
-   unsigned task_urb_kb = MAX2(total_urb_kb * task_urb_share, one_task_urb_kb);
+   /* 3DSTATE_URB_ALLOC_MESH_BODY and 3DSTATE_URB_ALLOC_TASK_BODY says
+    *
+    *   MESH Number of URB Entries must be divisible by 8 if the MESH/TASK URB
+    *   Entry Allocation Size is less than 9 512-bit URB entries.
+    */
+   const unsigned min_mesh_entries = r.mesh_entry_size_64b < 9 ? 8 : 1;
+   const unsigned min_task_entries = r.task_entry_size_64b < 9 ? 8 : 1;
+   const unsigned min_mesh_urb_kb = ALIGN(r.mesh_entry_size_64b * min_mesh_entries * 64, 1024) / 1024;
+   const unsigned min_task_urb_kb = ALIGN(r.task_entry_size_64b * min_task_entries * 64, 1024) / 1024;
+
+   total_urb_kb -= (min_mesh_urb_kb + min_task_urb_kb);
+
+   /* split the remaining urb_kbs */
+   unsigned task_urb_kb = total_urb_kb * task_urb_share;
    unsigned mesh_urb_kb = total_urb_kb - task_urb_kb;
 
-   if (r.task_entry_size_64b > 0) {
+   /* sum minimum + split urb_kbs */
+   mesh_urb_kb += min_mesh_urb_kb;
+
+   /* 3DSTATE_URB_ALLOC_TASK_BODY says
+    *    MESH Number of URB Entries SliceN
+    *       This field specifies the offset (from the start of the URB memory
+    *       in slices beyond Slice0) of the TASK URB allocation, specified in
+    *       multiples of 8 KB.
+    */
+   if ((total_urb_avail_mesh_task_kb - ALIGN(mesh_urb_kb, 8)) >= min_task_entries) {
+      mesh_urb_kb = ALIGN(mesh_urb_kb, 8);
+   } else {
       mesh_urb_kb = ROUND_DOWN_TO(mesh_urb_kb, 8);
-      task_urb_kb = total_urb_kb - mesh_urb_kb;
    }
 
    /* TODO(mesh): Could we avoid allocating URB for Mesh if rasterization is
     * disabled? */
 
-   unsigned next_address_8kb = DIV_ROUND_UP(push_constant_kb, 8);
-
-   r.mesh_entries = MIN2((mesh_urb_kb * 16) / r.mesh_entry_size_64b, 1548);
-   /* 3DSTATE_URB_ALLOC_MESH_BODY says
-    *
-    *   MESH Number of URB Entries must be divisible by 8 if the MESH URB
-    *   Entry Allocation Size is less than 9 512-bit URB entries.
-    */
-   if (r.mesh_entry_size_64b < 9)
-      r.mesh_entries = ROUND_DOWN_TO(r.mesh_entries, 8);
+   unsigned next_address_8kb = push_constant_kb / 8;
+   assert(push_constant_kb % 8 == 0);
 
    r.mesh_starting_address_8kb = next_address_8kb;
-   assert(mesh_urb_kb % 8 == 0);
-   next_address_8kb += mesh_urb_kb / 8;
+   r.mesh_entries = MIN2((mesh_urb_kb * 16) / r.mesh_entry_size_64b, 1548);
+   r.mesh_entries = r.mesh_entry_size_64b < 9 ? ROUND_DOWN_TO(r.mesh_entries, 8) : r.mesh_entries;
 
+   next_address_8kb += mesh_urb_kb / 8;
+   assert(mesh_urb_kb % 8 == 0);
+
+   r.task_starting_address_8kb = next_address_8kb;
+   task_urb_kb = total_urb_avail_mesh_task_kb - mesh_urb_kb;
    if (r.task_entry_size_64b > 0) {
       r.task_entries = MIN2((task_urb_kb * 16) / r.task_entry_size_64b, 1548);
-
-      /* 3DSTATE_URB_ALLOC_TASK_BODY says
-       *
-       *   TASK Number of URB Entries must be divisible by 8 if the TASK URB
-       *   Entry Allocation Size is less than 9 512-bit URB entries.
-       */
-      if (r.task_entry_size_64b < 9)
-         r.task_entries = ROUND_DOWN_TO(r.task_entries, 8);
-
-      r.task_starting_address_8kb = next_address_8kb;
+      r.task_entries = r.task_entry_size_64b < 9 ? ROUND_DOWN_TO(r.task_entries, 8) : r.task_entries;
    }
 
    r.deref_block_size = r.mesh_entries > 32 ?
       INTEL_URB_DEREF_BLOCK_SIZE_MESH :
       INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
+
+   assert(mesh_urb_kb + task_urb_kb <= total_urb_avail_mesh_task_kb);
+   assert(mesh_urb_kb >= min_mesh_urb_kb);
+   assert(task_urb_kb >= min_task_urb_kb);
 
    return r;
 }

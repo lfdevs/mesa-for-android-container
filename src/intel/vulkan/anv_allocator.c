@@ -1898,12 +1898,6 @@ anv_device_release_bo(struct anv_device *device,
    }
    assert(bo->refcount == 0);
 
-   /* Unmap the entire BO. In the case that some addresses lacked an aux-map
-    * entry, the unmapping function will add table entries for them.
-    */
-   if (anv_bo_allows_aux_map(device, bo))
-      intel_aux_map_unmap_range(device->aux_map_ctx, bo->offset, bo->size);
-
    /* Memset the BO just in case.  The refcount being zero should be enough to
     * prevent someone from assuming the data is valid but it's safer to just
     * stomp to zero just in case.  We explicitly do this *before* we actually

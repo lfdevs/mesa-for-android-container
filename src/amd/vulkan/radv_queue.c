@@ -1643,7 +1643,8 @@ radv_queue_submit_normal(struct radv_queue *queue, struct vk_queue_submit *submi
          queue->device->ws->cs_unchain(cmd_buffer->cs);
          if (!chainable || !queue->device->ws->cs_chain(chainable, cmd_buffer->cs, queue->state.uses_shadow_regs)) {
             /* don't submit empty command buffers to the kernel. */
-            if (radv_queue_ring(queue) != AMD_IP_VCN_ENC || cmd_buffer->cs->cdw != 0)
+            if ((radv_queue_ring(queue) != AMD_IP_VCN_ENC && radv_queue_ring(queue) != AMD_IP_UVD) ||
+                cmd_buffer->cs->cdw != 0)
                cs_array[num_submitted_cs++] = cmd_buffer->cs;
          }
 

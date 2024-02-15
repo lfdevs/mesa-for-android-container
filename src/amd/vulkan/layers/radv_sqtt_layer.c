@@ -573,8 +573,8 @@ radv_describe_queue_present(struct radv_queue *queue, uint64_t cpu_timestamp, vo
 }
 
 static VkResult
-radv_describe_queue_submit(struct radv_queue *queue, struct radv_cmd_buffer *cmd_buffer, uint64_t cpu_timestamp,
-                           void *pre_gpu_timestamp_ptr, void *post_gpu_timestamp_ptr)
+radv_describe_queue_submit(struct radv_queue *queue, struct radv_cmd_buffer *cmd_buffer, uint32_t cmdbuf_idx,
+                           uint64_t cpu_timestamp, void *pre_gpu_timestamp_ptr, void *post_gpu_timestamp_ptr)
 {
    struct radv_device *device = queue->device;
    struct rgp_queue_event_record *record;
@@ -590,6 +590,7 @@ radv_describe_queue_submit(struct radv_queue *queue, struct radv_cmd_buffer *cmd
    record->gpu_timestamps[0] = pre_gpu_timestamp_ptr;
    record->gpu_timestamps[1] = post_gpu_timestamp_ptr;
    record->queue_info_index = queue->vk.queue_family_index;
+   record->submit_sub_index = cmdbuf_idx;
 
    radv_describe_queue_event(queue, record);
 
@@ -841,7 +842,7 @@ sqtt_QueueSubmit2(VkQueue _queue, uint32_t submitCount, const VkSubmitInfo2 *pSu
          };
 
          RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, pCommandBufferInfo->commandBuffer);
-         radv_describe_queue_submit(queue, cmd_buffer, cpu_timestamp, gpu_timestamps_ptr[0], gpu_timestamps_ptr[1]);
+         radv_describe_queue_submit(queue, cmd_buffer, j, cpu_timestamp, gpu_timestamps_ptr[0], gpu_timestamps_ptr[1]);
       }
 
       sqtt_submit.commandBufferInfoCount = new_cmdbuf_count;
@@ -1578,10 +1579,12 @@ radv_register_rt_pipeline(struct radv_device *device, struct radv_ray_tracing_pi
    uint32_t idx = pipeline->stage_count;
 
    /* Combined traversal shader */
-   result = radv_register_rt_stage(device, pipeline, idx++, max_any_hit_stack_size + max_intersection_stack_size,
-                                   pipeline->base.base.shaders[MESA_SHADER_INTERSECTION]);
-   if (result != VK_SUCCESS)
-      return result;
+   if (pipeline->base.base.shaders[MESA_SHADER_INTERSECTION]) {
+      result = radv_register_rt_stage(device, pipeline, idx++, max_any_hit_stack_size + max_intersection_stack_size,
+                                      pipeline->base.base.shaders[MESA_SHADER_INTERSECTION]);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    /* Prolog */
    result = radv_register_rt_stage(device, pipeline, idx++, 0, pipeline->prolog);

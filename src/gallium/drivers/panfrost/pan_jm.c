@@ -300,6 +300,11 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
       cfg.textures = batch->textures[PIPE_SHADER_COMPUTE];
       cfg.samplers = batch->samplers[PIPE_SHADER_COMPUTE];
    }
+
+#if PAN_ARCH == 4
+   pan_section_pack(t.cpu, COMPUTE_JOB, COMPUTE_PADDING, cfg)
+      ;
+#endif
 #else
    struct panfrost_context *ctx = batch->ctx;
    struct panfrost_compiled_shader *cs = ctx->prog[PIPE_SHADER_COMPUTE];
@@ -449,6 +454,11 @@ jm_emit_vertex_job(struct panfrost_batch *batch,
 
    section = pan_section_ptr(job, COMPUTE_JOB, DRAW);
    jm_emit_vertex_draw(batch, section);
+
+#if PAN_ARCH == 4
+   pan_section_pack(job, COMPUTE_JOB, COMPUTE_PADDING, cfg)
+      ;
+#endif
 }
 #endif /* PAN_ARCH <= 7 */
 

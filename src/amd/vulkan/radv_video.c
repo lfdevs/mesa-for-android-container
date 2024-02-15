@@ -1724,10 +1724,12 @@ radv_uvd_cmd_reset(struct radv_cmd_buffer *cmd_buffer)
    if (vid->sessionctx.mem)
       send_cmd(cmd_buffer, RDECODE_CMD_SESSION_CONTEXT_BUFFER, vid->sessionctx.mem->bo, vid->sessionctx.offset);
    send_cmd(cmd_buffer, RDECODE_CMD_MSG_BUFFER, cmd_buffer->upload.upload_bo, out_offset);
+
    /* pad out the IB to the 16 dword boundary - otherwise the fw seems to be unhappy */
-   radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 8);
-   for (unsigned i = 0; i < 8; i++)
-      radeon_emit(cmd_buffer->cs, 0x81ff);
+   int padsize = vid->sessionctx.mem ? 4 : 6;
+   radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, padsize);
+   for (unsigned i = 0; i < padsize; i++)
+      radeon_emit(cmd_buffer->cs, PKT2_NOP_PAD);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -2022,12 +2022,12 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    if ((device->instance->debug_flags & RADV_DEBUG_INFO))
       ac_print_gpu_info(&device->rad_info, stdout);
 
+   radv_init_physical_device_decoder(device);
+
    radv_physical_device_init_queue_table(device);
 
    /* We don't check the error code, but later check if it is initialized. */
    ac_init_perfcounters(&device->rad_info, false, false, &device->ac_perfcounters);
-
-   radv_init_physical_device_decoder(device);
 
    /* The WSI is structured as a layer on top of the driver, so this has
     * to be the last part of initialization (at least until we get other

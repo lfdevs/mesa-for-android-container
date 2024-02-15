@@ -262,34 +262,41 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
 
 VAStatus vlVaHandleVAEncMiscParameterTypeRateControlAV1(vlVaContext *context, VAEncMiscParameterBuffer *misc)
 {
+   unsigned temporal_id;
    VAEncMiscParameterRateControl *rc = (VAEncMiscParameterRateControl *)misc->data;
    struct pipe_av1_enc_rate_control *pipe_rc = NULL;
 
-   for (int i = 1; i < ARRAY_SIZE(context->desc.av1enc.rc); i++) {
-      pipe_rc = &context->desc.av1enc.rc[i];
-      pipe_rc->rate_ctrl_method = context->desc.av1enc.rc[0].rate_ctrl_method;
-   }
+   temporal_id = context->desc.av1enc.rc[0].rate_ctrl_method !=
+                 PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE ?
+                 rc->rc_flags.bits.temporal_id :
+                 0;
 
-   for (int i = 0; i < ARRAY_SIZE(context->desc.av1enc.rc); i++)
-   {
-      pipe_rc = &context->desc.av1enc.rc[i];
+   if (context->desc.av1enc.seq.num_temporal_layers > 0 &&
+       temporal_id >= context->desc.av1enc.seq.num_temporal_layers)
+      return VA_STATUS_ERROR_INVALID_PARAMETER;
 
-      if (pipe_rc->rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT)
-         pipe_rc->target_bitrate = pipe_rc->peak_bitrate;
-      else
-         pipe_rc->target_bitrate = pipe_rc->peak_bitrate * (rc->target_percentage / 100.0);
+   pipe_rc = &context->desc.av1enc.rc[temporal_id];
 
-      if (pipe_rc->target_bitrate < 2000000)
-         pipe_rc->vbv_buffer_size = MIN2((pipe_rc->target_bitrate * 2.75), 2000000);
-      else
-         pipe_rc->vbv_buffer_size = pipe_rc->target_bitrate;
+   if (pipe_rc->rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT)
+      pipe_rc->target_bitrate = rc->bits_per_second;
+   else
+      pipe_rc->target_bitrate = rc->bits_per_second * (rc->target_percentage / 100.0);
+   pipe_rc->peak_bitrate = rc->bits_per_second;
+   if (pipe_rc->target_bitrate < 2000000)
+      pipe_rc->vbv_buffer_size = MIN2((pipe_rc->target_bitrate * 2.75), 2000000);
+   else
+      pipe_rc->vbv_buffer_size = pipe_rc->target_bitrate;
 
-      pipe_rc->fill_data_enable = !(rc->rc_flags.bits.disable_bit_stuffing);
-      pipe_rc->skip_frame_enable = 0;/* !(rc->rc_flags.bits.disable_frame_skip); */
+   pipe_rc->fill_data_enable = !(rc->rc_flags.bits.disable_bit_stuffing);
+   pipe_rc->skip_frame_enable = 0;/* !(rc->rc_flags.bits.disable_frame_skip); */
+   pipe_rc->max_qp = rc->max_qp;
+   pipe_rc->min_qp = rc->min_qp;
+   /* Distinguishes from the default params set for these values in other
+      functions and app specific params passed down */
+   pipe_rc->app_requested_qp_range = ((rc->max_qp > 0) || (rc->min_qp > 0));
 
-      if (pipe_rc->rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_QUALITY_VARIABLE)
-         pipe_rc->vbr_quality_factor = rc->quality_factor;
-   }
+   if (pipe_rc->rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_QUALITY_VARIABLE)
+      pipe_rc->vbr_quality_factor = rc->quality_factor;
 
    return VA_STATUS_SUCCESS;
 }

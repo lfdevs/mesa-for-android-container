@@ -368,7 +368,6 @@ shaders@glsl-bug-110796,Fail
 shaders@glsl-fs-bug25902,Fail
 shaders@glsl-fwidth,Fail
 shaders@glsl-lod-bias,Fail
-shaders@glsl-orangebook-ch06-bump,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Fail
 

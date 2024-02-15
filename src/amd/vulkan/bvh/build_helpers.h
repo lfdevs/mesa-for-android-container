@@ -460,6 +460,7 @@ TYPE(AccelerationStructureInstance, 8);
 bool
 build_triangle(inout radv_aabb bounds, VOID_REF dst_ptr, radv_bvh_geometry_data geom_data, uint32_t global_id)
 {
+   bool is_valid = true;
    triangle_indices indices = load_indices(geom_data.indices, geom_data.index_format, global_id);
 
    triangle_vertices vertices = load_vertices(geom_data.data, indices, geom_data.vertex_format, geom_data.stride);
@@ -469,7 +470,11 @@ build_triangle(inout radv_aabb bounds, VOID_REF dst_ptr, radv_bvh_geometry_data 
     * format does not have a NaN representation, then all triangles are considered active.
     */
    if (isnan(vertices.vertex[0].x) || isnan(vertices.vertex[1].x) || isnan(vertices.vertex[2].x))
+#if ALWAYS_ACTIVE
+      is_valid = false;
+#else
       return false;
+#endif
 
    if (geom_data.transform != NULL) {
       mat4 transform = mat4(1.0);
@@ -498,12 +503,13 @@ build_triangle(inout radv_aabb bounds, VOID_REF dst_ptr, radv_bvh_geometry_data 
    DEREF(node).geometry_id_and_flags = geom_data.geometry_id;
    DEREF(node).id = 9;
 
-   return true;
+   return is_valid;
 }
 
 bool
 build_aabb(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t geometry_id, uint32_t global_id)
 {
+   bool is_valid = true;
    REF(radv_bvh_aabb_node) node = REF(radv_bvh_aabb_node)(dst_ptr);
 
    for (uint32_t vec = 0; vec < 2; vec++)
@@ -520,12 +526,16 @@ build_aabb(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t 
     * NaN, and the first is not, the behavior is undefined.
     */
    if (isnan(bounds.min.x))
+#if ALWAYS_ACTIVE
+      is_valid = false;
+#else
       return false;
+#endif
 
    DEREF(node).primitive_id = global_id;
    DEREF(node).geometry_id_and_flags = geometry_id;
 
-   return true;
+   return is_valid;
 }
 
 radv_aabb

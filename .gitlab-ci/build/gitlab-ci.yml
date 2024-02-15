@@ -463,7 +463,6 @@ debian-clang:
     BUILDTYPE: debug
     LLVM_VERSION: 15
     UNWIND: "enabled"
-    GALLIUM_DUMP_CPU: "true"
     C_ARGS: >
       -Wno-error=constant-conversion
       -Wno-error=enum-conversion

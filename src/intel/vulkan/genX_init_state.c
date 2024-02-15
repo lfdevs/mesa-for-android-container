@@ -1152,8 +1152,12 @@ VkResult genX(CreateSampler)(
       const VkFilter mag_filter =
          plane_has_chroma ? sampler->vk.ycbcr_conversion->state.chroma_filter :
                             pCreateInfo->magFilter;
-      const bool enable_min_filter_addr_rounding = min_filter != VK_FILTER_NEAREST;
-      const bool enable_mag_filter_addr_rounding = mag_filter != VK_FILTER_NEAREST;
+      const bool force_addr_rounding =
+            device->physical->instance->force_filter_addr_rounding;
+      const bool enable_min_filter_addr_rounding =
+            force_addr_rounding || min_filter != VK_FILTER_NEAREST;
+      const bool enable_mag_filter_addr_rounding =
+            force_addr_rounding || mag_filter != VK_FILTER_NEAREST;
       /* From Broadwell PRM, SAMPLER_STATE:
        *   "Mip Mode Filter must be set to MIPFILTER_NONE for Planar YUV surfaces."
        */

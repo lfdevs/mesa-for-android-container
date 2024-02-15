@@ -1812,11 +1812,11 @@ copy_query_results_with_shader(struct anv_cmd_buffer *cmd_buffer,
 
    genX(emit_simple_shader_dispatch)(&state, query_count, push_data_state);
 
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             cmd_buffer->state.current_pipeline == GPGPU ?
-                             ANV_QUERY_COMPUTE_WRITES_PENDING_BITS :
-                             ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(device->info),
-                             "after query copy results");
+   /* The query copy result shader is writing using the dataport, flush
+    * HDC/Data cache depending on the generation. Also stall at pixel
+    * scoreboard in case we're doing the copy with a fragment shader.
+    */
+   cmd_buffer->state.queries.buffer_write_bits |= ANV_QUERY_WRITES_DATA_FLUSH;
 
    trace_intel_end_query_copy_shader(&cmd_buffer->trace, query_count);
 }

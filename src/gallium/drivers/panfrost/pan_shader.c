@@ -369,7 +369,7 @@ panfrost_create_shader_state(struct pipe_context *pctx,
    if (nir->info.stage == MESA_SHADER_FRAGMENT &&
        nir->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
 
-      NIR_PASS_V(nir, nir_lower_fragcolor, 8);
+      NIR_PASS_V(nir, nir_lower_fragcolor, nir->info.fs.color_is_dual_source ? 1 : 8);
       so->fragcolor_lowered = true;
    }
 

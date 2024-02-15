@@ -395,22 +395,18 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
                        0, base_layer, layer_count, ISL_AUX_OP_AMBIGUATE);
    }
 
-#if GFX_VER == 12
-   /* Depth/Stencil writes by the render pipeline to D16 & S8 formats use a
-    * different pairing bit for the compression cache line. This means that
-    * there is potential for aliasing with the wrong cache if you use another
-    * format OR a piece of HW that does not use the same pairing. To avoid
-    * this, flush the tile cache as the compression data does not live in the
-    * color/depth cache.
+   /* Additional tile cache flush for MTL:
+    *
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/10420
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/10530
     */
-   if (image->planes[depth_plane].aux_usage == ISL_AUX_USAGE_HIZ_CCS &&
-       final_needs_depth && !initial_depth_valid &&
-       anv_image_format_is_d16_or_s8(image)) {
+   if (intel_device_info_is_mtl(cmd_buffer->device->info) &&
+       image->planes[depth_plane].aux_usage == ISL_AUX_USAGE_HIZ_CCS &&
+       final_needs_depth && !initial_depth_valid) {
       anv_add_pending_pipe_bits(cmd_buffer,
                                 ANV_PIPE_TILE_CACHE_FLUSH_BIT,
-                                "D16 or S8 HIZ-CCS flush");
+                                "HIZ-CCS flush");
    }
-#endif
 }
 
 /* Transitions a HiZ-enabled depth buffer from one layout to another. Unless
@@ -467,17 +463,15 @@ transition_stencil_buffer(struct anv_cmd_buffer *cmd_buffer,
       }
    }
 
-   /* Depth/Stencil writes by the render pipeline to D16 & S8 formats use a
-    * different pairing bit for the compression cache line. This means that
-    * there is potential for aliasing with the wrong cache if you use another
-    * format OR a piece of HW that does not use the same pairing. To avoid
-    * this, flush the tile cache as the compression data does not live in the
-    * color/depth cache.
+   /* Additional tile cache flush for MTL:
+    *
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/10420
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/10530
     */
-   if (anv_image_format_is_d16_or_s8(image)) {
+   if (intel_device_info_is_mtl(cmd_buffer->device->info)) {
       anv_add_pending_pipe_bits(cmd_buffer,
                                 ANV_PIPE_TILE_CACHE_FLUSH_BIT,
-                                "D16 or S8 HIZ-CCS flush");
+                                "HIZ-CCS flush");
    }
 #endif
 }
@@ -4170,6 +4164,13 @@ mask_is_write(const VkAccessFlags2 access)
                     VK_ACCESS_2_OPTICAL_FLOW_WRITE_BIT_NV);
 }
 
+static inline bool
+mask_is_transfer_write(const VkAccessFlags2 access)
+{
+   return access & (VK_ACCESS_2_TRANSFER_WRITE_BIT |
+                    VK_ACCESS_2_MEMORY_WRITE_BIT);
+}
+
 static void
 cmd_buffer_barrier_video(struct anv_cmd_buffer *cmd_buffer,
                         const VkDependencyInfo *dep_info)
@@ -4333,6 +4334,16 @@ cmd_buffer_barrier_blitter(struct anv_cmd_buffer *cmd_buffer,
 #endif
 }
 
+static inline bool
+cmd_buffer_has_pending_copy_query(struct anv_cmd_buffer *cmd_buffer)
+{
+   /* Query copies are only written with dataport, so we only need to check
+    * that flag.
+    */
+   return (cmd_buffer->state.queries.buffer_write_bits &
+           ANV_QUERY_WRITES_DATA_FLUSH) != 0;
+}
+
 static void
 cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
                    const VkDependencyInfo *dep_info,
@@ -4358,6 +4369,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
    VkAccessFlags2 dst_flags = 0;
 
    bool apply_sparse_flushes = false;
+   bool flush_query_copies = false;
 
    for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
       src_flags |= dep_info->pMemoryBarriers[i].srcAccessMask;
@@ -4372,6 +4384,11 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
          cmd_buffer->state.queries.buffer_write_bits |=
             ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
       }
+
+      if (stage_is_transfer(dep_info->pMemoryBarriers[i].srcStageMask) &&
+          mask_is_transfer_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
+          cmd_buffer_has_pending_copy_query(cmd_buffer))
+         flush_query_copies = true;
 
       /* There's no way of knowing if this memory barrier is related to sparse
        * buffers! This is pretty horrible.
@@ -4397,6 +4414,11 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
          cmd_buffer->state.queries.buffer_write_bits |=
             ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
       }
+
+      if (stage_is_transfer(buf_barrier->srcStageMask) &&
+          mask_is_transfer_write(buf_barrier->srcAccessMask) &&
+          cmd_buffer_has_pending_copy_query(cmd_buffer))
+         flush_query_copies = true;
 
       if (anv_buffer_is_sparse(buffer) && mask_is_write(src_flags))
          apply_sparse_flushes = true;
@@ -4493,6 +4515,14 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
     */
    if (apply_sparse_flushes)
       bits |= ANV_PIPE_FLUSH_BITS;
+
+   /* Copies from query pools are executed with a shader writing through the
+    * dataport.
+    */
+   if (flush_query_copies) {
+      bits |= (GFX_VER >= 12 ?
+               ANV_PIPE_HDC_PIPELINE_FLUSH_BIT : ANV_PIPE_DATA_CACHE_FLUSH_BIT);
+   }
 
    if (dst_flags & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
       genX(cmd_buffer_flush_generated_draws)(cmd_buffer);
@@ -9133,10 +9163,8 @@ genX(CmdWriteBufferMarker2AMD)(VkCommandBuffer commandBuffer,
     * cache flushes.
     */
    enum anv_pipe_bits bits =
-#if GFX_VERx10 < 125
-      ANV_PIPE_DATA_CACHE_FLUSH_BIT |
-      ANV_PIPE_TILE_CACHE_FLUSH_BIT |
-#endif
+      (ANV_DEVINFO_HAS_COHERENT_L3_CS(cmd_buffer->device->info) ? 0 :
+       (ANV_PIPE_DATA_CACHE_FLUSH_BIT | ANV_PIPE_TILE_CACHE_FLUSH_BIT)) |
       ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    trace_intel_begin_write_buffer_marker(&cmd_buffer->trace);

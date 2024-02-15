@@ -216,7 +216,7 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref,
       p++;
    }
 
-   if (path.path[0]->var->data.compact) {
+   if (path.path[0]->var->data.compact && nir_src_is_const((*p)->arr.index)) {
       assert((*p)->deref_type == nir_deref_type_array);
       assert(glsl_type_is_scalar((*p)->type));
 

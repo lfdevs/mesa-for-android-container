@@ -1820,17 +1820,15 @@ handle_operands(std::map<PhysReg, copy_operation>& copy_map, lower_context* ctx,
       if (it->second.bytes > 8) {
          assert(!it->second.op.isConstant());
          assert(!it->second.def.regClass().is_subdword());
-         RegClass rc = RegClass(it->second.def.regClass().type(), it->second.def.size() - 2);
+         RegClass rc = it->second.def.regClass().resize(it->second.def.bytes() - 8);
          Definition hi_def = Definition(PhysReg{it->first + 2}, rc);
-         rc = RegClass(it->second.op.regClass().type(), it->second.op.size() - 2);
+         rc = it->second.op.regClass().resize(it->second.op.bytes() - 8);
          Operand hi_op = Operand(PhysReg{it->second.op.physReg() + 2}, rc);
          copy_operation copy = {hi_op, hi_def, it->second.bytes - 8};
          copy_map[hi_def.physReg()] = copy;
          assert(it->second.op.physReg().byte() == 0 && it->second.def.physReg().byte() == 0);
-         it->second.op = Operand(it->second.op.physReg(),
-                                 it->second.op.regClass().type() == RegType::sgpr ? s2 : v2);
-         it->second.def = Definition(it->second.def.physReg(),
-                                     it->second.def.regClass().type() == RegType::sgpr ? s2 : v2);
+         it->second.op = Operand(it->second.op.physReg(), it->second.op.regClass().resize(8));
+         it->second.def = Definition(it->second.def.physReg(), it->second.def.regClass().resize(8));
          it->second.bytes = 8;
       }
 
@@ -2927,6 +2925,11 @@ lower_to_hw_instr(Program* program)
                   } else if (inst->isSALU()) {
                      num_scalar++;
                   } else if (inst->isVALU() || inst->isVINTRP()) {
+                     if (instr->opcode == aco_opcode::v_writelane_b32 ||
+                         instr->opcode == aco_opcode::v_writelane_b32_e64) {
+                        /* writelane ignores exec, writing inactive lanes results in UB. */
+                        can_remove = false;
+                     }
                      num_vector++;
                      /* VALU which writes SGPRs are always executed on GFX10+ */
                      if (ctx.program->gfx_level >= GFX10) {

@@ -158,17 +158,17 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
         }
     }
 
-    /* Texture coordinates. */
-    for (i = 0; i < ATTR_TEXCOORD_COUNT; i++) {
-        if (outputs->texcoord[i] != ATTR_UNUSED) {
-            c->code->outputs[outputs->texcoord[i]] = reg++;
-        }
-    }
-
     /* Generics. */
     for (i = 0; i < ATTR_GENERIC_COUNT; i++) {
         if (outputs->generic[i] != ATTR_UNUSED) {
             c->code->outputs[outputs->generic[i]] = reg++;
+        }
+    }
+
+    /* Texture coordinates. */
+    for (i = 0; i < ATTR_TEXCOORD_COUNT; i++) {
+        if (outputs->texcoord[i] != ATTR_UNUSED) {
+            c->code->outputs[outputs->texcoord[i]] = reg++;
         }
     }
 

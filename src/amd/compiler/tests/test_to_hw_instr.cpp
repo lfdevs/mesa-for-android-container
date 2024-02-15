@@ -809,6 +809,32 @@ BEGIN_TEST(to_hw_instr.swap_linear_vgpr)
    finish_to_hw_instr_test();
 END_TEST
 
+BEGIN_TEST(to_hw_instr.copy_linear_vgpr_v3)
+   if (!setup_cs(NULL, GFX10))
+      return;
+
+   PhysReg reg_v0{256};
+   PhysReg reg_v4{256 + 4};
+   RegClass v3_linear = v3.as_linear();
+
+   //>> p_unit_test 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
+
+   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+   //! lv1: %0:v[2] = v_mov_b32 %0:v[6]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+   //! lv1: %0:v[2] = v_mov_b32 %0:v[6]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+   Instruction* instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v3_linear),
+                                   Operand(reg_v4, v3_linear));
+   instr->pseudo().scratch_sgpr = m0;
+
+   finish_to_hw_instr_test();
+END_TEST
+
 BEGIN_TEST(to_hw_instr.pack2x16_constant)
    PhysReg v0_lo{256};
    PhysReg v0_hi{256};

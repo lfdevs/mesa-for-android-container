@@ -2053,6 +2053,10 @@ void
 nvk_cmd_bind_vertex_buffer(struct nvk_cmd_buffer *cmd, uint32_t vb_idx,
                            struct nvk_addr_range addr_range)
 {
+   /* Used for meta save/restore */
+   if (vb_idx == 0)
+      cmd->state.gfx.vb0 = addr_range;
+
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
 
    P_MTHD(p, NV9097, SET_VERTEX_STREAM_A_LOCATION_A(vb_idx));
@@ -2096,10 +2100,6 @@ nvk_CmdBindVertexBuffers2(VkCommandBuffer commandBuffer,
       uint64_t size = pSizes ? pSizes[i] : VK_WHOLE_SIZE;
       const struct nvk_addr_range addr_range =
          nvk_buffer_addr_range(buffer, pOffsets[i], size);
-
-      /* Used for meta save/restore */
-      if (idx == 0)
-         cmd->state.gfx.vb0 = addr_range;
 
       nvk_cmd_bind_vertex_buffer(cmd, idx, addr_range);
    }

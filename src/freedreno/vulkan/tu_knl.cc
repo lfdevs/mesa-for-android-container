@@ -228,7 +228,7 @@ tu_physical_device_try_create(struct vk_instance *vk_instance,
 #ifdef TU_HAS_VIRTIO
       result = tu_knl_drm_virtio_load(instance, fd, version, &device);
 #endif
-   } else {
+   } else if (TU_DEBUG(STARTUP)) {
       result = vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                                  "device %s (%s) is not compatible with turnip",
                                  path, version->name);

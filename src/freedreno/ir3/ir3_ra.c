@@ -1715,8 +1715,14 @@ handle_collect(struct ra_ctx *ctx, struct ir3_instruction *instr)
 
       struct ra_interval *interval = &ctx->intervals[src->def->name];
 
-      if (src->def->merge_set != dst_set || interval->is_killed)
+      /* We only need special handling if the source's interval overlaps with
+       * the destination's interval.
+       */
+      if (src->def->interval_start >= instr->dsts[0]->interval_end ||
+          instr->dsts[0]->interval_start >= src->def->interval_end ||
+          interval->is_killed)
          continue;
+
       while (interval->interval.parent != NULL) {
          interval = ir3_reg_interval_to_ra_interval(interval->interval.parent);
       }
