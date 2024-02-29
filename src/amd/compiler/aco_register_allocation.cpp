@@ -62,7 +62,7 @@ struct assignment {
    };
    uint32_t affinity = 0;
    assignment() = default;
-   assignment(PhysReg reg_, RegClass rc_) : reg(reg_), rc(rc_), assigned(-1) {}
+   assignment(PhysReg reg_, RegClass rc_) : reg(reg_), rc(rc_) { assigned = true; }
    void set(const Definition& def)
    {
       assigned = true;
@@ -1936,19 +1936,6 @@ bool
 operand_can_use_reg(amd_gfx_level gfx_level, aco_ptr<Instruction>& instr, unsigned idx, PhysReg reg,
                     RegClass rc)
 {
-   bool is_writelane = instr->opcode == aco_opcode::v_writelane_b32 ||
-                       instr->opcode == aco_opcode::v_writelane_b32_e64;
-   if (gfx_level <= GFX9 && is_writelane && idx <= 1) {
-      /* v_writelane_b32 can take two sgprs but only if one is m0. */
-      bool is_other_sgpr =
-         instr->operands[!idx].isTemp() &&
-         (!instr->operands[!idx].isFixed() || instr->operands[!idx].physReg() != m0);
-      if (is_other_sgpr && instr->operands[!idx].tempId() != instr->operands[idx].tempId()) {
-         instr->operands[idx].setFixed(m0);
-         return reg == m0;
-      }
-   }
-
    if (reg.byte()) {
       unsigned stride = get_subdword_operand_stride(gfx_level, instr, idx, rc);
       if (reg.byte() % stride)
@@ -2842,6 +2829,18 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
 
             fixed |=
                operand.isFixed() && ctx.assignments[operand.tempId()].reg != operand.physReg();
+         }
+
+         bool is_writelane = instr->opcode == aco_opcode::v_writelane_b32 ||
+                             instr->opcode == aco_opcode::v_writelane_b32_e64;
+         if (program->gfx_level <= GFX9 && is_writelane && instr->operands[0].isTemp() &&
+             instr->operands[1].isTemp()) {
+            /* v_writelane_b32 can take two sgprs but only if one is m0. */
+            if (ctx.assignments[instr->operands[0].tempId()].reg != m0 &&
+                ctx.assignments[instr->operands[1].tempId()].reg != m0) {
+               instr->operands[0].setFixed(m0);
+               fixed = true;
+            }
          }
 
          if (fixed)

@@ -1,3 +1,12 @@
+mesa (24.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * clc-build-fix.diff: Dropped, upstream.
+  * fix-zink-logging.diff: Don't log to stderr when zink fails to load.
+    (Closes: #1064704)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 29 Feb 2024 09:22:00 +0200
+
 mesa (24.0.1-1) unstable; urgency=medium
 
   * New upstream release.

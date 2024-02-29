@@ -1507,6 +1507,49 @@ st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
    return num_sample_counts;
 }
 
+/* check whether any texture can be allocated for a given format */
+bool
+st_QueryTextureFormatSupport(struct gl_context *ctx, GLenum target, GLenum internalFormat)
+{
+   struct st_context *st = st_context(ctx);
+
+   /* If an sRGB framebuffer is unsupported, sRGB formats behave like linear
+    * formats.
+    */
+   if (!ctx->Extensions.EXT_sRGB) {
+      internalFormat = _mesa_get_linear_internalformat(internalFormat);
+   }
+
+   /* multisample textures need >= 2 samples */
+   unsigned min_samples = target == GL_TEXTURE_2D_MULTISAMPLE ||
+                          target == GL_TEXTURE_2D_MULTISAMPLE_ARRAY ? 1 : 0;
+   unsigned max_samples = min_samples ? 16 : 1;
+
+   /* compressed textures will be allocated as e.g., RGBA8, so check that instead */
+   enum pipe_format pf = st_choose_format(st, internalFormat, GL_NONE, GL_NONE,
+                                          PIPE_TEXTURE_2D, 0, 0, 0,
+                                          false, false);
+   if (util_format_is_compressed(pf)) {
+      enum pipe_format fmts[2] = {0};
+      pf = st_mesa_format_to_pipe_format(st, st_pipe_format_to_mesa_format(pf));
+      fmts[0] = pf;
+      for (unsigned i = max_samples; i > min_samples; i >>= 1) {
+         if (find_supported_format(st->screen, fmts, PIPE_TEXTURE_2D,
+                                   i, i, PIPE_BIND_SAMPLER_VIEW, false))
+            return true;
+      }
+      return false;
+   }
+   for (unsigned i = max_samples; i > min_samples; i >>= 1) {
+      if (st_choose_format(st, internalFormat, GL_NONE, GL_NONE,
+                           PIPE_TEXTURE_2D, i, i, PIPE_BIND_SAMPLER_VIEW,
+                           false, false))
+         return true;
+   }
+
+   return false;
+}
+
 
 /**
  * ARB_internalformat_query2 driver hook.

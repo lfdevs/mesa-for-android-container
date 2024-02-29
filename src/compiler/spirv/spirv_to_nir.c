@@ -4383,6 +4383,7 @@ vtn_handle_composite(struct vtn_builder *b, SpvOp opcode,
       break;
    }
    case SpvOpCopyObject:
+   case SpvOpExpectKHR:
       vtn_copy_value(b, w[3], w[2]);
       return;
 
@@ -6458,18 +6459,18 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_integer_dot(b, opcode, w, count);
       break;
 
+   case SpvOpBitcast:
+      vtn_handle_bitcast(b, w, count);
+      break;
+
    /* TODO: One day, we should probably do something with this information
     * For now, though, it's safe to implement them as no-ops.
     * Needed for Rusticl sycl support.
     */
    case SpvOpAssumeTrueKHR:
+      break;
+
    case SpvOpExpectKHR:
-      break;
-
-   case SpvOpBitcast:
-      vtn_handle_bitcast(b, w, count);
-      break;
-
    case SpvOpVectorExtractDynamic:
    case SpvOpVectorInsertDynamic:
    case SpvOpVectorShuffle:

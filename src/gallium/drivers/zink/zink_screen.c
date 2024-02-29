@@ -837,6 +837,9 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_BINDLESS_TEXTURE:
+      if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB &&
+          (screen->info.db_props.maxDescriptorBufferBindings < 2 || screen->info.db_props.maxSamplerDescriptorBufferBindings < 2))
+         return 0;
       return screen->info.have_EXT_descriptor_indexing;
 
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -3465,20 +3468,11 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
          mesa_logw("zink: bug detected: inputAttachmentDescriptorSize(%u) > %u", (unsigned)screen->info.db_props.inputAttachmentDescriptorSize, ZINK_FBFETCH_DESCRIPTOR_SIZE);
          can_db = false;
       }
-      if (screen->compact_descriptors) {
-         if (screen->info.db_props.maxDescriptorBufferBindings < 3) {
-            if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
-               mesa_loge("Cannot use db descriptor mode with compact descriptors with maxDescriptorBufferBindings < 3");
-               goto fail;
-            }
-            can_db = false;
-         }
-      } else {
-         if (screen->info.db_props.maxDescriptorBufferBindings < 5) {
-            if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
-               mesa_loge("Cannot use db descriptor mode with maxDescriptorBufferBindings < 5");
-               goto fail;
-            }
+      if (screen->info.db_props.maxDescriptorBufferBindings < 2 || screen->info.db_props.maxSamplerDescriptorBufferBindings < 2) {
+         if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+            /* allow for testing, but disable bindless */
+            mesa_logw("Cannot use bindless and db descriptor mode with (maxDescriptorBufferBindings||maxSamplerDescriptorBufferBindings) < 2");
+         } else {
             can_db = false;
          }
       }

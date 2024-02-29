@@ -95,6 +95,8 @@ struct kopper_displaytarget
    bool is_kill;
    VkPresentModeKHR present_mode;
    unsigned readback_counter;
+
+   bool age_locked; //disables buffer age during readback
 };
 
 struct zink_context;
@@ -118,6 +120,9 @@ zink_kopper_acquired(const struct kopper_displaytarget *cdt, uint32_t idx)
 {
    return idx != UINT32_MAX && cdt->swapchain->images[idx].acquired;
 }
+
+void
+zink_kopper_update_last_written(struct zink_resource *res);
 
 struct kopper_displaytarget *
 zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,

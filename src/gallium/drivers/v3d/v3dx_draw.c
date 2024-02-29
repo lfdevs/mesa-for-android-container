@@ -1390,7 +1390,7 @@ v3d_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
                 v3d->compute_shared_memory =
                         v3d_bo_alloc(v3d->screen,
                                      v3d->prog.compute->prog_data.compute->shared_size *
-                                     wgs_per_sg,
+                                     num_wgs,
                                      "shared_vars");
         }
 

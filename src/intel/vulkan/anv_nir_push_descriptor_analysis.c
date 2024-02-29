@@ -126,18 +126,17 @@ anv_nir_loads_push_desc_buffer(nir_shader *nir,
             if (intrin->intrinsic != nir_intrinsic_load_ubo)
                continue;
 
-            const nir_const_value *const_bt_idx =
-               nir_src_as_const_value(intrin->src[0]);
-            if (const_bt_idx == NULL)
+            const unsigned bt_idx =
+               brw_nir_ubo_surface_index_get_bti(intrin->src[0]);
+            if (bt_idx == UINT32_MAX)
                continue;
-
-            const unsigned bt_idx = const_bt_idx[0].u32;
 
             const struct anv_pipeline_binding *binding =
                &bind_map->surface_to_descriptor[bt_idx];
             if (binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS &&
-                binding->index == push_set)
+                binding->index == push_set) {
                return true;
+            }
          }
       }
    }
@@ -162,6 +161,7 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
    if (push_set_layout == NULL)
       return 0;
 
+   /* Assume every UBO can be promoted first. */
    uint32_t ubos_fully_promoted = 0;
    for (uint32_t b = 0; b < push_set_layout->binding_count; b++) {
       const struct anv_descriptor_set_binding_layout *bind_layout =
@@ -174,6 +174,10 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
          ubos_fully_promoted |= BITFIELD_BIT(bind_layout->descriptor_index);
    }
 
+   /* For each load_ubo intrinsic, if the descriptor index or the offset is
+    * not a constant, we could not promote to push constant. Then check the
+    * offset + size against the push ranges.
+    */
    nir_foreach_function_impl(impl, nir) {
       nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
@@ -184,45 +188,65 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
             if (intrin->intrinsic != nir_intrinsic_load_ubo)
                continue;
 
-            if (!brw_nir_ubo_surface_index_is_pushable(intrin->src[0]))
+            /* Don't check the load_ubo from descriptor buffers */
+            nir_intrinsic_instr *resource =
+               intrin->src[0].ssa->parent_instr->type == nir_instr_type_intrinsic ?
+               nir_instr_as_intrinsic(intrin->src[0].ssa->parent_instr) : NULL;
+            if (resource == NULL || resource->intrinsic != nir_intrinsic_resource_intel)
                continue;
 
-            const unsigned bt_idx =
-               brw_nir_ubo_surface_index_get_bti(intrin->src[0]);
-
-            /* Skip if this isn't a load from push descriptor buffer. */
-            const struct anv_pipeline_binding *binding =
-               &bind_map->surface_to_descriptor[bt_idx];
-            if (binding->set != push_set)
+            /* Skip load_ubo not loading from the push descriptor */
+            if (nir_intrinsic_desc_set(resource) != push_set)
                continue;
+
+            uint32_t binding = nir_intrinsic_binding(resource);
+
+            /* If we have indirect indexing in the binding, no push promotion
+             * in possible for the entire binding.
+             */
+            if (!nir_src_is_const(resource->src[1])) {
+               for (uint32_t i = 0; i < push_set_layout->binding[binding].array_size; i++) {
+                  ubos_fully_promoted &=
+                     ~BITFIELD_BIT(push_set_layout->binding[binding].descriptor_index + i);
+               }
+               continue;
+            }
+
+            const nir_const_value *const_bt_id =
+               nir_src_as_const_value(resource->src[1]);
+            uint32_t bt_id = const_bt_id[0].u32;
+
+            const struct anv_pipeline_binding *pipe_bind =
+               &bind_map->surface_to_descriptor[bt_id];
 
             const uint32_t desc_idx =
-               push_set_layout->binding[binding->binding].descriptor_index;
-            assert(desc_idx < MAX_PUSH_DESCRIPTORS);
-
-            bool promoted = false;
+               push_set_layout->binding[binding].descriptor_index;
 
             /* If the offset in the entry is dynamic, we can't tell if
              * promoted or not.
              */
             const nir_const_value *const_load_offset =
                nir_src_as_const_value(intrin->src[1]);
-            if (const_load_offset != NULL) {
-               /* Check if the load was promoted to a push constant. */
-               const unsigned load_offset = const_load_offset[0].u32;
-               const int load_bytes = nir_intrinsic_dest_components(intrin) *
-                  (intrin->def.bit_size / 8);
+            if (const_load_offset == NULL) {
+               ubos_fully_promoted &= ~BITFIELD_BIT(desc_idx);
+               continue;
+            }
 
-               for (unsigned i = 0; i < ARRAY_SIZE(bind_map->push_ranges); i++) {
-                  if (bind_map->push_ranges[i].set == binding->set &&
-                      bind_map->push_ranges[i].index == desc_idx &&
-                      bind_map->push_ranges[i].start * 32 <= load_offset &&
-                      (bind_map->push_ranges[i].start +
-                       bind_map->push_ranges[i].length) * 32 >=
-                      (load_offset + load_bytes)) {
-                     promoted = true;
-                     break;
-                  }
+            /* Check if the load was promoted to a push constant. */
+            const unsigned load_offset = const_load_offset[0].u32;
+            const int load_bytes = nir_intrinsic_dest_components(intrin) *
+               (intrin->def.bit_size / 8);
+
+            bool promoted = false;
+            for (unsigned i = 0; i < ARRAY_SIZE(bind_map->push_ranges); i++) {
+               if (bind_map->push_ranges[i].set == pipe_bind->set &&
+                   bind_map->push_ranges[i].index == desc_idx &&
+                   bind_map->push_ranges[i].start * 32 <= load_offset &&
+                   (bind_map->push_ranges[i].start +
+                    bind_map->push_ranges[i].length) * 32 >=
+                   (load_offset + load_bytes)) {
+                  promoted = true;
+                  break;
                }
             }
 

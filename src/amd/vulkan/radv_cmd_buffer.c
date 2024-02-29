@@ -9665,12 +9665,16 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, const struct radv
 
       if (radv_cmd_buffer_uses_mec(cmd_buffer)) {
          uint64_t indirect_va = info->va;
+         const bool needs_align32_workaround =
+            cmd_buffer->device->physical_device->rad_info.has_async_compute_align32_bug &&
+            cmd_buffer->qf == RADV_QUEUE_COMPUTE && !radv_is_aligned(indirect_va, 32);
+         const unsigned ace_predication_size =
+            4 /* DISPATCH_INDIRECT */ + (needs_align32_workaround ? 6 * 3 /* 3x COPY_DATA */ : 0);
 
          radv_cs_emit_compute_predication(&cmd_buffer->state, cs, cmd_buffer->mec_inv_pred_va,
-                                          &cmd_buffer->mec_inv_pred_emitted, 4 /* DISPATCH_INDIRECT size */);
+                                          &cmd_buffer->mec_inv_pred_emitted, ace_predication_size);
 
-         if (cmd_buffer->device->physical_device->rad_info.has_async_compute_align32_bug &&
-             cmd_buffer->qf == RADV_QUEUE_COMPUTE && !radv_is_aligned(indirect_va, 32)) {
+         if (needs_align32_workaround) {
             const uint64_t unaligned_va = indirect_va;
             UNUSED void *ptr;
             uint32_t offset;
@@ -10642,8 +10646,15 @@ VKAPI_ATTR void VKAPI_CALL
 radv_CmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo)
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+   enum rgp_barrier_reason barrier_reason;
 
-   radv_barrier(cmd_buffer, pDependencyInfo, RGP_BARRIER_EXTERNAL_CMD_PIPELINE_BARRIER);
+   if (cmd_buffer->vk.runtime_rp_barrier) {
+      barrier_reason = RGP_BARRIER_EXTERNAL_RENDER_PASS_SYNC;
+   } else {
+      barrier_reason = RGP_BARRIER_EXTERNAL_CMD_PIPELINE_BARRIER;
+   }
+
+   radv_barrier(cmd_buffer, pDependencyInfo, barrier_reason);
 }
 
 static void

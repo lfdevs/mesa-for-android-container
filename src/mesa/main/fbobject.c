@@ -2659,6 +2659,16 @@ _mesa_base_fbo_format(const struct gl_context *ctx, GLenum internalFormat)
    case GL_RGB565:
       return _mesa_is_gles(ctx) || ctx->Extensions.ARB_ES2_compatibility
          ? GL_RGB : 0;
+
+   case GL_BGRA:
+      /* EXT_texture_format_BGRA8888 only adds this as color-renderable for
+       * GLES 2 and later
+       */
+      if (_mesa_has_EXT_texture_format_BGRA8888(ctx) && _mesa_is_gles2(ctx))
+         return GL_RGBA;
+      else
+         return 0;
+
    default:
       return 0;
    }

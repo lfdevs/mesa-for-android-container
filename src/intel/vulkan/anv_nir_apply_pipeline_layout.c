@@ -1975,6 +1975,34 @@ add_push_entry(struct anv_pipeline_push_map *push_map,
    };
 }
 
+static bool
+binding_should_use_surface_binding_table(const struct apply_pipeline_layout_state *state,
+                                         const struct anv_descriptor_set_binding_layout *binding)
+{
+   if ((binding->data & ANV_DESCRIPTOR_BTI_SURFACE_STATE) == 0)
+      return false;
+
+   if (state->pdevice->always_use_bindless &&
+       (binding->data & ANV_DESCRIPTOR_SURFACE))
+      return false;
+
+   return true;
+}
+
+static bool
+binding_should_use_sampler_binding_table(const struct apply_pipeline_layout_state *state,
+                                         const struct anv_descriptor_set_binding_layout *binding)
+{
+   if ((binding->data & ANV_DESCRIPTOR_BTI_SAMPLER_STATE) == 0)
+      return false;
+
+   if (state->pdevice->always_use_bindless &&
+       (binding->data & ANV_DESCRIPTOR_SAMPLER))
+      return false;
+
+   return true;
+}
+
 void
 anv_nir_apply_pipeline_layout(nir_shader *shader,
                               const struct anv_physical_device *pdevice,
@@ -2146,7 +2174,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
       state.set[set].binding[b].surface_offset = BINDLESS_OFFSET;
       state.set[set].binding[b].sampler_offset = BINDLESS_OFFSET;
 
-      if (binding->data & ANV_DESCRIPTOR_BTI_SURFACE_STATE) {
+      if (binding_should_use_surface_binding_table(&state, binding)) {
          if (map->surface_count + array_size * array_multiplier > MAX_BINDING_TABLE_SIZE ||
              anv_descriptor_requires_bindless(pdevice, binding, false) ||
              brw_shader_stage_requires_bindless_resources(shader->info.stage)) {
@@ -2177,7 +2205,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
          assert(map->surface_count <= MAX_BINDING_TABLE_SIZE);
       }
 
-      if (binding->data & ANV_DESCRIPTOR_BTI_SAMPLER_STATE) {
+      if (binding_should_use_sampler_binding_table(&state, binding)) {
          if (map->sampler_count + array_size * array_multiplier > MAX_SAMPLER_TABLE_SIZE ||
              anv_descriptor_requires_bindless(pdevice, binding, true) ||
              brw_shader_stage_requires_bindless_resources(shader->info.stage)) {

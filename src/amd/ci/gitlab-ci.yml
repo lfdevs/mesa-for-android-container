@@ -163,7 +163,7 @@ radeonsi-raven-va-full:x86_64:
 vkcts-polaris10-valve:
   extends:
     - .vkcts-test-valve
-    - .polaris10-test-valve-mupuf
+    - .polaris10-test-valve-kws
     - .radv-valve-manual-rules
   timeout: 1h 15m
   variables:

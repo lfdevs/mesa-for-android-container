@@ -2024,7 +2024,7 @@ static void bgnloop(struct lp_build_nir_context *bld_base)
 static void endloop(struct lp_build_nir_context *bld_base)
 {
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
-   lp_exec_endloop(bld_base->base.gallivm, &bld->exec_mask);
+   lp_exec_endloop(bld_base->base.gallivm, &bld->exec_mask, bld->mask);
 }
 
 static void if_cond(struct lp_build_nir_context *bld_base, LLVMValueRef cond)

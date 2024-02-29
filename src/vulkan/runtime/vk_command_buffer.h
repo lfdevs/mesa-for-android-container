@@ -174,6 +174,12 @@ struct vk_command_buffer {
    struct vk_framebuffer *framebuffer;
    VkRect2D render_area;
 
+   /**
+    * True if we are currently inside a CmdPipelineBarrier() is inserted by
+    * the runtime's vk_render_pass.c
+    */
+   bool runtime_rp_barrier;
+
    /* This uses the same trick as STACK_ARRAY */
    struct vk_attachment_state *attachments;
    struct vk_attachment_state _attachments[8];

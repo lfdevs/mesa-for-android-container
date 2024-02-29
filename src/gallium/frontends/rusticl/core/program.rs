@@ -505,7 +505,12 @@ impl Program {
         for (i, d) in self.devs.iter().enumerate() {
             let mut ptr = ptrs[i];
             let info = lock.dev_build(d);
-            let spirv = info.spirv.as_ref().unwrap().to_bin();
+
+            // no spirv means nothing to write
+            let Some(spirv) = info.spirv.as_ref() else {
+                continue;
+            };
+            let spirv = spirv.to_bin();
 
             unsafe {
                 // 1. binary format version

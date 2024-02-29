@@ -543,8 +543,11 @@ brw_nir_lower_ray_queries(nir_shader *shader,
    };
 
    /* Map all query variable to internal type variables */
-   nir_foreach_function_temp_variable(var, state.impl)
+   nir_foreach_function_temp_variable(var, state.impl) {
+      if (!var->data.ray_query)
+         continue;
       register_opaque_var(var, &state);
+   }
    hash_table_foreach(state.queries, entry)
       create_internal_var(entry->data, &state);
 

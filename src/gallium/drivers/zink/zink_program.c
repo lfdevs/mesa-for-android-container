@@ -1006,6 +1006,8 @@ create_lib_cache(struct zink_gfx_program *prog, bool generated_tcs)
 {
    struct zink_gfx_lib_cache *libs = CALLOC_STRUCT(zink_gfx_lib_cache);
    libs->stages_present = prog->stages_present;
+   if (generated_tcs)
+      libs->stages_present &= ~BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
    simple_mtx_init(&libs->lock, mtx_plain);
    if (generated_tcs)
       _mesa_set_init(&libs->libs, NULL, hash_pipeline_lib_generated_tcs, equals_pipeline_lib_generated_tcs);

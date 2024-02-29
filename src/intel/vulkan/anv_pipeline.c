@@ -1728,7 +1728,7 @@ anv_pipeline_account_shader(struct anv_pipeline *pipeline,
 
    if (shader->push_desc_info.used_set_buffer) {
       pipeline->use_push_descriptor_buffer |=
-         BITFIELD_BIT(mesa_to_vk_shader_stage(shader->stage));
+         mesa_to_vk_shader_stage(shader->stage);
    }
    if (shader->push_desc_info.used_descriptors &
        ~shader->push_desc_info.fully_promoted_ubo_descriptors)

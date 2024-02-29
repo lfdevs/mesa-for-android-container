@@ -122,8 +122,7 @@ brw_nir_ubo_surface_index_is_pushable(nir_src src)
 
    if (intrin && intrin->intrinsic == nir_intrinsic_resource_intel) {
       return (nir_intrinsic_resource_access_intel(intrin) &
-              nir_resource_intel_pushable) &&
-             nir_src_is_const(intrin->src[1]);
+              nir_resource_intel_pushable);
    }
 
    return nir_src_is_const(src);
@@ -146,6 +145,14 @@ brw_nir_ubo_surface_index_get_push_block(nir_src src)
    return nir_intrinsic_resource_block_intel(intrin);
 }
 
+/* This helper return the binding table index of a surface access (any
+ * buffer/image/etc...). It works off the source of one of the intrinsics
+ * (load_ubo, load_ssbo, store_ssbo, load_image, store_image, etc...).
+ *
+ * If the source is constant, then this is the binding table index. If we're
+ * going through a resource_intel intel intrinsic, then we need to check
+ * src[1] of that intrinsic.
+ */
 static inline unsigned
 brw_nir_ubo_surface_index_get_bti(nir_src src)
 {
@@ -155,8 +162,19 @@ brw_nir_ubo_surface_index_get_bti(nir_src src)
    assert(src.ssa->parent_instr->type == nir_instr_type_intrinsic);
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src.ssa->parent_instr);
-   assert(intrin->intrinsic == nir_intrinsic_resource_intel);
-   assert(nir_src_is_const(intrin->src[1]));
+   if (!intrin || intrin->intrinsic != nir_intrinsic_resource_intel)
+      return UINT32_MAX;
+
+   /* In practice we could even drop this intrinsic because the bindless
+    * access always operate from a base offset coming from a push constant, so
+    * they can never be constant.
+    */
+   if (nir_intrinsic_resource_access_intel(intrin) &
+       nir_resource_intel_bindless)
+      return UINT32_MAX;
+
+   if (!nir_src_is_const(intrin->src[1]))
+      return UINT32_MAX;
 
    return nir_src_as_uint(intrin->src[1]);
 }

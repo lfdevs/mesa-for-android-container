@@ -4327,7 +4327,7 @@ cmd_buffer_create_csd_job(struct v3dv_cmd_buffer *cmd_buffer,
    if (cs_variant->prog_data.cs->shared_size > 0) {
       job->csd.shared_memory =
          v3dv_bo_alloc(cmd_buffer->device,
-                       cs_variant->prog_data.cs->shared_size * wgs_per_sg,
+                       cs_variant->prog_data.cs->shared_size * num_wgs,
                        "shared_vars", true);
       if (!job->csd.shared_memory) {
          v3dv_flag_oom(cmd_buffer, NULL);

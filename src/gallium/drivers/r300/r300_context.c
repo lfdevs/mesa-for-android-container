@@ -86,10 +86,15 @@ static void r300_destroy_context(struct pipe_context* context)
     if (r300->draw)
         draw_destroy(r300->draw);
 
+    for (unsigned i = 0; i < r300->nr_vertex_buffers; i++)
+       pipe_vertex_buffer_unreference(&r300->vertex_buffer[i]);
+
     if (r300->uploader)
         u_upload_destroy(r300->uploader);
     if (r300->context.stream_uploader)
         u_upload_destroy(r300->context.stream_uploader);
+    if (r300->context.const_uploader)
+       u_upload_destroy(r300->context.const_uploader);
 
     /* XXX: This function assumes r300->query_list was initialized */
     r300_release_referenced_objects(r300);
@@ -99,6 +104,7 @@ static void r300_destroy_context(struct pipe_context* context)
         r300->rws->ctx_destroy(r300->ctx);
 
     rc_destroy_regalloc_state(&r300->fs_regalloc_state);
+    rc_destroy_regalloc_state(&r300->vs_regalloc_state);
 
     /* XXX: No way to tell if this was initialized or not? */
     slab_destroy_child(&r300->pool_transfers);
@@ -125,6 +131,9 @@ static void r300_destroy_context(struct pipe_context* context)
             FREE(r300->vertex_stream_state.state);
         }
     }
+
+    FREE(r300->stencilref_fallback);
+
     FREE(r300);
 }
 

@@ -458,10 +458,13 @@ get_batch_state(struct zink_context *ctx, struct zink_batch *batch)
       }
       simple_mtx_unlock(&screen->free_batch_states_lock);
    }
-   if (!bs && ctx->batch_states) {
-      /* states are stored sequentially, so if the first one doesn't work, none of them will */
-      if (zink_screen_check_last_finished(screen, ctx->batch_states->fence.batch_id) ||
-          find_unused_state(ctx->batch_states)) {
+   /* states are stored sequentially, so if the first one doesn't work, none of them will */
+   if (!bs && ctx->batch_states && ctx->batch_states->next) {
+      /* only a submitted state can be reused */
+      if (p_atomic_read(&ctx->batch_states->fence.submitted) &&
+          /* a submitted state must have completed before it can be reused */
+          (zink_screen_check_last_finished(screen, ctx->batch_states->fence.batch_id) ||
+           p_atomic_read(&ctx->batch_states->fence.completed))) {
          bs = ctx->batch_states;
          pop_batch_state(ctx);
       }

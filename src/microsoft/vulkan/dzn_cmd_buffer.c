@@ -3100,6 +3100,7 @@ dzn_cmd_buffer_update_pipeline(struct dzn_cmd_buffer *cmdbuf, uint32_t bindpoint
    ID3D12PipelineState *old_pipeline_state =
       cmdbuf->state.pipeline ? cmdbuf->state.pipeline->state : NULL;
 
+   uint32_t view_instance_mask = 0;
    if (cmdbuf->state.bindpoint[bindpoint].dirty & DZN_CMD_BINDPOINT_DIRTY_PIPELINE) {
       if (cmdbuf->state.bindpoint[bindpoint].root_sig != pipeline->root.sig) {
          cmdbuf->state.bindpoint[bindpoint].root_sig = pipeline->root.sig;
@@ -3135,9 +3136,9 @@ dzn_cmd_buffer_update_pipeline(struct dzn_cmd_buffer *cmdbuf, uint32_t bindpoint
          ID3D12GraphicsCommandList1_IASetPrimitiveTopology(cmdbuf->cmdlist, gfx->ia.topology);
          dzn_graphics_pipeline_get_state(gfx, &cmdbuf->state.pipeline_variant);
          if (gfx->multiview.native_view_instancing)
-            ID3D12GraphicsCommandList1_SetViewInstanceMask(cmdbuf->cmdlist, gfx->multiview.view_mask);
+            view_instance_mask = gfx->multiview.view_mask;
          else
-            ID3D12GraphicsCommandList1_SetViewInstanceMask(cmdbuf->cmdlist, 1);
+            view_instance_mask = 1;
 
          if (gfx->zsa.dynamic_depth_bias && gfx->use_gs_for_polygon_mode_point)
             cmdbuf->state.bindpoint[bindpoint].dirty |= DZN_CMD_BINDPOINT_DIRTY_SYSVALS;
@@ -3150,6 +3151,11 @@ dzn_cmd_buffer_update_pipeline(struct dzn_cmd_buffer *cmdbuf, uint32_t bindpoint
       ID3D12GraphicsCommandList1_SetPipelineState(cmdbuf->cmdlist, pipeline->state);
       cmdbuf->state.pipeline = pipeline;
    }
+
+   /* Deferring this until after the pipeline has been set due to an NVIDIA driver bug
+    * when view instancing mask is set with no pipeline bound. */
+   if (view_instance_mask)
+      ID3D12GraphicsCommandList1_SetViewInstanceMask(cmdbuf->cmdlist, view_instance_mask);
 }
 
 static void

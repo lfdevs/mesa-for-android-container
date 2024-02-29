@@ -410,3 +410,21 @@ BEGIN_TEST(regalloc.vinterp_fp16)
 
    finish_ra_test(ra_test_policy());
 END_TEST
+
+BEGIN_TEST(regalloc.writelane)
+   //>> v1: %in0:v[0], s1: %in1:s[0], s1: %in2:s[1], s1: %in3:s[2] = p_startpgm
+   if (!setup_cs("v1 s1 s1 s1", GFX8))
+      return;
+
+   //! s1: %tmp:m0 = p_parallelcopy %int3:s[2]
+   Temp tmp = bld.copy(bld.def(s1, m0), inputs[3]);
+
+   //! s1: %in1_2:m0,  s1: %tmp_2:s[0] = p_parallelcopy %in1:s[0], %tmp:m0
+   //! v1: %tmp2:v[0] = v_writelane_b32_e64 %in1_2:m0, %in2:s[1], %in0:v[0]
+   Temp tmp2 = bld.writelane(bld.def(v1), inputs[1], inputs[2], inputs[0]);
+
+   //! p_unit_test %tmp_2:s[0], %tmp2:v[0]
+   bld.pseudo(aco_opcode::p_unit_test, tmp, tmp2);
+
+   finish_ra_test(ra_test_policy());
+END_TEST

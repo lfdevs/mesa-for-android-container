@@ -1357,7 +1357,7 @@ RADV driver environment variables
    ``video_decode``
       enable experimental video decoding support
    ``gsfastlaunch2``
-      use GS_FAST_LAUNCH=2 for Mesh shaders (GFX11+)
+      use GS_FAST_LAUNCH=2 for Mesh shaders (GFX11+ dGPUs only)
 
 .. envvar:: RADV_TEX_ANISO
 

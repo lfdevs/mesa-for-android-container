@@ -1,0 +1,143 @@
+From 6a3e1203f3d89546b20b411210364a0c78094fc3 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 27 Feb 2024 17:03:56 -0500
+Subject: [PATCH 1/2] egl/dri2: use the right egl platform enum
+
+this is otherwise completely broken and allows loading zink in all cases
+
+Fixes: 0fd066a1d7f ("egl: only check dri3 on X11")
+---
+ src/egl/drivers/dri2/egl_dri2.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/egl_dri2.c b/src/egl/drivers/dri2/egl_dri2.c
+index d08d7c8ccb4dc..b393317300bcc 100644
+--- a/src/egl/drivers/dri2/egl_dri2.c
++++ b/src/egl/drivers/dri2/egl_dri2.c
+@@ -974,8 +974,8 @@ dri2_setup_extensions(_EGLDisplay *disp)
+        dri2_dpy->dri3_major_version != -1 &&
+        !dri2_dpy->multibuffers_available &&
+ #endif
+-       (disp->Platform == EGL_PLATFORM_X11_KHR ||
+-        disp->Platform == EGL_PLATFORM_XCB_EXT) &&
++       /* this is enum _egl_platform_type */
++       disp->Platform == _EGL_PLATFORM_X11 &&
+        !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
+       return EGL_FALSE;
+ 
+-- 
+GitLab
+
+
+From 79442618bec83eb8d1de8cccb80e2d794b8ac6a6 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 27 Feb 2024 17:05:13 -0500
+Subject: [PATCH 2/2] glx: only print zink failure-to-load messages if
+ explicitly requested
+
+if zink is inferred, let it fail silently
+
+ref #10293
+---
+ src/glx/drisw_glx.c  | 9 ++++++---
+ src/glx/drisw_priv.h | 2 +-
+ src/glx/glxclient.h  | 8 +++++++-
+ src/glx/glxext.c     | 5 +++--
+ 4 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index 3d3f75259bc16..cbba547d7ebb3 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -1001,7 +1001,9 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
+       if (!psc->has_multibuffer &&
+           !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) &&
+           !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
+-         CriticalErrorMessageF("DRI3 not available\n");
++         /* only print error if zink was explicitly requested */
++         if (pdpyp->zink == TRY_ZINK_YES)
++            CriticalErrorMessageF("DRI3 not available\n");
+          goto handle_error;
+       }
+    }
+@@ -1049,7 +1051,8 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
+    glx_screen_cleanup(&psc->base);
+    free(psc);
+ 
+-   CriticalErrorMessageF("failed to load driver: %s\n", driver);
++   if (pdpyp->zink == TRY_ZINK_YES)
++      CriticalErrorMessageF("failed to load driver: %s\n", driver);
+ 
+    return NULL;
+ }
+@@ -1079,7 +1082,7 @@ driswDestroyDisplay(__GLXDRIdisplay * dpy)
+  * display pointer.
+  */
+ _X_HIDDEN __GLXDRIdisplay *
+-driswCreateDisplay(Display * dpy, bool zink)
++driswCreateDisplay(Display * dpy, enum try_zink zink)
+ {
+    struct drisw_display *pdpyp;
+ 
+diff --git a/src/glx/drisw_priv.h b/src/glx/drisw_priv.h
+index 53674f81a24a4..c7687ebcb63a7 100644
+--- a/src/glx/drisw_priv.h
++++ b/src/glx/drisw_priv.h
+@@ -33,7 +33,7 @@
+ struct drisw_display
+ {
+    __GLXDRIdisplay base;
+-   bool zink;
++   enum try_zink zink;
+ };
+ 
+ struct drisw_screen
+diff --git a/src/glx/glxclient.h b/src/glx/glxclient.h
+index e262b4a80face..e4eb3b4145178 100644
+--- a/src/glx/glxclient.h
++++ b/src/glx/glxclient.h
+@@ -133,11 +133,17 @@ struct __GLXDRIdrawableRec
+    int refcount;
+ };
+ 
++enum try_zink {
++   TRY_ZINK_NO,
++   TRY_ZINK_INFER,
++   TRY_ZINK_YES,
++};
++
+ /*
+ ** Function to create and DRI display data and initialize the display
+ ** dependent methods.
+ */
+-extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy, bool zink);
++extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy, enum try_zink zink);
+ extern __GLXDRIdisplay *dri2CreateDisplay(Display * dpy);
+ extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
+ extern __GLXDRIdisplay *driwindowsCreateDisplay(Display * dpy);
+diff --git a/src/glx/glxext.c b/src/glx/glxext.c
+index 6cf04d1b7450f..eebdfceeb4c08 100644
+--- a/src/glx/glxext.c
++++ b/src/glx/glxext.c
+@@ -918,7 +918,8 @@ __glXInitialize(Display * dpy)
+    }
+ #endif /* GLX_USE_DRM */
+    if (glx_direct)
+-      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink | try_zink);
++      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink ? TRY_ZINK_YES :
++                                                             try_zink ? TRY_ZINK_INFER : TRY_ZINK_NO);
+ 
+ #ifdef GLX_USE_WINDOWSGL
+    if (glx_direct && glx_accel)
+@@ -939,7 +940,7 @@ __glXInitialize(Display * dpy)
+       if (try_zink) {
+          free(dpyPriv->screens);
+          dpyPriv->driswDisplay->destroyDisplay(dpyPriv->driswDisplay);
+-         dpyPriv->driswDisplay = driswCreateDisplay(dpy, false);
++         dpyPriv->driswDisplay = driswCreateDisplay(dpy, TRY_ZINK_NO);
+          fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False);
+       }
+ #endif
+-- 
+GitLab
+

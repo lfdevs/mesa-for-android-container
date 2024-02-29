@@ -2165,6 +2165,14 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       goto fail_fd;
    }
 
+   /* Disable Wa_16013994831 on Gfx12.0 because we found other cases where we
+    * need to always disable preemption :
+    *    - https://gitlab.freedesktop.org/mesa/mesa/-/issues/5963
+    *    - https://gitlab.freedesktop.org/mesa/mesa/-/issues/5662
+    */
+   if (devinfo.verx10 == 120)
+      BITSET_CLEAR(devinfo.workarounds, INTEL_WA_16013994831);
+
    if (!devinfo.has_context_isolation) {
       result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                          "Vulkan requires context isolation for %s", devinfo.name);

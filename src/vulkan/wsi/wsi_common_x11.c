@@ -1666,7 +1666,7 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
                              chain->gc,
                              image->base.row_pitches[0] / 4,
                              chain->extent.height,
-                             0,0,0,24,
+                             0,0,0,chain->depth,
                              image->base.row_pitches[0] * chain->extent.height,
                              image->base.cpu_map);
       xcb_discard_reply(chain->conn, cookie.sequence);
@@ -1681,7 +1681,7 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
                                 chain->gc,
                                 image->base.row_pitches[0] / 4,
                                 this_lines,
-                                0,y_start,0,24,
+                                0,y_start,0,chain->depth,
                                 this_lines * stride_b,
                                 (const uint8_t *)myptr + (y_start * stride_b));
          xcb_discard_reply(chain->conn, cookie.sequence);

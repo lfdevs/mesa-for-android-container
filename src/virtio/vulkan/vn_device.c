@@ -570,6 +570,8 @@ vn_CreateDevice(VkPhysicalDevice physicalDevice,
       vn_log(instance, "%s", physical_dev->properties.vulkan_1_2.driverInfo);
    }
 
+   vn_tls_set_async_pipeline_create();
+
    *pDevice = vn_device_to_handle(dev);
 
    return VK_SUCCESS;

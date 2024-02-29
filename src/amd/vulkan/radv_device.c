@@ -1001,8 +1001,17 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    device->pbb_allowed =
       device->physical_device->rad_info.gfx_level >= GFX9 && !(device->instance->debug_flags & RADV_DEBUG_NOBINNING);
 
-   device->mesh_fast_launch_2 = (device->instance->perftest_flags & RADV_PERFTEST_GS_FAST_LAUNCH_2) &&
-                                device->physical_device->rad_info.gfx_level >= GFX11;
+   /* GS_FAST_LAUNCH=2 mode is supposed to be used on GFX11 but it turns
+    * out it has severe impact on performance for unknown reasons (tested on
+    * NAVI31 dGPU). It's disabled by default.
+    *
+    * On RDNA3 APUs (Phoenix) it turns GS_FAST_LAUNCH=1 doesn't work at all,
+    * and using mode2 fixes everything without any performance impact.
+    */
+   device->mesh_fast_launch_2 = ((device->instance->perftest_flags & RADV_PERFTEST_GS_FAST_LAUNCH_2) &&
+                                 device->physical_device->rad_info.gfx_level >= GFX11) ||
+                                device->physical_device->rad_info.family == CHIP_GFX1103_R1 ||
+                                device->physical_device->rad_info.family == CHIP_GFX1103_R2;
 
    device->disable_trunc_coord = device->instance->drirc.disable_trunc_coord;
 

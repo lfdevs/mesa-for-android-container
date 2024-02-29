@@ -917,7 +917,9 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
 
    if (need_resolve) {
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
-      P_IMMD(p, NV9097, WAIT_FOR_IDLE, 0);
+      P_IMMD(p, NVA097, INVALIDATE_TEXTURE_DATA_CACHE, {
+         .lines = LINES_ALL,
+      });
 
       nvk_meta_resolve_rendering(cmd, &vk_render);
    }

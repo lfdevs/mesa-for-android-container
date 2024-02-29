@@ -316,6 +316,7 @@ fedora/x86_64_build:
 
 
 .kernel+rootfs:
+  timeout: 2h  # 24.0-only change
   extends:
     - .container+build-rules
     - .debian-container

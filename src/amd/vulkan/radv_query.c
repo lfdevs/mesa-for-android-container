@@ -1155,7 +1155,7 @@ radv_query_shader(struct radv_cmd_buffer *cmd_buffer, VkPipeline *pipeline, stru
                                                                          .range = VK_WHOLE_SIZE}}});
 
    /* Encode the number of elements for easy access by the shader. */
-   pipeline_stats_mask &= (1 << radv_get_pipelinestat_query_size(device)) - 1;
+   pipeline_stats_mask &= (1 << (radv_get_pipelinestat_query_size(device) / 8)) - 1;
    pipeline_stats_mask |= util_bitcount(pipeline_stats_mask) << 16;
 
    avail_offset -= src_offset;

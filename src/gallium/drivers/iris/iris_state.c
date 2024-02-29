@@ -7135,7 +7135,12 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       }
    }
 
+#if GFX_VERx10 >= 125
+   /* This is only used on >= gfx125 for dynamic 3DSTATE_TE emission
+    * related workarounds.
+    */
    bool program_needs_wa_14015055625 = false;
+#endif
 
 #if INTEL_WA_14015055625_GFX_VER
    /* Check if FS stage will use primitive ID overrides for Wa_14015055625. */
@@ -7239,16 +7244,14 @@ iris_upload_dirty_render_state(struct iris_context *ice,
                             GENX(3DSTATE_PS_length));
             iris_emit_merge(batch, shader_psx, psx_state,
                             GENX(3DSTATE_PS_EXTRA_length));
-         } else if (stage == MESA_SHADER_TESS_EVAL &&
-                    intel_needs_workaround(batch->screen->devinfo, 14015055625) &&
-                    !program_needs_wa_14015055625) {
-            /* This program doesn't require Wa_14015055625, so we can enable
-             * a Tessellation Distribution Mode.
-             */
 #if GFX_VERx10 >= 125
+         } else if (stage == MESA_SHADER_TESS_EVAL) {
             uint32_t te_state[GENX(3DSTATE_TE_length)] = { 0 };
             iris_pack_command(GENX(3DSTATE_TE), te_state, te) {
-               if (intel_needs_workaround(batch->screen->devinfo, 22012699309))
+               if (intel_needs_workaround(screen->devinfo, 14015055625) &&
+                   program_needs_wa_14015055625)
+                  te.TessellationDistributionMode = TEDMODE_OFF;
+               else if (intel_needs_workaround(screen->devinfo, 22012699309))
                   te.TessellationDistributionMode = TEDMODE_RR_STRICT;
                else
                   te.TessellationDistributionMode = TEDMODE_RR_FREE;

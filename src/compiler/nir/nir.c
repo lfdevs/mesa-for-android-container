@@ -3133,6 +3133,8 @@ nir_tex_instr_has_implicit_derivative(const nir_tex_instr *instr)
    case nir_texop_txb:
    case nir_texop_lod:
       return true;
+   case nir_texop_tg4:
+      return instr->is_gather_implicit_lod;
    default:
       return false;
    }

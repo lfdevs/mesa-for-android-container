@@ -4268,7 +4268,7 @@ endloop_emit(
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
 
-   lp_exec_endloop(bld_base->base.gallivm, &bld->exec_mask);
+   lp_exec_endloop(bld_base->base.gallivm, &bld->exec_mask, bld->mask);
 }
 
 static void

@@ -351,6 +351,7 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
 out_err:
    if (device->has_vm_bind) {
       util_vma_heap_finish(&device->vma_heap);
+      util_vma_heap_finish(&device->bda_heap);
       simple_mtx_destroy(&device->vma_mutex);
    }
    if (ver)
@@ -372,6 +373,7 @@ nouveau_ws_device_destroy(struct nouveau_ws_device *device)
 
    if (device->has_vm_bind) {
       util_vma_heap_finish(&device->vma_heap);
+      util_vma_heap_finish(&device->bda_heap);
       simple_mtx_destroy(&device->vma_mutex);
    }
 

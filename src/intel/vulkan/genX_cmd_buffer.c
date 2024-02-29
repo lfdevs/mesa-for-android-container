@@ -8370,8 +8370,9 @@ void genX(CmdEndRendering)(
                                 "MSAA resolve");
    }
 
-   if (gfx->depth_att.resolve_mode != VK_RESOLVE_MODE_NONE ||
-       gfx->stencil_att.resolve_mode != VK_RESOLVE_MODE_NONE) {
+   if (!(gfx->rendering_flags & VK_RENDERING_SUSPENDING_BIT) &&
+       (gfx->depth_att.resolve_mode != VK_RESOLVE_MODE_NONE ||
+        gfx->stencil_att.resolve_mode != VK_RESOLVE_MODE_NONE)) {
       /* We are about to do some MSAA resolves.  We need to flush so that the
        * result of writes to the MSAA depth attachments show up in the sampler
        * when we blit to the single-sampled resolve target.

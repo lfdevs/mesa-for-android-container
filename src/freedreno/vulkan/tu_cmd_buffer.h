@@ -54,7 +54,7 @@ struct tu_descriptor_state
    uint32_t dynamic_descriptors[MAX_DYNAMIC_BUFFERS_SIZE];
    uint64_t set_iova[MAX_SETS];
    uint32_t max_sets_bound;
-   bool dynamic_bound;
+   uint32_t max_dynamic_offset_size;
 };
 
 enum tu_cmd_dirty_bits

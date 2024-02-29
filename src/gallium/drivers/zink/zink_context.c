@@ -187,21 +187,31 @@ zink_context_destroy(struct pipe_context *pctx)
          screen->free_batch_states = ctx->batch_states;
          screen->last_free_batch_state = screen->free_batch_states;
       }
-      while (screen->last_free_batch_state->next)
-         screen->last_free_batch_state = screen->last_free_batch_state->next;
    }
+   while (screen->last_free_batch_state && screen->last_free_batch_state->next)
+      screen->last_free_batch_state = screen->last_free_batch_state->next;
    if (ctx->free_batch_states) {
       if (screen->free_batch_states)
          screen->last_free_batch_state->next = ctx->free_batch_states;
-      else
+      else {
          screen->free_batch_states = ctx->free_batch_states;
-      screen->last_free_batch_state = ctx->last_free_batch_state;
+         screen->last_free_batch_state = ctx->last_free_batch_state;
+      }
    }
-   simple_mtx_unlock(&screen->free_batch_states_lock);
+   while (screen->last_free_batch_state && screen->last_free_batch_state->next)
+      screen->last_free_batch_state = screen->last_free_batch_state->next;
    if (ctx->batch.state) {
       zink_clear_batch_state(ctx, ctx->batch.state);
-      zink_batch_state_destroy(screen, ctx->batch.state);
+      if (screen->free_batch_states)
+         screen->last_free_batch_state->next = ctx->batch.state;
+      else {
+         screen->free_batch_states = ctx->batch.state;
+         screen->last_free_batch_state = screen->free_batch_states;
+      }
    }
+   while (screen->last_free_batch_state && screen->last_free_batch_state->next)
+      screen->last_free_batch_state = screen->last_free_batch_state->next;
+   simple_mtx_unlock(&screen->free_batch_states_lock);
 
    for (unsigned i = 0; i < 2; i++) {
       util_idalloc_fini(&ctx->di.bindless[i].tex_slots);
@@ -2837,6 +2847,29 @@ begin_rendering(struct zink_context *ctx)
                ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS+1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             }
          }
+      }
+      if (changed_size || changed_layout)
+         ctx->rp_changed = true;
+      ctx->rp_loadop_changed = false;
+      ctx->rp_layout_changed = false;
+   }
+   /* always assemble clear_buffers mask:
+    * if a scissored clear must be triggered during glFlush,
+    * the renderpass metadata may be unchanged (e.g., LOAD from previous rp),
+    * but the buffer mask must still be returned
+    */
+   if (ctx->clears_enabled) {
+      for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+         /* these are no-ops */
+         if (!ctx->fb_state.cbufs[i] || !zink_fb_clear_enabled(ctx, i))
+            continue;
+         /* these need actual clear calls inside the rp */
+         if (zink_fb_clear_needs_explicit(&ctx->fb_clears[i]))
+            clear_buffers |= (PIPE_CLEAR_COLOR0 << i);
+      }
+      if (ctx->fb_state.zsbuf && zink_fb_clear_enabled(ctx, PIPE_MAX_COLOR_BUFS)) {
+         struct zink_framebuffer_clear *fb_clear = &ctx->fb_clears[PIPE_MAX_COLOR_BUFS];
+         struct zink_framebuffer_clear_data *clear = zink_fb_clear_element(fb_clear, 0);
          if (zink_fb_clear_needs_explicit(fb_clear)) {
             for (int j = !zink_fb_clear_element_needs_explicit(clear);
                  (clear_buffers & PIPE_CLEAR_DEPTHSTENCIL) != PIPE_CLEAR_DEPTHSTENCIL && j < zink_fb_clear_count(fb_clear);
@@ -2844,10 +2877,6 @@ begin_rendering(struct zink_context *ctx)
                clear_buffers |= zink_fb_clear_element(fb_clear, j)->zs.bits;
          }
       }
-      if (changed_size || changed_layout)
-         ctx->rp_changed = true;
-      ctx->rp_loadop_changed = false;
-      ctx->rp_layout_changed = false;
    }
 
    if (!ctx->rp_changed && ctx->batch.in_rp)
@@ -3803,7 +3832,6 @@ zink_flush(struct pipe_context *pctx,
    struct zink_batch *batch = &ctx->batch;
    struct zink_fence *fence = NULL;
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   unsigned submit_count = 0;
    VkSemaphore export_sem = VK_NULL_HANDLE;
 
    /* triggering clears will force has_work */
@@ -3864,8 +3892,7 @@ zink_flush(struct pipe_context *pctx,
       }
    }
 
-   /* TODO: if swapchains gain timeline semaphore semantics, `flags` can be eliminated and no-op fence can return timeline id */
-   if (!batch->has_work && flags) {
+   if (!batch->has_work) {
        if (pfence) {
           /* reuse last fence */
           fence = ctx->last_fence;
@@ -3882,7 +3909,6 @@ zink_flush(struct pipe_context *pctx,
          tc_driver_internal_flush_notify(ctx->tc);
    } else {
       fence = &batch->state->fence;
-      submit_count = batch->state->usage.submit_count;
       if (deferred && !(flags & PIPE_FLUSH_FENCE_FD) && pfence)
          deferred_fence = true;
       else
@@ -3906,7 +3932,7 @@ zink_flush(struct pipe_context *pctx,
       mfence->fence = fence;
       mfence->sem = export_sem;
       if (fence) {
-         mfence->submit_count = submit_count;
+         mfence->submit_count = zink_batch_state(fence)->usage.submit_count;
          util_dynarray_append(&fence->mfences, struct zink_tc_fence *, mfence);
       }
       if (export_sem) {

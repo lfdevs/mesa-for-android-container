@@ -4774,7 +4774,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
       /* this could be huge, so only alloc if needed since it's extremely unlikely to
        * ever be used by anything except cts
        */
-      ctx.resident_defs = ralloc_array_size(ctx.mem_ctx,
+      ctx.resident_defs = rzalloc_array_size(ctx.mem_ctx,
                                             sizeof(SpvId), entry->ssa_alloc);
       if (!ctx.resident_defs)
          goto fail;

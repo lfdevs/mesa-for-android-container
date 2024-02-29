@@ -1220,7 +1220,7 @@ dlist_alloc(struct gl_context *ctx, OpCode opcode, GLuint bytes, bool align8)
       ctx->ListState.CurrentPos++;
    }
 
-   if (ctx->ListState.CurrentPos + numNodes + contNodes > BLOCK_SIZE) {
+   if (ctx->ListState.CurrentPos + numNodes + contNodes >= BLOCK_SIZE) {
       /* This block is full.  Allocate a new block and chain to it */
       Node *newblock;
       Node *n = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos;

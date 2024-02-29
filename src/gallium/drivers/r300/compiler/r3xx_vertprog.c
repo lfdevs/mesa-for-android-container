@@ -689,6 +689,7 @@ static void allocate_temporary_registers(struct radeon_compiler *c, void *user)
 
 	if (!ra_allocate(graph)) {
 		rc_error(c, "Ran out of hardware temporaries\n");
+                ralloc_free(graph);
 		return;
 	}
 

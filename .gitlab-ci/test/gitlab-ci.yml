@@ -43,7 +43,7 @@ rustfmt:
     - rustfmt --verbose src/**/lib.rs
     - rustfmt --verbose src/**/main.rs
 
-clang-format:
+.clang-format:
   extends:
     - .formatting-check
     - .lint-clang-format-rules

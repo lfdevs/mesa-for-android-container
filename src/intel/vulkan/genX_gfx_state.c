@@ -68,7 +68,7 @@ static const uint32_t genX(vk_to_intel_blend_op)[] = {
 static void
 genX(streamout_prologue)(struct anv_cmd_buffer *cmd_buffer)
 {
-#if GFX_VERx10 >= 120
+#if INTEL_WA_16013994831_GFX_VER
    /* Wa_16013994831 - Disable preemption during streamout, enable back
     * again if XFB not used by the current pipeline.
     *

@@ -2024,7 +2024,9 @@ adjust_patch_locations(struct vtn_builder *b, struct vtn_variable *var)
 
    for (uint16_t i = 0; i < num_data; i++) {
       vtn_assert(data[i].location < VARYING_SLOT_PATCH0);
-      if (data[i].patch && data[i].location >= VARYING_SLOT_VAR0)
+      if (data[i].patch &&
+          (data[i].mode == nir_var_shader_in || data[i].mode == nir_var_shader_out) &&
+          data[i].location >= VARYING_SLOT_VAR0)
          data[i].location += VARYING_SLOT_PATCH0 - VARYING_SLOT_VAR0;
    }
 }

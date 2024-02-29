@@ -73,6 +73,7 @@ static const struct dri2_wl_visual {
     */
    int alt_dri_image_format;
    int bpp;
+   int opaque_wl_drm_format;
    int rgba_shifts[4];
    unsigned int rgba_sizes[4];
 } dri2_wl_visuals[] = {
@@ -83,6 +84,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ABGR16161616F,
       0,
       64,
+      WL_DRM_FORMAT_XBGR16F,
       {0, 16, 32, 48},
       {16, 16, 16, 16},
    },
@@ -93,6 +95,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XBGR16161616F,
       0,
       64,
+      WL_DRM_FORMAT_XBGR16F,
       {0, 16, 32, -1},
       {16, 16, 16, 0},
    },
@@ -103,6 +106,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XRGB2101010,
       __DRI_IMAGE_FORMAT_XBGR2101010,
       32,
+      WL_DRM_FORMAT_XRGB2101010,
       {20, 10, 0, -1},
       {10, 10, 10, 0},
    },
@@ -113,6 +117,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ARGB2101010,
       __DRI_IMAGE_FORMAT_ABGR2101010,
       32,
+      WL_DRM_FORMAT_XRGB2101010,
       {20, 10, 0, 30},
       {10, 10, 10, 2},
    },
@@ -123,6 +128,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XBGR2101010,
       __DRI_IMAGE_FORMAT_XRGB2101010,
       32,
+      WL_DRM_FORMAT_XBGR2101010,
       {0, 10, 20, -1},
       {10, 10, 10, 0},
    },
@@ -133,6 +139,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ABGR2101010,
       __DRI_IMAGE_FORMAT_ARGB2101010,
       32,
+      WL_DRM_FORMAT_XBGR2101010,
       {0, 10, 20, 30},
       {10, 10, 10, 2},
    },
@@ -143,6 +150,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XRGB8888,
       __DRI_IMAGE_FORMAT_NONE,
       32,
+      WL_DRM_FORMAT_XRGB8888,
       {16, 8, 0, -1},
       {8, 8, 8, 0},
    },
@@ -153,6 +161,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ARGB8888,
       __DRI_IMAGE_FORMAT_NONE,
       32,
+      WL_DRM_FORMAT_XRGB8888,
       {16, 8, 0, 24},
       {8, 8, 8, 8},
    },
@@ -163,6 +172,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ABGR8888,
       __DRI_IMAGE_FORMAT_NONE,
       32,
+      WL_DRM_FORMAT_XBGR8888,
       {0, 8, 16, 24},
       {8, 8, 8, 8},
    },
@@ -173,6 +183,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XBGR8888,
       __DRI_IMAGE_FORMAT_NONE,
       32,
+      WL_DRM_FORMAT_XBGR8888,
       {0, 8, 16, -1},
       {8, 8, 8, 0},
    },
@@ -183,6 +194,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_RGB565,
       __DRI_IMAGE_FORMAT_NONE,
       16,
+      WL_DRM_FORMAT_RGB565,
       {11, 5, 0, -1},
       {5, 6, 5, 0},
    },
@@ -193,6 +205,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ARGB1555,
       __DRI_IMAGE_FORMAT_ABGR1555,
       16,
+      WL_DRM_FORMAT_XRGB1555,
       {10, 5, 0, 15},
       {5, 5, 5, 1},
    },
@@ -203,6 +216,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XRGB1555,
       __DRI_IMAGE_FORMAT_XBGR1555,
       16,
+      WL_DRM_FORMAT_XRGB1555,
       {10, 5, 0, -1},
       {5, 5, 5, 0},
    },
@@ -213,6 +227,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_ARGB4444,
       __DRI_IMAGE_FORMAT_XBGR4444,
       16,
+      WL_DRM_FORMAT_XRGB4444,
       {8, 4, 0, 12},
       {4, 4, 4, 4},
    },
@@ -223,6 +238,7 @@ static const struct dri2_wl_visual {
       __DRI_IMAGE_FORMAT_XRGB4444,
       __DRI_IMAGE_FORMAT_XBGR4444,
       16,
+      WL_DRM_FORMAT_XRGB4444,
       {8, 4, 0, -1},
       {4, 4, 4, 0},
    },
@@ -230,7 +246,7 @@ static const struct dri2_wl_visual {
 
 static int
 dri2_wl_visual_idx_from_config(struct dri2_egl_display *dri2_dpy,
-                               const __DRIconfig *config, bool force_opaque)
+                               const __DRIconfig *config)
 {
    int shifts[4];
    unsigned int sizes[4];
@@ -240,16 +256,13 @@ dri2_wl_visual_idx_from_config(struct dri2_egl_display *dri2_dpy,
    for (unsigned int i = 0; i < ARRAY_SIZE(dri2_wl_visuals); i++) {
       const struct dri2_wl_visual *wl_visual = &dri2_wl_visuals[i];
 
-      int cmp_rgb_shifts =
-         memcmp(shifts, wl_visual->rgba_shifts, 3 * sizeof(shifts[0]));
-      int cmp_rgb_sizes =
-         memcmp(sizes, wl_visual->rgba_sizes, 3 * sizeof(sizes[0]));
+      int cmp_rgba_shifts =
+         memcmp(shifts, wl_visual->rgba_shifts, 4 * sizeof(shifts[0]));
+      int cmp_rgba_sizes =
+         memcmp(sizes, wl_visual->rgba_sizes, 4 * sizeof(sizes[0]));
 
-      if (cmp_rgb_shifts == 0 && cmp_rgb_sizes == 0 &&
-          wl_visual->rgba_shifts[3] == (force_opaque ? -1 : shifts[3]) &&
-          wl_visual->rgba_sizes[3] == (force_opaque ? 0 : sizes[3])) {
+      if (cmp_rgba_shifts == 0 && cmp_rgba_sizes == 0)
          return i;
-      }
    }
 
    return -1;
@@ -302,7 +315,7 @@ dri2_wl_is_format_supported(void *user_data, uint32_t format)
 
    for (int i = 0; dri2_dpy->driver_configs[i]; i++)
       if (j == dri2_wl_visual_idx_from_config(
-                  dri2_dpy, dri2_dpy->driver_configs[i], false))
+                  dri2_dpy, dri2_dpy->driver_configs[i]))
          return true;
 
    return false;
@@ -710,43 +723,10 @@ dri2_wl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
    dri2_surf->base.Width = window->width;
    dri2_surf->base.Height = window->height;
 
-#ifndef NDEBUG
-   /* Enforce that every visual has an opaque variant (requirement to support
-    * EGL_EXT_present_opaque)
-    */
-   for (unsigned int i = 0; i < ARRAY_SIZE(dri2_wl_visuals); i++) {
-      const struct dri2_wl_visual *transparent_visual = &dri2_wl_visuals[i];
-      if (transparent_visual->rgba_sizes[3] == 0) {
-         continue;
-      }
-
-      bool found_opaque_equivalent = false;
-      for (unsigned int j = 0; j < ARRAY_SIZE(dri2_wl_visuals); j++) {
-         const struct dri2_wl_visual *opaque_visual = &dri2_wl_visuals[j];
-         if (opaque_visual->rgba_sizes[3] != 0) {
-            continue;
-         }
-
-         int cmp_rgb_shifts =
-            memcmp(transparent_visual->rgba_shifts, opaque_visual->rgba_shifts,
-                   3 * sizeof(opaque_visual->rgba_shifts[0]));
-         int cmp_rgb_sizes =
-            memcmp(transparent_visual->rgba_sizes, opaque_visual->rgba_sizes,
-                   3 * sizeof(opaque_visual->rgba_sizes[0]));
-
-         if (cmp_rgb_shifts == 0 && cmp_rgb_sizes == 0) {
-            found_opaque_equivalent = true;
-            break;
-         }
-      }
-
-      assert(found_opaque_equivalent);
-   }
-#endif
-
-   visual_idx = dri2_wl_visual_idx_from_config(dri2_dpy, config,
-                                               dri2_surf->base.PresentOpaque);
+   visual_idx = dri2_wl_visual_idx_from_config(dri2_dpy, config);
    assert(visual_idx != -1);
+   assert(dri2_wl_visuals[visual_idx].dri_image_format !=
+          __DRI_IMAGE_FORMAT_NONE);
 
    if (dri2_dpy->wl_dmabuf || dri2_dpy->wl_drm) {
       dri2_surf->format = dri2_wl_visuals[visual_idx].wl_drm_format;
@@ -1501,6 +1481,9 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
          close(fd);
       }
 
+      if (dri2_surf && dri2_surf->base.PresentOpaque)
+         fourcc = dri2_wl_visuals[visual_idx].opaque_wl_drm_format;
+
       ret = zwp_linux_buffer_params_v1_create_immed(params, width, height,
                                                     fourcc, 0);
       zwp_linux_buffer_params_v1_destroy(params);
@@ -1643,6 +1626,12 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
          dri2_surf->current->dri_image, 0, 0, dri2_surf->base.Width,
          dri2_surf->base.Height, 0, 0, dri2_surf->base.Width,
          dri2_surf->base.Height, 0);
+
+      if (dri2_dpy->flush) {
+         __DRIdrawable *dri_drawable = dri2_dpy->vtbl->get_dri_drawable(draw);
+
+         dri2_dpy->flush->flush(dri_drawable);
+      }
    }
 
    wl_surface_commit(dri2_surf->wl_surface_wrapper);
@@ -2078,7 +2067,7 @@ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
 
          /* No match for config. Try if we can blitImage convert to a visual */
          c = dri2_wl_visual_idx_from_config(dri2_dpy,
-                                            dri2_dpy->driver_configs[i], false);
+                                            dri2_dpy->driver_configs[i]);
 
          if (c == -1)
             continue;

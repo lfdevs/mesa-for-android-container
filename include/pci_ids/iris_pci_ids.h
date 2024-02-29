@@ -187,6 +187,8 @@ CHIPSET(0x46c3, adl_gt2, "ADL GT2", "Intel(R) Graphics")
 CHIPSET(0x46d0, adl_n, "ADL-N", "Intel(R) Graphics")
 CHIPSET(0x46d1, adl_n, "ADL-N", "Intel(R) Graphics")
 CHIPSET(0x46d2, adl_n, "ADL-N", "Intel(R) Graphics")
+CHIPSET(0x46d3, adl_n, "ADL-N", "Intel(R) Graphics")
+CHIPSET(0x46d4, adl_n, "ADL-N", "Intel(R) Graphics")
 
 CHIPSET(0x9a40, tgl_gt2, "TGL GT2", "Intel(R) Xe Graphics")
 CHIPSET(0x9a49, tgl_gt2, "TGL GT2", "Intel(R) Xe Graphics")

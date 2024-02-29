@@ -201,6 +201,6 @@ libgrl = static_library(
 idep_grl = declare_dependency(
   link_with : libgrl,
   dependencies : libgrl_deps,
-  sources : grl_metakernel_h,
+  sources : [grl_metakernel_h, grl_cl_kernel_h],
   include_directories : include_directories('include', 'gpu'),
 )
