@@ -20,7 +20,7 @@
 
 #include <xf86drm.h>
 
-#define NVK_PUSH_MAX_SYNCS 16
+#define NVK_PUSH_MAX_SYNCS 256
 #define NVK_PUSH_MAX_BINDS 4096
 #define NVK_PUSH_MAX_PUSH 1024
 

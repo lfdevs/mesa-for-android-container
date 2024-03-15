@@ -1767,6 +1767,9 @@ try_coalesce_copies(lower_context* ctx, std::map<PhysReg, copy_operation>& copy_
        copy.op.isConstant() != other->second.op.isConstant())
       return;
 
+   if (other->second.def.regClass().is_linear_vgpr() != copy.def.regClass().is_linear_vgpr())
+      return;
+
    /* don't create 64-bit copies before GFX10 */
    if (copy.bytes >= 4 && copy.def.regClass().type() == RegType::vgpr &&
        ctx->program->gfx_level < GFX10)

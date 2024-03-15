@@ -962,6 +962,13 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
                              src_box, SI_OP_SYNC_BEFORE_AFTER))
       return;
 
+   /* If the blitter isn't available fail here instead of crashing. */
+   if (!sctx->blitter) {
+      fprintf(stderr, "si_resource_copy_region failed src_format: %s dst_format: %s\n",
+              util_format_name(src->format), util_format_name(dst->format));
+      return;
+   }
+
    assert(u_max_sample(dst) == u_max_sample(src));
 
    /* The driver doesn't decompress resources automatically while

@@ -227,6 +227,13 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_d
    nir_def *cx = nir_fsub(b, nir_vector_extract(b, v_c, kx), nir_fmul(b, sx, nir_vector_extract(b, v_c, kz)));
    nir_def *cy = nir_fsub(b, nir_vector_extract(b, v_c, ky), nir_fmul(b, sy, nir_vector_extract(b, v_c, kz)));
 
+   ax = nir_f2f64(b, ax);
+   ay = nir_f2f64(b, ay);
+   bx = nir_f2f64(b, bx);
+   by = nir_f2f64(b, by);
+   cx = nir_f2f64(b, cx);
+   cy = nir_f2f64(b, cy);
+
    nir_def *u = nir_fsub(b, nir_fmul(b, cx, by), nir_fmul(b, cy, bx));
    nir_def *v = nir_fsub(b, nir_fmul(b, ax, cy), nir_fmul(b, ay, cx));
    nir_def *w = nir_fsub(b, nir_fmul(b, bx, ay), nir_fmul(b, by, ax));
@@ -244,6 +251,12 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_d
    {
       nir_def *det = nir_fadd(b, u, nir_fadd(b, v, w));
 
+      sz = nir_f2f64(b, sz);
+
+      v_a = nir_f2f64(b, v_a);
+      v_b = nir_f2f64(b, v_b);
+      v_c = nir_f2f64(b, v_c);
+
       nir_def *az = nir_fmul(b, sz, nir_vector_extract(b, v_a, kz));
       nir_def *bz = nir_fmul(b, sz, nir_vector_extract(b, v_b, kz));
       nir_def *cz = nir_fmul(b, sz, nir_vector_extract(b, v_c, kz));
@@ -256,7 +269,13 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_d
 
       nir_push_if(b, det_cond_front);
       {
-         nir_def *indices[4] = {t, det, v, w};
+         nir_def *det_abs = nir_fabs(b, det);
+
+         t = nir_f2f32(b, nir_fdiv(b, t, det_abs));
+         v = nir_f2f32(b, nir_fdiv(b, v, det_abs));
+         w = nir_f2f32(b, nir_fdiv(b, w, det_abs));
+
+         nir_def *indices[4] = {t, nir_f2f32(b, nir_fsign(b, det)), v, w};
          nir_store_var(b, result, nir_vec(b, indices, 4), 0xf);
       }
       nir_pop_if(b, NULL);
@@ -398,20 +417,6 @@ insert_traversal_triangle_case(struct radv_device *device, nir_builder *b, const
          {
             nir_def *divs[2] = {div, div};
             intersection.barycentrics = nir_fdiv(b, nir_channels(b, result, 0xc), nir_vec(b, divs, 2));
-
-            nir_def *hit_t = intersection.t;
-            /* t values within 10 ULP of the current hit t are most likely duplicate hits along shared edges, which
-             * might occur with emulated RT. The Vulkan spec discourages double-hits along shared-edges, so reject them
-             * here by subtracting 10 ULP from t.
-             */
-            if (radv_emulate_rt(device->physical_device)) {
-               nir_def *abs_t = nir_fabs(b, hit_t);
-               nir_def *sign_t = nir_fsign(b, hit_t);
-
-               nir_def *tm1 = nir_iadd(b, hit_t, nir_imul_imm(b, nir_f2i32(b, sign_t), -10));
-               nir_def *tm2 = nir_fmul(b, nir_isub_imm(b, 10, abs_t), nir_fneg(b, sign_t));
-               intersection.t = nir_bcsel(b, nir_ige_imm(b, abs_t, 10), tm1, tm2);
-            }
 
             args->triangle_cb(b, &intersection, args, ray_flags);
          }

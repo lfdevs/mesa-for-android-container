@@ -117,8 +117,11 @@ impl Event {
             self.cv.notify_all();
         }
 
-        if [CL_COMPLETE, CL_RUNNING, CL_SUBMITTED].contains(&(new as u32)) {
-            if let Some(cbs) = lock.cbs.get_mut(new as usize) {
+        // on error we need to call the CL_COMPLETE callbacks
+        let cb_idx = if new < 0 { CL_COMPLETE } else { new as u32 };
+
+        if [CL_COMPLETE, CL_RUNNING, CL_SUBMITTED].contains(&cb_idx) {
+            if let Some(cbs) = lock.cbs.get_mut(cb_idx as usize) {
                 cbs.drain(..).for_each(|cb| cb.call(self, new));
             }
         }

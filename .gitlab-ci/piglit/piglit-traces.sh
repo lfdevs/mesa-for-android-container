@@ -15,6 +15,10 @@ mkdir -p "$RESULTS"
 
 export PIGLIT_REPLAY_DESCRIPTION_FILE="$INSTALL/$PIGLIT_TRACES_FILE"
 
+# FIXME: guess why /usr/local/bin is not included in all runners PATH.
+# Needed because yq and ci-fairy are installed there.
+PATH="/usr/local/bin:$PATH"
+
 if [ "$PIGLIT_REPLAY_SUBCOMMAND" = "profile" ]; then
     yq -iY 'del(.traces[][] | select(.label[]? == "no-perf"))' \
       "$PIGLIT_REPLAY_DESCRIPTION_FILE"

@@ -638,6 +638,8 @@ zink_bo_create(struct zink_screen *screen, uint64_t size, unsigned alignment, en
       assert(bo->base.base.placement == mem_type_idx);
       pipe_reference_init(&bo->base.base.reference, 1);
       bo->base.base.size = size;
+      memset(&bo->reads, 0, sizeof(bo->reads));
+      memset(&bo->writes, 0, sizeof(bo->writes));
       assert(alignment <= 1 << bo->base.base.alignment_log2);
 
       return &bo->base;
@@ -666,8 +668,11 @@ no_slab:
        bo = (struct zink_bo*)
             pb_cache_reclaim_buffer(&screen->pb.bo_cache, size, alignment, 0, mem_type_idx);
        assert(!bo || bo->base.base.placement == mem_type_idx);
-       if (bo)
+       if (bo) {
+          memset(&bo->reads, 0, sizeof(bo->reads));
+          memset(&bo->writes, 0, sizeof(bo->writes));
           return &bo->base;
+       }
    }
 
    /* Create a new one. */

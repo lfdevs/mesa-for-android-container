@@ -173,6 +173,7 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_line_width:
    case nir_intrinsic_load_aa_line_width:
    case nir_intrinsic_load_fb_layers_v3d:
+   case nir_intrinsic_load_fep_w_v3d:
    case nir_intrinsic_load_tcs_num_patches_amd:
    case nir_intrinsic_load_sample_positions_pan:
    case nir_intrinsic_load_pipeline_stat_query_enabled_amd:

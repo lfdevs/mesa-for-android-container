@@ -121,7 +121,8 @@
 
 .zink-anv-test:
   extends:
-    - .anv-tgl-test
+    - .lava-acer-cp514-2h-1160g7-volteer:x86_64
+    - .anv-test
     - .zink-anv-rules
     - .zink-test
   variables:

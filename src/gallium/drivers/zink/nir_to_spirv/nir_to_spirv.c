@@ -1166,6 +1166,8 @@ get_bare_image_type(struct ntv_context *ctx, struct nir_variable *var, bool is_s
    bool arrayed = glsl_sampler_type_is_array(type);
    if (dimension == SpvDimCube && arrayed)
       spirv_builder_emit_cap(&ctx->builder, SpvCapabilityImageCubeArray);
+   if (arrayed && !is_sampler && is_ms)
+      spirv_builder_emit_cap(&ctx->builder, SpvCapabilityImageMSArray);
 
    SpvId result_type = get_glsl_basetype(ctx, glsl_get_sampler_result_type(type));
    return spirv_builder_type_image(&ctx->builder, result_type,
@@ -2737,6 +2739,8 @@ emit_interpolate(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_interp_deref_at_sample:
       op = GLSLstd450InterpolateAtSample;
       src1 = get_src(ctx, &intr->src[1], &atype);
+      if (atype != nir_type_int)
+         src1 = emit_bitcast(ctx, get_ivec_type(ctx, 32, 1), src1);
       break;
    case nir_intrinsic_interp_deref_at_offset:
       op = GLSLstd450InterpolateAtOffset;
@@ -3208,6 +3212,11 @@ emit_barrier(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       if (modes & (nir_var_shader_out | nir_var_mem_task_payload))
          semantics |= SpvMemorySemanticsOutputMemoryMask;
 
+      if (!modes)
+         semantics = SpvMemorySemanticsWorkgroupMemoryMask |
+                     SpvMemorySemanticsUniformMemoryMask |
+                     SpvMemorySemanticsImageMemoryMask |
+                     SpvMemorySemanticsCrossWorkgroupMemoryMask;
       semantics |= SpvMemorySemanticsAcquireReleaseMask;
    }
 

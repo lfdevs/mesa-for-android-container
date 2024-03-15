@@ -193,7 +193,8 @@ radv_rt_fill_group_info(struct radv_device *device, const struct radv_ray_tracin
          } else if (groups[idx].recursive_shader != VK_SHADER_UNUSED_KHR) {
             struct radv_shader *library_shader = stages[groups[idx].recursive_shader].shader;
             simple_mtx_lock(&library_shader->replay_mtx);
-            if (!library_shader->has_replay_alloc) {
+            /* If arena_va is 0, the pipeline is monolithic and the shader was inlined into raygen */
+            if (!library_shader->has_replay_alloc && handle->recursive_shader_alloc.arena_va) {
                union radv_shader_arena_block *new_block =
                   radv_replay_shader_arena_block(device, &handle->recursive_shader_alloc, library_shader);
                if (!new_block) {
@@ -535,7 +536,7 @@ radv_rt_compile_shaders(struct radv_device *device, struct vk_pipeline_cache *ca
       has_callable |= rt_stages[i].stage == MESA_SHADER_CALLABLE;
       monolithic &= rt_stages[i].can_inline;
 
-      if (i > pCreateInfo->stageCount)
+      if (i >= pCreateInfo->stageCount)
          raygen_imported |= rt_stages[i].stage == MESA_SHADER_RAYGEN;
    }
 
@@ -942,7 +943,8 @@ radv_GetRayTracingCaptureReplayShaderGroupHandlesKHR(VkDevice device, VkPipeline
       uint32_t recursive_shader = rt_pipeline->groups[firstGroup + i].recursive_shader;
       if (recursive_shader != VK_SHADER_UNUSED_KHR) {
          struct radv_shader *shader = rt_pipeline->stages[recursive_shader].shader;
-         data[i].recursive_shader_alloc = radv_serialize_shader_arena_block(shader->alloc);
+         if (shader)
+            data[i].recursive_shader_alloc = radv_serialize_shader_arena_block(shader->alloc);
       }
       data[i].non_recursive_idx = rt_pipeline->groups[firstGroup + i].handle.any_hit_index;
    }

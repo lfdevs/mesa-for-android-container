@@ -62,27 +62,19 @@ nvk_mme_set_priv_reg(struct mme_builder *b)
    mme_mthd(b, NV9097_SET_FALCON04);
    mme_emit(b, mme_load(b));
 
-   mme_if(b, ieq, s26, mme_imm(2)) {
-      struct mme_value loop_cond = mme_mov(b, mme_zero());
-      mme_while(b, ine, loop_cond, mme_imm(1)) {
-         mme_state_to(b, loop_cond, NV9097_SET_MME_SHADOW_SCRATCH(0));
-         mme_mthd(b, NV9097_NO_OPERATION);
-         mme_emit(b, mme_zero());
-      };
-   }
-
-   mme_if(b, ine, s26, mme_imm(2)) {
-      mme_loop(b, mme_imm(10)) {
-         mme_mthd(b, NV9097_NO_OPERATION);
-         mme_emit(b, mme_zero());
-      }
-   }
+   struct mme_value loop_cond = mme_mov(b, mme_zero());
+   mme_while(b, ine, loop_cond, mme_imm(1)) {
+      mme_state_to(b, loop_cond, NV9097_SET_MME_SHADOW_SCRATCH(0));
+      mme_mthd(b, NV9097_NO_OPERATION);
+      mme_emit(b, mme_zero());
+   };
 }
 
 VkResult
 nvk_queue_init_context_draw_state(struct nvk_queue *queue)
 {
    struct nvk_device *dev = nvk_queue_device(queue);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    uint32_t push_data[2048];
    struct nv_push push;
@@ -138,12 +130,68 @@ nvk_queue_init_context_draw_state(struct nvk_queue *queue)
     * For generations with firmware support for our `SET_PRIV_REG` mme method
     * we simply use that. On older generations we'll let the kernel do it.
     * Starting with GSP we have to do it via the firmware anyway.
+    *
+    * This clears bit 3 of gr_gpcs_tpcs_sm_disp_ctrl
     */
    if (dev->pdev->info.cls_eng3d >= MAXWELL_B) {
-      unsigned reg = dev->pdev->info.cls_eng3d >= VOLTA_A ? 0x419ba4 : 0x419f78;
+      unsigned reg = pdev->info.cls_eng3d >= VOLTA_A ? 0x419ba4 : 0x419f78;
       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SET_PRIV_REG));
       P_INLINE_DATA(p, 0);
       P_INLINE_DATA(p, BITFIELD_BIT(3));
+      P_INLINE_DATA(p, reg);
+   }
+
+   /* Disable Out Of Range Address exceptions
+    *
+    * From the SPH documentation:
+    *
+    *    "The SPH fields StoreReqStart and StoreReqEnd set a range of
+    *    attributes whose corresponding Odmap values of ST or ST_LAST are
+    *    treated as ST_REQ. Normally, for an attribute whose Omap bit is TRUE
+    *    and Odmap value is ST, when the shader writes data to this output, it
+    *    can not count on being able to read it back, since the next
+    *    downstream shader might have its Imap bit FALSE, thereby causing the
+    *    Bmap bit to be FALSE. By including a ST type of attribute in the
+    *    range of StoreReqStart and StoreReqEnd, the attribute’s Odmap value
+    *    is treated as ST_REQ, so an Omap bit being TRUE causes the Bmap bit
+    *    to be TRUE. This guarantees the shader program can output the value
+    *    and then read it back later. This will save register space."
+    *
+    * It's unclear exactly what's going on but this seems to imply that the
+    * hardware actually ANDs the output mask of one shader stage together with
+    * the input mask of the subsequent shader stage to determine which values
+    * are actually used.
+    *
+    * In the case when we have an empty fragment shader, it seems the hardware
+    * doesn't allocate any output memory for final geometry stage at all and
+    * so any writes to outputs from the final shader stage generates an Out Of
+    * Range Address exception.  We could fix this by eliminating unused
+    * outputs via cross-stage linking but that won't work in the case of
+    * VK_EXT_shader_object and VK_EXT_graphics_pipeline_library fast-link.
+    * Instead, the easiest solution is to just disable the exception.
+    *
+    * NOTE (Faith):
+    *
+    *    This above analysis is 100% conjecture on my part based on a creative
+    *    reading of the SPH docs and what I saw when trying to run certain
+    *    OpenGL CTS tests on NVK + Zink.  Without access to NVIDIA HW
+    *    engineers, have no way of verifying this analysis.
+    *
+    *    The CTS test in question is:
+    *
+    *    KHR-GL46.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_tessLevel
+    *
+    * This should also prevent any issues with array overruns on I/O arrays.
+    * Before, they would get an exception and kill the context whereas now
+    * they should gently get ignored.
+    *
+    * This clears bit 14 of gr_gpcs_tpcs_sms_hww_warp_esr_report_mask
+    */
+   if (dev->pdev->info.cls_eng3d >= MAXWELL_B) {
+      unsigned reg = pdev->info.cls_eng3d >= VOLTA_A ? 0x419ea8 : 0x419e44;
+      P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SET_PRIV_REG));
+      P_INLINE_DATA(p, 0);
+      P_INLINE_DATA(p, BITFIELD_BIT(14));
       P_INLINE_DATA(p, reg);
    }
 

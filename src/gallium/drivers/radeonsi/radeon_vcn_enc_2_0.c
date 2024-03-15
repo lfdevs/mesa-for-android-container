@@ -515,7 +515,7 @@ static void encode(struct radeon_encoder *enc)
    if (enc->need_rate_control) {
       i = 0;
       do {
-         enc->enc_pic.temporal_id = i;
+         enc->enc_pic.layer_sel.temporal_layer_index = i;
          enc->layer_select(enc);
          enc->rc_layer_init(enc);
       } while (++i < enc->enc_pic.num_temporal_layers);

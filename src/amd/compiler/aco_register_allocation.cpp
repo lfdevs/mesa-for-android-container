@@ -96,9 +96,9 @@ struct ra_ctx {
          renames(program->blocks.size()), policy(policy_)
    {
       pseudo_dummy.reset(
-         create_instruction<Instruction>(aco_opcode::p_parallelcopy, Format::PSEUDO, 0, 0));
+         create_instruction<Pseudo_instruction>(aco_opcode::p_parallelcopy, Format::PSEUDO, 0, 0));
       phi_dummy.reset(
-         create_instruction<Instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, 0, 0));
+         create_instruction<Pseudo_instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, 0, 0));
       sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
       vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
    }
@@ -1913,6 +1913,7 @@ handle_pseudo(ra_ctx& ctx, const RegisterFile& reg_file, Instruction* instr)
    if (!needs_scratch_reg)
       return;
 
+   instr->pseudo().needs_scratch_reg = true;
    instr->pseudo().tmp_in_scc = reg_file[scc];
 
    int reg = ctx.max_used_sgpr;
@@ -3067,6 +3068,7 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
 
                handle_pseudo(ctx, tmp_file, pc.get());
             } else {
+               pc->needs_scratch_reg = sgpr_operands_alias_defs || linear_vgpr;
                pc->tmp_in_scc = false;
             }
 

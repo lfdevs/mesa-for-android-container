@@ -124,6 +124,17 @@ void blorp_batch_init(struct blorp_context *blorp, struct blorp_batch *batch,
                       void *driver_batch, enum blorp_batch_flags flags);
 void blorp_batch_finish(struct blorp_batch *batch);
 
+static inline isl_surf_usage_flags_t
+blorp_batch_isl_copy_usage(const struct blorp_batch *batch, bool is_dest)
+{
+   if (batch->flags & BLORP_BATCH_USE_COMPUTE)
+      return is_dest ? ISL_SURF_USAGE_STORAGE_BIT : ISL_SURF_USAGE_TEXTURE_BIT;
+   else if (batch->flags & BLORP_BATCH_USE_BLITTER)
+      return is_dest ? ISL_SURF_USAGE_BLITTER_DST_BIT : ISL_SURF_USAGE_BLITTER_SRC_BIT;
+   else
+      return is_dest ? ISL_SURF_USAGE_RENDER_TARGET_BIT : ISL_SURF_USAGE_TEXTURE_BIT;
+}
+
 struct blorp_address {
    void *buffer;
    int64_t offset;

@@ -265,11 +265,8 @@ radv_shader_layout_init(const struct radv_pipeline_layout *pipeline_layout, gl_s
    }
 
    layout->push_constant_size = pipeline_layout->push_constant_size;
-
-   if (pipeline_layout->dynamic_offset_count &&
-       (pipeline_layout->dynamic_shader_stages & mesa_to_vk_shader_stage(stage))) {
-      layout->use_dynamic_descriptors = true;
-   }
+   layout->use_dynamic_descriptors = pipeline_layout->dynamic_offset_count &&
+                                     (pipeline_layout->dynamic_shader_stages & mesa_to_vk_shader_stage(stage));
 }
 
 static const struct vk_ycbcr_conversion_state *

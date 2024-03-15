@@ -136,8 +136,34 @@ anv_blorp_batch_finish(struct blorp_batch *batch)
    blorp_batch_finish(batch);
 }
 
+static isl_surf_usage_flags_t
+get_usage_flag_for_cmd_buffer(const struct anv_cmd_buffer *cmd_buffer,
+                              bool is_dest)
+{
+   isl_surf_usage_flags_t usage;
+
+   switch (cmd_buffer->queue_family->engine_class) {
+   case INTEL_ENGINE_CLASS_RENDER:
+      usage = is_dest ? ISL_SURF_USAGE_RENDER_TARGET_BIT :
+                        ISL_SURF_USAGE_TEXTURE_BIT;
+      break;
+   case INTEL_ENGINE_CLASS_COMPUTE:
+      usage = is_dest ? ISL_SURF_USAGE_STORAGE_BIT :
+                        ISL_SURF_USAGE_TEXTURE_BIT;
+      break;
+   case INTEL_ENGINE_CLASS_COPY:
+      usage = is_dest ? ISL_SURF_USAGE_BLITTER_DST_BIT :
+                        ISL_SURF_USAGE_BLITTER_SRC_BIT;
+      break;
+   default:
+      unreachable("Unhandled engine class");
+   }
+
+   return usage;
+}
+
 static void
-get_blorp_surf_for_anv_address(struct anv_device *device,
+get_blorp_surf_for_anv_address(struct anv_cmd_buffer *cmd_buffer,
                                struct anv_address address,
                                uint32_t width, uint32_t height,
                                uint32_t row_pitch, enum isl_format format,
@@ -146,19 +172,19 @@ get_blorp_surf_for_anv_address(struct anv_device *device,
                                struct isl_surf *isl_surf)
 {
    bool ok UNUSED;
+   isl_surf_usage_flags_t usage =
+      get_usage_flag_for_cmd_buffer(cmd_buffer, is_dest);
 
    *blorp_surf = (struct blorp_surf) {
       .surf = isl_surf,
       .addr = {
          .buffer = address.bo,
          .offset = address.offset,
-         .mocs = anv_mocs(device, address.bo,
-                          is_dest ? ISL_SURF_USAGE_RENDER_TARGET_BIT
-                                  : ISL_SURF_USAGE_TEXTURE_BIT),
+         .mocs = anv_mocs(cmd_buffer->device, address.bo, usage),
       },
    };
 
-   ok = isl_surf_init(&device->isl_dev, isl_surf,
+   ok = isl_surf_init(&cmd_buffer->device->isl_dev, isl_surf,
                      .dim = ISL_SURF_DIM_2D,
                      .format = format,
                      .width = width,
@@ -168,14 +194,13 @@ get_blorp_surf_for_anv_address(struct anv_device *device,
                      .array_len = 1,
                      .samples = 1,
                      .row_pitch_B = row_pitch,
-                     .usage = is_dest ? ISL_SURF_USAGE_RENDER_TARGET_BIT
-                                      : ISL_SURF_USAGE_TEXTURE_BIT,
+                     .usage = usage,
                      .tiling_flags = ISL_TILING_LINEAR_BIT);
    assert(ok);
 }
 
 static void
-get_blorp_surf_for_anv_buffer(struct anv_device *device,
+get_blorp_surf_for_anv_buffer(struct anv_cmd_buffer *cmd_buffer,
                               struct anv_buffer *buffer, uint64_t offset,
                               uint32_t width, uint32_t height,
                               uint32_t row_pitch, enum isl_format format,
@@ -183,7 +208,7 @@ get_blorp_surf_for_anv_buffer(struct anv_device *device,
                               struct blorp_surf *blorp_surf,
                               struct isl_surf *isl_surf)
 {
-   get_blorp_surf_for_anv_address(device,
+   get_blorp_surf_for_anv_address(cmd_buffer,
                                   anv_address_add(buffer->address, offset),
                                   width, height, row_pitch, format,
                                   is_dest, blorp_surf, isl_surf);
@@ -222,10 +247,9 @@ get_blorp_surf_for_anv_image(const struct anv_cmd_buffer *cmd_buffer,
                                           cmd_buffer->queue_family->queueFlags);
    }
 
-   isl_surf_usage_flags_t mocs_usage =
-      (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) ?
-      ISL_SURF_USAGE_RENDER_TARGET_BIT : ISL_SURF_USAGE_TEXTURE_BIT;
-
+   isl_surf_usage_flags_t isl_usage =
+      get_usage_flag_for_cmd_buffer(cmd_buffer,
+                                    usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
    const struct anv_surface *surface = &image->planes[plane].primary_surface;
    const struct anv_address address =
       anv_image_address(image, &surface->memory_range);
@@ -235,7 +259,7 @@ get_blorp_surf_for_anv_image(const struct anv_cmd_buffer *cmd_buffer,
       .addr = {
          .buffer = address.bo,
          .offset = address.offset,
-         .mocs = anv_mocs(device, address.bo, mocs_usage),
+         .mocs = anv_mocs(device, address.bo, isl_usage),
       },
    };
 
@@ -251,7 +275,7 @@ get_blorp_surf_for_anv_image(const struct anv_cmd_buffer *cmd_buffer,
          blorp_surf->aux_addr = (struct blorp_address) {
             .buffer = aux_address.bo,
             .offset = aux_address.offset,
-            .mocs = anv_mocs(device, aux_address.bo, 0),
+            .mocs = anv_mocs(device, aux_address.bo, isl_usage),
          };
       }
 
@@ -622,7 +646,7 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
       isl_format_for_size(linear_fmtl->bpb / 8);
 
    struct isl_surf buffer_isl_surf;
-   get_blorp_surf_for_anv_buffer(cmd_buffer->device,
+   get_blorp_surf_for_anv_buffer(cmd_buffer,
                                  anv_buffer, region->bufferOffset,
                                  buffer_extent.width, buffer_extent.height,
                                  buffer_layout.row_stride_B, buffer_format,
@@ -982,13 +1006,13 @@ copy_buffer(struct anv_device *device,
       .buffer = src_buffer->address.bo,
       .offset = src_buffer->address.offset + region->srcOffset,
       .mocs = anv_mocs(device, src_buffer->address.bo,
-                       ISL_SURF_USAGE_TEXTURE_BIT),
+                       blorp_batch_isl_copy_usage(batch, false /* is_dest */)),
    };
    struct blorp_address dst = {
       .buffer = dst_buffer->address.bo,
       .offset = dst_buffer->address.offset + region->dstOffset,
       .mocs = anv_mocs(device, dst_buffer->address.bo,
-                       ISL_SURF_USAGE_RENDER_TARGET_BIT),
+                       blorp_batch_isl_copy_usage(batch, true /* is_dest */)),
    };
 
    blorp_buffer_copy(batch, src, dst, region->size);
@@ -1055,14 +1079,16 @@ void anv_CmdUpdateBuffer(
       struct blorp_address src = {
          .buffer = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
          .offset = tmp_data.offset,
-         .mocs = isl_mocs(&cmd_buffer->device->isl_dev,
-                          ISL_SURF_USAGE_TEXTURE_BIT, false)
+         .mocs = anv_mocs(cmd_buffer->device, NULL,
+                          get_usage_flag_for_cmd_buffer(cmd_buffer,
+                                                        false /* is_dest */))
       };
       struct blorp_address dst = {
          .buffer = dst_buffer->address.bo,
          .offset = dst_buffer->address.offset + dstOffset,
          .mocs = anv_mocs(cmd_buffer->device, dst_buffer->address.bo,
-                          ISL_SURF_USAGE_RENDER_TARGET_BIT),
+                          get_usage_flag_for_cmd_buffer(cmd_buffer,
+                                                        true /* is_dest */)),
       };
 
       blorp_buffer_copy(&batch, src, dst, copy_size);
@@ -1104,12 +1130,13 @@ anv_cmd_buffer_fill_area(struct anv_cmd_buffer *cmd_buffer,
 
    const uint64_t max_fill_size = MAX_SURFACE_DIM * MAX_SURFACE_DIM * bs;
    while (size >= max_fill_size) {
-      get_blorp_surf_for_anv_address(cmd_buffer->device,
+      get_blorp_surf_for_anv_address(cmd_buffer,
                                      (struct anv_address) {
                                         .bo = address.bo, .offset = offset,
                                      },
                                      MAX_SURFACE_DIM, MAX_SURFACE_DIM,
-                                     MAX_SURFACE_DIM * bs, isl_format, true,
+                                     MAX_SURFACE_DIM * bs, isl_format,
+                                     true /* is_dest */,
                                      &surf, &isl_surf);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
@@ -1123,12 +1150,13 @@ anv_cmd_buffer_fill_area(struct anv_cmd_buffer *cmd_buffer,
    assert(height < MAX_SURFACE_DIM);
    if (height != 0) {
       const uint64_t rect_fill_size = height * MAX_SURFACE_DIM * bs;
-      get_blorp_surf_for_anv_address(cmd_buffer->device,
+      get_blorp_surf_for_anv_address(cmd_buffer,
                                      (struct anv_address) {
                                         .bo = address.bo, .offset = offset,
                                      },
                                      MAX_SURFACE_DIM, height,
-                                     MAX_SURFACE_DIM * bs, isl_format, true,
+                                     MAX_SURFACE_DIM * bs, isl_format,
+                                     true /* is_dest */,
                                      &surf, &isl_surf);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
@@ -1140,12 +1168,13 @@ anv_cmd_buffer_fill_area(struct anv_cmd_buffer *cmd_buffer,
 
    if (size != 0) {
       const uint32_t width = size / bs;
-      get_blorp_surf_for_anv_address(cmd_buffer->device,
+      get_blorp_surf_for_anv_address(cmd_buffer,
                                      (struct anv_address) {
                                         .bo = address.bo, .offset = offset,
                                      },
                                      width, 1,
-                                     width * bs, isl_format, true,
+                                     width * bs, isl_format,
+                                     true /* is_dest */,
                                      &surf, &isl_surf);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
@@ -2106,12 +2135,14 @@ void anv_CmdClearAttachments(
    anv_blorp_batch_finish(&batch);
 }
 
-void
+static void
 anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
                        const struct anv_image *src_image,
+                       enum isl_format src_format_override,
                        enum isl_aux_usage src_aux_usage,
                        uint32_t src_level, uint32_t src_base_layer,
                        const struct anv_image *dst_image,
+                       enum isl_format dst_format_override,
                        enum isl_aux_usage dst_aux_usage,
                        uint32_t dst_level, uint32_t dst_base_layer,
                        VkImageAspectFlagBits aspect,
@@ -2164,15 +2195,105 @@ anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t l = 0; l < layer_count; l++) {
       blorp_blit(&batch,
                  &src_surf, src_level, src_base_layer + l,
-                 ISL_FORMAT_UNSUPPORTED, ISL_SWIZZLE_IDENTITY,
+                 src_format_override, ISL_SWIZZLE_IDENTITY,
                  &dst_surf, dst_level, dst_base_layer + l,
-                 ISL_FORMAT_UNSUPPORTED, ISL_SWIZZLE_IDENTITY,
+                 dst_format_override, ISL_SWIZZLE_IDENTITY,
                  src_x, src_y, src_x + width, src_y + height,
                  dst_x, dst_y, dst_x + width, dst_y + height,
                  filter, false, false);
    }
 
    anv_blorp_batch_finish(&batch);
+}
+
+static enum blorp_filter
+vk_to_blorp_resolve_mode(VkResolveModeFlagBits vk_mode)
+{
+   switch (vk_mode) {
+   case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT:
+      return BLORP_FILTER_SAMPLE_0;
+   case VK_RESOLVE_MODE_AVERAGE_BIT:
+      return BLORP_FILTER_AVERAGE;
+   case VK_RESOLVE_MODE_MIN_BIT:
+      return BLORP_FILTER_MIN_SAMPLE;
+   case VK_RESOLVE_MODE_MAX_BIT:
+      return BLORP_FILTER_MAX_SAMPLE;
+   default:
+      return BLORP_FILTER_NONE;
+   }
+}
+
+void
+anv_attachment_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
+                            const struct anv_attachment *att,
+                            VkImageLayout layout,
+                            VkImageAspectFlagBits aspect)
+{
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+   const struct anv_image_view *src_iview = att->iview;
+   const struct anv_image_view *dst_iview = att->resolve_iview;
+
+   enum isl_aux_usage src_aux_usage =
+      anv_layout_to_aux_usage(cmd_buffer->device->info,
+                              src_iview->image, aspect,
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                              layout,
+                              cmd_buffer->queue_family->queueFlags);
+
+   enum isl_aux_usage dst_aux_usage =
+      anv_layout_to_aux_usage(cmd_buffer->device->info,
+                              dst_iview->image, aspect,
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                              att->resolve_layout,
+                              cmd_buffer->queue_family->queueFlags);
+
+   enum blorp_filter filter = vk_to_blorp_resolve_mode(att->resolve_mode);
+
+   /* Depth/stencil should not use their view format for resolve because they
+    * go in pairs.
+    */
+   enum isl_format src_format = ISL_FORMAT_UNSUPPORTED;
+   enum isl_format dst_format = ISL_FORMAT_UNSUPPORTED;
+   if (!(aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
+      src_format = src_iview->planes[0].isl.format;
+      dst_format = dst_iview->planes[0].isl.format;
+   }
+
+   const VkRect2D render_area = gfx->render_area;
+   if (gfx->view_mask == 0) {
+      anv_image_msaa_resolve(cmd_buffer,
+                             src_iview->image, src_format, src_aux_usage,
+                             src_iview->planes[0].isl.base_level,
+                             src_iview->planes[0].isl.base_array_layer,
+                             dst_iview->image, dst_format, dst_aux_usage,
+                             dst_iview->planes[0].isl.base_level,
+                             dst_iview->planes[0].isl.base_array_layer,
+                             aspect,
+                             render_area.offset.x, render_area.offset.y,
+                             render_area.offset.x, render_area.offset.y,
+                             render_area.extent.width,
+                             render_area.extent.height,
+                             gfx->layer_count, filter);
+   } else {
+      uint32_t res_view_mask = gfx->view_mask;
+      while (res_view_mask) {
+         int i = u_bit_scan(&res_view_mask);
+
+         anv_image_msaa_resolve(cmd_buffer,
+                                src_iview->image, src_format, src_aux_usage,
+                                src_iview->planes[0].isl.base_level,
+                                src_iview->planes[0].isl.base_array_layer + i,
+                                dst_iview->image, dst_format, dst_aux_usage,
+                                dst_iview->planes[0].isl.base_level,
+                                dst_iview->planes[0].isl.base_array_layer + i,
+                                aspect,
+                                render_area.offset.x, render_area.offset.y,
+                                render_area.offset.x, render_area.offset.y,
+                                render_area.extent.width,
+                                render_area.extent.height,
+                                1, filter);
+      }
+   }
 }
 
 static void
@@ -2206,10 +2327,10 @@ resolve_image(struct anv_cmd_buffer *cmd_buffer,
                                  cmd_buffer->queue_family->queueFlags);
 
       anv_image_msaa_resolve(cmd_buffer,
-                             src_image, src_aux_usage,
+                             src_image, ISL_FORMAT_UNSUPPORTED, src_aux_usage,
                              region->srcSubresource.mipLevel,
                              region->srcSubresource.baseArrayLayer,
-                             dst_image, dst_aux_usage,
+                             dst_image, ISL_FORMAT_UNSUPPORTED, dst_aux_usage,
                              region->dstSubresource.mipLevel,
                              region->dstSubresource.baseArrayLayer,
                              (1 << aspect_bit),

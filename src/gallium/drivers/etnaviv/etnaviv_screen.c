@@ -896,7 +896,7 @@ etna_get_specs(struct etna_screen *screen)
       DBG("could not get ETNA_GPU_NUM_VARYINGS");
       goto fail;
    }
-   screen->specs.max_varyings = MAX2(val, ETNA_NUM_VARYINGS);
+   screen->specs.max_varyings = MIN2(val, ETNA_NUM_VARYINGS);
 
    /* Figure out gross GPU architecture. See rnndb/common.xml for a specific
     * description of the differences. */

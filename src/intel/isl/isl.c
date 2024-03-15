@@ -267,6 +267,12 @@ isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage,
    uint32_t mask = (usage & ISL_SURF_USAGE_PROTECTED_BIT) ?
       dev->mocs.protected_mask : 0;
 
+   if (usage & ISL_SURF_USAGE_BLITTER_SRC_BIT)
+      return dev->mocs.blitter_src | mask;
+
+   if (usage & ISL_SURF_USAGE_BLITTER_DST_BIT)
+      return dev->mocs.blitter_dst | mask;
+
    if (external)
       return dev->mocs.external | mask;
 
@@ -279,7 +285,7 @@ isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage,
          return dev->mocs.internal | mask;
 
       if (usage & ISL_SURF_USAGE_CPB_BIT)
-         return dev->mocs.internal;
+         return dev->mocs.internal | mask;
 
       /* Using L1:HDC for storage buffers breaks Vulkan memory model
        * tests that use shader atomics.  This isn't likely to work out,

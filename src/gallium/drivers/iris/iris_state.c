@@ -6052,7 +6052,9 @@ batch_emit_fast_color_dummy_blit(struct iris_batch *batch)
 #if GFX_VERx10 >= 125
    iris_emit_cmd(batch, GENX(XY_FAST_COLOR_BLT), blt) {
       blt.DestinationBaseAddress = batch->screen->workaround_address;
-      blt.DestinationMOCS = batch->screen->isl_dev.mocs.blitter_dst;
+      blt.DestinationMOCS = iris_mocs(batch->screen->workaround_address.bo,
+                                      &batch->screen->isl_dev,
+                                      ISL_SURF_USAGE_BLITTER_DST_BIT);
       blt.DestinationPitch = 63;
       blt.DestinationX2 = 1;
       blt.DestinationY2 = 4;
@@ -7276,7 +7278,13 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             switch (stage) {
             case MESA_SHADER_VERTEX:    MERGE_SCRATCH_ADDR(3DSTATE_VS); break;
             case MESA_SHADER_TESS_CTRL: MERGE_SCRATCH_ADDR(3DSTATE_HS); break;
-            case MESA_SHADER_TESS_EVAL: MERGE_SCRATCH_ADDR(3DSTATE_DS); break;
+            case MESA_SHADER_TESS_EVAL: {
+               uint32_t *shader_ds = (uint32_t *) shader->derived_data;
+               uint32_t *shader_te = shader_ds + GENX(3DSTATE_DS_length);
+               iris_batch_emit(batch, shader_te, 4 * GENX(3DSTATE_TE_length));
+               MERGE_SCRATCH_ADDR(3DSTATE_DS);
+               break;
+            }
             case MESA_SHADER_GEOMETRY:  MERGE_SCRATCH_ADDR(3DSTATE_GS); break;
             }
          } else {

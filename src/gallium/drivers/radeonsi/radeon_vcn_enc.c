@@ -238,7 +238,6 @@ static void radeon_vcn_enc_h264_get_rc_param(struct radeon_encoder *enc,
    uint32_t frame_rate_den, frame_rate_num;
 
    enc->enc_pic.num_temporal_layers = pic->seq.num_temporal_layers ? pic->seq.num_temporal_layers : 1;
-   enc->enc_pic.temporal_id = 0;
    for (int i = 0; i < enc->enc_pic.num_temporal_layers; i++) {
       enc->enc_pic.rc_layer_init[i].target_bit_rate = pic->rate_ctrl[i].target_bitrate;
       enc->enc_pic.rc_layer_init[i].peak_bit_rate = pic->rate_ctrl[i].peak_bitrate;

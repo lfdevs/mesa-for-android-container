@@ -659,12 +659,30 @@ bool si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
     */
    if (!util_format_is_compressed(src->format) &&
        !util_format_is_compressed(dst->format) &&
-       !util_format_is_subsampled_422(src->format) &&
-       (!si_can_use_compute_blit(sctx, dst->format, dst->nr_samples, true,
-                                 vi_dcc_enabled(sdst, dst_level)) ||
-        !si_can_use_compute_blit(sctx, src->format, src->nr_samples, false,
-                                 vi_dcc_enabled(ssrc, src_level))))
-      return false;
+       !util_format_is_subsampled_422(src->format)) {
+      bool src_can_use_compute_blit =
+         si_can_use_compute_blit(sctx, src->format, src->nr_samples, false,
+                                 vi_dcc_enabled(ssrc, src_level));
+
+      if (!src_can_use_compute_blit)
+         return false;
+
+      bool dst_can_use_compute_blit =
+         si_can_use_compute_blit(sctx, dst->format, dst->nr_samples, true,
+                                 vi_dcc_enabled(sdst, dst_level));
+
+      if (!dst_can_use_compute_blit && !sctx->has_graphics &&
+          si_can_use_compute_blit(sctx, dst->format, dst->nr_samples, false,
+                                  vi_dcc_enabled(sdst, dst_level))) {
+         /* Non-graphics context don't have a blitter, so try harder to do
+          * a compute blit by disabling dcc on the destination texture.
+          */
+         dst_can_use_compute_blit = si_texture_disable_dcc(sctx, sdst);
+      }
+
+      if (!dst_can_use_compute_blit)
+         return false;
+   }
 
    enum pipe_format src_format = util_format_linear(src->format);
    enum pipe_format dst_format = util_format_linear(dst->format);

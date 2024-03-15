@@ -3444,6 +3444,10 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 vir_emit_tlb_color_read(c, instr);
                 break;
 
+        case nir_intrinsic_load_fep_w_v3d:
+                ntq_store_def(c, &instr->def, 0, vir_MOV(c, c->payload_w));
+                break;
+
         case nir_intrinsic_load_input:
                 ntq_emit_load_input(c, instr);
                 break;

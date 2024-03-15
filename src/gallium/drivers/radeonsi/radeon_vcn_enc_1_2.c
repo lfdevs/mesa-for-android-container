@@ -114,8 +114,6 @@ static void radeon_enc_layer_control(struct radeon_encoder *enc)
 
 static void radeon_enc_layer_select(struct radeon_encoder *enc)
 {
-   enc->enc_pic.layer_sel.temporal_layer_index = enc->enc_pic.temporal_id;
-
    RADEON_ENC_BEGIN(enc->cmd.layer_select);
    RADEON_ENC_CS(enc->enc_pic.layer_sel.temporal_layer_index);
    RADEON_ENC_END();
@@ -183,7 +181,7 @@ static void radeon_enc_rc_session_init(struct radeon_encoder *enc)
 
 static void radeon_enc_rc_layer_init(struct radeon_encoder *enc)
 {
-   unsigned int i = enc->enc_pic.temporal_id;
+   unsigned int i = enc->enc_pic.layer_sel.temporal_layer_index;
    RADEON_ENC_BEGIN(enc->cmd.rc_layer_init);
    RADEON_ENC_CS(enc->enc_pic.rc_layer_init[i].target_bit_rate);
    RADEON_ENC_CS(enc->enc_pic.rc_layer_init[i].peak_bit_rate);
@@ -1350,7 +1348,7 @@ static void begin(struct radeon_encoder *enc)
 
    i = 0;
    do {
-      enc->enc_pic.temporal_id = i;
+      enc->enc_pic.layer_sel.temporal_layer_index = i;
       enc->layer_select(enc);
       enc->rc_layer_init(enc);
       enc->layer_select(enc);
@@ -1402,7 +1400,7 @@ static void encode(struct radeon_encoder *enc)
    if (enc->need_rate_control) {
       i = 0;
       do {
-         enc->enc_pic.temporal_id = i;
+         enc->enc_pic.layer_sel.temporal_layer_index = i;
          enc->layer_select(enc);
          enc->rc_layer_init(enc);
       } while (++i < enc->enc_pic.num_temporal_layers);

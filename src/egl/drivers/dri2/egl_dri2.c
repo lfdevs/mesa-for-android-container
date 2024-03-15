@@ -1072,8 +1072,9 @@ dri2_setup_extensions(_EGLDisplay *disp)
        dri2_dpy->dri3_major_version != -1 &&
        !dri2_dpy->multibuffers_available &&
 #endif
-       (disp->Platform == EGL_PLATFORM_X11_KHR ||
-        disp->Platform == EGL_PLATFORM_XCB_EXT) &&
+       /* this is enum _egl_platform_type */
+       (disp->Platform == _EGL_PLATFORM_X11 ||
+        disp->Platform == _EGL_PLATFORM_XCB) &&
        !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
       return EGL_FALSE;
 

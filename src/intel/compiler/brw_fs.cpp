@@ -5473,7 +5473,8 @@ fs_visitor::lower_simd_width()
           */
          const unsigned max_width = MAX2(inst->exec_size, lower_width);
 
-         const fs_builder bld = fs_builder(this).at_end();
+         const fs_builder bld =
+            fs_builder(this, MAX2(max_width, this->dispatch_width)).at_end();
          const fs_builder ibld = bld.at(block, inst)
                                     .exec_all(inst->force_writemask_all)
                                     .group(max_width, inst->group / max_width);

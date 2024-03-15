@@ -206,14 +206,23 @@
     GPU_VERSION: iris-glk
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
 
-# Status: https://lava.collabora.dev/scheduler/device_type/asus-cx9400-volteer
-.lava-asus-cx9400-volteer:x86_64:
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-cp514-2h-1130g7-volteer
+.lava-acer-cp514-2h-1130g7-volteer:x86_64:
   variables:
     BOOT_METHOD: depthcharge
-    DEVICE_TYPE: asus-cx9400-volteer
+    DEVICE_TYPE: acer-cp514-2h-1130g7-volteer
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: anv-tgl
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cp514-2h-1130g7-volteer
+
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-cp514-2h-1160g7-volteer
+.lava-acer-cp514-2h-1160g7-volteer:x86_64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: acer-cp514-2h-1160g7-volteer
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: anv-tgl
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cp514-2h-1160g7-volteer
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C433TA-AJ0005-rammus
 .lava-asus-C433TA-AJ0005-rammus:x86_64:
@@ -278,11 +287,6 @@
     - .intel-rules
 
 ## ANV only
-.anv-tgl-test:
-  extends:
-    - .anv-test
-    - .lava-asus-cx9400-volteer:x86_64
-
 .anv-angle-test:
   extends:
     - .anv-test
@@ -387,7 +391,7 @@
 ## Intel (anv + iris)
 .intel-tgl-test:
   extends:
-    - .anv-tgl-test
+    - .anv-test
     - .intel-test
   variables:
     GPU_VERSION: intel-tgl

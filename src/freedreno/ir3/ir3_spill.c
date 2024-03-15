@@ -673,13 +673,13 @@ get_spill_slot(struct ra_spill_ctx *ctx, struct ir3_register *reg)
    if (reg->merge_set) {
       if (reg->merge_set->spill_slot == ~0) {
          reg->merge_set->spill_slot = ALIGN_POT(ctx->spill_slot,
-                                                reg->merge_set->alignment);
+                                                reg->merge_set->alignment * 2);
          ctx->spill_slot = reg->merge_set->spill_slot + reg->merge_set->size * 2;
       }
       return reg->merge_set->spill_slot + reg->merge_set_offset * 2;
    } else {
       if (reg->spill_slot == ~0) {
-         reg->spill_slot = ALIGN_POT(ctx->spill_slot, reg_elem_size(reg));
+         reg->spill_slot = ALIGN_POT(ctx->spill_slot, reg_elem_size(reg) * 2);
          ctx->spill_slot = reg->spill_slot + reg_size(reg) * 2;
       }
       return reg->spill_slot;

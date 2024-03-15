@@ -1283,9 +1283,11 @@ vk_graphics_pipeline_state_fill(const struct vk_device *device,
       vk_find_struct_const(info->pNext, GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT);
    const VkPipelineLibraryCreateInfoKHR *lib_info =
       vk_find_struct_const(info->pNext, PIPELINE_LIBRARY_CREATE_INFO_KHR);
+   
+   VkPipelineCreateFlags2KHR pipeline_flags = vk_graphics_pipeline_create_flags(info);
 
    VkShaderStageFlagBits allowed_stages;
-   if (!(info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
+   if (!(pipeline_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
       allowed_stages = VK_SHADER_STAGE_ALL_GRAPHICS |
                        VK_SHADER_STAGE_TASK_BIT_EXT |
                        VK_SHADER_STAGE_MESH_BIT_EXT;
@@ -1330,7 +1332,7 @@ vk_graphics_pipeline_state_fill(const struct vk_device *device,
    if (gpl_info) {
       lib = gpl_info->flags;
    } else if ((lib_info && lib_info->libraryCount > 0) ||
-              (info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
+              (pipeline_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
      /*
       * From the Vulkan 1.3.210 spec:
       *    "If this structure is omitted, and either VkGraphicsPipelineCreateInfo::flags

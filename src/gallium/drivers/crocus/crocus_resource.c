@@ -216,6 +216,10 @@ crocus_resource_configure_main(const struct crocus_screen *screen,
          tiling_flags = ISL_TILING_W_BIT;
    }
 
+   /* Disable aux for external memory objects. */
+   if (!res->mod_info && res->external_format != PIPE_FORMAT_NONE)
+      usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+
    const enum isl_format format =
       crocus_format_for_usage(&screen->devinfo, templ->format, usage).fmt;
 

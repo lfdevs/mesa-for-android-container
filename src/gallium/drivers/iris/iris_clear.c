@@ -326,7 +326,7 @@ fast_clear_color(struct iris_context *ice,
     */
    if (devinfo->ver >= 11) {
       iris_emit_pipe_control_flush(batch, "fast clear: pre-flush",
-         PIPE_CONTROL_STATE_CACHE_INVALIDATE | 
+         PIPE_CONTROL_STATE_CACHE_INVALIDATE |
          PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
    }
 
@@ -342,8 +342,8 @@ fast_clear_color(struct iris_context *ice,
    blorp_batch_init(&ice->blorp, &blorp_batch, batch, blorp_flags);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
-                                p_res, res->aux.usage, level, true);
+   iris_blorp_surf_for_resource(batch, &surf, p_res, res->aux.usage,
+                                level, true);
 
    blorp_fast_clear(&blorp_batch, &surf, res->surf.format,
                     ISL_SWIZZLE_IDENTITY,
@@ -412,8 +412,7 @@ clear_color(struct iris_context *ice,
    iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_RENDER_WRITE);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
-                                p_res, aux_usage, level, true);
+   iris_blorp_surf_for_resource(batch, &surf, p_res, aux_usage, level, true);
 
    iris_batch_sync_region_start(batch);
 
@@ -631,8 +630,8 @@ clear_depth_stencil(struct iris_context *ice,
       iris_resource_prepare_render(ice, z_res, z_res->surf.format, level,
                                    box->z, box->depth, aux_usage);
       iris_emit_buffer_barrier_for(batch, z_res->bo, IRIS_DOMAIN_DEPTH_WRITE);
-      iris_blorp_surf_for_resource(&batch->screen->isl_dev, &z_surf,
-                                   &z_res->base.b, aux_usage, level, true);
+      iris_blorp_surf_for_resource(batch, &z_surf, &z_res->base.b,
+                                   aux_usage, level, true);
    }
 
    uint8_t stencil_mask = clear_stencil && stencil_res ? 0xff : 0;
@@ -641,8 +640,7 @@ clear_depth_stencil(struct iris_context *ice,
                                    box->depth, stencil_res->aux.usage, false);
       iris_emit_buffer_barrier_for(batch, stencil_res->bo,
                                    IRIS_DOMAIN_DEPTH_WRITE);
-      iris_blorp_surf_for_resource(&batch->screen->isl_dev,
-                                   &stencil_surf, &stencil_res->base.b,
+      iris_blorp_surf_for_resource(batch, &stencil_surf, &stencil_res->base.b,
                                    stencil_res->aux.usage, level, true);
    }
 

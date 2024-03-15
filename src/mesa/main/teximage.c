@@ -4561,22 +4561,33 @@ copyteximage(struct gl_context *ctx, GLuint dims, struct gl_texture_object *texO
                return;
          }
       }
-      /* From Page 139 of OpenGL ES 3.0 spec:
-       *    "If internalformat is sized, the internal format of the new texel
-       *    array is internalformat, and this is also the new texel array’s
-       *    effective internal format. If the component sizes of internalformat
-       *    do not exactly match the corresponding component sizes of the source
-       *    buffer’s effective internal format, described below, an
-       *    INVALID_OPERATION error is generated. If internalformat is unsized,
-       *    the internal format of the new texel array is the effective internal
-       *    format of the source buffer, and this is also the new texel array’s
-       *    effective internal format.
-       */
-      else if (formats_differ_in_component_sizes (texFormat, rb->Format)) {
+      else {
+         /* From Page 139 of OpenGL ES 3.0 spec:
+         *    "If internalformat is sized, the internal format of the new texel
+         *    array is internalformat, and this is also the new texel array’s
+         *    effective internal format. If the component sizes of internalformat
+         *    do not exactly match the corresponding component sizes of the source
+         *    buffer’s effective internal format, described below, an
+         *    INVALID_OPERATION error is generated. If internalformat is unsized,
+         *    the internal format of the new texel array is the effective internal
+         *    format of the source buffer, and this is also the new texel array’s
+         *    effective internal format.
+         */
+         enum pipe_format rb_format = st_choose_format(ctx->st, rb->InternalFormat,
+                                                       GL_NONE, GL_NONE,
+                                                       PIPE_TEXTURE_2D, 0, 0, 0,
+                                                       false, false);
+         enum pipe_format new_format = st_choose_format(ctx->st, internalFormat,
+                                                        GL_NONE, GL_NONE,
+                                                        PIPE_TEXTURE_2D, 0, 0, 0,
+                                                        false, false);
+         /* this comparison must be done on the API format, not the driver format */
+         if (formats_differ_in_component_sizes (new_format, rb_format)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "glCopyTexImage%uD(component size changed in"
                         " internal format)", dims);
             return;
+         }
       }
    }
 

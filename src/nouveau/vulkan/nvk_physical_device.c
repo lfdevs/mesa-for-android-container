@@ -538,6 +538,9 @@ nvk_get_device_properties(const struct nvk_instance *instance,
                                                VK_SAMPLE_COUNT_4_BIT |
                                                VK_SAMPLE_COUNT_8_BIT;
 
+   uint64_t os_page_size = 4096;
+   os_get_page_size(&os_page_size);
+
    *properties = (struct vk_properties) {
       .apiVersion = nvk_get_vk_version(info),
       .driverVersion = vk_get_driver_version(),
@@ -614,7 +617,7 @@ nvk_get_device_properties(const struct nvk_instance *instance,
       .maxViewportDimensions = { 32768, 32768 },
       .viewportBoundsRange = { -65536, 65536 },
       .viewportSubPixelBits = 8,
-      .minMemoryMapAlignment = 64,
+      .minMemoryMapAlignment = os_page_size,
       .minTexelBufferOffsetAlignment = NVK_MIN_TEXEL_BUFFER_ALIGNMENT,
       .minUniformBufferOffsetAlignment = nvk_min_cbuf_alignment(info),
       .minStorageBufferOffsetAlignment = NVK_MIN_SSBO_ALIGNMENT,

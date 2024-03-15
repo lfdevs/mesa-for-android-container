@@ -2167,6 +2167,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    assert(cs_prog_data->push.per_thread.regs == 0);
    blorp_emit(batch, GENX(COMPUTE_WALKER), cw) {
       cw.SIMDSize                       = dispatch.simd_size / 16;
+      cw.MessageSIMD                    = dispatch.simd_size / 16,
       cw.LocalXMaximum                  = cs_prog_data->local_size[0] - 1;
       cw.LocalYMaximum                  = cs_prog_data->local_size[1] - 1;
       cw.LocalZMaximum                  = cs_prog_data->local_size[2] - 1;
@@ -2538,10 +2539,6 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
          blt.SourceClearValueEnable = !!params->src.clear_color_addr.buffer;
          blt.SourceClearAddress = params->src.clear_color_addr;
       }
-
-      /* XeHP needs special MOCS values for the blitter */
-      blt.DestinationMOCS = isl_dev->mocs.blitter_dst;
-      blt.SourceMOCS = isl_dev->mocs.blitter_src;
 #endif
    }
 #endif
@@ -2624,8 +2621,7 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
          blt.DestinationClearAddress = params->dst.clear_color_addr;
       }
 
-      /* XeHP needs special MOCS values for the blitter */
-      blt.DestinationMOCS = isl_dev->mocs.blitter_dst;
+      blt.DestinationMOCS = params->dst.addr.mocs;
 #endif
    }
 #endif

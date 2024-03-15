@@ -545,6 +545,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
 #if GFX_VERx10 >= 125
       anv_batch_emit(batch, GENX(COMPUTE_WALKER), cw) {
          cw.SIMDSize                       = dispatch.simd_size / 16;
+         cw.MessageSIMD                    = dispatch.simd_size / 16,
          cw.IndirectDataStartAddress       = push_state.offset;
          cw.IndirectDataLength             = push_state.alloc_size;
          cw.LocalXMaximum                  = prog_data->local_size[0] - 1;

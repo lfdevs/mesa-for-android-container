@@ -1963,6 +1963,9 @@ tu_pipeline_builder_parse_libraries(struct tu_pipeline_builder *builder,
          }
       }
 
+      BITSET_OR(pipeline->static_state_mask, pipeline->static_state_mask,
+                library->base.static_state_mask);
+
       vk_graphics_pipeline_state_merge(&builder->graphics_state,
                                        &library->graphics_state);
    }
@@ -3276,6 +3279,9 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
     * binding the pipeline by making it "dynamic".
     */
    BITSET_ANDNOT(remove, remove, keep);
+
+   BITSET_OR(pipeline->static_state_mask, pipeline->static_state_mask, remove);
+
    BITSET_OR(builder->graphics_state.dynamic, builder->graphics_state.dynamic,
              remove);
 }

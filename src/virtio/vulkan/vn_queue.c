@@ -857,7 +857,7 @@ vn_queue_submission_setup_batches(struct vn_queue_submission *submit)
     * to modify cmd buffer.
     * Only needed for non-empty submissions
     */
-   if (submit->batches) {
+   if (submit->batch_count) {
       memcpy(submit->temp.batches, submit->batches,
              batch_size * submit->batch_count);
    }

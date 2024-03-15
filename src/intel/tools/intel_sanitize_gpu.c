@@ -22,6 +22,7 @@
  */
 
 #undef _FILE_OFFSET_BITS /* prevent #define open open64 */
+#undef _TIME_BITS
 
 #include <string.h>
 #include <stdlib.h>
