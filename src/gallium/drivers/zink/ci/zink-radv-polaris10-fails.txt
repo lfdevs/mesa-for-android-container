@@ -13,9 +13,6 @@ glx@extension string sanity,Fail
 # #6322
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 
-spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index2,Fail
-spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index,Fail
-spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query,Fail

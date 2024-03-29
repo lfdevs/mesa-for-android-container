@@ -71,6 +71,7 @@ typedef struct
    bool early_prim_export;
    bool streamout_enabled;
    bool has_user_edgeflags;
+   bool skip_primitive_id;
    unsigned max_num_waves;
 
    /* LDS params */
@@ -1760,8 +1761,11 @@ ngg_nogs_store_xfb_outputs_to_lds(nir_builder *b, lower_ngg_nogs_state *s)
    nir_def *addr = pervertex_lds_addr(b, tid, s->pervertex_lds_bytes);
 
    u_foreach_bit64(slot, xfb_outputs) {
+      uint64_t outputs_written = b->shader->info.outputs_written;
+      if (s->skip_primitive_id)
+         outputs_written &= ~VARYING_BIT_PRIMITIVE_ID;
       unsigned packed_location =
-         util_bitcount64(b->shader->info.outputs_written & BITFIELD64_MASK(slot));
+         util_bitcount64(outputs_written & BITFIELD64_MASK(slot));
 
       unsigned mask = xfb_mask[slot];
 
@@ -1986,7 +1990,8 @@ ngg_build_streamout_vertex(nir_builder *b, nir_xfb_info *info,
                            unsigned stream, nir_def *so_buffer[4],
                            nir_def *buffer_offsets[4],
                            nir_def *vtx_buffer_idx, nir_def *vtx_lds_addr,
-                           shader_output_types *output_types)
+                           shader_output_types *output_types,
+                           bool skip_primitive_id)
 {
    nir_def *vtx_buffer_offsets[4];
    for (unsigned buffer = 0; buffer < 4; buffer++) {
@@ -2009,8 +2014,12 @@ ngg_build_streamout_vertex(nir_builder *b, nir_xfb_info *info,
             util_bitcount(b->shader->info.outputs_written_16bit &
                           BITFIELD_MASK(out->location - VARYING_SLOT_VAR0_16BIT));
       } else {
+         uint64_t outputs_written = b->shader->info.outputs_written;
+         if (skip_primitive_id)
+            outputs_written &= ~VARYING_BIT_PRIMITIVE_ID;
+
          base =
-            util_bitcount64(b->shader->info.outputs_written &
+            util_bitcount64(outputs_written &
                             BITFIELD64_MASK(out->location));
       }
 
@@ -2099,7 +2108,7 @@ ngg_nogs_build_streamout(nir_builder *b, lower_ngg_nogs_state *s)
             nir_def *vtx_lds_addr = pervertex_lds_addr(b, vtx_lds_idx, vtx_lds_stride);
             ngg_build_streamout_vertex(b, info, 0, so_buffer, buffer_offsets,
                                        nir_iadd_imm(b, vtx_buffer_idx, i),
-                                       vtx_lds_addr, &s->output_types);
+                                       vtx_lds_addr, &s->output_types, s->skip_primitive_id);
          }
          nir_pop_if(b, if_valid_vertex);
       }
@@ -2455,6 +2464,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
       .gs_exported_var = gs_exported_var,
       .max_num_waves = DIV_ROUND_UP(options->max_workgroup_size, options->wave_size),
       .has_user_edgeflags = has_user_edgeflags,
+      .skip_primitive_id = streamout_enabled && options->export_primitive_id,
    };
 
    const bool need_prim_id_store_shared =
@@ -3415,7 +3425,7 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
                                        buffer_offsets,
                                        nir_iadd_imm(b, vtx_buffer_idx, i),
                                        exported_vtx_lds_addr[i],
-                                       &s->output_types);
+                                       &s->output_types, false);
          }
       }
       nir_pop_if(b, if_emit);

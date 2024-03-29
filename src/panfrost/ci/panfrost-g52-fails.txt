@@ -435,7 +435,6 @@ dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.float32,Crash
 dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.int32,Crash
 dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32,Crash
 
-dEQP-VK.api.command_buffers.record_many_draws_secondary_2,Fail
 dEQP-VK.glsl.operator.sequence.no_side_effects.highp_bool_vec2_fragment,Fail
 dEQP-VK.glsl.operator.sequence.no_side_effects.highp_float_uint_fragment,Fail
 dEQP-VK.glsl.operator.sequence.no_side_effects.highp_vec4_ivec4_bvec4_fragment,Fail

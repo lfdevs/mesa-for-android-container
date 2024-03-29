@@ -182,6 +182,7 @@ nir_shader_intrinsics_pass(nir_shader *shader,
 }
 
 void nir_builder_instr_insert(nir_builder *build, nir_instr *instr);
+void nir_builder_instr_insert_at_top(nir_builder *build, nir_instr *instr);
 
 static inline nir_instr *
 nir_builder_last_instr(nir_builder *build)
@@ -250,9 +251,7 @@ nir_undef(nir_builder *build, unsigned num_components, unsigned bit_size)
    if (!undef)
       return NULL;
 
-   nir_instr_insert(nir_before_impl(build->impl), &undef->instr);
-   if (build->update_divergence)
-      nir_update_instr_divergence(build->shader, &undef->instr);
+   nir_builder_instr_insert_at_top(build, &undef->instr);
 
    return &undef->def;
 }
@@ -1832,7 +1831,7 @@ nir_decl_reg(nir_builder *b, unsigned num_components, unsigned bit_size,
    nir_intrinsic_set_divergent(decl, true);
    nir_def_init(&decl->instr, &decl->def, 1, 32);
 
-   nir_instr_insert(nir_before_impl(b->impl), &decl->instr);
+   nir_builder_instr_insert_at_top(b, &decl->instr);
 
    return &decl->def;
 }

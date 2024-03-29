@@ -33,7 +33,7 @@
 struct drisw_display
 {
    __GLXDRIdisplay base;
-   bool zink;
+   enum try_zink zink;
 };
 
 struct drisw_screen

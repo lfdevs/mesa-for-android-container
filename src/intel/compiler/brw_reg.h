@@ -260,6 +260,39 @@ struct brw_reg {
    };
 };
 
+static inline unsigned
+phys_nr(const struct intel_device_info *devinfo, const struct brw_reg reg)
+{
+   if (devinfo->ver >= 20) {
+      if (reg.file == BRW_GENERAL_REGISTER_FILE)
+         return reg.nr / 2;
+      else if (reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+               reg.nr >= BRW_ARF_ACCUMULATOR &&
+               reg.nr < BRW_ARF_FLAG)
+         return BRW_ARF_ACCUMULATOR + (reg.nr - BRW_ARF_ACCUMULATOR) / 2;
+      else
+         return reg.nr;
+   } else {
+      return reg.nr;
+   }
+}
+
+static inline unsigned
+phys_subnr(const struct intel_device_info *devinfo, const struct brw_reg reg)
+{
+   if (devinfo->ver >= 20) {
+      if (reg.file == BRW_GENERAL_REGISTER_FILE ||
+          (reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+           reg.nr >= BRW_ARF_ACCUMULATOR &&
+           reg.nr < BRW_ARF_FLAG))
+         return (reg.nr & 1) * REG_SIZE + reg.subnr;
+      else
+         return reg.subnr;
+   } else {
+      return reg.subnr;
+   }
+}
+
 static inline bool
 brw_regs_equal(const struct brw_reg *a, const struct brw_reg *b)
 {

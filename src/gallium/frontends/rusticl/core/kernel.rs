@@ -458,22 +458,8 @@ fn lower_and_optimize_nir(
     let mut args = KernelArg::from_spirv_nir(args, nir);
     let mut internal_args = Vec::new();
 
-    let dv_opts = nir_remove_dead_variables_options {
-        can_remove_var: Some(can_remove_var),
-        can_remove_var_data: ptr::null_mut(),
-    };
-    nir_pass!(
-        nir,
-        nir_remove_dead_variables,
-        nir_variable_mode::nir_var_uniform
-            | nir_variable_mode::nir_var_image
-            | nir_variable_mode::nir_var_mem_constant
-            | nir_variable_mode::nir_var_mem_shared
-            | nir_variable_mode::nir_var_function_temp,
-        &dv_opts,
-    );
-
-    // asign locations for inline samplers
+    // asign locations for inline samplers.
+    // IMPORTANT: this needs to happen before nir_remove_dead_variables.
     let mut last_loc = -1;
     for v in nir
         .variables_with_mode(nir_variable_mode::nir_var_uniform | nir_variable_mode::nir_var_image)
@@ -500,6 +486,21 @@ fn lower_and_optimize_nir(
             last_loc = v.data.location;
         }
     }
+
+    let dv_opts = nir_remove_dead_variables_options {
+        can_remove_var: Some(can_remove_var),
+        can_remove_var_data: ptr::null_mut(),
+    };
+    nir_pass!(
+        nir,
+        nir_remove_dead_variables,
+        nir_variable_mode::nir_var_uniform
+            | nir_variable_mode::nir_var_image
+            | nir_variable_mode::nir_var_mem_constant
+            | nir_variable_mode::nir_var_mem_shared
+            | nir_variable_mode::nir_var_function_temp,
+        &dv_opts,
+    );
 
     nir_pass!(nir, nir_lower_readonly_images_to_tex, true);
     nir_pass!(

@@ -4913,13 +4913,13 @@ fixup_io_locations(nir_shader *nir)
             else
                var->data.driver_location = var->data.location;
          }
-         return true;
+         continue;
       }
       /* i/o interface blocks are required to be EXACT matches between stages:
       * iterate over all locations and set locations incrementally
       */
       unsigned slot = 0;
-      for (unsigned i = 0; i < VARYING_SLOT_MAX; i++) {
+      for (unsigned i = 0; i < VARYING_SLOT_TESS_MAX; i++) {
          if (nir_slot_is_sysval_output(i, MESA_SHADER_NONE))
             continue;
          bool found = false;

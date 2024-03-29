@@ -697,13 +697,15 @@ void *si_create_dma_compute_shader(struct si_context *sctx, unsigned num_dwords_
     * the 2nd store writes into 1 * wavesize + tid,
     * the 3rd store writes into 2 * wavesize + tid, etc.
     */
-   nir_def *store_address = get_global_ids(&b, 1);
+   nir_def *store_address =
+      nir_iadd(&b, nir_imul_imm(&b, nir_channel(&b, nir_load_workgroup_id(&b), 0),
+                                default_wave_size * num_mem_ops),
+               nir_channel(&b, nir_load_local_invocation_id(&b), 0));
 
    /* Convert from a "store size unit" into bytes. */
    store_address = nir_imul_imm(&b, store_address, 4 * inst_dwords[0]);
 
-   nir_def *load_address = store_address, *value, *values[num_mem_ops];
-   value = nir_undef(&b, 1, 32);
+   nir_def *load_address = store_address, *value = NULL, *values[num_mem_ops];
 
    if (is_copy) {
       b.shader->info.num_ssbos++;
@@ -723,7 +725,7 @@ void *si_create_dma_compute_shader(struct si_context *sctx, unsigned num_dwords_
             load_address = nir_iadd(&b, load_address,
                                     nir_imm_int(&b, 4 * inst_dwords[i] * default_wave_size));
          }
-         values[i] = nir_load_ssbo(&b, 4, 32, nir_imm_int(&b, 1),load_address,
+         values[i] = nir_load_ssbo(&b, inst_dwords[i], 32, nir_imm_int(&b, 1), load_address,
                                    .access = load_qualifier);
       }
 

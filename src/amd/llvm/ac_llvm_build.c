@@ -119,6 +119,8 @@ void ac_llvm_context_dispose(struct ac_llvm_context *ctx)
    free(ctx->flow->stack);
    free(ctx->flow);
    ctx->flow = NULL;
+
+   LLVMDisposeBuilder(ctx->builder);
 }
 
 int ac_get_llvm_num_components(LLVMValueRef value)

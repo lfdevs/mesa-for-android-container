@@ -1770,6 +1770,11 @@ static bool kill_ps_outputs_cb(struct nir_builder *b, nir_instr *instr, void *_k
    assert(nir_intrinsic_component(intr) == 0);
    unsigned cb_shader_mask = ac_get_cb_shader_mask(key->ps.part.epilog.spi_shader_col_format);
 
+   /* Preserve alpha if ALPHA_TESTING is enabled. */
+   if (key->ps.part.epilog.alpha_func != PIPE_FUNC_ALWAYS ||
+       key->ps.part.epilog.alpha_to_coverage_via_mrtz)
+      cb_shader_mask |= 1 << 3;
+
    /* If COLOR is broadcasted to multiple color buffers, combine their masks. */
    if (location == FRAG_RESULT_COLOR) {
       for (unsigned i = 1; i <= key->ps.part.epilog.last_cbuf; i++)

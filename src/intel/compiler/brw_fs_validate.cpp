@@ -191,8 +191,8 @@ fs_visitor::validate()
        */
       if (intel_needs_workaround(devinfo, 14014617373) &&
           inst->dst.is_accumulator() &&
-          inst->dst.offset == 0) {
-         fsv_assert_eq(inst->dst.stride, 1);
+          phys_subnr(devinfo, inst->dst.as_brw_reg()) == 0) {
+         fsv_assert_eq(inst->dst.hstride, 1);
       }
    }
 }

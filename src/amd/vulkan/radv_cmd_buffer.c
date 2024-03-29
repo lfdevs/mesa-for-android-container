@@ -1551,6 +1551,8 @@ radv_get_disabled_binning_state(struct radv_cmd_buffer *cmd_buffer)
    uint32_t pa_sc_binner_cntl_0;
 
    if (pdevice->rad_info.gfx_level >= GFX10) {
+      const unsigned binning_disabled =
+         pdevice->rad_info.gfx_level >= GFX11_5 ? V_028C44_BINNING_DISABLED : V_028C44_DISABLE_BINNING_USE_NEW_SC;
       unsigned min_bytes_per_pixel = 0;
 
       for (unsigned i = 0; i < render->color_att_count; ++i) {
@@ -1567,8 +1569,8 @@ radv_get_disabled_binning_state(struct radv_cmd_buffer *cmd_buffer)
             min_bytes_per_pixel = bytes;
       }
 
-      pa_sc_binner_cntl_0 = S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_NEW_SC) | S_028C44_BIN_SIZE_X(0) |
-                            S_028C44_BIN_SIZE_Y(0) | S_028C44_BIN_SIZE_X_EXTEND(2) |       /* 128 */
+      pa_sc_binner_cntl_0 = S_028C44_BINNING_MODE(binning_disabled) | S_028C44_BIN_SIZE_X(0) | S_028C44_BIN_SIZE_Y(0) |
+                            S_028C44_BIN_SIZE_X_EXTEND(2) |                                /* 128 */
                             S_028C44_BIN_SIZE_Y_EXTEND(min_bytes_per_pixel <= 4 ? 2 : 1) | /* 128 or 64 */
                             S_028C44_DISABLE_START_OF_PRIM(1) | S_028C44_FLUSH_ON_BINNING_TRANSITION(1);
    } else {
@@ -3743,7 +3745,8 @@ radv_flush_occlusion_query_state(struct radv_cmd_buffer *cmd_buffer)
    if (!enable_occlusion_queries) {
       db_count_control = S_028004_ZPASS_INCREMENT_DISABLE(gfx_level < GFX11);
    } else {
-      uint32_t sample_rate = util_logbase2(cmd_buffer->state.render.max_samples);
+      const uint32_t rasterization_samples = radv_get_rasterization_samples(cmd_buffer);
+      const uint32_t sample_rate = util_logbase2(rasterization_samples);
       bool gfx10_perfect =
          gfx_level >= GFX10 && (cmd_buffer->state.perfect_occlusion_queries_enabled ||
                                 cmd_buffer->state.inherited_query_control_flags & VK_QUERY_CONTROL_PRECISE_BIT);
@@ -5609,6 +5612,9 @@ radv_dst_access_flush(struct radv_cmd_buffer *cmd_buffer, VkAccessFlags2 dst_fla
             flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
          break;
       case VK_ACCESS_2_MEMORY_READ_BIT:
+         if (has_CB_meta || has_DB_meta)
+            flush_bits |= RADV_CMD_FLAG_INV_L2_METADATA;
+         FALLTHROUGH;
       case VK_ACCESS_2_MEMORY_WRITE_BIT:
          flush_bits |= RADV_CMD_FLAG_INV_VCACHE | RADV_CMD_FLAG_INV_SCACHE;
          if (!image_is_coherent)
@@ -5955,6 +5961,9 @@ radv_CmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDe
    } else {
       cmd_buffer->state.index_va = 0;
       cmd_buffer->state.max_index_count = 0;
+
+      if (cmd_buffer->device->physical_device->rad_info.has_null_index_buffer_clamping_bug)
+         cmd_buffer->state.index_va = 0x2;
    }
 
    cmd_buffer->state.dirty |= RADV_CMD_DIRTY_INDEX_BUFFER;
@@ -9006,7 +9015,8 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
    if (cmd_buffer->state.dirty & RADV_CMD_DIRTY_SHADER_QUERY)
       radv_flush_shader_query_state(cmd_buffer);
 
-   if (cmd_buffer->state.dirty & RADV_CMD_DIRTY_OCCLUSION_QUERY)
+   if (cmd_buffer->state.dirty & (RADV_CMD_DIRTY_OCCLUSION_QUERY | RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES |
+                                  RADV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY))
       radv_flush_occlusion_query_state(cmd_buffer);
 
    if ((cmd_buffer->state.dirty &

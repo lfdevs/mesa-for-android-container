@@ -1223,7 +1223,8 @@ struct pipe_surface* r300_create_surface_custom(struct pipe_context * ctx,
                                                tex->b.nr_samples,
                                                tex->tex.microtile,
                                                tex->tex.macrotile[level],
-                                               DIM_HEIGHT, 0);
+                                               DIM_HEIGHT, 0,
+                                               tex->b.bind & PIPE_BIND_SCANOUT);
 
         surface->cbzb_height = align((surface->base.height + 1) / 2,
                                      tile_height);

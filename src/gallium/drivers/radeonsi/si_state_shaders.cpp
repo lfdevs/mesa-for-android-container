@@ -4345,6 +4345,15 @@ static void si_emit_vgt_pipeline_state(struct si_context *sctx, unsigned index)
    radeon_begin(cs);
    radeon_opt_set_context_reg(sctx, R_028B54_VGT_SHADER_STAGES_EN, SI_TRACKED_VGT_SHADER_STAGES_EN,
                               sctx->vgt_shader_stages_en);
+   if (sctx->gfx_level == GFX10_3) {
+      /* Legacy Tess+GS should disable reuse to prevent hangs on GFX10.3. */
+      bool has_legacy_tess_gs = G_028B54_HS_EN(sctx->vgt_shader_stages_en) &&
+                                G_028B54_GS_EN(sctx->vgt_shader_stages_en) &&
+                                !G_028B54_PRIMGEN_EN(sctx->vgt_shader_stages_en); /* !NGG */
+
+      radeon_opt_set_context_reg(sctx, R_028AB4_VGT_REUSE_OFF, SI_TRACKED_VGT_REUSE_OFF,
+                                 S_028AB4_REUSE_OFF(has_legacy_tess_gs));
+   }
    radeon_end_update_context_roll(sctx);
 
    if (sctx->gfx_level >= GFX10) {

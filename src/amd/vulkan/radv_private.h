@@ -380,6 +380,7 @@ struct radv_instance {
       bool force_rt_wave64;
       bool dual_color_blend_by_location;
       bool legacy_sparse_binding;
+      bool force_pstate_peak_gfx11_dgpu;
       bool clear_lds;
       bool enable_dgc;
       bool enable_khr_present_wait;

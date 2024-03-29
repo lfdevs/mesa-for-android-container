@@ -114,6 +114,7 @@ struct ntv_context {
          subgroup_size_var;
 
    SpvId discard_func;
+   SpvId float_array_type[2];
 };
 
 static SpvId
@@ -2784,6 +2785,16 @@ emit_deref_atomic_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    nir_alu_type atype;
    nir_alu_type ret_type = nir_atomic_op_type(nir_intrinsic_atomic_op(intr)) == nir_type_float ? nir_type_float : nir_type_uint;
    SpvId ptr = get_src(ctx, &intr->src[0], &atype);
+   if (atype != ret_type && ret_type == nir_type_float) {
+      unsigned bit_size = nir_src_bit_size(intr->src[0]);
+      SpvId *float_array_type = &ctx->float_array_type[bit_size == 32 ? 0 : 1];
+      if (!*float_array_type) {
+         *float_array_type = spirv_builder_type_pointer(&ctx->builder, SpvStorageClassStorageBuffer,
+                                                        spirv_builder_type_float(&ctx->builder, bit_size));
+      }
+      ptr = emit_unop(ctx, SpvOpBitcast, *float_array_type, ptr);
+   }
+
    SpvId param = get_src(ctx, &intr->src[1], &atype);
    if (atype != ret_type)
       param = cast_src_to_type(ctx, param, intr->src[1], ret_type);
@@ -3542,6 +3553,9 @@ tex_instr_is_lod_allowed(nir_tex_instr *tex)
            tex->sampler_dim == GLSL_SAMPLER_DIM_2D ||
            tex->sampler_dim == GLSL_SAMPLER_DIM_3D ||
            tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE ||
+           /* External images are interpreted as 2D in type_to_dim,
+            * so LOD is allowed */
+           tex->sampler_dim == GLSL_SAMPLER_DIM_EXTERNAL ||
            /* RECT will always become 2D, so this is fine */
            tex->sampler_dim == GLSL_SAMPLER_DIM_RECT);
 }
@@ -3974,8 +3988,11 @@ emit_deref_array(struct ntv_context *ctx, nir_deref_instr *deref)
    }
 
    SpvStorageClass storage_class = get_storage_class(var);
-   SpvId base, type;
+   SpvId type;
    nir_alu_type atype = nir_type_uint;
+
+   SpvId base = get_src(ctx, &deref->parent, &atype);
+
    switch (var->data.mode) {
 
    case nir_var_mem_ubo:
@@ -4016,6 +4033,26 @@ emit_deref_array(struct ntv_context *ctx, nir_deref_instr *deref)
    SpvId index = get_src(ctx, &deref->arr.index, &itype);
    if (itype == nir_type_float)
       index = emit_bitcast(ctx, get_uvec_type(ctx, 32, 1), index);
+
+   if (var->data.mode == nir_var_uniform || var->data.mode == nir_var_image) {
+      nir_deref_instr *aoa_deref = nir_src_as_deref(deref->parent);
+      uint32_t inner_stride = glsl_array_size(aoa_deref->type);
+
+      while (aoa_deref->deref_type != nir_deref_type_var) {
+         assert(aoa_deref->deref_type == nir_deref_type_array);
+
+         SpvId aoa_index = get_src(ctx, &aoa_deref->arr.index, &itype);
+         if (itype == nir_type_float)
+            aoa_index = emit_bitcast(ctx, get_uvec_type(ctx, 32, 1), aoa_index);
+
+         aoa_deref = nir_src_as_deref(aoa_deref->parent);
+
+         uint32_t stride = glsl_get_aoa_size(aoa_deref->type) / inner_stride;
+         aoa_index = emit_binop(ctx, SpvOpIMul, get_uvec_type(ctx, 32, 1), aoa_index,
+                                emit_uint_const(ctx, 32, stride));
+         index = emit_binop(ctx, SpvOpIAdd, get_uvec_type(ctx, 32, 1), index, aoa_index);
+      }
+   }
 
    SpvId ptr_type = spirv_builder_type_pointer(&ctx->builder,
                                                storage_class,

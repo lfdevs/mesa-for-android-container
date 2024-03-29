@@ -673,6 +673,7 @@ zink_resource_buffer_barrier(struct zink_context *ctx, struct zink_resource *res
          } else {
             bmb.srcAccessMask = res->obj->access;
          }
+         bmb.dstAccessMask = flags;
          VKCTX(CmdPipelineBarrier)(
             cmdbuf,
             stages,

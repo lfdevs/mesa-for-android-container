@@ -838,6 +838,18 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
          }
          else
             return 0;
+      case PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT:
+           if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN ||
+               profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10) {
+            union pipe_enc_cap_surface_alignment attrib;
+            attrib.value = 0;
+
+            attrib.bits.log2_width_alignment = RADEON_ENC_HEVC_SURFACE_LOG2_WIDTH_ALIGNMENT;
+            attrib.bits.log2_height_alignment = RADEON_ENC_HEVC_SURFACE_LOG2_HEIGHT_ALIGNMENT;
+            return attrib.value;
+         }
+         else
+            return 0;
 
       default:
          return 0;

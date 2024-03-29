@@ -7,6 +7,8 @@ use mesa_rust_gen::*;
 use rusticl_opencl_gen::*;
 
 use std::env;
+use std::ptr::addr_of;
+use std::ptr::addr_of_mut;
 use std::sync::Arc;
 use std::sync::Once;
 
@@ -71,7 +73,8 @@ static mut PLATFORM_FEATURES: PlatformFeatures = PlatformFeatures {
 };
 
 fn load_env() {
-    let debug = unsafe { &mut PLATFORM_DBG };
+    // SAFETY: no other references exist at this point
+    let debug = unsafe { &mut *addr_of_mut!(PLATFORM_DBG) };
     if let Ok(debug_flags) = env::var("RUSTICL_DEBUG") {
         for flag in debug_flags.split(',') {
             match flag {
@@ -85,7 +88,8 @@ fn load_env() {
         }
     }
 
-    let features = unsafe { &mut PLATFORM_FEATURES };
+    // SAFETY: no other references exist at this point
+    let features = unsafe { &mut *addr_of_mut!(PLATFORM_FEATURES) };
     if let Ok(feature_flags) = env::var("RUSTICL_FEATURES") {
         for flag in feature_flags.split(',') {
             match flag {
@@ -106,17 +110,17 @@ impl Platform {
     pub fn get() -> &'static Self {
         debug_assert!(PLATFORM_ONCE.is_completed());
         // SAFETY: no mut references exist at this point
-        unsafe { &PLATFORM }
+        unsafe { &*addr_of!(PLATFORM) }
     }
 
     pub fn dbg() -> &'static PlatformDebug {
         debug_assert!(PLATFORM_ENV_ONCE.is_completed());
-        unsafe { &PLATFORM_DBG }
+        unsafe { &*addr_of!(PLATFORM_DBG) }
     }
 
     pub fn features() -> &'static PlatformFeatures {
         debug_assert!(PLATFORM_ENV_ONCE.is_completed());
-        unsafe { &PLATFORM_FEATURES }
+        unsafe { &*addr_of!(PLATFORM_FEATURES) }
     }
 
     fn init(&mut self) {

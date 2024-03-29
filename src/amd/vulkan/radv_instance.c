@@ -155,6 +155,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_FLUSH_BEFORE_TIMESTAMP_WRITE(false)
       DRI_CONF_RADV_RT_WAVE64(false)
       DRI_CONF_RADV_LEGACY_SPARSE_BINDING(false)
+      DRI_CONF_RADV_FORCE_PSTATE_PEAK_GFX11_DGPU(false)
       DRI_CONF_DUAL_COLOR_BLEND_BY_LOCATION(false)
       DRI_CONF_RADV_OVERRIDE_GRAPHICS_SHADER_VERSION(0)
       DRI_CONF_RADV_OVERRIDE_COMPUTE_SHADER_VERSION(0)
@@ -230,6 +231,9 @@ radv_init_dri_options(struct radv_instance *instance)
       driQueryOptionb(&instance->drirc.options, "dual_color_blend_by_location");
 
    instance->drirc.legacy_sparse_binding = driQueryOptionb(&instance->drirc.options, "radv_legacy_sparse_binding");
+
+   instance->drirc.force_pstate_peak_gfx11_dgpu =
+      driQueryOptionb(&instance->drirc.options, "radv_force_pstate_peak_gfx11_dgpu");
 
    instance->drirc.override_graphics_shader_version =
       driQueryOptioni(&instance->drirc.options, "radv_override_graphics_shader_version");

@@ -729,7 +729,7 @@ bool radeon_bo_can_reclaim_slab(void *priv, struct pb_slab_entry *entry)
 {
    struct radeon_bo *bo = container_of(entry, struct radeon_bo, u.slab.entry);
 
-   return radeon_bo_can_reclaim(NULL, &bo->base);
+   return radeon_bo_can_reclaim(priv, &bo->base);
 }
 
 static void radeon_bo_slab_destroy(void *winsys, struct pb_buffer_lean *_buf)

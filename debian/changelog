@@ -1,3 +1,16 @@
+mesa (24.0.4-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * patches: Dropped upstreamed patches.
+
+  [ Fabio Pedretti ]
+  * control: libllvmspirvlib-*-dev is needed even with rusticl disabled
+    (Closes: #1061287)
+  * control: Bump meson build-dep
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 29 Mar 2024 17:59:50 +0200
+
 mesa (24.0.3-1) unstable; urgency=medium
 
   [ Timo Aaltonen ]

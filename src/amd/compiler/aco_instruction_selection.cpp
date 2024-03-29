@@ -12661,6 +12661,20 @@ select_rt_prolog(Program* program, ac_shader_config* config,
    program->config->num_sgprs = get_sgpr_alloc(program, num_sgprs);
 }
 
+PhysReg
+get_next_vgpr(unsigned size, unsigned* num, int *offset = NULL)
+{
+   unsigned reg = *num + (offset ? *offset : 0);
+   if (reg + size >= *num) {
+      *num = reg + size;
+      if (offset)
+         *offset = 0;
+   } else if (offset) {
+      *offset += size;
+   }
+   return PhysReg(256 + reg);
+}
+
 void
 select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_shader_config* config,
                  const struct aco_compiler_options* options, const struct aco_shader_info* info,
@@ -12702,13 +12716,30 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
    Operand start_instance = get_arg_fixed(args, args->start_instance);
    Operand instance_id = get_arg_fixed(args, args->instance_id);
 
-   PhysReg attributes_start(256 + args->num_vgprs_used);
-   /* choose vgprs that won't be used for anything else until the last attribute load */
-   PhysReg vertex_index(attributes_start.reg() + pinfo->num_attributes * 4 - 1);
-   PhysReg instance_index(attributes_start.reg() + pinfo->num_attributes * 4 - 2);
-   PhysReg start_instance_vgpr(attributes_start.reg() + pinfo->num_attributes * 4 - 3);
-   PhysReg nontrivial_tmp_vgpr0(attributes_start.reg() + pinfo->num_attributes * 4 - 4);
-   PhysReg nontrivial_tmp_vgpr1(attributes_start.reg() + pinfo->num_attributes * 4);
+   bool needs_instance_index =
+      pinfo->instance_rate_inputs &
+      ~(pinfo->zero_divisors | pinfo->nontrivial_divisors); /* divisor is 1 */
+   bool needs_start_instance = pinfo->instance_rate_inputs & pinfo->zero_divisors;
+   bool needs_vertex_index = ~pinfo->instance_rate_inputs & attrib_mask;
+   bool needs_tmp_vgpr0 = has_nontrivial_divisors;
+   bool needs_tmp_vgpr1 = has_nontrivial_divisors &&
+                          (program->gfx_level <= GFX8 || program->gfx_level >= GFX11);
+
+   int vgpr_offset = pinfo->misaligned_mask & (1u << (pinfo->num_attributes - 1)) ? 0 : -4;
+
+   unsigned num_vgprs = args->num_vgprs_used;
+   PhysReg attributes_start = get_next_vgpr(pinfo->num_attributes * 4, &num_vgprs);
+   PhysReg vertex_index, instance_index, start_instance_vgpr, nontrivial_tmp_vgpr0, nontrivial_tmp_vgpr1;
+   if (needs_vertex_index)
+      vertex_index = get_next_vgpr(1, &num_vgprs, &vgpr_offset);
+   if (needs_instance_index)
+      instance_index = get_next_vgpr(1, &num_vgprs, &vgpr_offset);
+   if (needs_start_instance)
+      start_instance_vgpr = get_next_vgpr(1, &num_vgprs, &vgpr_offset);
+   if (needs_tmp_vgpr0)
+      nontrivial_tmp_vgpr0 = get_next_vgpr(1, &num_vgprs, &vgpr_offset);
+   if (needs_tmp_vgpr1)
+      nontrivial_tmp_vgpr1 = get_next_vgpr(1, &num_vgprs, &vgpr_offset);
 
    bld.sop1(aco_opcode::s_mov_b32, Definition(vertex_buffers, s1),
             get_arg_fixed(args, args->vertex_buffers));
@@ -12720,16 +12751,10 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
                Operand::c32((unsigned)options->address32_hi));
    }
 
-   /* calculate vgpr requirements */
-   unsigned num_vgprs = attributes_start.reg() - 256;
-   num_vgprs += pinfo->num_attributes * 4;
-   if (has_nontrivial_divisors && program->gfx_level <= GFX8)
-      num_vgprs++; /* make space for nontrivial_tmp_vgpr1 */
-   unsigned num_sgprs = 0;
-
    const struct ac_vtx_format_info* vtx_info_table =
       ac_get_vtx_format_info_table(GFX8, CHIP_POLARIS10);
 
+   unsigned num_sgprs = 0;
    for (unsigned loc = 0; loc < pinfo->num_attributes;) {
       unsigned num_descs =
          load_vb_descs(bld, desc, Operand(vertex_buffers, s2), loc, pinfo->num_attributes - loc);
@@ -12769,11 +12794,6 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
             }
          }
 
-         bool needs_instance_index =
-            pinfo->instance_rate_inputs &
-            ~(pinfo->zero_divisors | pinfo->nontrivial_divisors); /* divisor is 1 */
-         bool needs_start_instance = pinfo->instance_rate_inputs & pinfo->zero_divisors;
-         bool needs_vertex_index = ~pinfo->instance_rate_inputs & attrib_mask;
          if (needs_vertex_index)
             bld.vadd32(Definition(vertex_index, v1), get_arg_fixed(args, args->base_vertex),
                        get_arg_fixed(args, args->vertex_id), false, Operand(s2), true);

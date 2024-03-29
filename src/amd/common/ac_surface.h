@@ -76,6 +76,12 @@ enum radeon_micro_mode
 #define RADEON_SURF_NO_TEXTURE            (1ull << 34)
 #define RADEON_SURF_NO_STENCIL_ADJUST     (1ull << 35)
 
+enum radeon_enc_hevc_surface_alignment
+{
+   RADEON_ENC_HEVC_SURFACE_LOG2_WIDTH_ALIGNMENT = 6,
+   RADEON_ENC_HEVC_SURFACE_LOG2_HEIGHT_ALIGNMENT = 4,
+};
+
 struct legacy_surf_level {
    uint32_t offset_256B;   /* divided by 256, the hw can only do 40-bit addresses */
    uint32_t slice_size_dw; /* in dwords; max = 4GB / 4. */

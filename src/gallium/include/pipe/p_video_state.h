@@ -2008,6 +2008,21 @@ union pipe_enc_cap_roi {
    uint32_t value;
 };
 
+union pipe_enc_cap_surface_alignment {
+   struct {
+      /**
+       * log2_width_alignment
+       */
+      uint32_t log2_width_alignment                 : 4;
+      /**
+       * log2_height_alignment
+       */
+      uint32_t log2_height_alignment                : 4;
+      uint32_t reserved                             : 24;
+   } bits;
+   uint32_t value;
+};
+
 #ifdef __cplusplus
 }
 #endif

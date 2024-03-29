@@ -669,14 +669,15 @@ update_gfx_shader_module_optimal(struct zink_context *ctx, struct zink_gfx_progr
 static void
 update_gfx_program_optimal(struct zink_context *ctx, struct zink_gfx_program *prog)
 {
-   const union zink_shader_key_optimal *optimal_key = (union zink_shader_key_optimal*)&prog->last_variant_hash;
-   if (ctx->gfx_pipeline_state.shader_keys_optimal.key.vs_bits != optimal_key->vs_bits) {
+   const union zink_shader_key_optimal *key = (union zink_shader_key_optimal*)&ctx->gfx_pipeline_state.optimal_key;
+   const union zink_shader_key_optimal *last_prog_key = (union zink_shader_key_optimal*)&prog->last_variant_hash;
+   if (key->vs_bits != last_prog_key->vs_bits) {
       assert(!prog->is_separable);
       bool changed = update_gfx_shader_module_optimal(ctx, prog, ctx->last_vertex_stage->info.stage);
       ctx->gfx_pipeline_state.modules_changed |= changed;
    }
-   const bool shadow_needs_shader_swizzle = optimal_key->fs.shadow_needs_shader_swizzle && (ctx->dirty_gfx_stages & BITFIELD_BIT(MESA_SHADER_FRAGMENT));
-   if (ctx->gfx_pipeline_state.shader_keys_optimal.key.fs_bits != optimal_key->fs_bits ||
+   const bool shadow_needs_shader_swizzle = last_prog_key->fs.shadow_needs_shader_swizzle && (ctx->dirty_gfx_stages & BITFIELD_BIT(MESA_SHADER_FRAGMENT));
+   if (key->fs_bits != last_prog_key->fs_bits ||
        /* always recheck shadow swizzles since they aren't directly part of the key */
        unlikely(shadow_needs_shader_swizzle)) {
       assert(!prog->is_separable);
@@ -688,7 +689,7 @@ update_gfx_program_optimal(struct zink_context *ctx, struct zink_gfx_program *pr
       }
    }
    if (prog->shaders[MESA_SHADER_TESS_CTRL] && prog->shaders[MESA_SHADER_TESS_CTRL]->non_fs.is_generated &&
-       ctx->gfx_pipeline_state.shader_keys_optimal.key.tcs_bits != optimal_key->tcs_bits) {
+       key->tcs_bits != last_prog_key->tcs_bits) {
       assert(!prog->is_separable);
       bool changed = update_gfx_shader_module_optimal(ctx, prog, MESA_SHADER_TESS_CTRL);
       ctx->gfx_pipeline_state.modules_changed |= changed;
@@ -724,12 +725,16 @@ zink_gfx_program_update_optimal(struct zink_context *ctx)
          ctx->gfx_pipeline_state.final_hash ^= ctx->curr_program->last_variant_hash;
       if (entry) {
          prog = (struct zink_gfx_program*)entry->data;
-         if (prog->is_separable && !(zink_debug & ZINK_DEBUG_NOOPT)) {
+         if (prog->is_separable) {
             /* shader variants can't be handled by separable programs: sync and compile */
-            if (!ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key))
+            if (!ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key) ||
+                (prog->base.uses_shobj ? !zink_can_use_shader_objects(ctx) : !zink_can_use_pipeline_libs(ctx)))
                util_queue_fence_wait(&prog->base.cache_fence);
             /* If the optimized linked pipeline is done compiling, swap it into place. */
-            if (util_queue_fence_is_signalled(&prog->base.cache_fence)) {
+            if (util_queue_fence_is_signalled(&prog->base.cache_fence) &&
+                /* but only if needed for ZINK_DEBUG=noopt */
+                (!(zink_debug & ZINK_DEBUG_NOOPT) || !ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key) ||
+                 (prog->base.uses_shobj ? !zink_can_use_shader_objects(ctx) : !zink_can_use_pipeline_libs(ctx)))) {
                prog = replace_separable_prog(screen, entry, prog);
             }
          }
@@ -754,19 +759,19 @@ zink_gfx_program_update_optimal(struct zink_context *ctx)
       /* remove old hash */
       ctx->gfx_pipeline_state.optimal_key = zink_sanitize_optimal_key(ctx->gfx_stages, ctx->gfx_pipeline_state.shader_keys_optimal.key.val);
       ctx->gfx_pipeline_state.final_hash ^= ctx->curr_program->last_variant_hash;
-      if (ctx->curr_program->is_separable && !(zink_debug & ZINK_DEBUG_NOOPT)) {
+      if (ctx->curr_program->is_separable && !ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key) &&
+          (ctx->curr_program->base.uses_shobj ? !zink_can_use_shader_objects(ctx) : !zink_can_use_pipeline_libs(ctx))) {
          struct zink_gfx_program *prog = ctx->curr_program;
-         if (!ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key)) {
-            util_queue_fence_wait(&prog->base.cache_fence);
-            /* shader variants can't be handled by separable programs: sync and compile */
-            perf_debug(ctx, "zink[gfx_compile]: non-default shader variant required with separate shader object program\n");
-            struct hash_table *ht = &ctx->program_cache[zink_program_cache_stages(ctx->shader_stages)];
-            const uint32_t hash = ctx->gfx_hash;
-            simple_mtx_lock(&ctx->program_lock[zink_program_cache_stages(ctx->shader_stages)]);
-            struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(ht, hash, ctx->gfx_stages);
-            ctx->curr_program = replace_separable_prog(screen, entry, prog);
-            simple_mtx_unlock(&ctx->program_lock[zink_program_cache_stages(ctx->shader_stages)]);
-         }
+
+         util_queue_fence_wait(&prog->base.cache_fence);
+         /* shader variants can't be handled by separable programs: sync and compile */
+         perf_debug(ctx, "zink[gfx_compile]: non-default shader variant required with separate shader object program\n");
+         struct hash_table *ht = &ctx->program_cache[zink_program_cache_stages(ctx->shader_stages)];
+         const uint32_t hash = ctx->gfx_hash;
+         simple_mtx_lock(&ctx->program_lock[zink_program_cache_stages(ctx->shader_stages)]);
+         struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(ht, hash, ctx->gfx_stages);
+         ctx->curr_program = replace_separable_prog(screen, entry, prog);
+         simple_mtx_unlock(&ctx->program_lock[zink_program_cache_stages(ctx->shader_stages)]);
       }
       update_gfx_program_optimal(ctx, ctx->curr_program);
       /* apply new hash */

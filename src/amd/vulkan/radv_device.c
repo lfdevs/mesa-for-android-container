@@ -1248,6 +1248,12 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
       device->capture_replay_arena_vas = _mesa_hash_table_u64_create(NULL);
    }
 
+   if (device->physical_device->rad_info.gfx_level == GFX11 && device->physical_device->rad_info.has_dedicated_vram &&
+       device->instance->drirc.force_pstate_peak_gfx11_dgpu) {
+      if (!radv_device_acquire_performance_counters(device))
+         fprintf(stderr, "radv: failed to set pstate to profile_peak.\n");
+   }
+
    *pDevice = radv_device_to_handle(device);
    return VK_SUCCESS;
 

@@ -579,7 +579,7 @@ vk_video_derive_h264_scaling_list(const StdVideoH264SequenceParameterSet *sps,
       {
          if (sps->pScalingLists->scaling_list_present_mask & (1 << i))
             memcpy(temp.ScalingList4x4[i],
-                   pps->pScalingLists->ScalingList4x4[i],
+                   sps->pScalingLists->ScalingList4x4[i],
                    STD_VIDEO_H264_SCALING_LIST_4X4_NUM_ELEMENTS);
          else /* fall-back rule A */
          {
@@ -602,7 +602,7 @@ vk_video_derive_h264_scaling_list(const StdVideoH264SequenceParameterSet *sps,
       {
          int i = j + STD_VIDEO_H264_SCALING_LIST_4X4_NUM_LISTS;
          if (sps->pScalingLists->scaling_list_present_mask & (1 << i))
-            memcpy(temp.ScalingList8x8[j], pps->pScalingLists->ScalingList8x8[j],
+            memcpy(temp.ScalingList8x8[j], sps->pScalingLists->ScalingList8x8[j],
                    STD_VIDEO_H264_SCALING_LIST_8X8_NUM_ELEMENTS);
          else /* fall-back rule A */
          {

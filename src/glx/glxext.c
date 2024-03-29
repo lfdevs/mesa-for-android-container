@@ -914,7 +914,8 @@ __glXInitialize(Display * dpy)
    }
 #endif /* GLX_USE_DRM */
    if (glx_direct)
-      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink | try_zink);
+      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink ? TRY_ZINK_YES :
+                                                             try_zink ? TRY_ZINK_INFER : TRY_ZINK_NO);
 
 #ifdef GLX_USE_WINDOWSGL
    if (glx_direct && glx_accel)
@@ -935,7 +936,7 @@ __glXInitialize(Display * dpy)
       if (try_zink) {
          free(dpyPriv->screens);
          dpyPriv->driswDisplay->destroyDisplay(dpyPriv->driswDisplay);
-         dpyPriv->driswDisplay = driswCreateDisplay(dpy, false);
+         dpyPriv->driswDisplay = driswCreateDisplay(dpy, TRY_ZINK_NO);
          fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False);
       }
 #endif

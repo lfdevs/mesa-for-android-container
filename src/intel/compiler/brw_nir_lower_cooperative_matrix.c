@@ -251,10 +251,22 @@ lower_cmat_load_store(nir_builder *b, nir_intrinsic_instr *intrin,
    const unsigned packing_factor = get_packing_factor(*desc, slice->type);
 
    nir_deref_instr *pointer = nir_src_as_deref(intrin->src[ptr_src]);
+   const unsigned ptr_comp_width = glsl_get_bit_size(pointer->type);
+   const unsigned ptr_num_comps = glsl_get_vector_elements(pointer->type);
+
+   /* The stride is given in number of elements of the pointed type, which
+    * doesn't necessarily match the matrix element type, so we need to adjust
+    * it considering it may be a vector and have a different bit-width.
+    */
+   nir_def *stride = nir_udiv_imm(b,
+                                  nir_imul_imm(b,
+                                               intrin->src[2].ssa,
+                                               ptr_comp_width * ptr_num_comps),
+                                  glsl_base_type_get_bit_size(desc->element_type));
 
    if ((nir_intrinsic_matrix_layout(intrin) == GLSL_MATRIX_LAYOUT_ROW_MAJOR) ==
        (desc->use != GLSL_CMAT_USE_B)) {
-      nir_def *stride = nir_udiv_imm(b, intrin->src[2].ssa, packing_factor);
+      stride = nir_udiv_imm(b, stride, packing_factor);
 
       const struct glsl_type *element_type =
          glsl_scalar_type(glsl_get_base_type(slice->type));
@@ -304,8 +316,6 @@ lower_cmat_load_store(nir_builder *b, nir_intrinsic_instr *intrin,
          }
       }
    } else {
-      nir_def *stride = intrin->src[2].ssa;
-
       const struct glsl_type *element_type = glsl_scalar_type(desc->element_type);
       const unsigned element_bits = glsl_base_type_get_bit_size(desc->element_type);
       const unsigned element_stride = element_bits / 8;

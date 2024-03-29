@@ -741,6 +741,9 @@ BEGIN_TEST(assembler.gfx11.flat)
    //! scratch_load_b32 v42, v10, s32                              ; dc510000 2aa0000a
    bld.scratch(aco_opcode::scratch_load_dword, dst_v1, op_v1, op_s1);
 
+   //! scratch_load_b32 v42, off, off                              ; dc510000 2a7c0080
+   bld.scratch(aco_opcode::scratch_load_dword, dst_v1, Operand(v1), Operand(s1));
+
    //! global_load_b32 v42, v[20:21], off offset:-42               ; dc521fd6 2a7c0014
    bld.global(aco_opcode::global_load_dword, dst_v1, op_v2, Operand(s1), -42);
 

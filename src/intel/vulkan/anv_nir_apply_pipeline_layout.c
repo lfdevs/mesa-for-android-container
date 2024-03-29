@@ -594,8 +594,16 @@ build_res_index(nir_builder *b,
       }
 
    const uint32_t desc_bti = state->set[set].binding[binding].surface_offset;
-   assert(bind_layout->descriptor_surface_stride % 8 == 0);
-   const uint32_t desc_stride = bind_layout->descriptor_surface_stride / 8;
+   /* We don't care about the stride field for inline uniforms (see
+    * build_desc_addr_for_res_index), but for anything else we should be
+    * aligned to 8 bytes because we store a multiple of 8 in the packed info
+    * to be able to encode a stride up to 2040 (8 * 255).
+    */
+   assert(bind_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
+          bind_layout->descriptor_surface_stride % 8 == 0);
+   const uint32_t desc_stride =
+      bind_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ? 0 :
+      bind_layout->descriptor_surface_stride / 8;
 
       nir_def *packed =
          nir_ior_imm(b,

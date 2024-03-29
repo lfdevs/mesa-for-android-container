@@ -161,6 +161,10 @@ enum pipe_video_cap
     * Encoding Region Of Interest feature
     */
    PIPE_VIDEO_CAP_ENC_ROI = 49,
+   /*
+    * Encoding surface width/height alignment
+    */
+   PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT = 50,
 };
 
 enum pipe_video_h264_enc_dbk_filter_mode_flags

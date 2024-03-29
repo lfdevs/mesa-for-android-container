@@ -6286,11 +6286,10 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
 
    /* Compute registers. */
    si_pm4_set_reg(pm4, R_00B834_COMPUTE_PGM_HI, S_00B834_DATA(sscreen->info.address32_hi >> 8));
-   si_pm4_set_reg(pm4, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0, compute_cu_en);
-   si_pm4_set_reg(pm4, R_00B85C_COMPUTE_STATIC_THREAD_MGMT_SE1, compute_cu_en);
 
-   si_pm4_set_reg(pm4, R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2, compute_cu_en);
-   si_pm4_set_reg(pm4, R_00B868_COMPUTE_STATIC_THREAD_MGMT_SE3, compute_cu_en);
+   for (unsigned i = 0; i < 4; ++i)
+      si_pm4_set_reg(pm4, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 + i * 4,
+                     i < sscreen->info.num_se ? compute_cu_en : 0x0);
 
    si_pm4_set_reg(pm4, R_00B890_COMPUTE_USER_ACCUM_0, 0);
    si_pm4_set_reg(pm4, R_00B894_COMPUTE_USER_ACCUM_1, 0);
@@ -6298,10 +6297,9 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
    si_pm4_set_reg(pm4, R_00B89C_COMPUTE_USER_ACCUM_3, 0);
 
    if (sctx->gfx_level >= GFX11) {
-      si_pm4_set_reg(pm4, R_00B8AC_COMPUTE_STATIC_THREAD_MGMT_SE4, compute_cu_en);
-      si_pm4_set_reg(pm4, R_00B8B0_COMPUTE_STATIC_THREAD_MGMT_SE5, compute_cu_en);
-      si_pm4_set_reg(pm4, R_00B8B4_COMPUTE_STATIC_THREAD_MGMT_SE6, compute_cu_en);
-      si_pm4_set_reg(pm4, R_00B8B8_COMPUTE_STATIC_THREAD_MGMT_SE7, compute_cu_en);
+      for (unsigned i = 4; i < 8; ++i)
+         si_pm4_set_reg(pm4, R_00B8AC_COMPUTE_STATIC_THREAD_MGMT_SE4 + (i - 4) * 4,
+                        i < sscreen->info.num_se ? compute_cu_en : 0x0);
 
       /* How many threads should go to 1 SE before moving onto the next. Think of GL1 cache hits.
        * Only these values are valid: 0 (disabled), 64, 128, 256, 512
@@ -6392,6 +6390,7 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
                   (sctx->gfx_level >= GFX11 ?
                       S_028410_DCC_WR_POLICY_GFX11(meta_write_policy) |
                       S_028410_COLOR_WR_POLICY_GFX11(V_028410_CACHE_STREAM) |
+                      S_028410_DCC_RD_POLICY(meta_read_policy) |
                       S_028410_COLOR_RD_POLICY(V_028410_CACHE_NOA_GFX11)
                     :
                       S_028410_CMASK_WR_POLICY(meta_write_policy) |
@@ -6401,7 +6400,7 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
                       S_028410_CMASK_RD_POLICY(meta_read_policy) |
                       S_028410_FMASK_RD_POLICY(V_028410_CACHE_NOA_GFX10) |
                       S_028410_COLOR_RD_POLICY(V_028410_CACHE_NOA_GFX10)) |
-                  S_028410_DCC_RD_POLICY(meta_read_policy));
+                      S_028410_DCC_RD_POLICY(meta_read_policy));
    si_pm4_set_reg(pm4, R_028708_SPI_SHADER_IDX_FORMAT,
                   S_028708_IDX0_EXPORT_FORMAT(V_028708_SPI_SHADER_1COMP));
 
@@ -6445,8 +6444,10 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
                      S_028B50_DONUT_SPLIT_GFX9(24) |
                      S_028B50_TRAP_SPLIT(6));
 
+   /* GFX11+ shouldn't subtract 1 from pbb_max_alloc_count.  */
+   unsigned gfx10_one = sctx->gfx_level < GFX11;
    si_pm4_set_reg(pm4, R_028C48_PA_SC_BINNER_CNTL_1,
-                  S_028C48_MAX_ALLOC_COUNT(sscreen->info.pbb_max_alloc_count - 1) |
+                  S_028C48_MAX_ALLOC_COUNT(sscreen->info.pbb_max_alloc_count - gfx10_one) |
                   S_028C48_MAX_PRIM_PER_BATCH(1023));
 
    if (sctx->gfx_level >= GFX11_5)

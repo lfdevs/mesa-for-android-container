@@ -63,10 +63,46 @@ genX(CmdEndVideoCodingKHR)(VkCommandBuffer commandBuffer,
    cmd_buffer->video.params = NULL;
 }
 
+/*
+ * The default scan order of scaling lists is up-right-diagonal
+ * according to the spec. But the device requires raster order,
+ * so we need to convert from the passed scaling lists.
+ */
+static void
+anv_h265_matrix_from_uprightdiagonal(StdVideoH265ScalingLists *out_sl,
+                                     const StdVideoH265ScalingLists *sl)
+{
+  uint8_t i, j;
+
+  for (i = 0; i < 6; i++) {
+     for (j = 0; j < STD_VIDEO_H265_SCALING_LIST_4X4_NUM_ELEMENTS; j++)
+        out_sl->ScalingList4x4[i][vl_zscan_h265_up_right_diagonal_16[j]] =
+           sl->ScalingList4x4[i][j];
+
+     for (j = 0; j < STD_VIDEO_H265_SCALING_LIST_8X8_NUM_ELEMENTS; j++)
+        out_sl->ScalingList8x8[i][vl_zscan_h265_up_right_diagonal[j]] =
+           sl->ScalingList8x8[i][j];
+
+     for (j = 0; j < STD_VIDEO_H265_SCALING_LIST_16X16_NUM_ELEMENTS; j++)
+        out_sl->ScalingList16x16[i][vl_zscan_h265_up_right_diagonal[j]] =
+           sl->ScalingList16x16[i][j];
+  }
+
+  for (i = 0; i < STD_VIDEO_H265_SCALING_LIST_32X32_NUM_LISTS; i++) {
+     for (j = 0; j < STD_VIDEO_H265_SCALING_LIST_32X32_NUM_ELEMENTS; j++)
+        out_sl->ScalingList32x32[i][vl_zscan_h265_up_right_diagonal[j]] =
+           sl->ScalingList32x32[i][j];
+  }
+}
+
 static void
 scaling_list(struct anv_cmd_buffer *cmd_buffer,
              const StdVideoH265ScalingLists *scaling_list)
 {
+   StdVideoH265ScalingLists out_sl = {0, };
+
+   anv_h265_matrix_from_uprightdiagonal(&out_sl, scaling_list);
+
    /* 4x4, 8x8, 16x16, 32x32 */
    for (uint8_t size = 0; size < 4; size++) {
       /* Intra, Inter */
@@ -89,22 +125,22 @@ scaling_list(struct anv_cmd_buffer *cmd_buffer,
                   for (uint8_t i = 0; i < 4; i++)
                      for (uint8_t j = 0; j < 4; j++)
                         qm.QuantizerMatrix8x8[4 * i + j] =
-                           scaling_list->ScalingList4x4[3 * pred + color][4 * i + j];
+                           out_sl.ScalingList4x4[3 * pred + color][4 * i + j];
                } else if (size == 1) {
                   for (uint8_t i = 0; i < 8; i++)
                      for (uint8_t j = 0; j < 8; j++)
                         qm.QuantizerMatrix8x8[8 * i + j] =
-                           scaling_list->ScalingList8x8[3 * pred + color][8 * i + j];
+                           out_sl.ScalingList8x8[3 * pred + color][8 * i + j];
                } else if (size == 2) {
                   for (uint8_t i = 0; i < 8; i++)
                      for (uint8_t j = 0; j < 8; j++)
                         qm.QuantizerMatrix8x8[8 * i + j] =
-                           scaling_list->ScalingList16x16[3 * pred + color][8 * i + j];
+                           out_sl.ScalingList16x16[3 * pred + color][8 * i + j];
                } else if (size == 3) {
                   for (uint8_t i = 0; i < 8; i++)
                      for (uint8_t j = 0; j < 8; j++)
                         qm.QuantizerMatrix8x8[8 * i + j] =
-                           scaling_list->ScalingList32x32[pred][8 * i + j];
+                           out_sl.ScalingList32x32[pred][8 * i + j];
                }
             }
          }

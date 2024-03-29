@@ -380,6 +380,22 @@ nir_builder_instr_insert(nir_builder *build, nir_instr *instr)
 }
 
 void
+nir_builder_instr_insert_at_top(nir_builder *build, nir_instr *instr)
+{
+   nir_cursor top = nir_before_impl(build->impl);
+   const bool at_top = build->cursor.block != NULL &&
+                       nir_cursors_equal(build->cursor, top);
+
+   nir_instr_insert(top, instr);
+
+   if (build->update_divergence)
+      nir_update_instr_divergence(build->shader, instr);
+
+   if (at_top)
+      build->cursor = nir_after_instr(instr);
+}
+
+void
 nir_builder_cf_insert(nir_builder *build, nir_cf_node *cf)
 {
    nir_cf_node_insert(build->cursor, cf);

@@ -82,6 +82,7 @@ panvk_meta_copy_emit_varying(struct pan_pool *pool, mali_ptr coordinates,
    pan_pack(varying.cpu, ATTRIBUTE, cfg) {
       cfg.buffer_index = 0;
       cfg.format = pool->dev->formats[PIPE_FORMAT_R32G32B32_FLOAT].hw;
+      cfg.offset_enable = false;
    }
 
    *varyings = varying.gpu;

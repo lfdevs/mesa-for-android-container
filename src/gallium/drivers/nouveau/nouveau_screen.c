@@ -291,6 +291,8 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
    void *data;
    union nouveau_bo_config mm_config;
 
+   glsl_type_singleton_init_or_ref();
+
    char *nv_dbg = getenv("NOUVEAU_MESA_DEBUG");
    if (nv_dbg)
       nouveau_mesa_debug = atoi(nv_dbg);
@@ -441,8 +443,6 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
                                        NOUVEAU_BO_GART | NOUVEAU_BO_MAP,
                                        &mm_config);
    screen->mm_VRAM = nouveau_mm_create(dev, NOUVEAU_BO_VRAM, &mm_config);
-
-   glsl_type_singleton_init_or_ref();
 
    return 0;
 

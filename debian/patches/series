@@ -1,4 +1,2 @@
 path_max.diff
 src_glx_dri_common.h.diff
-fix-zink-logging.diff
-radeon-fix-gnome-shell-crash.diff

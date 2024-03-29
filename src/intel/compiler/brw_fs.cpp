@@ -3049,10 +3049,9 @@ fs_visitor::opt_split_sends()
 
    foreach_block_and_inst(block, fs_inst, send, cfg) {
       if (send->opcode != SHADER_OPCODE_SEND ||
-          send->mlen <= reg_unit(devinfo) || send->ex_mlen > 0)
+          send->mlen <= reg_unit(devinfo) || send->ex_mlen > 0 ||
+          send->src[2].file != VGRF)
          continue;
-
-      assert(send->src[2].file == VGRF);
 
       /* Currently don't split sends that reuse a previously used payload. */
       fs_inst *lp = (fs_inst *) send->prev;
@@ -4473,7 +4472,8 @@ fs_visitor::lower_sub_sat()
           */
          if (inst->exec_size == 8 && inst->src[0].type != BRW_REGISTER_TYPE_Q &&
              inst->src[0].type != BRW_REGISTER_TYPE_UQ) {
-            fs_reg acc(ARF, BRW_ARF_ACCUMULATOR, inst->src[1].type);
+            fs_reg acc = retype(brw_acc_reg(inst->exec_size),
+                                inst->src[1].type);
 
             ibld.MOV(acc, inst->src[1]);
             fs_inst *add = ibld.ADD(inst->dst, acc, inst->src[0]);
@@ -7101,6 +7101,9 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
    payload_ = new fs_thread_payload(*this, source_depth_to_render_target,
                                     runtime_check_aads_emit);
 
+   if (nir->info.ray_queries > 0)
+      limit_dispatch_width(16, "SIMD32 not supported with ray queries.\n");
+
    if (do_rep_send) {
       assert(dispatch_width == 16);
       emit_repclear_shader();
@@ -7767,9 +7770,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
       v8->limit_dispatch_width(16, "SIMD32 not supported with coarse"
                                " pixel shading.\n");
    }
-
-   if (nir->info.ray_queries > 0 && v8)
-      v8->limit_dispatch_width(16, "SIMD32 with ray queries.\n");
 
    if (!has_spilled &&
        (!v8 || v8->max_dispatch_width >= 16) &&

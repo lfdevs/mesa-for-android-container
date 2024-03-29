@@ -1001,7 +1001,9 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
       if (!psc->has_multibuffer &&
           !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) &&
           !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
-         CriticalErrorMessageF("DRI3 not available\n");
+         /* only print error if zink was explicitly requested */
+         if (pdpyp->zink == TRY_ZINK_YES)
+            CriticalErrorMessageF("DRI3 not available\n");
          goto handle_error;
       }
    }
@@ -1049,7 +1051,8 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
    glx_screen_cleanup(&psc->base);
    free(psc);
 
-   CriticalErrorMessageF("failed to load driver: %s\n", driver);
+   if (pdpyp->zink == TRY_ZINK_YES)
+      CriticalErrorMessageF("failed to load driver: %s\n", driver);
 
    return NULL;
 }
@@ -1079,7 +1082,7 @@ driswDestroyDisplay(__GLXDRIdisplay * dpy)
  * display pointer.
  */
 _X_HIDDEN __GLXDRIdisplay *
-driswCreateDisplay(Display * dpy, bool zink)
+driswCreateDisplay(Display * dpy, enum try_zink zink)
 {
    struct drisw_display *pdpyp;
 

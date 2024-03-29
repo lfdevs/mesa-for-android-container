@@ -1009,10 +1009,14 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, fs_inst *inst, opcode op,
       /* Build the actual header */
       const fs_builder ubld = bld.exec_all().group(8 * reg_unit(devinfo), 0);
       const fs_builder ubld1 = ubld.group(1, 0);
-      ubld.MOV(header, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+      if (devinfo->ver >= 11)
+         ubld.MOV(header, brw_imm_ud(0));
+      else
+         ubld.MOV(header, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
       if (inst->offset) {
          ubld1.MOV(component(header, 2), brw_imm_ud(inst->offset));
-      } else if (bld.shader->stage != MESA_SHADER_VERTEX &&
+      } else if (devinfo->ver < 11 &&
+                 bld.shader->stage != MESA_SHADER_VERTEX &&
                  bld.shader->stage != MESA_SHADER_FRAGMENT) {
          /* The vertex and fragment stages have g0.2 set to 0, so
           * header0.2 is 0 when g0 is copied. Other stages may not, so we

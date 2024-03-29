@@ -3145,6 +3145,11 @@ encode_type_to_blob(struct blob *blob, const glsl_type *type)
       encode_type_to_blob(blob, type->fields.array);
       return;
    case GLSL_TYPE_COOPERATIVE_MATRIX:
+      /* The first 5 bits of encoded/decoded are used to identify the
+       * actual type, but cmat_desc already is 32-bit without that tag, so
+       * encode just the cmat base type first, then the actual cmat desc.
+       */
+      blob_write_uint32(blob, encoded.u32);
       encoded.cmat_desc = type->cmat_desc;
       blob_write_uint32(blob, encoded.u32);
       return;
@@ -3255,6 +3260,7 @@ decode_type_from_blob(struct blob_reader *blob)
                              explicit_stride);
    }
    case GLSL_TYPE_COOPERATIVE_MATRIX: {
+      encoded.u32 = blob_read_uint32(blob);
       return glsl_cmat_type(&encoded.cmat_desc);
    }
    case GLSL_TYPE_STRUCT:

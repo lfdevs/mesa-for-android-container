@@ -2472,6 +2472,15 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
       case GL_RGB10_A2:
          break;
 
+      case GL_RED:
+      case GL_RG:
+         /* GL_EXT_texture_rg adds support for GL_RED and GL_RG as an internal
+          * format
+          */
+         if (_mesa_has_EXT_texture_rg(ctx))
+            break;
+
+      FALLTHROUGH;
       default:
          _mesa_error(ctx, GL_INVALID_ENUM,
                      "glCopyTexImage%dD(internalFormat=%s)", dimensions,

@@ -121,7 +121,7 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
               dest.vstride == dest.width + 1));
       assert(!dest.negate && !dest.abs);
       brw_inst_set_dst_reg_file(devinfo, inst, dest.file);
-      brw_inst_set_dst_da_reg_nr(devinfo, inst, dest.nr);
+      brw_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
 
    } else if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
               brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
@@ -141,10 +141,10 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
       brw_inst_set_dst_address_mode(devinfo, inst, dest.address_mode);
 
       if (dest.address_mode == BRW_ADDRESS_DIRECT) {
-         brw_inst_set_dst_da_reg_nr(devinfo, inst, dest.nr);
+         brw_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
 
          if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-            brw_inst_set_dst_da1_subreg_nr(devinfo, inst, dest.subnr);
+            brw_inst_set_dst_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
             if (dest.hstride == BRW_HORIZONTAL_STRIDE_0)
                dest.hstride = BRW_HORIZONTAL_STRIDE_1;
             brw_inst_set_dst_hstride(devinfo, inst, dest.hstride);
@@ -162,7 +162,7 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
             brw_inst_set_dst_hstride(devinfo, inst, 1);
          }
       } else {
-         brw_inst_set_dst_ia_subreg_nr(devinfo, inst, dest.subnr);
+         brw_inst_set_dst_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
 
          /* These are different sizes in align1 vs align16:
           */
@@ -242,7 +242,7 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
       brw_inst_set_send_src0_reg_file(devinfo, inst, reg.file);
-      brw_inst_set_src0_da_reg_nr(devinfo, inst, reg.nr);
+      brw_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
 
    } else if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
               brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
@@ -279,14 +279,14 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
          }
       } else {
          if (reg.address_mode == BRW_ADDRESS_DIRECT) {
-            brw_inst_set_src0_da_reg_nr(devinfo, inst, reg.nr);
+            brw_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
             if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-                brw_inst_set_src0_da1_subreg_nr(devinfo, inst, reg.subnr);
+               brw_inst_set_src0_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
             } else {
                brw_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
             }
          } else {
-            brw_inst_set_src0_ia_subreg_nr(devinfo, inst, reg.subnr);
+            brw_inst_set_src0_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
 
             if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
                brw_inst_set_src0_ia1_addr_imm(devinfo, inst, reg.indirect_offset);
@@ -362,7 +362,7 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
-      brw_inst_set_send_src1_reg_nr(devinfo, inst, reg.nr);
+      brw_inst_set_send_src1_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
       brw_inst_set_send_src1_reg_file(devinfo, inst, reg.file);
    } else {
       /* From the IVB PRM Vol. 4, Pt. 3, Section 3.3.3.5:
@@ -395,9 +395,9 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
          assert (reg.address_mode == BRW_ADDRESS_DIRECT);
          /* assert (reg.file == BRW_GENERAL_REGISTER_FILE); */
 
-         brw_inst_set_src1_da_reg_nr(devinfo, inst, reg.nr);
+         brw_inst_set_src1_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
          if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-            brw_inst_set_src1_da1_subreg_nr(devinfo, inst, reg.subnr);
+            brw_inst_set_src1_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
          } else {
             brw_inst_set_src1_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
          }
@@ -832,7 +832,7 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
       if (devinfo->ver >= 12) {
          brw_inst_set_3src_a1_dst_reg_file(devinfo, inst, dest.file);
-         brw_inst_set_3src_dst_reg_nr(devinfo, inst, dest.nr);
+         brw_inst_set_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
       } else {
          if (dest.file == BRW_ARCHITECTURE_REGISTER_FILE) {
             brw_inst_set_3src_a1_dst_reg_file(devinfo, inst,
@@ -844,7 +844,7 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
             brw_inst_set_3src_dst_reg_nr(devinfo, inst, dest.nr);
          }
       }
-      brw_inst_set_3src_a1_dst_subreg_nr(devinfo, inst, dest.subnr / 8);
+      brw_inst_set_3src_a1_dst_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest) / 8);
 
       brw_inst_set_3src_a1_dst_hstride(devinfo, inst, BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_1);
 
@@ -868,11 +868,11 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
             devinfo, inst, to_3src_align1_vstride(devinfo, src0.vstride));
          brw_inst_set_3src_a1_src0_hstride(devinfo, inst,
                                            to_3src_align1_hstride(src0.hstride));
-         brw_inst_set_3src_a1_src0_subreg_nr(devinfo, inst, src0.subnr);
+         brw_inst_set_3src_a1_src0_subreg_nr(devinfo, inst, phys_subnr(devinfo, src0));
          if (src0.type == BRW_REGISTER_TYPE_NF) {
             brw_inst_set_3src_src0_reg_nr(devinfo, inst, BRW_ARF_ACCUMULATOR);
          } else {
-            brw_inst_set_3src_src0_reg_nr(devinfo, inst, src0.nr);
+            brw_inst_set_3src_src0_reg_nr(devinfo, inst, phys_nr(devinfo, src0));
          }
          brw_inst_set_3src_src0_abs(devinfo, inst, src0.abs);
          brw_inst_set_3src_src0_negate(devinfo, inst, src0.negate);
@@ -882,11 +882,11 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
       brw_inst_set_3src_a1_src1_hstride(devinfo, inst,
                                         to_3src_align1_hstride(src1.hstride));
 
-      brw_inst_set_3src_a1_src1_subreg_nr(devinfo, inst, src1.subnr);
+      brw_inst_set_3src_a1_src1_subreg_nr(devinfo, inst, phys_subnr(devinfo, src1));
       if (src1.file == BRW_ARCHITECTURE_REGISTER_FILE) {
          brw_inst_set_3src_src1_reg_nr(devinfo, inst, BRW_ARF_ACCUMULATOR);
       } else {
-         brw_inst_set_3src_src1_reg_nr(devinfo, inst, src1.nr);
+         brw_inst_set_3src_src1_reg_nr(devinfo, inst, phys_nr(devinfo, src1));
       }
       brw_inst_set_3src_src1_abs(devinfo, inst, src1.abs);
       brw_inst_set_3src_src1_negate(devinfo, inst, src1.negate);
@@ -897,8 +897,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
          brw_inst_set_3src_a1_src2_hstride(devinfo, inst,
                                            to_3src_align1_hstride(src2.hstride));
          /* no vstride on src2 */
-         brw_inst_set_3src_a1_src2_subreg_nr(devinfo, inst, src2.subnr);
-         brw_inst_set_3src_src2_reg_nr(devinfo, inst, src2.nr);
+         brw_inst_set_3src_a1_src2_subreg_nr(devinfo, inst, phys_subnr(devinfo, src2));
+         brw_inst_set_3src_src2_reg_nr(devinfo, inst, phys_nr(devinfo, src2));
          brw_inst_set_3src_src2_abs(devinfo, inst, src2.abs);
          brw_inst_set_3src_src2_negate(devinfo, inst, src2.negate);
       }
@@ -2923,7 +2923,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
       assert(ex_desc.nr == BRW_ARF_ADDRESS);
       assert((ex_desc.subnr & 0x3) == 0);
       brw_inst_set_send_sel_reg32_ex_desc(devinfo, send, 1);
-      brw_inst_set_send_ex_desc_ia_subreg_nr(devinfo, send, ex_desc.subnr >> 2);
+      brw_inst_set_send_ex_desc_ia_subreg_nr(devinfo, send, phys_subnr(devinfo, ex_desc) >> 2);
    }
 
    if (ex_bso) {

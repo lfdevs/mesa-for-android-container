@@ -131,11 +131,17 @@ struct __GLXDRIdrawableRec
    int refcount;
 };
 
+enum try_zink {
+   TRY_ZINK_NO,
+   TRY_ZINK_INFER,
+   TRY_ZINK_YES,
+};
+
 /*
 ** Function to create and DRI display data and initialize the display
 ** dependent methods.
 */
-extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy, bool zink);
+extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy, enum try_zink zink);
 extern __GLXDRIdisplay *dri2CreateDisplay(Display * dpy);
 extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
 extern __GLXDRIdisplay *driwindowsCreateDisplay(Display * dpy);

@@ -116,6 +116,7 @@ panvk_emit_varying(const struct panvk_device *dev,
       cfg.buffer_index = varyings->varying[loc].buf;
       cfg.offset = varyings->varying[loc].offset;
       cfg.format = panvk_varying_hw_format(dev, varyings, stage, idx);
+      cfg.offset_enable = false;
    }
 }
 
@@ -286,6 +287,7 @@ panvk_emit_attrib(const struct panvk_device *dev,
    pan_pack(attrib, ATTRIBUTE, cfg) {
       cfg.buffer_index = buf_idx * 2;
       cfg.offset = attribs->attrib[idx].offset + (bufs[buf_idx].address & 63);
+      cfg.offset_enable = true;
 
       if (buf_info->per_instance)
          cfg.offset += draw->first_instance * buf_info->stride;

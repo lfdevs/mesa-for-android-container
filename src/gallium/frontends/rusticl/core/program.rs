@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use std::ffi::CString;
 use std::mem::size_of;
 use std::ptr;
+use std::ptr::addr_of;
 use std::slice;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -55,7 +56,7 @@ fn get_disk_cache() -> &'static Option<DiskCache> {
         DISK_CACHE_ONCE.call_once(|| {
             DISK_CACHE = DiskCache::new("rusticl", &func_ptrs, 0);
         });
-        &DISK_CACHE
+        &*addr_of!(DISK_CACHE)
     }
 }
 

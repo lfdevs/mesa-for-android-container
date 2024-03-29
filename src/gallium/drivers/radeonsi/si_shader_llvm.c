@@ -239,7 +239,6 @@ void si_llvm_optimize_module(struct si_shader_context *ctx)
 
    /* Run the pass */
    LLVMRunPassManager(ctx->compiler->passmgr, ctx->ac.module);
-   LLVMDisposeBuilder(ctx->ac.builder);
 }
 
 void si_llvm_dispose(struct si_shader_context *ctx)

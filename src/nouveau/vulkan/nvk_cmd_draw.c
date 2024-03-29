@@ -3220,44 +3220,60 @@ nvk_CmdBeginConditionalRenderingEXT(VkCommandBuffer commandBuffer,
    bool inverted = pConditionalRenderingBegin->flags &
       VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
 
-   if (addr & 0x3f || buffer->is_local) {
-      uint64_t tmp_addr;
-      VkResult result = nvk_cmd_buffer_cond_render_alloc(cmd, &tmp_addr);
-      if (result != VK_SUCCESS) {
-         vk_command_buffer_set_error(&cmd->vk, result);
-         return;
-      }
-
-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 12);
-      P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
-      P_NV90B5_OFFSET_IN_UPPER(p, addr >> 32);
-      P_NV90B5_OFFSET_IN_LOWER(p, addr & 0xffffffff);
-      P_NV90B5_OFFSET_OUT_UPPER(p, tmp_addr >> 32);
-      P_NV90B5_OFFSET_OUT_LOWER(p, tmp_addr & 0xffffffff);
-      P_NV90B5_PITCH_IN(p, 4);
-      P_NV90B5_PITCH_OUT(p, 4);
-      P_NV90B5_LINE_LENGTH_IN(p, 4);
-      P_NV90B5_LINE_COUNT(p, 1);
-
-      P_IMMD(p, NV90B5, LAUNCH_DMA, {
-            .data_transfer_type = DATA_TRANSFER_TYPE_PIPELINED,
-            .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
-            .flush_enable = FLUSH_ENABLE_TRUE,
-            .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
-            .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-         });
-      addr = tmp_addr;
+   /* From the Vulkan 1.3.280 spec:
+    *
+    *    "If the 32-bit value at offset in buffer memory is zero,
+    *     then the rendering commands are discarded,
+    *     otherwise they are executed as normal."
+    *
+    * The hardware compare a 64-bit value, as such we are required to copy it.
+    */
+   uint64_t tmp_addr;
+   VkResult result = nvk_cmd_buffer_cond_render_alloc(cmd, &tmp_addr);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmd->vk, result);
+      return;
    }
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 12);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 26);
+
+   P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
+   P_NV90B5_OFFSET_IN_UPPER(p, addr >> 32);
+   P_NV90B5_OFFSET_IN_LOWER(p, addr & 0xffffffff);
+   P_NV90B5_OFFSET_OUT_UPPER(p, tmp_addr >> 32);
+   P_NV90B5_OFFSET_OUT_LOWER(p, tmp_addr & 0xffffffff);
+   P_NV90B5_PITCH_IN(p, 4);
+   P_NV90B5_PITCH_OUT(p, 4);
+   P_NV90B5_LINE_LENGTH_IN(p, 4);
+   P_NV90B5_LINE_COUNT(p, 1);
+
+   P_IMMD(p, NV90B5, SET_REMAP_COMPONENTS, {
+      .dst_x = DST_X_SRC_X,
+      .dst_y = DST_Y_SRC_X,
+      .dst_z = DST_Z_NO_WRITE,
+      .dst_w = DST_W_NO_WRITE,
+      .component_size = COMPONENT_SIZE_ONE,
+      .num_src_components = NUM_SRC_COMPONENTS_ONE,
+      .num_dst_components = NUM_DST_COMPONENTS_TWO,
+   });
+
+   P_IMMD(p, NV90B5, LAUNCH_DMA, {
+      .data_transfer_type = DATA_TRANSFER_TYPE_PIPELINED,
+      .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
+      .flush_enable = FLUSH_ENABLE_TRUE,
+      .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
+      .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
+      .remap_enable = REMAP_ENABLE_TRUE,
+   });
+
    P_MTHD(p, NV9097, SET_RENDER_ENABLE_A);
-   P_NV9097_SET_RENDER_ENABLE_A(p, addr >> 32);
-   P_NV9097_SET_RENDER_ENABLE_B(p, addr & 0xfffffff0);
+   P_NV9097_SET_RENDER_ENABLE_A(p, tmp_addr >> 32);
+   P_NV9097_SET_RENDER_ENABLE_B(p, tmp_addr & 0xfffffff0);
    P_NV9097_SET_RENDER_ENABLE_C(p, inverted ? MODE_RENDER_IF_EQUAL : MODE_RENDER_IF_NOT_EQUAL);
 
    P_MTHD(p, NV90C0, SET_RENDER_ENABLE_A);
-   P_NV90C0_SET_RENDER_ENABLE_A(p, addr >> 32);
-   P_NV90C0_SET_RENDER_ENABLE_B(p, addr & 0xfffffff0);
+   P_NV90C0_SET_RENDER_ENABLE_A(p, tmp_addr >> 32);
+   P_NV90C0_SET_RENDER_ENABLE_B(p, tmp_addr & 0xfffffff0);
    P_NV90C0_SET_RENDER_ENABLE_C(p, inverted ? MODE_RENDER_IF_EQUAL : MODE_RENDER_IF_NOT_EQUAL);
 }
 

@@ -305,8 +305,11 @@ try_merge_merge_set(cssa_ctx& ctx, Temp dst, merge_set& set_b)
       while (!dom.empty() && !dominates(ctx, dom.back(), current))
          dom.pop_back(); /* not the desired parent, remove */
 
-      if (!dom.empty() && interference(ctx, current, dom.back()))
+      if (!dom.empty() && interference(ctx, current, dom.back())) {
+         for (Temp t : union_set)
+            ctx.merge_node_table[t.id()].equal_anc_out = Temp();
          return false; /* intersection detected */
+      }
 
       dom.emplace_back(current); /* otherwise, keep checking */
       if (current != dst)

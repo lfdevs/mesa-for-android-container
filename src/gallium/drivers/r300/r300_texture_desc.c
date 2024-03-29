@@ -33,7 +33,8 @@ unsigned r300_get_pixel_alignment(enum pipe_format format,
                                   unsigned num_samples,
                                   enum radeon_bo_layout microtile,
                                   enum radeon_bo_layout macrotile,
-                                  enum r300_dim dim, bool is_rs690)
+                                  enum r300_dim dim, bool is_rs690,
+                                  bool scanout)
 {
     static const unsigned table[2][5][3][2] =
     {
@@ -75,6 +76,13 @@ unsigned r300_get_pixel_alignment(enum pipe_format format,
             tile = align;
     }
 
+    if (scanout) {
+        if (microtile || macrotile)
+           tile = MAX2(tile, 256 / pixsize);
+        else
+           tile = MAX2(tile, 64);
+    }
+
     assert(tile);
     return tile;
 }
@@ -92,7 +100,9 @@ static bool r300_texture_macro_switch(struct r300_resource *tex,
     }
 
     tile = r300_get_pixel_alignment(tex->b.format, tex->b.nr_samples,
-                                    tex->tex.microtile, RADEON_LAYOUT_TILED, dim, 0);
+                                    tex->tex.microtile, RADEON_LAYOUT_TILED, dim, 0,
+                                    tex->b.bind & PIPE_BIND_SCANOUT);
+
     if (dim == DIM_WIDTH) {
         texdim = u_minify(tex->tex.width0, level);
     } else {
@@ -133,11 +143,16 @@ static unsigned r300_texture_get_stride(struct r300_screen *screen,
     width = u_minify(tex->tex.width0, level);
 
     if (util_format_is_plain(tex->b.format)) {
+        /* MSAA and mipmapping are incompatible with scanout. */
+        assert(!(tex->b.bind & PIPE_BIND_SCANOUT) ||
+               (tex->b.last_level == 0 && tex->b.nr_samples <= 1));
+
         tile_width = r300_get_pixel_alignment(tex->b.format,
                                               tex->b.nr_samples,
                                               tex->tex.microtile,
                                               tex->tex.macrotile[level],
-                                              DIM_WIDTH, is_rs690);
+                                              DIM_WIDTH, is_rs690,
+                                              tex->b.bind & PIPE_BIND_SCANOUT);
         width = align(width, tile_width);
 
         stride = util_format_get_stride(tex->b.format, width);
@@ -169,7 +184,8 @@ static unsigned r300_texture_get_nblocksy(struct r300_resource *tex,
                                                tex->b.nr_samples,
                                                tex->tex.microtile,
                                                tex->tex.macrotile[level],
-                                               DIM_HEIGHT, 0);
+                                               DIM_HEIGHT, 0,
+                                               tex->b.bind & PIPE_BIND_SCANOUT);
         height = align(height, tile_height);
 
         /* See if the CBZB clear can be used on the buffer,
@@ -258,6 +274,11 @@ static void r300_setup_miptree(struct r300_screen *screen,
         tex->tex.layer_size_in_bytes[i] = layer_size;
         tex->tex.stride_in_bytes[i] = stride;
         tex->tex.cbzb_allowed[i] = tex->tex.cbzb_allowed[i] && aligned_for_cbzb;
+
+        if (tex->b.bind & PIPE_BIND_SCANOUT) {
+           assert(i == 0);
+           tex->tex.stride_in_bytes_override = stride;
+        }
 
         SCREEN_DBG(screen, DBG_TEXALLOC, "r300: Texture miptree: Level %d "
                 "(%dx%dx%d px, pitch %d bytes) %d bytes total, macrotiled %s\n",

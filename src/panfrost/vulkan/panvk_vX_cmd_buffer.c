@@ -532,6 +532,7 @@ panvk_fill_non_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
          pan_pack(attribs + offset, ATTRIBUTE, cfg) {
             cfg.buffer_index = first_buf + (img_idx + i) * 2;
             cfg.format = desc_state->sets[s]->img_fmts[i];
+            cfg.offset_enable = false;
          }
          offset += pan_size(ATTRIBUTE);
       }

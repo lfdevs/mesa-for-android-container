@@ -1935,7 +1935,6 @@ static LLVMValueRef visit_load_buffer(struct ac_nir_context *ctx, nir_intrinsic_
    LLVMValueRef offset = get_src(ctx, instr->src[1]);
    LLVMValueRef rsrc = ctx->abi->load_ssbo ?
       ctx->abi->load_ssbo(ctx->abi, rsrc_base, false, false) : rsrc_base;
-   LLVMValueRef vindex = ctx->ac.i32_0;
 
    LLVMTypeRef def_type = get_def_type(ctx, &instr->def);
    LLVMTypeRef def_elem_type = num_components > 1 ? LLVMGetElementType(def_type) : def_type;
@@ -1964,7 +1963,7 @@ static LLVMValueRef visit_load_buffer(struct ac_nir_context *ctx, nir_intrinsic_
          int num_channels = util_next_power_of_two(load_bytes) / 4;
          bool can_speculate = access & ACCESS_CAN_REORDER;
 
-         ret = ac_build_buffer_load(&ctx->ac, rsrc, num_channels, vindex, voffset, ctx->ac.i32_0,
+         ret = ac_build_buffer_load(&ctx->ac, rsrc, num_channels, NULL, voffset, ctx->ac.i32_0,
                                     ctx->ac.f32, access, can_speculate, false);
       }
 
@@ -4366,6 +4365,7 @@ bool ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
 {
    struct ac_nir_context ctx = {0};
    struct nir_function *func;
+   bool ret;
 
    ctx.ac = *ac;
    ctx.abi = abi;
@@ -4395,10 +4395,8 @@ bool ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
    if (gl_shader_stage_is_compute(nir->info.stage))
       setup_shared(&ctx, nir);
 
-   if (!visit_cf_list(&ctx, &func->impl->body))
-      return false;
-
-   phi_post_pass(&ctx);
+   if ((ret = visit_cf_list(&ctx, &func->impl->body)))
+      phi_post_pass(&ctx);
 
    free(ctx.ssa_defs);
    ralloc_free(ctx.defs);
@@ -4406,7 +4404,7 @@ bool ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
    if (ctx.abi->kill_ps_if_inf_interp)
       ralloc_free(ctx.verified_interp);
 
-   return true;
+   return ret;
 }
 
 /* Fixup the HW not emitting the TCS regs if there are no HS threads. */

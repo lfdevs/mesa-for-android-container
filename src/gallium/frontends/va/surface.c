@@ -713,6 +713,16 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
                                   config->profile, config->entrypoint,
                                   PIPE_VIDEO_CAP_MAX_HEIGHT);
       i++;
+#if VA_CHECK_VERSION(1, 21, 0)
+      attribs[i].type = VASurfaceAttribAlignmentSize;
+      attribs[i].value.type = VAGenericValueTypeInteger;
+      attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE;
+      attribs[i].value.value.i =
+         pscreen->get_video_param(pscreen,
+                                  config->profile, config->entrypoint,
+                                  PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT);
+      i++;
+#endif
    } else {
       attribs[i].type = VASurfaceAttribMaxWidth;
       attribs[i].value.type = VAGenericValueTypeInteger;

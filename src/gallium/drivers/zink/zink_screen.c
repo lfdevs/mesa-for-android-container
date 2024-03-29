@@ -1466,12 +1466,6 @@ static void
 zink_destroy_screen(struct pipe_screen *pscreen)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   struct zink_batch_state *bs = screen->free_batch_states;
-   while (bs) {
-      struct zink_batch_state *bs_next = bs->next;
-      zink_batch_state_destroy(screen, bs);
-      bs = bs_next;
-   }
 
 #ifdef HAVE_RENDERDOC_APP_H
    if (screen->renderdoc_capture_all && p_atomic_dec_zero(&num_screens))
@@ -1483,6 +1477,13 @@ zink_destroy_screen(struct pipe_screen *pscreen)
 
    if (screen->copy_context)
       screen->copy_context->base.destroy(&screen->copy_context->base);
+
+   struct zink_batch_state *bs = screen->free_batch_states;
+   while (bs) {
+      struct zink_batch_state *bs_next = bs->next;
+      zink_batch_state_destroy(screen, bs);
+      bs = bs_next;
+   }
 
    if (VK_NULL_HANDLE != screen->debugUtilsCallbackHandle) {
       VKSCR(DestroyDebugUtilsMessengerEXT)(screen->instance, screen->debugUtilsCallbackHandle, NULL);
@@ -2551,9 +2552,11 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    default:
       return 0;
    }
-   VkImageUsageFlags flags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-   flags |= is_zs ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   VkImageUsageFlags use_flags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                 VK_IMAGE_USAGE_STORAGE_BIT;
+   use_flags |= is_zs ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+   VkImageUsageFlags flags = screen->format_props[pformat].optimalTilingFeatures & use_flags;
    VkSparseImageFormatProperties props[4]; //planar?
    unsigned prop_count = ARRAY_SIZE(props);
    VKSCR(GetPhysicalDeviceSparseImageFormatProperties)(screen->pdev, format, type,
@@ -2562,11 +2565,21 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
                                                        VK_IMAGE_TILING_OPTIMAL,
                                                        &prop_count, props);
    if (!prop_count) {
-      if (pformat == PIPE_FORMAT_R9G9B9E5_FLOAT) {
-         screen->faked_e5sparse = true;
-         goto hack_it_up;
+      /* format may not support storage; try without */
+      flags &= ~VK_IMAGE_USAGE_STORAGE_BIT;
+      prop_count = ARRAY_SIZE(props);
+      VKSCR(GetPhysicalDeviceSparseImageFormatProperties)(screen->pdev, format, type,
+                                                         multi_sample ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT,
+                                                         flags,
+                                                         VK_IMAGE_TILING_OPTIMAL,
+                                                         &prop_count, props);
+      if (!prop_count) {
+         if (pformat == PIPE_FORMAT_R9G9B9E5_FLOAT) {
+            screen->faked_e5sparse = true;
+            goto hack_it_up;
+         }
+         return 0;
       }
-      return 0;
    }
 
    if (size) {

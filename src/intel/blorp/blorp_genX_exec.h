@@ -308,6 +308,8 @@ blorp_emit_vertex_data(struct blorp_batch *batch,
    };
 
    void *data = blorp_alloc_vertex_buffer(batch, sizeof(vertices), addr);
+   if (data == NULL)
+      return;
    memcpy(data, vertices, sizeof(vertices));
    *size = sizeof(vertices);
    blorp_flush_range(batch, data, *size);
@@ -329,6 +331,8 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
 
    const uint32_t *const inputs_src = (const uint32_t *)&params->wm_inputs;
    void *data = blorp_alloc_vertex_buffer(batch, *size, addr);
+   if (data == NULL)
+      return;
    uint32_t *inputs = data;
 
    /* Copy in the VS inputs */
@@ -424,8 +428,10 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    const uint32_t num_vbs = ARRAY_SIZE(vb);
 
    struct blorp_address addrs[2] = {};
-   uint32_t sizes[2];
+   uint32_t sizes[2] = {};
    blorp_emit_vertex_data(batch, params, &addrs[0], &sizes[0]);
+   if (sizes[0] == 0)
+      return;
    blorp_fill_vertex_buffer_state(vb, 0, addrs[0], sizes[0],
                                   3 * sizeof(float));
 
@@ -1147,6 +1153,8 @@ blorp_emit_blend_state(struct blorp_batch *batch,
    int size = GENX(BLEND_STATE_length) * 4;
    size += GENX(BLEND_STATE_ENTRY_length) * 4 * params->num_draw_buffers;
    uint32_t *state = blorp_alloc_dynamic_state(batch, size, 64, &offset);
+   if (state == NULL)
+      return 0;
    uint32_t *pos = state;
 
    GENX(BLEND_STATE_pack)(NULL, pos, &blend);
@@ -2103,6 +2111,11 @@ blorp_get_compute_push_const(struct blorp_batch *batch,
                                 &push_const_offset) :
       blorp_alloc_dynamic_state(batch, push_const_size, 64,
                                 &push_const_offset);
+   if (push_const == NULL) {
+      *state_offset = 0;
+      *state_size = 0;
+      return;
+   }
    memset(push_const, 0x0, push_const_size);
 
    void *dst = push_const;
@@ -2281,6 +2294,8 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    uint32_t idd_offset;
    uint32_t size = GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t);
    void *state = blorp_alloc_dynamic_state(batch, size, 64, &idd_offset);
+   if (state == NULL)
+      return;
    GENX(INTERFACE_DESCRIPTOR_DATA_pack)(NULL, state, &idd);
 
    blorp_emit(batch, GENX(MEDIA_INTERFACE_DESCRIPTOR_LOAD), mid) {
