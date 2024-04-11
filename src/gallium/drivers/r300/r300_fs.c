@@ -526,6 +526,7 @@ static void r300_translate_fragment_shader(
         }
 
         free(compiler.code->constants.Constants);
+        free(compiler.code->constants_remap_table);
         rc_destroy(&compiler.Base);
         r300_dummy_fragment_shader(r300, shader);
         return;

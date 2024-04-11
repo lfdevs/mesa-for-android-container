@@ -60,7 +60,7 @@ traces:
       text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8986
   TheRavenRemastered/Raven-f10900-v2.trace:
     gl-zink-anv-tgl:
-      checksum: db7b901177e7ac00cc489e0e13f71f76
+      checksum: e910141d9520739c653fa7de0d8a1c9b
   TombRaider2013/TombRaider-f1430-v2.trace:
     gl-zink-anv-tgl:
       label: [crash]

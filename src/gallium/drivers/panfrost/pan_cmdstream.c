@@ -3021,6 +3021,11 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
    mali_ptr saved_tls = batch->tls.gpu;
    batch->tls.gpu = panfrost_emit_shared_memory(batch, info);
 
+   /* if indirect, mark the indirect buffer as being read */
+   if (info->indirect)
+      panfrost_batch_read_rsrc(batch, pan_resource(info->indirect), PIPE_SHADER_COMPUTE);
+
+   /* launch it */
    JOBX(launch_grid)(batch, info);
    batch->compute_count++;
    batch->tls.gpu = saved_tls;

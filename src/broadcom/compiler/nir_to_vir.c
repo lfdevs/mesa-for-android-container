@@ -2745,8 +2745,21 @@ ntq_emit_load_input(struct v3d_compile *c, nir_intrinsic_instr *instr)
                                SYSTEM_VALUE_VERTEX_ID)) {
                       index++;
                }
-               for (int i = 0; i < offset; i++)
-                      index += c->vattr_sizes[i];
+
+               for (int i = 0; i < offset; i++) {
+                      /* GFXH-1602: if any builtins (vid, iid, etc) are read then
+                       * attribute 0 must be active (size > 0). When we hit this,
+                       * the driver is expected to program attribute 0 to have a
+                       * size of 1, so here we need to add that.
+                       */
+                      if (i == 0 && c->vs_key->is_coord &&
+                          c->vattr_sizes[i] == 0 && index > 0) {
+                         index++;
+                      } else {
+                         index += c->vattr_sizes[i];
+                      }
+               }
+
                index += nir_intrinsic_component(instr);
                for (int i = 0; i < instr->num_components; i++) {
                       struct qreg vpm_offset = vir_uniform_ui(c, index++);

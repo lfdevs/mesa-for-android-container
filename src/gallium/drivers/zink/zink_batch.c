@@ -757,7 +757,7 @@ submit_queue(void *data, void *gdata, int thread_index)
 
    unsigned i = 0;
    VkSemaphore *sem = bs->signal_semaphores.data;
-   set_foreach_remove(&bs->dmabuf_exports, entry) {
+   set_foreach(&bs->dmabuf_exports, entry) {
       struct zink_resource *res = (void*)entry->key;
       for (; res; res = zink_resource(res->base.b.next))
          zink_screen_import_dmabuf_semaphore(screen, res, sem[i++]);
@@ -765,6 +765,7 @@ submit_queue(void *data, void *gdata, int thread_index)
       struct pipe_resource *pres = (void*)entry->key;
       pipe_resource_reference(&pres, NULL);
    }
+   _mesa_set_clear(&bs->dmabuf_exports, NULL);
 
    bs->usage.submit_count++;
 end:

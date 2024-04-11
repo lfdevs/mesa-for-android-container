@@ -32,6 +32,8 @@ nak_nir_options(const struct nak_compiler *nak);
 void nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak);
 void nak_preprocess_nir(nir_shader *nir, const struct nak_compiler *nak);
 
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct nak_fs_key {
    bool zs_self_dep;
 
@@ -39,6 +41,8 @@ struct nak_fs_key {
     * VkPipelineMultisampleStateCreateInfo::minSampleShading
     */
    bool force_sample_shading;
+
+   uint8_t _pad;
 
    /**
     * The constant buffer index and offset at which the sample locations table lives.
@@ -48,6 +52,9 @@ struct nak_fs_key {
    uint8_t sample_locations_cb;
    uint32_t sample_locations_offset;
 };
+PRAGMA_DIAGNOSTIC_POP
+static_assert(sizeof(struct nak_fs_key) == 8, "This struct has no holes");
+
 
 void nak_postprocess_nir(nir_shader *nir, const struct nak_compiler *nak,
                          nir_variable_mode robust2_modes,

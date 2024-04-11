@@ -371,7 +371,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_LOAD_STATE" value="0x30" variants="A3XX"/>
 	<value name="CP_LOAD_STATE4" value="0x30" variants="A4XX-A5XX"/>
 	<doc>Conditionally load a IB based on a flag, prefetch enabled</doc>
-	<value name="CP_COND_INDIRECT_BUFFER_PFE" value="0x3a"/>
+	<value name="CP_COND_INDIRECT_BUFFER_PFE" value="0x3a" variants="A3XX-A5XX"/>
 	<doc>Conditionally load a IB based on a flag, prefetch disabled</doc>
 	<value name="CP_COND_INDIRECT_BUFFER_PFD" value="0x32" variants="A3XX"/>
 	<doc>Load a buffer with pre-fetch enabled</doc>
@@ -648,6 +648,9 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 
 	<doc>Reset various on-chip state used for synchronization</doc>
 	<value name="CP_RESET_CONTEXT_STATE" value="0x1f" variants="A7XX-"/>
+
+	<doc>Invalidates the "CCHE" introduced on a740</doc>
+	<value name="CP_CCHE_INVALIDATE" value="0x3a" variants="A7XX-"/>
 </enum>
 
 

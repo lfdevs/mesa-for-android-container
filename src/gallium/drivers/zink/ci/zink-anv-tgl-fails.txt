@@ -526,10 +526,6 @@ spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
 
 spec@arb_shader_image_load_store@early-z,Fail
 spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
-spec@arb_shader_image_load_store@host-mem-barrier,Fail
-spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit barrier test/16x16,Fail
-spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit barrier test/4x4,Fail
-spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit barrier test/64x64,Fail
 
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 

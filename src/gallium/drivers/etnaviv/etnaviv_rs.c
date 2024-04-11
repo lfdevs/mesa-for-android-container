@@ -711,12 +711,17 @@ etna_try_rs_blit(struct pipe_context *pctx,
       width = align(width, w_align);
 
    if (height & (h_align - 1) && height >= src_lev->height * src_yscale && height >= dst_lev->height) {
-      if (!ctx->screen->specs.single_buffer &&
-          align(height, h_align * ctx->screen->specs.pixel_pipes) <=
-          dst_lev->padded_height * src_yscale)
-         height = align(height, h_align * ctx->screen->specs.pixel_pipes);
-      else
-         height = align(height, h_align);
+      height = align(height, h_align);
+
+      /* Try to increase alignment to multi-pipe requirements to unlock
+       * multi-pipe resolve for increased performance. */
+      if (!ctx->screen->specs.single_buffer) {
+          unsigned int pipe_align = align(height, h_align * ctx->screen->specs.pixel_pipes);
+
+          if (pipe_align <= src_lev->padded_height &&
+              pipe_align <= dst_lev->padded_height * src_yscale)
+             height = pipe_align;
+      }
    }
 
    /* The padded dimensions are in samples */

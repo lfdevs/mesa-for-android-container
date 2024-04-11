@@ -649,9 +649,9 @@ lower_cmat_instr(nir_builder *b, nir_instr *instr, void *_state)
       nir_def *result =
          nir_dpas_intel(b,
                         packing_factor * glsl_base_type_get_bit_size(dst_desc.element_type),
+                        nir_load_deref(b, accum_slice),
                         nir_load_deref(b, A_slice),
                         nir_load_deref(b, B_slice),
-                        nir_load_deref(b, accum_slice),
                         .dest_type = nir_get_nir_type_for_glsl_base_type(dst_desc.element_type),
                         .src_type = nir_get_nir_type_for_glsl_base_type(src_desc.element_type),
                         .saturate = nir_intrinsic_saturate(intrin),

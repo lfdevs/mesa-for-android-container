@@ -273,7 +273,7 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    if (screen->info.have_EXT_color_write_enable)
       dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
 
-   assert(state->rast_prim != MESA_PRIM_COUNT);
+   assert(state->rast_prim != MESA_PRIM_COUNT || zink_debug & ZINK_DEBUG_SHADERDB);
 
    VkPipelineRasterizationLineStateCreateInfoEXT rast_line_state;
    if (screen->info.have_EXT_line_rasterization &&

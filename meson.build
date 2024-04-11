@@ -1523,11 +1523,6 @@ if with_any_intel and ['x86', 'x86_64'].contains(host_machine.cpu_family())
   pre_args += '-DSUPPORT_INTEL_INTEGRATED_GPUS'
 endif
 
-if get_option('intel-xe-kmd').enabled()
-  pre_args += '-DINTEL_XE_KMD_SUPPORTED'
-endif
-
-
 if with_gallium_i915 and host_machine.cpu_family().startswith('x86') == false
   error('Intel "i915" Gallium driver requires x86 or x86_64 CPU family')
 endif
@@ -1722,7 +1717,7 @@ if with_clc
   # all-targets is needed to support static linking LLVM build with multiple targets.
   # windowsdriver is needded with LLVM>=15 and frontendhlsl is needed with LLVM>=16,
   # but we don't know what LLVM version we are using yet
-  llvm_optional_modules += ['all-targets', 'windowsdriver', 'frontendhlsl']
+  llvm_optional_modules += ['all-targets', 'windowsdriver', 'frontendhlsl', 'frontenddriver']
 endif
 draw_with_llvm = get_option('draw-use-llvm')
 if draw_with_llvm
@@ -1865,6 +1860,9 @@ if with_clc
     endif
     if dep_llvm.version().version_compare('>= 16.0')
       clang_modules += 'clangASTMatchers'
+    endif
+    if dep_llvm.version().version_compare('>= 18.0')
+      clang_modules += 'clangAPINotes'
     endif
 
     dep_clang = []

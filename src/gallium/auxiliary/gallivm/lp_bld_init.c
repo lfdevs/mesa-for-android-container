@@ -609,7 +609,11 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
 
    if (!(gallivm_perf & GALLIVM_PERF_NO_OPT))
+#if LLVM_VERSION_MAJOR >= 18
+      strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine<no-verify-fixpoint>");
+#else
       strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine");
+#endif
    else
       strcpy(passes, "mem2reg");
 

@@ -1953,7 +1953,7 @@ nine_ff_load_lights(struct NineDevice9 *device)
         dst[19].z = dst[25].z * mtl->Ambient.b + mtl->Emissive.b;
     }
 
-    if (!(context->changed.group & NINE_STATE_FF_LIGHTING))
+    if (!(context->changed.group & NINE_STATE_FF_LIGHTING) && !IS_D3DTS_DIRTY(context, VIEW))
         return;
 
     for (l = 0; l < context->ff.num_lights_active; ++l) {

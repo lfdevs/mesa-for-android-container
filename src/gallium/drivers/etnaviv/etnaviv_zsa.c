@@ -48,7 +48,7 @@ etna_zsa_state_create(struct pipe_context *pctx,
    cs->base = *so;
 
    cs->z_test_enabled = so->depth_enabled && so->depth_func != PIPE_FUNC_ALWAYS;
-   cs->z_write_enabled = so->depth_enabled && so->depth_writemask;
+   cs->z_write_enabled = so->depth_writemask;
 
    /* XXX does stencil[0] / stencil[1] order depend on rs->front_ccw? */
 

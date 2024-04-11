@@ -46,7 +46,6 @@ radeonsi-stoney-traces:x86_64:
   variables:
     EGL_PLATFORM: surfaceless
     PIGLIT_TRACES_FILE: traces-amd.yml
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
     PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
 radv-raven-vkcts:x86_64:

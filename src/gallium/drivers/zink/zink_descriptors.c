@@ -825,11 +825,14 @@ create_pool(struct zink_screen *screen, unsigned num_type_sizes, const VkDescrip
    dpci.poolSizeCount = num_type_sizes;
    dpci.flags = flags;
    dpci.maxSets = MAX_LAZY_DESCRIPTORS;
-   VkResult result = VKSCR(CreateDescriptorPool)(screen->dev, &dpci, 0, &pool);
-   if (result != VK_SUCCESS) {
-      mesa_loge("ZINK: vkCreateDescriptorPool failed (%s)", vk_Result_to_str(result));
-      return VK_NULL_HANDLE;
-   }
+   VkResult result;
+   VRAM_ALLOC_LOOP(result,
+      VKSCR(CreateDescriptorPool)(screen->dev, &dpci, 0, &pool),
+      if (result != VK_SUCCESS) {
+         mesa_loge("ZINK: vkCreateDescriptorPool failed (%s)", vk_Result_to_str(result));
+         return VK_NULL_HANDLE;
+      }
+   );
    return pool;
 }
 

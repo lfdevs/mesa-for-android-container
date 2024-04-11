@@ -446,6 +446,9 @@ iris_batch_mark_reset_sync(struct iris_batch *batch)
 const char *
 iris_batch_name_to_string(enum iris_batch_name name);
 
+bool
+iris_batch_is_banned(struct iris_bufmgr *bufmgr, int ret);
+
 #define iris_foreach_batch(ice, batch)                \
    for (struct iris_batch *batch = &ice->batches[0];  \
         batch <= &ice->batches[((struct iris_screen *)ice->ctx.screen)->devinfo->ver >= 12 ? IRIS_BATCH_BLITTER : IRIS_BATCH_COMPUTE]; \

@@ -47,7 +47,8 @@ void add_subdword_operand(ra_ctx& ctx, aco_ptr<Instruction>& instr, unsigned idx
                           RegClass rc);
 std::pair<unsigned, unsigned>
 get_subdword_definition_info(Program* program, const aco_ptr<Instruction>& instr, RegClass rc);
-void add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg reg);
+void add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg reg,
+                             bool allow_16bit_write);
 
 struct assignment {
    PhysReg reg;
@@ -678,7 +679,8 @@ get_subdword_definition_info(Program* program, const aco_ptr<Instruction>& instr
 }
 
 void
-add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg reg)
+add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg reg,
+                        bool allow_16bit_write)
 {
    if (instr->isPseudo())
       return;
@@ -687,7 +689,7 @@ add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg r
       amd_gfx_level gfx_level = program->gfx_level;
       assert(instr->definitions[0].bytes() <= 2);
 
-      if (reg.byte() == 0 && instr_is_16bit(gfx_level, instr->opcode))
+      if (reg.byte() == 0 && allow_16bit_write && instr_is_16bit(gfx_level, instr->opcode))
          return;
 
       /* use SDWA */
@@ -695,6 +697,8 @@ add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg r
          convert_to_SDWA(gfx_level, instr);
          return;
       }
+
+      assert(allow_16bit_write);
 
       if (instr->opcode == aco_opcode::v_fma_mixlo_f16) {
          instr->opcode = aco_opcode::v_fma_mixhi_f16;
@@ -2979,7 +2983,8 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                   PhysReg reg = get_reg(ctx, register_file, tmp, parallelcopy, instr);
                   definition->setFixed(reg);
                   if (reg.byte() || register_file.test(reg, 4)) {
-                     add_subdword_definition(program, instr, reg);
+                     bool allow_16bit_write = reg.byte() % 2 == 0 && !register_file.test(reg, 2);
+                     add_subdword_definition(program, instr, reg, allow_16bit_write);
                      definition = &instr->definitions[i]; /* add_subdword_definition can invalidate
                                                              the reference */
                   }

@@ -987,16 +987,16 @@ st_destroy_context(struct st_context *st)
 
    st_destroy_program_variants(st);
 
-   st_context_free_zombie_objects(st);
-
-   simple_mtx_destroy(&st->zombie_sampler_views.mutex);
-   simple_mtx_destroy(&st->zombie_shaders.mutex);
-
    /* Do not release debug_output yet because it might be in use by other threads.
     * These threads will be terminated by _mesa_free_context_data and
     * st_destroy_context_priv.
     */
    _mesa_free_context_data(ctx, false);
+
+   st_context_free_zombie_objects(st);
+
+   simple_mtx_destroy(&st->zombie_sampler_views.mutex);
+   simple_mtx_destroy(&st->zombie_shaders.mutex);
 
    /* This will free the st_context too, so 'st' must not be accessed
     * afterwards. */

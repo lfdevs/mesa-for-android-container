@@ -251,6 +251,8 @@ CHIPSET(0x56ba, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56bb, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56bc, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56bd, dg2_g11, "DG2", "Intel(R) Graphics")
+CHIPSET(0x56be, dg2_g10, "DG2", "Intel(R) Graphics")
+CHIPSET(0x56bf, dg2_g10, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56c0, atsm_g10, "ATS-M", "Intel(R) Data Center GPU Flex Series 170 Graphics")
 CHIPSET(0x56c1, atsm_g11, "ATS-M", "Intel(R) Data Center GPU Flex Series 140 Graphics")
 

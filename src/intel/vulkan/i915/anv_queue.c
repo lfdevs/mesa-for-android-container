@@ -58,8 +58,13 @@ anv_i915_create_engine(struct anv_device *device,
    } else if (device->physical->has_vm_control) {
       assert(pCreateInfo->queueFamilyIndex < physical->queue.family_count);
       enum intel_engine_class engine_classes[1];
+      enum intel_gem_create_context_flags flags = 0;
+
       engine_classes[0] = queue_family->engine_class;
-      if (!intel_gem_create_context_engines(device->fd, 0 /* flags */,
+      if (pCreateInfo->flags & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT)
+         flags |= INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG;
+
+      if (!intel_gem_create_context_engines(device->fd, flags,
                                             physical->engine_info,
                                             1, engine_classes,
                                             device->vm_id,
@@ -74,7 +79,7 @@ anv_i915_create_engine(struct anv_device *device,
           queue_family->engine_class == INTEL_ENGINE_CLASS_COMPUTE) {
          uint32_t *context_id = (uint32_t *)&queue->companion_rcs_id;
          engine_classes[0] = INTEL_ENGINE_CLASS_RENDER;
-         if (!intel_gem_create_context_engines(device->fd, 0 /* flags */,
+         if (!intel_gem_create_context_engines(device->fd, flags,
                                                physical->engine_info,
                                                1, engine_classes,
                                                device->vm_id,

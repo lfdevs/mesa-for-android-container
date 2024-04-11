@@ -9537,10 +9537,12 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
    /* "GPGPU specific workarounds" (both post-sync and flush) ------------ */
 
    if (IS_COMPUTE_PIPELINE(batch)) {
-      if ((GFX_VER == 9 || GFX_VER == 11) &&
-          (flags & PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE)) {
-         /* Project: SKL, ICL / Argument: Tex Invalidate
-          * "Requires stall bit ([20] of DW) set for all GPGPU Workloads."
+      if (GFX_VER >= 9 && (flags & PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE)) {
+         /* SKL PRMs, Volume 7: 3D-Media-GPGPU, Programming Restrictions for
+          * PIPE_CONTROL, Flush Types:
+          *   "Requires stall bit ([20] of DW) set for all GPGPU Workloads."
+          * For newer platforms this is documented in the PIPE_CONTROL
+          * instruction page.
           */
          flags |= PIPE_CONTROL_CS_STALL;
       }

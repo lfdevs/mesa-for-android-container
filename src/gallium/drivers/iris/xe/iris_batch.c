@@ -151,7 +151,45 @@ void iris_xe_init_batches(struct iris_context *ice)
    free(engines_info);
 }
 
-void iris_xe_destroy_batch(struct iris_batch *batch)
+/*
+ * Wait for all previous DRM_IOCTL_XE_EXEC calls over the
+ * drm_xe_exec_queue in this iris_batch to complete.
+ **/
+static void
+iris_xe_wait_exec_queue_idle(struct iris_batch *batch)
+{
+   struct iris_bufmgr *bufmgr = batch->screen->bufmgr;
+   struct iris_syncobj *syncobj = iris_create_syncobj(bufmgr);
+   struct drm_xe_sync xe_sync = {
+      .type = DRM_XE_SYNC_TYPE_SYNCOBJ,
+      .flags = DRM_XE_SYNC_FLAG_SIGNAL,
+   };
+   struct drm_xe_exec exec = {
+      .exec_queue_id = batch->xe.exec_queue_id,
+      .num_syncs = 1,
+      .syncs = (uintptr_t)&xe_sync,
+   };
+   int ret;
+
+   if (!syncobj)
+      return;
+
+   xe_sync.handle = syncobj->handle;
+   /* Using the special exec.num_batch_buffer == 0 handling to get syncobj
+    * signaled when the last DRM_IOCTL_XE_EXEC is completed.
+    */
+   ret = intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_EXEC, &exec);
+   if (ret == 0) {
+      assert(iris_wait_syncobj(bufmgr, syncobj, INT64_MAX));
+   } else {
+      assert(iris_batch_is_banned(bufmgr, errno) == true);
+   }
+
+   iris_syncobj_destroy(bufmgr, syncobj);
+}
+
+static void
+iris_xe_destroy_exec_queue(struct iris_batch *batch)
 {
    struct iris_screen *screen = batch->screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
@@ -163,6 +201,15 @@ void iris_xe_destroy_batch(struct iris_batch *batch)
    ret = intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_EXEC_QUEUE_DESTROY,
                      &destroy);
    assert(ret == 0);
+}
+
+void iris_xe_destroy_batch(struct iris_batch *batch)
+{
+   /* Xe KMD don't refcount anything, so resources could be freed while they
+    * are still in use if we don't wait for exec_queue to be idle.
+    */
+   iris_xe_wait_exec_queue_idle(batch);
+   iris_xe_destroy_exec_queue(batch);
 }
 
 bool iris_xe_replace_batch(struct iris_batch *batch)
@@ -184,7 +231,7 @@ bool iris_xe_replace_batch(struct iris_batch *batch)
    ret = iris_xe_init_batch(bufmgr, engines_info, engine_classes[batch->name],
                             ice->priority, &new_exec_queue_id);
    if (ret) {
-      iris_xe_destroy_batch(batch);
+      iris_xe_destroy_exec_queue(batch);
       batch->xe.exec_queue_id = new_exec_queue_id;
       iris_lost_context_state(batch);
    }

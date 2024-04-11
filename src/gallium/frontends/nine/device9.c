@@ -1062,6 +1062,7 @@ NineDevice9_Reset( struct NineDevice9 *This,
     /* XXX: better use GetBackBuffer here ? */
 
     This->device_needs_reset = (hr != D3D_OK);
+    This->in_scene = FALSE; /* Not sure if should be done also for ResetEx */
     return hr;
 }
 

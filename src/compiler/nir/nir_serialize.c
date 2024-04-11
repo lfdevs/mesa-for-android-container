@@ -202,8 +202,6 @@ read_constant(read_ctx *ctx, nir_variable *nvar)
 
 enum var_data_encoding {
    var_encode_full,
-   var_encode_shader_temp,
-   var_encode_function_temp,
    var_encode_location_diff,
 };
 
@@ -264,30 +262,23 @@ write_variable(write_ctx *ctx, const nir_variable *var)
        data.mode != nir_var_shader_out)
       data.location = 0;
 
-   /* Temporary variables don't serialize var->data. */
-   if (data.mode == nir_var_shader_temp)
-      flags.u.data_encoding = var_encode_shader_temp;
-   else if (data.mode == nir_var_function_temp)
-      flags.u.data_encoding = var_encode_function_temp;
-   else {
-      struct nir_variable_data tmp = data;
+   struct nir_variable_data tmp = data;
 
-      tmp.location = ctx->last_var_data.location;
-      tmp.location_frac = ctx->last_var_data.location_frac;
-      tmp.driver_location = ctx->last_var_data.driver_location;
+   tmp.location = ctx->last_var_data.location;
+   tmp.location_frac = ctx->last_var_data.location_frac;
+   tmp.driver_location = ctx->last_var_data.driver_location;
 
-      /* See if we can encode only the difference in locations from the last
-       * variable.
-       */
-      if (memcmp(&ctx->last_var_data, &tmp, sizeof(tmp)) == 0 &&
-          abs((int)data.location -
-              (int)ctx->last_var_data.location) < (1 << 12) &&
-          abs((int)data.driver_location -
-              (int)ctx->last_var_data.driver_location) < (1 << 15))
-         flags.u.data_encoding = var_encode_location_diff;
-      else
-         flags.u.data_encoding = var_encode_full;
-   }
+   /* See if we can encode only the difference in locations from the last
+    * variable.
+    */
+   if (memcmp(&ctx->last_var_data, &tmp, sizeof(tmp)) == 0 &&
+       abs((int)data.location -
+           (int)ctx->last_var_data.location) < (1 << 12) &&
+       abs((int)data.driver_location -
+           (int)ctx->last_var_data.driver_location) < (1 << 15))
+      flags.u.data_encoding = var_encode_location_diff;
+   else
+      flags.u.data_encoding = var_encode_full;
 
    flags.u.ray_query = var->data.ray_query;
 
@@ -306,26 +297,23 @@ write_variable(write_ctx *ctx, const nir_variable *var)
    if (flags.u.has_name)
       blob_write_string(ctx->blob, var->name);
 
-   if (flags.u.data_encoding == var_encode_full ||
-       flags.u.data_encoding == var_encode_location_diff) {
-      if (flags.u.data_encoding == var_encode_full) {
-         blob_write_bytes(ctx->blob, &data, sizeof(data));
-      } else {
-         /* Serialize only the difference in locations from the last variable.
-          */
-         union packed_var_data_diff diff;
+   if (flags.u.data_encoding == var_encode_full) {
+      blob_write_bytes(ctx->blob, &data, sizeof(data));
+   } else {
+      /* Serialize only the difference in locations from the last variable.
+       */
+      union packed_var_data_diff diff;
 
-         diff.u.location = data.location - ctx->last_var_data.location;
-         diff.u.location_frac = data.location_frac -
-                                ctx->last_var_data.location_frac;
-         diff.u.driver_location = data.driver_location -
-                                  ctx->last_var_data.driver_location;
+      diff.u.location = data.location - ctx->last_var_data.location;
+      diff.u.location_frac = data.location_frac -
+                             ctx->last_var_data.location_frac;
+      diff.u.driver_location = data.driver_location -
+                               ctx->last_var_data.driver_location;
 
-         blob_write_uint32(ctx->blob, diff.u32);
-      }
-
-      ctx->last_var_data = data;
+      blob_write_uint32(ctx->blob, diff.u32);
    }
+
+   ctx->last_var_data = data;
 
    for (unsigned i = 0; i < var->num_state_slots; i++) {
       blob_write_bytes(ctx->blob, &var->state_slots[i],
@@ -374,11 +362,7 @@ read_variable(read_ctx *ctx)
       var->name = NULL;
    }
 
-   if (flags.u.data_encoding == var_encode_shader_temp)
-      var->data.mode = nir_var_shader_temp;
-   else if (flags.u.data_encoding == var_encode_function_temp)
-      var->data.mode = nir_var_function_temp;
-   else if (flags.u.data_encoding == var_encode_full) {
+   if (flags.u.data_encoding == var_encode_full) {
       blob_copy_bytes(ctx->blob, (uint8_t *)&var->data, sizeof(var->data));
       ctx->last_var_data = var->data;
    } else { /* var_encode_location_diff */

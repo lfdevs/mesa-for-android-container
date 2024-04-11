@@ -1137,7 +1137,7 @@ struct zink_gfx_program {
    uint32_t last_variant_hash;
 
    uint32_t last_finalized_hash[2][4]; //[dynamic, renderpass][primtype idx]
-   VkPipeline last_pipeline[2][4]; //[dynamic, renderpass][primtype idx]
+   struct zink_gfx_pipeline_cache_entry *last_pipeline[2][4]; //[dynamic, renderpass][primtype idx]
 
    struct zink_gfx_lib_cache *libs;
 };

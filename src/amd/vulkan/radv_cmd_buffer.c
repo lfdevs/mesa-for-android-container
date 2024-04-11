@@ -8580,10 +8580,7 @@ radv_emit_direct_taskmesh_draw_packets(struct radv_cmd_buffer *cmd_buffer, uint3
 {
    const uint32_t view_mask = cmd_buffer->state.render.view_mask;
    const unsigned num_views = MAX2(1, util_bitcount(view_mask));
-   unsigned ace_predication_size = num_views * 6; /* DISPATCH_TASKMESH_DIRECT_ACE size */
-
-   if (num_views > 1)
-      ace_predication_size += num_views * 3; /* SET_SH_REG size (view index SGPR) */
+   const unsigned ace_predication_size = num_views * 6; /* DISPATCH_TASKMESH_DIRECT_ACE size */
 
    radv_emit_userdata_task(cmd_buffer, x, y, z, 0);
    radv_cs_emit_compute_predication(cmd_buffer->device, &cmd_buffer->state, cmd_buffer->gang.cs,
@@ -8616,9 +8613,6 @@ radv_emit_indirect_taskmesh_draw_packets(struct radv_cmd_buffer *cmd_buffer, con
                                                  : radv_buffer_get_va(info->count_buffer->bo) +
                                                       info->count_buffer->offset + info->count_buffer_offset;
    uint64_t workaround_cond_va = 0;
-
-   if (num_views > 1)
-      ace_predication_size += num_views * 3; /* SET_SH_REG size (view index SGPR) */
 
    if (count_va)
       radv_cs_add_buffer(ws, cmd_buffer->gang.cs, info->count_buffer->bo);

@@ -683,10 +683,3 @@ option(
                 'the default driconf file is hardcoded into Mesa. ' +
                 'Requires expat.'
 )
-
-option (
-  'intel-xe-kmd',
-  type : 'feature',
-  value : 'disabled',
-  description: 'Enable Intel Xe KMD support.'
-)

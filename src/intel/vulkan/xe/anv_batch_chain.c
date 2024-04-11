@@ -114,9 +114,15 @@ xe_exec_process_syncs(struct anv_queue *queue,
                       struct drm_xe_sync **ret, uint32_t *ret_count)
 {
    struct anv_device *device = queue->device;
-   uint32_t num_syncs = wait_count + signal_count + extra_sync_count +
-                        (utrace_submit ? 1 : 0) +
-                        ((queue->sync && !is_companion_rcs_queue) ? 1 : 0);
+   /* Signal the utrace sync only if it doesn't have a batch. Otherwise the
+    * it's the utrace batch that should signal its own sync.
+    */
+   const bool has_utrace_sync = utrace_submit &&
+                                util_dynarray_num_elements(&utrace_submit->batch_bos, struct anv_bo *) == 0;
+   const uint32_t num_syncs = wait_count + signal_count + extra_sync_count +
+                              (has_utrace_sync ? 1 : 0) +
+                              ((queue->sync && !is_companion_rcs_queue) ? 1 : 0);
+
    if (!num_syncs)
       return VK_SUCCESS;
 
@@ -128,12 +134,7 @@ xe_exec_process_syncs(struct anv_queue *queue,
 
    uint32_t count = 0;
 
-   /* Signal the utrace sync only if it doesn't have a batch. Otherwise the
-    * it's the utrace batch that should signal its own sync.
-    */
-   if (utrace_submit &&
-       util_dynarray_num_elements(&utrace_submit->batch_bos,
-                                  struct anv_bo *) == 0) {
+   if (has_utrace_sync) {
       struct drm_xe_sync *xe_sync = &xe_syncs[count++];
 
       xe_exec_fill_sync(xe_sync, utrace_submit->sync, 0, TYPE_SIGNAL);
@@ -191,7 +192,7 @@ xe_execute_trtt_batch(struct anv_sparse_submission *submit,
    struct anv_queue *queue = submit->queue;
    struct anv_device *device = queue->device;
    struct anv_trtt *trtt = &device->trtt;
-   VkResult result;
+   VkResult result = VK_SUCCESS;
 
    struct drm_xe_sync extra_sync = {
       .type = DRM_XE_SYNC_TYPE_TIMELINE_SYNCOBJ,
@@ -220,18 +221,22 @@ xe_execute_trtt_batch(struct anv_sparse_submission *submit,
    };
 
    if (!device->info->no_hw) {
-      if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec))
-         return vk_device_set_lost(&device->vk, "XE_EXEC failed: %m");
+      if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec)) {
+         result = vk_device_set_lost(&device->vk, "XE_EXEC failed: %m");
+         goto out;
+      }
    }
 
    if (queue->sync) {
       result = vk_sync_wait(&device->vk, queue->sync, 0,
                             VK_SYNC_WAIT_COMPLETE, UINT64_MAX);
       if (result != VK_SUCCESS)
-         return vk_queue_set_lost(&queue->vk, "trtt sync wait failed");
+         result = vk_queue_set_lost(&queue->vk, "trtt sync wait failed");
    }
 
-   return VK_SUCCESS;
+out:
+   vk_free(&device->vk.alloc, xe_syncs);
+   return result;
 }
 
 VkResult

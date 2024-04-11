@@ -485,7 +485,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
 
       reg.nr = imm_byte_offset / REG_SIZE;
       reg.subnr = imm_byte_offset % REG_SIZE;
-      if (type_sz(reg.type) > 4 && !devinfo->has_64bit_float) {
+      if (type_sz(reg.type) > 4 && !devinfo->has_64bit_int) {
          brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
                     subscript(reg, BRW_REGISTER_TYPE_D, 0));
          brw_set_default_swsb(p, tgl_swsb_null());
@@ -567,7 +567,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
       if (type_sz(reg.type) > 4 &&
           ((devinfo->verx10 == 70) ||
            devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo) ||
-           !devinfo->has_64bit_float || devinfo->verx10 >= 125)) {
+           !devinfo->has_64bit_int)) {
          /* IVB has an issue (which we found empirically) where it reads two
           * address register components per channel for indirectly addressed
           * 64-bit sources.

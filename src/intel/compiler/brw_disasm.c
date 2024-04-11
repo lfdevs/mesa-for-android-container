@@ -1560,7 +1560,10 @@ src0_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
 
    if (subreg_nr)
       format(file, ".%d", subreg_nr);
-   src_align1_region(file, 1, 1, 0);
+   src_align1_region(file,
+                     BRW_VERTICAL_STRIDE_1,
+                     BRW_WIDTH_1,
+                     BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_0);
 
    string(file, brw_reg_type_to_letters(type));
 
@@ -1581,7 +1584,10 @@ src1_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
 
    if (subreg_nr)
       format(file, ".%d", subreg_nr);
-   src_align1_region(file, 1, 1, 0);
+   src_align1_region(file,
+                     BRW_VERTICAL_STRIDE_1,
+                     BRW_WIDTH_1,
+                     BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_0);
 
    string(file, brw_reg_type_to_letters(type));
 
@@ -1602,7 +1608,10 @@ src2_dpas_3src(FILE *file, const struct intel_device_info *devinfo,
 
    if (subreg_nr)
       format(file, ".%d", subreg_nr);
-   src_align1_region(file, 1, 1, 0);
+   src_align1_region(file,
+                     BRW_VERTICAL_STRIDE_1,
+                     BRW_WIDTH_1,
+                     BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_0);
 
    string(file, brw_reg_type_to_letters(type));
 

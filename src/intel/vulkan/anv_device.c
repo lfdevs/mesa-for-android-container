@@ -944,9 +944,10 @@ get_properties_1_1(const struct anv_physical_device *pdevice,
    p->maxMultiviewViewCount      = 16;
    p->maxMultiviewInstanceIndex  = UINT32_MAX / 16;
    /* Our protected implementation is a memory encryption mechanism, it
-    * doesn't page fault.
+    * shouldn't page fault, but it hangs the HW so in terms of user visibility
+    * it's similar to a fault.
     */
-   p->protectedNoFault           = true;
+   p->protectedNoFault           = false;
    /* This value doesn't matter for us today as our per-stage descriptors are
     * the real limit.
     */
@@ -2239,7 +2240,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       device->flush_astc_ldr_void_extent_denorms =
          device->has_astc_ldr && !device->emu_astc_ldr;
    }
-   device->disable_fcv = intel_device_info_is_mtl(&device->info) ||
+   device->disable_fcv = device->info.verx10 >= 125 ||
                          instance->disable_fcv;
 
    result = anv_physical_device_init_heaps(device, fd);
@@ -4063,7 +4064,7 @@ VkResult anv_AllocateMemory(
    if (mem->vk.alloc_flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT)
       alloc_flags |= ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS;
 
-   if (mem->vk.alloc_flags & VK_MEMORY_PROPERTY_PROTECTED_BIT)
+   if (mem_type->propertyFlags & VK_MEMORY_PROPERTY_PROTECTED_BIT)
       alloc_flags |= ANV_BO_ALLOC_PROTECTED;
 
    /* For now, always allocated AUX-TT aligned memory, regardless of dedicated

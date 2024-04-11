@@ -2363,6 +2363,10 @@ _mesa_ShaderBinary(GLint n, const GLuint* shaders, GLenum binaryformat,
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader **sh;
 
+   /* no binary data can be loaded if length==0 */
+   if (!length)
+      binary = NULL;
+
    /* Page 68, section 7.2 'Shader Binaries" of the of the OpenGL ES 3.1, and
     * page 88 of the OpenGL 4.5 specs state:
     *

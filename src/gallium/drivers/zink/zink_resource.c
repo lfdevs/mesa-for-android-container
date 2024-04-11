@@ -669,7 +669,7 @@ retry:
    }
    if (want_cube) {
       ici->flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-      if (get_image_usage(screen, ici, templ, bind, modifiers_count, modifiers, &mod) != ici->usage)
+      if ((get_image_usage(screen, ici, templ, bind, modifiers_count, modifiers, &mod) & ici->usage) != ici->usage)
          ici->flags &= ~VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
    }
 

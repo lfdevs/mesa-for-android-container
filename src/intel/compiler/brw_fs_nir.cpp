@@ -4608,7 +4608,7 @@ fs_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
          brw_type_for_nir_type(devinfo, nir_intrinsic_src_type(instr));
 
       dest = retype(dest, dest_type);
-      fs_reg src2 = retype(get_nir_src(ntb, instr->src[2]), dest_type);
+      fs_reg src0 = retype(get_nir_src(ntb, instr->src[0]), dest_type);
       const fs_reg dest_hf = dest;
 
       fs_builder bld8 = bld.exec_all().group(8, 0);
@@ -4624,24 +4624,24 @@ fs_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
           !s.compiler->lower_dpas) {
          dest = bld8.vgrf(BRW_REGISTER_TYPE_F, rcount);
 
-         if (src2.file != ARF) {
-            const fs_reg src2_hf = src2;
+         if (src0.file != ARF) {
+            const fs_reg src0_hf = src0;
 
-            src2 = bld8.vgrf(BRW_REGISTER_TYPE_F, rcount);
+            src0 = bld8.vgrf(BRW_REGISTER_TYPE_F, rcount);
 
             for (unsigned i = 0; i < 4; i++) {
-               bld16.MOV(byte_offset(src2, REG_SIZE * i * 2),
-                         byte_offset(src2_hf, REG_SIZE * i));
+               bld16.MOV(byte_offset(src0, REG_SIZE * i * 2),
+                         byte_offset(src0_hf, REG_SIZE * i));
             }
          } else {
-            src2 = retype(src2, BRW_REGISTER_TYPE_F);
+            src0 = retype(src0, BRW_REGISTER_TYPE_F);
          }
       }
 
       bld8.DPAS(dest,
-                src2,
+                src0,
+                retype(get_nir_src(ntb, instr->src[2]), src_type),
                 retype(get_nir_src(ntb, instr->src[1]), src_type),
-                retype(get_nir_src(ntb, instr->src[0]), src_type),
                 sdepth,
                 rcount)
          ->saturate = nir_intrinsic_saturate(instr);

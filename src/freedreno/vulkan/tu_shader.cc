@@ -2104,20 +2104,21 @@ tu_shader_deserialize(struct vk_pipeline_cache *cache,
                       struct blob_reader *blob);
 
 static void
-tu_shader_destroy(struct vk_device *device,
-                  struct vk_pipeline_cache_object *object)
+tu_shader_pipeline_cache_object_destroy(struct vk_device *vk_device,
+                                        struct vk_pipeline_cache_object *object)
 {
+   struct tu_device *device = container_of(vk_device, struct tu_device, vk);
    struct tu_shader *shader =
       container_of(object, struct tu_shader, base);
 
    vk_pipeline_cache_object_finish(&shader->base);
-   vk_free(&device->alloc, shader);
+   tu_shader_destroy(device, shader);
 }
 
 const struct vk_pipeline_cache_object_ops tu_shader_ops = {
    .serialize = tu_shader_serialize,
    .deserialize = tu_shader_deserialize,
-   .destroy = tu_shader_destroy,
+   .destroy = tu_shader_pipeline_cache_object_destroy,
 };
 
 static struct tu_shader *
@@ -2375,6 +2376,8 @@ tu_shader_create(struct tu_device *dev,
          ir3_shader_create_variant(ir3_shader, &safe_constlen_key,
                                    executable_info);
    }
+
+   ir3_shader_destroy(ir3_shader);
 
    shader->view_mask = key->multiview_mask;
 
@@ -2778,6 +2781,7 @@ tu_empty_fs_create(struct tu_device *dev, struct tu_shader **shader,
    struct ir3_shader *ir3_shader =
       ir3_shader_from_nir(dev->compiler, fs_b.shader, &options, &so_info);
    (*shader)->variant = ir3_shader_create_variant(ir3_shader, &key, false);
+   ir3_shader_destroy(ir3_shader);
 
    return tu_upload_shader(dev, *shader);
 }
@@ -2845,6 +2849,11 @@ tu_shader_destroy(struct tu_device *dev,
 
    if (shader->pvtmem_bo)
       tu_bo_finish(dev, shader->pvtmem_bo);
+
+   if (shader->variant)
+      ralloc_free((void *)shader->variant);
+   if (shader->safe_const_variant)
+      ralloc_free((void *)shader->safe_const_variant);
 
    vk_free(&dev->vk.alloc, shader);
 }

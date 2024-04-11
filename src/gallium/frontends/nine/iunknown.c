@@ -48,6 +48,7 @@ NineUnknown_ctor( struct NineUnknown *This,
         This->forward = false;
         This->bind = 0;
     }
+    This->has_bind_or_refs = This->bind + This->refs;
 
     This->container = pParams->container;
     This->device = pParams->device;
@@ -119,6 +120,7 @@ NineUnknown_AddRef( struct NineUnknown *This )
         r = p_atomic_inc_return(&This->refs);
 
     if (r == 1) {
+        p_atomic_inc(&This->has_bind_or_refs);
         if (This->device)
             NineUnknown_AddRef(NineUnknown(This->device));
     }
@@ -142,9 +144,11 @@ NineUnknown_Release( struct NineUnknown *This )
 
     if (r == 0) {
         struct NineDevice9 *device = This->device;
+        UINT b_or_ref = p_atomic_dec_return(&This->has_bind_or_refs);
         /* Containers (here with !forward) take care of item destruction */
 
-        if (!This->container && This->bind == 0) {
+        if (!This->container && b_or_ref == 0) {
+            assert(p_atomic_read(&This->bind) == 0);
             This->dtor(This);
         }
         if (device) {
@@ -166,8 +170,10 @@ NineUnknown_ReleaseWithDtorLock( struct NineUnknown *This )
 
     if (r == 0) {
         struct NineDevice9 *device = This->device;
+        UINT b_or_ref = p_atomic_dec_return(&This->has_bind_or_refs);
         /* Containers (here with !forward) take care of item destruction */
-        if (!This->container && This->bind == 0) {
+        if (!This->container && b_or_ref == 0) {
+            assert(p_atomic_read(&This->bind) == 0);
             NineLockGlobalMutex();
             This->dtor(This);
             NineUnlockGlobalMutex();

@@ -50,6 +50,7 @@
 /* Temporary storage for the set of attributes that need locations assigned. */
 struct temp_attr {
    unsigned slots;
+   unsigned original_idx;
    nir_variable *var;
 };
 
@@ -61,7 +62,10 @@ compare_attr(const void *a, const void *b)
    const struct temp_attr *const r = (const struct temp_attr *) b;
 
    /* Reversed because we want a descending order sort below. */
-   return r->slots - l->slots;
+   if (r->slots != l->slots)
+      return r->slots - l->slots;
+
+   return l->original_idx - r->original_idx;
 }
 
 /**
@@ -1238,6 +1242,7 @@ assign_attribute_or_color_locations(void *mem_ctx,
       }
       to_assign[num_attr].slots = slots;
       to_assign[num_attr].var = var;
+      to_assign[num_attr].original_idx = num_attr;
       num_attr++;
    }
 
