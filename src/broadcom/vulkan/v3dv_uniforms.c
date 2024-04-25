@@ -615,7 +615,7 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
          } else {
             assert(cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
             num_layers = 2048;
-#if DEBUG
+#if MESA_DEBUG
             fprintf(stderr, "Skipping gl_LayerID shader sanity check for "
                             "secondary command buffer\n");
 #endif
@@ -659,6 +659,15 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
 
       case QUNIFORM_DRAW_ID:
          cl_aligned_u32(&uniforms, job->cmd_buffer->state.draw_id);
+         break;
+
+      case QUNIFORM_LINE_WIDTH:
+         cl_aligned_u32(&uniforms, job->cmd_buffer->state.dynamic.line_width);
+         break;
+
+      case QUNIFORM_AA_LINE_WIDTH:
+         cl_aligned_u32(&uniforms,
+                        v3dv_get_aa_line_width(pipeline, job->cmd_buffer));
          break;
 
       default:

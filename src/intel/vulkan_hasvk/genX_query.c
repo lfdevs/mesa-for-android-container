@@ -621,9 +621,6 @@ emit_ps_depth_count(struct anv_cmd_buffer *cmd_buffer,
       pc.PostSyncOperation       = WritePSDepthCount;
       pc.DepthStallEnable        = true;
       pc.Address                 = addr;
-
-      if (GFX_VER == 9 && cmd_buffer->device->info->gt == 4)
-         pc.CommandStreamerStallEnable = true;
    }
 }
 

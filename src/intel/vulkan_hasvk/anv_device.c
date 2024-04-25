@@ -54,7 +54,7 @@
 #include "vk_util.h"
 #include "vk_deferred_operation.h"
 #include "vk_drm_syncobj.h"
-#include "common/intel_defines.h"
+#include "common/i915/intel_defines.h"
 #include "common/intel_uuid.h"
 #include "perf/intel_perf.h"
 
@@ -70,13 +70,14 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
       DRI_CONF_NO_16BIT(false)
-      DRI_CONF_ANV_HASVK_OVERRIDE_API_VERSION(false)
+      DRI_CONF_HASVK_OVERRIDE_API_VERSION(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
       DRI_CONF_ALWAYS_FLUSH_CACHE(false)
       DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false)
       DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
+      DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(false)
       DRI_CONF_LIMIT_TRIG_INPUT_RANGE(false)
    DRI_CONF_SECTION_END
 
@@ -183,6 +184,9 @@ static const struct vk_instance_extension_table instance_extensions = {
    .EXT_display_surface_counter              = true,
    .EXT_acquire_drm_display                  = true,
 #endif
+#ifndef VK_USE_PLATFORM_WIN32_KHR
+   .EXT_headless_surface                     = true,
+#endif
 };
 
 static void
@@ -238,6 +242,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_separate_depth_stencil_layouts    = true,
       .KHR_shader_clock                      = true,
       .KHR_shader_draw_parameters            = true,
+      .KHR_shader_expect_assume              = true,
       .KHR_shader_float16_int8               = device->info.ver >= 8 && !device->instance->no_16bit,
       .KHR_shader_float_controls             = true,
       .KHR_shader_integer_dot_product        = true,
@@ -317,7 +322,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_transform_feedback                = true,
       .EXT_vertex_attribute_divisor          = true,
       .EXT_ycbcr_image_arrays                = true,
-#ifdef ANDROID
+#if DETECT_OS_ANDROID
       .ANDROID_external_memory_android_hardware_buffer = true,
       .ANDROID_native_buffer                 = true,
 #endif
@@ -628,6 +633,9 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_EXT_depth_clip_control */
       .depthClipControl = true,
+
+      /* VK_KHR_shader_expect_assume */
+      .shaderExpectAssume = true,
    };
 
    /* We can't do image stores in vec4 shaders */
@@ -647,18 +655,9 @@ get_features(const struct anv_physical_device *pdevice,
 
 static uint64_t
 anv_compute_sys_heap_size(struct anv_physical_device *device,
-                          uint64_t total_ram)
+                          uint64_t available_ram)
 {
-   /* We don't want to burn too much ram with the GPU.  If the user has 4GiB
-    * or less, we use at most half.  If they have more than 4GiB, we use 3/4.
-    */
-   uint64_t available_ram;
-   if (total_ram <= 4ull * 1024ull * 1024ull * 1024ull)
-      available_ram = total_ram / 2;
-   else
-      available_ram = total_ram * 3 / 4;
-
-   /* We also want to leave some padding for things we allocate in the driver,
+   /* We want to leave some padding for things we allocate in the driver,
     * so don't go over 3/4 of the GTT either.
     */
    available_ram = MIN2(available_ram, device->gtt_size * 3 / 4);
@@ -831,7 +830,7 @@ anv_physical_device_init_disk_cache(struct anv_physical_device *device)
    _mesa_sha1_format(timestamp, device->driver_build_sha1);
 
    const uint64_t driver_flags =
-      brw_get_compiler_config_value(device->compiler);
+      elk_get_compiler_config_value(device->compiler);
    device->vk.disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
 #endif
 }
@@ -984,7 +983,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    int fd;
    int master_fd = -1;
 
-   brw_process_intel_debug_variable();
+   process_intel_debug_variable();
 
    fd = open(path, O_RDWR | O_CLOEXEC);
    if (fd < 0) {
@@ -997,8 +996,8 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    }
 
    struct intel_device_info devinfo;
-   if (!intel_get_device_info_from_fd(fd, &devinfo)) {
-      result = vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);
+   if (!intel_get_device_info_from_fd(fd, &devinfo, 7, 8)) {
+      result = VK_ERROR_INCOMPATIBLE_DRIVER;
       goto fail_fd;
    }
 
@@ -1188,7 +1187,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->always_flush_cache = INTEL_DEBUG(DEBUG_STALL) ||
       driQueryOptionb(&instance->dri_options, "always_flush_cache");
 
-   device->compiler = brw_compiler_create(NULL, &device->info);
+   device->compiler = elk_compiler_create(NULL, &device->info);
    if (device->compiler == NULL) {
       result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_base;
@@ -1603,7 +1602,7 @@ anv_get_physical_device_properties_1_1(struct anv_physical_device *pdevice,
    p->deviceNodeMask = 0;
    p->deviceLUIDValid = false;
 
-   p->subgroupSize = BRW_SUBGROUP_SIZE;
+   p->subgroupSize = ELK_SUBGROUP_SIZE;
    VkShaderStageFlags scalar_stages = 0;
    for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
       if (pdevice->compiler->scalar_stage[stage])
@@ -2515,11 +2514,11 @@ VkResult anv_CreateDevice(
    if (INTEL_DEBUG(DEBUG_BATCH)) {
       const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
 
-      intel_batch_decode_ctx_init(&device->decoder_ctx,
-                                  &physical_device->compiler->isa,
-                                  &physical_device->info,
-                                  stderr, decode_flags, NULL,
-                                  decode_get_bo, NULL, device);
+      intel_batch_decode_ctx_init_elk(&device->decoder_ctx,
+                                      &physical_device->compiler->isa,
+                                      &physical_device->info,
+                                      stderr, decode_flags, NULL,
+                                      decode_get_bo, NULL, device);
 
       device->decoder_ctx.dynamic_base = DYNAMIC_STATE_POOL_MIN_ADDRESS;
       device->decoder_ctx.surface_base = SURFACE_STATE_POOL_MIN_ADDRESS;
@@ -3338,7 +3337,7 @@ void anv_FreeMemory(
 
    anv_device_release_bo(device, mem->bo);
 
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
+#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
    if (mem->ahw)
       AHardwareBuffer_release(mem->ahw);
 #endif

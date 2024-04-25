@@ -29,7 +29,7 @@
 #include "state_tracker/st_texture.h"
 #include "state_tracker/st_util.h"
 
-#include "util/u_box.h"
+#include "util/box.h"
 #include "util/format/u_format.h"
 #include "util/u_inlines.h"
 

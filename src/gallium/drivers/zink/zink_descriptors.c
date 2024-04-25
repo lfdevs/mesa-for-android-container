@@ -1063,8 +1063,11 @@ enlarge_db(struct zink_context *ctx)
    struct zink_batch_state *bs = ctx->batch.state;
    /* ensure current db surives */
    zink_batch_reference_resource(&ctx->batch, bs->dd.db);
-   /* rebinding a db mid-batch is extremely costly: scaling by 10x should ensure it never happens more than twice */
-   ctx->dd.db.max_db_size *= 10;
+   /* rebinding a db mid-batch is extremely costly: if we start with a factor
+    * 16 and then half the factor with each new allocation. It shouldn't need to
+    * do this more than twice. */
+   ctx->dd.db.max_db_size *= ctx->dd.db.size_enlarge_scale;
+   ctx->dd.db.size_enlarge_scale = MAX2(ctx->dd.db.size_enlarge_scale >> 1, 4);
    reinit_db(screen, bs);
 }
 
@@ -1647,6 +1650,7 @@ zink_descriptors_init(struct zink_context *ctx)
       }
       /* start small */
       ctx->dd.db.max_db_size = 250;
+      ctx->dd.db.size_enlarge_scale = 16;
    }
 
    return true;

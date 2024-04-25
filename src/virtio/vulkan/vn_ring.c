@@ -11,6 +11,8 @@
 #include "vn_instance.h"
 #include "vn_renderer.h"
 
+#define VN_RING_IDLE_TIMEOUT_NS (1ull * 1000 * 1000)
+
 static_assert(ATOMIC_INT_LOCK_FREE == 2 && sizeof(atomic_uint) == 4,
               "vn_ring_shared requires lock-free 32-bit atomic_uint");
 
@@ -40,11 +42,23 @@ struct vn_ring {
     */
    mtx_t mutex;
 
+   /* size limit for cmd submission via ring shmem, derived from
+    * (buffer_size >> direct_order) upon vn_ring_create
+    */
+   uint32_t direct_size;
+
    /* used for indirect submission of large command (non-VkCommandBuffer) */
    struct vn_cs_encoder upload;
 
    struct list_head submits;
    struct list_head free_submits;
+
+   /* to synchronize renderer/ring */
+   mtx_t roundtrip_mutex;
+   uint64_t roundtrip_next;
+
+   int64_t last_notify;
+   int64_t next_notify;
 };
 
 struct vn_ring_submit {
@@ -161,8 +175,10 @@ vn_ring_wait_seqno(struct vn_ring *ring, uint32_t seqno)
    /* A renderer wait incurs several hops and the renderer might poll
     * repeatedly anyway.  Let's just poll here.
     */
-   struct vn_relax_state relax_state =
-      vn_relax_init(ring->instance, "ring seqno");
+   const enum vn_relax_reason reason = ring == ring->instance->ring.ring
+                                          ? VN_RELAX_REASON_RING_SEQNO
+                                          : VN_RELAX_REASON_TLS_RING_SEQNO;
+   struct vn_relax_state relax_state = vn_relax_init(ring->instance, reason);
    do {
       if (vn_ring_get_seqno_status(ring, seqno)) {
          vn_relax_fini(&relax_state);
@@ -209,7 +225,7 @@ vn_ring_wait_space(struct vn_ring *ring, uint32_t size)
 
       /* see the reasoning in vn_ring_wait_seqno */
       struct vn_relax_state relax_state =
-         vn_relax_init(ring->instance, "ring space");
+         vn_relax_init(ring->instance, VN_RELAX_REASON_RING_SPACE);
       do {
          vn_relax(&relax_state);
          if (vn_ring_has_space(ring, size, &head)) {
@@ -251,7 +267,8 @@ vn_ring_get_layout(size_t buf_size,
 
 struct vn_ring *
 vn_ring_create(struct vn_instance *instance,
-               const struct vn_ring_layout *layout)
+               const struct vn_ring_layout *layout,
+               uint8_t direct_order)
 {
    VN_TRACE_FUNC();
 
@@ -289,11 +306,17 @@ vn_ring_create(struct vn_instance *instance,
 
    mtx_init(&ring->mutex, mtx_plain);
 
+   ring->direct_size = layout->buffer_size >> direct_order;
+   assert(ring->direct_size);
+
    vn_cs_encoder_init(&ring->upload, instance,
                       VN_CS_ENCODER_STORAGE_SHMEM_ARRAY, 1 * 1024 * 1024);
 
    list_inithead(&ring->submits);
    list_inithead(&ring->free_submits);
+
+   mtx_init(&ring->roundtrip_mutex, mtx_plain);
+   ring->roundtrip_next = 1;
 
    const struct VkRingMonitorInfoMESA monitor_info = {
       .sType = VK_STRUCTURE_TYPE_RING_MONITOR_INFO_MESA,
@@ -304,7 +327,7 @@ vn_ring_create(struct vn_instance *instance,
       .pNext = &monitor_info,
       .resourceId = ring->shmem->res_id,
       .size = layout->shmem_size,
-      .idleTimeout = 5ull * 1000 * 1000,
+      .idleTimeout = VN_RING_IDLE_TIMEOUT_NS,
       .headOffset = layout->head_offset,
       .tailOffset = layout->tail_offset,
       .statusOffset = layout->status_offset,
@@ -337,6 +360,8 @@ vn_ring_destroy(struct vn_ring *ring)
    vn_encode_vkDestroyRingMESA(&local_enc, 0, ring->id);
    vn_renderer_submit_simple(ring->instance->renderer, destroy_ring_data,
                              vn_cs_encoder_get_len(&local_enc));
+
+   mtx_destroy(&ring->roundtrip_mutex);
 
    vn_ring_retire_submits(ring, ring->cur);
    assert(list_is_empty(&ring->submits));
@@ -414,8 +439,19 @@ vn_ring_submit_internal(struct vn_ring *ring,
 
    *seqno = submit->seqno;
 
-   /* notify renderer to wake up ring if idle */
-   return status & VK_RING_STATUS_IDLE_BIT_MESA;
+   /* Notify renderer to wake up idle ring if at least VN_RING_IDLE_TIMEOUT_NS
+    * has passed since the last sent notification to avoid excessive wake up
+    * calls (non-trivial since submitted via virtio-gpu kernel).
+    */
+   if (status & VK_RING_STATUS_IDLE_BIT_MESA) {
+      const int64_t now = os_time_get_nano();
+      if (os_time_timeout(ring->last_notify, ring->next_notify, now)) {
+         ring->last_notify = now;
+         ring->next_notify = now + VN_RING_IDLE_TIMEOUT_NS;
+         return true;
+      }
+   }
+   return false;
 }
 
 static const struct vn_cs_encoder *
@@ -529,7 +565,7 @@ static inline bool
 vn_ring_submission_can_direct(const struct vn_ring *ring,
                               const struct vn_cs_encoder *cs)
 {
-   return vn_cs_encoder_get_len(cs) <= (ring->buffer_size >> 4);
+   return vn_cs_encoder_get_len(cs) <= ring->direct_size;
 }
 
 static struct vn_cs_encoder *
@@ -550,6 +586,9 @@ vn_ring_cs_upload_locked(struct vn_ring *ring, const struct vn_cs_encoder *cs)
 
    vn_cs_encoder_write(upload, cs_size, cs_data, cs_size);
    vn_cs_encoder_commit(upload);
+
+   if (vn_cs_encoder_needs_roundtrip(upload))
+      vn_ring_roundtrip(ring);
 
    return upload;
 }
@@ -639,6 +678,10 @@ vn_ring_submit_command(struct vn_ring *ring,
          ring->instance, submit->reply_size, &reply_offset);
       if (!submit->reply_shmem)
          return;
+
+      if (ring->instance->renderer->info.has_guest_vram &&
+          !submit->reply_shmem->cache_timestamp)
+         vn_ring_roundtrip(ring);
    }
 
    mtx_lock(&ring->mutex);
@@ -672,4 +715,29 @@ vn_ring_free_command_reply(struct vn_ring *ring,
 {
    assert(submit->reply_shmem);
    vn_renderer_shmem_unref(ring->instance->renderer, submit->reply_shmem);
+}
+
+VkResult
+vn_ring_submit_roundtrip(struct vn_ring *ring, uint64_t *roundtrip_seqno)
+{
+   uint32_t local_data[8];
+   struct vn_cs_encoder local_enc =
+      VN_CS_ENCODER_INITIALIZER_LOCAL(local_data, sizeof(local_data));
+
+   mtx_lock(&ring->roundtrip_mutex);
+   const uint64_t seqno = ring->roundtrip_next++;
+   vn_encode_vkSubmitVirtqueueSeqnoMESA(&local_enc, 0, ring->id, seqno);
+   VkResult result =
+      vn_renderer_submit_simple(ring->instance->renderer, local_data,
+                                vn_cs_encoder_get_len(&local_enc));
+   mtx_unlock(&ring->roundtrip_mutex);
+
+   *roundtrip_seqno = seqno;
+   return result;
+}
+
+void
+vn_ring_wait_roundtrip(struct vn_ring *ring, uint64_t roundtrip_seqno)
+{
+   vn_async_vkWaitVirtqueueSeqnoMESA(ring, roundtrip_seqno);
 }

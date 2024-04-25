@@ -33,6 +33,9 @@ bool anv_xe_device_destroy_vm(struct anv_device *device)
    struct drm_xe_vm_destroy destroy = {
       .vm_id = device->vm_id,
    };
+
+   intel_bind_timeline_finish(&device->bind_timeline, device->fd);
+
    return intel_ioctl(device->fd, DRM_IOCTL_XE_VM_DESTROY, &destroy) == 0;
 }
 
@@ -46,6 +49,13 @@ VkResult anv_xe_device_setup_vm(struct anv_device *device)
                        "vm creation failed");
 
    device->vm_id = create.vm_id;
+
+   if (!intel_bind_timeline_init(&device->bind_timeline, device->fd)) {
+      anv_xe_device_destroy_vm(device);
+      return vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                       "intel_bind_timeline_init failed");
+   }
+
    return VK_SUCCESS;
 }
 
@@ -76,6 +86,7 @@ anv_xe_physical_device_get_parameters(struct anv_physical_device *device)
                        "unable to query device config");
 
    device->has_exec_timeline = true;
+   device->has_vm_control = true;
    device->max_context_priority =
          drm_sched_priority_to_vk_priority(config->info[DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY]);
 

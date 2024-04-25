@@ -106,13 +106,32 @@ enum intel_urb_deref_block_size {
    INTEL_URB_DEREF_BLOCK_SIZE_MESH       = 3,
 };
 
+struct intel_urb_config {
+   unsigned size[5];
+   unsigned entries[5];
+   unsigned start[5];
+};
+
 void intel_get_urb_config(const struct intel_device_info *devinfo,
                           const struct intel_l3_config *l3_cfg,
                           bool tess_present, bool gs_present,
-                          const unsigned entry_size[4],
-                          unsigned entries[4], unsigned start[4],
+                          struct intel_urb_config *urb_cfg,
                           enum intel_urb_deref_block_size *deref_block_size,
                           bool *constrained);
+
+/* Returns if URB changed for given shader stage. */
+static inline bool
+intel_urb_setup_changed(const struct intel_urb_config *a,
+                        const struct intel_urb_config *b,
+                        gl_shader_stage stage)
+{
+   if (a->size[stage] != b->size[stage] ||
+       a->entries[stage] != b->entries[stage] ||
+       a->start[stage] != b->start[stage])
+      return true;
+
+   return false;
+}
 
 struct intel_mesh_urb_allocation {
    unsigned task_entries;

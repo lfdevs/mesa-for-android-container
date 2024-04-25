@@ -1,7 +1,10 @@
 // Copyright © 2023 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::ir::*;
+use crate::{
+    api::{GetDebugFlags, DEBUG},
+    ir::*,
+};
 
 fn try_combine_outs(emit: &mut Instr, cut: &Instr) -> bool {
     let Op::Out(emit) = &mut emit.op else {
@@ -46,6 +49,11 @@ impl Shader {
                 for instr in b.instrs.drain(..) {
                     if let Some(prev) = instrs.last_mut() {
                         if try_combine_outs(prev, &instr) {
+                            if DEBUG.annotate() {
+                                instrs.push(Instr::new_boxed(OpAnnotate {
+                                    annotation: "combined by opt_out".into(),
+                                }));
+                            }
                             continue;
                         }
                     }

@@ -46,7 +46,7 @@ tcs_thread_payload::tcs_thread_payload(const fs_visitor &v)
    struct brw_tcs_prog_data *tcs_prog_data = brw_tcs_prog_data(v.prog_data);
    struct brw_tcs_prog_key *tcs_key = (struct brw_tcs_prog_key *) v.key;
 
-   if (vue_prog_data->dispatch_mode == DISPATCH_MODE_TCS_SINGLE_PATCH) {
+   if (vue_prog_data->dispatch_mode == INTEL_DISPATCH_MODE_TCS_SINGLE_PATCH) {
       patch_urb_output = brw_ud1_grf(0, 0);
       primitive_id = brw_vec1_grf(0, 1);
 
@@ -55,7 +55,7 @@ tcs_thread_payload::tcs_thread_payload(const fs_visitor &v)
 
       num_regs = 5;
    } else {
-      assert(vue_prog_data->dispatch_mode == DISPATCH_MODE_TCS_MULTI_PATCH);
+      assert(vue_prog_data->dispatch_mode == INTEL_DISPATCH_MODE_TCS_MULTI_PATCH);
       assert(tcs_key->input_vertices <= BRW_MAX_TCS_INPUT_VERTICES);
 
       unsigned r = 0;
@@ -113,6 +113,11 @@ gs_thread_payload::gs_thread_payload(fs_visitor &v)
    urb_handles = bld.vgrf(BRW_REGISTER_TYPE_UD);
    bld.AND(urb_handles, brw_ud8_grf(r, 0),
          v.devinfo->ver >= 20 ? brw_imm_ud(0xFFFFFF) : brw_imm_ud(0xFFFF));
+
+   /* R1: Instance ID stored in bits 31:27 */
+   instance_id = bld.vgrf(BRW_REGISTER_TYPE_UD);
+   bld.SHR(instance_id, brw_ud8_grf(r, 0), brw_imm_ud(27u));
+
    r += reg_unit(v.devinfo);
 
    if (gs_prog_data->include_primitive_id) {
@@ -211,12 +216,27 @@ setup_fs_payload_gfx20(fs_thread_payload &payload,
             payload.num_regs++;
          }
       }
+
+      /* R22: Sample offsets. */
+      if (prog_data->uses_sample_offsets && j == 0) {
+         payload.sample_offsets_reg = payload.num_regs;
+         payload.num_regs += 2;
+      }
    }
 
-   if (prog_data->uses_depth_w_coefficients) {
-      assert(v.max_polygons == 1);
-      payload.depth_w_coef_reg = payload.num_regs;
-      payload.num_regs += 2;
+   /* RP0: Source Depth and/or W Attribute Vertex Deltas and/or
+    * Perspective Bary Planes.
+    */
+   if (prog_data->uses_depth_w_coefficients ||
+       prog_data->uses_pc_bary_coefficients) {
+      payload.depth_w_coef_reg = payload.pc_bary_coef_reg = payload.num_regs;
+      payload.num_regs += 2 * v.max_polygons;
+   }
+
+   /* RP4: Non-Perspective Bary planes. */
+   if (prog_data->uses_npc_bary_coefficients) {
+      payload.npc_bary_coef_reg = payload.num_regs;
+      payload.num_regs += 2 * v.max_polygons;
    }
 
    if (v.nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
@@ -225,7 +245,7 @@ setup_fs_payload_gfx20(fs_thread_payload &payload,
 }
 
 static inline void
-setup_fs_payload_gfx6(fs_thread_payload &payload,
+setup_fs_payload_gfx9(fs_thread_payload &payload,
                       const fs_visitor &v,
                       bool &source_depth_to_render_target)
 {
@@ -233,7 +253,7 @@ setup_fs_payload_gfx6(fs_thread_payload &payload,
 
    const unsigned payload_width = MIN2(16, v.dispatch_width);
    assert(v.dispatch_width % payload_width == 0);
-   assert(v.devinfo->ver >= 6 && v.devinfo->ver < 20);
+   assert(v.devinfo->ver < 20);
 
    payload.num_regs = 0;
 
@@ -280,16 +300,32 @@ setup_fs_payload_gfx6(fs_thread_payload &payload,
 
       /* R32-33: MSAA input coverage mask */
       if (prog_data->uses_sample_mask) {
-         assert(v.devinfo->ver >= 7);
          payload.sample_mask_in_reg[j] = payload.num_regs;
          payload.num_regs += payload_width / 8;
       }
    }
 
-   /* R66: Source Depth and/or W Attribute Vertex Deltas */
+   /* R66: Source Depth and/or W Attribute Vertex Deltas. */
    if (prog_data->uses_depth_w_coefficients) {
-      assert(v.max_polygons == 1);
       payload.depth_w_coef_reg = payload.num_regs;
+      payload.num_regs += v.max_polygons;
+   }
+
+   /* R68: Perspective bary planes. */
+   if (prog_data->uses_pc_bary_coefficients) {
+      payload.pc_bary_coef_reg = payload.num_regs;
+      payload.num_regs += v.max_polygons;
+   }
+
+   /* R70: Non-perspective bary planes. */
+   if (prog_data->uses_npc_bary_coefficients) {
+      payload.npc_bary_coef_reg = payload.num_regs;
+      payload.num_regs += v.max_polygons;
+   }
+
+   /* R72: Sample offsets. */
+   if (prog_data->uses_sample_offsets) {
+      payload.sample_offsets_reg = payload.num_regs;
       payload.num_regs++;
    }
 
@@ -298,153 +334,8 @@ setup_fs_payload_gfx6(fs_thread_payload &payload,
    }
 }
 
-#undef P                        /* prompted depth */
-#undef C                        /* computed */
-#undef N                        /* non-promoted? */
-
-#define P 0
-#define C 1
-#define N 2
-
-static const struct {
-   GLuint mode:2;
-   GLuint sd_present:1;
-   GLuint sd_to_rt:1;
-   GLuint dd_present:1;
-   GLuint ds_present:1;
-} wm_iz_table[BRW_WM_IZ_BIT_MAX] =
-{
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 0 },
- { N, 0, 1, 0, 0 },
- { N, 0, 1, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { C, 0, 1, 1, 0 },
- { C, 0, 1, 1, 0 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 0 },
- { C, 0, 1, 1, 0 },
- { C, 0, 1, 1, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 0 },
- { N, 0, 1, 0, 0 },
- { N, 0, 1, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { C, 0, 1, 1, 0 },
- { C, 0, 1, 1, 0 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 0 },
- { C, 0, 1, 1, 0 },
- { C, 0, 1, 1, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 1 },
- { N, 0, 1, 0, 1 },
- { N, 0, 1, 0, 1 },
- { P, 0, 0, 0, 0 },
- { P, 0, 0, 0, 0 },
- { C, 0, 1, 1, 1 },
- { C, 0, 1, 1, 1 },
- { P, 0, 0, 0, 0 },
- { N, 1, 1, 0, 1 },
- { C, 0, 1, 1, 1 },
- { C, 0, 1, 1, 1 },
- { P, 0, 0, 0, 0 },
- { C, 0, 0, 0, 1 },
- { P, 0, 0, 0, 0 },
- { C, 0, 1, 0, 1 },
- { P, 0, 0, 0, 0 },
- { C, 1, 1, 0, 1 },
- { C, 0, 1, 0, 1 },
- { C, 0, 1, 0, 1 },
- { P, 0, 0, 0, 0 },
- { C, 1, 1, 1, 1 },
- { C, 0, 1, 1, 1 },
- { C, 0, 1, 1, 1 },
- { P, 0, 0, 0, 0 },
- { C, 1, 1, 1, 1 },
- { C, 0, 1, 1, 1 },
- { C, 0, 1, 1, 1 }
-};
-
-/**
- * \param line_aa  BRW_NEVER, BRW_ALWAYS or BRW_SOMETIMES
- * \param lookup  bitmask of BRW_WM_IZ_* flags
- */
-static inline void
-setup_fs_payload_gfx4(fs_thread_payload &payload,
-                      const fs_visitor &v,
-                      bool &source_depth_to_render_target,
-                      bool &runtime_check_aads_emit)
-{
-   assert(v.dispatch_width <= 16);
-
-   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(v.prog_data);
-   brw_wm_prog_key *key = (brw_wm_prog_key *) v.key;
-
-   GLuint reg = 1;
-   bool kill_stats_promoted_workaround = false;
-   int lookup = key->iz_lookup;
-
-   assert(lookup < BRW_WM_IZ_BIT_MAX);
-
-   /* Crazy workaround in the windowizer, which we need to track in
-    * our register allocation and render target writes.  See the "If
-    * statistics are enabled..." paragraph of 11.5.3.2: Early Depth
-    * Test Cases [Pre-DevGT] of the 3D Pipeline - Windower B-Spec.
-    */
-   if (key->stats_wm &&
-       (lookup & BRW_WM_IZ_PS_KILL_ALPHATEST_BIT) &&
-       wm_iz_table[lookup].mode == P) {
-      kill_stats_promoted_workaround = true;
-   }
-
-   payload.subspan_coord_reg[0] = reg++;
-
-   if (wm_iz_table[lookup].sd_present || prog_data->uses_src_depth ||
-       kill_stats_promoted_workaround) {
-      payload.source_depth_reg[0] = reg;
-      reg += 2;
-   }
-
-   if (wm_iz_table[lookup].sd_to_rt || kill_stats_promoted_workaround)
-      source_depth_to_render_target = true;
-
-   if (wm_iz_table[lookup].ds_present || key->line_aa != BRW_NEVER) {
-      payload.aa_dest_stencil_reg[0] = reg;
-      runtime_check_aads_emit =
-         !wm_iz_table[lookup].ds_present && key->line_aa == BRW_SOMETIMES;
-      reg++;
-   }
-
-   if (wm_iz_table[lookup].dd_present) {
-      payload.dest_depth_reg[0] = reg;
-      reg+=2;
-   }
-
-   payload.num_regs = reg;
-}
-
-#undef P                        /* prompted depth */
-#undef C                        /* computed */
-#undef N                        /* non-promoted? */
-
 fs_thread_payload::fs_thread_payload(const fs_visitor &v,
-                                     bool &source_depth_to_render_target,
-                                     bool &runtime_check_aads_emit)
+                                     bool &source_depth_to_render_target)
   : subspan_coord_reg(),
     source_depth_reg(),
     source_w_reg(),
@@ -452,27 +343,45 @@ fs_thread_payload::fs_thread_payload(const fs_visitor &v,
     dest_depth_reg(),
     sample_pos_reg(),
     sample_mask_in_reg(),
+    barycentric_coord_reg(),
     depth_w_coef_reg(),
-    barycentric_coord_reg()
+    pc_bary_coef_reg(),
+    npc_bary_coef_reg(),
+    sample_offsets_reg()
 {
    if (v.devinfo->ver >= 20)
       setup_fs_payload_gfx20(*this, v, source_depth_to_render_target);
-   else if (v.devinfo->ver >= 6)
-      setup_fs_payload_gfx6(*this, v, source_depth_to_render_target);
    else
-      setup_fs_payload_gfx4(*this, v, source_depth_to_render_target,
-                            runtime_check_aads_emit);
+      setup_fs_payload_gfx9(*this, v, source_depth_to_render_target);
 }
 
 cs_thread_payload::cs_thread_payload(const fs_visitor &v)
 {
+   struct brw_cs_prog_data *prog_data = brw_cs_prog_data(v.prog_data);
+
+   unsigned r = reg_unit(v.devinfo);
+
    /* See nir_setup_uniforms for subgroup_id in earlier versions. */
-   if (v.devinfo->verx10 >= 125)
+   if (v.devinfo->verx10 >= 125) {
       subgroup_id_ = brw_ud1_grf(0, 2);
 
-   /* TODO: Fill out uses_btd_stack_ids automatically */
-   num_regs = (1 + brw_cs_prog_data(v.prog_data)->uses_btd_stack_ids) *
-              reg_unit(v.devinfo);
+      for (int i = 0; i < 3; i++) {
+         if (prog_data->generate_local_id & (1 << i)) {
+            local_invocation_id[i] = brw_uw8_grf(r, 0);
+            r += reg_unit(v.devinfo);
+            if (v.devinfo->ver < 20 && v.dispatch_width == 32)
+               r += reg_unit(v.devinfo);
+         } else {
+            local_invocation_id[i] = brw_imm_uw(0);
+         }
+      }
+
+      /* TODO: Fill out uses_btd_stack_ids automatically */
+      if (prog_data->uses_btd_stack_ids)
+         r += reg_unit(v.devinfo);
+   }
+
+   num_regs = r;
 }
 
 void
@@ -489,7 +398,7 @@ cs_thread_payload::load_subgroup_id(const fs_builder &bld,
       assert(devinfo->verx10 < 125);
       assert(gl_shader_stage_is_compute(bld.shader->stage));
       int index = brw_get_subgroup_id_param_index(devinfo,
-                                                  bld.shader->stage_prog_data);
+                                                  bld.shader->prog_data);
       bld.MOV(dest, fs_reg(UNIFORM, index, BRW_REGISTER_TYPE_UD));
    }
 }

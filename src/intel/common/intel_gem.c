@@ -21,7 +21,6 @@
  */
 
 #include "intel_gem.h"
-#include "drm-uapi/i915_drm.h"
 
 #include "i915/intel_engine.h"
 #include "i915/intel_gem.h"

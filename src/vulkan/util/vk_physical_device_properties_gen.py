@@ -141,7 +141,7 @@ vk_common_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
    ${copy_property("pProperties->properties." + prop.name, "pdevice->properties." + prop.actual_name, prop.decl)}
 % endfor
 
-   vk_foreach_struct(ext, pProperties) {
+   vk_foreach_struct(ext, pProperties->pNext) {
       switch (ext->sType) {
 % for property_struct in property_structs:
 % if property_struct.name not in SPECIALIZED_PROPERTY_STRUCTS:

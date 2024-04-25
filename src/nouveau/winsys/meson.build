@@ -13,11 +13,11 @@ libnouveau_ws = static_library(
   include_directories : [
     inc_include,
     inc_src,
+    inc_nouveau_drm,
   ],
-  c_args: [ '-Wno-gnu-variable-sized-type-not-at-end' ],
+  c_args: [ cc.get_supported_arguments('-Wno-gnu-variable-sized-type-not-at-end') ],
   dependencies : [
     dep_libdrm,
-    dep_libdrm_nouveau,
     dep_valgrind,
     idep_nvidia_headers,
   ],

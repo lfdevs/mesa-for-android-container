@@ -79,20 +79,19 @@ pack_blend(struct v3dv_pipeline *pipeline,
    if (!cb_info)
       return;
 
-   assert(pipeline->subpass);
-   if (pipeline->subpass->color_count == 0)
+   const struct vk_render_pass_state *ri = &pipeline->rendering_info;
+   if (ri->color_attachment_count == 0)
       return;
 
-   assert(pipeline->subpass->color_count == cb_info->attachmentCount);
+   assert(ri->color_attachment_count == cb_info->attachmentCount);
    pipeline->blend.needs_color_constants = false;
    uint32_t color_write_masks = 0;
-   for (uint32_t i = 0; i < pipeline->subpass->color_count; i++) {
+   for (uint32_t i = 0; i < ri->color_attachment_count; i++) {
       const VkPipelineColorBlendAttachmentState *b_state =
          &cb_info->pAttachments[i];
 
-      uint32_t attachment_idx =
-         pipeline->subpass->color_attachments[i].attachment;
-      if (attachment_idx == VK_ATTACHMENT_UNUSED)
+      const VkFormat vk_format = ri->color_attachment_formats[i];
+      if (vk_format == VK_FORMAT_UNDEFINED)
          continue;
 
       color_write_masks |= (~b_state->colorWriteMask & 0xf) << (4 * i);
@@ -100,9 +99,7 @@ pack_blend(struct v3dv_pipeline *pipeline,
       if (!b_state->blendEnable)
          continue;
 
-      VkAttachmentDescription2 *desc =
-         &pipeline->pass->attachments[attachment_idx].desc;
-      const struct v3dv_format *format = v3dX(get_format)(desc->format);
+      const struct v3dv_format *format = v3dX(get_format)(vk_format);
 
       /* We only do blending with render pass attachments, so we should not have
        * multiplanar images here
@@ -213,10 +210,11 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       config.blend_enable = pipeline->blend.enables != 0;
 
       /* Disable depth/stencil if we don't have a D/S attachment */
-      bool has_ds_attachment =
-         pipeline->subpass->ds_attachment.attachment != VK_ATTACHMENT_UNUSED;
+      const struct vk_render_pass_state *ri = &pipeline->rendering_info;
+      bool has_depth = ri->depth_attachment_format != VK_FORMAT_UNDEFINED;
+      bool has_stencil = ri->stencil_attachment_format != VK_FORMAT_UNDEFINED;
 
-      if (ds_info && ds_info->depthTestEnable && has_ds_attachment) {
+      if (ds_info && ds_info->depthTestEnable && has_depth) {
          config.z_updates_enable = ds_info->depthWriteEnable;
          config.depth_test_function = ds_info->depthCompareOp;
       } else {
@@ -224,7 +222,7 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       }
 
       config.stencil_enable =
-         ds_info ? ds_info->stencilTestEnable && has_ds_attachment: false;
+         ds_info ? ds_info->stencilTestEnable && has_stencil: false;
 
       pipeline->z_updates_enable = config.z_updates_enable;
 
@@ -238,15 +236,11 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
        *     the z planes of the frustrum as described in Primitive Clipping.
        *     Otherwise depth clipping is controlled by the state set in
        *     VkPipelineRasterizationDepthClipStateCreateInfoEXT."
-       *
-       * Note: neither depth clamping nor VK_EXT_depth_clip_enable are actually
-       * supported in the driver yet, so in practice we are always enabling Z
-       * clipping for now.
        */
       bool z_clamp_enable = rs_info && rs_info->depthClampEnable;
       bool z_clip_enable = false;
       const VkPipelineRasterizationDepthClipStateCreateInfoEXT *clip_info =
-         ds_info ? vk_find_struct_const(ds_info->pNext,
+         rs_info ? vk_find_struct_const(rs_info->pNext,
                                         PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT) :
                    NULL;
       if (clip_info)
@@ -264,7 +258,7 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       config.z_clamp_mode = z_clamp_enable;
 
       config.depth_bounds_test_enable =
-              ds_info && ds_info->depthBoundsTestEnable && has_ds_attachment;
+              ds_info && ds_info->depthBoundsTestEnable && has_depth;
 #endif
    };
 }
@@ -350,7 +344,8 @@ pack_stencil_cfg(struct v3dv_pipeline *pipeline,
    if (!ds_info || !ds_info->stencilTestEnable)
       return;
 
-   if (pipeline->subpass->ds_attachment.attachment == VK_ATTACHMENT_UNUSED)
+   const struct vk_render_pass_state *ri = &pipeline->rendering_info;
+   if (ri->stencil_attachment_format == VK_FORMAT_UNDEFINED)
       return;
 
    const uint32_t dynamic_stencil_states = V3DV_DYNAMIC_STENCIL_COMPARE_MASK |

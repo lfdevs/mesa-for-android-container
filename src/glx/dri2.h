@@ -33,7 +33,7 @@
 #ifndef _DRI2_H_
 #define _DRI2_H_
 
-#include <xf86drm.h>
+#include "util/libdrm.h"
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/dri2tokens.h>
 

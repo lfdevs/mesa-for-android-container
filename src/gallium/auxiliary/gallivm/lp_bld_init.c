@@ -76,7 +76,7 @@ static const struct debug_named_value lp_bld_debug_flags[] = {
    { "perf",   GALLIVM_DEBUG_PERF, NULL },
    { "gc",     GALLIVM_DEBUG_GC, NULL },
 /* Don't allow setting DUMP_BC for release builds, since writing the files may be an issue with setuid. */
-#ifdef DEBUG
+#if MESA_DEBUG
    { "dumpbc", GALLIVM_DEBUG_DUMP_BC, NULL },
 #endif
    DEBUG_NAMED_VALUE_END
@@ -525,7 +525,7 @@ gallivm_verify_function(struct gallivm_state *gallivm,
                         LLVMValueRef func)
 {
    /* Verify the LLVM IR.  If invalid, dump and abort */
-#ifdef DEBUG
+#if MESA_DEBUG
    if (LLVMVerifyFunction(func, LLVMPrintMessageAction)) {
       lp_debug_dump_value(func);
       assert(0);
@@ -634,7 +634,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
 
    /* Disable frame pointer omission on debug/profile builds */
    /* XXX: And workaround http://llvm.org/PR21435 */
-#if defined(DEBUG) || defined(PROFILE) || DETECT_ARCH_X86 || DETECT_ARCH_X86_64
+#if MESA_DEBUG || defined(PROFILE) || DETECT_ARCH_X86 || DETECT_ARCH_X86_64
       LLVMAddTargetDependentFunctionAttr(func, "no-frame-pointer-elim", "true");
       LLVMAddTargetDependentFunctionAttr(func, "no-frame-pointer-elim-non-leaf", "true");
 #endif

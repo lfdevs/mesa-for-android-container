@@ -225,7 +225,7 @@ i915_drm_buffer_destroy(struct i915_winsys *iws,
 {
    drm_intel_bo_unreference(intel_bo(buffer));
 
-#ifdef DEBUG
+#if MESA_DEBUG
    i915_drm_buffer(buffer)->magic = 0;
    i915_drm_buffer(buffer)->bo = NULL;
 #endif

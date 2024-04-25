@@ -157,7 +157,7 @@ void nouveau_screen_init_vdec(struct nouveau_screen *);
 
 int
 nouveau_pushbuf_create(struct nouveau_screen *, struct nouveau_context *, struct nouveau_client *,
-                       struct nouveau_object *chan, int nr, uint32_t size, bool immediate,
+                       struct nouveau_object *chan, int nr, uint32_t size,
                        struct nouveau_pushbuf **);
 void nouveau_pushbuf_destroy(struct nouveau_pushbuf **);
 

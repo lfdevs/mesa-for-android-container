@@ -23,7 +23,7 @@
 
 #include "anv_nir.h"
 #include "nir/nir_builder.h"
-#include "compiler/brw_nir.h"
+#include "compiler/elk/elk_nir.h"
 #include "util/mesa-sha1.h"
 #include "util/set.h"
 
@@ -914,8 +914,8 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *intrin,
       offset = nir_umin(b, offset, nir_imm_int(b, max_offset));
 
       nir_def *const_data_base_addr = nir_pack_64_2x32_split(b,
-         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW),
-         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
+         nir_load_reloc_const_intel(b, ELK_SHADER_RELOC_CONST_DATA_ADDR_LOW),
+         nir_load_reloc_const_intel(b, ELK_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
 
       data = nir_load_global_constant(b, nir_iadd(b, const_data_base_addr,
                                                      nir_u2u64(b, offset)),
@@ -1232,7 +1232,7 @@ compare_binding_infos(const void *_a, const void *_b)
 void
 anv_nir_apply_pipeline_layout(nir_shader *shader,
                               const struct anv_physical_device *pdevice,
-                              enum brw_robustness_flags robust_flags,
+                              enum elk_robustness_flags robust_flags,
                               const struct anv_pipeline_layout *layout,
                               struct anv_pipeline_bind_map *map)
 {

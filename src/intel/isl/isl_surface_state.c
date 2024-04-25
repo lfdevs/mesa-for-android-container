@@ -47,6 +47,7 @@ static const uint8_t isl_encode_tiling[] = {
 #if GFX_VERx10 >= 125
    [ISL_TILING_4]       = TILE4,
    [ISL_TILING_64]      = TILE64,
+   [ISL_TILING_64_XE2]  = TILE64,
 #else
    [ISL_TILING_Y0]      = YMAJOR,
    [ISL_TILING_ICL_Yf]  = YMAJOR,
@@ -171,6 +172,60 @@ get_media_compression_format(enum isl_format format,
    }
 }
 #endif
+
+static struct isl_swizzle
+format_swizzle(enum isl_format format)
+{
+   struct isl_swizzle fmt_swz = {};
+
+   fmt_swz.r = isl_format_has_color_component(format, 0) ?
+               ISL_CHANNEL_SELECT_RED :
+               ISL_CHANNEL_SELECT_ZERO;
+
+   fmt_swz.g = isl_format_has_color_component(format, 1) ?
+               ISL_CHANNEL_SELECT_GREEN :
+               ISL_CHANNEL_SELECT_ZERO;
+
+   fmt_swz.b = isl_format_has_color_component(format, 2) ?
+               ISL_CHANNEL_SELECT_BLUE :
+               ISL_CHANNEL_SELECT_ZERO;
+
+   fmt_swz.a = isl_format_has_color_component(format, 3) ?
+               ISL_CHANNEL_SELECT_ALPHA :
+               ISL_CHANNEL_SELECT_ONE;
+
+   return fmt_swz;
+}
+
+static struct isl_swizzle
+isl_get_shader_channel_select(enum isl_format format,
+                              struct isl_swizzle view_swizzle)
+{
+   /* Currently we map both FXT1_RGB/FXT1_RGBA to single FXT1 format
+    * (supporting both 3/4 component) as a result we can use RGBA swizzle as it
+    * is.
+    */
+   if (format == ISL_FORMAT_FXT1)
+      return view_swizzle;
+
+   /* Bspec 12486: RENDER_SURFACE_STATE::Shader Channel Select Red
+    *
+    *    "The output channel is undefined if the source is to a channel is not
+    *    present for the current surface format. For example, If the surface
+    *    format is R16_float and the shader channel select green specifies
+    *    green as the source the output is undefined. It should instead select
+    *    0 which is the default for a missing color channel."
+    *
+    * Bspec 57023: RENDER_SURFACE_STATE::Shader Channel Select Red
+    *
+    *    "For channels not present in the surface format, the corresponding
+    *    Surface Channel Select is either SCS_ZERO or SCS_ONE."
+    *
+    * This restriction applies to alpha channel as well if associated resource
+    * is not used as render target.
+    */
+   return isl_swizzle_compose(view_swizzle, format_swizzle(format));
+}
 
 void
 isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
@@ -541,13 +596,17 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if (GFX_VERx10 >= 75)
-   if (info->view->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT)
-      assert(isl_swizzle_supports_rendering(dev->info, info->view->swizzle));
+   struct isl_swizzle swz = info->view->swizzle;
+   if (info->view->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) {
+      assert(isl_swizzle_supports_rendering(dev->info, swz));
+   } else {
+      swz = isl_get_shader_channel_select(info->view->format, swz);
+   }
 
-   s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) info->view->swizzle.r;
-   s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) info->view->swizzle.g;
-   s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) info->view->swizzle.b;
-   s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) info->view->swizzle.a;
+   s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) swz.r;
+   s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) swz.g;
+   s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) swz.b;
+   s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) swz.a;
 #else
    assert(isl_swizzle_is_identity(info->view->swizzle));
 #endif
@@ -1006,10 +1065,13 @@ isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if (GFX_VERx10 >= 75)
-   s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) info->swizzle.r;
-   s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) info->swizzle.g;
-   s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) info->swizzle.b;
-   s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) info->swizzle.a;
+   struct isl_swizzle swz = isl_get_shader_channel_select(info->format,
+                                                          info->swizzle);
+
+   s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) swz.r;
+   s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) swz.g;
+   s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) swz.b;
+   s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) swz.a;
 #endif
 
    GENX(RENDER_SURFACE_STATE_pack)(NULL, state, &s);

@@ -73,6 +73,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
       _mesa_hash_table_create(ctx, _mesa_hash_pointer, _mesa_key_pointer_equal);
    ctx->sel_cond_conversions =
       _mesa_hash_table_create(ctx, _mesa_hash_pointer, _mesa_key_pointer_equal);
+   ctx->predicate_conversions = _mesa_pointer_hash_table_create(ctx);
 
    /* TODO: maybe generate some sort of bitmask of what key
     * lowers vs what shader has (ie. no need to lower
@@ -109,13 +110,24 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
       NIR_PASS(progress, ctx->s, nir_opt_dce);
    }
 
+   /* This must run after the last nir_opt_algebraic or it gets undone. */
+   if (compiler->has_branch_and_or)
+      NIR_PASS_V(ctx->s, ir3_nir_opt_branch_and_or_not);
+
    /* Enable the texture pre-fetch feature only a4xx onwards.  But
     * only enable it on generations that have been tested:
     */
    if ((so->type == MESA_SHADER_FRAGMENT) && compiler->has_fs_tex_prefetch)
       NIR_PASS_V(ctx->s, ir3_nir_lower_tex_prefetch);
 
+   NIR_PASS(progress, ctx->s, nir_convert_to_lcssa, true, true);
+
    NIR_PASS(progress, ctx->s, nir_lower_phis_to_scalar, true);
+
+   /* This has to go at the absolute end to make sure that all SSA defs are
+    * correctly marked.
+    */
+   NIR_PASS_V(ctx->s, nir_divergence_analysis);
 
    /* Super crude heuristic to limit # of tex prefetch in small
     * shaders.  This completely ignores loops.. but that's really
@@ -161,6 +173,21 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
    }
 
    ir3_ibo_mapping_init(&so->image_mapping, ctx->s->info.num_textures);
+
+   /* Implement the "dual_color_blend_by_location" workaround for Unigine Heaven
+    * and Unigine Valley, by remapping FRAG_RESULT_DATA1 to be the 2nd color
+    * channel of FRAG_RESULT_DATA0.
+    */
+   if ((so->type == MESA_SHADER_FRAGMENT) && so->key.force_dual_color_blend) {
+      nir_variable *var = nir_find_variable_with_location(
+         ctx->s, nir_var_shader_out, FRAG_RESULT_DATA1);
+      if (var) {
+         var->data.location = FRAG_RESULT_DATA0;
+         var->data.index = 1;
+         nir_shader_gather_info(ctx->s, nir_shader_get_entrypoint(ctx->s));
+         so->dual_src_blend = true;
+      }
+   }
 
    return ctx;
 }
@@ -460,19 +487,34 @@ ir3_get_addr1(struct ir3_context *ctx, unsigned const_val)
 struct ir3_instruction *
 ir3_get_predicate(struct ir3_context *ctx, struct ir3_instruction *src)
 {
-   struct ir3_block *b = ctx->block;
+   src = ir3_get_cond_for_nonzero_compare(src);
+
+   struct hash_entry *src_entry =
+      _mesa_hash_table_search(ctx->predicate_conversions, src);
+   if (src_entry)
+      return src_entry->data;
+
+   struct ir3_block *b = src->block;
    struct ir3_instruction *cond;
 
-   /* NOTE: only cmps.*.* can write p0.x: */
+   /* NOTE: we use cpms.s.ne x, 0 to move x into a predicate register */
    struct ir3_instruction *zero =
          create_immed_typed(b, 0, is_half(src) ? TYPE_U16 : TYPE_U32);
    cond = ir3_CMPS_S(b, src, 0, zero, 0);
    cond->cat2.condition = IR3_COND_NE;
 
    /* condition always goes in predicate register: */
-   cond->dsts[0]->num = regid(REG_P0, 0);
-   cond->dsts[0]->flags &= ~IR3_REG_SSA;
+   cond->dsts[0]->flags |= IR3_REG_PREDICATE;
 
+   /* phi's should stay first in a block */
+   if (src->opc == OPC_META_PHI)
+      ir3_instr_move_after(zero, ir3_block_get_last_phi(src->block));
+   else
+      ir3_instr_move_after(zero, src);
+
+   ir3_instr_move_after(cond, zero);
+
+   _mesa_hash_table_insert(ctx->predicate_conversions, src, cond);
    return cond;
 }
 

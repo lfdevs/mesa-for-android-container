@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 #include "mme_fermi.h"
-#include "mme_fermi_encode.h"
 
-#include "util/u_math.h"
+#include "mme_bitpack_helpers.h"
 
 #define OP_TO_STR(OP) [MME_FERMI_OP_##OP] = #OP
 static const char *op_to_str[] = {
@@ -95,67 +94,77 @@ void mme_fermi_encode(uint32_t *out, uint32_t inst_count,
                       const struct mme_fermi_inst *insts)
 {
    for (uint32_t i = 0; i < inst_count; i++) {
-      bitmask_t enc = encode__instruction(NULL, NULL, insts[i]);
-      out[i] = enc.bitset[0];
+      uint32_t *b = &out[i];
+      *b = 0;
+
+      pack_uint(b, 0,  3, insts[i].op);
+      pack_uint(b, 7,  7, insts[i].end_next);
+      pack_uint(b, 8, 10, insts[i].dst);
+
+      if (insts[i].op != MME_FERMI_OP_BRANCH) {
+         pack_uint(b, 4, 6, insts[i].assign_op);
+      }
+
+      if (insts[i].op == MME_FERMI_OP_ALU_REG) {
+         pack_uint(b, 11, 13, insts[i].src[0]);
+         pack_uint(b, 14, 16, insts[i].src[1]);
+         pack_uint(b, 17, 21, insts[i].alu_op);
+      } else if (insts[i].op == MME_FERMI_OP_ADD_IMM ||
+                 insts[i].op == MME_FERMI_OP_STATE) {
+         pack_uint(b, 11, 13, insts[i].src[0]);
+         pack_sint(b, 14, 31, insts[i].imm);
+      } else if (insts[i].op == MME_FERMI_OP_MERGE ||
+                 insts[i].op == MME_FERMI_OP_BFE_LSL_IMM ||
+                 insts[i].op == MME_FERMI_OP_BFE_LSL_REG) {
+         pack_uint(b, 11, 13, insts[i].src[0]);
+         pack_uint(b, 14, 16, insts[i].src[1]);
+         pack_uint(b, 17, 21, insts[i].bitfield.src_bit);
+         pack_uint(b, 22, 26, insts[i].bitfield.size);
+         pack_uint(b, 27, 31, insts[i].bitfield.dst_bit);
+      } else if (insts[i].op == MME_FERMI_OP_BRANCH) {
+         pack_uint(b,  4,  4, insts[i].branch.not_zero);
+         pack_uint(b,  5,  5, insts[i].branch.no_delay);
+         pack_uint(b, 11, 13, insts[i].src[0]);
+         pack_sint(b, 14, 31, insts[i].imm);
+      }
    }
-}
-
-static uint64_t
-unpack_field(bitmask_t bitmask, unsigned low, unsigned high, bool is_signed)
-{
-   bitmask_t field, mask;
-
-   assert(high >= low);
-
-   BITSET_ZERO(mask.bitset);
-   BITSET_SET_RANGE(mask.bitset, 0, high - low);
-
-   BITSET_COPY(field.bitset, bitmask.bitset);
-   BITSET_SHR(field.bitset, low);
-   BITSET_AND(field.bitset, field.bitset, mask.bitset);
-
-   uint64_t data = bitmask_to_uint64_t(field);
-   if (is_signed)
-      data = util_sign_extend(data, high - low + 1);
-
-   return data;
 }
 
 void mme_fermi_decode(struct mme_fermi_inst *insts,
                       const uint32_t *in, uint32_t inst_count)
 {
    for (uint32_t i = 0; i < inst_count; i++) {
-      bitmask_t enc = { .bitset = { in[i] }};
+      const uint32_t *b = &in[i];
 
-      insts[i].op       = unpack_field(enc, 0, 3, false);
-      insts[i].end_next = unpack_field(enc, 7, 7, false);
-      insts[i].dst      = unpack_field(enc, 8, 10, false);
+      insts[i].op       = unpack_uint(b, 0, 3);
+      insts[i].end_next = unpack_uint(b, 7, 7);
+      insts[i].dst      = unpack_uint(b, 8, 10);
 
       if (insts[i].op != MME_FERMI_OP_BRANCH) {
-         insts[i].assign_op = unpack_field(enc, 4, 6, false);
+         insts[i].assign_op = unpack_uint(b, 4, 6);
       }
 
       if (insts[i].op == MME_FERMI_OP_ALU_REG) {
-         insts[i].src[0] = unpack_field(enc, 11, 13, false);
-         insts[i].src[1] = unpack_field(enc, 14, 16, false);
-         insts[i].alu_op = unpack_field(enc, 17, 21, false);
+         insts[i].src[0] = unpack_uint(b, 11, 13);
+         insts[i].src[1] = unpack_uint(b, 14, 16);
+         insts[i].alu_op = unpack_uint(b, 17, 21);
       } else if (insts[i].op == MME_FERMI_OP_ADD_IMM ||
                  insts[i].op == MME_FERMI_OP_STATE) {
-         insts[i].src[0] = unpack_field(enc, 11, 13, false);
-         insts[i].imm    = unpack_field(enc, 14, 31, false);
+         insts[i].src[0] = unpack_uint(b, 11, 13);
+         insts[i].imm    = unpack_sint(b, 14, 31);
       } else if (insts[i].op == MME_FERMI_OP_MERGE ||
                  insts[i].op == MME_FERMI_OP_BFE_LSL_IMM ||
                  insts[i].op == MME_FERMI_OP_BFE_LSL_REG) {
-         insts[i].src[0] = unpack_field(enc, 11, 13, false);
-         insts[i].src[1] = unpack_field(enc, 14, 16, false);
-         insts[i].bitfield.src_bit = unpack_field(enc, 17, 21, false);
-         insts[i].bitfield.size = unpack_field(enc, 22, 26, false);
-         insts[i].bitfield.dst_bit = unpack_field(enc, 27, 31, false);
+         insts[i].src[0] = unpack_uint(b, 11, 13);
+         insts[i].src[1] = unpack_uint(b, 14, 16);
+         insts[i].bitfield.src_bit  = unpack_uint(b, 17, 21);
+         insts[i].bitfield.size     = unpack_uint(b, 22, 26);
+         insts[i].bitfield.dst_bit  = unpack_uint(b, 27, 31);
       } else if (insts[i].op == MME_FERMI_OP_BRANCH) {
-         insts[i].branch.not_zero = unpack_field(enc, 4, 4, false);
-         insts[i].branch.no_delay = unpack_field(enc, 5, 5, false);
-         insts[i].src[0] = unpack_field(enc, 11, 13, false);
-         insts[i].imm    = unpack_field(enc, 14, 31, false);
+         insts[i].branch.not_zero   = unpack_uint(b, 4, 4);
+         insts[i].branch.no_delay   = unpack_uint(b, 5, 5);
+         insts[i].src[0]            = unpack_uint(b, 11, 13);
+         insts[i].imm               = unpack_sint(b, 14, 31);
       }
    }
 }
@@ -279,5 +288,16 @@ mme_fermi_print(FILE *fp, const struct mme_fermi_inst *insts,
    for (uint32_t i = 0; i < inst_count; i++) {
       fprintf(fp, "%u:\n", i);
       mme_fermi_print_inst(fp, 1, &insts[i]);
+   }
+}
+
+void
+mme_fermi_dump(FILE *fp, uint32_t *encoded, size_t encoded_size)
+{
+   uint32_t inst_count = encoded_size / 4;
+   for (uint32_t i = 0; i < inst_count; i++) {
+      struct mme_fermi_inst inst;
+      mme_fermi_decode(&inst, &encoded[i], 1);
+      mme_fermi_print_inst(fp, 1, &inst);
    }
 }

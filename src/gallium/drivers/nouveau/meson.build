@@ -185,11 +185,12 @@ libnouveau = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, idep_nouveau_codegen, dep_libdrm_nouveau, idep_mesautil, idep_nir_headers],
+  link_with : [libnouveauwinsys],
+  dependencies : [dep_libdrm, idep_libnouveauwinsys, idep_nouveau_codegen, idep_mesautil, idep_nir_headers],
 )
 
 driver_nouveau = declare_dependency(
   compile_args : '-DGALLIUM_NOUVEAU',
   dependencies : [idep_nir, idep_nouveau_codegen],
-  link_with : [libnouveauwinsys, libnouveau_codegen, libnouveau],
+  link_with : [libnouveau_codegen, libnouveau],
 )

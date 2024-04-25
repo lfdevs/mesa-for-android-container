@@ -174,7 +174,7 @@ v3d_predraw_check_stage_inputs(struct pipe_context *pctx,
                         v3d_update_shadow_texture(pctx, &view->base);
 
                 v3d_flush_jobs_writing_resource(v3d, view->texture,
-                                                V3D_FLUSH_DEFAULT,
+                                                V3D_FLUSH_NOT_CURRENT_JOB,
                                                 s == PIPE_SHADER_COMPUTE);
         }
 
@@ -842,13 +842,15 @@ v3d_update_job_ez(struct v3d_context *v3d, struct v3d_job *job)
                 return;
         }
 
-        /* If this is the first time we update EZ state for this job we first
-         * check if there is anything that requires disabling it completely
-         * for the entire job (based on state that is not related to the
-         * current draw call and pipeline state).
+        /* When we update the EZ state we first check if there is anything
+         * that requires disabling it completely for the entire job (based on
+         * state that is not related to the current draw call and pipeline
+         * state).
          */
-        if (!job->decided_global_ez_enable) {
+        if (!job->decided_global_ez_enable ||
+            job->global_ez_zsa_decision_state != v3d->zsa) {
                 job->decided_global_ez_enable = true;
+                job->global_ez_zsa_decision_state = v3d->zsa;
 
                 if (!job->zsbuf) {
                         job->first_ez_state = V3D_EZ_DISABLED;
@@ -857,19 +859,29 @@ v3d_update_job_ez(struct v3d_context *v3d, struct v3d_job *job)
                 }
 
                 /* GFXH-1918: the early-Z buffer may load incorrect depth
-                 * values if the frame has odd width or height. Disable early-Z
-                 * in this case.
+                 * values if the frame has odd width or height, or if the
+                 * buffer is 16-bit and multisampled. Disable early-Z in these
+                 * cases.
                  */
                 bool needs_depth_load = v3d->zsa && job->zsbuf &&
                         v3d->zsa->base.depth_enabled &&
                         (PIPE_CLEAR_DEPTH & ~job->clear);
-                if (needs_depth_load &&
-                     ((job->draw_width % 2 != 0) || (job->draw_height % 2 != 0))) {
-                        perf_debug("Loading depth buffer for framebuffer with odd width "
-                                   "or height disables early-Z tests\n");
-                        job->first_ez_state = V3D_EZ_DISABLED;
-                        job->ez_state = V3D_EZ_DISABLED;
-                        return;
+                if (needs_depth_load) {
+                        if (job->zsbuf->texture->format == PIPE_FORMAT_Z16_UNORM &&
+                            job->zsbuf->texture->nr_samples > 0) {
+                                perf_debug("Loading 16-bit multisampled depth buffer "
+                                           "disables early-Z tests\n");
+                                job->first_ez_state = V3D_EZ_DISABLED;
+                                job->ez_state = V3D_EZ_DISABLED;
+                                return;
+                        }
+                        if ((job->draw_width % 2 != 0) || (job->draw_height % 2 != 0)) {
+                                perf_debug("Loading depth buffer for framebuffer with "
+                                           "odd width or height disables early-Z tests\n");
+                                job->first_ez_state = V3D_EZ_DISABLED;
+                                job->ez_state = V3D_EZ_DISABLED;
+                                return;
+                        }
                 }
         }
 
@@ -1036,12 +1048,16 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 u_foreach_bit(i, v3d->ssbo[s].enabled_mask) {
                         v3d_job_add_write_resource(job,
                                                    v3d->ssbo[s].sb[i].buffer);
+                        struct v3d_resource *rsc= v3d_resource(v3d->ssbo[s].sb[i].buffer);
+                        rsc->graphics_written = true;
                         job->tmu_dirty_rcl = true;
                 }
 
                 u_foreach_bit(i, v3d->shaderimg[s].enabled_mask) {
                         v3d_job_add_write_resource(job,
                                                    v3d->shaderimg[s].si[i].base.resource);
+                        struct v3d_resource *rsc= v3d_resource(v3d->shaderimg[s].si[i].base.resource);
+                        rsc->graphics_written = true;
                         job->tmu_dirty_rcl = true;
                 }
         }

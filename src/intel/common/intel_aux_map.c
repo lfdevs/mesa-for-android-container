@@ -75,6 +75,8 @@
  *  - TM (Tile-mode): 0=Ys, 1=Y, 2=rsvd, 3=rsvd
  *  - aux-data-addr: VMA/GPU address for the aux-data
  *  - V: entry is valid
+ *
+ * BSpec 44930
  */
 
 #include "intel_aux_map.h"
@@ -83,7 +85,6 @@
 #include "dev/intel_device_info.h"
 #include "isl/isl.h"
 
-#include "drm-uapi/i915_drm.h"
 #include "util/list.h"
 #include "util/ralloc.h"
 #include "util/u_atomic.h"
@@ -244,6 +245,13 @@ uint64_t
 intel_aux_get_main_to_aux_ratio(struct intel_aux_map_context *ctx)
 {
    return ctx->format->main_to_aux_ratio;
+}
+
+uint64_t
+intel_aux_main_to_aux_offset(struct intel_aux_map_context *ctx,
+                             uint64_t main_offset)
+{
+   return main_offset / ctx->format->main_to_aux_ratio;
 }
 
 static const struct aux_format_info *

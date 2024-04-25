@@ -33,7 +33,7 @@
  *   Kristian Høgsberg (krh@redhat.com)
  */
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
 
 #include <unistd.h>
 #include <dlfcn.h>

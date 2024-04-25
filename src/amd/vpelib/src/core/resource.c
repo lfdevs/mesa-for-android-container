@@ -31,6 +31,10 @@
 #include "vpe10_resource.h"
 #endif
 
+#ifdef VPE_BUILD_1_1
+#include "vpe11_resource.h"
+#endif
+
 static const struct vpe_debug_options debug_defaults = {
     .flags                   = {0},
     .cm_in_bypass            = 0,
@@ -73,19 +77,26 @@ static const struct vpe_debug_options debug_defaults = {
     .dpp_crc_ctrl                            = 0,
     .mpc_crc_ctrl                            = 0,
     .visual_confirm_params                   = {{{0}}},
+    .skip_optimal_tap_check                  = 0,
 };
 
 enum vpe_ip_level vpe_resource_parse_ip_version(
-    uint8_t mj, uint8_t mn, uint8_t rv)
+    uint8_t major, uint8_t minor, uint8_t rev_id)
 {
     enum vpe_ip_level ip_level = VPE_IP_LEVEL_UNKNOWN;
-    switch (VPE_VERSION(mj, mn, rv)) {
+    switch (VPE_VERSION(major, minor, rev_id)) {
 #if VPE_BUILD_1_X
 #if VPE_BUILD_1_0
     case VPE_VERSION(6, 1, 0):
         ip_level = VPE_IP_LEVEL_1_0;
-#endif
         break;
+#endif
+#if VPE_BUILD_1_1
+    case VPE_VERSION(6, 1, 1):
+    case VPE_VERSION(6, 1, 2):
+        ip_level = VPE_IP_LEVEL_1_1;
+        break;
+#endif
 #endif
     default:
         ip_level = VPE_IP_LEVEL_UNKNOWN;
@@ -102,6 +113,11 @@ enum vpe_status vpe_construct_resource(
 #ifdef VPE_BUILD_1_0
     case VPE_IP_LEVEL_1_0:
         status = vpe10_construct_resource(vpe_priv, res);
+        break;
+#endif
+#ifdef VPE_BUILD_1_1
+    case VPE_IP_LEVEL_1_1:
+        status = vpe11_construct_resource(vpe_priv, res);
         break;
 #endif
     default:
@@ -124,6 +140,11 @@ void vpe_destroy_resource(struct vpe_priv *vpe_priv, struct resource *res)
 #ifdef VPE_BUILD_1_0
     case VPE_IP_LEVEL_1_0:
         vpe10_destroy_resource(vpe_priv, res);
+        break;
+#endif
+#ifdef VPE_BUILD_1_1
+    case VPE_IP_LEVEL_1_1:
+        vpe11_destroy_resource(vpe_priv, res);
         break;
 #endif
     default:
@@ -159,6 +180,9 @@ struct stream_ctx *vpe_alloc_stream_ctx(struct vpe_priv *vpe_priv, uint32_t num_
         ctx->vpe_priv = vpe_priv;
         vpe_color_set_adjustments_to_default(&ctx->color_adjustments);
         ctx->tf_scaling_factor = vpe_fixpt_one;
+        ctx->stream.flags.geometric_scaling = 0;
+        ctx->stream.tm_params.UID = 0;
+        ctx->UID_3DLUT = 0;
     }
 
     return ctx_base;

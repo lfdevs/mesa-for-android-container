@@ -33,7 +33,7 @@ f16_using_mac(const fs_builder &bld, fs_inst *inst)
       dest.type == BRW_REGISTER_TYPE_HF ? REG_SIZE / 2 : REG_SIZE;
 
    for (unsigned r = 0; r < inst->rcount; r++) {
-      fs_reg temp = bld.vgrf(BRW_REGISTER_TYPE_HF, 1);
+      fs_reg temp = bld.vgrf(BRW_REGISTER_TYPE_HF);
 
       for (unsigned subword = 0; subword < 2; subword++) {
          for (unsigned s = 0; s < inst->sdepth; s++) {
@@ -96,7 +96,7 @@ f16_using_mac(const fs_builder &bld, fs_inst *inst)
 
       if (!src0.is_null()) {
          if (src0_type != BRW_REGISTER_TYPE_HF) {
-            fs_reg temp2 = bld.vgrf(src0_type, 1);
+            fs_reg temp2 = bld.vgrf(src0_type);
 
             bld.MOV(temp2, temp);
 
@@ -199,8 +199,8 @@ int8_using_mul_add(const fs_builder &bld, fs_inst *inst)
       }
 
       for (unsigned s = 0; s < inst->sdepth; s++) {
-         fs_reg temp1 = bld.vgrf(BRW_REGISTER_TYPE_UD, 1);
-         fs_reg temp2 = bld.vgrf(BRW_REGISTER_TYPE_UD, 1);
+         fs_reg temp1 = bld.vgrf(BRW_REGISTER_TYPE_UD);
+         fs_reg temp2 = bld.vgrf(BRW_REGISTER_TYPE_UD);
          fs_reg temp3 = bld.vgrf(BRW_REGISTER_TYPE_UD, 2);
          const brw_reg_type temp_type =
             (inst->src[1].type == BRW_REGISTER_TYPE_B ||
@@ -275,7 +275,7 @@ int8_using_mul_add(const fs_builder &bld, fs_inst *inst)
 }
 
 bool
-brw_lower_dpas(fs_visitor &v)
+brw_fs_lower_dpas(fs_visitor &v)
 {
    bool progress = false;
 

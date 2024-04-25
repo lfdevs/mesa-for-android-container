@@ -308,7 +308,7 @@ anv_state_table_add(struct anv_state_table *table, uint32_t *idx,
 
          old.u64 = __sync_lock_test_and_set(&table->state.u64, new.u64);
          if (old.next != state.next)
-            futex_wake(&table->state.end, INT_MAX);
+            futex_wake(&table->state.end, INT32_MAX);
       } else {
          futex_wait(&table->state.end, state.end, NULL);
          continue;
@@ -779,7 +779,7 @@ anv_block_pool_alloc_new(struct anv_block_pool *pool,
 
          old.u64 = __sync_lock_test_and_set(&pool_state->u64, new.u64);
          if (old.next != state.next)
-            futex_wake(&pool_state->end, INT_MAX);
+            futex_wake(&pool_state->end, INT32_MAX);
          return state.next;
       } else {
          futex_wait(&pool_state->end, state.end, NULL);
@@ -906,7 +906,7 @@ anv_fixed_size_state_pool_alloc_new(struct anv_fixed_size_state_pool *pool,
       new.end = offset + block_size;
       old.u64 = __sync_lock_test_and_set(&pool->block.u64, new.u64);
       if (old.next != block.next)
-         futex_wake(&pool->block.end, INT_MAX);
+         futex_wake(&pool->block.end, INT32_MAX);
       return offset;
    } else {
       futex_wait(&pool->block.end, block.end, NULL);

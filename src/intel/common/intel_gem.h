@@ -24,10 +24,6 @@
 #ifndef INTEL_GEM_H
 #define INTEL_GEM_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <assert.h>
 #include <time.h>
 #include <errno.h>
@@ -38,7 +34,12 @@ extern "C" {
 #include <sys/ioctl.h>
 
 #include "intel_engine.h"
+#include "drm-uapi/drm.h"
 #include "util/macros.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define RCS_TIMESTAMP 0x2358
 
@@ -129,6 +130,15 @@ bool intel_gem_create_context_ext(int fd, enum intel_gem_create_context_flags fl
                                   uint32_t *ctx_id);
 bool intel_gem_supports_protected_context(int fd,
                                           enum intel_kmd_type kmd_type);
+
+#define DRM_IOCTL_I915_LAST             DRM_IO(DRM_COMMAND_END - 1)
+
+struct drm_intel_stub_devinfo {
+   uint64_t addr;
+   uint32_t size;
+};
+
+#define DRM_IOCTL_INTEL_STUB_DEVINFO    DRM_IOR(DRM_IOCTL_I915_LAST, struct drm_intel_stub_devinfo)
 
 #ifdef __cplusplus
 }

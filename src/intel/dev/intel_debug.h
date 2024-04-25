@@ -161,7 +161,7 @@ extern uint32_t intel_debug_bkp_after_draw_count;
 
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
-extern void brw_process_intel_debug_variable(void);
+extern void process_intel_debug_variable(void);
 
 /* Below is a list of structure located in the identifier buffer. The driver
  * can fill those in for debug purposes.

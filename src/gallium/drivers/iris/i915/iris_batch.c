@@ -25,7 +25,7 @@
 #include "iris/iris_batch.h"
 #include "iris/iris_context.h"
 
-#include "common/intel_defines.h"
+#include "common/i915/intel_defines.h"
 #include "common/intel_gem.h"
 #include "util/u_debug.h"
 
@@ -172,8 +172,7 @@ iris_create_engines_context(struct iris_context *ice)
    /* Blitter is only supported on Gfx12+ */
    unsigned num_batches = IRIS_BATCH_COUNT - (devinfo->ver >= 12 ? 0 : 1);
 
-   if (debug_get_bool_option("INTEL_COMPUTE_CLASS", false) &&
-       intel_engines_count(engines_info, INTEL_ENGINE_CLASS_COMPUTE) > 0)
+   if (iris_bufmgr_compute_engine_supported(screen->bufmgr))
       engine_classes[IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_COMPUTE;
 
    enum intel_gem_create_context_flags flags = 0;

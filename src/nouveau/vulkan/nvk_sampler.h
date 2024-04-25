@@ -8,10 +8,10 @@
 #include "nvk_private.h"
 #include "nvk_physical_device.h"
 
-#include "vulkan/runtime/vk_sampler.h"
-#include "vulkan/runtime/vk_ycbcr_conversion.h"
+#include "vk_sampler.h"
+#include "vk_ycbcr_conversion.h"
 
-#include "vulkan/util/vk_format.h"
+#include "vk_format.h"
 
 struct nvk_sampler {
    struct vk_sampler vk;

@@ -203,8 +203,13 @@ _PLATFORM_GFXVERS = {"INTEL_PLATFORM_BDW" : 80,
                      "INTEL_PLATFORM_DG2_G10" : 125,
                      "INTEL_PLATFORM_DG2_G11" : 125,
                      "INTEL_PLATFORM_DG2_G12" : 125,
+                     "INTEL_PLATFORM_ATSM_G10" : 125,
+                     "INTEL_PLATFORM_ATSM_G11" : 125,
                      "INTEL_PLATFORM_MTL_U" : 125,
                      "INTEL_PLATFORM_MTL_H" : 125,
+                     "INTEL_PLATFORM_ARL_U" : 125,
+                     "INTEL_PLATFORM_ARL_H" : 125,
+                     "INTEL_PLATFORM_LNL" : 200,
                      }
 
 def macro_versions(wa_def):

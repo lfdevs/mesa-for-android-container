@@ -38,6 +38,8 @@
 
 #include "util/os_file.h"
 
+#include "main/glconfig.h"
+
 #include "egl_dri2.h"
 #include "egldevice.h"
 #include "loader.h"
@@ -97,10 +99,8 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
                               const __DRIconfig *config,
                               struct gbm_surface *surface)
 {
+   const struct gl_config *gl_config = (struct gl_config *) config;
    const struct gbm_dri_visual *visual = NULL;
-   int shifts[4];
-   unsigned int sizes[4];
-   bool is_float;
    int i;
 
    /* Check that the EGLConfig being used to render to the surface is
@@ -108,10 +108,6 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
     * otherwise-compatible formats is relatively common, explicitly allow
     * this.
     */
-   dri2_get_shifts_and_sizes(dri2_dpy->core, config, shifts, sizes);
-
-   dri2_get_render_type_float(dri2_dpy->core, config, &is_float);
-
    for (i = 0; i < dri2_dpy->gbm_dri->num_visuals; i++) {
       visual = &dri2_dpy->gbm_dri->visual_table[i];
       if (visual->gbm_format == surface->v0.format)
@@ -121,21 +117,17 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
    if (i == dri2_dpy->gbm_dri->num_visuals)
       return false;
 
-   if (shifts[0] != visual->rgba_shifts.red ||
-       shifts[1] != visual->rgba_shifts.green ||
-       shifts[2] != visual->rgba_shifts.blue ||
-       (shifts[3] > -1 && visual->rgba_shifts.alpha > -1 &&
-        shifts[3] != visual->rgba_shifts.alpha) ||
-       sizes[0] != visual->rgba_sizes.red ||
-       sizes[1] != visual->rgba_sizes.green ||
-       sizes[2] != visual->rgba_sizes.blue ||
-       (sizes[3] > 0 && visual->rgba_sizes.alpha > 0 &&
-        sizes[3] != visual->rgba_sizes.alpha) ||
-       is_float != visual->is_float) {
-      return false;
-   }
 
-   return true;
+   const struct util_format_description *fmt_c =
+      util_format_description(gl_config->color_format);
+   const struct util_format_description *fmt_s =
+      util_format_description(visual->dri_image_format);
+
+   if (util_is_format_compatible(fmt_c, fmt_s) ||
+       util_is_format_compatible(fmt_s, fmt_c))
+      return true;
+
+   return false;
 }
 
 static _EGLSurface *
@@ -492,39 +484,24 @@ swrast_get_image(__DRIdrawable *driDrawable, int x, int y, int width,
    gbm_dri_bo_unmap_dumb(bo);
 }
 
-static EGLBoolean
+static void
 drm_add_configs_for_visuals(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    const struct gbm_dri_visual *visuals = dri2_dpy->gbm_dri->visual_table;
    int num_visuals = dri2_dpy->gbm_dri->num_visuals;
    unsigned int format_count[num_visuals];
-   unsigned int config_count = 0;
 
    memset(format_count, 0, num_visuals * sizeof(unsigned int));
 
    for (unsigned i = 0; dri2_dpy->driver_configs[i]; i++) {
       const __DRIconfig *config = dri2_dpy->driver_configs[i];
-      int shifts[4];
-      unsigned int sizes[4];
-      bool is_float;
-
-      dri2_get_shifts_and_sizes(dri2_dpy->core, config, shifts, sizes);
-
-      dri2_get_render_type_float(dri2_dpy->core, config, &is_float);
+      struct gl_config *gl_config = (struct gl_config *) config;
 
       for (unsigned j = 0; j < num_visuals; j++) {
          struct dri2_egl_config *dri2_conf;
 
-         if (visuals[j].rgba_shifts.red != shifts[0] ||
-             visuals[j].rgba_shifts.green != shifts[1] ||
-             visuals[j].rgba_shifts.blue != shifts[2] ||
-             visuals[j].rgba_shifts.alpha != shifts[3] ||
-             visuals[j].rgba_sizes.red != sizes[0] ||
-             visuals[j].rgba_sizes.green != sizes[1] ||
-             visuals[j].rgba_sizes.blue != sizes[2] ||
-             visuals[j].rgba_sizes.alpha != sizes[3] ||
-             visuals[j].is_float != is_float)
+         if (visuals[j].dri_image_format != gl_config->color_format)
             continue;
 
          const EGLint attr_list[] = {
@@ -534,13 +511,10 @@ drm_add_configs_for_visuals(_EGLDisplay *disp)
          };
 
          dri2_conf =
-            dri2_add_config(disp, dri2_dpy->driver_configs[i], config_count + 1,
-                            EGL_WINDOW_BIT, attr_list, NULL, NULL);
-         if (dri2_conf) {
-            if (dri2_conf->base.ConfigID == config_count + 1)
-               config_count++;
+            dri2_add_config(disp, dri2_dpy->driver_configs[i], EGL_WINDOW_BIT,
+                            attr_list);
+         if (dri2_conf)
             format_count[j]++;
-         }
       }
    }
 
@@ -551,8 +525,6 @@ drm_add_configs_for_visuals(_EGLDisplay *disp)
                  gbm_format_get_name(visuals[i].gbm_format, &desc));
       }
    }
-
-   return (config_count != 0);
 }
 
 static const struct dri2_egl_display_vtbl dri2_drm_display_vtbl = {
@@ -683,10 +655,7 @@ dri2_initialize_drm(_EGLDisplay *disp)
 
    dri2_setup_screen(disp);
 
-   if (!drm_add_configs_for_visuals(disp)) {
-      err = "DRI2: failed to add configs";
-      goto cleanup;
-   }
+   drm_add_configs_for_visuals(disp);
 
    disp->Extensions.KHR_image_pixmap = EGL_TRUE;
    if (dri2_dpy->image_driver)

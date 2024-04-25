@@ -161,6 +161,9 @@ stw_init(const struct stw_winsys *stw_winsys)
       goto error1;
    }
 
+   /* Per WGL_EXT_swap_control, the default swap interval is 1. */
+   stw_dev->swap_interval = 1;
+
    /* env var override for WGL_EXT_swap_control, useful for testing/debugging */
    const char *s = os_get_option("WGL_SWAP_INTERVAL");
    if (s) {

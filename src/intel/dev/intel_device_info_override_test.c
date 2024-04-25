@@ -62,7 +62,7 @@ main(int argc, char *argv[])
       if (fd < 0)
          continue;
 
-      bool success = intel_get_device_info_from_fd(fd, &devinfo);
+      bool success = intel_get_device_info_from_fd(fd, &devinfo, -1, -1);
       close(fd);
 
       if (!success)

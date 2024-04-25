@@ -23,11 +23,11 @@
 
 #include "anv_private.h"
 
-VkResult
-hitman3_CreateBufferView(VkDevice _device,
-                         const VkBufferViewCreateInfo *pCreateInfo,
-                         const VkAllocationCallbacks *pAllocator,
-                         VkBufferView *pView)
+VkResult anv_hitman3_CreateBufferView(
+    VkDevice                                    _device,
+    const VkBufferViewCreateInfo*               pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkBufferView*                               pView)
 {
    ANV_FROM_HANDLE(anv_buffer, buffer, pCreateInfo->buffer);
    if (pCreateInfo->format == VK_FORMAT_R32G32B32_SFLOAT &&

@@ -24,7 +24,7 @@ nvk_init_wsi(struct nvk_physical_device *pdev)
    result = wsi_device_init(&pdev->wsi_device,
                             nvk_physical_device_to_handle(pdev),
                             nvk_wsi_proc_addr, &pdev->vk.instance->alloc,
-                            -1, &nvk_physical_device_instance(pdev)->dri_options, &wsi_options);
+                            pdev->master_fd, &nvk_physical_device_instance(pdev)->dri_options, &wsi_options);
    if (result != VK_SUCCESS)
       return result;
 

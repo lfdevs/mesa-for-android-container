@@ -7,7 +7,7 @@
 
 #include "nvk_private.h"
 
-#include "vulkan/runtime/vk_buffer_view.h"
+#include "vk_buffer_view.h"
 
 struct nvk_physical_device;
 

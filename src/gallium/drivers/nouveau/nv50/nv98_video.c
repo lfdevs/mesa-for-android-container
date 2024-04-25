@@ -118,7 +118,7 @@ nv98_create_decoder(struct pipe_context *context,
 
    if (!ret)
       ret = nouveau_pushbuf_create(screen, &nv50->base, nv50->base.client, dec->channel[0],
-                                   4, 32 * 1024, true, &dec->pushbuf[0]);
+                                   4, 32 * 1024, &dec->pushbuf[0]);
 
    for (i = 1; i < 3; ++i) {
       dec->channel[i] = dec->channel[0];

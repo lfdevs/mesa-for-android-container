@@ -139,7 +139,7 @@ dri2_device_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
    }
 
    dri2_surf->visual = dri2_image_format_for_pbuffer_config(dri2_dpy, config);
-   if (dri2_surf->visual == __DRI_IMAGE_FORMAT_NONE)
+   if (dri2_surf->visual == PIPE_FORMAT_NONE)
       goto cleanup_surface;
 
    if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
@@ -381,10 +381,7 @@ dri2_initialize_device(_EGLDisplay *disp)
 #endif
    dri2_set_WL_bind_wayland_display(disp);
 
-   if (!dri2_add_pbuffer_configs_for_visuals(disp)) {
-      err = "DRI2: failed to add configs";
-      goto cleanup;
-   }
+   dri2_add_pbuffer_configs_for_visuals(disp);
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

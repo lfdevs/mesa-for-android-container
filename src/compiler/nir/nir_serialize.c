@@ -1680,6 +1680,7 @@ static void
 write_block(write_ctx *ctx, const nir_block *block)
 {
    write_add_object(ctx, block);
+   blob_write_uint8(ctx->blob, block->divergent);
    blob_write_uint32(ctx->blob, exec_list_length(&block->instr_list));
 
    ctx->last_instr_type = ~0;
@@ -1702,6 +1703,7 @@ read_block(read_ctx *ctx, struct exec_list *cf_list)
       exec_node_data(nir_block, exec_list_get_tail(cf_list), cf_node.node);
 
    read_add_object(ctx, block);
+   block->divergent = blob_read_uint8(ctx->blob);
    unsigned num_instrs = blob_read_uint32(ctx->blob);
    for (unsigned i = 0; i < num_instrs;) {
       i += read_instr(ctx, block);
@@ -1879,9 +1881,17 @@ write_function(write_ctx *ctx, const nir_function *fxn)
       flags |= 0x10;
    if (fxn->dont_inline)
       flags |= 0x20;
+   if (fxn->is_subroutine)
+      flags |= 0x40;
    blob_write_uint32(ctx->blob, flags);
    if (fxn->name)
       blob_write_string(ctx->blob, fxn->name);
+
+   blob_write_uint32(ctx->blob, fxn->subroutine_index);
+   blob_write_uint32(ctx->blob, fxn->num_subroutine_types);
+   for (unsigned i = 0; i < fxn->num_subroutine_types; i++) {
+      encode_type_to_blob(ctx->blob, fxn->subroutine_types[i]);
+   }
 
    write_add_object(ctx, fxn);
 
@@ -1904,10 +1914,17 @@ static void
 read_function(read_ctx *ctx)
 {
    uint32_t flags = blob_read_uint32(ctx->blob);
+
    bool has_name = flags & 0x4;
    char *name = has_name ? blob_read_string(ctx->blob) : NULL;
 
    nir_function *fxn = nir_function_create(ctx->nir, name);
+
+   fxn->subroutine_index = blob_read_uint32(ctx->blob);
+   fxn->num_subroutine_types = blob_read_uint32(ctx->blob);
+   for (unsigned i = 0; i < fxn->num_subroutine_types; i++) {
+      fxn->subroutine_types[i] = decode_type_from_blob(ctx->blob);
+   }
 
    read_add_object(ctx, fxn);
 
@@ -1925,6 +1942,7 @@ read_function(read_ctx *ctx)
       fxn->impl = NIR_SERIALIZE_FUNC_HAS_IMPL;
    fxn->should_inline = flags & 0x10;
    fxn->dont_inline = flags & 0x20;
+   fxn->is_subroutine = flags & 0x40;
 }
 
 static void

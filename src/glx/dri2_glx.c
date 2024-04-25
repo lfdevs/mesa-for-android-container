@@ -30,7 +30,7 @@
  *   Kristian Høgsberg (krh@redhat.com)
  */
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xfixes.h>
@@ -1001,7 +1001,7 @@ static const struct glx_screen_vtable dri2_screen_vtable = {
 };
 
 static struct glx_screen *
-dri2CreateScreen(int screen, struct glx_display * priv)
+dri2CreateScreen(int screen, struct glx_display * priv, bool implicit)
 {
    const __DRIconfig **driver_configs;
    const __DRIextension **extensions;
@@ -1064,17 +1064,17 @@ dri2CreateScreen(int screen, struct glx_display * priv)
 
    static const struct dri_extension_match exts[] = {
        { __DRI_CORE, 1, offsetof(struct dri2_screen, core), false },
-       { __DRI_DRI2, 4, offsetof(struct dri2_screen, dri2), false },
-       { __DRI_MESA, 1, offsetof(struct dri2_screen, mesa), false },
+       { __DRI_DRI2, 5, offsetof(struct dri2_screen, dri2), false },
+       { __DRI_MESA, 2, offsetof(struct dri2_screen, mesa), false },
    };
    if (!loader_bind_extensions(psc, exts, ARRAY_SIZE(exts), extensions))
       goto handle_error;
 
    psc->driScreen =
-       psc->dri2->createNewScreen2(screen, psc->fd,
+       psc->dri2->createNewScreen3(screen, psc->fd,
                                    (const __DRIextension **)&pdp->loader_extensions[0],
                                    extensions,
-                                   &driver_configs, psc);
+                                   &driver_configs, implicit, psc);
 
    if (psc->driScreen == NULL) {
       ErrorMessageF("glx: failed to create dri2 screen\n");

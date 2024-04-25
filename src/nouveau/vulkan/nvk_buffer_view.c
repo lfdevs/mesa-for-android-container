@@ -4,8 +4,7 @@
  */
 #include "nvk_buffer_view.h"
 
-#include "nil_format.h"
-#include "nil_image.h"
+#include "nil.h"
 #include "nvk_buffer.h"
 #include "nvk_entrypoints.h"
 #include "nvk_device.h"
@@ -58,8 +57,8 @@ nvk_CreateBufferView(VkDevice _device,
    uint32_t desc[8];
    nil_buffer_fill_tic(&nvk_device_physical(device)->info,
                        nvk_buffer_address(buffer, view->vk.offset),
-                       vk_format_to_pipe_format(view->vk.format),
-                       view->vk.elements, desc);
+                       nil_format(vk_format_to_pipe_format(view->vk.format)),
+                       view->vk.elements, &desc);
 
    result = nvk_descriptor_table_add(device, &device->images,
                                      desc, sizeof(desc), &view->desc_index);

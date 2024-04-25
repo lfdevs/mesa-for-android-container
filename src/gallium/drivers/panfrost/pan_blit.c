@@ -38,7 +38,8 @@ panfrost_blitter_save(struct panfrost_context *ctx,
 {
    struct blitter_context *blitter = ctx->blitter;
 
-   util_blitter_save_vertex_buffer_slot(blitter, ctx->vertex_buffers);
+   util_blitter_save_vertex_buffers(blitter, ctx->vertex_buffers,
+                                    util_last_bit(ctx->vb_mask));
    util_blitter_save_vertex_elements(blitter, ctx->vertex);
    util_blitter_save_vertex_shader(blitter,
                                    ctx->uncompiled[PIPE_SHADER_VERTEX]);

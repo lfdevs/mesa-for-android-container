@@ -89,12 +89,9 @@ lower_vtg_io_intrin(nir_builder *b,
    default:
       return false;
    }
+   const bool offset_is_const = nir_src_is_const(nir_src_for_ssa(offset));
 
    const bool is_store = data != NULL;
-
-   unsigned base = nir_intrinsic_base(intrin);
-   unsigned range = nir_intrinsic_range(intrin);
-   unsigned component = nir_intrinsic_component(intrin);
 
    bool is_output;
    switch (intrin->intrinsic) {
@@ -152,19 +149,30 @@ lower_vtg_io_intrin(nir_builder *b,
    if (vtx == NULL)
       vtx = nir_imm_int(b, 0);
 
-   unsigned addr = base + 4 * component;
-   const bool offset_is_const = nir_src_is_const(nir_src_for_ssa(offset));
+   const nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
+   unsigned component = nir_intrinsic_component(intrin);
+
+   uint32_t base_addr;
+   if (b->shader->info.stage == MESA_SHADER_VERTEX && !is_output)
+      base_addr = nak_attribute_attr_addr(sem.location);
+   else
+      base_addr = nak_varying_attr_addr(sem.location);
+   base_addr += 4 * component;
+
+   uint32_t range;
    if (offset_is_const) {
       unsigned const_offset = nir_src_as_uint(nir_src_for_ssa(offset));
-      assert(const_offset % 16 == 0);
-      addr += const_offset;
 
       /* Tighten the range */
-      base = addr;
+      base_addr += const_offset * 16;
       range = 4 * intrin->num_components;
 
       if (const_offset != 0)
          offset = nir_imm_int(b, 0);
+   } else {
+      /* Offsets from NIR are in vec4's */
+      offset = nir_imul_imm(b, offset, 16);
+      range = (sem.num_slots - 1) * 16 + intrin->num_components * 4;
    }
 
    const struct nak_nir_attr_io_flags flags = {
@@ -183,7 +191,7 @@ lower_vtg_io_intrin(nir_builder *b,
       unsigned comps = ffs(~(mask >> c)) - 1;
       assert(comps > 0);
 
-      unsigned c_addr = addr + 4 * c;
+      unsigned c_addr = base_addr + 4 * c;
 
       /* vec2 has to be vec2 aligned, vec3/4 have to be vec4 aligned.  We
        * don't have actual alignment information on these intrinsics but we
@@ -213,14 +221,14 @@ lower_vtg_io_intrin(nir_builder *b,
          nir_ast_nv(b, c_data, vtx, c_offset,
                     .base = c_addr,
                     .flags = flags_u32,
-                    .range_base = base,
+                    .range_base = base_addr,
                     .range = range);
       } else {
          uint32_t access = flags.output ? 0 : ACCESS_CAN_REORDER;
          nir_def *c_data = nir_ald_nv(b, comps, vtx, c_offset,
                                       .base = c_addr,
                                       .flags = flags_u32,
-                                      .range_base = base,
+                                      .range_base = base_addr,
                                       .range = range,
                                       .access = access);
          for (unsigned i = 0; i < comps; i++)

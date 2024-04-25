@@ -128,3 +128,7 @@ spec@!opengl 1.1@line-smooth-stipple,Fail
 
 # fails after Debian bookworm update
 spec@arb_viewport_array@display-list,Fail
+
+# uprev Piglit in Mesa
+spec@arb_tessellation_shader@execution@tesslevels-indirect,Crash
+

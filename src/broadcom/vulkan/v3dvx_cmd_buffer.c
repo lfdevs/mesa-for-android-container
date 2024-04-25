@@ -28,8 +28,8 @@
 #include "broadcom/compiler/v3d_compiler.h"
 
 #include "util/half_float.h"
-#include "vulkan/util/vk_format.h"
 #include "util/u_pack_color.h"
+#include "vk_format.h"
 
 void
 v3dX(job_emit_binning_flush)(struct v3dv_job *job)
@@ -1551,7 +1551,8 @@ v3dX(cmd_buffer_emit_line_width)(struct v3dv_cmd_buffer *cmd_buffer)
    v3dv_return_if_oom(cmd_buffer, NULL);
 
    cl_emit(&job->bcl, LINE_WIDTH, line) {
-      line.line_width = cmd_buffer->state.dynamic.line_width;
+      line.line_width = v3dv_get_aa_line_width(cmd_buffer->state.gfx.pipeline,
+                                               cmd_buffer);
    }
 
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_LINE_WIDTH;
@@ -1826,10 +1827,11 @@ job_update_ez_state(struct v3dv_job *job,
          return false;
       }
 
-      /* GFXH-1918: the early-z buffer may load incorrect depth values
-       * if the frame has odd width or height.
+      /* GFXH-1918: the early-z buffer may load incorrect depth values if the
+       * frame has odd width or height, or if the buffer is 16-bit and
+       * multisampled.
        *
-       * So we need to disable EZ in this case.
+       * So we need to disable EZ in these cases.
        */
       const struct v3dv_render_pass_attachment *ds_attachment =
          &state->pass->attachments[subpass->ds_attachment.attachment];
@@ -1846,6 +1848,15 @@ job_update_ez_state(struct v3dv_job *job,
                                           ds_attachment->desc.storeOp);
 
       if (needs_depth_load) {
+         if (ds_attachment->desc.format == VK_FORMAT_D16_UNORM &&
+             ds_attachment->desc.samples != VK_SAMPLE_COUNT_1_BIT) {
+            perf_debug("Loading depth aspect from a multisampled 16-bit "
+                       "depth buffer disables early-Z tests.\n");
+            job->first_ez_state = V3D_EZ_DISABLED;
+            job->ez_state = V3D_EZ_DISABLED;
+            return false;
+         }
+
          struct v3dv_framebuffer *fb = state->framebuffer;
 
          if (!fb) {
@@ -2003,8 +2014,7 @@ cmd_buffer_copy_secondary_end_query_state(struct v3dv_cmd_buffer *primary,
       struct v3dv_end_query_info *p_qstate =
          &p_state->query.end.states[p_state->query.end.used_count++];
 
-      p_qstate->pool = s_qstate->pool;
-      p_qstate->query = s_qstate->query;
+      memcpy(p_qstate, s_qstate, sizeof(struct v3dv_end_query_info));
    }
 }
 
@@ -2050,7 +2060,7 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
 
       list_for_each_entry(struct v3dv_job, secondary_job,
                           &secondary->jobs, list_link) {
-         if (secondary_job->type == V3DV_JOB_TYPE_GPU_CL_SECONDARY) {
+         if (secondary_job->type == V3DV_JOB_TYPE_GPU_CL_INCOMPLETE) {
             /* If the job is a CL, then we branch to it from the primary BCL.
              * In this case the secondary's BCL is finished with a
              * RETURN_FROM_SUB_LIST command to return back to the primary BCL
@@ -2715,4 +2725,162 @@ v3dX(cmd_buffer_emit_indexed_indirect)(struct v3dv_cmd_buffer *cmd_buffer,
       prim.address = v3dv_cl_address(buffer->mem->bo,
                                      buffer->mem_offset + offset);
    }
+}
+
+void
+v3dX(cmd_buffer_suspend)(struct v3dv_cmd_buffer *cmd_buffer)
+{
+   struct v3dv_job *job = cmd_buffer->state.job;
+   assert(job);
+
+   job->suspending = true;
+
+   v3dv_cl_ensure_space_with_branch(&job->bcl, cl_packet_length(BRANCH));
+
+   job->suspend_branch_inst_ptr = cl_start(&job->bcl);
+   cl_emit(&job->bcl, BRANCH, branch) {
+      branch.address = v3dv_cl_address(NULL, 0);
+   }
+
+   /* The sim complains if the command list ends with a branch */
+   cl_emit(&job->bcl, NOP, nop);
+}
+
+void
+v3dX(job_patch_resume_address)(struct v3dv_job *first_suspend,
+                               struct v3dv_job *suspend,
+                               struct v3dv_job *resume)
+{
+   assert(resume && resume->resuming);
+   assert(first_suspend && first_suspend->suspending);
+   assert(suspend && suspend->suspending);
+   assert(suspend->suspend_branch_inst_ptr != NULL);
+
+   struct v3dv_bo *resume_bo =
+      list_first_entry(&resume->bcl.bo_list, struct v3dv_bo, list_link);
+   struct cl_packet_struct(BRANCH) branch = {
+      cl_packet_header(BRANCH),
+   };
+   branch.address = v3dv_cl_address(NULL, resume_bo->offset);
+
+   uint8_t *rewrite_addr = (uint8_t *) suspend->suspend_branch_inst_ptr;
+   cl_packet_pack(BRANCH)(NULL, rewrite_addr, &branch);
+
+   if (resume != first_suspend) {
+      set_foreach(resume->bos, entry) {
+         struct v3dv_bo *bo = (void *)entry->key;
+         v3dv_job_add_bo(first_suspend, bo);
+      }
+   }
+
+   first_suspend->suspended_bcl_end = resume->bcl.bo->offset +
+                                      v3dv_cl_offset(&resume->bcl);
+}
+
+static void
+job_destroy_cb(VkDevice device, uint64_t pobj, VkAllocationCallbacks *allocb)
+{
+   struct v3dv_job *clone = (struct v3dv_job *) (uintptr_t) pobj;
+   v3dv_job_destroy(clone);
+}
+
+/**
+ * This checks if the command buffer has been created with
+ * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, in which case we won't be
+ * able to safely patch the resume address into the job (since we could have
+ * another instance of this job running in the GPU, potentially resuming in a
+ * different address). In that case, we clone the job and make the clone have
+ * its own BCL copied from the original job so we can later patch the resume
+ * address into it safely.
+ */
+struct v3dv_job *
+v3dX(cmd_buffer_prepare_suspend_job_for_submit)(struct v3dv_job *job)
+{
+   assert(job->suspending);
+   assert(job->cmd_buffer);
+   assert(job->type == V3DV_JOB_TYPE_GPU_CL);
+
+   if (!(job->cmd_buffer->usage_flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))
+      return job;
+
+   /* Create the clone job, but skip the BCL since we are going to create
+    * our own below.
+    */
+   struct v3dv_job *clone = v3dv_job_clone(job, true);
+   if (!clone)
+      return NULL;
+
+   /* Compute total size of BCL we need to copy */
+   uint32_t bcl_size = 0;
+   list_for_each_entry(struct v3dv_bo, bo, &job->bcl.bo_list, list_link)
+      bcl_size += bo->size;
+
+   /* Prepare the BCL for the cloned job. For this we go over the BOs in the
+    * BCL of the original job and we copy their contents into the single BO
+    * in the BCL of the cloned job.
+    */
+   clone->clone_owns_bcl = true;
+   v3dv_cl_init(clone, &clone->bcl);
+   v3dv_cl_ensure_space(&clone->bcl, bcl_size, 4);
+   if (!clone->bcl.bo)
+      return NULL;
+
+   assert(clone->bcl.base);
+   assert(clone->bcl.base == clone->bcl.next);
+
+   /* Unlink this job from the command buffer's execution list */
+   list_inithead(&clone->list_link);
+
+   /* Copy the contents of each BO in the original job's BCL into the single
+    * BO we have in the clone's BCL.
+    *
+    * If the BO is the last in the BCL (which we can tell because it wouldn't
+    * have emitted a BRANCH instruction to link to another BO) we need to copy
+    * up to the current BCL offset, otherwise we need to copy up to the BRANCH
+    * instruction (excluded, since we are putting everything together into a
+    * single BO here).
+    */
+   list_for_each_entry(struct v3dv_bo, bo, &job->bcl.bo_list, list_link) {
+      assert(bo->map);
+      uint32_t copy_size;
+      if (bo->cl_branch_offset == 0xffffffff) { /* Last BO in BCL */
+         assert(bo == list_last_entry(&job->bcl.bo_list, struct v3dv_bo, list_link));
+         copy_size = v3dv_cl_offset(&job->bcl);
+      } else {
+         assert(bo->cl_branch_offset >= cl_packet_length(BRANCH));
+         copy_size = bo->cl_branch_offset - cl_packet_length(BRANCH);
+      }
+
+      assert(v3dv_cl_offset(&job->bcl) + copy_size < bcl_size);
+      memcpy(cl_start(&clone->bcl), bo->map, copy_size);
+      cl_advance_and_end(&clone->bcl, copy_size);
+   }
+
+   /* Now we need to fixup the pointer to the suspend BRANCH instruction at the
+    * end of the BCL so it points to the address in the new BCL. We know that
+    * to suspend a command buffer we always emit a BRANCH+NOP combo, so we just
+    * need to go back that many bytes in to the BCL to find the instruction.
+    */
+   uint32_t suspend_terminator_size =
+      cl_packet_length(BRANCH) + cl_packet_length(NOP);
+   clone->suspend_branch_inst_ptr = (struct v3dv_cl_out *)
+      (((uint8_t *)cl_start(&clone->bcl)) - suspend_terminator_size);
+   assert(*(((uint8_t *)clone->suspend_branch_inst_ptr)) == V3DX(BRANCH_opcode));
+
+   /* This job is not in the execution list of the command buffer so it
+    * won't be destroyed with it; add it as a private object to get it freed.
+    *
+    * FIXME: every time this job is submitted we clone the job and we only
+    * destroy it when the command buffer is destroyed. If the user keeps the
+    * command buffer for the entire lifetime of the application, this command
+    * buffer could grow significantly, so maybe we want to do something smarter
+    * like having a syncobj bound to these jobs and every time we submit the
+    * command buffer again we first check these sncobjs to see if we can free
+    * some of these clones so we avoid blowing up memory.
+    */
+   v3dv_cmd_buffer_add_private_obj(
+      job->cmd_buffer, (uintptr_t)clone,
+      (v3dv_cmd_buffer_private_obj_destroy_cb)job_destroy_cb);
+
+   return clone;
 }

@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 
+#include "drm-uapi/xe_drm.h"
 #include "vulkan/vulkan_core.h"
 #include "vk_sync.h"
 
@@ -59,3 +60,6 @@ xe_queue_exec_locked(struct anv_queue *queue,
 VkResult
 xe_queue_exec_utrace_locked(struct anv_queue *queue,
                             struct anv_utrace_submit *utrace_submit);
+
+struct drm_xe_sync
+vk_sync_to_drm_xe_sync(struct vk_sync *vk_sync, uint64_t value, bool signal);

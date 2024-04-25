@@ -62,6 +62,7 @@ wp_protos = {
   'linux-dmabuf-unstable-v1': 'unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml',
   'presentation-time': 'stable/presentation-time/presentation-time.xml',
   'tearing-control-v1': 'staging/tearing-control/tearing-control-v1.xml',
+  'linux-drm-syncobj-v1': 'staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml',
 }
 wp_files = {}
 foreach name, xml : wp_protos

@@ -23,6 +23,8 @@ struct nvk_cmd_bo;
 struct nvk_cmd_pool;
 struct nvk_image_view;
 struct nvk_push_descriptor_set;
+struct nvk_shader;
+struct vk_shader;
 
 struct nvk_sample_location {
    uint8_t x_u4:4;
@@ -56,8 +58,11 @@ struct nvk_root_descriptor_table {
    /* Dynamic buffer bindings */
    struct nvk_buffer_address dynamic_buffers[NVK_MAX_DYNAMIC_BUFFERS];
 
+   /* Start index in dynamic_buffers where each set starts */
+   uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
+
    /* enfore alignment to 0x100 as needed pre pascal */
-   uint8_t __padding[0x20];
+   uint8_t __padding[0x18];
 };
 
 /* helper macro for computing root descriptor byte offsets */
@@ -88,6 +93,7 @@ struct nvk_rendering_state {
    VkRect2D area;
    uint32_t layer_count;
    uint32_t view_mask;
+   uint32_t samples;
 
    uint32_t color_att_count;
    struct nvk_attachment color_att[NVK_MAX_RTS];
@@ -97,8 +103,10 @@ struct nvk_rendering_state {
 
 struct nvk_graphics_state {
    struct nvk_rendering_state render;
-   struct nvk_graphics_pipeline *pipeline;
    struct nvk_descriptor_state descriptors;
+
+   uint32_t shaders_dirty;
+   struct nvk_shader *shaders[MESA_SHADER_MESH + 1];
 
    /* Used for meta save/restore */
    struct nvk_addr_range vb0;
@@ -109,8 +117,8 @@ struct nvk_graphics_state {
 };
 
 struct nvk_compute_state {
-   struct nvk_compute_pipeline *pipeline;
    struct nvk_descriptor_state descriptors;
+   struct nvk_shader *shader;
 };
 
 struct nvk_cmd_push {
@@ -201,10 +209,20 @@ void nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
 void nvk_cmd_buffer_begin_compute(struct nvk_cmd_buffer *cmd,
                                   const VkCommandBufferBeginInfo *pBeginInfo);
 
-void nvk_cmd_bind_graphics_pipeline(struct nvk_cmd_buffer *cmd,
-                                    struct nvk_graphics_pipeline *pipeline);
-void nvk_cmd_bind_compute_pipeline(struct nvk_cmd_buffer *cmd,
-                                   struct nvk_compute_pipeline *pipeline);
+void nvk_cmd_invalidate_graphics_state(struct nvk_cmd_buffer *cmd);
+void nvk_cmd_invalidate_compute_state(struct nvk_cmd_buffer *cmd);
+
+void nvk_cmd_bind_shaders(struct vk_command_buffer *vk_cmd,
+                          uint32_t stage_count,
+                          const gl_shader_stage *stages,
+                          struct vk_shader ** const shaders);
+
+void nvk_cmd_bind_graphics_shader(struct nvk_cmd_buffer *cmd,
+                                  const gl_shader_stage stage,
+                                  struct nvk_shader *shader);
+
+void nvk_cmd_bind_compute_shader(struct nvk_cmd_buffer *cmd,
+                                 struct nvk_shader *shader);
 
 void nvk_cmd_bind_vertex_buffer(struct nvk_cmd_buffer *cmd, uint32_t vb_idx,
                                 struct nvk_addr_range addr_range);
@@ -249,6 +267,7 @@ nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
 bool
 nvk_cmd_buffer_get_cbuf_descriptor(struct nvk_cmd_buffer *cmd,
                                    const struct nvk_descriptor_state *desc,
+                                   const struct nvk_shader *shader,
                                    const struct nvk_cbuf *cbuf,
                                    struct nvk_buffer_address *desc_out);
 uint64_t

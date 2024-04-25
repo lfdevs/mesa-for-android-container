@@ -93,8 +93,6 @@ struct tu_program_state
       struct tu_draw_state vpc_state;
       struct tu_draw_state fs_state;
 
-      uint32_t hs_param_dwords;
-
       struct tu_push_constant_range shared_consts;
 
       struct tu_program_descriptor_linkage link[MESA_SHADER_STAGES];

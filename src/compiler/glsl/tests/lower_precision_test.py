@@ -401,7 +401,7 @@ TESTS = [
              gl_FragColor = vec4(b * a, 0.0, 0.0);
          }
          """,
-         r'\(expression +f16vec2 \* \(var_ref b\) \(var_ref a\)'),
+         r'\(expression f16vec2 \+ \(expression f16vec2 \* \(array_ref \(var_ref b\) \(constant int \(0\)\) \) \(swiz x \(var_ref a\) \)\) \(expression f16vec2 \* \(array_ref \(var_ref b\) \(constant int \(1\)\) \) \(swiz y \(var_ref a\) \)\) \) \)'),
     Test("f32 simple struct deref",
          """
          precision mediump float;

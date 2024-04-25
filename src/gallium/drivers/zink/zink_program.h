@@ -163,9 +163,6 @@ zink_gfx_lib_cache_unref(struct zink_screen *screen, struct zink_gfx_lib_cache *
 void
 zink_program_init(struct zink_context *ctx);
 
-uint32_t
-zink_program_get_descriptor_usage(struct zink_context *ctx, gl_shader_stage stage, enum zink_descriptor_type type);
-
 void
 debug_describe_zink_gfx_program(char* buf, const struct zink_gfx_program *ptr);
 
@@ -406,7 +403,6 @@ ALWAYS_INLINE static bool
 zink_can_use_pipeline_libs(const struct zink_context *ctx)
 {
    return
-          /* TODO: if there's ever a dynamic render extension with input attachments */
           !ctx->gfx_pipeline_state.render_pass &&
           /* this is just terrible */
           !zink_get_fs_base_key(ctx)->shadow_needs_shader_swizzle &&
@@ -423,7 +419,6 @@ ALWAYS_INLINE static bool
 zink_can_use_shader_objects(const struct zink_context *ctx)
 {
    return
-          /* TODO: if there's ever a dynamic render extension with input attachments */
           !ctx->gfx_pipeline_state.render_pass &&
           ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(ctx->gfx_pipeline_state.optimal_key) &&
           /* TODO: is sample shading even possible to handle with GPL? */
@@ -444,6 +439,14 @@ zink_driver_thread_add_job(struct pipe_screen *pscreen, void *data,
 equals_gfx_pipeline_state_func
 zink_get_gfx_pipeline_eq_func(struct zink_screen *screen, struct zink_gfx_program *prog);
 
+/* determines whether the 'samples' shader key is valid */
+static inline bool
+zink_shader_uses_samples(const struct zink_shader *zs)
+{
+   assert(zs->info.stage == MESA_SHADER_FRAGMENT);
+   return zs->uses_sample || zs->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+}
+
 static inline uint32_t
 zink_sanitize_optimal_key(struct zink_shader **shaders, uint32_t val)
 {
@@ -452,7 +455,7 @@ zink_sanitize_optimal_key(struct zink_shader **shaders, uint32_t val)
       k.val = val;
    else
       k.val = zink_shader_key_optimal_no_tcs(val);
-   if (!(shaders[MESA_SHADER_FRAGMENT]->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)))
+   if (!zink_shader_uses_samples(shaders[MESA_SHADER_FRAGMENT]))
       k.fs.samples = false;
    if (!(shaders[MESA_SHADER_FRAGMENT]->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DATA1)))
       k.fs.force_dual_color_blend = false;

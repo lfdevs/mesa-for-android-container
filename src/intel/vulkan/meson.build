@@ -18,8 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-subdir('shaders')
-
 inc_anv = include_directories('.')
 
 anv_flags = [
@@ -42,9 +40,10 @@ anv_entrypoints = custom_target(
     '--device-prefix', 'gfx12',
     '--device-prefix', 'gfx125',
     '--device-prefix', 'gfx20',
-    '--device-prefix', 'doom64',
-    '--device-prefix', 'hitman3',
-    '--device-prefix', 'android'
+    '--device-prefix', 'anv_doom64',
+    '--device-prefix', 'anv_hitman3',
+    '--device-prefix', 'anv_android',
+    '--device-prefix', 'anv_rmv',
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )
@@ -95,19 +94,26 @@ _dev_icd = custom_target(
   build_by_default : true,
 )
 
+devenv.append('VK_DRIVER_FILES', _dev_icd.full_path())
+# Deprecated: replaced by VK_DRIVER_FILES above
 devenv.append('VK_ICD_FILENAMES', _dev_icd.full_path())
 
 libanv_per_hw_ver_libs = []
 anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
   'genX_cmd_buffer.c',
+  'genX_cmd_compute.c',
+  'genX_cmd_draw.c',
+  'genX_cmd_draw_generated_flush.h',
+  'genX_cmd_draw_generated_indirect.h',
+  'genX_cmd_video.c',
   'genX_gfx_state.c',
   'genX_gpu_memcpy.c',
   'genX_init_state.c',
+  'genX_internal_kernels.c',
   'genX_pipeline.c',
   'genX_query.c',
   'genX_simple_shader.c',
-  'genX_video.c',
 )
 if with_intel_vk_rt
   anv_per_hw_ver_files += files('genX_acceleration_structure.c',)
@@ -116,7 +122,7 @@ endif
 foreach _gfx_ver : ['90', '110', '120', '125', '200']
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
-    [anv_per_hw_ver_files, anv_entrypoints[0], anv_internal_spvs, ],
+    [anv_per_hw_ver_files, anv_entrypoints[0]],
     include_directories : [
       inc_include, inc_src, inc_intel,
     ],
@@ -126,7 +132,7 @@ foreach _gfx_ver : ['90', '110', '120', '125', '200']
       dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml,
       idep_vulkan_util_headers, idep_vulkan_wsi_headers,
       idep_vulkan_runtime_headers, idep_intel_driver_ds_headers,
-      idep_grl,
+      idep_grl, idep_intel_shaders, idep_intel_blorp,
     ],
   )
 endforeach
@@ -141,9 +147,10 @@ libanv_files = files(
   'i915/anv_kmd_backend.c',
   'i915/anv_queue.c',
   'i915/anv_queue.h',
+  'layers/anv_android_layer.c',
   'layers/anv_doom64.c',
   'layers/anv_hitman3.c',
-  'layers/anv_android_layer.c',
+  'layers/anv_rmv_layer.c',
   'xe/anv_batch_chain.c',
   'xe/anv_batch_chain.h',
   'xe/anv_kmd_backend.c',
@@ -153,6 +160,7 @@ libanv_files = files(
   'xe/anv_queue.h',
   'anv_allocator.c',
   'anv_android.h',
+  'anv_astc_emu.c',
   'anv_batch_chain.c',
   'anv_blorp.c',
   'anv_bo_sync.c',
@@ -182,8 +190,9 @@ libanv_files = files(
   'anv_pipeline_cache.c',
   'anv_private.h',
   'anv_queue.c',
+  'anv_rmv.c',
+  'anv_rmv.h',
   'anv_sparse.c',
-  'anv_astc_emu.c',
   'anv_util.c',
   'anv_utrace.c',
   'anv_va.c',
@@ -199,6 +208,8 @@ anv_deps = [
   idep_vulkan_util_headers,
   idep_vulkan_runtime_headers,
   idep_vulkan_wsi_headers,
+  idep_intel_shaders,
+  idep_intel_blorp,
 ]
 
 if with_platform_x11
@@ -226,8 +237,7 @@ libanv_common = static_library(
   'anv_common',
   [
     libanv_files, anv_entrypoints, sha1_h,
-    gen_xml_pack, float64_spv_h,
-    anv_internal_spvs,
+    gen_xml_pack, intel_float64_spv_h,
   ],
   include_directories : [
     inc_include, inc_src, inc_intel,
@@ -247,13 +257,14 @@ libvulkan_intel = shared_library(
   ],
   link_whole : [libanv_common, libanv_per_hw_ver_libs] + optional_libgrl,
   link_with : [
-    libintel_compiler, libisl, libblorp, libintel_perf,
+    libisl, libintel_perf,
   ],
   dependencies : [
     dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
     idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
     idep_vulkan_runtime, idep_mesautil, idep_xmlconfig,
-    idep_intel_driver_ds, idep_intel_dev,
+    idep_intel_driver_ds, idep_intel_dev, idep_intel_blorp,
+    idep_intel_compiler_brw, idep_intel_decoder_brw,
   ],
   c_args : anv_flags,
   gnu_symbol_visibility : 'hidden',
@@ -284,13 +295,14 @@ if with_tests
     ],
     link_whole : libanv_common,
     link_with : [
-      libanv_per_hw_ver_libs, libintel_compiler, libintel_common,
-      libisl, libblorp, libintel_perf,
+      libanv_per_hw_ver_libs, libintel_common,
+      libisl, libintel_perf,
     ] + optional_libgrl,
     dependencies : [
       dep_thread, dep_dl, dep_m, anv_deps,
       idep_nir, idep_vulkan_util, idep_vulkan_wsi, idep_vulkan_runtime,
-      idep_mesautil, idep_intel_dev,
+      idep_mesautil, idep_intel_dev, idep_intel_shaders, idep_intel_blorp,
+      idep_intel_compiler_brw, idep_intel_decoder_brw,
     ],
     c_args : anv_flags,
     gnu_symbol_visibility : 'hidden',
@@ -320,6 +332,7 @@ if with_tests
         idep_gtest, dep_libdrm, dep_thread, dep_m, dep_valgrind,
         idep_vulkan_util, idep_vulkan_wsi_headers,
         idep_vulkan_runtime, idep_intel_driver_ds, idep_intel_dev,
+        idep_intel_shaders,
       ],
       include_directories : [
         inc_include, inc_src, inc_intel,

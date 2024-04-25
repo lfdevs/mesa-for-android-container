@@ -52,14 +52,13 @@ extern "C" {
 #endif
 
 struct intel_device_info;
-struct brw_image_param;
 
 #ifndef ISL_GFX_VER
 /**
  * Get the hardware generation of isl_device.
  *
  * You can define this as a compile-time constant in the CFLAGS. For example,
- * `gcc -DISL_GFX_VER(dev)=9 ...`.
+ * ``gcc -DISL_GFX_VER(dev)=9 ...``.
  */
 #define ISL_GFX_VER(__dev) ((__dev)->info->ver)
 #define ISL_GFX_VERX10(__dev) ((__dev)->info->verx10)
@@ -79,7 +78,7 @@ struct brw_image_param;
  * @brief Get the hardware generation of isl_device.
  *
  * You can define this as a compile-time constant in the CFLAGS. For example,
- * `gcc -DISL_GFX_VER(dev)=9 ...`.
+ * ``gcc -DISL_GFX_VER(dev)=9 ...``.
  */
 #define ISL_DEV_IS_HASWELL(__dev) ((__dev)->info->platform == INTEL_PLATFORM_HSW)
 #endif
@@ -91,7 +90,7 @@ struct brw_image_param;
 #ifndef ISL_DEV_USE_SEPARATE_STENCIL
 /**
  * You can define this as a compile-time constant in the CFLAGS. For example,
- * `gcc -DISL_DEV_USE_SEPARATE_STENCIL(dev)=1 ...`.
+ * ``gcc -DISL_DEV_USE_SEPARATE_STENCIL(dev)=1 ...``.
  */
 #define ISL_DEV_USE_SEPARATE_STENCIL(__dev) ((__dev)->use_separate_stencil)
 #define ISL_DEV_USE_SEPARATE_STENCIL_SANITIZE(__dev)
@@ -588,6 +587,8 @@ enum isl_tiling {
    ISL_TILING_4,
    /** 64K tiling.*/
    ISL_TILING_64,
+   /** Xe2 64K tiling.*/
+   ISL_TILING_64_XE2,
    /** Tiling format for HiZ surfaces */
    ISL_TILING_HIZ,
    /** Tiling format for CCS surfaces */
@@ -611,6 +612,7 @@ typedef uint32_t isl_tiling_flags_t;
 #define ISL_TILING_ICL_Ys_BIT             (1u << ISL_TILING_ICL_Ys)
 #define ISL_TILING_4_BIT                  (1u << ISL_TILING_4)
 #define ISL_TILING_64_BIT                 (1u << ISL_TILING_64)
+#define ISL_TILING_64_XE2_BIT             (1u << ISL_TILING_64_XE2)
 #define ISL_TILING_HIZ_BIT                (1u << ISL_TILING_HIZ)
 #define ISL_TILING_CCS_BIT                (1u << ISL_TILING_CCS)
 #define ISL_TILING_GFX12_CCS_BIT          (1u << ISL_TILING_GFX12_CCS)
@@ -629,6 +631,11 @@ typedef uint32_t isl_tiling_flags_t;
                                            ISL_TILING_SKL_Ys_BIT | \
                                            ISL_TILING_ICL_Yf_BIT | \
                                            ISL_TILING_ICL_Ys_BIT)
+
+/** Any Tiling 64 */
+#define ISL_TILING_STD_64_MASK            (ISL_TILING_64_BIT | \
+                                           ISL_TILING_64_XE2_BIT)
+
 /** @} */
 
 /**
@@ -776,14 +783,14 @@ enum isl_aux_usage {
     * main surface which says how the corresponding pair of cache lines in the
     * main surface are to be interpreted.  Valid CCS values include:
     *
-    *  - `0x0`: Indicates that the corresponding pair of cache lines in the
+    *  - ``0x0``: Indicates that the corresponding pair of cache lines in the
     *    main surface contain valid color data
     *
-    *  - `0x1`: Indicates that the corresponding pair of cache lines in the
+    *  - ``0x1``: Indicates that the corresponding pair of cache lines in the
     *    main surface contain compressed color data.  Typically, the
     *    compressed data fits in one of the two cache lines.
     *
-    *  - `0x3`: Indicates that the corresponding pair of cache lines in the
+    *  - ``0x3``: Indicates that the corresponding pair of cache lines in the
     *    main surface should be ignored.  Those cache lines should be
     *    considered to contain the clear color.
     *
@@ -1142,6 +1149,7 @@ typedef uint64_t isl_surf_usage_flags_t;
 #define ISL_SURF_USAGE_STREAM_OUT_BIT          (1u << 18)
 #define ISL_SURF_USAGE_2D_3D_COMPATIBLE_BIT    (1u << 19)
 #define ISL_SURF_USAGE_SPARSE_BIT              (1u << 20)
+#define ISL_SURF_USAGE_NO_AUX_TT_ALIGNMENT_BIT (1u << 21)
 #define ISL_SURF_USAGE_BLITTER_DST_BIT         (1u << 22)
 #define ISL_SURF_USAGE_BLITTER_SRC_BIT         (1u << 23)
 /** @} */
@@ -1235,8 +1243,8 @@ enum isl_msaa_layout {
     * Suppose the multisample surface's logical extent is (w, h) and its
     * sample count is N. Then surface's physical extent is the same as
     * a singlesample 2D surface whose logical extent is (w, h) and array
-    * length is N.  Array slice `i` contains the pixel values for sample
-    * index `i`.
+    * length is N.  Array slice ``i`` contains the pixel values for sample
+    * index ``i``.
     *
     * The Ivybridge docs refer to surfaces in this format as UMS
     * (Uncompressed Multsample Layout) and CMS (Compressed Multisample
@@ -1698,7 +1706,7 @@ struct isl_view {
     * specified in terms of 2-D layers and must be a multiple of 6.
     *
     * 3-D textures are effectively treated as 2-D arrays when used as a
-    * storage image or render target.  If `usage` contains
+    * storage image or render target.  If ``usage`` contains
     * ISL_SURF_USAGE_RENDER_TARGET_BIT or ISL_SURF_USAGE_STORAGE_BIT then
     * base_array_layer and array_len are applied.  If the surface is only used
     * for texturing, they are ignored.
@@ -1918,6 +1926,48 @@ struct isl_cpb_emit_info {
     * The Memory Object Control state for the surface.
     */
    uint32_t mocs;
+};
+
+/*
+ * Image metadata structure as laid out in the shader parameter
+ * buffer.  Entries have to be 16B-aligned for the vec4 back-end to be
+ * able to use them.  That's okay because the padding and any unused
+ * entries [most of them except when we're doing untyped surface
+ * access] will be removed by the uniform packing pass.
+ */
+#define ISL_IMAGE_PARAM_OFFSET_OFFSET           0
+#define ISL_IMAGE_PARAM_SIZE_OFFSET             4
+#define ISL_IMAGE_PARAM_STRIDE_OFFSET           8
+#define ISL_IMAGE_PARAM_TILING_OFFSET           12
+#define ISL_IMAGE_PARAM_SWIZZLING_OFFSET        16
+#define ISL_IMAGE_PARAM_SIZE                    20
+
+struct isl_image_param {
+   /** Offset applied to the X and Y surface coordinates. */
+   uint32_t offset[2];
+
+   /** Surface X, Y and Z dimensions. */
+   uint32_t size[3];
+
+   /** X-stride in bytes, Y-stride in pixels, horizontal slice stride in
+    * pixels, vertical slice stride in pixels.
+    */
+   uint32_t stride[4];
+
+   /** Log2 of the tiling modulus in the X, Y and Z dimension. */
+   uint32_t tiling[3];
+
+   /**
+    * Right shift to apply for bit 6 address swizzling.  Two different
+    * swizzles can be specified and will be applied one after the other.  The
+    * resulting address will be:
+    *
+    *  addr' = addr ^ ((1 << 6) & ((addr >> swizzling[0]) ^
+    *                              (addr >> swizzling[1])))
+    *
+    * Use \c 0xff if any of the swizzles is not required.
+    */
+   uint32_t swizzling[2];
 };
 
 extern const struct isl_format_layout isl_format_layouts[];
@@ -2209,11 +2259,27 @@ isl_tiling_is_std_y(enum isl_tiling tiling)
    return (1u << tiling) & ISL_TILING_STD_Y_MASK;
 }
 
+static inline bool
+isl_tiling_is_64(enum isl_tiling tiling)
+{
+   return (1u << tiling) & ISL_TILING_STD_64_MASK;
+}
+
 uint32_t
 isl_tiling_to_i915_tiling(enum isl_tiling tiling);
 
 enum isl_tiling
 isl_tiling_from_i915_tiling(uint32_t tiling);
+
+
+/**
+ * Return an isl_aux_state to describe an auxiliary surface that is either
+ * uninitialized or zeroed.
+ */
+enum isl_aux_state
+isl_aux_get_initial_state(const struct intel_device_info *devinfo,
+                          enum isl_aux_usage usage,
+                          bool zeroed);
 
 /**
  * Return an isl_aux_op needed to enable an access to occur in an
@@ -2671,13 +2737,13 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
 
 void
 isl_surf_fill_image_param(const struct isl_device *dev,
-                          struct brw_image_param *param,
+                          struct isl_image_param *param,
                           const struct isl_surf *surf,
                           const struct isl_view *view);
 
 void
 isl_buffer_fill_image_param(const struct isl_device *dev,
-                            struct brw_image_param *param,
+                            struct isl_image_param *param,
                             enum isl_format format,
                             uint64_t size);
 
@@ -3134,6 +3200,12 @@ isl_aux_op_to_name(enum isl_aux_op op);
 
 const char *
 isl_tiling_to_name(enum isl_tiling tiling);
+
+const char *
+isl_aux_usage_to_name(enum isl_aux_usage usage);
+
+const char *
+isl_aux_state_to_name(enum isl_aux_state state);
 
 #ifdef __cplusplus
 }

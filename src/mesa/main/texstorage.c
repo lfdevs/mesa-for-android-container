@@ -221,6 +221,56 @@ GLboolean
 _mesa_is_legal_tex_storage_format(const struct gl_context *ctx,
                                   GLenum internalformat)
 {
+   if (!_mesa_is_desktop_gl(ctx)) {
+      assert(_mesa_has_EXT_texture_storage(ctx));
+
+      /* EXT_texture_storage allows us to use some sized internal formats
+       * for TexStorage* that aren't otherwise allowed in OpenGL ES.
+       **/
+      switch (internalformat) {
+      case GL_ALPHA8:
+      case GL_LUMINANCE8:
+      case GL_LUMINANCE8_ALPHA8:
+         return true;
+
+      case GL_RGBA32F:
+      case GL_RGB32F:
+      case GL_ALPHA32F_EXT:
+      case GL_LUMINANCE32F_EXT:
+      case GL_LUMINANCE_ALPHA32F_EXT:
+         return _mesa_has_OES_texture_float(ctx);
+
+      case GL_RGBA16F:
+      case GL_RGB16F:
+      case GL_ALPHA16F_EXT:
+      case GL_LUMINANCE16F_EXT:
+      case GL_LUMINANCE_ALPHA16F_EXT:
+         return _mesa_has_OES_texture_half_float(ctx);
+
+      case GL_RGB10_A2:
+      case GL_RGB10:
+         return _mesa_has_EXT_texture_type_2_10_10_10_REV(ctx);
+
+      case GL_BGRA8_EXT:
+         assert(_mesa_has_EXT_texture_format_BGRA8888(ctx));
+         return true;
+
+      case GL_R8:
+      case GL_RG8:
+         return _mesa_has_EXT_texture_rg(ctx);
+
+      case GL_R32F_EXT:
+      case GL_RG32F_EXT:
+         return _mesa_has_EXT_texture_rg(ctx) &&
+                _mesa_has_OES_texture_float(ctx);
+
+      case GL_R16F_EXT:
+      case GL_RG16F_EXT:
+         return _mesa_has_EXT_texture_rg(ctx) &&
+                _mesa_has_OES_texture_half_float(ctx);
+      }
+   }
+
    /* check internal format - note that only sized formats are allowed */
    switch (internalformat) {
    case GL_ALPHA:

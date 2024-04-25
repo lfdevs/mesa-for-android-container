@@ -82,7 +82,7 @@ UNUSED static struct isl_extent3d
 isl_get_image_alignment(const struct isl_surf *surf)
 {
    if (GFX_VERx10 >= 125) {
-      if (surf->tiling == ISL_TILING_64) {
+      if (isl_tiling_is_64(surf->tiling)) {
          /* The hardware ignores the alignment values. Anyway, the surface's
           * true alignment is likely outside the enum range of HALIGN* and
           * VALIGN*.

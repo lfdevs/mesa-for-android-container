@@ -91,7 +91,7 @@ lp_build_array_get_ptr2(struct gallivm_state *gallivm,
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = index;
    element_ptr = LLVMBuildGEP2(gallivm->builder, array_type, ptr, indices, ARRAY_SIZE(indices), "");
-#ifdef DEBUG
+#if MESA_DEBUG
    lp_build_name(element_ptr, "&%s[%s]", LLVMGetValueName(ptr), LLVMGetValueName(index));
 #endif
    return element_ptr;
@@ -111,7 +111,7 @@ lp_build_array_get2(struct gallivm_state *gallivm,
    element_ptr = lp_build_array_get_ptr2(gallivm, array_type, ptr, index);
    LLVMTypeRef element_type = LLVMGetElementType(array_type);
    res = LLVMBuildLoad2(gallivm->builder, element_type, element_ptr, "");
-#ifdef DEBUG
+#if MESA_DEBUG
    lp_build_name(res, "%s[%s]", LLVMGetValueName(ptr), LLVMGetValueName(index));
 #endif
    return res;
@@ -131,7 +131,7 @@ lp_build_pointer_get_unaligned2(LLVMBuilderRef builder,
    res = LLVMBuildLoad2(builder, ptr_type, element_ptr, "");
    if (alignment)
       LLVMSetAlignment(res, alignment);
-#ifdef DEBUG
+#if MESA_DEBUG
    lp_build_name(res, "%s[%s]", LLVMGetValueName(ptr), LLVMGetValueName(index));
 #endif
    return res;

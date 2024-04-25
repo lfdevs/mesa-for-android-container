@@ -850,7 +850,7 @@ intel_perf_begin_query(struct intel_perf_context *perf_ctx,
       query->oa.bo = perf_cfg->vtbl.bo_alloc(perf_ctx->bufmgr,
                                              "perf. query OA MI_RPC bo",
                                              MI_RPC_BO_SIZE);
-#ifdef DEBUG
+#if MESA_DEBUG
       /* Pre-filling the BO helps debug whether writes landed. */
       void *map = perf_cfg->vtbl.bo_map(perf_ctx->ctx, query->oa.bo, MAP_WRITE);
       memset(map, 0x80, MI_RPC_BO_SIZE);

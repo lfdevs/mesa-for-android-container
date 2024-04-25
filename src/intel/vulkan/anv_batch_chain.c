@@ -747,8 +747,13 @@ anv_cmd_buffer_alloc_dynamic_state(struct anv_cmd_buffer *cmd_buffer,
 {
    if (size == 0)
       return ANV_STATE_NULL;
+   assert(cmd_buffer->state.current_db_mode !=
+          ANV_CMD_DESCRIPTOR_BUFFER_MODE_UNKNOWN);
    struct anv_state state =
-      anv_state_stream_alloc(&cmd_buffer->dynamic_state_stream,
+      anv_state_stream_alloc(cmd_buffer->state.current_db_mode ==
+                             ANV_CMD_DESCRIPTOR_BUFFER_MODE_BUFFER ?
+                             &cmd_buffer->dynamic_state_db_stream :
+                             &cmd_buffer->dynamic_state_stream,
                              size, alignment);
    if (state.map == NULL)
       anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_DEVICE_MEMORY);
@@ -1380,7 +1385,7 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
     * supposed to be used by applications that request sparse to be enabled
     * but don't actually *use* it.
     */
-   if (!device->physical->has_sparse) {
+   if (device->physical->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) {
       if (INTEL_DEBUG(DEBUG_SPARSE))
          fprintf(stderr, "=== application submitting sparse operations: "
                "buffer_bind:%d image_opaque_bind:%d image_bind:%d\n",
@@ -1388,8 +1393,6 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
                submit->image_bind_count);
       return vk_queue_set_lost(&queue->vk, "Sparse binding not supported");
    }
-
-   device->using_sparse = true;
 
    assert(submit->command_buffer_count == 0);
 
@@ -1420,10 +1423,9 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
       assert(anv_buffer_is_sparse(buffer));
 
       for (uint32_t j = 0; j < bind_info->bindCount; j++) {
-         result = anv_sparse_bind_resource_memory(device,
-                                                  &buffer->sparse_data,
-                                                  &bind_info->pBinds[j],
-                                                  &sparse_submit);
+         result = anv_sparse_bind_buffer(device, buffer,
+                                         &bind_info->pBinds[j],
+                                         &sparse_submit);
          if (result != VK_SUCCESS)
             goto out_free_submit;
       }
@@ -1451,14 +1453,11 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
       ANV_FROM_HANDLE(anv_image, image, bind_info->image);
 
       assert(anv_image_is_sparse(image));
-      assert(!image->disjoint);
-      struct anv_sparse_binding_data *sparse_data =
-         &image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].sparse_data;
 
       for (uint32_t j = 0; j < bind_info->bindCount; j++) {
-         result = anv_sparse_bind_resource_memory(device, sparse_data,
-                                                  &bind_info->pBinds[j],
-                                                  &sparse_submit);
+         result = anv_sparse_bind_image_opaque(device, image,
+                                               &bind_info->pBinds[j],
+                                               &sparse_submit);
          if (result != VK_SUCCESS)
             goto out_free_submit;
       }

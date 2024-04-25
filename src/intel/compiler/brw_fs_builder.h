@@ -26,30 +26,15 @@
 #define BRW_FS_BUILDER_H
 
 #include "brw_ir_fs.h"
-#include "brw_shader.h"
 #include "brw_eu.h"
 #include "brw_fs.h"
 
 namespace brw {
    /**
     * Toolbox to assemble an FS IR program out of individual instructions.
-    *
-    * This object is meant to have an interface consistent with
-    * brw::vec4_builder.  They cannot be fully interchangeable because
-    * brw::fs_builder generates scalar code while brw::vec4_builder generates
-    * vector code.
     */
    class fs_builder {
    public:
-      /** Type used in this IR to represent a source of an instruction. */
-      typedef fs_reg src_reg;
-
-      /** Type used in this IR to represent the destination of an instruction. */
-      typedef fs_reg dst_reg;
-
-      /** Type used in this IR to represent an instruction. */
-      typedef fs_inst instruction;
-
       /**
        * Construct an fs_builder that inserts instructions into \p shader.
        * \p dispatch_width gives the native execution width of the program.
@@ -199,14 +184,14 @@ namespace brw {
        * dispatch_width units (which is just enough space for one logical
        * component in this IR).
        */
-      dst_reg
+      fs_reg
       vgrf(enum brw_reg_type type, unsigned n = 1) const
       {
          const unsigned unit = reg_unit(shader->devinfo);
          assert(dispatch_width() <= 32);
 
          if (n > 0)
-            return dst_reg(VGRF, shader->alloc.allocate(
+            return fs_reg(VGRF, shader->alloc.allocate(
                               DIV_ROUND_UP(n * type_sz(type) * dispatch_width(),
                                            unit * REG_SIZE) * unit),
                            type);
@@ -217,126 +202,102 @@ namespace brw {
       /**
        * Create a null register of floating type.
        */
-      dst_reg
+      fs_reg
       null_reg_f() const
       {
-         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_F));
+         return fs_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_F));
       }
 
-      dst_reg
+      fs_reg
       null_reg_df() const
       {
-         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_DF));
+         return fs_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_DF));
       }
 
       /**
        * Create a null register of signed integer type.
        */
-      dst_reg
+      fs_reg
       null_reg_d() const
       {
-         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
+         return fs_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
       }
 
       /**
        * Create a null register of unsigned integer type.
        */
-      dst_reg
+      fs_reg
       null_reg_ud() const
       {
-         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
+         return fs_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
       }
 
       /**
        * Insert an instruction into the program.
        */
-      instruction *
-      emit(const instruction &inst) const
+      fs_inst *
+      emit(const fs_inst &inst) const
       {
-         return emit(new(shader->mem_ctx) instruction(inst));
+         return emit(new(shader->mem_ctx) fs_inst(inst));
       }
 
       /**
        * Create and insert a nullary control instruction into the program.
        */
-      instruction *
+      fs_inst *
       emit(enum opcode opcode) const
       {
-         return emit(instruction(opcode, dispatch_width()));
+         return emit(fs_inst(opcode, dispatch_width()));
       }
 
       /**
        * Create and insert a nullary instruction into the program.
        */
-      instruction *
-      emit(enum opcode opcode, const dst_reg &dst) const
+      fs_inst *
+      emit(enum opcode opcode, const fs_reg &dst) const
       {
-         return emit(instruction(opcode, dispatch_width(), dst));
+         return emit(fs_inst(opcode, dispatch_width(), dst));
       }
 
       /**
        * Create and insert a unary instruction into the program.
        */
-      instruction *
-      emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0) const
+      fs_inst *
+      emit(enum opcode opcode, const fs_reg &dst, const fs_reg &src0) const
       {
-         switch (opcode) {
-         case SHADER_OPCODE_RCP:
-         case SHADER_OPCODE_RSQ:
-         case SHADER_OPCODE_SQRT:
-         case SHADER_OPCODE_EXP2:
-         case SHADER_OPCODE_LOG2:
-         case SHADER_OPCODE_SIN:
-         case SHADER_OPCODE_COS:
-            return emit(instruction(opcode, dispatch_width(), dst,
-                                    fix_math_operand(src0)));
-
-         default:
-            return emit(instruction(opcode, dispatch_width(), dst, src0));
-         }
+         return emit(fs_inst(opcode, dispatch_width(), dst, src0));
       }
 
       /**
        * Create and insert a binary instruction into the program.
        */
-      instruction *
-      emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
-           const src_reg &src1) const
+      fs_inst *
+      emit(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
+           const fs_reg &src1) const
       {
-         switch (opcode) {
-         case SHADER_OPCODE_POW:
-         case SHADER_OPCODE_INT_QUOTIENT:
-         case SHADER_OPCODE_INT_REMAINDER:
-            return emit(instruction(opcode, dispatch_width(), dst,
-                                    fix_math_operand(src0),
-                                    fix_math_operand(src1)));
-
-         default:
-            return emit(instruction(opcode, dispatch_width(), dst,
-                                    src0, src1));
-
-         }
+         return emit(fs_inst(opcode, dispatch_width(), dst,
+                                 src0, src1));
       }
 
       /**
        * Create and insert a ternary instruction into the program.
        */
-      instruction *
-      emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
-           const src_reg &src1, const src_reg &src2) const
+      fs_inst *
+      emit(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
+           const fs_reg &src1, const fs_reg &src2) const
       {
          switch (opcode) {
          case BRW_OPCODE_BFE:
          case BRW_OPCODE_BFI2:
          case BRW_OPCODE_MAD:
          case BRW_OPCODE_LRP:
-            return emit(instruction(opcode, dispatch_width(), dst,
+            return emit(fs_inst(opcode, dispatch_width(), dst,
                                     fix_3src_operand(src0),
                                     fix_3src_operand(src1),
                                     fix_3src_operand(src2)));
 
          default:
-            return emit(instruction(opcode, dispatch_width(), dst,
+            return emit(fs_inst(opcode, dispatch_width(), dst,
                                     src0, src1, src2));
          }
       }
@@ -345,8 +306,8 @@ namespace brw {
        * Create and insert an instruction with a variable number of sources
        * into the program.
        */
-      instruction *
-      emit(enum opcode opcode, const dst_reg &dst, const src_reg srcs[],
+      fs_inst *
+      emit(enum opcode opcode, const fs_reg &dst, const fs_reg srcs[],
            unsigned n) const
       {
          /* Use the emit() methods for specific operand counts to ensure that
@@ -357,15 +318,15 @@ namespace brw {
          } else if (n == 3) {
             return emit(opcode, dst, srcs[0], srcs[1], srcs[2]);
          } else {
-            return emit(instruction(opcode, dispatch_width(), dst, srcs, n));
+            return emit(fs_inst(opcode, dispatch_width(), dst, srcs, n));
          }
       }
 
       /**
        * Insert a preallocated instruction into the program.
        */
-      instruction *
-      emit(instruction *inst) const
+      fs_inst *
+      emit(fs_inst *inst) const
       {
          assert(inst->exec_size <= 32);
          assert(inst->exec_size == dispatch_width() ||
@@ -377,7 +338,7 @@ namespace brw {
          inst->ir = annotation.ir;
 
          if (block)
-            static_cast<instruction *>(cursor)->insert_before(block, inst);
+            static_cast<fs_inst *>(cursor)->insert_before(block, inst);
          else
             cursor->insert_before(inst);
 
@@ -390,9 +351,9 @@ namespace brw {
        *
        * Generally useful to get the minimum or maximum of two values.
        */
-      instruction *
-      emit_minmax(const dst_reg &dst, const src_reg &src0,
-                  const src_reg &src1, brw_conditional_mod mod) const
+      fs_inst *
+      emit_minmax(const fs_reg &dst, const fs_reg &src0,
+                  const fs_reg &src1, brw_conditional_mod mod) const
       {
          assert(mod == BRW_CONDITIONAL_GE || mod == BRW_CONDITIONAL_L);
 
@@ -406,8 +367,8 @@ namespace brw {
       /**
        * Copy any live channel from \p src to the first channel of the result.
        */
-      src_reg
-      emit_uniformize(const src_reg &src) const
+      fs_reg
+      emit_uniformize(const fs_reg &src) const
       {
          /* FIXME: We use a vector chan_index and dst to allow constant and
           * copy propagration to move result all the way into the consuming
@@ -417,37 +378,37 @@ namespace brw {
           * should go back to scalar destinations here.
           */
          const fs_builder ubld = exec_all();
-         const dst_reg chan_index = vgrf(BRW_REGISTER_TYPE_UD);
-         const dst_reg dst = vgrf(src.type);
+         const fs_reg chan_index = vgrf(BRW_REGISTER_TYPE_UD);
+         const fs_reg dst = vgrf(src.type);
 
          ubld.emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index);
          ubld.emit(SHADER_OPCODE_BROADCAST, dst, src, component(chan_index, 0));
 
-         return src_reg(component(dst, 0));
+         return fs_reg(component(dst, 0));
       }
 
-      src_reg
-      move_to_vgrf(const src_reg &src, unsigned num_components) const
+      fs_reg
+      move_to_vgrf(const fs_reg &src, unsigned num_components) const
       {
-         src_reg *const src_comps = new src_reg[num_components];
+         fs_reg *const src_comps = new fs_reg[num_components];
          for (unsigned i = 0; i < num_components; i++)
             src_comps[i] = offset(src, dispatch_width(), i);
 
-         const dst_reg dst = vgrf(src.type, num_components);
+         const fs_reg dst = vgrf(src.type, num_components);
          LOAD_PAYLOAD(dst, src_comps, num_components, 0);
 
          delete[] src_comps;
 
-         return src_reg(dst);
+         return fs_reg(dst);
       }
 
       void
       emit_scan_step(enum opcode opcode, brw_conditional_mod mod,
-                     const dst_reg &tmp,
+                     const fs_reg &tmp,
                      unsigned left_offset, unsigned left_stride,
                      unsigned right_offset, unsigned right_stride) const
       {
-         dst_reg left, right;
+         fs_reg left, right;
          left = horiz_stride(horiz_offset(tmp, left_offset), left_stride);
          right = horiz_stride(horiz_offset(tmp, right_offset), right_stride);
          if ((tmp.type == BRW_REGISTER_TYPE_Q ||
@@ -470,13 +431,13 @@ namespace brw {
                /* We treat the bottom 32 bits as unsigned regardless of
                 * whether or not the integer as a whole is signed.
                 */
-               dst_reg right_low = subscript(right, BRW_REGISTER_TYPE_UD, 0);
-               dst_reg left_low = subscript(left, BRW_REGISTER_TYPE_UD, 0);
+               fs_reg right_low = subscript(right, BRW_REGISTER_TYPE_UD, 0);
+               fs_reg left_low = subscript(left, BRW_REGISTER_TYPE_UD, 0);
 
                /* The upper bits get the same sign as the 64-bit type */
                brw_reg_type type32 = brw_reg_type_from_bit_size(32, tmp.type);
-               dst_reg right_high = subscript(right, type32, 1);
-               dst_reg left_high = subscript(left, type32, 1);
+               fs_reg right_high = subscript(right, type32, 1);
+               fs_reg left_high = subscript(left, type32, 1);
 
                /* Build up our comparison:
                 *
@@ -508,7 +469,7 @@ namespace brw {
       }
 
       void
-      emit_scan(enum opcode opcode, const dst_reg &tmp,
+      emit_scan(enum opcode opcode, const fs_reg &tmp,
                 unsigned cluster_size, brw_conditional_mod mod) const
       {
          assert(dispatch_width() >= 8);
@@ -519,8 +480,8 @@ namespace brw {
          if (dispatch_width() * type_sz(tmp.type) > 2 * REG_SIZE) {
             const unsigned half_width = dispatch_width() / 2;
             const fs_builder ubld = exec_all().group(half_width, 0);
-            dst_reg left = tmp;
-            dst_reg right = horiz_offset(tmp, half_width);
+            fs_reg left = tmp;
+            fs_reg right = horiz_offset(tmp, half_width);
             ubld.emit_scan(opcode, left, cluster_size, mod);
             ubld.emit_scan(opcode, right, cluster_size, mod);
             if (cluster_size > half_width) {
@@ -570,11 +531,11 @@ namespace brw {
          }
       }
 
-      instruction *
-      emit_undef_for_dst(const instruction *old_inst) const
+      fs_inst *
+      emit_undef_for_dst(const fs_inst *old_inst) const
       {
          assert(old_inst->dst.file == VGRF);
-         instruction *inst = emit(SHADER_OPCODE_UNDEF,
+         fs_inst *inst = emit(SHADER_OPCODE_UNDEF,
                                   retype(old_inst->dst, BRW_REGISTER_TYPE_UD));
          inst->size_written = old_inst->size_written;
 
@@ -586,32 +547,35 @@ namespace brw {
        * @{
        */
 #define ALU1(op)                                        \
-      instruction *                                     \
-      op(const dst_reg &dst, const src_reg &src0) const \
+      fs_inst *                                     \
+      op(const fs_reg &dst, const fs_reg &src0) const \
       {                                                 \
+         assert(_dispatch_width == 1 ||                         \
+                (dst.file >= VGRF && dst.stride != 0) ||        \
+                (dst.file < VGRF && dst.hstride != 0));         \
          return emit(BRW_OPCODE_##op, dst, src0);       \
       }
 
 #define ALU2(op)                                                        \
-      instruction *                                                     \
-      op(const dst_reg &dst, const src_reg &src0, const src_reg &src1) const \
+      fs_inst *                                                     \
+      op(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1) const \
       {                                                                 \
          return emit(BRW_OPCODE_##op, dst, src0, src1);                 \
       }
 
 #define ALU2_ACC(op)                                                    \
-      instruction *                                                     \
-      op(const dst_reg &dst, const src_reg &src0, const src_reg &src1) const \
+      fs_inst *                                                     \
+      op(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1) const \
       {                                                                 \
-         instruction *inst = emit(BRW_OPCODE_##op, dst, src0, src1);    \
+         fs_inst *inst = emit(BRW_OPCODE_##op, dst, src0, src1);    \
          inst->writes_accumulator = true;                               \
          return inst;                                                   \
       }
 
 #define ALU3(op)                                                        \
-      instruction *                                                     \
-      op(const dst_reg &dst, const src_reg &src0, const src_reg &src1,  \
-         const src_reg &src2) const                                     \
+      fs_inst *                                                     \
+      op(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1,  \
+         const fs_reg &src2) const                                     \
       {                                                                 \
          return emit(BRW_OPCODE_##op, dst, src0, src1, src2);           \
       }
@@ -627,7 +591,6 @@ namespace brw {
       ALU3(BFI2)
       ALU1(BFREV)
       ALU1(CBIT)
-      ALU1(DIM)
       ALU2(DP2)
       ALU2(DP3)
       ALU2(DP4)
@@ -664,36 +627,6 @@ namespace brw {
 #undef ALU2_ACC
 #undef ALU2
 #undef ALU1
-
-      instruction *
-      F32TO16(const dst_reg &dst, const src_reg &src) const
-      {
-         assert(dst.type == BRW_REGISTER_TYPE_HF);
-         assert(src.type == BRW_REGISTER_TYPE_F);
-
-         if (shader->devinfo->ver >= 8) {
-            return MOV(dst, src);
-         } else {
-            assert(shader->devinfo->ver == 7);
-            return emit(BRW_OPCODE_F32TO16,
-                        retype(dst, BRW_REGISTER_TYPE_W), src);
-         }
-      }
-
-      instruction *
-      F16TO32(const dst_reg &dst, const src_reg &src) const
-      {
-         assert(dst.type == BRW_REGISTER_TYPE_F);
-         assert(src.type == BRW_REGISTER_TYPE_HF);
-
-         if (shader->devinfo->ver >= 8) {
-            return MOV(dst, src);
-         } else {
-            assert(shader->devinfo->ver == 7);
-            return emit(BRW_OPCODE_F16TO32,
-                        dst, retype(src, BRW_REGISTER_TYPE_W));
-         }
-      }
       /** @} */
 
       /**
@@ -701,8 +634,8 @@ namespace brw {
        * of the comparison, while the upper bits are undefined, and updates
        * the flag register with the packed 16 bits of the result.
        */
-      instruction *
-      CMP(const dst_reg &dst, const src_reg &src0, const src_reg &src1,
+      fs_inst *
+      CMP(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1,
           brw_conditional_mod condition) const
       {
          /* Take the instruction:
@@ -726,8 +659,8 @@ namespace brw {
       /**
        * CMPN: Behaves like CMP, but produces true if src1 is NaN.
        */
-      instruction *
-      CMPN(const dst_reg &dst, const src_reg &src0, const src_reg &src1,
+      fs_inst *
+      CMPN(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1,
            brw_conditional_mod condition) const
       {
          /* Take the instruction:
@@ -751,7 +684,7 @@ namespace brw {
       /**
        * Gfx4 predicated IF.
        */
-      instruction *
+      fs_inst *
       IF(brw_predicate predicate) const
       {
          return set_predicate(predicate, emit(BRW_OPCODE_IF));
@@ -760,9 +693,9 @@ namespace brw {
       /**
        * CSEL: dst = src2 <op> 0.0f ? src0 : src1
        */
-      instruction *
-      CSEL(const dst_reg &dst, const src_reg &src0, const src_reg &src1,
-           const src_reg &src2, brw_conditional_mod condition) const
+      fs_inst *
+      CSEL(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1,
+           const fs_reg &src2, brw_conditional_mod condition) const
       {
          /* CSEL only operates on floats, so we can't do integer </<=/>=/>
           * comparisons.  Zero/non-zero (== and !=) comparisons almost work.
@@ -781,11 +714,11 @@ namespace brw {
       /**
        * Emit a linear interpolation instruction.
        */
-      instruction *
-      LRP(const dst_reg &dst, const src_reg &x, const src_reg &y,
-          const src_reg &a) const
+      fs_inst *
+      LRP(const fs_reg &dst, const fs_reg &x, const fs_reg &y,
+          const fs_reg &a) const
       {
-         if (shader->devinfo->ver >= 6 && shader->devinfo->ver <= 10) {
+         if (shader->devinfo->ver <= 10) {
             /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
              * we need to reorder the operands.
              */
@@ -793,25 +726,25 @@ namespace brw {
 
          } else {
             /* We can't use the LRP instruction.  Emit x*(1-a) + y*a. */
-            const dst_reg y_times_a = vgrf(dst.type);
-            const dst_reg one_minus_a = vgrf(dst.type);
-            const dst_reg x_times_one_minus_a = vgrf(dst.type);
+            const fs_reg y_times_a = vgrf(dst.type);
+            const fs_reg one_minus_a = vgrf(dst.type);
+            const fs_reg x_times_one_minus_a = vgrf(dst.type);
 
             MUL(y_times_a, y, a);
             ADD(one_minus_a, negate(a), brw_imm_f(1.0f));
-            MUL(x_times_one_minus_a, x, src_reg(one_minus_a));
-            return ADD(dst, src_reg(x_times_one_minus_a), src_reg(y_times_a));
+            MUL(x_times_one_minus_a, x, fs_reg(one_minus_a));
+            return ADD(dst, fs_reg(x_times_one_minus_a), fs_reg(y_times_a));
          }
       }
 
       /**
        * Collect a number of registers in a contiguous range of registers.
        */
-      instruction *
-      LOAD_PAYLOAD(const dst_reg &dst, const src_reg *src,
+      fs_inst *
+      LOAD_PAYLOAD(const fs_reg &dst, const fs_reg *src,
                    unsigned sources, unsigned header_size) const
       {
-         instruction *inst = emit(SHADER_OPCODE_LOAD_PAYLOAD, dst, src, sources);
+         fs_inst *inst = emit(SHADER_OPCODE_LOAD_PAYLOAD, dst, src, sources);
          inst->header_size = header_size;
          inst->size_written = header_size * REG_SIZE;
          for (unsigned i = header_size; i < sources; i++) {
@@ -822,27 +755,33 @@ namespace brw {
          return inst;
       }
 
-      instruction *
-      UNDEF(const dst_reg &dst) const
+      fs_inst *
+      SYNC(enum tgl_sync_function sync) const
+      {
+         return emit(BRW_OPCODE_SYNC, null_reg_ud(), brw_imm_ud(sync));
+      }
+
+      fs_inst *
+      UNDEF(const fs_reg &dst) const
       {
          assert(dst.file == VGRF);
          assert(dst.offset % REG_SIZE == 0);
-         instruction *inst = emit(SHADER_OPCODE_UNDEF,
+         fs_inst *inst = emit(SHADER_OPCODE_UNDEF,
                                   retype(dst, BRW_REGISTER_TYPE_UD));
          inst->size_written = shader->alloc.sizes[dst.nr] * REG_SIZE - dst.offset;
 
          return inst;
       }
 
-      instruction *
-      DPAS(const dst_reg &dst, const src_reg &src0, const src_reg &src1, const src_reg &src2,
+      fs_inst *
+      DPAS(const fs_reg &dst, const fs_reg &src0, const fs_reg &src1, const fs_reg &src2,
            unsigned sdepth, unsigned rcount) const
       {
-         assert(_dispatch_width == 8);
+         assert(_dispatch_width == 8 * reg_unit(shader->devinfo));
          assert(sdepth == 8);
          assert(rcount == 1 || rcount == 2 || rcount == 4 || rcount == 8);
 
-         instruction *inst = emit(BRW_OPCODE_DPAS, dst, src0, src1, src2);
+         fs_inst *inst = emit(BRW_OPCODE_DPAS, dst, src0, src1, src2);
          inst->sdepth = sdepth;
          inst->rcount = rcount;
 
@@ -869,14 +808,14 @@ namespace brw {
        * Workaround for negation of UD registers.  See comment in
        * fs_generator::generate_code() for more details.
        */
-      src_reg
-      fix_unsigned_negate(const src_reg &src) const
+      fs_reg
+      fix_unsigned_negate(const fs_reg &src) const
       {
          if (src.type == BRW_REGISTER_TYPE_UD &&
              src.negate) {
-            dst_reg temp = vgrf(BRW_REGISTER_TYPE_UD);
+            fs_reg temp = vgrf(BRW_REGISTER_TYPE_UD);
             MOV(temp, src);
-            return src_reg(temp);
+            return fs_reg(temp);
          } else {
             return src;
          }
@@ -886,8 +825,8 @@ namespace brw {
        * Workaround for source register modes not supported by the ternary
        * instruction encoding.
        */
-      src_reg
-      fix_3src_operand(const src_reg &src) const
+      fs_reg
+      fix_3src_operand(const fs_reg &src) const
       {
          switch (src.file) {
          case FIXED_GRF:
@@ -906,39 +845,9 @@ namespace brw {
             break;
          }
 
-         dst_reg expanded = vgrf(src.type);
+         fs_reg expanded = vgrf(src.type);
          MOV(expanded, src);
          return expanded;
-      }
-
-      /**
-       * Workaround for source register modes not supported by the math
-       * instruction.
-       */
-      src_reg
-      fix_math_operand(const src_reg &src) const
-      {
-         /* Can't do hstride == 0 args on gfx6 math, so expand it out. We
-          * might be able to do better by doing execsize = 1 math and then
-          * expanding that result out, but we would need to be careful with
-          * masking.
-          *
-          * Gfx6 hardware ignores source modifiers (negate and abs) on math
-          * instructions, so we also move to a temp to set those up.
-          *
-          * Gfx7 relaxes most of the above restrictions, but still can't use IMM
-          * operands to math
-          */
-         if ((shader->devinfo->ver == 6 &&
-              (src.file == IMM || src.file == UNIFORM ||
-               src.abs || src.negate)) ||
-             (shader->devinfo->ver == 7 && src.file == IMM)) {
-            const dst_reg tmp = vgrf(src.type);
-            MOV(tmp, src);
-            return tmp;
-         } else {
-            return src;
-         }
       }
 
       bblock_t *block;

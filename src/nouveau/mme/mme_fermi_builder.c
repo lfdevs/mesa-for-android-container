@@ -224,7 +224,7 @@ mme_fermi_add_imm18(struct mme_fermi_builder *fb,
 
    inst->op = MME_FERMI_OP_ADD_IMM;
    inst->src[0] = mme_value_alu_reg(src);
-   inst->imm = imm & BITFIELD_MASK(18);
+   inst->imm = imm;
    inst->assign_op = MME_FERMI_ASSIGN_OP_MOVE;
    inst->dst = mme_value_alu_reg(dst);
 

@@ -1030,6 +1030,14 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
          baseformat = _mesa_base_fbo_format(ctx, internalformat);
       }
 
+      /* If the internal format is unsupported, or if a particular component
+       * is not present in the format, 0 is written to params.
+       */
+      if (!st_QueryTextureFormatSupport(ctx, target, internalformat)) {
+         buffer[0] = GL_NONE;
+         break;
+      }
+
       /* Let the driver choose the texture format.
        *
        * Disclaimer: I am considering that drivers use for renderbuffers the

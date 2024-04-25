@@ -73,16 +73,18 @@ can_omit_write(const fs_inst *inst)
 }
 
 bool
-fs_visitor::dead_code_eliminate()
+brw_fs_opt_dead_code_eliminate(fs_visitor &s)
 {
+   const intel_device_info *devinfo = s.devinfo;
+
    bool progress = false;
 
-   const fs_live_variables &live_vars = live_analysis.require();
+   const fs_live_variables &live_vars = s.live_analysis.require();
    int num_vars = live_vars.num_vars;
    BITSET_WORD *live = rzalloc_array(NULL, BITSET_WORD, BITSET_WORDS(num_vars));
    BITSET_WORD *flag_live = rzalloc_array(NULL, BITSET_WORD, 1);
 
-   foreach_block_reverse_safe(block, cfg) {
+   foreach_block_reverse_safe(block, s.cfg) {
       memcpy(live, live_vars.block_data[block->num].liveout,
              sizeof(BITSET_WORD) * BITSET_WORDS(num_vars));
       memcpy(flag_live, live_vars.block_data[block->num].flag_liveout,
@@ -140,13 +142,13 @@ fs_visitor::dead_code_eliminate()
       }
    }
 
-   cfg->adjust_block_ips();
+   s.cfg->adjust_block_ips();
 
    ralloc_free(live);
    ralloc_free(flag_live);
 
    if (progress)
-      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

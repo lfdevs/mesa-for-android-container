@@ -157,6 +157,7 @@ nvk_GetDeviceBufferMemoryRequirements(
    VkMemoryRequirements2 *pMemoryRequirements)
 {
    VK_FROM_HANDLE(nvk_device, dev, device);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    const uint32_t alignment =
       nvk_get_buffer_alignment(nvk_device_physical(dev),
@@ -166,7 +167,7 @@ nvk_GetDeviceBufferMemoryRequirements(
    pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
       .size = align64(pInfo->pCreateInfo->size, alignment),
       .alignment = alignment,
-      .memoryTypeBits = BITFIELD_MASK(dev->pdev->mem_type_count),
+      .memoryTypeBits = BITFIELD_MASK(pdev->mem_type_count),
    };
 
    vk_foreach_struct_const(ext, pMemoryRequirements->pNext) {
@@ -241,22 +242,20 @@ nvk_BindBufferMemory2(VkDevice device,
       buffer->is_local = !(mem->bo->flags & NOUVEAU_WS_BO_GART);
       if (buffer->vma_size_B) {
          VK_FROM_HANDLE(nvk_device, dev, device);
-         if (mem != NULL) {
-            nouveau_ws_bo_bind_vma(dev->ws_dev,
-                                   mem->bo,
-                                   buffer->addr,
-                                   buffer->vma_size_B,
-                                   pBindInfos[i].memoryOffset,
-                                   0 /* pte_kind */);
-         } else {
-            nouveau_ws_bo_unbind_vma(dev->ws_dev,
-                                     buffer->addr,
-                                     buffer->vma_size_B);
-         }
+         nouveau_ws_bo_bind_vma(dev->ws_dev,
+                                mem->bo,
+                                buffer->addr,
+                                buffer->vma_size_B,
+                                pBindInfos[i].memoryOffset,
+                                0 /* pte_kind */);
       } else {
-         buffer->addr =
-            mem != NULL ? mem->bo->offset + pBindInfos[i].memoryOffset : 0;
+         buffer->addr = mem->bo->offset + pBindInfos[i].memoryOffset;
       }
+
+      const VkBindMemoryStatusKHR *status =
+         vk_find_struct_const(pBindInfos[i].pNext, BIND_MEMORY_STATUS_KHR);
+      if (status != NULL && status->pResult != NULL)
+         *status->pResult = VK_SUCCESS;
    }
    return VK_SUCCESS;
 }

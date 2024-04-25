@@ -20,7 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <nouveau.h>
+#include "nouveau_winsys.h"
 
 #include "pipe/p_defines.h"
 #include "vl/vl_video_buffer.h"

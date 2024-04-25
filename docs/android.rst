@@ -33,15 +33,15 @@ Then, create your Meson cross file to use it, something like this
     pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=NDKDIR/pkgconfig', '/usr/bin/pkg-config']
 
     [host_machine]
-    system = 'linux'
+    system = 'android'
     cpu_family = 'arm'
-    cpu = 'armv8'
+    cpu = 'aarch64'
     endian = 'little'
 
 Now, use that cross file for your Android build directory (as in this
 one cross-compiling the turnip driver for a stock Pixel phone)
 
-.. code-block:: console
+.. code-block:: sh
 
     meson setup build-android-aarch64 \
         --cross-file android-aarch64 \
@@ -61,21 +61,27 @@ read-only disk image on ``/vendor``.  To be able to replace them for
 driver development, we need to unlock the device and remount
 ``/vendor`` read/write.
 
-.. code-block:: console
+.. code-block:: sh
 
     adb disable-verity
     adb reboot
     adb remount -R
+    adb remount
 
 Now you can replace drivers as in:
 
-.. code-block:: console
+.. code-block:: sh
 
     adb push build-android-aarch64/src/freedreno/vulkan/libvulkan_freedreno.so /vendor/lib64/hw/vulkan.sdm710.so
 
 Note this command doesn't quite work because libvulkan wants the
-SONAME to match.  For now, in turnip we have been using a hack to the
-meson.build to change the SONAME.
+SONAME to match. You can use ``patchelf`` to fix this:
+
+.. code-block:: sh
+
+   cp build-android-aarch64/src/freedreno/vulkan/libvulkan_freedreno.so /tmp/vulkan.sdm710.so
+   patchelf --set-soname vulkan.sdm710.so /tmp/vulkan.sdm710.so
+   adb push /tmp/vulkan.sdm710.so /vendor/lib64/hw/
 
 Replacing Android drivers on Chrome OS
 --------------------------------------
@@ -91,7 +97,7 @@ using scp from outside the container.
 On your device, you'll want to make ``/`` read-write.  ssh in as root
 and run:
 
-.. code-block:: console
+.. code-block:: sh
 
     crossystem dev_boot_signed_only=0
     /usr/share/vboot/bin/make_dev_ssd.sh --remove_rootfs_verification --partitions 4
@@ -100,7 +106,7 @@ and run:
 Then, we'll switch Android from using an image for ``/vendor`` to using a
 bind-mount from a directory we control.
 
-.. code-block:: console
+.. code-block:: sh
 
     cd /opt/google/containers/android/
     mkdir vendor-ro
@@ -123,7 +129,7 @@ change it to::
 
 Now, restart the UI to do a full reload:
 
-.. code-block:: console
+.. code-block:: sh
 
     restart ui
 
@@ -136,7 +142,7 @@ then the ``mount`` command should show::
 Now, replacing your DRI driver with a new one built for Android should
 be a matter of:
 
-.. code-block:: console
+.. code-block:: sh
 
     scp msm_dri.so $HOST:/opt/google/containers/android/vendor-rw/lib64/dri/
 
@@ -149,7 +155,7 @@ available to the NDK, assuming you're building anything but the
 Freedreno Vulkan driver for KGSL.  You can mostly put things in place
 with:
 
-.. code-block:: console
+.. code-block:: sh
 
     scp $HOST:/opt/google/containers/android/vendor-rw/lib64/libdrm.so \
         NDKDIR/sysroot/usr/lib/aarch64-linux-android/lib/
@@ -166,6 +172,6 @@ find you need to reload the whole Android container.  To do so without
 having to log in to Chrome again every time, you can just kill the
 container and let it restart:
 
-.. code-block:: console
+.. code-block:: sh
 
     kill $(cat /run/containers/android-run_oci/container.pid )

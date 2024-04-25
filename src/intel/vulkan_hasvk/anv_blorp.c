@@ -43,7 +43,7 @@ lookup_blorp_shader(struct blorp_batch *batch,
    anv_shader_bin_unref(device, bin);
 
    *kernel_out = bin->kernel.offset;
-   *(const struct brw_stage_prog_data **)prog_data_out = bin->prog_data;
+   *(const struct elk_stage_prog_data **)prog_data_out = bin->prog_data;
 
    return true;
 }
@@ -52,7 +52,7 @@ static bool
 upload_blorp_shader(struct blorp_batch *batch, uint32_t stage,
                     const void *key, uint32_t key_size,
                     const void *kernel, uint32_t kernel_size,
-                    const struct brw_stage_prog_data *prog_data,
+                    const void *prog_data,
                     uint32_t prog_data_size,
                     uint32_t *kernel_out, void *prog_data_out)
 {
@@ -79,7 +79,7 @@ upload_blorp_shader(struct blorp_batch *batch, uint32_t stage,
    anv_shader_bin_unref(device, bin);
 
    *kernel_out = bin->kernel.offset;
-   *(const struct brw_stage_prog_data **)prog_data_out = bin->prog_data;
+   *(const struct elk_stage_prog_data **)prog_data_out = bin->prog_data;
 
    return true;
 }
@@ -89,8 +89,8 @@ anv_device_init_blorp(struct anv_device *device)
 {
    const struct blorp_config config = {};
 
-   blorp_init(&device->blorp, device, &device->isl_dev, &config);
-   device->blorp.compiler = device->physical->compiler;
+   blorp_init_elk(&device->blorp, device, &device->isl_dev,
+                  device->physical->compiler, &config);
    device->blorp.lookup_shader = lookup_blorp_shader;
    device->blorp.upload_shader = upload_blorp_shader;
    switch (device->info->verx10) {

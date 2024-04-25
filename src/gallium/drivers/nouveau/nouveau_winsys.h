@@ -8,8 +8,7 @@
 #include "util/os_misc.h"
 
 #include "drm-uapi/drm.h"
-#include <nouveau.h>
-
+#include "nouveau.h"
 #include "nouveau_screen.h"
 
 #ifndef NV04_PFIFO_MAX_PACKET_LEN
@@ -95,7 +94,7 @@ PUSH_KICK(struct nouveau_pushbuf *push)
 {
    struct nouveau_pushbuf_priv *ppush = push->user_priv;
    simple_mtx_lock(&ppush->screen->fence.lock);
-   nouveau_pushbuf_kick(push, push->channel);
+   nouveau_pushbuf_kick(push);
    simple_mtx_unlock(&ppush->screen->fence.lock);
 }
 

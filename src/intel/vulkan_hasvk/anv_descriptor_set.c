@@ -123,7 +123,7 @@ anv_descriptor_data_for_mutable_type(const struct anv_physical_device *device,
 {
    enum anv_descriptor_data desc_data = 0;
 
-   if (!mutable_info || mutable_info->mutableDescriptorTypeListCount == 0) {
+   if (!mutable_info || mutable_info->mutableDescriptorTypeListCount <= binding) {
       for(VkDescriptorType i = 0; i <= VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; i++) {
          if (i == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
              i == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
@@ -158,7 +158,7 @@ anv_descriptor_data_size(enum anv_descriptor_data data)
       size += sizeof(struct anv_storage_image_descriptor);
 
    if (data & ANV_DESCRIPTOR_IMAGE_PARAM)
-      size += BRW_IMAGE_PARAM_SIZE * 4;
+      size += ISL_IMAGE_PARAM_SIZE * 4;
 
    if (data & ANV_DESCRIPTOR_ADDRESS_RANGE)
       size += sizeof(struct anv_address_range_descriptor);
@@ -209,7 +209,7 @@ anv_descriptor_size_for_mutable_type(const struct anv_physical_device *device,
 {
    unsigned size = 0;
 
-   if (!mutable_info || mutable_info->mutableDescriptorTypeListCount == 0) {
+   if (!mutable_info || mutable_info->mutableDescriptorTypeListCount <= binding) {
       for(VkDescriptorType i = 0; i <= VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; i++) {
 
          if (i == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
@@ -1313,11 +1313,11 @@ VkResult anv_FreeDescriptorSets(
 
 static void
 anv_descriptor_set_write_image_param(uint32_t *param_desc_map,
-                                     const struct brw_image_param *param)
+                                     const struct isl_image_param *param)
 {
 #define WRITE_PARAM_FIELD(field, FIELD) \
    for (unsigned i = 0; i < ARRAY_SIZE(param->field); i++) \
-      param_desc_map[BRW_IMAGE_PARAM_##FIELD##_OFFSET + i] = param->field[i]
+      param_desc_map[ISL_IMAGE_PARAM_##FIELD##_OFFSET + i] = param->field[i]
 
    WRITE_PARAM_FIELD(offset, OFFSET);
    WRITE_PARAM_FIELD(size, SIZE);
@@ -1455,7 +1455,7 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
    if (data & ANV_DESCRIPTOR_IMAGE_PARAM) {
       /* Storage images can only ever have one plane */
       assert(image_view->n_planes == 1);
-      const struct brw_image_param *image_param =
+      const struct isl_image_param *image_param =
          &image_view->planes[0].lowered_storage_image_param;
 
       anv_descriptor_set_write_image_param(desc_map, image_param);

@@ -43,14 +43,6 @@
 #include <stddef.h>
 
 #include <llvm/Config/llvm-config.h>
-
-#if LLVM_VERSION_MAJOR < 7
-// Workaround http://llvm.org/PR23628
-#pragma push_macro("DEBUG")
-#undef DEBUG
-#endif
-
-#include <llvm/Config/llvm-config.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -85,11 +77,6 @@
 #include <llvm/Config/llvm-config.h>
 #if LLVM_USE_INTEL_JITEVENTS
 #include <llvm/ExecutionEngine/JITEventListener.h>
-#endif
-
-#if LLVM_VERSION_MAJOR < 7
-// Workaround http://llvm.org/PR23628
-#pragma pop_macro("DEBUG")
 #endif
 
 #include "c11/threads.h"
@@ -130,7 +117,7 @@ static void init_native_targets()
    llvm::InitializeNativeTargetAsmPrinter();
 
    llvm::InitializeNativeTargetDisassembler();
-#if DEBUG
+#if MESA_DEBUG
    {
       char *env_llc_options = getenv("GALLIVM_LLC_OPTIONS");
       if (env_llc_options) {

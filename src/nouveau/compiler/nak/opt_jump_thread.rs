@@ -86,7 +86,7 @@ fn jump_thread(func: &mut Function) -> bool {
         rewrite_cfg(func);
     }
 
-    return progress;
+    progress
 }
 
 fn rewrite_cfg(func: &mut Function) {

@@ -22,7 +22,7 @@
  */
 
 #include "isl_priv.h"
-#include "compiler/brw_compiler.h"
+#include "compiler/intel_shader_enums.h"
 
 bool
 isl_is_storage_image_format(const struct intel_device_info *devinfo,
@@ -243,7 +243,7 @@ isl_has_matching_typed_storage_image_format(const struct intel_device_info *devi
    }
 }
 
-static const struct brw_image_param image_param_defaults = {
+static const struct isl_image_param image_param_defaults = {
    /* Set the swizzling shifts to all-ones to effectively disable
     * swizzling -- See emit_address_calculation() in
     * brw_fs_surface_builder.cpp for a more detailed explanation of
@@ -254,7 +254,7 @@ static const struct brw_image_param image_param_defaults = {
 
 void
 isl_surf_fill_image_param(const struct isl_device *dev,
-                          struct brw_image_param *param,
+                          struct isl_image_param *param,
                           const struct isl_surf *surf,
                           const struct isl_view *view)
 {
@@ -349,7 +349,7 @@ isl_surf_fill_image_param(const struct isl_device *dev,
 
 void
 isl_buffer_fill_image_param(const struct isl_device *dev,
-                            struct brw_image_param *param,
+                            struct isl_image_param *param,
                             enum isl_format format,
                             uint64_t size)
 {

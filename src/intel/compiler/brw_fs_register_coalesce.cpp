@@ -188,11 +188,49 @@ can_coalesce_vars(const fs_live_variables &live, const cfg_t *cfg,
    return true;
 }
 
-bool
-fs_visitor::register_coalesce()
+/**
+ * Check if coalescing this register would expand the size of the last
+ * SEND instruction's payload to more than would fit in g112-g127.
+ */
+static bool
+would_violate_eot_restriction(const brw::simple_allocator &alloc,
+                              const cfg_t *cfg,
+                              unsigned dst_reg, unsigned src_reg)
 {
+   if (alloc.sizes[dst_reg] > alloc.sizes[src_reg]) {
+      foreach_inst_in_block_reverse(fs_inst, send, cfg->last_block()) {
+         if (send->opcode != SHADER_OPCODE_SEND || !send->eot)
+            continue;
+
+         if ((send->src[2].file == VGRF && send->src[2].nr == src_reg) ||
+             (send->sources >= 4 &&
+              send->src[3].file == VGRF && send->src[3].nr == src_reg)) {
+            const unsigned s2 =
+               send->src[2].file == VGRF ? alloc.sizes[send->src[2].nr] : 0;
+            const unsigned s3 = send->sources >= 4 &&
+               send->src[3].file == VGRF ?
+               alloc.sizes[send->src[3].nr] : 0;
+
+            const unsigned increase =
+               alloc.sizes[dst_reg] - alloc.sizes[src_reg];
+
+            if (s2 + s3 + increase > 15)
+               return true;
+         }
+         break;
+      }
+   }
+
+   return false;
+}
+
+bool
+brw_fs_opt_register_coalesce(fs_visitor &s)
+{
+   const intel_device_info *devinfo = s.devinfo;
+
    bool progress = false;
-   fs_live_variables &live = live_analysis.require();
+   fs_live_variables &live = s.live_analysis.require();
    int src_size = 0;
    int channels_remaining = 0;
    unsigned src_reg = ~0u, dst_reg = ~0u;
@@ -201,8 +239,8 @@ fs_visitor::register_coalesce()
    int *dst_var = new int[MAX_VGRF_SIZE(devinfo)];
    int *src_var = new int[MAX_VGRF_SIZE(devinfo)];
 
-   foreach_block_and_inst(block, fs_inst, inst, cfg) {
-      if (!is_coalesce_candidate(this, inst))
+   foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
+      if (!is_coalesce_candidate(&s, inst))
          continue;
 
       if (is_nop_mov(inst)) {
@@ -214,7 +252,7 @@ fs_visitor::register_coalesce()
       if (src_reg != inst->src[0].nr) {
          src_reg = inst->src[0].nr;
 
-         src_size = alloc.sizes[inst->src[0].nr];
+         src_size = s.alloc.sizes[inst->src[0].nr];
          assert(src_size <= MAX_VGRF_SIZE(devinfo));
 
          channels_remaining = src_size;
@@ -228,7 +266,7 @@ fs_visitor::register_coalesce()
 
       if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
          for (int i = 0; i < src_size; i++) {
-            dst_reg_offset[i] = i;
+            dst_reg_offset[i] = inst->dst.offset / REG_SIZE + i;
          }
          mov[0] = inst;
          channels_remaining -= regs_written(inst);
@@ -265,7 +303,8 @@ fs_visitor::register_coalesce()
          dst_var[i] = live.var_from_vgrf[dst_reg] + dst_reg_offset[i];
          src_var[i] = live.var_from_vgrf[src_reg] + i;
 
-         if (!can_coalesce_vars(live, cfg, block, inst, dst_var[i], src_var[i])) {
+         if (!can_coalesce_vars(live, s.cfg, block, inst, dst_var[i], src_var[i]) ||
+             would_violate_eot_restriction(s.alloc, s.cfg, dst_reg, src_reg)) {
             can_coalesce = false;
             src_reg = ~0u;
             break;
@@ -301,7 +340,7 @@ fs_visitor::register_coalesce()
          }
       }
 
-      foreach_block_and_inst(block, fs_inst, scan_inst, cfg) {
+      foreach_block_and_inst(block, fs_inst, scan_inst, s.cfg) {
          if (scan_inst->dst.file == VGRF &&
              scan_inst->dst.nr == src_reg) {
             scan_inst->dst.nr = dst_reg;
@@ -329,15 +368,15 @@ fs_visitor::register_coalesce()
    }
 
    if (progress) {
-      foreach_block_and_inst_safe (block, backend_instruction, inst, cfg) {
+      foreach_block_and_inst_safe (block, fs_inst, inst, s.cfg) {
          if (inst->opcode == BRW_OPCODE_NOP) {
             inst->remove(block, true);
          }
       }
 
-      cfg->adjust_block_ips();
+      s.cfg->adjust_block_ips();
 
-      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
    }
 
    delete[] src_var;

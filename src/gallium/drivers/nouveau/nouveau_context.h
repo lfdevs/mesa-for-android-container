@@ -3,7 +3,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
-#include <nouveau.h>
+#include "nouveau_winsys.h"
 
 #define NOUVEAU_MAX_SCRATCH_BUFS 4
 

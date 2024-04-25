@@ -231,6 +231,7 @@ static bool
 d3d12_video_encode_supported_resolution_range(const D3D12_VIDEO_ENCODER_CODEC &argTargetCodec,
                                               D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC &minResolution,
                                               D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC &maxResolution,
+                                              union pipe_enc_cap_surface_alignment& alignment,
                                               ID3D12VideoDevice3 *pD3D12VideoDevice)
 {
    D3D12_FEATURE_DATA_VIDEO_ENCODER_OUTPUT_RESOLUTION_RATIOS_COUNT capResRatiosCountData = { 0, argTargetCodec, 0 };
@@ -263,6 +264,8 @@ d3d12_video_encode_supported_resolution_range(const D3D12_VIDEO_ENCODER_CODEC &a
 
    minResolution = capOutputResolutionData.MinResolutionSupported;
    maxResolution = capOutputResolutionData.MaxResolutionSupported;
+   alignment.bits.log2_width_alignment = std::log2(capOutputResolutionData.ResolutionWidthMultipleRequirement);
+   alignment.bits.log2_height_alignment = std::log2(capOutputResolutionData.ResolutionHeightMultipleRequirement);
 
    return true;
 }
@@ -840,6 +843,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                uint32_t &maxLvlSpec,
                                D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC &minRes,
                                D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC &maxRes,
+                               union pipe_enc_cap_surface_alignment &alignRes,
                                uint32_t &maxSlices,
                                uint32_t &supportedSliceStructures,
                                uint32_t &maxReferencesPerFrame,
@@ -897,7 +901,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
 
             DXGI_FORMAT encodeFormat = d3d12_convert_pipe_video_profile_to_dxgi_format(profile);
             supportsProfile = supportsProfile &&
-                              d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, spD3D12VideoDevice.Get());
+                              d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, alignRes, spD3D12VideoDevice.Get());
 
             D3D12_VIDEO_ENCODER_PROFILE_DESC profile;
             profile.pH264Profile = &profH264;
@@ -1087,7 +1091,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
 
                DXGI_FORMAT encodeFormat = d3d12_convert_pipe_video_profile_to_dxgi_format(profile);
                supportsProfile = supportsProfile &&
-                                 d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, spD3D12VideoDevice.Get());
+                                 d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, alignRes, spD3D12VideoDevice.Get());
 
                D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1 capEncoderSupportData1 = {};
                D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS resolutionDepCaps;
@@ -1331,7 +1335,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                }
 
                supportsProfile = supportsProfile &&
-                                 d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, spD3D12VideoDevice.Get());
+                                 d3d12_video_encode_supported_resolution_range(codecDesc, minRes, maxRes, alignRes, spD3D12VideoDevice.Get());
 
                D3D12_VIDEO_ENCODER_AV1_FRAME_SUBREGION_LAYOUT_CONFIG_SUPPORT av1TileSupport = {};
                d3d12_video_encode_supported_tile_structures(codecDesc,
@@ -1672,6 +1676,7 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
    uint32_t maxLvlEncode = 0u;
    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC minResEncode = {};
    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC maxResEncode = {};
+   union pipe_enc_cap_surface_alignment alignResEncode = {};
    uint32_t maxSlices = 0u;
    uint32_t supportedSliceStructures = 0u;
    uint32_t maxReferencesPerFrame = 0u;
@@ -1722,12 +1727,14 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
       case PIPE_VIDEO_CAP_ENC_H264_DISABLE_DBK_FILTER_MODES_SUPPORTED:
       case PIPE_VIDEO_CAP_ENC_H264_SUPPORTS_CABAC_ENCODE:
       case PIPE_VIDEO_CAP_ENC_ROI:
+      case PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT:
       {
          if (d3d12_has_video_encode_support(pscreen,
                                             profile,
                                             maxLvlEncode,
                                             minResEncode,
                                             maxResEncode,
+                                            alignResEncode,
                                             maxSlices,
                                             supportedSliceStructures,
                                             maxReferencesPerFrame,
@@ -1812,6 +1819,8 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
                } else if(param == PIPE_VIDEO_CAP_ENC_ROI) {
                   assert(roi_support.bits.num_roi_regions <= PIPE_ENC_ROI_REGION_NUM_MAX);
                   return static_cast<int>(roi_support.value);
+               } else if(param == PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT) {
+                  return alignResEncode.value;
                }
             }
          } else if (param == PIPE_VIDEO_CAP_ENC_QUALITY_LEVEL) {

@@ -205,8 +205,7 @@ Strided linear images have numerous limitations:
 - Strides must be a multiple of 16 bytes.
 - Strides must be nonzero. For 1D images where the stride is logically
   irrelevant, ail will internally select the minimal stride.
-- Only 1D and 2D images may be linear. In particular, no 3D or cubemaps.
-- Array texture may not be linear. No 2D arrays or cubemap arrays.
+- Only 1D, 2D, and 2D Array images may be linear. In particular, no 3D or cubemaps.
 - 2D images must not be mipmapped.
 - Block-compressed formats and multisampled images are unsupported. Elements of
   a strided linear image are simply pixels.
@@ -307,14 +306,14 @@ useful for exercising the compiler. To build, use options:
 
 Then run an OpenGL workload with environment variable:
 
-.. code-block:: console
+.. code-block:: sh
 
    LD_PRELOAD=~/mesa/build/src/asahi/drm-shim/libasahi_noop_drm_shim.so
 
 For example to compile a shader with shaderdb and print some statistics along
 with the IR:
 
-.. code-block:: console
+.. code-block:: sh
 
    ~/shader-db$ AGX_MESA_DEBUG=shaders,shaderdb ASAHI_MESA_DEBUG=precompile LIBGL_DRIVERS_PATH=~/lib/dri/ LD_PRELOAD=~/mesa/build/src/asahi/drm-shim/libasahi_noop_drm_shim.so ./run shaders/glmark/1-12.shader_test
 
@@ -362,3 +361,7 @@ concepts used in PowerVR GPUs appear in AGX.
    Pixel BackEnd
       Hardware unit which writes to color attachements and images. Also the
       name for a descriptor passed to :term:`PBE` instructions.
+
+   UVS
+   Unified Vertex Store
+      Hardware unit which buffers the outputs of the vertex shader (varyings).

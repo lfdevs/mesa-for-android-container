@@ -46,7 +46,8 @@ anv_bo_sync_init(struct vk_device *vk_device,
 
    return anv_device_alloc_bo(device, "bo-sync", 4096,
                               ANV_BO_ALLOC_EXTERNAL |
-                              ANV_BO_ALLOC_IMPLICIT_SYNC,
+                              ANV_BO_ALLOC_IMPLICIT_SYNC |
+                              ANV_BO_ALLOC_INTERNAL,
                               0 /* explicit_address */,
                               &sync->bo);
 }

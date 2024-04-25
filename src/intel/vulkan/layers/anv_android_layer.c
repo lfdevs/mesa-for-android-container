@@ -23,11 +23,11 @@
 
 #include "anv_private.h"
 
-VKAPI_ATTR VkResult VKAPI_CALL
-android_CreateImageView(VkDevice _device,
-                        const VkImageViewCreateInfo *pCreateInfo,
-                        const VkAllocationCallbacks *pAllocator,
-                        VkImageView *pView)
+VkResult anv_android_CreateImageView(
+    VkDevice                                    _device,
+    const VkImageViewCreateInfo*                pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkImageView*                                pView)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    const struct util_format_description *fmt =

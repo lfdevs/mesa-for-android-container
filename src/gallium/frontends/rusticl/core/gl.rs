@@ -137,6 +137,13 @@ pub struct GLCtxManager {
     gl_ctx: GLCtx,
 }
 
+// SAFETY: We do have a few pointers inside [GLCtxManager], but nothing really relevant here:
+//  * pointers of the GLX/EGL context and _XDisplay/EGLDisplay, but we don't do much with them
+//    except calling into our mesa internal GL sharing extension, which properly locks data.
+//  * pointer to the _XDisplay/EGLDisplay
+unsafe impl Send for GLCtxManager {}
+unsafe impl Sync for GLCtxManager {}
+
 impl GLCtxManager {
     pub fn new(
         gl_context: *mut c_void,
@@ -144,7 +151,7 @@ impl GLCtxManager {
         egl_display: EGLDisplay,
     ) -> CLResult<Option<Self>> {
         let mut info = mesa_glinterop_device_info {
-            version: 3,
+            version: 4,
             ..Default::default()
         };
         let xplat_manager = XPlatManager::new();
@@ -449,18 +456,17 @@ pub fn create_shadow_slice(
     Ok(slice)
 }
 
-pub fn copy_cube_to_slice(
-    q: &Arc<Queue>,
-    ctx: &PipeContext,
-    mem_objects: &[Arc<Mem>],
-) -> CLResult<()> {
+pub fn copy_cube_to_slice(q: &Arc<Queue>, ctx: &PipeContext, mem_objects: &[Mem]) -> CLResult<()> {
     for mem in mem_objects {
-        let gl_obj = mem.gl_obj.as_ref().unwrap();
+        let Mem::Image(image) = mem else {
+            continue;
+        };
+        let gl_obj = image.gl_obj.as_ref().unwrap();
         if !is_cube_map_face(gl_obj.gl_object_target) {
             continue;
         }
-        let width = mem.image_desc.image_width;
-        let height = mem.image_desc.image_height;
+        let width = image.image_desc.image_width;
+        let height = image.image_desc.image_height;
 
         // Fill in values for doing the copy
         let idx = get_array_slice_idx(gl_obj.gl_object_target);
@@ -469,7 +475,7 @@ pub fn copy_cube_to_slice(
         let region = CLVec::<usize>::new([width, height, 1]);
         let src_bx = create_pipe_box(src_origin, region, CL_MEM_OBJECT_IMAGE2D_ARRAY)?;
 
-        let cl_res = mem.get_res_of_dev(q.device)?;
+        let cl_res = image.get_res_of_dev(q.device)?;
         let gl_res = gl_obj.shadow_map.as_ref().unwrap().get(cl_res).unwrap();
 
         ctx.resource_copy_region(gl_res.as_ref(), cl_res.as_ref(), &dst_offset, &src_bx);
@@ -478,18 +484,17 @@ pub fn copy_cube_to_slice(
     Ok(())
 }
 
-pub fn copy_slice_to_cube(
-    q: &Arc<Queue>,
-    ctx: &PipeContext,
-    mem_objects: &[Arc<Mem>],
-) -> CLResult<()> {
+pub fn copy_slice_to_cube(q: &Arc<Queue>, ctx: &PipeContext, mem_objects: &[Mem]) -> CLResult<()> {
     for mem in mem_objects {
-        let gl_obj = mem.gl_obj.as_ref().unwrap();
+        let Mem::Image(image) = mem else {
+            continue;
+        };
+        let gl_obj = image.gl_obj.as_ref().unwrap();
         if !is_cube_map_face(gl_obj.gl_object_target) {
             continue;
         }
-        let width = mem.image_desc.image_width;
-        let height = mem.image_desc.image_height;
+        let width = image.image_desc.image_width;
+        let height = image.image_desc.image_height;
 
         // Fill in values for doing the copy
         let idx = get_array_slice_idx(gl_obj.gl_object_target) as u32;
@@ -498,7 +503,7 @@ pub fn copy_slice_to_cube(
         let region = CLVec::<usize>::new([width, height, 1]);
         let src_bx = create_pipe_box(src_origin, region, CL_MEM_OBJECT_IMAGE2D_ARRAY)?;
 
-        let cl_res = mem.get_res_of_dev(q.device)?;
+        let cl_res = image.get_res_of_dev(q.device)?;
         let gl_res = gl_obj.shadow_map.as_ref().unwrap().get(cl_res).unwrap();
 
         ctx.resource_copy_region(cl_res.as_ref(), gl_res.as_ref(), &dst_offset, &src_bx);

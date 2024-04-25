@@ -12,6 +12,7 @@
 #include "nvk_physical_device.h"
 
 #include "nv_push.h"
+#include "util/u_atomic.h"
 
 #include <inttypes.h>
 #include <sys/mman.h>
@@ -206,7 +207,7 @@ nvk_AllocateMemory(VkDevice device,
 
    if (dev->ws_dev->debug_flags & NVK_DEBUG_ZERO_MEMORY) {
       if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-         void *map = nouveau_ws_bo_map(mem->bo, NOUVEAU_WS_BO_RDWR);
+         void *map = nouveau_ws_bo_map(mem->bo, NOUVEAU_WS_BO_RDWR, NULL);
          if (map == NULL) {
             result = vk_errorf(dev, VK_ERROR_OUT_OF_HOST_MEMORY,
                                "Memory map failed");
@@ -234,6 +235,9 @@ nvk_AllocateMemory(VkDevice device,
       close(fd_info->fd);
    }
 
+   struct nvk_memory_heap *heap = &pdev->mem_heaps[type->heapIndex];
+   p_atomic_add(&heap->used, mem->bo->size);
+
    *pMem = nvk_device_memory_to_handle(mem);
 
    return VK_SUCCESS;
@@ -252,12 +256,17 @@ nvk_FreeMemory(VkDevice device,
 {
    VK_FROM_HANDLE(nvk_device, dev, device);
    VK_FROM_HANDLE(nvk_device_memory, mem, _mem);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    if (!mem)
       return;
 
    if (mem->map)
       nouveau_ws_bo_unmap(mem->bo, mem->map);
+
+   const VkMemoryType *type = &pdev->mem_types[mem->vk.memory_type_index];
+   struct nvk_memory_heap *heap = &pdev->mem_heaps[type->heapIndex];
+   p_atomic_add(&heap->used, -((int64_t)mem->bo->size));
 
    nouveau_ws_bo_destroy(mem->bo);
 
@@ -281,6 +290,13 @@ nvk_MapMemory2KHR(VkDevice device,
    const VkDeviceSize size =
       vk_device_memory_range(&mem->vk, pMemoryMapInfo->offset,
                                        pMemoryMapInfo->size);
+
+   void *fixed_addr = NULL;
+   if (pMemoryMapInfo->flags & VK_MEMORY_MAP_PLACED_BIT_EXT) {
+      const VkMemoryMapPlacedInfoEXT *placed_info =
+         vk_find_struct_const(pMemoryMapInfo->pNext, MEMORY_MAP_PLACED_INFO_EXT);
+      fixed_addr = placed_info->pPlacedAddress;
+   }
 
    /* From the Vulkan spec version 1.0.32 docs for MapMemory:
     *
@@ -307,7 +323,7 @@ nvk_MapMemory2KHR(VkDevice device,
                        "Memory object already mapped.");
    }
 
-   mem->map = nouveau_ws_bo_map(mem->bo, NOUVEAU_WS_BO_RDWR);
+   mem->map = nouveau_ws_bo_map(mem->bo, NOUVEAU_WS_BO_RDWR, fixed_addr);
    if (mem->map == NULL) {
       return vk_errorf(dev, VK_ERROR_MEMORY_MAP_FAILED,
                        "Memory object couldn't be mapped.");
@@ -322,12 +338,22 @@ VKAPI_ATTR VkResult VKAPI_CALL
 nvk_UnmapMemory2KHR(VkDevice device,
                     const VkMemoryUnmapInfoKHR *pMemoryUnmapInfo)
 {
+   VK_FROM_HANDLE(nvk_device, dev, device);
    VK_FROM_HANDLE(nvk_device_memory, mem, pMemoryUnmapInfo->memory);
 
    if (mem == NULL)
       return VK_SUCCESS;
 
-   nouveau_ws_bo_unmap(mem->bo, mem->map);
+   if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
+      int err = nouveau_ws_bo_overmap(mem->bo, mem->map);
+      if (err) {
+         return vk_errorf(dev, VK_ERROR_MEMORY_MAP_FAILED,
+                          "Failed to map over original mapping");
+      }
+   } else {
+      nouveau_ws_bo_unmap(mem->bo, mem->map);
+   }
+
    mem->map = NULL;
 
    return VK_SUCCESS;

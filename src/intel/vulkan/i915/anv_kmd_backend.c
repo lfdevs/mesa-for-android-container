@@ -160,7 +160,8 @@ i915_gem_close(struct anv_device *device, struct anv_bo *bo)
 
 static void *
 i915_gem_mmap_offset(struct anv_device *device, struct anv_bo *bo,
-                     uint64_t size, uint32_t flags)
+                     uint64_t size, uint32_t flags,
+                     void *placed_addr)
 {
    struct drm_i915_gem_mmap_offset gem_mmap = {
       .handle = bo->gem_handle,
@@ -169,7 +170,8 @@ i915_gem_mmap_offset(struct anv_device *device, struct anv_bo *bo,
    if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET, &gem_mmap))
       return MAP_FAILED;
 
-   return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
+   return mmap(placed_addr, size, PROT_READ | PROT_WRITE,
+               (placed_addr != NULL ? MAP_FIXED : 0) | MAP_SHARED,
                device->fd, gem_mmap.offset);
 }
 
@@ -214,25 +216,27 @@ mmap_calc_flags(struct anv_device *device, struct anv_bo *bo)
 
 static void *
 i915_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
-              uint64_t size)
+              uint64_t size, void *placed_addr)
 {
    const uint32_t flags = mmap_calc_flags(device, bo);
 
    if (likely(device->physical->info.has_mmap_offset))
-      return i915_gem_mmap_offset(device, bo, size, flags);
+      return i915_gem_mmap_offset(device, bo, size, flags, placed_addr);
+   assert(placed_addr == NULL);
    return i915_gem_mmap_legacy(device, bo, offset, size, flags);
 }
 
-static int
-i915_vm_bind(struct anv_device *device, struct anv_sparse_submission *submit)
+static VkResult
+i915_vm_bind(struct anv_device *device, struct anv_sparse_submission *submit,
+             enum anv_vm_bind_flags flags)
 {
-   return 0;
+   return VK_SUCCESS;
 }
 
-static int
+static VkResult
 i915_vm_bind_bo(struct anv_device *device, struct anv_bo *bo)
 {
-   return 0;
+   return VK_SUCCESS;
 }
 
 static uint32_t

@@ -31,7 +31,7 @@
 #include "ir3_compiler.h"
 #include "ir3_context.h"
 
-#ifdef DEBUG
+#if MESA_DEBUG
 #define SCHED_DEBUG (ir3_shader_debug & IR3_DBG_SCHEDMSGS)
 #else
 #define SCHED_DEBUG 0
@@ -650,6 +650,12 @@ sched_block(struct ir3_postsched_ctx *ctx, struct ir3_block *block)
    ctx->sy_delay = 0;
    ctx->ss_delay = 0;
 
+   /* The terminator has to stay at the end. Instead of trying to set up
+    * dependencies to achieve this, it's easier to just remove it now and add it
+    * back after scheduling.
+    */
+   struct ir3_instruction *terminator = ir3_block_take_terminator(block);
+
    /* move all instructions to the unscheduled list, and
     * empty the block's instruction list (to which we will
     * be inserting).
@@ -663,8 +669,6 @@ sched_block(struct ir3_postsched_ctx *ctx, struct ir3_block *block)
    foreach_instr_safe (instr, &ctx->unscheduled_list) {
       switch (instr->opc) {
       case OPC_NOP:
-      case OPC_B:
-      case OPC_JUMP:
          list_delinit(&instr->node);
          break;
       default:
@@ -707,6 +711,9 @@ sched_block(struct ir3_postsched_ctx *ctx, struct ir3_block *block)
    }
 
    sched_dag_destroy(ctx);
+
+   if (terminator)
+      list_addtail(&terminator->node, &block->instr_list);
 }
 
 static bool

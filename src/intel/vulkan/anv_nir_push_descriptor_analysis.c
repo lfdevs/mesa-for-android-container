@@ -133,7 +133,8 @@ anv_nir_loads_push_desc_buffer(nir_shader *nir,
 
             const struct anv_pipeline_binding *binding =
                &bind_map->surface_to_descriptor[bt_idx];
-            if (binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS &&
+            if ((binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS ||
+                 binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS_BUFFER) &&
                 binding->index == push_set) {
                return true;
             }

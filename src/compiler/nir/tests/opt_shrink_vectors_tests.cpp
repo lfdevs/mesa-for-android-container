@@ -93,7 +93,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_load_const_trailing_compo
 
    nir_store_var(b, out_var, alu_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 
@@ -101,7 +101,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_load_const_trailing_compo
    nir_load_const_instr * imm_vec_instr = nir_instr_as_load_const(imm_vec->parent_instr);
    ASSERT_TRUE(nir_const_value_as_float(imm_vec_instr->value[0], 32) == 1.0);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader, true));
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_alu_trailing_component_only)
@@ -130,14 +130,14 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_alu_trailing_component_on
 
    nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 
    check_swizzle(&alu_instr->src[0], "x");
    ASSERT_TRUE(alu_result->num_components == 1);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader, true));
 }
 
 TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
@@ -170,7 +170,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
 
    nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 
@@ -186,7 +186,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_simple)
    check_swizzle(&alu2_instr->src[0], "xxy");
    check_swizzle(&alu2_instr->src[1], "xxy");
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 }
@@ -235,7 +235,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_vec8)
 
    nir_store_var(b, out_var, alu2_result, 1);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 
@@ -255,7 +255,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_vectors_vec8)
    check_swizzle(&alu2_instr->src[0], "abbcdefg");
    check_swizzle(&alu2_instr->src[1], "abbcdefg");
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader, true));
 
    nir_validate_shader(b->shader, NULL);
 }
@@ -357,7 +357,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_simple)
 
    nir_validate_shader(b->shader, NULL);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
    ASSERT_TRUE(phi_def->num_components == 1);
    check_swizzle(&fge_alu_instr->src[0], "x");
    check_swizzle(&fadd_alu_instr->src[0], "x");
@@ -461,7 +461,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_swizzle)
 
    nir_validate_shader(b->shader, NULL);
 
-   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_TRUE(nir_opt_shrink_vectors(b->shader, true));
    ASSERT_TRUE(phi_def->num_components == 2);
 
    check_swizzle(&fge_alu_instr->src[0], "y");
@@ -574,6 +574,6 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_phi_out)
 
    nir_validate_shader(b->shader, NULL);
 
-   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader));
+   ASSERT_FALSE(nir_opt_shrink_vectors(b->shader, true));
    ASSERT_TRUE(phi_def->num_components == 4);
 }

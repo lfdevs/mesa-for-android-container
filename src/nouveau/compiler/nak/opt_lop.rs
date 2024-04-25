@@ -22,7 +22,7 @@ fn src_as_bool(src: &Src) -> Option<bool> {
     match src.src_ref {
         SrcRef::Zero | SrcRef::False | SrcRef::Imm32(0) => Some(false),
         SrcRef::True | SrcRef::Imm32(u32::MAX) => Some(true),
-        _ => return None,
+        _ => None,
     }
 }
 

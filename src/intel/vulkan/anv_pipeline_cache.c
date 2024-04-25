@@ -29,7 +29,7 @@
 #include "nir/nir_serialize.h"
 #include "anv_private.h"
 #include "nir/nir_xfb_info.h"
-#include "vulkan/util/vk_util.h"
+#include "vk_util.h"
 #include "compiler/spirv/nir_spirv.h"
 #include "shaders/float64_spv.h"
 
@@ -52,6 +52,13 @@ anv_shader_bin_destroy(struct vk_device *_device,
    struct anv_shader_bin *shader =
       container_of(object, struct anv_shader_bin, base);
 
+   for (uint32_t i = 0; i < shader->bind_map.embedded_sampler_count; i++) {
+      anv_state_pool_free(&device->dynamic_state_db_pool,
+                          shader->embedded_samplers[i].sampler_state);
+      anv_state_pool_free(&device->dynamic_state_db_pool,
+                          shader->embedded_samplers[i].border_color_state);
+   }
+
    anv_state_pool_free(&device->instruction_state_pool, shader->kernel);
    vk_pipeline_cache_object_finish(&shader->base);
    vk_free(&device->vk.alloc, shader);
@@ -68,7 +75,28 @@ const struct vk_pipeline_cache_object_ops *const anv_cache_import_ops[2] = {
    NULL
 };
 
-struct anv_shader_bin *
+static void
+anv_shader_bin_rewrite_embedded_samplers(struct anv_device *device,
+                                         struct anv_shader_bin *shader,
+                                         const struct anv_pipeline_bind_map *bind_map,
+                                         const struct brw_stage_prog_data *prog_data_in)
+{
+   int rv_count = 0;
+   struct brw_shader_reloc_value reloc_values[BRW_MAX_EMBEDDED_SAMPLERS];
+
+   for (uint32_t i = 0; i < bind_map->embedded_sampler_count; i++) {
+      reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
+         .id = BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE + i,
+         .value = shader->embedded_samplers[i].sampler_state.offset,
+      };
+   }
+
+   brw_write_shader_relocs(&device->physical->compiler->isa,
+                           shader->kernel.map, prog_data_in,
+                           reloc_values, rv_count);
+}
+
+static struct anv_shader_bin *
 anv_shader_bin_create(struct anv_device *device,
                       gl_shader_stage stage,
                       const void *key_data, uint32_t key_size,
@@ -98,8 +126,13 @@ anv_shader_bin_create(struct anv_device *device,
                            bind_map->surface_count);
    VK_MULTIALLOC_DECL(&ma, struct anv_pipeline_binding, sampler_to_descriptor,
                       bind_map->sampler_count);
+   VK_MULTIALLOC_DECL(&ma, struct anv_pipeline_embedded_sampler_binding,
+                      embedded_sampler_to_binding,
+                      bind_map->embedded_sampler_count);
    VK_MULTIALLOC_DECL(&ma, struct brw_kernel_arg_desc, kernel_args,
                       bind_map->kernel_arg_count);
+   VK_MULTIALLOC_DECL(&ma, struct anv_embedded_sampler, embedded_samplers,
+                      bind_map->embedded_sampler_count);
 
    if (!vk_multialloc_alloc(&ma, &device->vk.alloc,
                             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
@@ -116,13 +149,25 @@ anv_shader_bin_create(struct anv_device *device,
    memcpy(shader->kernel.map, kernel_data, kernel_size);
    shader->kernel_size = kernel_size;
 
+   for (uint32_t i = 0; i < bind_map->embedded_sampler_count; i++) {
+      anv_genX(device->info, emit_embedded_sampler)(
+         device, &embedded_samplers[i],
+         &bind_map->embedded_sampler_to_binding[i]);
+   }
+   shader->embedded_samplers = embedded_samplers;
+
    uint64_t shader_data_addr =
       device->physical->va.instruction_state_pool.addr +
       shader->kernel.offset +
       prog_data_in->const_data_offset;
 
    int rv_count = 0;
-   struct brw_shader_reloc_value reloc_values[6];
+   struct brw_shader_reloc_value reloc_values[7];
+   assert((device->physical->va.descriptor_buffer_pool.addr & 0xffffffff) == 0);
+   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH,
+      .value = device->physical->va.descriptor_buffer_pool.addr >> 32,
+   };
    assert((device->physical->va.indirect_descriptor_pool.addr & 0xffffffff) == 0);
    assert((device->physical->va.internal_surface_state_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
@@ -136,6 +181,7 @@ anv_shader_bin_create(struct anv_device *device,
       .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
    };
+   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
    assert(shader_data_addr >> 32 == device->physical->va.instruction_state_pool.addr >> 32);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
@@ -166,6 +212,8 @@ anv_shader_bin_create(struct anv_device *device,
                            shader->kernel.map, prog_data_in,
                            reloc_values, rv_count);
 
+   anv_shader_bin_rewrite_embedded_samplers(device, shader, bind_map, prog_data_in);
+
    memcpy(prog_data, prog_data_in, prog_data_size);
    typed_memcpy(prog_data_relocs, prog_data_in->relocs,
                 prog_data_in->num_relocs);
@@ -194,12 +242,19 @@ anv_shader_bin_create(struct anv_device *device,
    typed_memcpy(&shader->push_desc_info, push_desc_info, 1);
 
    shader->bind_map = *bind_map;
+
    typed_memcpy(surface_to_descriptor, bind_map->surface_to_descriptor,
                 bind_map->surface_count);
    shader->bind_map.surface_to_descriptor = surface_to_descriptor;
+
    typed_memcpy(sampler_to_descriptor, bind_map->sampler_to_descriptor,
                 bind_map->sampler_count);
    shader->bind_map.sampler_to_descriptor = sampler_to_descriptor;
+
+   typed_memcpy(embedded_sampler_to_binding, bind_map->embedded_sampler_to_binding,
+                bind_map->embedded_sampler_count);
+   shader->bind_map.embedded_sampler_to_binding = embedded_sampler_to_binding;
+
    typed_memcpy(kernel_args, bind_map->kernel_args,
                 bind_map->kernel_arg_count);
    shader->bind_map.kernel_args = kernel_args;
@@ -259,6 +314,7 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
                     sizeof(shader->bind_map.push_sha1));
    blob_write_uint32(blob, shader->bind_map.surface_count);
    blob_write_uint32(blob, shader->bind_map.sampler_count);
+   blob_write_uint32(blob, shader->bind_map.embedded_sampler_count);
    if (shader->stage == MESA_SHADER_KERNEL) {
       uint32_t packed = (uint32_t)shader->bind_map.kernel_args_size << 16 |
                         (uint32_t)shader->bind_map.kernel_arg_count;
@@ -270,6 +326,9 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
    blob_write_bytes(blob, shader->bind_map.sampler_to_descriptor,
                     shader->bind_map.sampler_count *
                     sizeof(*shader->bind_map.sampler_to_descriptor));
+   blob_write_bytes(blob, shader->bind_map.embedded_sampler_to_binding,
+                    shader->bind_map.embedded_sampler_count *
+                    sizeof(*shader->bind_map.embedded_sampler_to_binding));
    blob_write_bytes(blob, shader->bind_map.kernel_args,
                     shader->bind_map.kernel_arg_count *
                     sizeof(*shader->bind_map.kernel_args));
@@ -326,6 +385,7 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
    blob_copy_bytes(blob, bind_map.push_sha1, sizeof(bind_map.push_sha1));
    bind_map.surface_count = blob_read_uint32(blob);
    bind_map.sampler_count = blob_read_uint32(blob);
+   bind_map.embedded_sampler_count = blob_read_uint32(blob);
    if (stage == MESA_SHADER_KERNEL) {
       uint32_t packed = blob_read_uint32(blob);
       bind_map.kernel_args_size = (uint16_t)(packed >> 16);
@@ -337,6 +397,9 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
    bind_map.sampler_to_descriptor = (void *)
       blob_read_bytes(blob, bind_map.sampler_count *
                             sizeof(*bind_map.sampler_to_descriptor));
+   bind_map.embedded_sampler_to_binding = (void *)
+      blob_read_bytes(blob, bind_map.embedded_sampler_count *
+                            sizeof(*bind_map.embedded_sampler_to_binding));
    bind_map.kernel_args = (void *)
       blob_read_bytes(blob, bind_map.kernel_arg_count *
                             sizeof(*bind_map.kernel_args));
@@ -377,6 +440,7 @@ anv_device_search_for_kernel(struct anv_device *device,
       *user_cache_hit = object != NULL && cache_hit &&
                         cache != device->default_pipeline_cache;
    }
+
    if (object == NULL)
       return NULL;
 
@@ -386,31 +450,29 @@ anv_device_search_for_kernel(struct anv_device *device,
 struct anv_shader_bin *
 anv_device_upload_kernel(struct anv_device *device,
                          struct vk_pipeline_cache *cache,
-                         gl_shader_stage stage,
-                         const void *key_data, uint32_t key_size,
-                         const void *kernel_data, uint32_t kernel_size,
-                         const struct brw_stage_prog_data *prog_data,
-                         uint32_t prog_data_size,
-                         const struct brw_compile_stats *stats,
-                         uint32_t num_stats,
-                         const nir_xfb_info *xfb_info,
-                         const struct anv_pipeline_bind_map *bind_map,
-                         const struct anv_push_descriptor_info *push_desc_info,
-                         enum anv_dynamic_push_bits dynamic_push_values)
+                         const struct anv_shader_upload_params *params)
 {
    /* Use the default pipeline cache if none is specified */
    if (cache == NULL)
       cache = device->default_pipeline_cache;
 
+
+
    struct anv_shader_bin *shader =
-      anv_shader_bin_create(device, stage,
-                            key_data, key_size,
-                            kernel_data, kernel_size,
-                            prog_data, prog_data_size,
-                            stats, num_stats,
-                            xfb_info, bind_map,
-                            push_desc_info,
-                            dynamic_push_values);
+      anv_shader_bin_create(device,
+                            params->stage,
+                            params->key_data,
+                            params->key_size,
+                            params->kernel_data,
+                            params->kernel_size,
+                            params->prog_data,
+                            params->prog_data_size,
+                            params->stats,
+                            params->num_stats,
+                            params->xfb_info,
+                            params->bind_map,
+                            params->push_desc_info,
+                            params->dynamic_push_values);
    if (shader == NULL)
       return NULL;
 

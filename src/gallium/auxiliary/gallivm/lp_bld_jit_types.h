@@ -215,10 +215,11 @@ struct lp_texture_functions {
    void **image_functions;
 
    struct lp_static_texture_state state;
-   uint32_t ref_count;
 
    bool sampled;
    bool storage;
+
+   void *matrix;
 };
 
 struct lp_texture_handle {
@@ -236,6 +237,7 @@ struct lp_descriptor {
          struct lp_jit_image image;
       };
       struct lp_jit_buffer buffer;
+      uint64_t accel_struct;
    };
 
    /* Store sample/image functions in the same location since some d3d12 games

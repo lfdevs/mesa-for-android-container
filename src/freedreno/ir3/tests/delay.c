@@ -145,6 +145,30 @@ fixup_wrmask(struct ir3 *ir)
    }
 }
 
+/* Calculate the number of nops added before the last instruction by
+ * ir3_legalize.
+ */
+static unsigned
+calc_nops(struct ir3_block *block, struct ir3_instruction *last)
+{
+   unsigned nops = 0;
+
+   foreach_instr_rev (instr, &block->instr_list) {
+      if (instr == last)
+         continue;
+
+      if (instr->opc == OPC_NOP) {
+         nops += 1 + instr->repeat;
+      } else {
+         if (is_alu(instr))
+            nops += instr->nop;
+         break;
+      }
+   }
+
+   return nops;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -177,13 +201,10 @@ main(int argc, char **argv)
          break;
       }
 
-      /* The delay calc is expecting the instr to not yet be added to the
-       * block, so remove it from the block so that it doesn't get counted
-       * in the distance from assigner:
-       */
-      list_delinit(&last->node);
+      int max_bary;
+      ir3_legalize(ir, shader->variants, &max_bary);
 
-      unsigned n = ir3_delay_calc(block, last, true);
+      unsigned n = calc_nops(block, last);
 
       if (n != test->expected_delay) {
          printf("%d: FAIL: Expected delay %u, but got %u, for:\n%s\n", i,

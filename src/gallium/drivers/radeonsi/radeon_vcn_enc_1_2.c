@@ -33,6 +33,7 @@
 #define RENCODE_IB_PARAM_ENCODE_CONTEXT_BUFFER     0x0000000d
 #define RENCODE_IB_PARAM_VIDEO_BITSTREAM_BUFFER    0x0000000e
 #define RENCODE_IB_PARAM_FEEDBACK_BUFFER           0x00000010
+#define RENCODE_IB_PARAM_RATE_CONTROL_PER_PIC_EX   0x0000001d
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU        0x00000020
 #define RENCODE_IB_PARAM_QP_MAP                    0x00000021
 #define RENCODE_IB_PARAM_ENCODE_STATISTICS         0x00000024
@@ -1189,14 +1190,40 @@ static void radeon_enc_intra_refresh(struct radeon_encoder *enc)
 
 static void radeon_enc_rc_per_pic(struct radeon_encoder *enc)
 {
+   fprintf(stderr, "Warning: Obsoleted rate control is being used due to outdated VCN firmware on system.\n");
+   fprintf(stderr, "Updating VCN firmware is highly recommended.\n");
    RADEON_ENC_BEGIN(enc->cmd.rc_per_pic);
-   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp);
-   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_app);
-   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_qp_app);
-   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_au_size);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp_obs);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_app_obs);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_qp_app_obs);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_au_size_obs);
    RADEON_ENC_CS(enc->enc_pic.rc_per_pic.enabled_filler_data);
    RADEON_ENC_CS(enc->enc_pic.rc_per_pic.skip_frame_enable);
    RADEON_ENC_CS(enc->enc_pic.rc_per_pic.enforce_hrd);
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_rc_per_pic_ex(struct radeon_encoder *enc)
+{
+   enc->enc_pic.rc_per_pic.reserved_0xff = 0xFFFFFFFF;
+
+   RADEON_ENC_BEGIN(enc->cmd.rc_per_pic);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp_i);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp_p);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp_b);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_i);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_qp_i);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_p);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_qp_p);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_b);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_qp_b);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_au_size_i);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_au_size_p);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.max_au_size_b);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.enabled_filler_data);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.skip_frame_enable);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.enforce_hrd);
+   RADEON_ENC_CS(enc->enc_pic.rc_per_pic.reserved_0xff);
    RADEON_ENC_END();
 }
 
@@ -1399,12 +1426,18 @@ static void encode(struct radeon_encoder *enc)
    enc->total_task_size = 0;
    enc->task_info(enc, enc->need_feedback);
 
-   if (enc->need_rate_control) {
+   if (enc->need_rate_control || enc->need_rc_per_pic) {
       i = 0;
       do {
          enc->enc_pic.layer_sel.temporal_layer_index = i;
-         enc->layer_select(enc);
-         enc->rc_layer_init(enc);
+         if (enc->need_rate_control) {
+            enc->layer_select(enc);
+            enc->rc_layer_init(enc);
+         }
+         if (enc->need_rc_per_pic) {
+            enc->layer_select(enc);
+            enc->rc_per_pic(enc);
+         }
       } while (++i < enc->enc_pic.num_temporal_layers);
    }
 
@@ -1562,7 +1595,10 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->bitstream = radeon_enc_bitstream;
    enc->feedback = radeon_enc_feedback;
    enc->intra_refresh = radeon_enc_intra_refresh;
-   enc->rc_per_pic = radeon_enc_rc_per_pic;
+   if (enc->enc_pic.use_rc_per_pic_ex == true)
+      enc->rc_per_pic = radeon_enc_rc_per_pic_ex;
+   else
+      enc->rc_per_pic = radeon_enc_rc_per_pic;
    enc->encode_params = radeon_enc_encode_params;
    enc->op_init = radeon_enc_op_init;
    enc->op_close = radeon_enc_op_close;
@@ -1604,7 +1640,10 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->cmd.layer_select = RENCODE_IB_PARAM_LAYER_SELECT;
    enc->cmd.rc_session_init = RENCODE_IB_PARAM_RATE_CONTROL_SESSION_INIT;
    enc->cmd.rc_layer_init = RENCODE_IB_PARAM_RATE_CONTROL_LAYER_INIT;
-   enc->cmd.rc_per_pic = RENCODE_IB_PARAM_RATE_CONTROL_PER_PICTURE;
+   if (enc->enc_pic.use_rc_per_pic_ex == true)
+      enc->cmd.rc_per_pic = RENCODE_IB_PARAM_RATE_CONTROL_PER_PIC_EX;
+   else
+      enc->cmd.rc_per_pic = RENCODE_IB_PARAM_RATE_CONTROL_PER_PICTURE;
    enc->cmd.quality_params = RENCODE_IB_PARAM_QUALITY_PARAMS;
    enc->cmd.nalu = RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU;
    enc->cmd.slice_header = RENCODE_IB_PARAM_SLICE_HEADER;

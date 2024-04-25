@@ -152,7 +152,6 @@ struct _egl_extensions {
    EGLBoolean NV_post_sub_buffer;
 
    EGLBoolean WL_bind_wayland_display;
-   EGLBoolean WL_create_wayland_buffer_from_image;
 };
 
 struct _egl_display {
@@ -208,6 +207,7 @@ struct _egl_display {
    EGLint Version;            /**< EGL version major*10+minor */
    EGLint ClientAPIs;         /**< Bitmask of APIs supported (EGL_xxx_BIT) */
    _EGLExtensions Extensions; /**< Extensions supported */
+   EGLBoolean RobustBufferAccess; /**< Supports robust buffer access behavior */
 
    /* these fields are derived from above */
    char VersionString[100];                        /**< EGL_VERSION */

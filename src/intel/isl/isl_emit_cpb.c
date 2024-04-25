@@ -43,6 +43,7 @@ __gen_combine_address(__attribute__((unused)) void *data,
 static const uint8_t isl_encode_tiling[] = {
    [ISL_TILING_4]  = TILE4,
    [ISL_TILING_64] = TILE64,
+   [ISL_TILING_64_XE2] = TILE64,
 };
 #endif
 
@@ -55,7 +56,7 @@ isl_genX(emit_cpb_control_s)(const struct isl_device *dev, void *batch,
       assert((info->surf->usage & ISL_SURF_USAGE_CPB_BIT));
       assert(info->surf->dim != ISL_SURF_DIM_3D);
       assert(info->surf->tiling == ISL_TILING_4 ||
-             info->surf->tiling == ISL_TILING_64);
+             isl_tiling_is_64(info->surf->tiling));
       assert(info->surf->format == ISL_FORMAT_R8_UINT);
    }
 

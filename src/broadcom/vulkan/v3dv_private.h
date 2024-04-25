@@ -65,7 +65,9 @@
 #define VG(x) ((void)0)
 #endif
 
-#ifdef ANDROID
+#include "util/detect_os.h"
+
+#if DETECT_OS_ANDROID
 #include <vndk/hardware_buffer.h>
 #include "util/u_gralloc/u_gralloc.h"
 #endif
@@ -102,7 +104,7 @@
 #include "wsi_common.h"
 
 /* A non-fatal assert.  Useful for debugging. */
-#ifdef DEBUG
+#if MESA_DEBUG
 #define v3dv_assert(x) ({ \
    if (unlikely(!(x))) \
       fprintf(stderr, "%s:%d ASSERT: %s", __FILE__, __LINE__, #x); \
@@ -337,6 +339,7 @@ struct v3dv_pipeline_key {
    uint8_t f32_color_rb;
    uint32_t va_swap_rb_mask;
    bool has_multiview;
+   bool line_smooth;
 };
 
 struct v3dv_pipeline_cache_stats {
@@ -597,7 +600,7 @@ struct v3dv_device {
    void *device_address_mem_ctx;
    struct util_dynarray device_address_bo_list; /* Array of struct v3dv_bo * */
 
-#ifdef ANDROID
+#if DETECT_OS_ANDROID
    struct u_gralloc *gralloc;
 #endif
 };
@@ -738,7 +741,7 @@ struct v3dv_image {
     */
    struct v3dv_image *shadow;
 
-#ifdef ANDROID
+#if DETECT_OS_ANDROID
    /* Image is backed by VK_ANDROID_native_buffer, */
    bool is_native_buffer_memory;
    /* Image is backed by VK_ANDROID_external_memory_android_hardware_buffer */
@@ -1149,7 +1152,7 @@ enum v3dv_ez_state {
 
 enum v3dv_job_type {
    V3DV_JOB_TYPE_GPU_CL = 0,
-   V3DV_JOB_TYPE_GPU_CL_SECONDARY,
+   V3DV_JOB_TYPE_GPU_CL_INCOMPLETE,
    V3DV_JOB_TYPE_GPU_TFU,
    V3DV_JOB_TYPE_GPU_CSD,
    V3DV_JOB_TYPE_CPU_RESET_QUERIES,
@@ -1231,6 +1234,18 @@ struct v3dv_job {
     * so we want to flag them to avoid freeing resources they don't own.
     */
    bool is_clone;
+
+   /* If this is a cloned job, if it has its own BCL resource. This happens
+    * when we suspend jobs with in command buffers with the
+    * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT flag.
+    */
+   bool clone_owns_bcl;
+
+   /* VK_KHR_dynamic_rendering */
+   bool suspending;
+   bool resuming;
+   struct v3dv_cl_out *suspend_branch_inst_ptr;
+   uint32_t suspended_bcl_end;
 
    /* If the job executes on the transfer stage of the pipeline */
    bool is_transfer;
@@ -1389,6 +1404,9 @@ void v3dv_job_start_frame(struct v3dv_job *job,
 bool v3dv_job_type_is_gpu(struct v3dv_job *job);
 
 struct v3dv_job *
+v3dv_job_clone(struct v3dv_job *job, bool skip_bcl);
+
+struct v3dv_job *
 v3dv_job_clone_in_cmd_buffer(struct v3dv_job *job,
                              struct v3dv_cmd_buffer *cmd_buffer);
 
@@ -1409,6 +1427,21 @@ void v3dv_cmd_buffer_emit_pre_draw(struct v3dv_cmd_buffer *cmd_buffer,
                                    uint32_t vertex_count);
 
 bool v3dv_job_allocate_tile_state(struct v3dv_job *job);
+
+void
+v3dv_setup_dynamic_framebuffer(struct v3dv_cmd_buffer *cmd_buffer,
+                               const VkRenderingInfoKHR *pRenderingInfo);
+
+void
+v3dv_destroy_dynamic_framebuffer(struct v3dv_cmd_buffer *cmd_buffer);
+
+void
+v3dv_setup_dynamic_render_pass(struct v3dv_cmd_buffer *cmd_buffer,
+                               const VkRenderingInfoKHR *pRenderingInfo);
+
+void
+v3dv_setup_dynamic_render_pass_inheritance(struct v3dv_cmd_buffer *cmd_buffer,
+                                           const VkCommandBufferInheritanceRenderingInfo *info);
 
 /* FIXME: only used on v3dv_cmd_buffer and v3dvx_cmd_buffer, perhaps move to a
  * cmd_buffer specific header?
@@ -1469,6 +1502,14 @@ struct v3dv_barrier_state {
 struct v3dv_cmd_buffer_state {
    struct v3dv_render_pass *pass;
    struct v3dv_framebuffer *framebuffer;
+
+   /* VK_KHR_dynamic_rendering */
+   struct v3dv_render_pass dynamic_pass;
+   struct v3dv_subpass dynamic_subpass;
+   struct v3dv_render_pass_attachment dynamic_attachments[18 /* (8 color + D/S) x 2 (for resolves) */];
+   struct v3dv_subpass_attachment dynamic_subpass_attachments[18];
+   struct v3dv_framebuffer *dynamic_framebuffer;
+
    VkRect2D render_area;
 
    /* Current job being recorded */
@@ -1539,6 +1580,10 @@ struct v3dv_cmd_buffer_state {
 
    /* If we are currently recording job(s) for a transfer operation */
    bool is_transfer;
+
+   /* VK_KHR_dynamic_rendering */
+   bool suspending;
+   bool resuming;
 
    /* Barrier state tracking */
    struct v3dv_barrier_state barrier;
@@ -2239,6 +2284,9 @@ struct v3dv_pipeline {
 
    struct v3dv_pipeline_stage *stages[BROADCOM_SHADER_STAGES];
 
+   /* For VK_KHR_dynamic_rendering */
+   struct vk_render_pass_state rendering_info;
+
    /* Flags for whether optional pipeline stages are present, for convenience */
    bool has_gs;
 
@@ -2294,6 +2342,8 @@ struct v3dv_pipeline {
    uint32_t va_count;
 
    enum mesa_prim topology;
+
+   bool line_smooth;
 
    struct v3dv_pipeline_shared_data *shared_data;
 
@@ -2678,7 +2728,11 @@ v3dv_update_image_layout(struct v3dv_device *device,
                          bool disjoint,
                          const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info);
 
-#ifdef ANDROID
+float
+v3dv_get_aa_line_width(struct v3dv_pipeline *pipeline,
+                       struct v3dv_cmd_buffer *buffer);
+
+#if DETECT_OS_ANDROID
 VkResult
 v3dv_gralloc_to_drm_explicit_layout(struct u_gralloc *gralloc,
                                     struct u_gralloc_buffer_handle *in_hnd,
@@ -2691,6 +2745,6 @@ v3dv_import_native_buffer_fd(VkDevice device_h,
                              int dma_buf,
                              const VkAllocationCallbacks *alloc,
                              VkImage image_h);
-#endif /* ANDROID */
+#endif /* DETECT_OS_ANDROID */
 
 #endif /* V3DV_PRIVATE_H */

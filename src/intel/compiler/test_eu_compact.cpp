@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "util/ralloc.h"
+#include "brw_disasm.h"
 #include "brw_eu.h"
 
 #include <gtest/gtest.h>
@@ -100,13 +101,6 @@ clear_pad_bits(const struct brw_isa_info *isa, brw_inst *inst)
        brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
       brw_inst_set_bits(inst, 127, 111, 0);
    }
-
-   if (devinfo->ver == 8 && devinfo->platform != INTEL_PLATFORM_CHV &&
-       is_3src(isa, brw_inst_opcode(isa, inst))) {
-      brw_inst_set_bits(inst, 105, 105, 0);
-      brw_inst_set_bits(inst, 84, 84, 0);
-      brw_inst_set_bits(inst, 36, 35, 0);
-   }
 }
 
 static bool
@@ -123,39 +117,17 @@ skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
       return true;
 
    if (is_3src(isa, brw_inst_opcode(isa, src))) {
-      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
-         if (bit == 127)
-            return true;
-      } else {
-         if (bit >= 126 && bit <= 127)
-            return true;
-
-         if (bit == 105)
-            return true;
-
-         if (bit == 84)
-            return true;
-
-         if (bit >= 35 && bit <= 36)
-            return true;
-      }
+      if (bit == 127)
+         return true;
    } else {
       if (bit == 47)
          return true;
 
-      if (devinfo->ver >= 8) {
-         if (bit == 11)
-            return true;
+      if (bit == 11)
+         return true;
 
-         if (bit == 95)
-            return true;
-      } else {
-         if (devinfo->ver < 7 && bit == 90)
-            return true;
-
-         if (bit >= 91 && bit <= 95)
-            return true;
-      }
+      if (bit == 95)
+         return true;
    }
 
    /* sometimes these are pad bits. */
@@ -239,29 +211,12 @@ INSTANTIATE_TEST_SUITE_P(
    CompactTest,
    Instructions,
    testing::Values(
-      CompactParams{ 50,  BRW_ALIGN_1 }, CompactParams{ 50, BRW_ALIGN_16 },
-      CompactParams{ 60,  BRW_ALIGN_1 }, CompactParams{ 60, BRW_ALIGN_16 },
-      CompactParams{ 70,  BRW_ALIGN_1 }, CompactParams{ 70, BRW_ALIGN_16 },
-      CompactParams{ 75,  BRW_ALIGN_1 }, CompactParams{ 75, BRW_ALIGN_16 },
-      CompactParams{ 80,  BRW_ALIGN_1 }, CompactParams{ 80, BRW_ALIGN_16 },
       CompactParams{ 90,  BRW_ALIGN_1 }, CompactParams{ 90, BRW_ALIGN_16 },
       CompactParams{ 110, BRW_ALIGN_1 },
       CompactParams{ 120, BRW_ALIGN_1 },
       CompactParams{ 125, BRW_ALIGN_1 }
    ),
    get_compact_params_name);
-
-class InstructionsBeforeIvyBridge : public CompactTestFixture {};
-
-INSTANTIATE_TEST_SUITE_P(
-   CompactTest,
-   InstructionsBeforeIvyBridge,
-   testing::Values(
-      CompactParams{ 50,  BRW_ALIGN_1 }, CompactParams{ 50, BRW_ALIGN_16 },
-      CompactParams{ 60,  BRW_ALIGN_1 }, CompactParams{ 60, BRW_ALIGN_16 }
-   ),
-   get_compact_params_name);
-
 
 TEST_P(Instructions, ADD_GRF_GRF_GRF)
 {
@@ -296,15 +251,6 @@ TEST_P(Instructions, MOV_GRF_GRF)
    brw_MOV(p, g0, g2);
 }
 
-TEST_P(InstructionsBeforeIvyBridge, ADD_MRF_GRF_GRF)
-{
-   struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
-   struct brw_reg g2 = brw_vec8_grf(2, 0);
-   struct brw_reg g4 = brw_vec8_grf(4, 0);
-
-   brw_ADD(p, m6, g2, g4);
-}
-
 TEST_P(Instructions, ADD_vec1_GRF_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec1_grf(0, 0);
@@ -312,15 +258,6 @@ TEST_P(Instructions, ADD_vec1_GRF_GRF_GRF)
    struct brw_reg g4 = brw_vec1_grf(4, 0);
 
    brw_ADD(p, g0, g2, g4);
-}
-
-TEST_P(InstructionsBeforeIvyBridge, PLN_MRF_GRF_GRF)
-{
-   struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
-   struct brw_reg interp = brw_vec1_grf(2, 0);
-   struct brw_reg g4 = brw_vec8_grf(4, 0);
-
-   brw_PLN(p, m6, interp, g4);
 }
 
 TEST_P(Instructions, f0_0_MOV_GRF_GRF)

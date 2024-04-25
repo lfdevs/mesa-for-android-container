@@ -11,7 +11,6 @@
 #include "nvk_mme.h"
 #include "nvk_physical_device.h"
 
-#include "nil_format.h"
 #include "vk_format.h"
 
 #include "nvk_cl9097.h"
@@ -291,6 +290,7 @@ nvk_CmdClearColorImage(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VK_FROM_HANDLE(nvk_image, image, _image);
 
    VkClearValue clear_value = {
@@ -304,7 +304,7 @@ nvk_CmdClearColorImage(VkCommandBuffer commandBuffer,
    enum pipe_format p_format = vk_format_to_pipe_format(vk_format);
    assert(p_format != PIPE_FORMAT_NONE);
 
-   if (!nil_format_supports_color_targets(&dev->pdev->info, p_format)) {
+   if (!nil_format_supports_color_targets(&pdev->info, p_format)) {
       memset(&clear_value, 0, sizeof(clear_value));
       util_format_pack_rgba(p_format, clear_value.color.uint32,
                             pColor->uint32, 1);

@@ -437,8 +437,6 @@ nv30_set_viewport_states(struct pipe_context *pipe,
 static void
 nv30_set_vertex_buffers(struct pipe_context *pipe,
                         unsigned count,
-                        unsigned unbind_num_trailing_slots,
-                        bool take_ownership,
                         const struct pipe_vertex_buffer *vb)
 {
     struct nv30_context *nv30 = nv30_context(pipe);
@@ -446,9 +444,7 @@ nv30_set_vertex_buffers(struct pipe_context *pipe,
     nouveau_bufctx_reset(nv30->bufctx, BUFCTX_VTXBUF);
 
     util_set_vertex_buffers_count(nv30->vtxbuf, &nv30->num_vtxbufs,
-                                  vb, count,
-                                  unbind_num_trailing_slots,
-                                  take_ownership);
+                                  vb, count, true);
 
     nv30->dirty |= NV30_NEW_ARRAYS;
 }

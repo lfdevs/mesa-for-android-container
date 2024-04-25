@@ -246,7 +246,7 @@ fs_live_variables::compute_start_end()
    }
 }
 
-fs_live_variables::fs_live_variables(const backend_shader *s)
+fs_live_variables::fs_live_variables(const fs_visitor *s)
    : devinfo(s->devinfo), cfg(s->cfg)
 {
    mem_ctx = ralloc_context(NULL);
@@ -334,7 +334,7 @@ check_register_live_range(const fs_live_variables *live, int ip,
 }
 
 bool
-fs_live_variables::validate(const backend_shader *s) const
+fs_live_variables::validate(const fs_visitor *s) const
 {
    int ip = 0;
 

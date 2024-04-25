@@ -96,6 +96,7 @@ disk_cache_get_function_identifier(void *ptr, struct mesa_sha1 *ctx)
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "utime.h"
 
 #include "util/blob.h"
 #include "util/crc32.h"
@@ -878,6 +879,7 @@ disk_cache_write_item_to_disk(struct disk_cache_put_job *dc_job,
  *
  *   $MESA_SHADER_CACHE_DIR
  *   $XDG_CACHE_HOME/mesa_shader_cache
+ *   $HOME/.cache/mesa_shader_cache
  *   <pwd.pw_dir>/.cache/mesa_shader_cache
  */
 char *
@@ -918,6 +920,20 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
             return NULL;
 
          path = concatenate_and_mkdir(mem_ctx, xdg_cache_home, cache_dir_name);
+         if (!path)
+            return NULL;
+      }
+   }
+
+   if (!path) {
+      char *home = getenv("HOME");
+
+      if (home) {
+         path = concatenate_and_mkdir(mem_ctx, home, ".cache");
+         if (!path)
+            return NULL;
+
+         path = concatenate_and_mkdir(mem_ctx, path, cache_dir_name);
          if (!path)
             return NULL;
       }
@@ -1042,6 +1058,29 @@ disk_cache_load_cache_index_foz(void *mem_ctx, struct disk_cache *cache)
 {
    /* Load cache index into a hash map (from fossilise files) */
    return foz_prepare(&cache->foz_db, cache->path);
+}
+
+
+void
+disk_cache_touch_cache_user_marker(char *path)
+{
+   char *marker_path = NULL;
+   asprintf(&marker_path, "%s/marker", path);
+   if (!marker_path)
+      return;
+
+   time_t now = time(NULL);
+
+   struct stat attr;
+   if (stat(marker_path, &attr) == -1) {
+      int fd = open(marker_path, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+      if (fd != -1) {
+         close(fd);
+      }
+   } else if (now - attr.st_mtime < 60 * 60 * 24 /* One day */) {
+      (void)utime(marker_path, NULL);
+   }
+   free(marker_path);
 }
 
 bool

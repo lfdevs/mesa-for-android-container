@@ -1377,7 +1377,7 @@ svga_hwtnl_prim(struct svga_hwtnl *hwtnl,
    else {
       /* batch up drawing commands */
       assert(indirect == NULL);
-#ifdef DEBUG
+#if MESA_DEBUG
       check_draw_params(hwtnl, range, min_index, max_index, ib);
       assert(start_instance == 0);
       assert(instance_count <= 1);

@@ -9,7 +9,30 @@
 
 #include "vk_image.h"
 
-#include "nil_image.h"
+#include "nil.h"
+
+/* Because small images can end up with an array_stride_B that is less than
+ * the sparse block size (in bytes), we have to set SINGLE_MIPTAIL_BIT when
+ * advertising sparse properties to the client.  This means that we get one
+ * single memory range for the miptail of the image.  For large images with
+ * mipTailStartLod > 0, we have to deal with the array stride ourselves.
+ *
+ * We do this by returning NVK_MIP_TAIL_START_OFFSET as the image's
+ * imageMipTailOffset.  We can then detect anything with that address as
+ * being part of the miptail and re-map it accordingly.  The Vulkan spec
+ * explicitly allows for this.
+ *
+ * From the Vulkan 1.3.279 spec:
+ *
+ *    "When VK_SPARSE_MEMORY_BIND_METADATA_BIT is present, the resourceOffset
+ *    must have been derived explicitly from the imageMipTailOffset in the
+ *    sparse resource properties returned for the metadata aspect. By
+ *    manipulating the value returned for imageMipTailOffset, the
+ *    resourceOffset does not have to correlate directly to a device virtual
+ *    address offset, and may instead be whatever value makes it easiest for
+ *    the implementation to derive the correct device virtual address."
+ */
+#define NVK_MIP_TAIL_START_OFFSET 0x6d74000000000000UL
 
 struct nvk_device_memory;
 struct nvk_physical_device;

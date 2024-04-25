@@ -43,9 +43,11 @@
 #include "util/libsync.h"
 #include "util/os_file.h"
 
+#include "main/glconfig.h"
 #include "egl_dri2.h"
 #include "eglglobals.h"
 #include "loader.h"
+#include "loader_dri_helper.h"
 #include "platform_android.h"
 
 static __DRIimage *
@@ -788,26 +790,24 @@ droid_destroy_loader_image_state(void *loaderPrivate)
 #endif
 }
 
-static EGLBoolean
+static void
 droid_add_configs_for_visuals(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    static const struct {
-      int format;
-      int rgba_shifts[4];
-      unsigned int rgba_sizes[4];
+      int hal_format;
+      enum pipe_format pipe_format;
    } visuals[] = {
-      {HAL_PIXEL_FORMAT_RGBA_8888, {0, 8, 16, 24}, {8, 8, 8, 8}},
-      {HAL_PIXEL_FORMAT_RGBX_8888, {0, 8, 16, -1}, {8, 8, 8, 0}},
-      {HAL_PIXEL_FORMAT_RGB_565, {11, 5, 0, -1}, {5, 6, 5, 0}},
+      {HAL_PIXEL_FORMAT_RGBA_8888, PIPE_FORMAT_RGBA8888_UNORM},
+      {HAL_PIXEL_FORMAT_RGBX_8888, PIPE_FORMAT_RGBX8888_UNORM},
+      {HAL_PIXEL_FORMAT_RGB_565, PIPE_FORMAT_R5G6B5_UNORM},
       /* This must be after HAL_PIXEL_FORMAT_RGBA_8888, we only keep BGRA
        * visual if it turns out RGBA visual is not available.
        */
-      {HAL_PIXEL_FORMAT_BGRA_8888, {16, 8, 0, 24}, {8, 8, 8, 8}},
+      {HAL_PIXEL_FORMAT_BGRA_8888, PIPE_FORMAT_BGRA8888_UNORM},
    };
 
    unsigned int format_count[ARRAY_SIZE(visuals)] = {0};
-   int config_count = 0;
 
    /* The nesting of loops is significant here. Also significant is the order
     * of the HAL pixel formats. Many Android apps (such as Google's official
@@ -832,16 +832,21 @@ droid_add_configs_for_visuals(_EGLDisplay *disp)
       /* Only enable BGRA configs when RGBA is not available. BGRA configs are
        * buggy on stock Android.
        */
-      if (visuals[i].format == HAL_PIXEL_FORMAT_BGRA_8888 && has_rgba)
+      if (visuals[i].hal_format == HAL_PIXEL_FORMAT_BGRA_8888 && has_rgba)
          continue;
       for (int j = 0; dri2_dpy->driver_configs[j]; j++) {
-         const EGLint surface_type = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
+         const struct gl_config *gl_config =
+            (struct gl_config *) dri2_dpy->driver_configs[j];
 
+         if (gl_config->color_format != visuals[i].pipe_format)
+            continue;
+
+         const EGLint surface_type = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
          const EGLint config_attrs[] = {
             EGL_NATIVE_VISUAL_ID,
-            visuals[i].format,
+            visuals[i].hal_format,
             EGL_NATIVE_VISUAL_TYPE,
-            visuals[i].format,
+            visuals[i].hal_format,
             EGL_FRAMEBUFFER_TARGET_ANDROID,
             EGL_TRUE,
             EGL_RECORDABLE_ANDROID,
@@ -850,26 +855,21 @@ droid_add_configs_for_visuals(_EGLDisplay *disp)
          };
 
          struct dri2_egl_config *dri2_conf = dri2_add_config(
-            disp, dri2_dpy->driver_configs[j], config_count + 1, surface_type,
-            config_attrs, visuals[i].rgba_shifts, visuals[i].rgba_sizes);
-         if (dri2_conf) {
-            if (dri2_conf->base.ConfigID == config_count + 1)
-               config_count++;
+            disp, dri2_dpy->driver_configs[j], surface_type, config_attrs);
+         if (dri2_conf)
             format_count[i]++;
-         }
       }
-      if (visuals[i].format == HAL_PIXEL_FORMAT_RGBA_8888 && format_count[i])
+
+      if (visuals[i].hal_format == HAL_PIXEL_FORMAT_RGBA_8888 && format_count[i])
          has_rgba = true;
    }
 
    for (int i = 0; i < ARRAY_SIZE(format_count); i++) {
       if (!format_count[i]) {
          _eglLog(_EGL_DEBUG, "No DRI config supports native format 0x%x",
-                 visuals[i].format);
+                 visuals[i].hal_format);
       }
    }
-
-   return (config_count != 0);
 }
 
 static const struct dri2_egl_display_vtbl droid_display_vtbl = {
@@ -977,11 +977,14 @@ droid_load_driver(_EGLDisplay *disp, bool swrast)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
+   if (disp->Options.Zink)
+      dri2_dpy->driver_name = strdup("zink");
+   else
+      dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (dri2_dpy->driver_name == NULL)
       return false;
 
-   if (swrast) {
+   if (swrast && !disp->Options.Zink) {
       /* Use kms swrast only with vgem / virtio_gpu.
        * virtio-gpu fallbacks to software rendering when 3D features
        * are unavailable since 6c5ab.
@@ -1239,10 +1242,7 @@ dri2_initialize_android(_EGLDisplay *disp)
    /* Create configs *after* enabling extensions because presence of DRI
     * driver extensions can affect the capabilities of EGLConfigs.
     */
-   if (!droid_add_configs_for_visuals(disp)) {
-      err = "DRI2: failed to add configs";
-      goto cleanup;
-   }
+   droid_add_configs_for_visuals(disp);
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

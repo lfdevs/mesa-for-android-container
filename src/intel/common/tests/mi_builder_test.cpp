@@ -195,7 +195,7 @@ mi_builder_test::SetUp()
          ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, &device_id))
                << strerror(errno);
 
-         ASSERT_TRUE(intel_get_device_info_from_fd(fd, &devinfo));
+         ASSERT_TRUE(intel_get_device_info_from_fd(fd, &devinfo, -1, -1));
          if (devinfo.ver != GFX_VER ||
              (devinfo.platform == INTEL_PLATFORM_HSW) != (GFX_VERx10 == 75)) {
             close(fd);

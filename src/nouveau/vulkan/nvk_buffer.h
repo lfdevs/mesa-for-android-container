@@ -9,7 +9,7 @@
 #include "nvk_device_memory.h"
 
 #include "nouveau_bo.h"
-#include "vulkan/runtime/vk_buffer.h"
+#include "vk_buffer.h"
 
 struct nvk_device_memory;
 struct nvk_physical_device;

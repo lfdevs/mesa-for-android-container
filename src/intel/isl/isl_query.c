@@ -172,7 +172,7 @@ main(int argc, char *argv[])
       }
    }
 
-   brw_process_intel_debug_variable();
+   process_intel_debug_variable();
 
    int pci_id = intel_device_name_to_pci_device_id(platform);
    if (pci_id == -1) {

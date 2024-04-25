@@ -34,32 +34,12 @@
 
 #include "util/list.h"
 
-#include "common/intel_hang_dump.h"
+#include "error_decode_lib.h"
+#include "error2hangdump_lib.h"
+#include "error2hangdump_xe.h"
+#include "intel/dev/intel_device_info.h"
 
-#include "drm-uapi/i915_drm.h"
-
-static inline void
-_fail(const char *prefix, const char *format, ...)
-{
-   va_list args;
-
-   va_start(args, format);
-   if (prefix)
-      fprintf(stderr, "%s: ", prefix);
-   vfprintf(stderr, format, args);
-   va_end(args);
-
-   abort();
-}
-
-#define _fail_if(cond, prefix, ...) do { \
-   if (cond) \
-      _fail(prefix, __VA_ARGS__); \
-} while (0)
-
-#define fail_if(cond, ...) _fail_if(cond, NULL, __VA_ARGS__)
-
-#define fail(...) fail_if(true, __VA_ARGS__)
+#define XE_KMD_ERROR_DUMP_IDENTIFIER "**** Xe Device Coredump ****"
 
 static int zlib_inflate(uint32_t **ptr, int len)
 {
@@ -127,16 +107,7 @@ static int ascii85_decode(const char *in, uint32_t **out, bool inflate)
             return 0;
       }
 
-      if (*in == 'z') {
-         in++;
-      } else {
-         v += in[0] - 33; v *= 85;
-         v += in[1] - 33; v *= 85;
-         v += in[2] - 33; v *= 85;
-         v += in[3] - 33; v *= 85;
-         v += in[4] - 33;
-         in += 5;
-      }
+      in = ascii85_decode_char(in, &v);
       (*out)[len++] = v;
    }
 
@@ -176,7 +147,7 @@ struct bo {
    uint8_t *data;
    uint64_t size;
 
-   enum drm_i915_gem_engine_class engine_class;
+   enum intel_engine_class engine_class;
    int engine_instance;
 
    struct list_head link;
@@ -185,7 +156,7 @@ struct bo {
 static struct bo *
 find_or_create(struct list_head *bo_list, uint64_t addr,
                enum address_space gtt,
-               enum drm_i915_gem_engine_class engine_class,
+               enum intel_engine_class engine_class,
                int engine_instance)
 {
    list_for_each_entry(struct bo, bo_entry, bo_list, link) {
@@ -208,24 +179,24 @@ find_or_create(struct list_head *bo_list, uint64_t addr,
 
 static void
 engine_from_name(const char *engine_name,
-                 enum drm_i915_gem_engine_class *engine_class,
+                 enum intel_engine_class *engine_class,
                  int *engine_instance)
 {
    const struct {
       const char *match;
-      enum drm_i915_gem_engine_class engine_class;
+      enum intel_engine_class engine_class;
       bool parse_instance;
    } rings[] = {
-      { "rcs", I915_ENGINE_CLASS_RENDER, true },
-      { "vcs", I915_ENGINE_CLASS_VIDEO, true },
-      { "vecs", I915_ENGINE_CLASS_VIDEO_ENHANCE, true },
-      { "bcs", I915_ENGINE_CLASS_COPY, true },
-      { "global", I915_ENGINE_CLASS_INVALID, false },
-      { "render command stream", I915_ENGINE_CLASS_RENDER, false },
-      { "blt command stream", I915_ENGINE_CLASS_COPY, false },
-      { "bsd command stream", I915_ENGINE_CLASS_VIDEO, false },
-      { "vebox command stream", I915_ENGINE_CLASS_VIDEO_ENHANCE, false },
-      { NULL, I915_ENGINE_CLASS_INVALID },
+      { "rcs", INTEL_ENGINE_CLASS_RENDER, true },
+      { "vcs", INTEL_ENGINE_CLASS_VIDEO, true },
+      { "vecs", INTEL_ENGINE_CLASS_VIDEO_ENHANCE, true },
+      { "bcs", INTEL_ENGINE_CLASS_COPY, true },
+      { "global", INTEL_ENGINE_CLASS_INVALID, false },
+      { "render command stream", INTEL_ENGINE_CLASS_RENDER, false },
+      { "blt command stream", INTEL_ENGINE_CLASS_COPY, false },
+      { "bsd command stream", INTEL_ENGINE_CLASS_VIDEO, false },
+      { "vebox command stream", INTEL_ENGINE_CLASS_VIDEO_ENHANCE, false },
+      { NULL, INTEL_ENGINE_CLASS_INVALID },
    }, *r;
 
    for (r = rings; r->match; r++) {
@@ -243,123 +214,8 @@ engine_from_name(const char *engine_name,
 }
 
 static void
-write_header(FILE *f)
+read_i915_data_file(FILE *err_file, FILE *hang_file, bool verbose, enum intel_engine_class capture_engine)
 {
-   struct intel_hang_dump_block_header header = {
-      .base = {
-         .type = INTEL_HANG_DUMP_BLOCK_TYPE_HEADER,
-      },
-      .magic   = INTEL_HANG_DUMP_MAGIC,
-      .version = INTEL_HANG_DUMP_VERSION,
-   };
-
-   fwrite(&header, sizeof(header), 1, f);
-}
-
-static void
-write_buffer(FILE *f,
-             uint64_t offset,
-             const void *data,
-             uint64_t size,
-             const char *name)
-{
-   struct intel_hang_dump_block_bo header = {
-      .base = {
-         .type = INTEL_HANG_DUMP_BLOCK_TYPE_BO,
-      },
-      .offset  = offset,
-      .size    = size,
-   };
-   snprintf(header.name, sizeof(header.name), "%s", name);
-
-   fwrite(&header, sizeof(header), 1, f);
-   fwrite(data, size, 1, f);
-}
-
-static void
-write_hw_image_buffer(FILE *f, const void *data, uint64_t size)
-{
-   struct intel_hang_dump_block_hw_image header = {
-      .base = {
-         .type = INTEL_HANG_DUMP_BLOCK_TYPE_HW_IMAGE,
-      },
-      .size    = size,
-   };
-
-   fwrite(&header, sizeof(header), 1, f);
-   fwrite(data, size, 1, f);
-}
-
-static void
-write_exec(FILE *f, uint64_t offset)
-{
-   struct intel_hang_dump_block_exec header = {
-      .base = {
-         .type = INTEL_HANG_DUMP_BLOCK_TYPE_EXEC,
-      },
-      .offset  = offset,
-   };
-
-   fwrite(&header, sizeof(header), 1, f);
-}
-
-int
-main(int argc, char *argv[])
-{
-   int i, c;
-   bool help = false, verbose = false;
-   char *out_filename = NULL, *in_filename = NULL, *capture_engine_name = "rcs";
-   const struct option aubinator_opts[] = {
-      { "help",       no_argument,       NULL,     'h' },
-      { "output",     required_argument, NULL,     'o' },
-      { "verbose",    no_argument,       NULL,     'v' },
-      { "engine",     required_argument, NULL,     'e' },
-      { NULL,         0,                 NULL,     0 }
-   };
-
-   i = 0;
-   while ((c = getopt_long(argc, argv, "ho:v", aubinator_opts, &i)) != -1) {
-      switch (c) {
-      case 'h':
-         help = true;
-         break;
-      case 'o':
-         out_filename = strdup(optarg);
-         break;
-      case 'v':
-         verbose = true;
-         break;
-      case 'e':
-         capture_engine_name = optarg;
-         break;
-      default:
-         break;
-      }
-   }
-
-   if (optind < argc)
-      in_filename = argv[optind++];
-
-   if (help || argc == 1 || !in_filename) {
-      print_help(argv[0], stderr);
-      return in_filename ? EXIT_SUCCESS : EXIT_FAILURE;
-   }
-
-   enum drm_i915_gem_engine_class capture_engine;
-   engine_from_name(capture_engine_name, &capture_engine, &c);
-
-   if (out_filename == NULL) {
-      int out_filename_size = strlen(in_filename) + 5;
-      out_filename = malloc(out_filename_size);
-      snprintf(out_filename, out_filename_size, "%s.dmp", in_filename);
-   }
-
-   FILE *err_file = fopen(in_filename, "r");
-   fail_if(!err_file, "Failed to open error file \"%s\": %m\n", in_filename);
-
-   FILE *hang_file = fopen(out_filename, "w");
-   fail_if(!hang_file, "Failed to open aub file \"%s\": %m\n", in_filename);
-
    enum address_space active_gtt = PPGTT;
    enum address_space default_gtt = PPGTT;
 
@@ -370,7 +226,7 @@ main(int argc, char *argv[])
 
    struct bo *last_bo = NULL;
 
-   enum drm_i915_gem_engine_class active_engine_class = I915_ENGINE_CLASS_INVALID;
+   enum intel_engine_class active_engine_class = INTEL_ENGINE_CLASS_INVALID;
    int active_engine_instance = -1;
 
    char *line = NULL;
@@ -503,8 +359,77 @@ main(int argc, char *argv[])
       free(bo_entry);
    }
 
-   free(out_filename);
    free(line);
+}
+
+int
+main(int argc, char *argv[])
+{
+   int i, c;
+   bool help = false, verbose = false;
+   char *out_filename = NULL, *in_filename = NULL, *capture_engine_name = "rcs";
+   const struct option aubinator_opts[] = {
+      { "help",       no_argument,       NULL,     'h' },
+      { "output",     required_argument, NULL,     'o' },
+      { "verbose",    no_argument,       NULL,     'v' },
+      { "engine",     required_argument, NULL,     'e' },
+      { NULL,         0,                 NULL,     0 }
+   };
+   char *line = NULL;
+   size_t line_size;
+
+   i = 0;
+   while ((c = getopt_long(argc, argv, "ho:v", aubinator_opts, &i)) != -1) {
+      switch (c) {
+      case 'h':
+         help = true;
+         break;
+      case 'o':
+         out_filename = strdup(optarg);
+         break;
+      case 'v':
+         verbose = true;
+         break;
+      case 'e':
+         capture_engine_name = optarg;
+         break;
+      default:
+         break;
+      }
+   }
+
+   if (optind < argc)
+      in_filename = argv[optind++];
+
+   if (help || argc == 1 || !in_filename) {
+      print_help(argv[0], stderr);
+      return in_filename ? EXIT_SUCCESS : EXIT_FAILURE;
+   }
+
+   enum intel_engine_class capture_engine;
+   engine_from_name(capture_engine_name, &capture_engine, &c);
+
+   if (out_filename == NULL) {
+      int out_filename_size = strlen(in_filename) + 5;
+      out_filename = malloc(out_filename_size);
+      snprintf(out_filename, out_filename_size, "%s.dmp", in_filename);
+   }
+
+   FILE *err_file = fopen(in_filename, "r");
+   fail_if(!err_file, "Failed to open error file \"%s\": %m\n", in_filename);
+
+   FILE *hang_file = fopen(out_filename, "w");
+   fail_if(!hang_file, "Failed to open aub file \"%s\": %m\n", out_filename);
+
+   getline(&line, &line_size, err_file);
+   rewind(err_file);
+   if (strncmp(line, XE_KMD_ERROR_DUMP_IDENTIFIER, strlen(XE_KMD_ERROR_DUMP_IDENTIFIER)) == 0)
+      read_xe_data_file(err_file, hang_file, verbose);
+   else
+      read_i915_data_file(err_file, hang_file, verbose, capture_engine);
+
+   free(line);
+   free(out_filename);
    if (err_file)
       fclose(err_file);
    fclose(hang_file);

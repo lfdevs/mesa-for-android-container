@@ -37,71 +37,6 @@
 
 #include "glxclient.h"
 
-/* Some debugging info.  */
-
-#ifdef DEBUG
-#undef _R
-#undef _G
-#undef _B
-#include <ctype.h>
-
-int debug_xfonts = 0;
-
-static void
-dump_char_struct(XCharStruct * ch, char *prefix)
-{
-   printf("%slbearing = %d, rbearing = %d, width = %d\n",
-          prefix, ch->lbearing, ch->rbearing, ch->width);
-   printf("%sascent = %d, descent = %d, attributes = %u\n",
-          prefix, ch->ascent, ch->descent, (unsigned int) ch->attributes);
-}
-
-static void
-dump_font_struct(XFontStruct * font)
-{
-   printf("ascent = %d, descent = %d\n", font->ascent, font->descent);
-   printf("char_or_byte2 = (%u,%u)\n",
-          font->min_char_or_byte2, font->max_char_or_byte2);
-   printf("byte1 = (%u,%u)\n", font->min_byte1, font->max_byte1);
-   printf("all_chars_exist = %s\n", font->all_chars_exist ? "True" : "False");
-   printf("default_char = %c (\\%03o)\n",
-          (char) (isprint(font->default_char) ? font->default_char : ' '),
-          font->default_char);
-   dump_char_struct(&font->min_bounds, "min> ");
-   dump_char_struct(&font->max_bounds, "max> ");
-#if 0
-   for (c = font->min_char_or_byte2; c <= font->max_char_or_byte2; c++) {
-      char prefix[8];
-      sprintf(prefix, "%d> ", c);
-      dump_char_struct(&font->per_char[c], prefix);
-   }
-#endif
-}
-
-static void
-dump_bitmap(unsigned int width, unsigned int height, GLubyte * bitmap)
-{
-   unsigned int x, y;
-
-   printf("    ");
-   for (x = 0; x < 8 * width; x++)
-      printf("%o", 7 - (x % 8));
-   putchar('\n');
-   for (y = 0; y < height; y++) {
-      printf("%3o:", y);
-      for (x = 0; x < 8 * width; x++)
-         putchar((bitmap[width * (height - y - 1) + x / 8] & (1 << (7 - (x %
-                                                                         8))))
-                 ? '*' : '.');
-      printf("   ");
-      for (x = 0; x < width; x++)
-         printf("0x%02x, ", bitmap[width * (height - y - 1) + x]);
-      putchar('\n');
-   }
-}
-#endif /* DEBUG */
-
-
 /* Implementation.  */
 
 /* Fill a BITMAP with a character C from thew current font
@@ -287,11 +222,6 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
    gc = XCreateGC(dpy, pixmap, valuemask, &values);
    XFreePixmap(dpy, pixmap);
 
-#ifdef DEBUG
-   if (debug_xfonts)
-      dump_font_struct(fs);
-#endif
-
    for (i = 0; i < count; i++) {
       unsigned int width, height, bm_width, bm_height;
       GLfloat x0, y0, dx, dy;
@@ -310,14 +240,6 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
       else {
          valid = 1;
       }
-
-#ifdef DEBUG
-      if (debug_xfonts) {
-         char s[7];
-         sprintf(s, isprint(c) ? "%c> " : "\\%03o> ", c);
-         dump_char_struct(ch, s);
-      }
-#endif
 
       /* glBitmap()' parameters:
          straight from the glXUseXFont(3) manpage.  */
@@ -345,14 +267,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
          fill_bitmap(dpy, screen, gc, bm_width, bm_height, x, y, c, bm);
 
          glBitmap(width, height, x0, y0, dx, dy, bm);
-#ifdef DEBUG
-         if (debug_xfonts) {
-            printf("width/height = %u/%u\n", width, height);
-            printf("bm_width/bm_height = %u/%u\n", bm_width, bm_height);
-            dump_bitmap(bm_width, bm_height, bm);
          }
-#endif
-      }
       else {
          glBitmap(0, 0, 0.0, 0.0, dx, dy, NULL);
       }

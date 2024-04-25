@@ -65,6 +65,7 @@ static bool
 xmesa_st_framebuffer_display(struct pipe_frontend_drawable *drawable,
                              struct st_context *st,
                              enum st_attachment_type statt,
+                             unsigned nboxes,
                              struct pipe_box *box)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
@@ -82,7 +83,7 @@ xmesa_st_framebuffer_display(struct pipe_frontend_drawable *drawable,
       pres = xstfb->display_resource;
    }
 
-   xstfb->screen->flush_frontbuffer(xstfb->screen, pctx, pres, 0, 0, &xstfb->buffer->ws, box);
+   xstfb->screen->flush_frontbuffer(xstfb->screen, pctx, pres, 0, 0, &xstfb->buffer->ws, nboxes, box);
    return true;
 }
 
@@ -282,7 +283,7 @@ xmesa_st_framebuffer_flush_front(struct st_context *st,
    if (statt != ST_ATTACHMENT_FRONT_LEFT)
       return false;
 
-   ret = xmesa_st_framebuffer_display(drawable, st, statt, NULL);
+   ret = xmesa_st_framebuffer_display(drawable, st, statt, 0, NULL);
 
    if (ret && xmesa_strict_invalidate())
       xmesa_check_buffer_size(xstfb->buffer);
@@ -359,7 +360,7 @@ xmesa_swap_st_framebuffer(struct pipe_frontend_drawable *drawable)
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    bool ret;
 
-   ret = xmesa_st_framebuffer_display(drawable, NULL, ST_ATTACHMENT_BACK_LEFT, NULL);
+   ret = xmesa_st_framebuffer_display(drawable, NULL, ST_ATTACHMENT_BACK_LEFT, 0, NULL);
    if (ret) {
       struct pipe_resource **front, **back, *tmp;
 
@@ -396,7 +397,7 @@ xmesa_copy_st_framebuffer(struct pipe_frontend_drawable *drawable,
       box.y = y;
       box.width = w;
       box.height = h;
-      xmesa_st_framebuffer_display(drawable, NULL, src, &box);
+      xmesa_st_framebuffer_display(drawable, NULL, src, 1, &box);
    }
 }
 

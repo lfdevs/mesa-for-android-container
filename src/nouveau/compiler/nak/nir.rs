@@ -44,6 +44,14 @@ impl<'a, T> ExecListIter<'a, T> {
             _marker: PhantomData,
         }
     }
+
+    fn at(n: &'a exec_node, offset: usize) -> Self {
+        Self {
+            n,
+            offset: offset,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: 'a> Iterator for ExecListIter<'a, T> {
@@ -151,11 +159,11 @@ impl AsConst for nir_src {
 }
 
 pub trait AsDef {
-    fn as_def<'a>(&'a self) -> &'a nir_def;
+    fn as_def(&self) -> &nir_def;
 }
 
 impl AsDef for nir_def {
-    fn as_def<'a>(&'a self) -> &'a nir_def {
+    fn as_def(&self) -> &nir_def {
         self
     }
 }
@@ -176,7 +184,7 @@ impl<T: AsDef> NirValue for T {
 }
 
 impl AsDef for nir_src {
-    fn as_def<'a>(&'a self) -> &'a nir_def {
+    fn as_def(&self) -> &nir_def {
         unsafe { &*self.ssa }
     }
 }
@@ -220,7 +228,7 @@ impl NirSrcsAsSlice<nir_alu_src> for nir_alu_instr {
 }
 
 impl AsDef for nir_alu_src {
-    fn as_def<'a>(&'a self) -> &'a nir_def {
+    fn as_def(&self) -> &nir_def {
         self.src.as_def()
     }
 }
@@ -421,6 +429,21 @@ impl NirPhiInstr for nir_phi_instr {
     }
 }
 
+pub trait NirJumpInstr {
+    fn target(&self) -> Option<&nir_block>;
+    fn else_target(&self) -> Option<&nir_block>;
+}
+
+impl NirJumpInstr for nir_jump_instr {
+    fn target(&self) -> Option<&nir_block> {
+        NonNull::new(self.target).map(|b| unsafe { b.as_ref() })
+    }
+
+    fn else_target(&self) -> Option<&nir_block> {
+        NonNull::new(self.else_target).map(|b| unsafe { b.as_ref() })
+    }
+}
+
 pub trait NirInstr {
     fn as_alu(&self) -> Option<&nir_alu_instr>;
     fn as_jump(&self) -> Option<&nir_jump_instr>;
@@ -556,6 +579,7 @@ pub trait NirCfNode {
     fn as_block(&self) -> Option<&nir_block>;
     fn as_if(&self) -> Option<&nir_if>;
     fn as_loop(&self) -> Option<&nir_loop>;
+    fn next(&self) -> Option<&nir_cf_node>;
 }
 
 impl NirCfNode for nir_cf_node {
@@ -581,6 +605,12 @@ impl NirCfNode for nir_cf_node {
         } else {
             None
         }
+    }
+
+    fn next(&self) -> Option<&nir_cf_node> {
+        let mut iter: ExecListIter<nir_cf_node> =
+            ExecListIter::at(&self.node, offset_of!(nir_cf_node, node));
+        iter.next()
     }
 }
 

@@ -44,7 +44,7 @@
 #include "dev/intel_debug.h"
 
 static inline void
-assign_vue_slot(struct brw_vue_map *vue_map, int varying, int slot)
+assign_vue_slot(struct intel_vue_map *vue_map, int varying, int slot)
 {
    /* Make sure this varying hasn't been assigned a slot already */
    assert (vue_map->varying_to_slot[varying] == -1);
@@ -58,18 +58,11 @@ assign_vue_slot(struct brw_vue_map *vue_map, int varying, int slot)
  */
 void
 brw_compute_vue_map(const struct intel_device_info *devinfo,
-                    struct brw_vue_map *vue_map,
+                    struct intel_vue_map *vue_map,
                     uint64_t slots_valid,
                     bool separate,
                     uint32_t pos_slots)
 {
-   /* Keep using the packed/contiguous layout on old hardware - we only need
-    * the SSO layout when using geometry/tessellation shaders or 32 FS input
-    * varyings, which only exist on Gen >= 6.  It's also a bit more efficient.
-    */
-   if (devinfo->ver < 6)
-      separate = false;
-
    if (separate) {
       /* In SSO mode, we don't know whether the adjacent stage will
        * read/write gl_ClipDistance, which has a fixed slot location.
@@ -112,63 +105,49 @@ brw_compute_vue_map(const struct intel_device_info *devinfo,
     *
     * See the Sandybridge PRM, Volume 2 Part 1, section 1.5.1 (page 30),
     * "Vertex URB Entry (VUE) Formats" which describes the VUE header layout.
+    *
+    * There are 8 or 16 DWs (D0-D15) in VUE header on Sandybridge:
+    * dword 0-3 of the header is shading rate, indices, point width, clip flags.
+    * dword 4-7 is the 4D space position
+    * dword 8-15 of the vertex header is the user clip distance if
+    * enabled.
+    * dword 8-11 or 16-19 is the first vertex element data we fill.
     */
-   if (devinfo->ver < 6) {
-      /* There are 8 dwords in VUE header pre-Ironlake:
-       * dword 0-3 is indices, point width, clip flags.
-       * dword 4-7 is ndc position
-       * dword 8-11 is the first vertex data.
-       *
-       * On Ironlake the VUE header is nominally 20 dwords, but the hardware
-       * will accept the same header layout as Gfx4 [and should be a bit faster]
-       */
-      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
-      assign_vue_slot(vue_map, BRW_VARYING_SLOT_NDC, slot++);
-      assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
-   } else {
-      /* There are 8 or 16 DWs (D0-D15) in VUE header on Sandybridge:
-       * dword 0-3 of the header is shading rate, indices, point width, clip flags.
-       * dword 4-7 is the 4D space position
-       * dword 8-15 of the vertex header is the user clip distance if
-       * enabled.
-       * dword 8-11 or 16-19 is the first vertex element data we fill.
-       */
-      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
-      assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
+   assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
+   assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
 
-      /* When using Primitive Replication, multiple slots are used for storing
-       * positions for each view.
-       */
-      assert(pos_slots >= 1);
-      if (pos_slots > 1) {
-         for (int i = 1; i < pos_slots; i++) {
-            vue_map->slot_to_varying[slot++] = VARYING_SLOT_POS;
-         }
+   /* When using Primitive Replication, multiple slots are used for storing
+    * positions for each view.
+    */
+   assert(pos_slots >= 1);
+   if (pos_slots > 1) {
+      for (int i = 1; i < pos_slots; i++) {
+         vue_map->slot_to_varying[slot++] = VARYING_SLOT_POS;
       }
-
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0))
-         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST0, slot++);
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1))
-         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST1, slot++);
-
-      /* Vertex URB Formats table says: "Vertex Header shall be padded at the
-       * end so that the header ends on a 32-byte boundary".
-       */
-      slot += slot % 2;
-
-      /* front and back colors need to be consecutive so that we can use
-       * ATTRIBUTE_SWIZZLE_INPUTATTR_FACING to swizzle them when doing
-       * two-sided color.
-       */
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL0))
-         assign_vue_slot(vue_map, VARYING_SLOT_COL0, slot++);
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC0))
-         assign_vue_slot(vue_map, VARYING_SLOT_BFC0, slot++);
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL1))
-         assign_vue_slot(vue_map, VARYING_SLOT_COL1, slot++);
-      if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC1))
-         assign_vue_slot(vue_map, VARYING_SLOT_BFC1, slot++);
    }
+
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0))
+      assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST0, slot++);
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1))
+      assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST1, slot++);
+
+   /* Vertex URB Formats table says: "Vertex Header shall be padded at the
+    * end so that the header ends on a 32-byte boundary".
+    */
+   slot += slot % 2;
+
+   /* front and back colors need to be consecutive so that we can use
+    * ATTRIBUTE_SWIZZLE_INPUTATTR_FACING to swizzle them when doing
+    * two-sided color.
+    */
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL0))
+      assign_vue_slot(vue_map, VARYING_SLOT_COL0, slot++);
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC0))
+      assign_vue_slot(vue_map, VARYING_SLOT_BFC0, slot++);
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL1))
+      assign_vue_slot(vue_map, VARYING_SLOT_COL1, slot++);
+   if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC1))
+      assign_vue_slot(vue_map, VARYING_SLOT_BFC1, slot++);
 
    /* The hardware doesn't care about the rest of the vertex outputs, so we
     * can assign them however we like.  For normal programs, we simply assign
@@ -216,7 +195,7 @@ brw_compute_vue_map(const struct intel_device_info *devinfo,
  * tessellation evaluation shader inputs.
  */
 void
-brw_compute_tess_vue_map(struct brw_vue_map *vue_map,
+brw_compute_tess_vue_map(struct intel_vue_map *vue_map,
                          uint64_t vertex_slots,
                          uint32_t patch_slots)
 {
@@ -289,16 +268,14 @@ varying_name(brw_varying_slot slot, gl_shader_stage stage)
       return gl_varying_slot_name_for_stage((gl_varying_slot)slot, stage);
 
    static const char *brw_names[] = {
-      [BRW_VARYING_SLOT_NDC - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_NDC",
       [BRW_VARYING_SLOT_PAD - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_PAD",
-      [BRW_VARYING_SLOT_PNTC - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_PNTC",
    };
 
    return brw_names[slot - VARYING_SLOT_MAX];
 }
 
 void
-brw_print_vue_map(FILE *fp, const struct brw_vue_map *vue_map,
+brw_print_vue_map(FILE *fp, const struct intel_vue_map *vue_map,
                   gl_shader_stage stage)
 {
    if (vue_map->num_per_vertex_slots > 0 || vue_map->num_per_patch_slots > 0) {

@@ -329,7 +329,7 @@ impl<N> CFG<N> {
         &self.nodes[idx].pred[..]
     }
 
-    pub fn drain<'a>(&'a mut self) -> impl Iterator<Item = N> + 'a {
+    pub fn drain(&mut self) -> impl Iterator<Item = N> + '_ {
         self.has_loop = false;
         self.nodes.drain(..).map(|n| n.node)
     }

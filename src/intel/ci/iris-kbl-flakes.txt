@@ -18,3 +18,7 @@ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_
 
 # See the https://gitlab.freedesktop.org/mesa/mesa/-/issues/7547
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear
+
+# uprev Piglit in Mesa
+spec@!opengl 1.2@tex3d-maxsize
+

@@ -1,25 +1,7 @@
 /*
  * Copyright © 2020 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 #include "helpers.h"
 
@@ -373,6 +355,8 @@ BEGIN_TEST(to_hw_instr.swap_subdword)
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_b1, v1b), Definition(v0_b3, v1b),
                  Operand(v0_b3, v1b), Operand(v0_b1, v1b));
 
+      //~gfx11! s_nop
+      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //~gfx(8|9|11)! s_endpgm
 
       finish_to_hw_instr_test();
@@ -534,6 +518,8 @@ BEGIN_TEST(to_hw_instr.subdword_constant)
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(17u));
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1b), Operand::zero(1));
 
+      //~gfx11! s_nop
+      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
 
       finish_to_hw_instr_test();
@@ -662,6 +648,8 @@ BEGIN_TEST(to_hw_instr.extract)
 
          finish_to_hw_instr_test();
 
+         //~gfx11_.*! s_nop
+         //~gfx11_.*! s_sendmsg sendmsg(dealloc_vgprs)
          //! s_endpgm
       }
    }
@@ -754,6 +742,8 @@ BEGIN_TEST(to_hw_instr.insert)
 
       finish_to_hw_instr_test();
 
+      //~gfx11! s_nop
+      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
    }
 END_TEST
@@ -762,10 +752,7 @@ BEGIN_TEST(to_hw_instr.copy_linear_vgpr_scc)
    if (!setup_cs(NULL, GFX10))
       return;
 
-   PhysReg reg_s0{0};
    PhysReg v0_lo{256};
-   PhysReg v0_b3{256};
-   v0_b3.reg_b += 3;
    PhysReg v1_lo{257};
 
    //>> p_unit_test 0
@@ -775,17 +762,16 @@ BEGIN_TEST(to_hw_instr.copy_linear_vgpr_scc)
     * enough
     */
 
-   //! s1: %0:scc = s_cmp_lg_i32 %0:s[0], 0
+   //! v1: %0:v[0] = v_mov_b32 %0:v[1]
    //! s1: %0:m0 = s_mov_b32 %0:scc
-   //! lv1: %0:v[0] = v_mov_b32 %0:v[1]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv1: %0:v[0] = v_mov_b32 %0:v[1]
+   //! v1: %0:v[0] = v_mov_b32 %0:v[1]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
    //! s1: %0:scc = s_cmp_lg_i32 %0:m0, 0
-   Instruction* instr =
-      bld.pseudo(aco_opcode::p_parallelcopy, Definition(scc, s1), Definition(v0_lo, v1.as_linear()),
-                 Operand(reg_s0, s1), Operand(v1_lo, v1.as_linear()));
+   Instruction* instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1.as_linear()),
+                                   Operand(v1_lo, v1.as_linear()));
    instr->pseudo().scratch_sgpr = m0;
+   instr->pseudo().tmp_in_scc = true;
 
    finish_to_hw_instr_test();
 END_TEST
@@ -801,6 +787,10 @@ BEGIN_TEST(to_hw_instr.swap_linear_vgpr)
    //>> p_unit_test 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
 
+   //! v1: %0:v[0],  v1: %0:v[1] = v_swap_b32 %0:v[1], %0:v[0]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
+   //! v1: %0:v[0],  v1: %0:v[1] = v_swap_b32 %0:v[1], %0:v[0]
+   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
    Instruction* instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v1_linear),
                                    Definition(reg_v1, v1_linear), Operand(reg_v1, v1_linear),
                                    Operand(reg_v0, v1_linear));
@@ -820,13 +810,11 @@ BEGIN_TEST(to_hw_instr.copy_linear_vgpr_v3)
    //>> p_unit_test 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
 
-   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! v2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! v1: %0:v[2] = v_mov_b32 %0:v[6]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv1: %0:v[2] = v_mov_b32 %0:v[6]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv1: %0:v[2] = v_mov_b32 %0:v[6]
+   //! v2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! v1: %0:v[2] = v_mov_b32 %0:v[6]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
    Instruction* instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v3_linear),
                                    Operand(reg_v4, v3_linear));
@@ -846,40 +834,15 @@ BEGIN_TEST(to_hw_instr.copy_linear_vgpr_coalesce)
    RegClass v1_linear = v1.as_linear();
 
    //>> p_unit_test 0
-   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! v2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
+   //! v2: %0:v[0-1] = v_lshrrev_b64 0, %0:v[4-5]
    //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
    bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
 
    Instruction* instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v1_linear),
                                    Definition(reg_v1, v1_linear), Operand(reg_v4, v1_linear),
                                    Operand(reg_v5, v1_linear));
-   instr->pseudo().scratch_sgpr = m0;
-
-   //! p_unit_test 1
-   //! lv1: %0:v[0] = v_mov_b32 %0:v[4]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv1: %0:v[0] = v_mov_b32 %0:v[4]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! v1: %0:v[1] = v_mov_b32 %0:v[5]
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
-
-   instr = bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v1_linear),
-                      Definition(reg_v1, v1), Operand(reg_v4, v1_linear), Operand(reg_v5, v1));
-   instr->pseudo().scratch_sgpr = m0;
-
-   //! p_unit_test 2
-   //! v1: %0:v[0] = v_mov_b32 %0:v[4]
-   //! lv1: %0:v[1] = v_mov_b32 %0:v[5]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   //! lv1: %0:v[1] = v_mov_b32 %0:v[5]
-   //! s2: %0:exec,  s1: %0:scc = s_not_b64 %0:exec
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
-
-   instr =
-      bld.pseudo(aco_opcode::p_parallelcopy, Definition(reg_v0, v1), Definition(reg_v1, v1_linear),
-                 Operand(reg_v4, v1), Operand(reg_v5, v1_linear));
    instr->pseudo().scratch_sgpr = m0;
 
    finish_to_hw_instr_test();
@@ -931,6 +894,8 @@ BEGIN_TEST(to_hw_instr.pack2x16_constant)
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v2b), Definition(v0_hi, v2b),
                  Operand::zero(2), Operand(v1_lo, v2b));
 
+      //~gfx11! s_nop
+      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
 
       finish_to_hw_instr_test();

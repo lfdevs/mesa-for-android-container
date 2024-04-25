@@ -143,9 +143,9 @@ nvc0_create_decoder(struct pipe_context *context,
             data = &nvc0_args;
          } else {
             unsigned engine[] = {
-               NVE0_FIFO_ENGINE_BSP,
-               NVE0_FIFO_ENGINE_VP,
-               NVE0_FIFO_ENGINE_PPP
+               NOUVEAU_FIFO_ENGINE_BSP,
+               NOUVEAU_FIFO_ENGINE_VP,
+               NOUVEAU_FIFO_ENGINE_PPP
             };
 
             nve0_args.engine = engine[i];
@@ -159,7 +159,7 @@ nvc0_create_decoder(struct pipe_context *context,
 
          if (!ret)
             ret = nouveau_pushbuf_create(screen, &nvc0->base, nvc0->base.client, dec->channel[i],
-                                         4, 32 * 1024, true, &dec->pushbuf[i]);
+                                         4, 32 * 1024, &dec->pushbuf[i]);
          if (ret)
             break;
       }

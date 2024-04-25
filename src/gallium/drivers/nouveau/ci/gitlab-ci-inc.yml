@@ -5,10 +5,22 @@
     - !reference [.anholt-farm-rules, rules]
     - !reference [.gl-rules, rules]
     - changes: &nouveau_file_list
-      - src/nouveau/**/*
-      - src/gallium/drivers/nouveau/**/*
-      - src/gallium/winsys/kmsro/**/*
-      - src/gallium/winsys/nouveau/**/*
+        - src/nouveau/*
+        - src/nouveau/codegen/**/*
+        - src/nouveau/drm/**/*
+        - src/nouveau/drm-shim/**/*
+        - src/nouveau/headers/**/*
+        - src/nouveau/winsys/**/*
+        - src/gallium/drivers/nouveau/*
+        - src/gallium/drivers/nouveau/nv*/**/*
+        - src/gallium/drivers/nouveau/ci/gitlab-ci.yml
+        - src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml
+        - src/gallium/drivers/nouveau/ci/deqp-$DEQP_SUITE.toml
+        - src/gallium/drivers/nouveau/ci/$GPU_VERSION-fails.txt
+        - src/gallium/drivers/nouveau/ci/$GPU_VERSION-flakes.txt
+        - src/gallium/drivers/nouveau/ci/$GPU_VERSION-skips.txt
+        - src/gallium/winsys/kmsro/**/*
+        - src/gallium/winsys/nouveau/**/*
       when: on_success
 
 .nouveau-manual-rules:

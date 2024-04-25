@@ -29,7 +29,6 @@
 #include "util/u_screen.h"
 
 #include "etnaviv/etnaviv_screen.h"
-#include "etnaviv/hw/common.xml.h"
 #include "etnaviv_drm_public.h"
 
 #include <stdio.h>
@@ -40,7 +39,6 @@ screen_create(int gpu_fd, const struct pipe_screen_config *config, struct render
 {
    struct etna_device *dev;
    struct etna_gpu *gpu;
-   uint64_t val;
    int i;
 
    dev = etna_device_new_dup(gpu_fd);
@@ -57,8 +55,7 @@ screen_create(int gpu_fd, const struct pipe_screen_config *config, struct render
       }
 
       /* Look for a 3D capable GPU */
-      int ret = etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_0, &val);
-      if (ret == 0 && (val & chipFeatures_PIPE_3D))
+      if (etna_core_has_feature(etna_gpu_get_core_info(gpu), ETNA_FEATURE_PIPE_3D))
          break;
 
       etna_gpu_del(gpu);

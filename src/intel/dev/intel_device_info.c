@@ -35,6 +35,7 @@
 #include "i915/intel_device_info.h"
 #include "xe/intel_device_info.h"
 
+#include "common/intel_gem.h"
 #include "util/u_debug.h"
 #include "util/log.h"
 #include "util/macros.h"
@@ -72,6 +73,7 @@ static const struct {
    { "rpl", 0xa780 },
    { "dg2", 0x5690 },
    { "mtl", 0x7d60 },
+   { "arl", 0x7d67 },
 };
 
 /**
@@ -616,10 +618,10 @@ static const struct intel_device_info intel_device_info_chv = {
    .has_sample_with_hiz = true,                     \
    .has_illegal_ccs_values = true,                                    \
    .cooperative_matrix_configurations = {                             \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
    }
 
 static const struct intel_device_info intel_device_info_skl_gt1 = {
@@ -848,10 +850,10 @@ static const struct intel_device_info intel_device_info_cfl_gt3 = {
    .num_subslices = _subslices,                       \
    .max_eus_per_subslice = 8,                                         \
    .cooperative_matrix_configurations = {                             \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
    }
 
 #define GFX11_URB_MIN_MAX_ENTRIES                     \
@@ -981,10 +983,10 @@ static const struct intel_device_info intel_device_info_ehl_2x4 = {
          .writecombining = PAT_ENTRY(1, WC, NONE),              \
    },                                                           \
    .cooperative_matrix_configurations = {                       \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
    }
 
 #define dual_subslices(args...) { args, }
@@ -1020,39 +1022,33 @@ static const struct intel_device_info intel_device_info_rkl_gt1 = {
 static const struct intel_device_info intel_device_info_adl_gt05 = {
    GFX12_GT05_FEATURES,
    .platform = INTEL_PLATFORM_ADL,
-   .display_ver = 13,
 };
 
 static const struct intel_device_info intel_device_info_adl_gt1 = {
    GFX12_GT_FEATURES(1),
    .platform = INTEL_PLATFORM_ADL,
-   .display_ver = 13,
 };
 
 static const struct intel_device_info intel_device_info_adl_n = {
    GFX12_GT_FEATURES(1),
    .platform = INTEL_PLATFORM_ADL,
-   .display_ver = 13,
    .is_adl_n = true,
 };
 
 static const struct intel_device_info intel_device_info_adl_gt2 = {
    GFX12_GT_FEATURES(2),
    .platform = INTEL_PLATFORM_ADL,
-   .display_ver = 13,
 };
 
 static const struct intel_device_info intel_device_info_rpl = {
    GFX12_FEATURES(1, 1, 4),
    .num_subslices = dual_subslices(2),
    .platform = INTEL_PLATFORM_RPL,
-   .display_ver = 13,
 };
 
 static const struct intel_device_info intel_device_info_rpl_p = {
    GFX12_GT_FEATURES(2),
    .platform = INTEL_PLATFORM_RPL,
-   .display_ver = 13,
 };
 
 #define GFX12_DG1_SG1_FEATURES                           \
@@ -1119,16 +1115,15 @@ static const struct intel_device_info intel_device_info_sg1 = {
    .has_aux_map = false,                                        \
    .simulator_id = 29,                                          \
    .cooperative_matrix_configurations = {                       \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
-    { SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
-    { SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
    }
 
 #define DG2_FEATURES                                            \
    /* (Sub)slice info comes from the kernel topology info */    \
    XEHP_FEATURES(0, 1, 0),                                      \
-   .display_ver = 13,                                           \
    .revision = 4, /* For offline compiler */                    \
    .apply_hwconfig = true,                                      \
    .has_coarse_pixel_primitive_and_cb = true,                   \
@@ -1195,6 +1190,16 @@ static const struct intel_device_info intel_device_info_mtl_u = {
 static const struct intel_device_info intel_device_info_mtl_h = {
    MTL_FEATURES,
    .platform = INTEL_PLATFORM_MTL_H,
+};
+
+static const struct intel_device_info intel_device_info_arl_u = {
+   MTL_FEATURES,
+   .platform = INTEL_PLATFORM_ARL_U,
+};
+
+static const struct intel_device_info intel_device_info_arl_h = {
+   MTL_FEATURES,
+   .platform = INTEL_PLATFORM_ARL_H,
 };
 
 void
@@ -1405,8 +1410,14 @@ intel_device_info_init_common(int pci_id,
    if (devinfo->verx10 == 0)
       devinfo->verx10 = devinfo->ver * 10;
 
-   if (devinfo->display_ver == 0)
-      devinfo->display_ver = devinfo->ver;
+   uint16_t major = devinfo->ver;
+   uint16_t minor = (devinfo->verx10 - (devinfo->ver * 10)) * 10;
+   /* When supported gfx_ip_ver will be overwritten by values read from KMD.
+    * This is a approximation for platforms that do not support GMD ID or
+    * when running offline tools.
+    * verx10 125 becomes GFX_IP_VER(12, 50) for example.
+    */
+   devinfo->gfx_ip_ver = GFX_IP_VER(major, minor);
 
    if (devinfo->has_mesh_shading) {
       /* Half of push constant space matches the size used in the simplest
@@ -1454,21 +1465,29 @@ intel_get_device_info_from_pci_id(int pci_id,
 bool
 intel_device_info_compute_system_memory(struct intel_device_info *devinfo, bool update)
 {
-   uint64_t total_phys;
-   if (!os_get_total_physical_memory(&total_phys))
-      return false;
+   if (!update) {
+      if (!os_get_total_physical_memory(&devinfo->mem.sram.mappable.size))
+         return false;
+   }
 
-   uint64_t available = 0;
-   os_get_available_system_memory(&available);
-
-   if (!update)
-      devinfo->mem.sram.mappable.size = total_phys;
-   else
-      assert(devinfo->mem.sram.mappable.size == total_phys);
-
-   devinfo->mem.sram.mappable.free = available;
+   os_get_available_system_memory(&devinfo->mem.sram.mappable.free);
 
    return true;
+}
+
+static void
+intel_device_info_adjust_memory(struct intel_device_info *devinfo)
+{
+   uint64_t available;
+
+   /* Applications running without elevated privileges don't report valid
+    * numbers for free sram
+    */
+   if (os_get_available_system_memory(&available)) {
+      devinfo->mem.sram.mappable.free = MIN3(devinfo->mem.sram.mappable.free,
+                                             devinfo->mem.sram.mappable.size,
+                                             available);
+   }
 }
 
 static void
@@ -1590,7 +1609,7 @@ intel_device_info_calc_engine_prefetch(const struct intel_device_info *devinfo,
       }
    }
 
-   if (intel_device_info_is_mtl(devinfo)) {
+   if (intel_device_info_is_mtl_or_arl(devinfo)) {
       switch (engine_class) {
       case INTEL_ENGINE_CLASS_RENDER:
          return 2048;
@@ -1610,8 +1629,23 @@ intel_device_info_calc_engine_prefetch(const struct intel_device_info *devinfo,
 }
 
 bool
-intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
+intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo, int min_ver, int max_ver)
 {
+   if (NULL != getenv("INTEL_STUB_GPU_JSON")) {
+      /* This call will succeed when shim-drm has been initialized with a
+       * serialized intel_device_info structure.
+       */
+      struct drm_intel_stub_devinfo arg = {
+         .addr = (uintptr_t)devinfo,
+         .size = sizeof(*devinfo),
+      };
+      if (0 == intel_ioctl(fd, DRM_IOCTL_INTEL_STUB_DEVINFO, &arg)) {
+         intel_device_info_init_was(devinfo);
+         intel_device_info_apply_workarounds(devinfo);
+         return true;
+      }
+   }
+
    /* Get PCI info.
     *
     * Some callers may already have a valid drm device which holds values of
@@ -1631,6 +1665,12 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
       drmFreeDevice(&drmdev);
       return false;
    }
+   
+   if ((min_ver > 0 && devinfo->ver < min_ver) || (max_ver > 0 && devinfo->ver > max_ver)) {
+      drmFreeDevice(&drmdev);
+      return false;
+   }
+
    devinfo->pci_domain = drmdev->businfo.pci->domain;
    devinfo->pci_bus = drmdev->businfo.pci->bus;
    devinfo->pci_dev = drmdev->businfo.pci->dev;
@@ -1640,18 +1680,13 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
    drmFreeDevice(&drmdev);
    devinfo->no_hw = debug_get_bool_option("INTEL_NO_HW", false);
 
-   if (devinfo->ver == 10) {
-      mesa_loge("Gfx10 support is redacted.");
-      return false;
-   }
-
    devinfo->kmd_type = intel_get_kmd_type(fd);
    if (devinfo->kmd_type == INTEL_KMD_TYPE_INVALID) {
       mesa_loge("Unknown kernel mode driver");
       return false;
    }
 
-   /* remaining initializion queries the kernel for device info */
+   /* remaining initialization queries the kernel for device info */
    if (devinfo->no_hw) {
       /* Provide some sensible values for NO_HW. */
       devinfo->gtt_size =
@@ -1685,6 +1720,8 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
       return false;
    }
 
+   intel_device_info_adjust_memory(devinfo);
+
    /* Gfx7 and older do not support EU/Subslice info */
    assert(devinfo->subslice_total >= 1 || devinfo->ver <= 7);
    devinfo->subslice_total = MAX2(devinfo->subslice_total, 1);
@@ -1716,7 +1753,10 @@ bool intel_device_info_update_memory_info(struct intel_device_info *devinfo, int
    default:
       ret = false;
    }
-   return ret || intel_device_info_compute_system_memory(devinfo, true);
+
+   if (ret)
+      intel_device_info_adjust_memory(devinfo);
+   return ret;
 }
 
 void
@@ -1732,14 +1772,17 @@ intel_device_info_update_after_hwconfig(struct intel_device_info *devinfo)
 enum intel_wa_steppings
 intel_device_info_wa_stepping(struct intel_device_info *devinfo)
 {
-   if (intel_device_info_is_mtl(devinfo)) {
-      if (devinfo->revision < 4)
-         return INTEL_STEPPING_A0;
-      return INTEL_STEPPING_B0;
-   } else if (devinfo->platform == INTEL_PLATFORM_TGL) {
+   /* When adding platforms to this function, check to see if
+    * stepping-specific workarounds impact the compiler.
+    *
+    * If a stepping specific compiler workaround is required on a released
+    * platform, intel_device_info->revision must be added as a
+    * 'compiler_field' in intel_device_info.py
+    */
+
+   if (devinfo->platform == INTEL_PLATFORM_TGL) {
+      /* TGL production steppings: B0 and C0 */
       switch (devinfo->revision) {
-      case 0:
-         return INTEL_STEPPING_A0;
       case 1:
          return INTEL_STEPPING_B0;
       case 3:
@@ -1752,3 +1795,4 @@ intel_device_info_wa_stepping(struct intel_device_info *devinfo)
    /* all other platforms support only released steppings */
    return INTEL_STEPPING_RELEASE;
 }
+

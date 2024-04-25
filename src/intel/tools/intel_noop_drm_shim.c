@@ -34,6 +34,7 @@
 
 #include "common/intel_gem.h"
 #include "dev/intel_device_info.h"
+#include "dev/intel_device_info_serialize.h"
 #include "drm-uapi/i915_drm.h"
 #include "drm-shim/drm_shim.h"
 #include "util/macros.h"
@@ -51,6 +52,7 @@ struct i915_bo {
 };
 
 static struct i915_device i915 = {};
+static bool i915_device_from_json = false;
 
 bool drm_shim_driver_prefers_first_render_node = true;
 
@@ -489,6 +491,31 @@ i915_gem_get_aperture(int fd, unsigned long request, void *arg)
    return 0;
 }
 
+/* Provide a binary blob of struct intel_device_info to the caller
+ *
+ * This is used in conjunction with INTEL_STUB_GPU_JSON to initialize a
+ * stubbed driver with device info from a file.
+ */
+static int
+i915_ioctl_load_device_info(int fd, unsigned long request, void *arg)
+{
+   if(!i915_device_from_json)
+      return -1;
+
+   struct drm_intel_stub_devinfo *stub_arg = (struct drm_intel_stub_devinfo*) arg;
+   struct intel_device_info *stub_info = (struct intel_device_info*) stub_arg->addr;
+
+   if (stub_arg->size != sizeof(i915.devinfo)) {
+      assert(false);
+      return -1;
+   }
+   memcpy(stub_info, &i915.devinfo, sizeof(i915.devinfo));
+   return 0;
+}
+
+#define DRM_I915_LAST (DRM_COMMAND_END - DRM_COMMAND_BASE - 1)
+#define DRM_I915_LOAD_STUB_DEVINFO DRM_I915_LAST
+
 static ioctl_fn_t driver_ioctls[] = {
    [DRM_I915_GETPARAM] = i915_ioctl_get_param,
    [DRM_I915_QUERY] = i915_ioctl_query,
@@ -521,25 +548,33 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_I915_GEM_MADVISE] = i915_ioctl_noop,
    [DRM_I915_GEM_WAIT] = i915_ioctl_noop,
    [DRM_I915_GEM_BUSY] = i915_ioctl_noop,
+   [DRM_I915_LOAD_STUB_DEVINFO] = i915_ioctl_load_device_info,
 };
 
 void
 drm_shim_driver_init(void)
 {
    i915.device_id = 0;
-   const char *device_id_str = getenv("INTEL_STUB_GPU_DEVICE_ID");
-   if (device_id_str != NULL) {
-      /* Set as 0 if strtoul fails */
-      i915.device_id = strtoul(device_id_str, NULL, 16);
+   const char *json_dev_str = getenv("INTEL_STUB_GPU_JSON");
+   if (json_dev_str != NULL) {
+      if (!intel_device_info_from_json(json_dev_str, &i915.devinfo))
+         return;
+      i915.device_id = i915.devinfo.pci_device_id;
+      i915_device_from_json = true;
+   } else {
+      const char *device_id_str = getenv("INTEL_STUB_GPU_DEVICE_ID");
+      if (device_id_str != NULL) {
+         /* Set as 0 if strtoul fails */
+         i915.device_id = strtoul(device_id_str, NULL, 16);
+      }
+      if (i915.device_id == 0) {
+         const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
+         /* Use SKL if nothing is specified. */
+         i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
+      }
+      if (!intel_get_device_info_from_pci_id(i915.device_id, &i915.devinfo))
+         return;
    }
-   if (i915.device_id == 0) {
-      const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
-      /* Use SKL if nothing is specified. */
-      i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
-   }
-
-   if (!intel_get_device_info_from_pci_id(i915.device_id, &i915.devinfo))
-      return;
 
    shim_device.bus_type = DRM_BUS_PCI;
    shim_device.driver_name = "i915";

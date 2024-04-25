@@ -37,6 +37,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "util/detect_os.h"
 #include "util/mesa-sha1.h"
 #include "util/disk_cache.h"
 #include "util/disk_cache_os.h"
@@ -190,7 +191,7 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name,
 
    disk_cache_destroy(cache);
 
-#ifdef ANDROID
+#if DETECT_OS_ANDROID
    /* Android doesn't try writing to disk (just calls the cache callbacks), so
     * the directory tests below don't apply.
     */

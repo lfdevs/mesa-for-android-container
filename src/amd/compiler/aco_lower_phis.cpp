@@ -1,25 +1,7 @@
 /*
  * Copyright © 2019 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "aco_builder.h"
@@ -108,8 +90,8 @@ get_output(Program* program, unsigned block_idx, ssa_state* state)
    }
 
    /* create phi */
-   aco_ptr<Pseudo_instruction> phi{create_instruction<Pseudo_instruction>(
-      aco_opcode::p_linear_phi, Format::PSEUDO, num_preds, 1)};
+   aco_ptr<Instruction> phi{
+      create_instruction(aco_opcode::p_linear_phi, Format::PSEUDO, num_preds, 1)};
    for (unsigned i = 0; i < num_preds; i++)
       phi->operands[i] = state->outputs[block.linear_preds[i]];
    phi->definitions[0] = Definition(output.getTemp());
@@ -347,8 +329,8 @@ lower_divergent_bool_phi(Program* program, ssa_state* state, Block* block,
 
    unsigned num_preds = block->linear_preds.size();
    if (phi->operands.size() != num_preds) {
-      Pseudo_instruction* new_phi{create_instruction<Pseudo_instruction>(
-         aco_opcode::p_linear_phi, Format::PSEUDO, num_preds, 1)};
+      Instruction* new_phi{
+         create_instruction(aco_opcode::p_linear_phi, Format::PSEUDO, num_preds, 1)};
       new_phi->definitions[0] = phi->definitions[0];
       phi.reset(new_phi);
    } else {

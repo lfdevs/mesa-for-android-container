@@ -656,7 +656,10 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
                          */
                         uint32_t perquad =
                                 is_load && !vir_in_nonuniform_control_flow(c) &&
-                                !c->emitted_discard ?
+                                ((c->s->info.stage == MESA_SHADER_FRAGMENT &&
+                                  c->s->info.fs.needs_quad_helper_invocations &&
+                                  !c->emitted_discard) ||
+                                 c->s->info.uses_wide_subgroup_intrinsics) ?
                                 GENERAL_TMU_LOOKUP_PER_QUAD :
                                 GENERAL_TMU_LOOKUP_PER_PIXEL;
                         config = 0xffffff00 | tmu_op << 3 | perquad;
@@ -3293,6 +3296,105 @@ emit_load_local_invocation_index(struct v3d_compile *c)
                        vir_uniform_ui(c, 32 - c->local_invocation_index_bits));
 }
 
+/* For the purposes of reduction operations (ballot, alleq, allfeq, bcastf) in
+ * fragment shaders a lane is considered active if any sample flags are set
+ * for *any* lane in the same quad, however, we still need to ensure that
+ * terminated lanes (OpTerminate) are not included. Further, we also need to
+ * disable lanes that may be disabled because of non-uniform control
+ * flow.
+ */
+static enum v3d_qpu_cond
+setup_subgroup_control_flow_condition(struct v3d_compile *c)
+{
+        assert(c->s->info.stage == MESA_SHADER_FRAGMENT ||
+               c->s->info.stage == MESA_SHADER_COMPUTE);
+
+        enum v3d_qpu_cond cond = V3D_QPU_COND_NONE;
+
+        /* We need to make sure that terminated lanes in fragment shaders are
+         * not included. We can identify these lanes by comparing the inital
+         * sample mask with the current. This fixes:
+         * dEQP-VK.spirv_assembly.instruction.terminate_invocation.terminate.subgroup_*
+         */
+        if (c->s->info.stage == MESA_SHADER_FRAGMENT && c->emitted_discard) {
+                vir_set_pf(c, vir_AND_dest(c, vir_nop_reg(), c->start_msf,
+                                           vir_NOT(c, vir_XOR(c, c->start_msf,
+                                                              vir_MSF(c)))),
+                           V3D_QPU_PF_PUSHZ);
+                cond = V3D_QPU_COND_IFNA;
+        }
+
+        /* If we are in non-uniform control-flow update the condition to
+         * also limit lanes to those in the current execution mask.
+         */
+        if (vir_in_nonuniform_control_flow(c)) {
+                if (cond == V3D_QPU_COND_IFNA) {
+                        vir_set_uf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute),
+                                   V3D_QPU_UF_NORNZ);
+                } else {
+                        assert(cond == V3D_QPU_COND_NONE);
+                        vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute),
+                                   V3D_QPU_PF_PUSHZ);
+                }
+                cond = V3D_QPU_COND_IFA;
+        }
+
+        return cond;
+}
+
+static void
+emit_compute_barrier(struct v3d_compile *c)
+{
+        /* Ensure we flag the use of the control barrier. NIR's
+         * gather info pass usually takes care of this, but that
+         * requires that we call that pass after any other pass
+         * may emit a control barrier, so this is safer.
+         */
+        c->s->info.uses_control_barrier = true;
+
+        /* Emit a TSY op to get all invocations in the workgroup
+         * (actually supergroup) to block until the last
+         * invocation reaches the TSY op.
+         */
+        vir_BARRIERID_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_SYNCB));
+}
+
+static void
+emit_barrier(struct v3d_compile *c)
+{
+        struct qreg eidx = vir_EIDX(c);
+
+        /* The config for the TSY op should be setup like this:
+         * - Lane 0: Quorum
+         * - Lane 2: TSO id
+         * - Lane 3: TSY opcode
+         */
+
+        /* Lane 0: we want to synchronize across one subgroup. Here we write to
+         * all lanes unconditionally and will overwrite other lanes below.
+         */
+        struct qreg tsy_conf = vir_uniform_ui(c, 1);
+
+        /* Lane 2: TSO id. We choose a general purpose TSO (id=0..64) using the
+         * curent QPU index and thread index to ensure we get a unique one for
+         * this group of invocations in this core.
+         */
+        struct qreg tso_id =
+                vir_AND(c, vir_TIDX(c), vir_uniform_ui(c, 0x0000003f));
+        vir_set_pf(c, vir_XOR_dest(c, vir_nop_reg(), eidx, vir_uniform_ui(c, 2)),
+                   V3D_QPU_PF_PUSHZ);
+        vir_MOV_cond(c, V3D_QPU_COND_IFA, tsy_conf, tso_id);
+
+        /* Lane 3: TSY opcode (set_quorum_wait_inc_check) */
+        struct qreg tsy_op = vir_uniform_ui(c, 16);
+        vir_set_pf(c, vir_XOR_dest(c, vir_nop_reg(), eidx, vir_uniform_ui(c, 3)),
+                   V3D_QPU_PF_PUSHZ);
+        vir_MOV_cond(c, V3D_QPU_COND_IFA, tsy_conf, tsy_op);
+
+        /* Emit TSY sync */
+        vir_MOV_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_SYNCB), tsy_conf);
+}
+
 static void
 ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
 {
@@ -3536,19 +3638,11 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 ntq_flush_tmu(c);
 
                 if (nir_intrinsic_execution_scope(instr) != SCOPE_NONE) {
-                        /* Ensure we flag the use of the control barrier. NIR's
-                         * gather info pass usually takes care of this, but that
-                         * requires that we call that pass after any other pass
-                         * may emit a control barrier, so this is safer.
-                         */
-                        c->s->info.uses_control_barrier = true;
+                        if (c->s->info.stage == MESA_SHADER_COMPUTE)
+                                emit_compute_barrier(c);
+                        else
+                                emit_barrier(c);
 
-                        /* Emit a TSY op to get all invocations in the workgroup
-                         * (actually supergroup) to block until the last
-                         * invocation reaches the TSY op.
-                         */
-                        vir_BARRIERID_dest(c, vir_reg(QFILE_MAGIC,
-                                                      V3D_QPU_WADDR_SYNCB));
                         /* The blocking of a TSY op only happens at the next
                          * thread switch. No texturing may be outstanding at the
                          * time of a TSY blocking operation.
@@ -3805,6 +3899,113 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                                            first, vir_uniform_ui(c, 1)),
                                            V3D_QPU_PF_PUSHZ);
                 struct qreg result = ntq_emit_cond_to_bool(c, V3D_QPU_COND_IFA);
+                ntq_store_def(c, &instr->def, 0, result);
+                break;
+        }
+
+        case nir_intrinsic_ballot: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                enum v3d_qpu_cond cond = setup_subgroup_control_flow_condition(c);
+                struct qreg res = vir_get_temp(c);
+                vir_set_cond(vir_BALLOT_dest(c, res, value), cond);
+                ntq_store_def(c, &instr->def, 0, vir_MOV(c, res));
+                break;
+        }
+
+        case nir_intrinsic_read_invocation: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                struct qreg index = ntq_get_src(c, instr->src[1], 0);
+                struct qreg res = vir_SHUFFLE(c, value, index);
+                ntq_store_def(c, &instr->def, 0, vir_MOV(c, res));
+                break;
+        }
+
+        case nir_intrinsic_read_first_invocation: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                enum v3d_qpu_cond cond = setup_subgroup_control_flow_condition(c);
+                struct qreg res = vir_get_temp(c);
+                vir_set_cond(vir_BCASTF_dest(c, res, value), cond);
+                ntq_store_def(c, &instr->def, 0, vir_MOV(c, res));
+                break;
+        }
+
+        case nir_intrinsic_shuffle: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                struct qreg indices = ntq_get_src(c, instr->src[1], 0);
+                struct qreg res = vir_SHUFFLE(c, value, indices);
+                ntq_store_def(c, &instr->def, 0, vir_MOV(c, res));
+                break;
+        }
+
+        case nir_intrinsic_vote_feq:
+        case nir_intrinsic_vote_ieq: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                enum v3d_qpu_cond cond = setup_subgroup_control_flow_condition(c);
+                struct qreg res = vir_get_temp(c);
+                vir_set_cond(instr->intrinsic == nir_intrinsic_vote_ieq ?
+                             vir_ALLEQ_dest(c, res, value) :
+                             vir_ALLFEQ_dest(c, res, value),
+                             cond);
+
+                /* Produce boolean result */
+                vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), res),
+                           V3D_QPU_PF_PUSHZ);
+                struct qreg result = ntq_emit_cond_to_bool(c, V3D_QPU_COND_IFNA);
+                ntq_store_def(c, &instr->def, 0, result);
+                break;
+        }
+
+        case nir_intrinsic_vote_all: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                enum v3d_qpu_cond cond = setup_subgroup_control_flow_condition(c);
+                struct qreg res = vir_get_temp(c);
+                vir_set_cond(vir_ALLEQ_dest(c, res, value), cond);
+
+                /* We want to check if 'all lanes are equal (alleq != 0) and
+                 * their value is True (value != 0)'.
+                 *
+                 * The first MOV.pushz generates predicate for 'alleq == 0'.
+                 * The second MOV.NORZ generates predicate for:
+                 * '!(alleq == 0) & !(value == 0).
+                 */
+                vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), res),
+                           V3D_QPU_PF_PUSHZ);
+                vir_set_uf(c, vir_MOV_dest(c, vir_nop_reg(), value),
+                           V3D_QPU_UF_NORZ);
+                struct qreg result =
+                        ntq_emit_cond_to_bool(c, V3D_QPU_COND_IFA);
+                ntq_store_def(c, &instr->def, 0, result);
+                break;
+        }
+
+        case nir_intrinsic_vote_any: {
+                assert(c->devinfo->ver >= 71);
+                struct qreg value = ntq_get_src(c, instr->src[0], 0);
+                enum v3d_qpu_cond cond = setup_subgroup_control_flow_condition(c);
+                struct qreg res = vir_get_temp(c);
+                vir_set_cond(vir_ALLEQ_dest(c, res, value), cond);
+
+                /* We want to check 'not (all lanes are equal (alleq != 0)'
+                 * and their value is False (value == 0))'.
+                 *
+                 * The first MOV.pushz generates predicate for 'alleq == 0'.
+                 * The second MOV.NORNZ generates predicate for:
+                 * '!(alleq == 0) & (value == 0).
+                 * The IFNA condition negates the predicate when evaluated:
+                 * '!(!alleq == 0) & (value == 0))
+                 */
+                vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), res),
+                           V3D_QPU_PF_PUSHZ);
+                vir_set_uf(c, vir_MOV_dest(c, vir_nop_reg(), value),
+                           V3D_QPU_UF_NORNZ);
+                struct qreg result =
+                        ntq_emit_cond_to_bool(c, V3D_QPU_COND_IFNA);
                 ntq_store_def(c, &instr->def, 0, result);
                 break;
         }
@@ -4366,6 +4567,7 @@ nir_to_vir(struct v3d_compile *c)
 {
         switch (c->s->info.stage) {
         case MESA_SHADER_FRAGMENT:
+                c->start_msf = vir_MSF(c);
                 if (c->devinfo->ver < 71)
                         c->payload_w = vir_MOV(c, vir_reg(QFILE_REG, 0));
                 else

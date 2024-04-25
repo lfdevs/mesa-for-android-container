@@ -763,7 +763,7 @@ glx_screen_cleanup(struct glx_screen *psc)
 ** If that works then fetch the per screen configs data.
 */
 static Bool
-AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, Bool zink)
+AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, Bool zink, Bool implicit)
 {
    struct glx_screen *psc;
    GLint i, screens;
@@ -783,24 +783,30 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, Bool zink)
 #if defined(GLX_USE_DRM)
 #if defined(HAVE_DRI3)
       if (priv->dri3Display)
-         psc = priv->dri3Display->createScreen(i, priv);
+         psc = priv->dri3Display->createScreen(i, priv, implicit);
 #endif /* HAVE_DRI3 */
       if (psc == NULL && priv->dri2Display)
-	 psc = priv->dri2Display->createScreen(i, priv);
+	      psc = priv->dri2Display->createScreen(i, priv, implicit);
 #endif /* GLX_USE_DRM */
 
 #ifdef GLX_USE_WINDOWSGL
       if (psc == NULL && priv->windowsdriDisplay)
-	 psc = priv->windowsdriDisplay->createScreen(i, priv);
+	      psc = priv->windowsdriDisplay->createScreen(i, priv, implicit);
 #endif
 
-      if (psc == NULL && priv->driswDisplay)
-	 psc = priv->driswDisplay->createScreen(i, priv);
+      if ((psc == GLX_LOADER_USE_ZINK || psc == NULL) && priv->driswDisplay)
+	      psc = priv->driswDisplay->createScreen(i, priv, psc == GLX_LOADER_USE_ZINK ? false : implicit);
 #endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
+
+#if defined(GLX_USE_APPLE)
+      if (psc == NULL && priv->driswDisplay) {
+         psc = priv->driswDisplay->createScreen(i, priv);
+      }
+#endif
 
       bool indirect = false;
 
-#if defined(GLX_USE_APPLEGL)
+#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
       if (psc == NULL)
          psc = applegl_create_screen(i, priv);
 #else
@@ -880,7 +886,7 @@ __glXInitialize(Display * dpy)
    Bool zink = False;
    Bool try_zink = False;
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
    Bool glx_accel = !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
    const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
@@ -901,10 +907,15 @@ __glXInitialize(Display * dpy)
     ** (e.g., those called in AllocAndFetchScreenConfigs).
     */
 #if defined(GLX_USE_DRM)
-   if (glx_direct && glx_accel && !zink) {
+   if (glx_direct && glx_accel &&
+       (!zink || debug_get_bool_option("LIBGL_KOPPER_DISABLE", false))) {
 #if defined(HAVE_DRI3)
-      if (!debug_get_bool_option("LIBGL_DRI3_DISABLE", false))
+      if (!debug_get_bool_option("LIBGL_DRI3_DISABLE", false)) {
          dpyPriv->dri3Display = dri3_create_display(dpy);
+         /* nouveau wants to fallback to zink so if we get a screen enable try_zink */
+         if (dpyPriv->dri3Display)
+            try_zink = !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false);
+      }
 #endif /* HAVE_DRI3 */
       if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false))
          dpyPriv->dri2Display = dri2CreateDisplay(dpy);
@@ -923,21 +934,21 @@ __glXInitialize(Display * dpy)
 #endif
 #endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
 
-#ifdef GLX_USE_APPLEGL
+#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
    if (!applegl_create_display(dpyPriv)) {
       free(dpyPriv);
       return NULL;
    }
 #endif
 
-   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, zink | try_zink)) {
+   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, zink | try_zink, zink || try_zink ? try_zink : !env)) {
       Bool fail = True;
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
       if (try_zink) {
          free(dpyPriv->screens);
          dpyPriv->driswDisplay->destroyDisplay(dpyPriv->driswDisplay);
          dpyPriv->driswDisplay = driswCreateDisplay(dpy, TRY_ZINK_NO);
-         fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False);
+         fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, False, true);
       }
 #endif
       if (fail) {

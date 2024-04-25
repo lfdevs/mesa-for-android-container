@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "brw_shader.h"
+#include "brw_fs.h"
 
 using namespace brw;
 
@@ -99,21 +99,21 @@ has_continue(const struct loop_continue_tracking *s)
 }
 
 bool
-opt_predicated_break(backend_shader *s)
+brw_fs_opt_predicated_break(fs_visitor &s)
 {
    bool progress = false;
    struct loop_continue_tracking state = { {0, }, 0 };
 
-   foreach_block (block, s->cfg) {
+   foreach_block (block, s.cfg) {
       /* DO instructions, by definition, can only be found at the beginning of
        * basic blocks.
        */
-      backend_instruction *const do_inst = block->start();
+      fs_inst *const do_inst = block->start();
 
       /* BREAK, CONTINUE, and WHILE instructions, by definition, can only be
        * found at the ends of basic blocks.
        */
-      backend_instruction *jump_inst = block->end();
+      fs_inst *jump_inst = block->end();
 
       if (do_inst->opcode == BRW_OPCODE_DO)
          enter_loop(&state);
@@ -130,11 +130,11 @@ opt_predicated_break(backend_shader *s)
           jump_inst->opcode != BRW_OPCODE_CONTINUE)
          continue;
 
-      backend_instruction *if_inst = block->prev()->end();
+      fs_inst *if_inst = block->prev()->end();
       if (if_inst->opcode != BRW_OPCODE_IF)
          continue;
 
-      backend_instruction *endif_inst = block->next()->start();
+      fs_inst *endif_inst = block->next()->start();
       if (endif_inst->opcode != BRW_OPCODE_ENDIF)
          continue;
 
@@ -168,7 +168,7 @@ opt_predicated_break(backend_shader *s)
                 earlier_block->start()->opcode != BRW_OPCODE_DO);
 
          earlier_block->unlink_children();
-         earlier_block->add_successor(s->cfg->mem_ctx, jump_block,
+         earlier_block->add_successor(s.cfg->mem_ctx, jump_block,
                                       bblock_link_logical);
       }
 
@@ -198,7 +198,7 @@ opt_predicated_break(backend_shader *s)
       }
 
       if (need_to_link) {
-         jump_block->add_successor(s->cfg->mem_ctx, later_block,
+         jump_block->add_successor(s.cfg->mem_ctx, later_block,
                                    bblock_link_logical);
       }
 
@@ -219,7 +219,7 @@ opt_predicated_break(backend_shader *s)
        * CONT instruction.
        */
       bblock_t *while_block = earlier_block->next();
-      backend_instruction *while_inst = while_block->start();
+      fs_inst *while_inst = while_block->start();
 
       if (jump_inst->opcode == BRW_OPCODE_BREAK &&
           while_inst->opcode == BRW_OPCODE_WHILE &&
@@ -237,7 +237,7 @@ opt_predicated_break(backend_shader *s)
    }
 
    if (progress)
-      s->invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
+      s.invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

@@ -85,6 +85,14 @@ uint64_t
 intel_aux_get_main_to_aux_ratio(struct intel_aux_map_context *ctx);
 
 /**
+ * Takes a relative offset in the main surface and returns a relative offset
+ * in the aux surface that maps to the main offset.
+ */
+uint64_t
+intel_aux_main_to_aux_offset(struct intel_aux_map_context *ctx,
+                             uint64_t main_offset);
+
+/**
  * Fill an array of exec_object2 with aux-map buffer handles
  *
  * The intel_aux_map_get_num_buffers call should be made, then the driver can

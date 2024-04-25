@@ -535,5 +535,6 @@ vl_video_buffer_create_as_resource(struct pipe_context *pipe,
    struct pipe_video_buffer vidtemplate = *tmpl;
    vidtemplate.width = templ.width0;
    vidtemplate.height = templ.height0 * array_size;
+   vidtemplate.contiguous_planes = true;
    return vl_video_buffer_create_ex2(pipe, &vidtemplate, resources);
 }

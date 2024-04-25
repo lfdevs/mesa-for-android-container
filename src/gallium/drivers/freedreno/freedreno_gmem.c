@@ -333,7 +333,7 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
          tpp_x += 1;
    }
 
-#ifdef DEBUG
+#if MESA_DEBUG
    tpp_x = debug_get_num_option("TPP_X", tpp_x);
    tpp_y = debug_get_num_option("TPP_Y", tpp_x);
 #endif

@@ -461,7 +461,7 @@ driwindowsMapConfigs(struct glx_display *priv, int screen, struct glx_config *co
 }
 
 static struct glx_screen *
-driwindowsCreateScreen(int screen, struct glx_display *priv)
+driwindowsCreateScreen(int screen, struct glx_display *priv, bool implicit)
 {
    __GLXDRIscreen *psp;
    struct driwindows_screen *psc;

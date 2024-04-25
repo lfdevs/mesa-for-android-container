@@ -10,7 +10,9 @@
 #include "vk_queue.h"
 
 struct novueau_ws_bo;
+struct nouveau_ws_context;
 struct novueau_ws_push;
+struct nv_push;
 struct nvk_device;
 
 struct nvk_queue_state {
@@ -23,10 +25,6 @@ struct nvk_queue_state {
       struct nouveau_ws_bo *bo;
       uint32_t alloc_count;
    } samplers;
-
-   struct {
-      struct nouveau_ws_bo *bo;
-   } shaders;
 
    struct {
       struct nouveau_ws_bo *bo;
@@ -47,10 +45,12 @@ VkResult nvk_queue_state_update(struct nvk_device *dev,
 struct nvk_queue {
    struct vk_queue vk;
 
+   struct {
+      struct nouveau_ws_context *ws_ctx;
+      uint32_t syncobj;
+   } drm;
+
    struct nvk_queue_state state;
-
-
-   uint32_t syncobj_handle;
 };
 
 static inline struct nvk_device *
@@ -65,13 +65,24 @@ VkResult nvk_queue_init(struct nvk_device *dev, struct nvk_queue *queue,
 
 void nvk_queue_finish(struct nvk_device *dev, struct nvk_queue *queue);
 
-VkResult nvk_queue_init_context_draw_state(struct nvk_queue *queue);
+VkResult nvk_push_draw_state_init(struct nvk_device *dev,
+                                  struct nv_push *p);
+
+VkResult nvk_push_dispatch_state_init(struct nvk_device *dev,
+                                      struct nv_push *p);
 
 /* this always syncs, so only use when that doesn't matter */
 VkResult nvk_queue_submit_simple(struct nvk_queue *queue,
                                  uint32_t dw_count, const uint32_t *dw,
                                  uint32_t extra_bo_count,
                                  struct nouveau_ws_bo **extra_bos);
+
+VkResult nvk_queue_init_drm_nouveau(struct nvk_device *dev,
+                                    struct nvk_queue *queue,
+                                    VkQueueFlags queue_flags);
+
+void nvk_queue_finish_drm_nouveau(struct nvk_device *dev,
+                                  struct nvk_queue *queue);
 
 VkResult nvk_queue_submit_simple_drm_nouveau(struct nvk_queue *queue,
                                              uint32_t push_dw_count,

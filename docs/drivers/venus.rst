@@ -51,7 +51,7 @@ vtest
 The simplest way to test Venus is to use virglrenderer's vtest server.  To
 build virglrenderer with Venus support and to start the vtest server,
 
-.. code-block:: console
+.. code-block:: sh
 
     $ git clone https://gitlab.freedesktop.org/virgl/virglrenderer.git
     $ cd virglrenderer
@@ -63,16 +63,16 @@ build virglrenderer with Venus support and to start the vtest server,
 
 In another shell,
 
-.. code-block:: console
+.. code-block:: sh
 
-    $ export VK_ICD_FILENAMES=<path-to-virtio_icd.x86_64.json>
+    $ export VK_DRIVER_FILES=<path-to-virtio_icd.x86_64.json>
     $ export VN_DEBUG=vtest
     $ vulkaninfo
     $ vkcube
 
 If the host driver of the system is not new enough, it is a good idea to build
 the host driver as well when building the Venus driver.  Just remember to set
-:envvar:`VK_ICD_FILENAMES` when starting the vtest server so that the vtest
+:envvar:`VK_DRIVER_FILES` when starting the vtest server so that the vtest
 server finds the locally built host driver.
 
 Virtio-GPU
@@ -84,7 +84,7 @@ driver, which was upstreamed in kernel 5.16.
 crosvm is written in Rust.  To build crosvm, make sure Rust has been installed
 and
 
-.. code-block:: console
+.. code-block:: sh
 
  $ git clone --recurse-submodules \
        https://chromium.googlesource.com/chromiumos/platform/crosvm
@@ -97,9 +97,9 @@ Note that crosvm must be built with ``default-no-sandbox`` or started with
 
 This is how one might want to start crosvm
 
-.. code-block:: console
+.. code-block:: sh
 
- $ sudo LD_LIBRARY_PATH=<...> VK_ICD_FILENAMES=<...> ./target/debug/crosvm run \
+ $ sudo LD_LIBRARY_PATH=<...> VK_DRIVER_FILES=<...> ./target/debug/crosvm run \
        --gpu vulkan=true \
        --gpu-render-server path=<path-to-virglrenderer>/out/server/virgl_render_server \
        --display-window-keyboard \
@@ -126,7 +126,7 @@ the `Chrome OS kernel
 
 To build minigbm and to enable minigbm support in virglrenderer,
 
-.. code-block:: console
+.. code-block:: sh
 
  $ git clone https://chromium.googlesource.com/chromiumos/platform/minigbm
  $ cd minigbm
@@ -141,7 +141,7 @@ Make sure a host Wayland compositor is running.  Replace
 
 In the guest, build and start sommelier, the special Wayland compositor,
 
-.. code-block:: console
+.. code-block:: sh
 
  $ git clone https://chromium.googlesource.com/chromiumos/platform2
  $ cd platform2/vm_tools/sommelier

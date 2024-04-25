@@ -28,6 +28,9 @@ const struct si_reg *ac_find_register(enum amd_gfx_level gfx_level, enum radeon_
       table_size = ARRAY_SIZE(gfx11_reg_table);
       break;
    case GFX10_3:
+      table = gfx103_reg_table;
+      table_size = ARRAY_SIZE(gfx103_reg_table);
+      break;
    case GFX10:
       table = gfx10_reg_table;
       table_size = ARRAY_SIZE(gfx10_reg_table);
@@ -230,6 +233,23 @@ static int compare_wave(const void *p1, const void *p2)
    return 0;
 }
 
+#define AC_UMR_REGISTERS_LINE "Main Registers"
+
+static bool
+ac_read_umr_register(char **_scan, const char *name, uint32_t *value)
+{
+   char *scan = *_scan;
+   if (strncmp(scan, name, MIN2(strlen(scan), strlen(name))))
+      return false;
+
+   scan += strlen(name);
+   scan += strlen(": ");
+
+   *value = strtoul(scan, NULL, 16);
+   *_scan = scan + 8;
+   return true;
+}
+
 /* Return wave information. "waves" should be a large enough array. */
 unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info *info,
                           struct ac_wave_info waves[AC_MAX_WAVES_PER_CHIP])
@@ -248,25 +268,73 @@ unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info
    if (!p)
       return 0;
 
-   if (!fgets(line, sizeof(line), p) || strncmp(line, "SE", 2) != 0) {
-      pclose(p);
-      return 0;
-   }
-
    while (fgets(line, sizeof(line), p)) {
-      struct ac_wave_info *w;
-      uint32_t pc_hi, pc_lo, exec_hi, exec_lo;
+      if (strncmp(line, AC_UMR_REGISTERS_LINE, strlen(AC_UMR_REGISTERS_LINE)))
+         continue;
 
       assert(num_waves < AC_MAX_WAVES_PER_CHIP);
-      w = &waves[num_waves];
+      struct ac_wave_info *w = &waves[num_waves];
+      memset(w, 0, sizeof(struct ac_wave_info));
+      num_waves++;
 
-      if (sscanf(line, "%u %u %u %u %u %x %x %x %x %x %x %x", &w->se, &w->sh, &w->cu, &w->simd,
-                 &w->wave, &w->status, &pc_hi, &pc_lo, &w->inst_dw0, &w->inst_dw1, &exec_hi,
-                 &exec_lo) == 12) {
-         w->pc = ((uint64_t)pc_hi << 32) | pc_lo;
-         w->exec = ((uint64_t)exec_hi << 32) | exec_lo;
-         w->matched = false;
-         num_waves++;
+      while (fgets(line, sizeof(line), p)) {
+         if (strlen(line) < 2)
+            break;
+
+         char *scan = line;
+         while (scan < line + strlen(line)) {
+            if (strncmp(scan, "ix", MIN2(strlen(scan), strlen("ix")))) {
+               scan++;
+               continue;
+            }
+
+            scan += strlen("ix");
+
+            bool progress = false;
+
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_STATUS", &w->status);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_PC_LO", &w->pc_lo);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_PC_HI", &w->pc_hi);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_EXEC_LO", &w->exec_lo);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_EXEC_HI", &w->exec_hi);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_INST_DW0", &w->inst_dw0);
+            progress |= ac_read_umr_register(&scan, "SQ_WAVE_INST_DW1", &w->inst_dw1);
+
+            uint32_t wave;
+            if (ac_read_umr_register(&scan, "SQ_WAVE_HW_ID", &wave)) {
+               w->se = G_000050_SE_ID(wave);
+               w->sh = G_000050_SH_ID(wave);
+               w->cu = G_000050_CU_ID(wave);
+               w->simd = G_000050_SIMD_ID(wave);
+               w->wave = G_000050_WAVE_ID(wave);
+
+               progress = true;
+            }
+
+            if (ac_read_umr_register(&scan, "SQ_WAVE_HW_ID1", &wave)) {
+               w->se = G_00045C_SE_ID(wave);
+               w->sh = G_00045C_SA_ID(wave);
+               w->cu = G_00045C_WGP_ID(wave);
+               w->simd = G_00045C_SIMD_ID(wave);
+               w->wave = G_00045C_WAVE_ID(wave);
+
+               progress = true;
+            }
+
+            /* Skip registers we do not handle. */
+            if (!progress) {
+               while (scan < line + strlen(line)) {
+                  if (*scan == '|') {
+                     progress = true;
+                     break;
+                  }
+                  scan++;
+               }
+            }
+
+            if (!progress)
+               break;
+         }
       }
    }
 

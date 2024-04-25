@@ -1,25 +1,7 @@
 /*
  * Copyright © 2022 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 #include "helpers.h"
 
@@ -46,7 +28,7 @@ BEGIN_TEST(setup_reduce_temp.divergent_if_phi)
       program.get(), bld, Operand(inputs[0]),
       [&]() -> void
       {
-         //>> s1: %_, s2: %_, s1: %_:scc = p_reduce %a, %lv, lv1: undef op:umin32 cluster_size:64
+         //>> s1: %_, s2: %_, s1: %_:scc = p_reduce %a, (latekill)%lv, lv1: undef op:umin32 cluster_size:64
          Instruction* reduce =
             bld.reduction(aco_opcode::p_reduce, bld.def(s1), bld.def(bld.lm), bld.def(s1, scc),
                           inputs[1], Operand(v1.as_linear()), Operand(v1.as_linear()), umin32);
@@ -58,7 +40,7 @@ BEGIN_TEST(setup_reduce_temp.divergent_if_phi)
       });
    bld.pseudo(aco_opcode::p_phi, bld.def(v1), Operand::c32(1), Operand::zero());
    //>> /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
-   //! p_end_linear_vgpr %lv
+   //! p_end_linear_vgpr (latekill)%lv
 
    finish_setup_reduce_temp_test();
 END_TEST

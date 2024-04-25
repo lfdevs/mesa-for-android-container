@@ -250,7 +250,7 @@ namespace {
     * Return the number of instructions in the program.
     */
    unsigned
-   num_instructions(const backend_shader *shader)
+   num_instructions(const fs_visitor *shader)
    {
       return shader->cfg->blocks[shader->cfg->num_blocks - 1]->end_ip + 1;
    }
@@ -764,7 +764,6 @@ namespace {
                                reg_offset(r) / REG_SIZE);
 
          return (r.file == VGRF || r.file == FIXED_GRF ? &grf_deps[reg] :
-                 r.file == MRF ? &grf_deps[GFX7_MRF_HACK_START + reg] :
                  r.file == ARF && reg >= BRW_ARF_ADDRESS &&
                                   reg < BRW_ARF_ACCUMULATOR ? &addr_dep :
                  r.file == ARF && reg >= BRW_ARF_ACCUMULATOR &&
@@ -1044,13 +1043,6 @@ namespace {
       if (inst->reads_accumulator_implicitly())
          sb.set(brw_acc_reg(8), dependency(TGL_REGDIST_SRC, jp, exec_all));
 
-      if (is_send(inst) && inst->base_mrf != -1) {
-         const dependency rd_dep = dependency(TGL_SBID_SRC, ip, exec_all);
-
-         for (unsigned j = 0; j < inst->mlen; j++)
-            sb.set(brw_uvec_mrf(8, inst->base_mrf + j, 0), rd_dep);
-      }
-
       /* Track any destination registers of this instruction. */
       const dependency wr_dep =
          is_unordered(devinfo, inst) ? dependency(TGL_SBID_DST, ip, exec_all) :
@@ -1173,12 +1165,6 @@ namespace {
                add_dependency(ids, deps[ip], dep);
          }
 
-         if (is_send(inst) && inst->base_mrf != -1) {
-            for (unsigned j = 0; j < inst->mlen; j++)
-               add_dependency(ids, deps[ip], dependency_for_read(
-                  sb.get(brw_uvec_mrf(8, inst->base_mrf + j, 0))));
-         }
-
          if (is_unordered(devinfo, inst) && !inst->eot)
             add_dependency(ids, deps[ip],
                            dependency(TGL_SBID_SET, ip, exec_all));
@@ -1203,12 +1189,6 @@ namespace {
                const dependency dep = sb.get(brw_acc_reg(8));
                if (dep.ordered && !is_single_pipe(dep.jp, p))
                   add_dependency(ids, deps[ip], dep);
-            }
-
-            if (is_send(inst) && inst->base_mrf != -1) {
-               for (unsigned j = 0; j < inst->implied_mrf_writes(); j++)
-                  add_dependency(ids, deps[ip], dependency_for_write(devinfo, inst,
-                     sb.get(brw_uvec_mrf(8, inst->base_mrf + j, 0))));
             }
          }
 
@@ -1309,8 +1289,7 @@ namespace {
                    */
                   const fs_builder ibld = fs_builder(shader, block, inst)
                                           .exec_all().group(1, 0);
-                  fs_inst *sync = ibld.emit(BRW_OPCODE_SYNC, ibld.null_reg_ud(),
-                                            brw_imm_ud(TGL_SYNC_NOP));
+                  fs_inst *sync = ibld.SYNC(TGL_SYNC_NOP);
                   sync->sched.sbid = dep.id;
                   sync->sched.mode = dep.unordered;
                   assert(!(sync->sched.mode & TGL_SBID_SET));
@@ -1333,8 +1312,7 @@ namespace {
                 */
                const fs_builder ibld = fs_builder(shader, block, inst)
                                        .exec_all().group(1, 0);
-               fs_inst *sync = ibld.emit(BRW_OPCODE_SYNC, ibld.null_reg_ud(),
-                                         brw_imm_ud(TGL_SYNC_NOP));
+               fs_inst *sync = ibld.SYNC(TGL_SYNC_NOP);
                sync->sched = ordered_dependency_swsb(deps[ip], jps[ip], true);
                break;
             }
@@ -1349,13 +1327,13 @@ namespace {
 }
 
 bool
-fs_visitor::lower_scoreboard()
+brw_fs_lower_scoreboard(fs_visitor &s)
 {
-   if (devinfo->ver >= 12) {
-      const ordered_address *jps = ordered_inst_addresses(this);
-      const dependency_list *deps0 = gather_inst_dependencies(this, jps);
-      const dependency_list *deps1 = allocate_inst_dependencies(this, deps0);
-      emit_inst_dependencies(this, jps, deps1);
+   if (s.devinfo->ver >= 12) {
+      const ordered_address *jps = ordered_inst_addresses(&s);
+      const dependency_list *deps0 = gather_inst_dependencies(&s, jps);
+      const dependency_list *deps1 = allocate_inst_dependencies(&s, deps0);
+      emit_inst_dependencies(&s, jps, deps1);
       delete[] deps1;
       delete[] deps0;
       delete[] jps;

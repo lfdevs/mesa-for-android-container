@@ -25,7 +25,7 @@ IntelPerf::IntelPerf(const int drm_fd)
 {
    assert(drm_fd >= 0 && "DRM fd is not valid");
 
-   if (!intel_get_device_info_from_fd(drm_fd, &devinfo)) {
+   if (!intel_get_device_info_from_fd(drm_fd, &devinfo, -1, -1)) {
       PPS_LOG_FATAL("Failed to get devinfo");
    }
 

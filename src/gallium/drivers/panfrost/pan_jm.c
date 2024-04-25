@@ -232,9 +232,11 @@ done:
 void
 GENX(jm_preload_fb)(struct panfrost_batch *batch, struct pan_fb_info *fb)
 {
+   struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
+
    GENX(pan_preload_fb)
-   (&batch->pool.base, &batch->jm.jobs.vtc_jc, fb, batch->tls.gpu,
-    PAN_ARCH >= 6 ? batch->tiler_ctx.bifrost : 0, NULL);
+   (&dev->blitter, &batch->pool.base, &batch->jm.jobs.vtc_jc, fb,
+    batch->tls.gpu, PAN_ARCH >= 6 ? batch->tiler_ctx.bifrost : 0, NULL);
 }
 
 void
@@ -338,9 +340,10 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
    unsigned indirect_dep = 0;
 #if PAN_GPU_INDIRECTS
    if (info->indirect) {
+      struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
       struct pan_indirect_dispatch_info indirect = {
          .job = t.gpu,
-         .indirect_dim = pan_resource(info->indirect)->image.data.bo->ptr.gpu +
+         .indirect_dim = pan_resource(info->indirect)->image.data.base +
                          info->indirect_offset,
          .num_wg_sysval =
             {
@@ -351,7 +354,8 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
       };
 
       indirect_dep = GENX(pan_indirect_dispatch_emit)(
-         &batch->pool.base, &batch->jm.jobs.vtc_jc, &indirect);
+         &dev->indirect_dispatch, &batch->pool.base, &batch->jm.jobs.vtc_jc,
+         &indirect);
    }
 #endif
 
@@ -491,7 +495,7 @@ jm_emit_tiler_draw(void *out, struct panfrost_batch *batch, bool fs_required,
 
          struct panfrost_resource *rsrc =
             pan_resource(ctx->occlusion_query->rsrc);
-         cfg.occlusion = rsrc->image.data.bo->ptr.gpu;
+         cfg.occlusion = rsrc->image.data.base;
          panfrost_batch_write_rsrc(ctx->batch, rsrc, PIPE_SHADER_FRAGMENT);
       }
 
@@ -518,6 +522,11 @@ jm_emit_tiler_draw(void *out, struct panfrost_batch *batch, bool fs_required,
       cfg.maximum_z = batch->maximum_z;
 
       cfg.depth_stencil = batch->depth_stencil;
+
+      if (prim == MESA_PRIM_LINES && rast->line_smooth) {
+         cfg.multisample_enable = true;
+         cfg.single_sampled_lines = false;
+      }
 
       if (fs_required) {
          bool has_oq = ctx->occlusion_query && ctx->active_queries;

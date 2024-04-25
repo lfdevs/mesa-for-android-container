@@ -833,7 +833,7 @@ static void
 check_memory_bindings(const struct anv_device *device,
                      const struct anv_image *image)
 {
-#ifdef DEBUG
+#if MESA_DEBUG
    /* As we inspect each part of the image, we merge the part's memory range
     * into these accumulation ranges.
     */
@@ -1253,7 +1253,7 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
    if (image->vk.external_handle_types &
        VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) {
       image->from_ahb = true;
-#ifdef ANDROID
+#if DETECT_OS_ANDROID
       image->vk.ahb_format = anv_ahb_format_for_vk_format(image->vk.format);
 #endif
       return VK_SUCCESS;
@@ -1447,7 +1447,7 @@ resolve_ahw_image(struct anv_device *device,
                   struct anv_image *image,
                   struct anv_device_memory *mem)
 {
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
+#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
    assert(mem->ahw);
    AHardwareBuffer_Desc desc;
    AHardwareBuffer_describe(mem->ahw, &desc);
@@ -2182,7 +2182,7 @@ anv_image_fill_surface_state(struct anv_device *device,
                              const union isl_color_value *clear_color,
                              enum anv_image_view_state_flags flags,
                              struct anv_surface_state *state_inout,
-                             struct brw_image_param *image_param_out)
+                             struct isl_image_param *image_param_out)
 {
    const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
 

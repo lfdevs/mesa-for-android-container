@@ -37,15 +37,15 @@ _load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
    nir_intrinsic_set_base(load, offset / 4);
 
    switch (offset) {
-   case BRW_IMAGE_PARAM_OFFSET_OFFSET:
-   case BRW_IMAGE_PARAM_SWIZZLING_OFFSET:
+   case ISL_IMAGE_PARAM_OFFSET_OFFSET:
+   case ISL_IMAGE_PARAM_SWIZZLING_OFFSET:
       load->num_components = 2;
       break;
-   case BRW_IMAGE_PARAM_TILING_OFFSET:
-   case BRW_IMAGE_PARAM_SIZE_OFFSET:
+   case ISL_IMAGE_PARAM_TILING_OFFSET:
+   case ISL_IMAGE_PARAM_SIZE_OFFSET:
       load->num_components = 3;
       break;
-   case BRW_IMAGE_PARAM_STRIDE_OFFSET:
+   case ISL_IMAGE_PARAM_STRIDE_OFFSET:
       load->num_components = 4;
       break;
    default:
@@ -58,7 +58,7 @@ _load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
 }
 
 #define load_image_param(b, d, o) \
-   _load_image_param(b, d, BRW_IMAGE_PARAM_##o##_OFFSET)
+   _load_image_param(b, d, ISL_IMAGE_PARAM_##o##_OFFSET)
 
 static nir_def *
 image_coord_is_in_bounds(nir_builder *b, nir_deref_instr *deref,
@@ -198,27 +198,6 @@ image_address(nir_builder *b, const struct intel_device_info *devinfo,
 
       /* Multiply by the Bpp value. */
       addr = nir_imul(b, idx, nir_channel(b, stride, 0));
-
-      if (devinfo->ver < 8 && devinfo->platform != INTEL_PLATFORM_BYT) {
-         /* Take into account the two dynamically specified shifts.  Both are
-          * used to implement swizzling of X-tiled surfaces.  For Y-tiled
-          * surfaces only one bit needs to be XOR-ed with bit 6 of the memory
-          * address, so a swz value of 0xff (actually interpreted as 31 by the
-          * hardware) will be provided to cause the relevant bit of tmp.y to
-          * be zero and turn the first XOR into the identity.  For linear
-          * surfaces or platforms lacking address swizzling both shifts will
-          * be 0xff causing the relevant bits of both tmp.x and .y to be zero,
-          * what effectively disables swizzling.
-          */
-         nir_def *swizzle = load_image_param(b, deref, SWIZZLING);
-         nir_def *shift0 = nir_ushr(b, addr, nir_channel(b, swizzle, 0));
-         nir_def *shift1 = nir_ushr(b, addr, nir_channel(b, swizzle, 1));
-
-         /* XOR tmp.x and tmp.y with bit 6 of the memory address. */
-         nir_def *bit = nir_iand(b, nir_ixor(b, shift0, shift1),
-                                        nir_imm_int(b, 1 << 6));
-         addr = nir_ixor(b, addr, bit);
-      }
    } else {
       /* Multiply by the Bpp/stride value.  Note that the addr.y may be
        * non-zero even if the image is one-dimensional because a vertical
@@ -292,16 +271,6 @@ convert_color_for_load(nir_builder *b, const struct intel_device_info *devinfo,
       /* All these formats are homogeneous */
       for (unsigned i = 1; i < image.chans; i++)
          assert(image.bits[i] == image.bits[0]);
-
-      /* On IVB, we rely on the undocumented behavior that typed reads from
-       * surfaces of the unsupported R8 and R16 formats return useful data in
-       * their least significant bits.  However, the data in the high bits is
-       * garbage so we have to discard it.
-       */
-      if (devinfo->verx10 == 70 &&
-          (lower_fmt == ISL_FORMAT_R16_UINT ||
-           lower_fmt == ISL_FORMAT_R8_UINT))
-         color = nir_format_mask_uvec(b, color, lower.bits);
 
       if (image.bits[0] != lower.bits[0]) {
          color = nir_format_bitcast_uvec_unmasked(b, color, lower.bits[0],
@@ -434,18 +403,6 @@ lower_image_load_instr(nir_builder *b,
       nir_def *coord = intrin->src[1].ssa;
 
       nir_def *do_load = image_coord_is_in_bounds(b, deref, coord);
-      if (devinfo->verx10 == 70) {
-         /* Check whether the first stride component (i.e. the Bpp value)
-          * is greater than four, what on Gfx7 indicates that a surface of
-          * type RAW has been bound for untyped access.  Reading or writing
-          * to a surface of type other than RAW using untyped surface
-          * messages causes a hang on IVB and VLV.
-          */
-         nir_def *stride = load_image_param(b, deref, STRIDE);
-         nir_def *is_raw =
-            nir_igt_imm(b, nir_channel(b, stride, 0), 4);
-         do_load = nir_iand(b, do_load, is_raw);
-      }
       nir_push_if(b, do_load);
 
       nir_def *addr = image_address(b, devinfo, deref, coord);
@@ -584,18 +541,6 @@ lower_image_store_instr(nir_builder *b,
       nir_def *coord = intrin->src[1].ssa;
 
       nir_def *do_store = image_coord_is_in_bounds(b, deref, coord);
-      if (devinfo->verx10 == 70) {
-         /* Check whether the first stride component (i.e. the Bpp value)
-          * is greater than four, what on Gfx7 indicates that a surface of
-          * type RAW has been bound for untyped access.  Reading or writing
-          * to a surface of type other than RAW using untyped surface
-          * messages causes a hang on IVB and VLV.
-          */
-         nir_def *stride = load_image_param(b, deref, STRIDE);
-         nir_def *is_raw =
-            nir_igt_imm(b, nir_channel(b, stride, 0), 4);
-         do_store = nir_iand(b, do_store, is_raw);
-      }
       nir_push_if(b, do_store);
 
       nir_def *addr = image_address(b, devinfo, deref, coord);
@@ -614,88 +559,6 @@ lower_image_store_instr(nir_builder *b,
 
       nir_pop_if(b, NULL);
    }
-
-   return true;
-}
-
-static bool
-lower_image_atomic_instr(nir_builder *b,
-                         const struct intel_device_info *devinfo,
-                         nir_intrinsic_instr *intrin)
-{
-   if (devinfo->verx10 >= 75)
-      return false;
-
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-
-   b->cursor = nir_instr_remove(&intrin->instr);
-
-   /* Use an undef to hold the uses of the load conversion. */
-   nir_def *placeholder = nir_undef(b, 4, 32);
-   nir_def_rewrite_uses(&intrin->def, placeholder);
-
-   /* Check the first component of the size field to find out if the
-    * image is bound.  Necessary on IVB for typed atomics because
-    * they don't seem to respect null surfaces and will happily
-    * corrupt or read random memory when no image is bound.
-    */
-   nir_def *size = load_image_param(b, deref, SIZE);
-   nir_def *zero = nir_imm_int(b, 0);
-   nir_push_if(b, nir_ine(b, nir_channel(b, size, 0), zero));
-
-   nir_builder_instr_insert(b, &intrin->instr);
-
-   nir_pop_if(b, NULL);
-
-   nir_def *result = nir_if_phi(b, &intrin->def, zero);
-   nir_def_rewrite_uses(placeholder, result);
-
-   return true;
-}
-
-static bool
-lower_image_size_instr(nir_builder *b,
-                       const struct intel_device_info *devinfo,
-                       nir_intrinsic_instr *intrin)
-{
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
-
-   /* For write-only images, we have an actual image surface so we fall back
-    * and let the back-end emit a TXS for this.
-    */
-   if (var->data.access & ACCESS_NON_READABLE)
-      return false;
-
-   if (var->data.image.format == PIPE_FORMAT_NONE)
-      return false;
-
-   /* If we have a matching typed format, then we have an actual image surface
-    * so we fall back and let the back-end emit a TXS for this.
-    */
-   const enum isl_format image_fmt =
-      isl_format_for_pipe_format(var->data.image.format);
-   if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt))
-      return false;
-
-   assert(nir_src_as_uint(intrin->src[1]) == 0);
-
-   b->cursor = nir_instr_remove(&intrin->instr);
-
-   nir_def *size = load_image_param(b, deref, SIZE);
-
-   nir_def *comps[4] = { NULL, NULL, NULL, NULL };
-
-   assert(nir_intrinsic_image_dim(intrin) != GLSL_SAMPLER_DIM_CUBE);
-   unsigned coord_comps = glsl_get_sampler_coordinate_components(deref->type);
-   for (unsigned c = 0; c < coord_comps; c++)
-      comps[c] = nir_channel(b, size, c);
-
-   for (unsigned c = coord_comps; c < intrin->def.num_components; ++c)
-      comps[c] = nir_imm_int(b, 1);
-
-   nir_def *vec = nir_vec(b, comps, intrin->def.num_components);
-   nir_def_rewrite_uses(&intrin->def, vec);
 
    return true;
 }
@@ -724,17 +587,6 @@ brw_nir_lower_storage_image_instr(nir_builder *b,
    case nir_intrinsic_image_deref_store:
       if (opts->lower_stores)
          return lower_image_store_instr(b, opts->devinfo, intrin);
-      return false;
-
-   case nir_intrinsic_image_deref_atomic:
-   case nir_intrinsic_image_deref_atomic_swap:
-      if (opts->lower_atomics)
-         return lower_image_atomic_instr(b, opts->devinfo, intrin);
-      return false;
-
-   case nir_intrinsic_image_deref_size:
-      if (opts->lower_get_size)
-         return lower_image_size_instr(b, opts->devinfo, intrin);
       return false;
 
    default:

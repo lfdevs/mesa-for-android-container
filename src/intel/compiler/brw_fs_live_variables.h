@@ -33,7 +33,7 @@
 #include "util/bitset.h"
 
 struct cfg_t;
-struct backend_shader;
+struct fs_visitor;
 
 namespace brw {
 
@@ -77,10 +77,10 @@ public:
       BITSET_WORD flag_liveout[1];
    };
 
-   fs_live_variables(const backend_shader *s);
+   fs_live_variables(const fs_visitor *s);
    ~fs_live_variables();
 
-   bool validate(const backend_shader *s) const;
+   bool validate(const fs_visitor *s) const;
 
    analysis_dependency_class
    dependency_class() const

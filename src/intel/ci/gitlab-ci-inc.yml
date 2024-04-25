@@ -188,6 +188,7 @@
     DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
     FDO_CI_CONCURRENT: 3
     GPU_VERSION: iris-jsl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C523NA-A20057-coral
@@ -196,6 +197,7 @@
     DEVICE_TYPE: asus-C523NA-A20057-coral
     FDO_CI_CONCURRENT: 5
     GPU_VERSION: iris-apl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
 
 # Status: https://lava.collabora.dev/scheduler/device_type/hp-x360-12b-ca0010nr-n4020-octopus
@@ -204,6 +206,7 @@
     DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
     FDO_CI_CONCURRENT: 3
     GPU_VERSION: iris-glk
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
 
 # Status: https://lava.collabora.dev/scheduler/device_type/acer-cp514-2h-1130g7-volteer
@@ -213,6 +216,7 @@
     DEVICE_TYPE: acer-cp514-2h-1130g7-volteer
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: anv-tgl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-acer-cp514-2h-1130g7-volteer
 
 # Status: https://lava.collabora.dev/scheduler/device_type/acer-cp514-2h-1160g7-volteer
@@ -222,6 +226,7 @@
     DEVICE_TYPE: acer-cp514-2h-1160g7-volteer
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: anv-tgl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-acer-cp514-2h-1160g7-volteer
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C433TA-AJ0005-rammus
@@ -230,6 +235,7 @@
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
     FDO_CI_CONCURRENT: 5
     GPU_VERSION: iris-amly
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
 
 # Status: https://lava.collabora.dev/scheduler/device_type/hp-x360-14-G1-sona
@@ -238,6 +244,7 @@
     DEVICE_TYPE: hp-x360-14-G1-sona
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-kbl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
 
 # Status: https://lava.collabora.dev/scheduler/device_type/dell-latitude-5400-8665U-sarien
@@ -246,6 +253,7 @@
     DEVICE_TYPE: dell-latitude-5400-8665U-sarien
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-whl
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C436FA-Flip-hatch
@@ -254,6 +262,7 @@
     DEVICE_TYPE: asus-C436FA-Flip-hatch
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-cml
+    HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
 
 

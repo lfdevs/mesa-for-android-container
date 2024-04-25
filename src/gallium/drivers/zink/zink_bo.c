@@ -326,7 +326,6 @@ bo_create_internal(struct zink_screen *screen,
    bo->base.vtbl = &bo_vtbl;
    bo->base.base.placement = mem_type_idx;
    bo->base.base.usage = flags;
-   bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
 
    return bo;
 
@@ -579,9 +578,9 @@ zink_bo_create(struct zink_screen *screen, uint64_t size, unsigned alignment, en
 
    //struct pb_slabs *slabs = ((flags & RADEON_FLAG_ENCRYPTED) && screen->info.has_tmz_support) ?
       //screen->bo_slabs_encrypted : screen->bo_slabs;
-   struct pb_slabs *slabs = screen->pb.bo_slabs;
+   struct pb_slabs *bo_slabs = screen->pb.bo_slabs;
 
-   struct pb_slabs *last_slab = &slabs[NUM_SLAB_ALLOCATORS - 1];
+   struct pb_slabs *last_slab = &bo_slabs[NUM_SLAB_ALLOCATORS - 1];
    unsigned max_slab_entry_size = 1 << (last_slab->min_order + last_slab->num_orders - 1);
 
    /* Sub-allocate small buffers from slabs. */
@@ -640,6 +639,7 @@ zink_bo_create(struct zink_screen *screen, uint64_t size, unsigned alignment, en
       bo->base.base.size = size;
       memset(&bo->reads, 0, sizeof(bo->reads));
       memset(&bo->writes, 0, sizeof(bo->writes));
+      bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
       assert(alignment <= 1 << bo->base.base.alignment_log2);
 
       return &bo->base;
@@ -798,7 +798,7 @@ buffer_bo_commit(struct zink_context *ctx, struct zink_resource *res, uint32_t o
    assert(offset % ZINK_SPARSE_BUFFER_PAGE_SIZE == 0);
    assert(offset <= bo->base.base.size);
    assert(size <= bo->base.base.size - offset);
-   assert(size % ZINK_SPARSE_BUFFER_PAGE_SIZE == 0 || offset + size == bo->base.base.size);
+   assert(size % ZINK_SPARSE_BUFFER_PAGE_SIZE == 0 || offset + size == res->obj->size);
 
    struct zink_sparse_commitment *comm = bo->u.sparse.commitments;
 
@@ -969,9 +969,6 @@ zink_bo_commit(struct zink_context *ctx, struct zink_resource *res, unsigned lev
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    struct zink_bo *bo = res->obj->bo;
    VkSemaphore cur_sem = VK_NULL_HANDLE;
-
-   if (screen->faked_e5sparse && res->base.b.format == PIPE_FORMAT_R9G9B9E5_FLOAT)
-      return true;
 
    simple_mtx_lock(&screen->queue_lock);
    simple_mtx_lock(&bo->lock);
@@ -1200,7 +1197,6 @@ static struct pb_slab *
 bo_slab_alloc(void *priv, unsigned mem_type_idx, unsigned entry_size, unsigned group_index, bool encrypted)
 {
    struct zink_screen *screen = priv;
-   uint32_t base_id;
    unsigned slab_size = 0;
    struct zink_slab *slab = CALLOC_STRUCT(zink_slab);
 
@@ -1256,7 +1252,6 @@ bo_slab_alloc(void *priv, unsigned mem_type_idx, unsigned entry_size, unsigned g
 
    list_inithead(&slab->base.free);
 
-   base_id = p_atomic_fetch_add(&screen->pb.next_bo_unique_id, slab->base.num_entries);
    for (unsigned i = 0; i < slab->base.num_entries; ++i) {
       struct zink_bo *bo = &slab->entries[i];
 
@@ -1265,7 +1260,6 @@ bo_slab_alloc(void *priv, unsigned mem_type_idx, unsigned entry_size, unsigned g
       bo->base.base.size = entry_size;
       bo->base.vtbl = &bo_slab_vtbl;
       bo->offset = slab->buffer->offset + i * entry_size;
-      bo->unique_id = base_id + i;
       bo->u.slab.entry.slab = &slab->base;
 
       if (slab->buffer->mem) {

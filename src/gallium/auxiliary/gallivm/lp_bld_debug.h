@@ -62,7 +62,7 @@ extern unsigned gallivm_debug;
 static inline void
 lp_build_name(LLVMValueRef val, const char *format, ...)
 {
-#ifdef DEBUG
+#if MESA_DEBUG
    char name[32];
    va_list ap;
    va_start(ap, format);

@@ -10,8 +10,8 @@
 #include "nouveau_device.h"
 #include "nv_device_info.h"
 
-#include "vulkan/runtime/vk_physical_device.h"
-#include "vulkan/runtime/vk_sync.h"
+#include "vk_physical_device.h"
+#include "vk_sync.h"
 
 #include "wsi_common.h"
 
@@ -19,23 +19,43 @@
 
 struct nak_compiler;
 struct nvk_instance;
+struct nvk_physical_device;
+
+struct nvk_queue_family {
+   VkQueueFlags queue_flags;
+   uint32_t queue_count;
+};
+
+struct nvk_memory_heap {
+   uint64_t size;
+   uint64_t used;
+   VkMemoryHeapFlags flags;
+   uint64_t (*available)(struct nvk_physical_device *pdev);
+};
 
 struct nvk_physical_device {
    struct vk_physical_device vk;
    struct nv_device_info info;
    enum nvk_debug debug_flags;
    dev_t render_dev;
-   dev_t primary_dev;
+   int master_fd;
+
+   /* Only used for VK_EXT_memory_budget */
+   struct nouveau_ws_device *ws_dev;
+
    struct nak_compiler *nak;
    struct wsi_device wsi_device;
 
    uint8_t device_uuid[VK_UUID_SIZE];
 
    // TODO: add mapable VRAM heap if possible
-   VkMemoryHeap mem_heaps[2];
-   VkMemoryType mem_types[2];
+   struct nvk_memory_heap mem_heaps[3];
+   VkMemoryType mem_types[3];
    uint8_t mem_heap_count;
    uint8_t mem_type_count;
+
+   struct nvk_queue_family queue_families[3];
+   uint8_t queue_family_count;
 
    struct vk_sync_type syncobj_sync_type;
    const struct vk_sync_type *sync_types[2];

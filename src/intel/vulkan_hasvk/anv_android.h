@@ -24,7 +24,9 @@
 #ifndef ANV_ANDROID_H
 #define ANV_ANDROID_H
 
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
+#include "util/detect_os.h"
+
+#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
 #include <vndk/hardware_buffer.h>
 #endif
 #include <vulkan/vulkan.h>

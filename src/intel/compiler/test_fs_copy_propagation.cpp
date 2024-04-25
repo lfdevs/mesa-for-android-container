@@ -74,7 +74,7 @@ copy_propagation_test::copy_propagation_test()
 
    bld = fs_builder(v).at_end();
 
-   devinfo->ver = 4;
+   devinfo->ver = 9;
    devinfo->verx10 = devinfo->ver * 10;
 }
 
@@ -107,7 +107,7 @@ copy_propagation(fs_visitor *v)
       v->cfg->dump();
    }
 
-   bool ret = v->opt_copy_propagation();
+   bool ret = brw_fs_opt_copy_propagation(*v);
 
    if (print) {
       fprintf(stderr, "\n= After =\n");
@@ -119,10 +119,10 @@ copy_propagation(fs_visitor *v)
 
 TEST_F(copy_propagation_test, basic)
 {
-   fs_reg vgrf0 = v->vgrf(glsl_float_type());
-   fs_reg vgrf1 = v->vgrf(glsl_float_type());
-   fs_reg vgrf2 = v->vgrf(glsl_float_type());
-   fs_reg vgrf3 = v->vgrf(glsl_float_type());
+   fs_reg vgrf0 = bld.vgrf(BRW_REGISTER_TYPE_F);
+   fs_reg vgrf1 = bld.vgrf(BRW_REGISTER_TYPE_F);
+   fs_reg vgrf2 = bld.vgrf(BRW_REGISTER_TYPE_F);
+   fs_reg vgrf3 = bld.vgrf(BRW_REGISTER_TYPE_F);
    bld.MOV(vgrf0, vgrf2);
    bld.ADD(vgrf1, vgrf0, vgrf3);
 
@@ -160,9 +160,9 @@ TEST_F(copy_propagation_test, basic)
 
 TEST_F(copy_propagation_test, maxmax_sat_imm)
 {
-   fs_reg vgrf0 = v->vgrf(glsl_float_type());
-   fs_reg vgrf1 = v->vgrf(glsl_float_type());
-   fs_reg vgrf2 = v->vgrf(glsl_float_type());
+   fs_reg vgrf0 = bld.vgrf(BRW_REGISTER_TYPE_F);
+   fs_reg vgrf1 = bld.vgrf(BRW_REGISTER_TYPE_F);
+   fs_reg vgrf2 = bld.vgrf(BRW_REGISTER_TYPE_F);
 
    static const struct {
       enum brw_conditional_mod conditional_mod;

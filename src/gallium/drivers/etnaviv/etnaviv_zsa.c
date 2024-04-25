@@ -32,8 +32,6 @@
 #include "util/half_float.h"
 #include "util/u_memory.h"
 
-#include "hw/common.xml.h"
-
 void *
 etna_zsa_state_create(struct pipe_context *pctx,
                       const struct pipe_depth_stencil_alpha_state *so)
@@ -92,7 +90,7 @@ etna_zsa_state_create(struct pipe_context *pctx,
    /* calculate extra_reference value */
    uint32_t extra_reference = 0;
 
-   if (VIV_FEATURE(screen, chipMinorFeatures1, HALF_FLOAT))
+   if (VIV_FEATURE(screen, ETNA_FEATURE_HALF_FLOAT))
       extra_reference = _mesa_float_to_half(SATURATE(so->alpha_ref_value));
 
    cs->PE_STENCIL_CONFIG_EXT =

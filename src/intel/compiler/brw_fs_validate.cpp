@@ -34,65 +34,67 @@
    {                                                                    \
       if (!(assertion)) {                                               \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
-                 _mesa_shader_stage_to_abbrev(stage));                  \
-         dump_instruction(inst, stderr);                                \
+                 _mesa_shader_stage_to_abbrev(s.stage));                \
+         s.dump_instruction(inst, stderr);                              \
          fprintf(stderr, "%s:%d: '%s' failed\n", __FILE__, __LINE__, #assertion);  \
          abort();                                                       \
       }                                                                 \
    }
 
-#define fsv_assert_eq(first, second)                                    \
+#define fsv_assert_eq(A, B)                                             \
    {                                                                    \
-      unsigned f = (first);                                             \
-      unsigned s = (second);                                            \
-      if (f != s) {                                                     \
+      unsigned a = (A);                                                 \
+      unsigned b = (B);                                                 \
+      if (a != b) {                                                     \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
-                 _mesa_shader_stage_to_abbrev(stage));                  \
-         dump_instruction(inst, stderr);                                \
+                 _mesa_shader_stage_to_abbrev(s.stage));                \
+         s.dump_instruction(inst, stderr);                              \
          fprintf(stderr, "%s:%d: A == B failed\n", __FILE__, __LINE__); \
-         fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
-         fprintf(stderr, "  B = %s = %u\n", #second, s);                \
+         fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
+         fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
          abort();                                                       \
       }                                                                 \
    }
 
-#define fsv_assert_ne(first, second)                                    \
+#define fsv_assert_ne(A, B)                                             \
    {                                                                    \
-      unsigned f = (first);                                             \
-      unsigned s = (second);                                            \
-      if (f == s) {                                                     \
+      unsigned a = (A);                                                 \
+      unsigned b = (B);                                                 \
+      if (a == b) {                                                     \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
-                 _mesa_shader_stage_to_abbrev(stage));                  \
-         dump_instruction(inst, stderr);                                \
+                 _mesa_shader_stage_to_abbrev(s.stage));                \
+         s.dump_instruction(inst, stderr);                              \
          fprintf(stderr, "%s:%d: A != B failed\n", __FILE__, __LINE__); \
-         fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
-         fprintf(stderr, "  B = %s = %u\n", #second, s);                \
+         fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
+         fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
          abort();                                                       \
       }                                                                 \
    }
 
-#define fsv_assert_lte(first, second)                                   \
+#define fsv_assert_lte(A, B)                                            \
    {                                                                    \
-      unsigned f = (first);                                             \
-      unsigned s = (second);                                            \
-      if (f > s) {                                                      \
+      unsigned a = (A);                                                 \
+      unsigned b = (B);                                                 \
+      if (a > b) {                                                      \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
-                 _mesa_shader_stage_to_abbrev(stage));                  \
-         dump_instruction(inst, stderr);                                \
+                 _mesa_shader_stage_to_abbrev(s.stage));                \
+         s.dump_instruction(inst, stderr);                              \
          fprintf(stderr, "%s:%d: A <= B failed\n", __FILE__, __LINE__); \
-         fprintf(stderr, "  A = %s = %u\n", #first, f);                 \
-         fprintf(stderr, "  B = %s = %u\n", #second, s);                \
+         fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
+         fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
          abort();                                                       \
       }                                                                 \
    }
 
 #ifndef NDEBUG
 void
-fs_visitor::validate()
+brw_fs_validate(const fs_visitor &s)
 {
-   cfg->validate(_mesa_shader_stage_to_abbrev(stage));
+   const intel_device_info *devinfo = s.devinfo;
 
-   foreach_block_and_inst (block, fs_inst, inst, cfg) {
+   s.cfg->validate(_mesa_shader_stage_to_abbrev(s.stage));
+
+   foreach_block_and_inst (block, fs_inst, inst, s.cfg) {
       switch (inst->opcode) {
       case SHADER_OPCODE_SEND:
          fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
@@ -106,7 +108,7 @@ fs_visitor::validate()
          break;
       }
 
-      if (inst->is_3src(compiler)) {
+      if (inst->is_3src(s.compiler)) {
          const unsigned integer_sources =
             brw_reg_type_is_integer(inst->src[0].type) +
             brw_reg_type_is_integer(inst->src[1].type) +
@@ -144,7 +146,7 @@ fs_visitor::validate()
                   break;
                }
             }
-         } else if (grf_used != 0) {
+         } else if (s.grf_used != 0) {
             /* Only perform the pre-Gfx10 checks after register allocation has
              * occured.
              *
@@ -174,13 +176,13 @@ fs_visitor::validate()
 
       if (inst->dst.file == VGRF) {
          fsv_assert_lte(inst->dst.offset / REG_SIZE + regs_written(inst),
-                        alloc.sizes[inst->dst.nr]);
+                        s.alloc.sizes[inst->dst.nr]);
       }
 
       for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
             fsv_assert_lte(inst->src[i].offset / REG_SIZE + regs_read(inst, i),
-                           alloc.sizes[inst->src[i].nr]);
+                           s.alloc.sizes[inst->src[i].nr]);
          }
       }
 
@@ -193,6 +195,24 @@ fs_visitor::validate()
           inst->dst.is_accumulator() &&
           phys_subnr(devinfo, inst->dst.as_brw_reg()) == 0) {
          fsv_assert_eq(inst->dst.hstride, 1);
+      }
+
+      if (inst->is_math() && intel_needs_workaround(devinfo, 22016140776)) {
+         /* Wa_22016140776:
+          *
+          *    Scalar broadcast on HF math (packed or unpacked) must not be
+          *    used.  Compiler must use a mov instruction to expand the scalar
+          *    value to a vector before using in a HF (packed or unpacked)
+          *    math operation.
+          *
+          * Since copy propagation knows about this restriction, nothing
+          * should be able to generate these invalid source strides. Detect
+          * potential problems sooner rather than later.
+          */
+         for (unsigned i = 0; i < inst->sources; i++) {
+            fsv_assert(!is_uniform(inst->src[i]) ||
+                       inst->src[i].type != BRW_REGISTER_TYPE_HF);
+         }
       }
    }
 }

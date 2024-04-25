@@ -64,13 +64,13 @@ Farm management
 
 When the farm starts failing for any reason (power, network, out-of-space), it needs to be disabled by pushing separate MR with
 
-.. code-block:: console
+.. code-block:: sh
 
    git mv .ci-farms{,-disabled}/$farm_name
 
 After farm restore functionality can be enabled by pushing a new merge request, which contains
 
-.. code-block:: console
+.. code-block:: sh
 
    git mv .ci-farms{-disabled,}/$farm_name
 
@@ -279,7 +279,7 @@ command`` instead of ``run -it $IMAGE bash`` (which you may also find
 useful for debug).  Extract your build setup variables from
 .gitlab-ci.yml and run the CI meson build script:
 
-.. code-block:: console
+.. code-block:: sh
 
    IMAGE=registry.freedesktop.org/anholt/mesa/debian/android_build:2020-09-11
    sudo docker pull $IMAGE
@@ -288,7 +288,7 @@ useful for debug).  Extract your build setup variables from
 All you have left over from the build is its output, and a _build
 directory.  You can hack on mesa and iterate testing the build with:
 
-.. code-block:: console
+.. code-block:: sh
 
    sudo docker run --rm -v `pwd`:/mesa $IMAGE meson compile -C /mesa/_build
 
@@ -304,6 +304,12 @@ See ``bin/ci/ci_run_n_monitor.py --help`` for all the options.
 The ``--target`` argument takes a regex that you can use to select the
 jobs names you want to run, eg. ``--target 'zink.*'`` will run all the
 zink jobs, leaving the other drivers' jobs free for others to use.
+
+Note that in fork pipelines, GitLab only adds the jobs for the files that have
+changed **since the last push**, so you might not get the jobs you expect.
+You can work around that by adding a dummy change in a file core to what you're
+working on and then making a new push with that change, and removing that change
+before you create the MR.
 
 Conformance Tests
 -----------------

@@ -1,7 +1,10 @@
 // Copyright © 2022 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::ir::*;
+use crate::{
+    api::{GetDebugFlags, DEBUG},
+    ir::*,
+};
 
 use std::collections::HashSet;
 
@@ -143,7 +146,13 @@ impl DeadCodePass {
         if is_live {
             MappedInstrs::One(instr)
         } else {
-            MappedInstrs::None
+            if DEBUG.annotate() {
+                MappedInstrs::One(Instr::new_boxed(OpAnnotate {
+                    annotation: "killed by dce".into(),
+                }))
+            } else {
+                MappedInstrs::None
+            }
         }
     }
 

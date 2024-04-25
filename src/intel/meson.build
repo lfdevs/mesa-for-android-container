@@ -28,6 +28,10 @@ endif
 subdir('isl')
 subdir('common')
 subdir('compiler')
+subdir('decoder')
+if with_intel_vk or with_gallium_iris
+  subdir('shaders')
+endif
 if with_intel_hasvk or with_intel_vk or with_gallium_crocus or with_gallium_iris or with_intel_tools
   subdir('perf')
 endif

@@ -35,6 +35,7 @@
 #include "util/list.h"
 
 #include "aub_write.h"
+#include "error_decode_lib.h"
 #include "intel_aub.h"
 
 #define fail_if(cond, ...) _fail_if(cond, NULL, __VA_ARGS__)
@@ -107,16 +108,7 @@ static int ascii85_decode(const char *in, uint32_t **out, bool inflate)
             return 0;
       }
 
-      if (*in == 'z') {
-         in++;
-      } else {
-         v += in[0] - 33; v *= 85;
-         v += in[1] - 33; v *= 85;
-         v += in[2] - 33; v *= 85;
-         v += in[3] - 33; v *= 85;
-         v += in[4] - 33;
-         in += 5;
-      }
+      in = ascii85_decode_char(in, &v);
       (*out)[len++] = v;
    }
 

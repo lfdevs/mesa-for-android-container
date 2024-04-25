@@ -95,6 +95,18 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
    if (iris_bufmgr_vram_size(bufmgr) > 0 &&
        !intel_vram_all_mappable(devinfo) &&
        heap == IRIS_HEAP_DEVICE_LOCAL_PREFERRED)
+      /* For lmem + smem placements, the NEEDS_CPU_ACCESS flag will avoid a
+       * page fault when the CPU tries to access the BO.
+       * Although it's counterintuitive, we cannot set this flag for
+       * IRIS_HEAP_DEVICE_LOCAL_CPU_VISIBLE_SMALL_BAR because i915 does not
+       * accept that flag for lmem only placements.
+       * When lmem only BOs are accessed by the CPU, i915 will fault and
+       * automatically migrate the BO to the lmem portion that is CPU
+       * accessible.
+       * The CPU_VISIBLE heap is still valuable for other reasons however
+       * (e.g., it tells the functions which calculate the iris_mmap_mode
+       * that it can be mapped).
+       */
       create.flags |= I915_GEM_CREATE_EXT_FLAG_NEEDS_CPU_ACCESS;
 
    /* Protected param */
@@ -302,13 +314,18 @@ i915_batch_submit(struct iris_batch *batch)
          if (written)
             validation_list[prev_index].flags |= EXEC_OBJECT_WRITE;
       } else {
+         uint32_t flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
+         flags |= bo->real.capture ? EXEC_OBJECT_CAPTURE : 0;
+         flags |= bo == batch->screen->workaround_bo ? EXEC_OBJECT_ASYNC : 0;
+         flags |= iris_bo_is_external(bo) ? 0 : EXEC_OBJECT_ASYNC;
+         flags |= written ? EXEC_OBJECT_WRITE : 0;
+
          index_for_handle[bo->gem_handle] = validation_count;
          validation_list[validation_count] =
             (struct drm_i915_gem_exec_object2) {
                .handle = bo->gem_handle,
                .offset = bo->address,
-               .flags  = bo->real.kflags | (written ? EXEC_OBJECT_WRITE : 0) |
-                         (iris_bo_is_external(bo) ? 0 : EXEC_OBJECT_ASYNC),
+               .flags  = flags,
             };
          ++validation_count;
       }

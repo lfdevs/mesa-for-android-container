@@ -394,7 +394,7 @@ firmware_present(struct pipe_screen *pscreen, enum pipe_video_profile profile)
       struct nouveau_object *channel = NULL, *bsp = NULL;
       struct nv04_fifo nv04_data = {.vram = 0xbeef0201, .gart = 0xbeef0202};
       struct nvc0_fifo nvc0_args = {};
-      struct nve0_fifo nve0_args = {.engine = NVE0_FIFO_ENGINE_BSP};
+      struct nve0_fifo nve0_args = {.engine = NOUVEAU_FIFO_ENGINE_BSP};
       void *data = NULL;
       int size;
 

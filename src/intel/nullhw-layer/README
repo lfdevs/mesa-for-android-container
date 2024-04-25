@@ -2,4 +2,4 @@ A Vulkan layer to disable all rendering/compute commands.
 
 To turn on the layer run :
 
-VK_INSTANCE_LAYERS=VK_LAYER_INTEL_nullhw /path/to/my_vulkan_app
+VK_LOADER_LAYERS_ENABLE=VK_LAYER_INTEL_nullhw /path/to/my_vulkan_app

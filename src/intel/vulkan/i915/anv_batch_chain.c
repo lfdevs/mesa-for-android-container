@@ -413,6 +413,12 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    if (result != VK_SUCCESS)
       return result;
 
+   if (device->vk.enabled_extensions.EXT_descriptor_buffer) {
+      result = pin_state_pool(device, execbuf, &device->dynamic_state_db_pool);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
    result = pin_state_pool(device, execbuf, &device->general_state_pool);
    if (result != VK_SUCCESS)
       return result;
@@ -424,6 +430,18 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    result = pin_state_pool(device, execbuf, &device->binding_table_pool);
    if (result != VK_SUCCESS)
       return result;
+
+   if (device->physical->va.aux_tt_pool.size > 0) {
+      result = pin_state_pool(device, execbuf, &device->aux_tt_pool);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   if (device->physical->va.push_descriptor_buffer_pool.size > 0) {
+      result = pin_state_pool(device, execbuf, &device->push_descriptor_buffer_pool);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    /* Add the BOs for all user allocated memory objects because we can't
     * track after binding updates of VK_EXT_descriptor_indexing and due to how
@@ -643,6 +661,8 @@ anv_queue_exec_utrace_locked(struct anv_queue *queue,
    if (result != VK_SUCCESS)
       goto error;
 
+   ANV_RMV(bos_gtt_map, device, execbuf.bos, execbuf.bo_count);
+
    int ret = queue->device->info->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);
    if (ret)
@@ -745,6 +765,8 @@ i915_companion_rcs_queue_exec_locked(struct anv_queue *queue,
    anv_cmd_buffer_exec_batch_debug(queue, 1, &companion_rcs_cmd_buffer, NULL, 0);
 
    setup_execbuf_fence_params(&execbuf);
+
+   ANV_RMV(bos_gtt_map, device, execbuf.bos, execbuf.bo_count);
 
    int ret = queue->device->info->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);
@@ -895,6 +917,8 @@ i915_queue_exec_locked(struct anv_queue *queue,
          result = vk_queue_set_lost(&queue->vk, "execbuf2 failed: %m");
    }
 
+   ANV_RMV(bos_gtt_map, device, execbuf.bos, execbuf.bo_count);
+
    int ret = queue->device->info->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);
    if (ret) {
@@ -912,12 +936,7 @@ i915_queue_exec_locked(struct anv_queue *queue,
                                                     waits);
    }
 
-   if (result == VK_SUCCESS && queue->sync) {
-      result = vk_sync_wait(&device->vk, queue->sync, 0,
-                            VK_SYNC_WAIT_COMPLETE, UINT64_MAX);
-      if (result != VK_SUCCESS)
-         result = vk_queue_set_lost(&queue->vk, "sync wait failed");
-   }
+   result = anv_queue_post_submit(queue, result);
 
  error:
    anv_execbuf_finish(&execbuf);
@@ -957,6 +976,8 @@ i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
       .rsvd1 = context_id,
       .rsvd2 = 0,
    };
+
+   ANV_RMV(bos_gtt_map, device, execbuf.bos, execbuf.bo_count);
 
    if (anv_gem_execbuffer(device, &execbuf.execbuf)) {
       result = vk_device_set_lost(&device->vk, "anv_gem_execbuffer failed: %m");
@@ -1050,6 +1071,8 @@ i915_execute_trtt_batch(struct anv_sparse_submission *submit,
       .rsvd2 = 0,
    };
    setup_execbuf_fence_params(&execbuf);
+
+   ANV_RMV(bos_gtt_map, device, execbuf.bos, execbuf.bo_count);
 
    int ret = queue->device->info->no_hw ? 0 :
       anv_gem_execbuffer(device, &execbuf.execbuf);

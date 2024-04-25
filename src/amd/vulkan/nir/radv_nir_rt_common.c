@@ -1,24 +1,7 @@
 /*
  * Copyright © 2021 Google
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "nir/radv_nir_rt_common.h"
@@ -297,11 +280,12 @@ build_addr_to_node(nir_builder *b, nir_def *addr)
 static nir_def *
 build_node_to_addr(struct radv_device *device, nir_builder *b, nir_def *node, bool skip_type_and)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_def *addr = skip_type_and ? node : nir_iand_imm(b, node, ~7ull);
    addr = nir_ishl_imm(b, addr, 3);
    /* Assumes everything is in the top half of address space, which is true in
     * GFX9+ for now. */
-   return device->physical_device->rad_info.gfx_level >= GFX9 ? nir_ior_imm(b, addr, 0xffffull << 48) : addr;
+   return pdev->info.gfx_level >= GFX9 ? nir_ior_imm(b, addr, 0xffffull << 48) : addr;
 }
 
 nir_def *
@@ -460,9 +444,24 @@ fetch_parent_node(nir_builder *b, nir_def *bvh, nir_def *node)
    return nir_build_load_global(b, 1, 32, nir_isub(b, bvh, nir_u2u64(b, offset)), .align_mul = 4);
 }
 
+static nir_def *
+radv_test_flag(nir_builder *b, const struct radv_ray_traversal_args *args, uint32_t flag, bool set)
+{
+   nir_def *result;
+   if (args->set_flags & flag)
+      result = nir_imm_true(b);
+   else if (args->unset_flags & flag)
+      result = nir_imm_false(b);
+   else
+      result = nir_test_mask(b, args->flags, flag);
+
+   return set ? result : nir_inot(b, result);
+}
+
 nir_def *
 radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struct radv_ray_traversal_args *args)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_variable *incomplete = nir_local_variable_create(b->impl, glsl_bool_type(), "incomplete");
    nir_store_var(b, incomplete, nir_imm_true(b), 0x1);
 
@@ -470,15 +469,15 @@ radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struc
    nir_def *vec3ones = nir_imm_vec3(b, 1.0, 1.0, 1.0);
 
    struct radv_ray_flags ray_flags = {
-      .force_opaque = nir_test_mask(b, args->flags, SpvRayFlagsOpaqueKHRMask),
-      .force_not_opaque = nir_test_mask(b, args->flags, SpvRayFlagsNoOpaqueKHRMask),
-      .terminate_on_first_hit = nir_test_mask(b, args->flags, SpvRayFlagsTerminateOnFirstHitKHRMask),
-      .no_cull_front = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsCullFrontFacingTrianglesKHRMask), 0),
-      .no_cull_back = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsCullBackFacingTrianglesKHRMask), 0),
-      .no_cull_opaque = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsCullOpaqueKHRMask), 0),
-      .no_cull_no_opaque = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsCullNoOpaqueKHRMask), 0),
-      .no_skip_triangles = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsSkipTrianglesKHRMask), 0),
-      .no_skip_aabbs = nir_ieq_imm(b, nir_iand_imm(b, args->flags, SpvRayFlagsSkipAABBsKHRMask), 0),
+      .force_opaque = radv_test_flag(b, args, SpvRayFlagsOpaqueKHRMask, true),
+      .force_not_opaque = radv_test_flag(b, args, SpvRayFlagsNoOpaqueKHRMask, true),
+      .terminate_on_first_hit = radv_test_flag(b, args, SpvRayFlagsTerminateOnFirstHitKHRMask, true),
+      .no_cull_front = radv_test_flag(b, args, SpvRayFlagsCullFrontFacingTrianglesKHRMask, false),
+      .no_cull_back = radv_test_flag(b, args, SpvRayFlagsCullBackFacingTrianglesKHRMask, false),
+      .no_cull_opaque = radv_test_flag(b, args, SpvRayFlagsCullOpaqueKHRMask, false),
+      .no_cull_no_opaque = radv_test_flag(b, args, SpvRayFlagsCullNoOpaqueKHRMask, false),
+      .no_skip_triangles = radv_test_flag(b, args, SpvRayFlagsSkipTrianglesKHRMask, false),
+      .no_skip_aabbs = radv_test_flag(b, args, SpvRayFlagsSkipAABBsKHRMask, false),
    };
    nir_push_loop(b);
    {
@@ -554,7 +553,7 @@ radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struc
       nir_def *global_bvh_node = nir_iadd(b, nir_load_deref(b, args->vars.bvh_base), nir_u2u64(b, bvh_node));
 
       nir_def *intrinsic_result = NULL;
-      if (!radv_emulate_rt(device->physical_device)) {
+      if (!radv_emulate_rt(pdev)) {
          intrinsic_result =
             nir_bvh64_intersect_ray_amd(b, 32, desc, nir_unpack_64_2x32(b, global_bvh_node),
                                         nir_load_deref(b, args->vars.tmax), nir_load_deref(b, args->vars.origin),
@@ -572,6 +571,12 @@ radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struc
             }
             nir_push_else(b, NULL);
             {
+               if (args->vars.iteration_instance_count) {
+                  nir_def *iteration_instance_count = nir_load_deref(b, args->vars.iteration_instance_count);
+                  iteration_instance_count = nir_iadd_imm(b, iteration_instance_count, 1 << 16);
+                  nir_store_deref(b, args->vars.iteration_instance_count, iteration_instance_count, 0x1);
+               }
+
                /* instance */
                nir_def *instance_node_addr = build_node_to_addr(device, b, global_bvh_node, false);
                nir_store_deref(b, args->vars.instance_addr, instance_node_addr, 1);
@@ -672,6 +677,12 @@ radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struc
          insert_traversal_triangle_case(device, b, args, &ray_flags, result, global_bvh_node);
       }
       nir_pop_if(b, NULL);
+
+      if (args->vars.iteration_instance_count) {
+         nir_def *iteration_instance_count = nir_load_deref(b, args->vars.iteration_instance_count);
+         iteration_instance_count = nir_iadd_imm(b, iteration_instance_count, 1);
+         nir_store_deref(b, args->vars.iteration_instance_count, iteration_instance_count, 0x1);
+      }
    }
    nir_pop_loop(b, NULL);
 

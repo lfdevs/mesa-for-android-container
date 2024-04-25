@@ -133,7 +133,7 @@ impl ShaderProgramHeader {
     }
 
     #[inline]
-    fn common_word3<'a>(&mut self) -> SubSPHView<'_> {
+    fn common_word3(&mut self) -> SubSPHView<'_> {
         BitMutView::new_subset(&mut self.data, 96..128)
     }
 
@@ -455,6 +455,7 @@ impl ShaderProgramHeader {
 
     // TODO: This seems always set on fragment shaders, figure out what this is for.
     #[inline]
+    #[allow(dead_code)]
     pub fn set_unknown_bit611(&mut self, value: bool) {
         assert!(self.shader_type == ShaderType::Fragment);
         self.set_bit(611, value);
@@ -533,7 +534,14 @@ pub fn encode_header(
 
             let zs_self_dep = fs_key.map_or(false, |key| key.zs_self_dep);
 
-            sph.set_multiple_render_target_enable(io.writes_color > 0xf);
+            // This isn't so much a "Do we write multiple render targets?" bit
+            // as a "Should color0 be broadcast to all render targets?" bit. In
+            // other words, it's the gl_FragCoord behavior, not gl_FragData.
+            //
+            // For now, we always set it to true because Vulkan requires
+            // explicit fragment output locations.
+            sph.set_multiple_render_target_enable(true);
+
             sph.set_kills_pixels(io.uses_kill || zs_self_dep);
             sph.set_omap_sample_mask(io.writes_sample_mask);
             sph.set_omap_depth(io.writes_depth);

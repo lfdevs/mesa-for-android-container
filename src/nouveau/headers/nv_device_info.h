@@ -43,6 +43,7 @@ struct nv_device_info {
    uint16_t cls_compute;
 
    uint64_t vram_size_B;
+   uint64_t bar_size_B;
 };
 
 #endif /* NV_DEVINFO_H */

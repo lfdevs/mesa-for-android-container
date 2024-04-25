@@ -2,6 +2,8 @@
 
 #include "nouveau_context.h"
 
+#include "nvidia/g_nv_name_released.h"
+
 #include "drm-uapi/nouveau_drm.h"
 #include "util/hash_table.h"
 #include "util/u_debug.h"
@@ -10,10 +12,41 @@
 
 #include <fcntl.h>
 #include <nouveau/nvif/ioctl.h>
-#include <nvif/cl0080.h>
-#include <nvif/class.h>
+#include "nvif/cl0080.h"
+#include "nvif/class.h"
 #include <unistd.h>
 #include <xf86drm.h>
+
+static const char *
+name_for_chip(uint32_t dev_id,
+              uint16_t subsystem_id,
+              uint16_t subsystem_vendor_id)
+{
+   const char *name = NULL;
+   for (uint32_t i = 0; i < ARRAY_SIZE(sChipsReleased); i++) {
+      const CHIPS_RELEASED *chip = &sChipsReleased[i];
+
+      if (dev_id != chip->devID)
+         continue;
+
+      if (chip->subSystemID == 0 && chip->subSystemVendorID == 0) {
+         /* When subSystemID and subSystemVendorID are both 0, this is the
+          * default name for the given chip.  A more specific name may exist
+          * elsewhere in the list.
+          */
+         assert(name == NULL);
+         name = chip->name;
+         continue;
+      }
+
+      /* If we find a specific name, return it */
+      if (chip->subSystemID == subsystem_id &&
+          chip->subSystemVendorID == subsystem_vendor_id)
+         return chip->name;
+   }
+
+   return name;
+}
 
 static uint8_t
 sm_for_chipset(uint16_t chipset)
@@ -294,6 +327,7 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    if (nouveau_ws_device_info(fd, device))
       goto out_err;
 
+   const char *name;
    if (drm_device->bustype == DRM_BUS_PCI) {
       assert(device->info.type == NV_DEVICE_TYPE_DIS);
       assert(device->info.device_id == drm_device->deviceinfo.pci->device_id);
@@ -303,7 +337,19 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
       device->info.pci.dev          = drm_device->businfo.pci->dev;
       device->info.pci.func         = drm_device->businfo.pci->func;
       device->info.pci.revision_id  = drm_device->deviceinfo.pci->revision_id;
-   };
+
+      name = name_for_chip(drm_device->deviceinfo.pci->device_id,
+                           drm_device->deviceinfo.pci->subdevice_id,
+                           drm_device->deviceinfo.pci->subvendor_id);
+   } else {
+      name = name_for_chip(device->info.device_id, 0, 0);
+   }
+
+   if (name != NULL) {
+      size_t end = sizeof(device->info.device_name) - 1;
+      strncpy(device->info.device_name, name, end);
+      device->info.device_name[end] = 0;
+   }
 
    device->fd = fd;
 
@@ -317,6 +363,10 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    else
       device->local_mem_domain = NOUVEAU_GEM_DOMAIN_VRAM;
 
+   if (drm_device->bustype == DRM_BUS_PCI &&
+       !nouveau_ws_param(fd, NOUVEAU_GETPARAM_VRAM_BAR_SIZE, &value))
+      device->info.bar_size_B = value;
+
    if (nouveau_ws_param(fd, NOUVEAU_GETPARAM_GRAPH_UNITS, &value))
       goto out_err;
 
@@ -326,7 +376,7 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    nouveau_ws_device_set_dbg_flags(device);
 
    struct nouveau_ws_context *tmp_ctx;
-   if (nouveau_ws_context_create(device, &tmp_ctx))
+   if (nouveau_ws_context_create(device, ~0, &tmp_ctx))
       goto out_err;
 
    device->info.sm = sm_for_chipset(device->info.chipset);
@@ -379,4 +429,29 @@ nouveau_ws_device_destroy(struct nouveau_ws_device *device)
 
    close(device->fd);
    FREE(device);
+}
+
+uint64_t
+nouveau_ws_device_vram_used(struct nouveau_ws_device *device)
+{
+   uint64_t used = 0;
+   if (nouveau_ws_param(device->fd, NOUVEAU_GETPARAM_VRAM_USED, &used))
+      return 0;
+
+   /* Zero memory used would be very strange given that it includes kernel
+    * internal allocations.
+    */
+   assert(used > 0);
+
+   return used;
+}
+
+uint64_t
+nouveau_ws_device_timestamp(struct nouveau_ws_device *device)
+{
+   uint64_t timestamp = 0;
+   if (nouveau_ws_param(device->fd, NOUVEAU_GETPARAM_PTIMER_TIME, &timestamp))
+      return 0;
+
+   return timestamp;
 }

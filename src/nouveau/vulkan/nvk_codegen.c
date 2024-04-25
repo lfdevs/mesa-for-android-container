@@ -174,7 +174,7 @@ nvk_cg_optimize_nir(nir_shader *nir)
       }
    } while (progress);
 
-   NIR_PASS(progress, nir, nir_opt_shrink_vectors);
+   NIR_PASS(progress, nir, nir_opt_shrink_vectors, true);
    NIR_PASS(progress, nir, nir_remove_dead_variables,
             nir_var_function_temp | nir_var_shader_in | nir_var_shader_out, NULL);
 }

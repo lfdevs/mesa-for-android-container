@@ -83,9 +83,11 @@
       <value name="RD" value="2" />
       <value name="RTZ" value="3" />
     </field>
-    <field name="Thread group dispatch size" start="187" end="187" type="uint">
+    <field name="Thread Group Dispatch Size" start="186" end="187" type="uint">
       <value name="TG size 8" value="0" />
-      <value name="TG size 16" value="1" />
+      <value name="TG size 4" value="1" />
+      <value name="TG size 2" value="2" />
+      <value name="TG size 1" value="3" />
     </field>
     <field name="Number Of Barriers" start="188" end="190" type="uint" prefix="BARRIER_SIZE">
       <value name="NONE" value="0" />
@@ -1910,6 +1912,7 @@
     <field name="Disable L1 Invalidate for non-L1-cacheable Writes" start="45" end="45" type="bool" />
     <field name="Large GRF Mode" start="47" end="47" type="bool" />
     <field name="Z Pass Async Compute Thread Limit Mask" start="48" end="50" type="uint" />
+    <field name="Mask1" start="48" end="63" type="uint" />
     <field name="Force Non-Coherent Mask" start="51" end="52" type="uint" />
     <field name="Fast Clear Disabled on Compressed Surface Mask" start="53" end="53" type="bool" />
     <field name="Disable SLM Read Merge Optimization Mask" start="54" end="54" type="bool" />
@@ -2128,6 +2131,12 @@
   <register name="BCS_CCS_AUX_INV" length="1" num="0x4248">
     <field name="Aux Inv" start="0" end="0" type="bool" />
   </register>
+  <register name="CCS_INSTDONE" length="1" num="0x1206c">
+    <field name="Ring Enable" start="0" end="0" type="bool" />
+    <field name="VFE Done" start="16" end="16" type="bool" />
+    <field name="TSG Done" start="17" end="17" type="bool" />
+    <field name="CS Done" start="21" end="21" type="bool" />
+  </register>
   <register name="CHICKEN_RASTER_1" length="1" num="0x6204">
     <field name="AA Line Quality Fix" start="5" end="5" type="bool" />
     <field name="AA Line Quality Fix Mask" start="21" end="21" type="bool" />
@@ -2253,6 +2262,7 @@
     <field name="GW3 Done" start="23" end="23" type="bool" />
     <field name="TDC Done" start="24" end="24" type="bool" />
     <field name="SFBE Done" start="25" end="25" type="bool" />
+    <field name="PSS Done" start="26" end="26" type="bool" />
     <field name="AMFS Done" start="27" end="27" type="bool" />
   </register>
   <register name="SC_INSTDONE_EXTRA" length="1" num="0x7104">
@@ -2270,6 +2280,7 @@
     <field name="GW6 Done" start="22" end="22" type="bool" />
     <field name="GW7 Done" start="23" end="23" type="bool" />
     <field name="TDC1 Done" start="24" end="24" type="bool" />
+    <field name="PSS Done" start="26" end="26" type="bool" />
   </register>
   <register name="SC_INSTDONE_EXTRA2" length="1" num="0x7108">
     <field name="RCC2 Done" start="9" end="9" type="bool" />

@@ -30,7 +30,7 @@
 #include "ir3.h"
 #include "ir3_compiler.h"
 
-#ifdef DEBUG
+#if MESA_DEBUG
 #define SCHED_DEBUG (ir3_shader_debug & IR3_DBG_SCHEDMSGS)
 #else
 #define SCHED_DEBUG 0
@@ -97,9 +97,8 @@ struct ir3_sched_ctx {
    struct ir3_instruction *scheduled; /* last scheduled instr */
    struct ir3_instruction *addr0;     /* current a0.x user, if any */
    struct ir3_instruction *addr1;     /* current a1.x user, if any */
-   struct ir3_instruction *pred;      /* current p0.x user, if any */
 
-   struct ir3_instruction *split; /* most-recently-split a0/a1/p0 producer */
+   struct ir3_instruction *split; /* most-recently-split a0/a1 producer */
 
    int remaining_kills;
    int remaining_tex;
@@ -277,11 +276,6 @@ schedule(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
       ctx->addr1 = instr;
    }
 
-   if (writes_pred(instr)) {
-      assert(ctx->pred == NULL);
-      ctx->pred = instr;
-   }
-
    instr->flags |= IR3_INSTR_MARK;
 
    di(instr, "schedule");
@@ -366,9 +360,9 @@ struct ir3_sched_notes {
     */
    bool blocked_kill;
    /* there is at least one instruction that could be scheduled,
-    * except for conflicting address/predicate register usage:
+    * except for conflicting address register usage:
     */
-   bool addr0_conflict, addr1_conflict, pred_conflict;
+   bool addr0_conflict, addr1_conflict;
 };
 
 static bool
@@ -482,12 +476,6 @@ check_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
    if (writes_addr1(instr) && ctx->addr1) {
       assert(ctx->addr1 != instr);
       notes->addr1_conflict = true;
-      return false;
-   }
-
-   if (writes_pred(instr) && ctx->pred) {
-      assert(ctx->pred != instr);
-      notes->pred_conflict = true;
       return false;
    }
 
@@ -955,68 +943,6 @@ split_addr(struct ir3_sched_ctx *ctx, struct ir3_instruction **addr,
    return new_addr;
 }
 
-/* "spill" the predicate register by remapping any unscheduled
- * instructions which depend on the current predicate register
- * to a clone of the instruction which wrote the address reg.
- */
-static struct ir3_instruction *
-split_pred(struct ir3_sched_ctx *ctx)
-{
-   struct ir3 *ir;
-   struct ir3_instruction *new_pred = NULL;
-   unsigned i;
-
-   assert(ctx->pred);
-
-   ir = ctx->pred->block->shader;
-
-   for (i = 0; i < ir->predicates_count; i++) {
-      struct ir3_instruction *predicated = ir->predicates[i];
-
-      if (!predicated)
-         continue;
-
-      /* skip instructions already scheduled: */
-      if (is_scheduled(predicated))
-         continue;
-
-      /* remap remaining instructions using current pred
-       * to new pred:
-       *
-       * TODO is there ever a case when pred isn't first
-       * (and only) src?
-       */
-      if (ssa(predicated->srcs[0]) == ctx->pred) {
-         if (!new_pred) {
-            new_pred = split_instr(ctx, ctx->pred);
-            /* original pred is scheduled, but new one isn't: */
-            new_pred->flags &= ~IR3_INSTR_MARK;
-         }
-         predicated->srcs[0]->def->instr = new_pred;
-         /* don't need to remove old dag edge since old pred is
-          * already scheduled:
-          */
-         sched_node_add_dep(predicated, new_pred, 0);
-         di(predicated, "new predicate");
-      }
-   }
-
-   if (ctx->block->condition == ctx->pred) {
-      if (!new_pred) {
-         new_pred = split_instr(ctx, ctx->pred);
-         /* original pred is scheduled, but new one isn't: */
-         new_pred->flags &= ~IR3_INSTR_MARK;
-      }
-      ctx->block->condition = new_pred;
-      d("new branch condition");
-   }
-
-   /* all remaining predicated remapped to new pred: */
-   ctx->pred = NULL;
-
-   return new_pred;
-}
-
 static void
 sched_node_init(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 {
@@ -1192,11 +1118,16 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
    /* addr/pred writes are per-block: */
    ctx->addr0 = NULL;
    ctx->addr1 = NULL;
-   ctx->pred = NULL;
    ctx->sy_delay = 0;
    ctx->ss_delay = 0;
    ctx->sy_index = ctx->first_outstanding_sy_index = 0;
    ctx->ss_index = ctx->first_outstanding_ss_index = 0;
+
+   /* The terminator has to stay at the end. Instead of trying to set up
+    * dependencies to achieve this, it's easier to just remove it now and add it
+    * back after scheduling.
+    */
+   struct ir3_instruction *terminator = ir3_block_take_terminator(block);
 
    /* move all instructions to the unscheduled list, and
     * empty the block's instruction list (to which we will
@@ -1271,8 +1202,6 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
          } else if (notes.addr1_conflict) {
             new_instr =
                split_addr(ctx, &ctx->addr1, ir->a1_users, ir->a1_users_count);
-         } else if (notes.pred_conflict) {
-            new_instr = split_pred(ctx);
          } else {
             d("unscheduled_list:");
             foreach_instr (instr, &ctx->unscheduled_list)
@@ -1295,6 +1224,9 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
    }
 
    sched_dag_destroy(ctx);
+
+   if (terminator)
+      list_addtail(&terminator->node, &block->instr_list);
 }
 
 int
@@ -1308,7 +1240,7 @@ ir3_sched(struct ir3 *ir)
       }
    }
 
-   ir3_count_instructions(ir);
+   ir3_count_instructions_sched(ir);
    ir3_clear_mark(ir);
    ir3_find_ssa_uses(ir, ctx, false);
 

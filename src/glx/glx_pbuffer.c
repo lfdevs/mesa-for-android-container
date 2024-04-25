@@ -48,7 +48,7 @@
 
 #include "glx_error.h"
 
-#ifndef GLX_USE_APPLEGL
+#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
 /**
  * Change a drawable's attribute.
  *

@@ -538,7 +538,7 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
 #define DRI3_SUPPORTED_MINOR    0
 #endif
 
-EGLBoolean
+enum dri2_egl_driver_fail
 dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
 {
    xcb_dri3_query_version_reply_t *dri3_query;
@@ -561,15 +561,15 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
 
    extension = xcb_get_extension_data(dri2_dpy->conn, &xcb_dri3_id);
    if (!(extension && extension->present))
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
 
    extension = xcb_get_extension_data(dri2_dpy->conn, &xcb_present_id);
    if (!(extension && extension->present))
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
 
    extension = xcb_get_extension_data(dri2_dpy->conn, &xcb_xfixes_id);
    if (!(extension && extension->present))
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
 
    dri3_query_cookie = xcb_dri3_query_version(
       dri2_dpy->conn, DRI3_SUPPORTED_MAJOR, DRI3_SUPPORTED_MINOR);
@@ -586,7 +586,7 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       _eglLog(_EGL_WARNING, "DRI3: failed to query the version");
       free(dri3_query);
       free(error);
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
    }
 
    dri2_dpy->dri3_major_version = dri3_query->major_version;
@@ -599,7 +599,7 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       _eglLog(_EGL_WARNING, "DRI3: failed to query Present version");
       free(present_query);
       free(error);
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
    }
 
    dri2_dpy->present_major_version = present_query->major_version;
@@ -613,7 +613,7 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       _eglLog(_EGL_WARNING, "DRI3: failed to query xfixes version");
       free(error);
       free(xfixes_query);
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
    }
    free(xfixes_query);
 
@@ -626,7 +626,7 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       if (conn_error)
          _eglLog(_EGL_WARNING, "DRI3: Failed to initialize");
 
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
    }
 
    loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
@@ -634,10 +634,17 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
 
    if (!dri2_dpy->driver_name)
       dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
+
+   if (!strcmp(dri2_dpy->driver_name, "zink") &&
+       !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false)) {
+      close(dri2_dpy->fd_render_gpu);
+      return DRI2_EGL_DRIVER_PREFER_ZINK;
+   }
+
    if (!dri2_dpy->driver_name) {
       _eglLog(_EGL_WARNING, "DRI3: No driver found");
       close(dri2_dpy->fd_render_gpu);
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
    }
 
 #ifdef HAVE_WAYLAND_PLATFORM
@@ -648,5 +655,5 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       drmGetRenderDeviceNameFromFd(dri2_dpy->fd_render_gpu);
 #endif
 
-   return EGL_TRUE;
+   return DRI2_EGL_DRIVER_LOADED;
 }

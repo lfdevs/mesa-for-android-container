@@ -72,13 +72,15 @@ enum vpe_status {
     VPE_STATUS_REPEAT_ITEM,
     VPE_STATUS_PATCH_OVER_MAXSIZE,
     VPE_STATUS_INVALID_BUFFER_SIZE,
-    VPE_STATUS_SCALER_NOT_SET
+    VPE_STATUS_SCALER_NOT_SET,
+    VPE_STATUS_GEOMETRICSCALING_ERROR
 };
 
 /** HW IP level */
 enum vpe_ip_level {
     VPE_IP_LEVEL_UNKNOWN = (-1),
     VPE_IP_LEVEL_1_0,
+    VPE_IP_LEVEL_1_1
 };
 
 /****************************************
@@ -344,6 +346,7 @@ struct vpe_debug_options {
         uint32_t mpc_crc_ctrl            : 1;
         uint32_t bg_bit_depth            : 1;
         uint32_t visual_confirm          : 1;
+        uint32_t skip_optimal_tap_check  : 1;
     } flags;
 
     // valid only if the corresponding flag is set
@@ -365,6 +368,7 @@ struct vpe_debug_options {
     uint32_t dpp_crc_ctrl            : 1;
     uint32_t opp_pipe_crc_ctrl       : 1;
     uint32_t mpc_crc_ctrl            : 1;
+    uint32_t skip_optimal_tap_check  : 1;
     uint32_t bg_bit_depth;
 
     struct vpe_mem_low_power_enable_options enable_mem_low_power;
@@ -432,6 +436,8 @@ enum vpe_transfer_function {
     VPE_TF_PQ,
     VPE_TF_PQ_NORMALIZED,
     VPE_TF_HLG,
+    VPE_TF_SRGB,
+    VPE_TF_BT709,
     VPE_TF_COUNT
 };
 
@@ -541,10 +547,12 @@ struct vpe_hdr_metadata {
 };
 
 struct vpe_tonemap_params {
+    uint64_t                   UID;          /* Unique ID for tonemap params */
     enum vpe_transfer_function shaper_tf;
     enum vpe_transfer_function lut_out_tf;
     enum vpe_color_primaries   lut_in_gamut;
     enum vpe_color_primaries   lut_out_gamut;
+    uint16_t                   input_pq_norm_factor;
     uint16_t                   lut_dim;
     uint16_t                  *lut_data;
 
@@ -570,7 +578,11 @@ struct vpe_stream {
 
     struct {
         uint32_t hdr_metadata : 1;
-        uint32_t reserved     : 31;
+        uint32_t geometric_scaling : 1; /* support 1 input stream only,
+                                         * if set, gamut/gamma remapping will be disabled,
+                                         * blending will be disabled
+                                         * dst rect must equal to target rect */
+        uint32_t reserved : 30;
     } flags;
 };
 
@@ -593,6 +605,8 @@ struct vpe_build_param {
         uint32_t reserved     : 31;
     } flags;
 
+    uint16_t num_instances;
+    bool     collaboration_mode;
 };
 
 /** reported through vpe_check_support()
@@ -612,7 +626,7 @@ struct vpe_bufs_req {
 struct vpe_buf {
     uint64_t gpu_va; /**< GPU start address of the buffer */
     uint64_t cpu_va;
-    int64_t  size;
+    uint64_t  size;
     bool     tmz; /**< allocated from tmz */
 };
 

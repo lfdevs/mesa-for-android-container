@@ -1072,9 +1072,10 @@ anv_format_supports_usage(
    }
 
    if (usage_flags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
-      /* Ignore this flag because it was removed from the
-       * provisional_I_20150910 header.
-       */
+      if (!(format_feature_flags & (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
+                                    VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT))) {
+         return false;
+      }
    }
 
    return true;
@@ -1213,14 +1214,62 @@ anv_formats_gather_format_features(
    return all_formats_feature_flags;
 }
 
+/* Supports opaque fd but not dma_buf. */
+static const VkExternalMemoryProperties opaque_fd_only_props = {
+   .externalMemoryFeatures =
+      VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+      VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+};
+
+/* Supports opaque fd and dma_buf. */
+static const VkExternalMemoryProperties opaque_fd_dma_buf_props = {
+   .externalMemoryFeatures =
+      VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+      VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+};
+
+static const VkExternalMemoryProperties userptr_props = {
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes = 0,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+};
+
+static const VkExternalMemoryProperties android_buffer_props = {
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+                             VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
+};
+
+
+static const VkExternalMemoryProperties android_image_props = {
+   /* VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT will be set dynamically */
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT |
+                             VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT,
+   .exportFromImportedHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
+};
 
 static VkResult
 anv_get_image_format_properties(
    struct anv_physical_device *physical_device,
    const VkPhysicalDeviceImageFormatInfo2 *info,
-   VkImageFormatProperties *pImageFormatProperties,
-   VkSamplerYcbcrConversionImageFormatProperties *pYcbcrImageFormatProperties,
-   bool from_wsi)
+   VkImageFormatProperties2 *props)
 {
    VkFormatFeatureFlags2 format_feature_flags;
    VkExtent3D maxExtent;
@@ -1230,17 +1279,75 @@ anv_get_image_format_properties(
    const struct intel_device_info *devinfo = &physical_device->info;
    const struct anv_format *format = anv_get_format(info->format);
    const struct isl_drm_modifier_info *isl_mod_info = NULL;
-   const VkImageFormatListCreateInfo *format_list_info =
-      vk_find_struct_const(info->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
+   const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *modifier_info = NULL;
+   const VkImageFormatListCreateInfo *format_list_info = NULL;
+   const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
+   VkExternalImageFormatProperties *external_props = NULL;
+   VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
+   VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
+   VkTextureLODGatherFormatPropertiesAMD *texture_lod_gather_props = NULL;
+   VkImageCompressionPropertiesEXT *comp_props = NULL;
+   bool from_wsi = false;
+
+   /* Extract input structs */
+   vk_foreach_struct_const(s, info->pNext) {
+      switch ((unsigned)s->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
+         external_info = (const void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
+         modifier_info = (const void *)s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
+         format_list_info = (const void *)s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
+         /* Ignore but don't warn */
+         break;
+      case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
+         from_wsi = true;
+         break;
+      case VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR:
+         /* Ignore but don't warn */
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT:
+         /* Ignore but don't warn */
+         break;
+      default:
+         anv_debug_ignored_stype(s->sType);
+         break;
+      }
+   }
+
+   /* Extract output structs */
+   vk_foreach_struct(s, props->pNext) {
+      switch (s->sType) {
+      case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
+         external_props = (void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
+         ycbcr_props = (void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
+         android_usage = (void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
+         texture_lod_gather_props = (void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
+         comp_props = (void *) s;
+         break;
+      default:
+         anv_debug_ignored_stype(s->sType);
+         break;
+      }
+   }
 
    if (format == NULL)
       goto unsupported;
 
    if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
-      const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *vk_mod_info =
-         vk_find_struct_const(info->pNext, PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT);
-
-      isl_mod_info = isl_drm_modifier_get_info(vk_mod_info->drmFormatModifier);
+      isl_mod_info = isl_drm_modifier_get_info(modifier_info->drmFormatModifier);
       if (isl_mod_info == NULL)
          goto unsupported;
 
@@ -1477,7 +1584,7 @@ anv_get_image_format_properties(
    else
       maxResourceSize = (uint64_t) 1 << 44;
 
-   *pImageFormatProperties = (VkImageFormatProperties) {
+   props->imageFormatProperties = (VkImageFormatProperties) {
       .maxExtent = maxExtent,
       .maxMipLevels = maxMipLevels,
       .maxArrayLayers = maxArraySize,
@@ -1489,172 +1596,23 @@ anv_get_image_format_properties(
       .maxResourceSize = maxResourceSize,
    };
 
-   if (pYcbcrImageFormatProperties) {
-      pYcbcrImageFormatProperties->combinedImageSamplerDescriptorCount =
-         format->n_planes;
+   if (ycbcr_props)
+      ycbcr_props->combinedImageSamplerDescriptorCount = format->n_planes;
+
+   if (texture_lod_gather_props) {
+      texture_lod_gather_props->supportsTextureGatherLODBiasAMD =
+         physical_device->info.ver >= 20;
    }
-
-   return VK_SUCCESS;
-
-unsupported:
-   *pImageFormatProperties = (VkImageFormatProperties) {
-      .maxExtent = { 0, 0, 0 },
-      .maxMipLevels = 0,
-      .maxArrayLayers = 0,
-      .sampleCounts = 0,
-      .maxResourceSize = 0,
-   };
-
-   return VK_ERROR_FORMAT_NOT_SUPPORTED;
-}
-
-VkResult anv_GetPhysicalDeviceImageFormatProperties(
-    VkPhysicalDevice                            physicalDevice,
-    VkFormat                                    format,
-    VkImageType                                 type,
-    VkImageTiling                               tiling,
-    VkImageUsageFlags                           usage,
-    VkImageCreateFlags                          createFlags,
-    VkImageFormatProperties*                    pImageFormatProperties)
-{
-   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
-
-   const VkPhysicalDeviceImageFormatInfo2 info = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
-      .pNext = NULL,
-      .format = format,
-      .type = type,
-      .tiling = tiling,
-      .usage = usage,
-      .flags = createFlags,
-   };
-
-   return anv_get_image_format_properties(physical_device, &info,
-                                          pImageFormatProperties, NULL, false);
-}
-
-
-/* Supports opaque fd but not dma_buf. */
-static const VkExternalMemoryProperties opaque_fd_only_props = {
-   .externalMemoryFeatures =
-      VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-      VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
-   .exportFromImportedHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-   .compatibleHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-};
-
-/* Supports opaque fd and dma_buf. */
-static const VkExternalMemoryProperties opaque_fd_dma_buf_props = {
-   .externalMemoryFeatures =
-      VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-      VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
-   .exportFromImportedHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-   .compatibleHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-};
-
-static const VkExternalMemoryProperties userptr_props = {
-   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
-   .exportFromImportedHandleTypes = 0,
-   .compatibleHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
-};
-
-static const VkExternalMemoryProperties android_buffer_props = {
-   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-                             VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
-   .exportFromImportedHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
-   .compatibleHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
-};
-
-
-static const VkExternalMemoryProperties android_image_props = {
-   /* VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT will be set dynamically */
-   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT |
-                             VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT,
-   .exportFromImportedHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
-   .compatibleHandleTypes =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
-};
-
-VkResult anv_GetPhysicalDeviceImageFormatProperties2(
-    VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceImageFormatInfo2*     base_info,
-    VkImageFormatProperties2*                   base_props)
-{
-   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
-   const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
-   VkExternalImageFormatProperties *external_props = NULL;
-   VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
-   UNUSED VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
-   VkResult result;
-   bool from_wsi = false;
-
-   /* Extract input structs */
-   vk_foreach_struct_const(s, base_info->pNext) {
-      switch ((unsigned)s->sType) {
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-         external_info = (const void *) s;
-         break;
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
-      case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
-         /* anv_get_image_format_properties will handle these */
-         break;
-      case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
-         /* Ignore but don't warn */
-         break;
-      case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
-         from_wsi = true;
-         break;
-      case VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR:
-         /* Ignore but don't warn */
-         break;
-      default:
-         anv_debug_ignored_stype(s->sType);
-         break;
-      }
-   }
-
-   /* Extract output structs */
-   vk_foreach_struct(s, base_props->pNext) {
-      switch (s->sType) {
-      case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-         external_props = (void *) s;
-         break;
-      case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
-         ycbcr_props = (void *) s;
-         break;
-      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
-         android_usage = (void *) s;
-         break;
-      default:
-         anv_debug_ignored_stype(s->sType);
-         break;
-      }
-   }
-
-   result = anv_get_image_format_properties(physical_device, base_info,
-               &base_props->imageFormatProperties, ycbcr_props, from_wsi);
-   if (result != VK_SUCCESS)
-      goto fail;
 
    bool ahw_supported =
       physical_device->vk.supported_extensions.ANDROID_external_memory_android_hardware_buffer;
 
    if (ahw_supported && android_usage) {
       android_usage->androidHardwareBufferUsage =
-         vk_image_usage_to_ahb_usage(base_info->flags, base_info->usage);
+         vk_image_usage_to_ahb_usage(info->flags, info->usage);
 
       /* Limit maxArrayLayers to 1 for AHardwareBuffer based images for now. */
-      base_props->imageFormatProperties.maxArrayLayers = 1;
+      props->imageFormatProperties.maxArrayLayers = 1;
    }
 
    /* From the Vulkan 1.0.42 spec:
@@ -1669,7 +1627,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
        */
       bool tiling_has_explicit_layout;
 
-      switch (base_info->tiling) {
+      switch (info->tiling) {
       default:
          unreachable("bad VkImageTiling");
       case VK_IMAGE_TILING_LINEAR:
@@ -1733,11 +1691,11 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
           * and therefore requires explicit memory layout.
           */
          if (!tiling_has_explicit_layout) {
-            result = vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
-                               "VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT "
-                               "requires VK_IMAGE_TILING_LINEAR or "
-                               "VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT");
-            goto fail;
+            vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
+                      "VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT "
+                      "requires VK_IMAGE_TILING_LINEAR or "
+                      "VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT");
+            goto unsupported;
          }
 
          /* With an explicit memory layout, we don't care which type of fd
@@ -1752,11 +1710,11 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
           * and therefore requires explicit memory layout.
           */
          if (!tiling_has_explicit_layout) {
-            result = vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
-                               "VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT "
-                               "requires VK_IMAGE_TILING_LINEAR or "
-                               "VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT");
-            goto fail;
+            vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
+                      "VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT "
+                      "requires VK_IMAGE_TILING_LINEAR or "
+                      "VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT");
+            goto unsupported;
          }
 
          if (external_props)
@@ -1771,7 +1729,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          if (ahw_supported) {
             if (external_props) {
                external_props->externalMemoryProperties = android_image_props;
-               if (anv_ahb_format_for_vk_format(base_info->format)) {
+               if (anv_ahb_format_for_vk_format(info->format)) {
                   external_props->externalMemoryProperties.externalMemoryFeatures |=
                      VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
                }
@@ -1787,28 +1745,56 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
           *    vkGetPhysicalDeviceImageFormatProperties2 returns
           *    VK_ERROR_FORMAT_NOT_SUPPORTED.
           */
-         result = vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
-                            "unsupported VkExternalMemoryTypeFlagBits 0x%x",
-                            external_info->handleType);
-         goto fail;
+         vk_errorf(physical_device, VK_ERROR_FORMAT_NOT_SUPPORTED,
+                   "unsupported VkExternalMemoryTypeFlagBits 0x%x",
+                   external_info->handleType);
+         goto unsupported;
       }
+   }
+
+   if (comp_props) {
+      bool ccs_supported =
+         anv_formats_ccs_e_compatible(devinfo, info->flags, info->format,
+                                      info->tiling, info->usage,
+                                      format_list_info);
+      comp_props->imageCompressionFixedRateFlags =
+         VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+      comp_props->imageCompressionFlags = ccs_supported ?
+         VK_IMAGE_COMPRESSION_DEFAULT_EXT :
+         VK_IMAGE_COMPRESSION_DISABLED_EXT;
    }
 
    return VK_SUCCESS;
 
- fail:
-   if (result == VK_ERROR_FORMAT_NOT_SUPPORTED) {
-      /* From the Vulkan 1.0.42 spec:
-       *
-       *    If the combination of parameters to
-       *    vkGetPhysicalDeviceImageFormatProperties2 is not supported by
-       *    the implementation for use in vkCreateImage, then all members of
-       *    imageFormatProperties will be filled with zero.
-       */
-      base_props->imageFormatProperties = (VkImageFormatProperties) {};
-   }
+unsupported:
+   /* From the Vulkan 1.0.42 spec:
+    *
+    *    If the combination of parameters to
+    *    vkGetPhysicalDeviceImageFormatProperties2 is not supported by the
+    *    implementation for use in vkCreateImage, then all members of
+    *    imageFormatProperties will be filled with zero.
+    */
+   props->imageFormatProperties = (VkImageFormatProperties) {
+      .maxExtent = { 0, 0, 0 },
+      .maxMipLevels = 0,
+      .maxArrayLayers = 0,
+      .sampleCounts = 0,
+      .maxResourceSize = 0,
+   };
 
-   return result;
+   return VK_ERROR_FORMAT_NOT_SUPPORTED;
+}
+
+VkResult anv_GetPhysicalDeviceImageFormatProperties2(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
+    VkImageFormatProperties2*                   pImageFormatProperties)
+{
+   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+
+   return anv_get_image_format_properties(physical_device,
+                                          pImageFormatInfo,
+                                          pImageFormatProperties);
 }
 
 void anv_GetPhysicalDeviceSparseImageFormatProperties2(
@@ -1823,7 +1809,7 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties2(
    VK_OUTARRAY_MAKE_TYPED(VkSparseImageFormatProperties2, props,
                           pProperties, pPropertyCount);
 
-   if (!physical_device->has_sparse) {
+   if (physical_device->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) {
       if (INTEL_DEBUG(DEBUG_SPARSE))
          fprintf(stderr, "=== [%s:%d] [%s]\n", __FILE__, __LINE__, __func__);
       return;
@@ -1843,9 +1829,9 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties2(
       .flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
                VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT,
    };
-   VkImageFormatProperties img_props;
-   if (anv_get_image_format_properties(physical_device, &img_info,
-                                       &img_props, NULL, false) != VK_SUCCESS)
+   VkImageFormatProperties2 img_props = {};
+   if (anv_get_image_format_properties(physical_device,
+                                       &img_info, &img_props) != VK_SUCCESS)
       return;
 
    if (anv_sparse_image_check_support(physical_device,
@@ -1877,8 +1863,10 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties2(
          VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
 
       isl_surf_usage_flags_t isl_usage =
-         anv_image_choose_isl_surf_usage(vk_create_flags, pFormatInfo->usage,
-                                         0, aspect);
+         anv_image_choose_isl_surf_usage(physical_device,
+                                         vk_create_flags, pFormatInfo->usage,
+                                         0, aspect,
+                                         VK_IMAGE_COMPRESSION_DEFAULT_EXT);
 
       const enum isl_surf_dim isl_surf_dim =
          pFormatInfo->type == VK_IMAGE_TYPE_1D ? ISL_SURF_DIM_1D :

@@ -53,7 +53,7 @@ extern "C" {
 #include "target-helpers/inline_sw_helper.h"
 }
 
-#ifdef DEBUG
+#if MESA_DEBUG
 #define TRACE(x...) printf("egl_haiku: " x)
 #define CALLED()    TRACE("CALLED: %s\n", __PRETTY_FUNCTION__)
 #else
@@ -220,7 +220,7 @@ haiku_swap_buffers(_EGLDisplay *disp, _EGLSurface *surf)
    // flush back buffer and swap buffers if double buffering is used
    if (backBuffer != NULL) {
       screen->flush_frontbuffer(screen, st->pipe, backBuffer, 0, 0,
-                                buffer->winsysContext, NULL);
+                                buffer->winsysContext, 1, NULL);
       std::swap(frontBuffer, backBuffer);
       p_atomic_inc(&buffer->base.stamp);
    }

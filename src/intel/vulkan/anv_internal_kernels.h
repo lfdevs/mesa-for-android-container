@@ -24,21 +24,51 @@
 #ifndef ANV_GENERATED_INDIRECT_DRAWS_H
 #define ANV_GENERATED_INDIRECT_DRAWS_H
 
-#include "shaders/interface.h"
+#include "libintel_shaders.h"
 
-struct PACKED anv_generated_indirect_params {
-   struct anv_generated_indirect_draw_params draw;
+struct PACKED anv_gen_indirect_params {
+   /* Draw ID buffer address (only used on Gfx9) */
+   uint64_t draw_id_addr;
 
-   /* Global address of binding 0 */
+   /* Indirect data buffer address (only used on Gfx9) */
    uint64_t indirect_data_addr;
 
-   /* Global address of binding 1 */
+   /* Stride between each elements of the indirect data buffer */
+   uint32_t indirect_data_stride;
+
+   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws */
+
+   /* Base number of the draw ID, it is added to the index computed from the
+    * gl_FragCoord
+    */
+   uint32_t draw_base;
+
+   /* Maximum number of draws (equals to draw_count for indirect draws without
+    * an indirect count)
+    */
+   uint32_t max_draw_count;
+
+   /* Number of draws to generate in the ring buffer (only useful in ring
+    * buffer mode)
+    */
+   uint32_t ring_count;
+
+   /* Instance multiplier for multi view */
+   uint32_t instance_multiplier;
+
+   /* Address where to jump at to generate further draws (used with ring mode)
+    */
+   uint64_t gen_addr;
+
+   /* Address where to jump at after the generated draw (only used with
+    * indirect draw count variants)
+    */
+   uint64_t end_addr;
+
+   /* Destination of the generated draw commands */
    uint64_t generated_cmds_addr;
 
-   /* Global address of binding 2 */
-   uint64_t draw_ids_addr;
-
-   /* Global address of binding 3 (points to the draw_count field above) */
+   /* Draw count address (points to the draw_count field in cases) */
    uint64_t draw_count_addr;
 
    /* Draw count value for non count variants of draw indirect commands */
@@ -48,31 +78,53 @@ struct PACKED anv_generated_indirect_params {
     * split into smaller chunks, see while loop in
     * genX(cmd_buffer_emit_indirect_generated_draws)
     */
-   struct anv_generated_indirect_params *prev;
+   struct anv_gen_indirect_params *prev;
 };
 
 struct PACKED anv_query_copy_params {
-   struct anv_query_copy_shader_params copy;
+   /* ANV_COPY_QUERY_FLAG_* flags */
+   uint32_t flags;
 
+   /* Number of queries to copy */
+   uint32_t num_queries;
+
+   /* Number of items to write back in the results per query */
+   uint32_t num_items;
+
+   /* First query to copy result from */
+   uint32_t query_base;
+
+   /* Query stride in bytes */
+   uint32_t query_stride;
+
+   /* Offset at which the data should be read from */
+   uint32_t query_data_offset;
+
+   /* Stride of destination writes */
+   uint32_t destination_stride;
+
+   /* We need to be 64 bit aligned, or 32 bit builds get
+    * very unhappy.
+    */
+   uint32_t padding;
+
+   /* Address of the query pool */
    uint64_t query_data_addr;
 
+   /* Destination address of the results */
    uint64_t destination_addr;
 };
 
-/* This needs to match memcpy_compute.glsl :
- *
- *    layout(set = 0, binding = 2) uniform block
- */
-struct PACKED anv_memcpy_shader_params {
-   uint32_t num_dwords;
-   uint32_t pad;
-};
-
 struct PACKED anv_memcpy_params {
-   struct anv_memcpy_shader_params copy;
+   /* Number of dwords to copy*/
+   uint32_t num_dwords;
 
+   uint32_t pad;
+
+   /* Source address of the copy */
    uint64_t src_addr;
 
+   /* Destination address of the copy */
    uint64_t dst_addr;
 };
 

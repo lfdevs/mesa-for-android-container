@@ -26,7 +26,17 @@ nvk_heap_init(struct nvk_device *dev, struct nvk_heap *heap,
       heap->bo_flags |= NOUVEAU_WS_BO_MAP;
    heap->map_flags = map_flags;
    heap->overalloc = overalloc;
-   heap->contiguous = contiguous;
+
+   if (contiguous) {
+      heap->base_addr = nouveau_ws_alloc_vma(dev->ws_dev, 0,
+                                             NVK_HEAP_MAX_SIZE,
+                                             0, false /* bda */,
+                                             false /* sparse */);
+      if (heap->base_addr == 0) {
+         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                          "Failed to allocate VMA for heap");
+      }
+   }
 
    simple_mtx_init(&heap->mutex, mtx_plain);
    util_vma_heap_init(&heap->heap, 0, 0);
@@ -41,12 +51,24 @@ void
 nvk_heap_finish(struct nvk_device *dev, struct nvk_heap *heap)
 {
    for (uint32_t bo_idx = 0; bo_idx < heap->bo_count; bo_idx++) {
-      nouveau_ws_bo_unmap(heap->bos[bo_idx].bo, heap->bos[bo_idx].map);
+      if (heap->base_addr != 0) {
+         nouveau_ws_bo_unbind_vma(dev->ws_dev, heap->bos[bo_idx].addr,
+                                  heap->bos[bo_idx].bo->size);
+      }
+      if (heap->map_flags) {
+         assert(heap->bos[bo_idx].map);
+         nouveau_ws_bo_unmap(heap->bos[bo_idx].bo, heap->bos[bo_idx].map);
+      }
       nouveau_ws_bo_destroy(heap->bos[bo_idx].bo);
    }
 
    util_vma_heap_finish(&heap->heap);
    simple_mtx_destroy(&heap->mutex);
+
+   if (heap->base_addr != 0) {
+      nouveau_ws_free_vma(dev->ws_dev, heap->base_addr, NVK_HEAP_MAX_SIZE,
+                          false /* bda */, false /* sparse */);
+   }
 }
 
 static uint64_t
@@ -74,115 +96,62 @@ vma_bo_offset(uint64_t offset)
 static VkResult
 nvk_heap_grow_locked(struct nvk_device *dev, struct nvk_heap *heap)
 {
-   VkResult result;
-
-   if (heap->contiguous) {
-      if (heap->total_size >= NVK_HEAP_MAX_SIZE) {
-         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Heap has already hit its maximum size");
-      }
-
-      const uint64_t new_bo_size =
-         MAX2(heap->total_size * 2, NVK_HEAP_MIN_SIZE);
-
-      void *new_bo_map;
-      struct nouveau_ws_bo *new_bo =
-         nouveau_ws_bo_new_mapped(dev->ws_dev,
-                                  new_bo_size + heap->overalloc, 0,
-                                  heap->bo_flags, heap->map_flags,
-                                  &new_bo_map);
-      if (new_bo == NULL) {
-         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Failed to allocate a heap BO: %m");
-      }
-
-      if (heap->bo_count > 0) {
-         assert(heap->bo_count == 1);
-         struct nouveau_ws_bo *old_bo = heap->bos[0].bo;
-
-         assert(util_is_power_of_two_nonzero(heap->total_size));
-         assert(heap->total_size >= NVK_HEAP_MIN_SIZE);
-         assert(heap->total_size <= old_bo->size);
-         assert(heap->total_size < new_bo_size);
-
-         unsigned line_bytes = MIN2(heap->total_size, 1 << 17);
-         assert(heap->total_size % line_bytes == 0);
-         unsigned line_count = heap->total_size / line_bytes;
-
-         uint32_t push_dw[12];
-         struct nv_push push;
-         nv_push_init(&push, push_dw, ARRAY_SIZE(push_dw));
-         struct nv_push *p = &push;
-
-         P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
-         P_NV90B5_OFFSET_IN_UPPER(p, old_bo->offset >> 32);
-         P_NV90B5_OFFSET_IN_LOWER(p, old_bo->offset & 0xffffffff);
-         P_NV90B5_OFFSET_OUT_UPPER(p, new_bo->offset >> 32);
-         P_NV90B5_OFFSET_OUT_LOWER(p, new_bo->offset & 0xffffffff);
-         P_NV90B5_PITCH_IN(p, line_bytes);
-         P_NV90B5_PITCH_OUT(p, line_bytes);
-         P_NV90B5_LINE_LENGTH_IN(p, line_bytes);
-         P_NV90B5_LINE_COUNT(p, line_count);
-
-         P_IMMD(p, NV90B5, LAUNCH_DMA, {
-            .data_transfer_type = DATA_TRANSFER_TYPE_NON_PIPELINED,
-            .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
-            .flush_enable = FLUSH_ENABLE_TRUE,
-            .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
-            .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-         });
-
-         struct nouveau_ws_bo *push_bos[] = { new_bo, old_bo, };
-         result = nvk_queue_submit_simple(&dev->queue,
-                                          nv_push_dw_count(&push), push_dw,
-                                          ARRAY_SIZE(push_bos), push_bos);
-         if (result != VK_SUCCESS) {
-            nouveau_ws_bo_unmap(new_bo, new_bo_map);
-            nouveau_ws_bo_destroy(new_bo);
-            return result;
-         }
-
-         nouveau_ws_bo_unmap(heap->bos[0].bo, heap->bos[0].map);
-         nouveau_ws_bo_destroy(heap->bos[0].bo);
-      }
-
-      uint64_t vma = encode_vma(0, heap->total_size);
-      util_vma_heap_free(&heap->heap, vma, new_bo_size - heap->total_size);
-
-      heap->total_size = new_bo_size;
-      heap->bo_count = 1;
-      heap->bos[0].bo = new_bo;
-      heap->bos[0].map = new_bo_map;
-
-      return VK_SUCCESS;
-   } else {
-      if (heap->bo_count >= NVK_HEAP_MAX_BO_COUNT) {
-         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Heap has already hit its maximum size");
-      }
-
-      /* First two BOs are MIN_SIZE, double after that */
-      const uint64_t new_bo_size =
-         NVK_HEAP_MIN_SIZE << (MAX2(heap->bo_count, 1) - 1);
-
-      heap->bos[heap->bo_count].bo =
-         nouveau_ws_bo_new_mapped(dev->ws_dev,
-                                  new_bo_size + heap->overalloc, 0,
-                                  heap->bo_flags, heap->map_flags,
-                                  &heap->bos[heap->bo_count].map);
-      if (heap->bos[heap->bo_count].bo == NULL) {
-         return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Failed to allocate a heap BO: %m");
-      }
-
-      uint64_t vma = encode_vma(heap->bo_count, 0);
-      util_vma_heap_free(&heap->heap, vma, new_bo_size);
-
-      heap->total_size += new_bo_size;
-      heap->bo_count++;
-
-      return VK_SUCCESS;
+   if (heap->bo_count >= NVK_HEAP_MAX_BO_COUNT) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "Heap has already hit its maximum size");
    }
+
+   /* First two BOs are MIN_SIZE, double after that */
+   const uint64_t new_bo_size =
+      NVK_HEAP_MIN_SIZE << (MAX2(heap->bo_count, 1) - 1);
+
+   struct nouveau_ws_bo *bo =
+      nouveau_ws_bo_new(dev->ws_dev, new_bo_size, 0, heap->bo_flags);
+   if (bo == NULL) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "Failed to allocate a heap BO: %m");
+   }
+
+   void *map = NULL;
+   if (heap->map_flags) {
+      map = nouveau_ws_bo_map(bo, heap->map_flags, NULL);
+      if (map == NULL) {
+         nouveau_ws_bo_destroy(bo);
+         return vk_errorf(dev, VK_ERROR_OUT_OF_HOST_MEMORY,
+                          "Failed to map a heap BO: %m");
+      }
+   }
+
+   uint64_t addr = bo->offset;
+   if (heap->base_addr != 0) {
+      addr = heap->base_addr + heap->total_size;
+      nouveau_ws_bo_bind_vma(dev->ws_dev, bo, addr, new_bo_size, 0, 0);
+
+      /* For contiguous heaps, we can now free the padding from the previous
+       * BO because the BO we just added will provide the needed padding. For
+       * non-contiguous heaps, we have to leave each BO padded individually.
+       */
+      if (heap->bo_count > 0) {
+         struct nouveau_ws_bo *prev_bo = heap->bos[heap->bo_count - 1].bo;
+         assert(heap->overalloc < prev_bo->size);
+         const uint64_t pad_vma =
+            encode_vma(heap->bo_count - 1, prev_bo->size - heap->overalloc);
+         util_vma_heap_free(&heap->heap, pad_vma, heap->overalloc);
+      }
+   }
+
+   uint64_t vma = encode_vma(heap->bo_count, 0);
+   assert(heap->overalloc < new_bo_size);
+   util_vma_heap_free(&heap->heap, vma, new_bo_size - heap->overalloc);
+
+   heap->bos[heap->bo_count++] = (struct nvk_heap_bo) {
+      .bo = bo,
+      .map = map,
+      .addr = addr,
+   };
+   heap->total_size += new_bo_size;
+
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -198,16 +167,15 @@ nvk_heap_alloc_locked(struct nvk_device *dev, struct nvk_heap *heap,
 
          assert(bo_idx < heap->bo_count);
          assert(heap->bos[bo_idx].bo != NULL);
-         assert(bo_offset + size + heap->overalloc <=
-                heap->bos[bo_idx].bo->size);
+         assert(bo_offset + size <= heap->bos[bo_idx].bo->size);
 
-         if (heap->contiguous) {
-            assert(bo_idx == 0);
-            *addr_out = bo_offset;
-         } else {
-            *addr_out = heap->bos[bo_idx].bo->offset + bo_offset;
+         *addr_out = heap->bos[bo_idx].addr + bo_offset;
+         if (map_out != NULL) {
+            if (heap->bos[bo_idx].map != NULL)
+               *map_out = (char *)heap->bos[bo_idx].map + bo_offset;
+            else
+               *map_out = NULL;
          }
-         *map_out = (char *)heap->bos[bo_idx].map + bo_offset;
 
          return VK_SUCCESS;
       }
@@ -224,31 +192,21 @@ nvk_heap_free_locked(struct nvk_device *dev, struct nvk_heap *heap,
 {
    assert(addr + size > addr);
 
-   if (heap->contiguous) {
-      assert(heap->bo_count == 1);
-      uint64_t bo_offset = addr;
+   for (uint32_t bo_idx = 0; bo_idx < heap->bo_count; bo_idx++) {
+      if (addr < heap->bos[bo_idx].addr)
+         continue;
 
-      assert(bo_offset + size <= heap->bos[0].bo->size);
-      uint64_t vma = encode_vma(0, bo_offset);
+      uint64_t bo_offset = addr - heap->bos[bo_idx].addr;
+      if (bo_offset >= heap->bos[bo_idx].bo->size)
+         continue;
+
+      assert(bo_offset + size <= heap->bos[bo_idx].bo->size);
+      uint64_t vma = encode_vma(bo_idx, bo_offset);
 
       util_vma_heap_free(&heap->heap, vma, size);
-   } else {
-      for (uint32_t bo_idx = 0; bo_idx < heap->bo_count; bo_idx++) {
-         if (addr < heap->bos[bo_idx].bo->offset)
-            continue;
-
-         uint64_t bo_offset = addr - heap->bos[bo_idx].bo->offset;
-         if (bo_offset >= heap->bos[bo_idx].bo->size)
-            continue;
-
-         assert(bo_offset + size <= heap->bos[bo_idx].bo->size);
-         uint64_t vma = encode_vma(bo_idx, bo_offset);
-
-         util_vma_heap_free(&heap->heap, vma, size);
-         return;
-      }
-      assert(!"Failed to find heap BO");
+      return;
    }
+   assert(!"Failed to find heap BO");
 }
 
 VkResult
@@ -256,12 +214,6 @@ nvk_heap_alloc(struct nvk_device *dev, struct nvk_heap *heap,
                uint64_t size, uint32_t alignment,
                uint64_t *addr_out, void **map_out)
 {
-   /* We can't return maps from contiguous heaps because the the map may go
-    * away at any time when the lock isn't taken and we don't want to trust
-    * the caller with racy maps.
-    */
-   assert(!heap->contiguous);
-
    simple_mtx_lock(&heap->mutex);
    VkResult result = nvk_heap_alloc_locked(dev, heap, size, alignment,
                                            addr_out, map_out);
@@ -276,15 +228,45 @@ nvk_heap_upload(struct nvk_device *dev, struct nvk_heap *heap,
                 uint64_t *addr_out)
 {
    simple_mtx_lock(&heap->mutex);
-
-   void *map;
+   void *map = NULL;
    VkResult result = nvk_heap_alloc_locked(dev, heap, size, alignment,
                                            addr_out, &map);
-   if (result == VK_SUCCESS)
-      memcpy(map, data, size);
    simple_mtx_unlock(&heap->mutex);
 
-   return result;
+   if (result != VK_SUCCESS)
+      return result;
+
+   if (map != NULL && (heap->map_flags & NOUVEAU_WS_BO_WR)) {
+      /* If we have a map, copy directly with memcpy */
+      memcpy(map, data, size);
+   } else {
+      /* Otherwise, kick off an upload with the upload queue.
+       *
+       * This is a queued operation that the driver ensures happens before any
+       * more client work via semaphores.  Because this is asynchronous and
+       * heap allocations are synchronous we have to be a bit careful here.
+       * The heap only ever tracks the current known CPU state of everything
+       * while the upload queue makes that state valid at some point in the
+       * future.
+       *
+       * This can be especially tricky for very fast upload/free cycles such
+       * as if the client compiles a shader, throws it away without using it,
+       * and then compiles another shader that ends up at the same address.
+       * What makes this all correct is the fact that the everything on the
+       * upload queue happens in a well-defined device-wide order.  In this
+       * case the first shader will get uploaded and then the second will get
+       * uploaded over top of it.  As long as we don't free the memory out
+       * from under the upload queue, everything will end up in the correct
+       * state by the time the client's shaders actually execute.
+       */
+      result = nvk_upload_queue_upload(dev, &dev->upload, *addr_out, data, size);
+      if (result != VK_SUCCESS) {
+         nvk_heap_free(dev, heap, *addr_out, size);
+         return result;
+      }
+   }
+
+   return VK_SUCCESS;
 }
 
 void

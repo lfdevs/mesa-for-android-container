@@ -633,8 +633,8 @@ util_memcpy_cpu_to_le32(void * restrict dest, const void * restrict src, size_t 
 #if defined(ALIGN)
 #undef ALIGN
 #endif
-static inline uintptr_t
-ALIGN(uintptr_t value, int32_t alignment)
+static inline uint32_t
+ALIGN(uint32_t value, uint32_t alignment)
 {
    assert(util_is_power_of_two_nonzero(alignment));
    return ALIGN_POT(value, alignment);
@@ -691,11 +691,7 @@ align64(uint64_t value, uint64_t alignment)
 static inline uintptr_t
 align_uintptr(uintptr_t value, uintptr_t alignment)
 {
-#if UINTPTR_MAX == UINT64_MAX
-   assert(util_is_power_of_two_nonzero64(alignment));
-#else
-   assert(util_is_power_of_two_nonzero(alignment));
-#endif
+   assert(util_is_power_of_two_nonzero_uintptr(alignment));
    return ALIGN_POT(value, alignment);
 }
 
@@ -810,6 +806,23 @@ util_clamped_uadd(unsigned a, unsigned b)
       res = ~0U;
    }
    return res;
+}
+
+/**
+ * Checks the value 'n' is aligned to 'a'.
+ * The alignment must be a power of two.
+ */
+static inline bool
+util_is_aligned(uintmax_t n, uintmax_t a)
+{
+   assert(a == (a & -a));
+   return (n & (a - 1)) == 0;
+}
+
+static inline bool
+util_is_sint16(int x)
+{
+   return x >= INT16_MIN && x <= INT16_MAX;
 }
 
 #ifdef __cplusplus

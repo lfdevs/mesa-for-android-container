@@ -30,7 +30,7 @@
 #include <fcntl.h>
 
 #include "anv_private.h"
-#include "common/intel_defines.h"
+#include "common/i915/intel_defines.h"
 #include "common/intel_gem.h"
 
 /**

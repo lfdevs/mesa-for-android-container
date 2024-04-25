@@ -9,7 +9,7 @@
 #include "nvk_entrypoints.h"
 #include "nvk_mme.h"
 #include "nvk_physical_device.h"
-#include "nvk_pipeline.h"
+#include "nvk_shader.h"
 
 #include "nouveau_context.h"
 
@@ -17,32 +17,47 @@
 #include "cla1c0.h"
 #include "clc0c0.h"
 #include "clc5c0.h"
+#include "nvk_cl90c0.h"
 #include "nvk_cl9097.h"
 #include "nvk_cla0c0.h"
+#include "nvk_clb0c0.h"
 #include "nvk_clb1c0.h"
 #include "nvk_clc3c0.h"
 #include "nvk_clc597.h"
 #include "nvk_clc6c0.h"
 
-#include "drf.h"
-#include "cla0c0qmd.h"
-#include "clc0c0qmd.h"
-#include "clc3c0qmd.h"
-#include "clc6c0qmd.h"
+VkResult
+nvk_push_dispatch_state_init(struct nvk_device *dev, struct nv_push *p)
+{
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
-#define NVA0C0_QMDV00_06_VAL_SET(p,a...) NVVAL_MW_SET((p), NVA0C0, QMDV00_06, ##a)
-#define NVA0C0_QMDV00_06_DEF_SET(p,a...) NVDEF_MW_SET((p), NVA0C0, QMDV00_06, ##a)
-#define NVC0C0_QMDV02_01_VAL_SET(p,a...) NVVAL_MW_SET((p), NVC0C0, QMDV02_01, ##a)
-#define NVC0C0_QMDV02_01_DEF_SET(p,a...) NVDEF_MW_SET((p), NVC0C0, QMDV02_01, ##a)
-#define NVC3C0_QMDV02_02_VAL_SET(p,a...) NVVAL_MW_SET((p), NVC3C0, QMDV02_02, ##a)
-#define NVC3C0_QMDV02_02_DEF_SET(p,a...) NVDEF_MW_SET((p), NVC3C0, QMDV02_02, ##a)
-#define NVC6C0_QMDV03_00_VAL_SET(p,a...) NVVAL_MW_SET((p), NVC6C0, QMDV03_00, ##a)
-#define NVC6C0_QMDV03_00_DEF_SET(p,a...) NVDEF_MW_SET((p), NVC6C0, QMDV03_00, ##a)
+   P_MTHD(p, NV90C0, SET_OBJECT);
+   P_NV90C0_SET_OBJECT(p, {
+      .class_id = pdev->info.cls_compute,
+      .engine_id = 0,
+   });
+
+   if (pdev->info.cls_compute == MAXWELL_COMPUTE_A)
+      P_IMMD(p, NVB0C0, SET_SELECT_MAXWELL_TEXTURE_HEADERS, V_TRUE);
+
+   if (pdev->info.cls_eng3d < VOLTA_COMPUTE_A) {
+      uint64_t shader_base_addr =
+         nvk_heap_contiguous_base_address(&dev->shader_heap);
+
+      P_MTHD(p, NVA0C0, SET_PROGRAM_REGION_A);
+      P_NVA0C0_SET_PROGRAM_REGION_A(p, shader_base_addr >> 32);
+      P_NVA0C0_SET_PROGRAM_REGION_B(p, shader_base_addr);
+   }
+
+   return VK_SUCCESS;
+}
 
 static inline uint16_t
 nvk_cmd_buffer_compute_cls(struct nvk_cmd_buffer *cmd)
 {
-   return nvk_cmd_buffer_device(cmd)->pdev->info.cls_compute;
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   return pdev->info.cls_compute;
 }
 
 void
@@ -63,92 +78,23 @@ nvk_cmd_buffer_begin_compute(struct nvk_cmd_buffer *cmd,
    }
 }
 
-static void
-nva0c0_qmd_set_dispatch_size(UNUSED struct nvk_device *dev, uint32_t *qmd,
-                             uint32_t x, uint32_t y, uint32_t z)
+void
+nvk_cmd_invalidate_compute_state(struct nvk_cmd_buffer *cmd)
 {
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CTA_RASTER_WIDTH, x);
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CTA_RASTER_HEIGHT, y);
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CTA_RASTER_DEPTH, z);
+   memset(&cmd->state.cs, 0, sizeof(cmd->state.cs));
 }
-
-static void
-nvc0c0_qmd_set_dispatch_size(UNUSED struct nvk_device *dev, uint32_t *qmd,
-                             uint32_t x, uint32_t y, uint32_t z)
-{
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CTA_RASTER_WIDTH, x);
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CTA_RASTER_HEIGHT, y);
-   /* this field is different from older QMD versions */
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CTA_RASTER_DEPTH, z);
-}
-
-static void
-nvc6c0_qmd_set_dispatch_size(UNUSED struct nvk_device *dev, uint32_t *qmd,
-                             uint32_t x, uint32_t y, uint32_t z)
-{
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CTA_RASTER_WIDTH, x);
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CTA_RASTER_HEIGHT, y);
-   /* this field is different from older QMD versions */
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CTA_RASTER_DEPTH, z);
-}
-
-static uint32_t
-qmd_dispatch_size_offset(const struct nv_device_info *devinfo)
-{
-   assert(devinfo->cls_compute >= VOLTA_COMPUTE_A);
-   uint32_t bit = DRF_LO(DRF_MW(NVC3C0_QMDV02_02_CTA_RASTER_WIDTH));
-   assert(bit % 32 == 0);
-   assert(DRF_LO(DRF_MW(NVC3C0_QMDV02_02_CTA_RASTER_HEIGHT)) == bit + 32);
-   assert(DRF_LO(DRF_MW(NVC3C0_QMDV02_02_CTA_RASTER_DEPTH)) == bit + 64);
-   return bit / 8;
-}
-
-static inline void
-nva0c0_cp_launch_desc_set_cb(uint32_t *qmd, unsigned index,
-                             uint32_t size, uint64_t address)
-{
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_LOWER, index, address);
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_UPPER, index, address >> 32);
-   NVA0C0_QMDV00_06_VAL_SET(qmd, CONSTANT_BUFFER_SIZE, index, size);
-   NVA0C0_QMDV00_06_DEF_SET(qmd, CONSTANT_BUFFER_VALID, index, TRUE);
-}
-
-static inline void
-nvc0c0_cp_launch_desc_set_cb(uint32_t *qmd, unsigned index,
-                             uint32_t size, uint64_t address)
-{
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_LOWER, index, address);
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_UPPER, index, address >> 32);
-   NVC0C0_QMDV02_01_VAL_SET(qmd, CONSTANT_BUFFER_SIZE_SHIFTED4, index,
-                            DIV_ROUND_UP(size, 16));
-   NVC0C0_QMDV02_01_DEF_SET(qmd, CONSTANT_BUFFER_VALID, index, TRUE);
-}
-
-static inline void
-nvc6c0_cp_launch_desc_set_cb(uint32_t *qmd, unsigned index,
-                             uint32_t size, uint64_t address)
-{
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_LOWER, index, address);
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CONSTANT_BUFFER_ADDR_UPPER, index, address >> 32);
-   NVC6C0_QMDV03_00_VAL_SET(qmd, CONSTANT_BUFFER_SIZE_SHIFTED4, index,
-                            DIV_ROUND_UP(size, 16));
-   NVC6C0_QMDV03_00_DEF_SET(qmd, CONSTANT_BUFFER_VALID, index, TRUE);
-}
-
 
 void
-nvk_cmd_bind_compute_pipeline(struct nvk_cmd_buffer *cmd,
-                              struct nvk_compute_pipeline *pipeline)
+nvk_cmd_bind_compute_shader(struct nvk_cmd_buffer *cmd,
+                            struct nvk_shader *shader)
 {
-   cmd->state.cs.pipeline = pipeline;
+   cmd->state.cs.shader = shader;
 }
 
 static uint32_t
 nvk_compute_local_size(struct nvk_cmd_buffer *cmd)
 {
-   const struct nvk_compute_pipeline *pipeline = cmd->state.cs.pipeline;
-   const struct nvk_shader *shader =
-      pipeline->base.shaders[MESA_SHADER_COMPUTE];
+   const struct nvk_shader *shader = cmd->state.cs.shader;
 
    return shader->info.cs.local_size[0] *
           shader->info.cs.local_size[1] *
@@ -162,7 +108,7 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
    const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
-   const struct nvk_compute_pipeline *pipeline = cmd->state.cs.pipeline;
+   const struct nvk_shader *shader = cmd->state.cs.shader;
    struct nvk_descriptor_state *desc = &cmd->state.cs.descriptors;
    VkResult result;
 
@@ -188,30 +134,18 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
    desc->root.root_desc_addr = root_desc_addr;
    memcpy(root_desc_map, &desc->root, sizeof(desc->root));
 
-   uint32_t qmd[128];
-   memset(qmd, 0, sizeof(qmd));
-   memcpy(qmd, pipeline->qmd_template, sizeof(pipeline->qmd_template));
+   struct nak_qmd_info qmd_info = {
+      .addr = shader->hdr_addr,
+      .smem_size = shader->info.cs.smem_size,
+      .smem_max = NVK_MAX_SHARED_SIZE,
+      .global_size = {
+         desc->root.cs.group_count[0],
+         desc->root.cs.group_count[1],
+         desc->root.cs.group_count[2],
+      },
+   };
 
-   if (nvk_cmd_buffer_compute_cls(cmd) >= AMPERE_COMPUTE_A) {
-      nvc6c0_qmd_set_dispatch_size(nvk_cmd_buffer_device(cmd), qmd,
-                                   desc->root.cs.group_count[0],
-                                   desc->root.cs.group_count[1],
-                                   desc->root.cs.group_count[2]);
-   } else if (nvk_cmd_buffer_compute_cls(cmd) >= PASCAL_COMPUTE_A) {
-      nvc0c0_qmd_set_dispatch_size(nvk_cmd_buffer_device(cmd), qmd,
-                                   desc->root.cs.group_count[0],
-                                   desc->root.cs.group_count[1],
-                                   desc->root.cs.group_count[2]);
-   } else {
-      assert(nvk_cmd_buffer_compute_cls(cmd) >= KEPLER_COMPUTE_A);
-      nva0c0_qmd_set_dispatch_size(nvk_cmd_buffer_device(cmd), qmd,
-                                   desc->root.cs.group_count[0],
-                                   desc->root.cs.group_count[1],
-                                   desc->root.cs.group_count[2]);
-   }
-
-   const struct nvk_shader *shader =
-      pipeline->base.shaders[MESA_SHADER_COMPUTE];
+   assert(shader->cbuf_map.cbuf_count <= ARRAY_SIZE(qmd_info.cbufs));
    for (uint32_t c = 0; c < shader->cbuf_map.cbuf_count; c++) {
       const struct nvk_cbuf *cbuf = &shader->cbuf_map.cbufs[c];
 
@@ -223,7 +157,7 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
          };
       } else {
          ASSERTED bool direct_descriptor =
-            nvk_cmd_buffer_get_cbuf_descriptor(cmd, desc, cbuf, &ba);
+            nvk_cmd_buffer_get_cbuf_descriptor(cmd, desc, shader, cbuf, &ba);
          assert(direct_descriptor);
       }
 
@@ -232,19 +166,19 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
          ba.size = align(ba.size, min_cbuf_alignment);
          ba.size = MIN2(ba.size, NVK_MAX_CBUF_SIZE);
 
-         if (nvk_cmd_buffer_compute_cls(cmd) >= AMPERE_COMPUTE_A) {
-            nvc6c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
-         } else if (nvk_cmd_buffer_compute_cls(cmd) >= PASCAL_COMPUTE_A) {
-            nvc0c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
-         } else {
-            assert(nvk_cmd_buffer_compute_cls(cmd) >= KEPLER_COMPUTE_A);
-            nva0c0_cp_launch_desc_set_cb(qmd, c, ba.size, ba.base_addr);
-         }
+         qmd_info.cbufs[qmd_info.num_cbufs++] = (struct nak_qmd_cbuf) {
+            .index = c,
+            .addr = ba.base_addr,
+            .size = ba.size,
+         };
       }
    }
 
+   uint32_t qmd[64];
+   nak_fill_qmd(&pdev->info, &shader->info, &qmd_info, qmd, sizeof(qmd));
+
    uint64_t qmd_addr;
-   result = nvk_cmd_buffer_upload_data(cmd, qmd, sizeof(qmd), 256, &qmd_addr);
+   result = nvk_cmd_buffer_upload_data(cmd, qmd, sizeof(qmd), 0x100, &qmd_addr);
    if (unlikely(result != VK_SUCCESS)) {
       vk_command_buffer_set_error(&cmd->vk, result);
       return 0;
@@ -376,7 +310,7 @@ nvk_mme_dispatch_indirect(struct mme_builder *b)
 
    mme_tu104_read_fifoed(b, dispatch_addr, mme_imm(3));
 
-   uint32_t qmd_size_offset = qmd_dispatch_size_offset(b->devinfo);
+   uint32_t qmd_size_offset = nak_qmd_dispatch_size_offset(b->devinfo);
    uint32_t root_desc_size_offset =
       offsetof(struct nvk_root_descriptor_table, cs.group_count);
 
@@ -404,7 +338,7 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
    struct nvk_descriptor_state *desc = &cmd->state.cs.descriptors;
 
    /* TODO: Indirect dispatch pre-Turing */
-   assert(nvk_cmd_buffer_device(cmd)->pdev->info.cls_eng3d >= TURING_A);
+   assert(nvk_cmd_buffer_compute_cls(cmd) >= TURING_COMPUTE_A);
 
    desc->root.cs.base_group[0] = 0;
    desc->root.cs.base_group[1] = 0;

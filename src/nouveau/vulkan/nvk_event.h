@@ -7,7 +7,7 @@
 
 #include "nvk_private.h"
 
-#include "vulkan/runtime/vk_object.h"
+#include "vk_object.h"
 
 struct nvk_event {
    struct vk_object_base base;

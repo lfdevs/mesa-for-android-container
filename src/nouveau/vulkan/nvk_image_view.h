@@ -7,7 +7,9 @@
 
 #include "nvk_private.h"
 
-#include "vulkan/runtime/vk_image.h"
+#include "vk_image.h"
+
+#include "nil.h"
 
 struct nvk_device;
 
@@ -17,6 +19,8 @@ struct nvk_image_view {
    uint8_t plane_count;
    struct {
       uint8_t image_plane;
+
+      enum nil_sample_layout sample_layout;
 
       /** Index in the image descriptor table for the sampled image descriptor */
       uint32_t sampled_desc_index;

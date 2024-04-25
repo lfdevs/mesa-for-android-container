@@ -3,6 +3,7 @@
   <import name="gen125.xml">
     <exclude name="3DSTATE_CLEAR_PARAMS" />
     <exclude name="CLEAR_COLOR" />
+    <exclude name="L3ALLOC" />
   </import>
   <enum name="PREF_SLM_ALLOCATION_SIZE">
     <value name="SLM_ENCODES_0K" value="0" />
@@ -40,10 +41,7 @@
       <value name="IEEE-754" value="0" />
       <value name="Alternate" value="1" />
     </field>
-    <field name="Single Program Flow" start="82" end="82" type="uint">
-      <value name="Multiple" value="0" />
-      <value name="Single" value="1" />
-    </field>
+    <field name="Single Program Flow" start="82" end="82" type="bool" />
     <field name="Denorm Mode" start="83" end="83" type="uint">
       <value name="Ftz" value="0" />
       <value name="SetByKernel" value="1" />
@@ -57,13 +55,25 @@
       <value name="Between 13 and 16 samplers used" value="4" />
     </field>
     <field name="Sampler State Pointer" start="101" end="127" type="offset" />
-    <field name="Binding Table Entry Count" start="128" end="132" type="uint">
-      <value name="Prefetch disabled" value="0" />
-    </field>
+    <field name="Binding Table Entry Count" start="128" end="132" type="uint" />
     <field name="Binding Table Pointer" start="133" end="148" type="offset" />
     <field name="Number of Threads in GPGPU Thread Group" start="160" end="169" type="uint" />
     <field name="Thread group forward progress guarantee" start="173" end="173" type="bool" />
-    <field name="Shared Local Memory Size" start="176" end="180" type="uint" />
+    <field name="Shared Local Memory Size" start="176" end="180" type="uint">
+      <value name="Encodes 0K" value="0" />
+      <value name="Encodes 1K" value="1" />
+      <value name="Encodes 2K" value="2" />
+      <value name="Encodes 4K" value="3" />
+      <value name="Encodes 8K" value="4" />
+      <value name="Encodes 16K" value="5" />
+      <value name="Encodes 32K" value="6" />
+      <value name="Encodes 64K" value="7" />
+      <value name="Encodes 96K" value="10" />
+      <value name="Encodes 128K" value="11" />
+      <value name="Encodes 192K" value="12" />
+      <value name="Encodes 256K" value="13" />
+      <value name="Encodes 384K" value="14" />
+    </field>
     <field name="Rounding Mode" start="182" end="183" type="uint">
       <value name="RTNE" value="0" />
       <value name="RU" value="1" />
@@ -76,7 +86,16 @@
       <value name="TG size 2" value="2" />
       <value name="TG size 1" value="3" />
     </field>
-    <field name="Number Of Barriers" start="188" end="190" type="uint" />
+    <field name="Number Of Barriers" start="188" end="190" type="uint" prefix="BARRIER_SIZE">
+      <value name="NONE" value="0" />
+      <value name="B1" value="1" />
+      <value name="B2" value="2" />
+      <value name="B4" value="3" />
+      <value name="B8" value="4" />
+      <value name="B16" value="5" />
+      <value name="B24" value="6" />
+      <value name="B32" value="7" />
+    </field>
     <field name="BTD Mode" start="191" end="191" type="uint" />
     <field name="Preferred SLM Allocation Size" start="224" end="227" type="PREF_SLM_ALLOCATION_SIZE" />
   </struct>
@@ -812,7 +831,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="1" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
   </instruction>
-  <instruction name="PIPE_CONTROL" bias="2" length="6" engine="render">
+  <instruction name="PIPE_CONTROL" bias="2" length="6" engine="render|compute">
     <field name="DWord Length" start="0" end="7" type="uint" default="4" />
     <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool" />
     <field name="L3 Read Only Cache Invalidation Enable" start="10" end="10" type="bool" />
@@ -861,4 +880,7 @@
     <field name="Address" start="66" end="111" type="address" />
     <field name="Immediate Data" start="128" end="191" type="uint" />
   </instruction>
+  <register name="GFX_TRTT_VA_RANGE" length="1" num="0x4404">
+    <field name="TR-VA Base" start="0" end="12" type="uint" />
+  </register>
 </genxml>

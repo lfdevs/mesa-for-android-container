@@ -36,6 +36,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
                             struct brw_stage_prog_data *prog_data,
                             struct anv_pipeline_bind_map *map,
                             const struct anv_pipeline_push_map *push_map,
+                            enum anv_descriptor_set_layout_type desc_type,
                             void *mem_ctx)
 {
    const struct brw_compiler *compiler = pdevice->compiler;
@@ -74,6 +75,16 @@ anv_nir_compute_push_layout(nir_shader *nir,
                push_end = MAX2(push_end, base +
                   sizeof_field(struct anv_push_constants,
                                desc_surface_offsets));
+
+               if (desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER &&
+                   !pdevice->uses_ex_bso) {
+                  base = offsetof(struct anv_push_constants,
+                                  surfaces_base_offset);
+                  push_start = MIN2(push_start, base);
+                  push_end = MAX2(push_end, base +
+                                  sizeof_field(struct anv_push_constants,
+                                               surfaces_base_offset));
+               }
                break;
             }
 
@@ -130,10 +141,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
    push_start = MIN2(push_start, push_end);
    push_start = ROUND_DOWN_TO(push_start, 32);
 
-   /* For vec4 our push data size needs to be aligned to a vec4 and for
-    * scalar, it needs to be aligned to a DWORD.
-    */
-   const unsigned alignment = compiler->scalar_stage[nir->info.stage] ? 4 : 16;
+   /* For scalar, push data size needs to be aligned to a DWORD. */
+   const unsigned alignment = 4;
    nir->num_uniforms = ALIGN(push_end - push_start, alignment);
    prog_data->nr_params = nir->num_uniforms / 4;
    prog_data->param = rzalloc_array(mem_ctx, uint32_t, prog_data->nr_params);
@@ -175,19 +184,34 @@ anv_nir_compute_push_layout(nir_shader *nir,
                case nir_intrinsic_load_desc_set_address_intel: {
                   assert(brw_shader_stage_requires_bindless_resources(nir->info.stage));
                   b->cursor = nir_before_instr(&intrin->instr);
-                  nir_def *pc_load = nir_load_uniform(b, 1, 32,
+                  nir_def *desc_offset = nir_load_uniform(b, 1, 32,
                      nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
                      .base = offsetof(struct anv_push_constants,
                                       desc_surface_offsets),
                      .range = sizeof_field(struct anv_push_constants,
                                            desc_surface_offsets),
                      .dest_type = nir_type_uint32);
-                  pc_load = nir_iand_imm(b, pc_load, ANV_DESCRIPTOR_SET_OFFSET_MASK);
+                  desc_offset = nir_iand_imm(b, desc_offset, ANV_DESCRIPTOR_SET_OFFSET_MASK);
+                  if (desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER &&
+                      !pdevice->uses_ex_bso) {
+                     nir_def *bindless_base_offset = nir_load_uniform(
+                        b, 1, 32,
+                        nir_imm_int(b, 0),
+                        .base = offsetof(struct anv_push_constants,
+                                         surfaces_base_offset),
+                        .range = sizeof_field(struct anv_push_constants,
+                                              surfaces_base_offset),
+                        .dest_type = nir_type_uint32);
+                     desc_offset = nir_iadd(b, bindless_base_offset, desc_offset);
+                  }
                   nir_def *desc_addr =
                      nir_pack_64_2x32_split(
-                        b, pc_load,
+                        b, desc_offset,
                         nir_load_reloc_const_intel(
-                           b, BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH));
+                           b,
+                           desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER ?
+                           BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH :
+                           BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH));
                   nir_def_rewrite_uses(&intrin->def, desc_addr);
                   break;
                }
@@ -218,13 +242,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
    if (push_ubo_ranges) {
       brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
-      /* The vec4 back-end pushes at most 32 regs while the scalar back-end
-       * pushes up to 64.  This is primarily because the scalar back-end has a
-       * massively more competent register allocator and so the risk of
-       * spilling due to UBO pushing isn't nearly as high.
-       */
-      const unsigned max_push_regs =
-         compiler->scalar_stage[nir->info.stage] ? 64 : 32;
+      const unsigned max_push_regs = 64;
 
       unsigned total_push_regs = push_constant_range.length;
       for (unsigned i = 0; i < 4; i++) {

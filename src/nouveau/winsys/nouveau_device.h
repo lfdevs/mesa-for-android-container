@@ -64,6 +64,9 @@ struct nouveau_ws_device {
 struct nouveau_ws_device *nouveau_ws_device_new(struct _drmDevice *drm_device);
 void nouveau_ws_device_destroy(struct nouveau_ws_device *);
 
+uint64_t nouveau_ws_device_vram_used(struct nouveau_ws_device *);
+uint64_t nouveau_ws_device_timestamp(struct nouveau_ws_device *device);
+
 #ifdef __cplusplus
 }
 #endif

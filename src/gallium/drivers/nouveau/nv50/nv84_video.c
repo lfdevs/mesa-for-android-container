@@ -335,7 +335,7 @@ nv84_create_decoder(struct pipe_context *context,
          goto fail;
 
       ret = nouveau_pushbuf_create(screen, &nv50->base, dec->client, dec->bsp_channel,
-                                   4, 32 * 1024, true, &dec->bsp_pushbuf);
+                                   4, 32 * 1024, &dec->bsp_pushbuf);
       if (ret)
          goto fail;
 
@@ -350,7 +350,7 @@ nv84_create_decoder(struct pipe_context *context,
    if (ret)
       goto fail;
    ret = nouveau_pushbuf_create(screen, &nv50->base, dec->client, dec->vp_channel,
-                                4, 32 * 1024, true, &dec->vp_pushbuf);
+                                4, 32 * 1024, &dec->vp_pushbuf);
    if (ret)
       goto fail;
 

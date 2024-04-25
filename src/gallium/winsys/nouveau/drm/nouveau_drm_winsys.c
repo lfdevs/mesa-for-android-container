@@ -17,8 +17,8 @@
 #include "nouveau/nouveau_winsys.h"
 #include "nouveau/nouveau_screen.h"
 
-#include <nvif/class.h>
-#include <nvif/cl0080.h>
+#include "nvif/class.h"
+#include "nvif/cl0080.h"
 
 static struct hash_table *fd_tab = NULL;
 
@@ -79,10 +79,7 @@ nouveau_drm_screen_create(int fd)
 	if (ret)
 		goto err;
 
-	ret = nouveau_device_new(&drm->client, NV_DEVICE,
-				 &(struct nv_device_v0) {
-					.device = ~0ULL,
-				 }, sizeof(struct nv_device_v0), &dev);
+	ret = nouveau_device_new(&drm->client, &dev);
 	if (ret)
 		goto err;
 

@@ -512,8 +512,11 @@ fn calc_delays(f: &mut Function, sm: u8) {
     // after every instruction which has an exec latency.  Perhaps it has
     // something to do with .yld?  In any case, the extra 2 cycles aren't worth
     // the chance of weird bugs.
-    f.map_instrs(|instr, _| {
-        if instr.get_exec_latency(sm) > 1 {
+    f.map_instrs(|mut instr, _| {
+        if matches!(instr.op, Op::SrcBar(_)) {
+            instr.op = Op::Nop(OpNop { label: None });
+            MappedInstrs::One(instr)
+        } else if instr.get_exec_latency(sm) > 1 {
             let mut nop = Instr::new_boxed(OpNop { label: None });
             nop.deps.set_delay(2);
             MappedInstrs::Many(vec![instr, nop])

@@ -1426,6 +1426,39 @@
     <field name="TDS Timer Value" start="16" end="23" type="uint" />
     <field name="GS Timer Value" start="24" end="31" type="uint" />
   </register>
+  <register name="GAM_DONE" length="1" num="0xcf68">
+    <field name="GFX TLB0 Done" start="0" end="0" type="bool" />
+    <field name="GFX TLB1 Done" start="1" end="1" type="bool" />
+    <field name="COMP TLB0 Done" start="2" end="2" type="bool" />
+    <field name="COMP TLB1 Done" start="3" end="3" type="bool" />
+    <field name="GUC TLB Done" start="4" end="4" type="bool" />
+    <field name="KCR TLB Done" start="5" end="5" type="bool" />
+    <field name="OAC TLB Done" start="6" end="6" type="bool" />
+    <field name="VDBOX0 TLB Done" start="7" end="7" type="bool" />
+    <field name="VDBOX2 TLB Done" start="8" end="8" type="bool" />
+    <field name="VEBOX0 TLB Done" start="9" end="9" type="bool" />
+    <field name="CM INGRESS Done" start="10" end="10" type="bool" />
+    <field name="Data INGRESS Done" start="11" end="11" type="bool" />
+    <field name="REQ STRM Done" start="12" end="12" type="bool" />
+    <field name="S TLB Done" start="13" end="13" type="bool" />
+    <field name="BLT TLB Done" start="14" end="14" type="bool" />
+    <field name="TLB Hit ARB COMP Done" start="15" end="15" type="bool" />
+    <field name="TLB Hit ARB MISC Done" start="16" end="16" type="bool" />
+    <field name="TLB Hit ARB STG Done" start="17" end="17" type="bool" />
+    <field name="TLB Hit GFX STG Done" start="18" end="18" type="bool" />
+    <field name="TLB Miss ARB GFX Done" start="19" end="19" type="bool" />
+    <field name="TLB Miss ARB COMP Done" start="20" end="20" type="bool" />
+    <field name="TLB Miss ARB MISC Done" start="21" end="21" type="bool" />
+    <field name="TLB Miss ARB STG Done" start="22" end="22" type="bool" />
+    <field name="TR TLB Done" start="23" end="23" type="bool" />
+    <field name="WKRS Done" start="24" end="24" type="bool" />
+    <field name="CCS Done" start="25" end="25" type="bool" />
+    <field name="CTRLCOMM Done" start="26" end="26" type="bool" />
+    <field name="FLWCTRL Done" start="27" end="27" type="bool" />
+    <field name="DRTN Done" start="28" end="28" type="bool" />
+    <field name="VEBOX1 TBL Done" start="29" end="29" type="bool" />
+    <field name="XBL Done" start="30" end="30" type="bool" />
+  </register>
   <register name="GFX_AUX_TABLE_BASE_ADDR" length="2" num="0x4200">
     <field name="Address" start="0" end="63" type="uint" />
   </register>

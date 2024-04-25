@@ -34,7 +34,7 @@
 #include "si_vpe.h"
 
 #define SI_VPE_PRETAG              ""
-#define SI_VPE_LOG_LEVEL_DEFAULT     1
+#define SI_VPE_LOG_LEVEL_DEFAULT     0
 #define SI_VPE_LOG_LEVEL_INFO        1
 #define SI_VPE_LOG_LEVEL_WARNING     2
 #define SI_VPE_LOG_LEVEL_DEBUG       3
@@ -173,6 +173,14 @@ si_vpe_get_tf_str(enum vpe_transfer_function tf)
    }
 }
 
+/* cycle to the next set of buffers */
+static void
+next_buffer(struct vpe_video_processor *vpeproc)
+{
+   ++vpeproc->cur_buf;
+   vpeproc->cur_buf %= vpeproc->bufs_num;
+}
+
 static enum vpe_status
 si_vpe_populate_init_data(struct si_context *sctx, struct vpe_init_data* params, uint8_t log_level)
 {
@@ -240,7 +248,7 @@ si_vpe_format(enum pipe_format format)
       ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr;
       break;
    case PIPE_FORMAT_P010:
-      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr;
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb;
       break;
    /* VPE output format: */
    case PIPE_FORMAT_A8R8G8B8_UNORM:
@@ -415,13 +423,15 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
    si_vpe_set_color_space(process_properties, &surface_info->cs, format, which_surface);
 
    /* Get surface info, such as buffer alignment and offset */
-   if (vpeproc->base.context->screen && vpeproc->base.context->screen->resource_get_info)
+   if (vpeproc->base.context->screen && vpeproc->base.context->screen->resource_get_info) {
       vpeproc->base.context->screen->resource_get_info(vpeproc->base.context->screen,
                                                        surfaces[0]->texture,
                                                        &pitch,
                                                        &offset);
-   else
+   } else {
       SIVPE_ERR("Get plane pitch and offset info failed\n");
+      return VPE_STATUS_ERROR;
+   }
 
    si_res = si_resource(surfaces[0]->texture);
    plane_address->tmz_surface = false;
@@ -442,6 +452,33 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       plane_address->video_progressive.luma_dcc_const_color.quad_part = 0;
       //plane_size->surface_pitch /= 1;   // Byte alignment to Pixel alignment
       /* Get 2nd plane buffer info */
+      if (surfaces[1] && vpeproc->base.context->screen && vpeproc->base.context->screen->resource_get_info) {
+         vpeproc->base.context->screen->resource_get_info(vpeproc->base.context->screen,
+                                                          surfaces[1]->texture,
+                                                          &pitch,
+                                                          &offset);
+      } else {
+         SIVPE_ERR("Get 2nd plane pitch and offset info failed\n");
+         return VPE_STATUS_ERROR;
+      }
+      si_res = si_resource(surfaces[1]->texture);
+      plane_address->video_progressive.chroma_addr.quad_part = si_res->gpu_address + offset;
+      plane_address->video_progressive.chroma_meta_addr.quad_part = 0;
+      plane_address->video_progressive.chroma_dcc_const_color.quad_part = 0;
+
+      plane_size->chroma_size.x = pos_x;
+      plane_size->chroma_size.y = pos_y;
+      plane_size->chroma_size.width = (width + 1) / 2;   // 2 pixel-width alignment
+      plane_size->chroma_size.height = (height + 1) / 2;  // 2 pixel-height alignment
+      plane_size->chroma_pitch = pitch / 2;  // Byte alignment to Pixel alignment (NV12/NV21 2nd plane is 16 bits per pixel)
+      break;
+
+   case PIPE_FORMAT_P010:
+      plane_address->type = VPE_PLN_ADDR_TYPE_VIDEO_PROGRESSIVE;
+      plane_address->video_progressive.luma_addr.quad_part = si_res->gpu_address + offset;
+      plane_address->video_progressive.luma_meta_addr.quad_part = 0;
+      plane_address->video_progressive.luma_dcc_const_color.quad_part = 0;
+      plane_size->surface_pitch /= 2;  // Byte alignment to Pixel alignment (P010 plane is 16 bits per pixel)
       if (surfaces[1] && vpeproc->base.context->screen && vpeproc->base.context->screen->resource_get_info)
          vpeproc->base.context->screen->resource_get_info(vpeproc->base.context->screen,
                                                           surfaces[1]->texture,
@@ -460,8 +497,9 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       plane_size->chroma_size.y = pos_y;
       plane_size->chroma_size.width = (width + 1) / 2;   // 2 pixel-width alignment
       plane_size->chroma_size.height = (height + 1) / 2;  // 2 pixel-height alignment
-      plane_size->chroma_pitch = pitch / 2;  // Byte alignment to Pixel alignment (NV12/NV21 2nd plane is 16 bits per pixel)
+      plane_size->chroma_pitch = pitch / 4;  // Byte alignment to Pixel alignment (NV12/NV21 2nd plane is 32 bits per pixel)
       break;
+
    case PIPE_FORMAT_A8R8G8B8_UNORM:
    case PIPE_FORMAT_A8B8G8R8_UNORM:
    case PIPE_FORMAT_R8G8B8A8_UNORM:
@@ -470,11 +508,6 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
    case PIPE_FORMAT_X8B8G8R8_UNORM:
    case PIPE_FORMAT_R8G8B8X8_UNORM:
    case PIPE_FORMAT_B8G8R8X8_UNORM:
-   case PIPE_FORMAT_A2R10G10B10_UNORM:
-   case PIPE_FORMAT_R10G10B10A2_UNORM:
-   case PIPE_FORMAT_A2B10G10R10_UNORM:
-   case PIPE_FORMAT_B10G10R10A2_UNORM:
-   default:
       plane_address->type = VPE_PLN_ADDR_TYPE_GRAPHICS;
       plane_address->grph.addr.quad_part = si_res->gpu_address + offset;
       plane_address->grph.meta_addr.quad_part = 0;
@@ -487,6 +520,13 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       plane_size->chroma_size.height = 0;
       plane_size->chroma_pitch = 0;
       break;
+
+   case PIPE_FORMAT_A2R10G10B10_UNORM:
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
+   case PIPE_FORMAT_A2B10G10R10_UNORM:
+   case PIPE_FORMAT_B10G10R10A2_UNORM:
+   default:
+      SIVPE_ERR("Un-supported format %d\n", format);
    }
    return VPE_STATUS_OK;
 }
@@ -619,6 +659,7 @@ static void
 si_vpe_processor_destroy(struct pipe_video_codec *codec)
 {
    struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
+   unsigned int i;
    assert(codec);
 
    if (vpeproc->process_fence) {
@@ -626,14 +667,28 @@ si_vpe_processor_destroy(struct pipe_video_codec *codec)
       vpeproc->ws->fence_wait(vpeproc->ws, vpeproc->process_fence, PIPE_DEFAULT_DECODER_FEEDBACK_TIMEOUT_NS);
    }
    vpeproc->ws->cs_destroy(&vpeproc->cs);
-   si_vid_destroy_buffer(&vpeproc->emb_buffer);
 
    if (vpeproc->vpe_build_bufs)
       si_vpe_free_buffer(vpeproc->vpe_build_bufs);
    if (vpeproc->vpe_handle)
       vpe_destroy(&vpeproc->vpe_handle);
-   if (vpeproc->vpe_build_param)
+   if (vpeproc->vpe_build_param) {
+      if (vpeproc->vpe_build_param->streams)
+         FREE(vpeproc->vpe_build_param->streams);
       FREE(vpeproc->vpe_build_param);
+   }
+   if (vpeproc->emb_buffers) {
+      for (i = 0; i < vpeproc->bufs_num; i++) {
+         if (vpeproc->emb_buffers[i].res) {
+            vpeproc->ws->buffer_unmap(vpeproc->ws, vpeproc->emb_buffers[i].res->buf);
+            si_vid_destroy_buffer(&vpeproc->emb_buffers[i]);
+         }
+      }
+      FREE(vpeproc->emb_buffers);
+   }
+   if (vpeproc->mapped_cpu_va)
+      FREE(vpeproc->mapped_cpu_va);
+   vpeproc->bufs_num = 0;
 
    SIVPE_DBG(vpeproc->log_level, "Success\n");
    FREE(vpeproc);
@@ -684,7 +739,8 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    struct vpe_build_param *build_param = vpeproc->vpe_build_param;
    struct pipe_surface **src_surfaces;
    struct vpe_bufs_req bufs_required;
-   struct pipe_fence_handle *process_fence = NULL;
+   struct rvid_buffer *emb_buf;
+   uint64_t *vpe_ptr;
 
    assert(codec);
    assert(process_properties);
@@ -700,12 +756,13 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    /* Following setting is from si_vpe_set_build_param()*/
    /* VPE 1.0 only support one input */
    build_param->num_streams = 1;
+   if (build_param->num_streams > VPE_STREAM_MAX_NUM) {
+      SIVPE_ERR("Can only suppport %d stream(s) now\n", VPE_STREAM_MAX_NUM);
+      return;
+   }
 
-   /* Allocate array "streams" */
-   build_param->streams = (struct vpe_stream *)CALLOC(build_param->num_streams, sizeof(struct vpe_stream));
    if (!build_param->streams) {
-      SIVPE_ERR("Allocate streams failed\n");
-      free(build_param);
+      SIVPE_ERR("Streams structure is not allocated\n");
       return;
    }
 
@@ -783,19 +840,20 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    build_param->hdr_metadata.max_content     = 1;
    build_param->hdr_metadata.avg_content     = 1;
 
-   uint64_t *vpe_ptr;
+
+   /* Setup CmdBuf and EmbBuf address adn size information */
    vpe_ptr = (uint64_t *)vpeproc->cs.current.buf;
    vpeproc->vpe_build_bufs->cmd_buf.cpu_va = (uintptr_t)vpe_ptr;
    vpeproc->vpe_build_bufs->cmd_buf.gpu_va = 0;
    vpeproc->vpe_build_bufs->cmd_buf.size = vpeproc->cs.current.max_dw;
    vpeproc->vpe_build_bufs->cmd_buf.tmz = false;
 
-   vpe_ptr = (uint64_t *)vpeproc->ws->buffer_map(vpeproc->ws, vpeproc->emb_buffer.res->buf,
-                                                 &vpeproc->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
-   vpeproc->vpe_build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
-   vpeproc->vpe_build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(vpeproc->emb_buffer.res->buf);
-   vpeproc->vpe_build_bufs->emb_buf.size = VPE_BUILD_BUFS_SIZE;
+   emb_buf = &vpeproc->emb_buffers[vpeproc->cur_buf];
+   vpeproc->vpe_build_bufs->emb_buf.cpu_va = (uintptr_t)vpeproc->mapped_cpu_va[vpeproc->cur_buf];
+   vpeproc->vpe_build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->res->buf);
+   vpeproc->vpe_build_bufs->emb_buf.size = VPE_EMBBUF_SIZE;
    vpeproc->vpe_build_bufs->emb_buf.tmz = false;
+
 
    if (vpeproc->log_level >= SI_VPE_LOG_LEVEL_DEBUG) {
       SIVPE_DBG(vpeproc->log_level, "src surface format(%d) rect (%d, %d, %d, %d)\n",
@@ -823,6 +881,12 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
                si_vpe_get_primarie_str(build_param->dst_surface.cs.primaries),
                si_vpe_get_tf_str(build_param->dst_surface.cs.tf),
                (build_param->dst_surface.cs.range == VPE_COLOR_RANGE_FULL)?"FULL":"STUDIO");
+
+      SIVPE_DBG(vpeproc->log_level, "Source surface pitch(%d), chroma pitch(%d), dst-surface pitch(%d), chroma pitch(%d)\n",
+               build_param->streams[0].surface_info.plane_size.surface_pitch,
+               build_param->streams[0].surface_info.plane_size.chroma_pitch,
+               build_param->dst_surface.plane_size.surface_pitch,
+               build_param->dst_surface.plane_size.chroma_pitch);
 
       SIVPE_DBG(vpeproc->log_level, "background color RGBA(%0.3f, %0.3f, %0.3f, %0.3f)\n",
                build_param->bg_color.rgba.r,
@@ -874,6 +938,14 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       //         build_param->streams[0].tm_params.enable_3dlut);
    }
 
+   if(vpe_handle->level == VPE_IP_LEVEL_1_1) {
+      build_param->num_instances = 2;
+      build_param->collaboration_mode = true;
+   } else {
+      build_param->num_instances = 1;
+      build_param->collaboration_mode = false;
+   }
+
    result = vpe_check_support(vpe_handle, build_param, &bufs_required);
    if (VPE_STATUS_OK != result) {
       SIVPE_ERR("Check support failed with result: %d\n", result);
@@ -891,41 +963,27 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       SIVPE_ERR("Cmdbuf size wrong\n");
       goto fail;
    }
-   if (vpeproc->vpe_build_bufs->emb_buf.size == 0 || vpeproc->vpe_build_bufs->emb_buf.size == VPE_BUILD_BUFS_SIZE) {
+   if (vpeproc->vpe_build_bufs->emb_buf.size == 0 || vpeproc->vpe_build_bufs->emb_buf.size == VPE_EMBBUF_SIZE) {
       SIVPE_ERR("Embbuf size wrong\n");
       goto fail;
    }
-
-   /* Wait Source Surface fence */
-   if (process_properties->src_surface_fence) {
-      struct pipe_fence_handle *input_fence = (struct pipe_fence_handle *)process_properties->src_surface_fence;
-      while (!vpeproc->ws->fence_wait(vpeproc->ws, input_fence, VPE_FENCE_TIMEOUT_NS))
-         SIVPE_INFO(vpeproc->log_level, "Wait source surface fence fail\n");
-   }
+   SIVPE_INFO(vpeproc->log_level, "Used buf size: %" PRIu64 ", %" PRIu64 "\n",
+              vpeproc->vpe_build_bufs->cmd_buf.size, vpeproc->vpe_build_bufs->emb_buf.size);
 
    /* Have to tell Command Submission context the command length wrote by libvpe */
    vpeproc->cs.current.cdw += (vpeproc->vpe_build_bufs->cmd_buf.size / 4);
 
    /* Add embbuf into bo_handle list */
-   vpeproc->ws->buffer_unmap(vpeproc->ws, vpeproc->emb_buffer.res->buf);
-   vpeproc->ws->cs_add_buffer(&vpeproc->cs, vpeproc->emb_buffer.res->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
+   vpeproc->ws->cs_add_buffer(&vpeproc->cs, emb_buf->res->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
 
    si_vpe_cs_add_surface_buffer(vpeproc, vpeproc->src_surfaces, RADEON_USAGE_READ);
    si_vpe_cs_add_surface_buffer(vpeproc, vpeproc->dst_surfaces, RADEON_USAGE_WRITE);
 
-   vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, &process_fence);
-
-   if (process_fence)
-      vpeproc->process_fence = process_fence;
-   SIVPE_INFO(vpeproc->log_level, "Flush success\n");
-
-   FREE(build_param->streams);
    SIVPE_DBG(vpeproc->log_level, "Success\n");
    return;
 
 fail:
-   vpeproc->ws->buffer_unmap(vpeproc->ws, vpeproc->emb_buffer.res->buf);
-   FREE(build_param->streams);
+   vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->res->buf);
    SIVPE_ERR("Failed\n");
    return;
 }
@@ -936,22 +994,28 @@ si_vpe_processor_end_frame(struct pipe_video_codec *codec,
                            struct pipe_picture_desc *picture)
 {
    struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
+   struct pipe_fence_handle *process_fence = NULL;
    assert(codec);
 
-   if (picture->fence && vpeproc->process_fence) {
-      *picture->fence = vpeproc->process_fence;
+   vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, &process_fence);
+   next_buffer(vpeproc);
+
+   if (picture->fence && process_fence) {
+      *picture->fence = process_fence;
       SIVPE_INFO(vpeproc->log_level, "Assign process fence\n");
-   }
+   } else
+      SIVPE_WARN(vpeproc->log_level, "Fence may have problem!\n");
+
    SIVPE_INFO(vpeproc->log_level, "Success\n");
 }
 
 static void
 si_vpe_processor_flush(struct pipe_video_codec *codec)
 {
-   struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
-   assert(codec);
+   //struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
+   //assert(codec);
 
-   SIVPE_DBG(vpeproc->log_level, "Success\n");
+   //SIVPE_DBG(vpeproc->log_level, "Success\n");
    return;
 }
 
@@ -963,8 +1027,10 @@ static int si_vpe_processor_get_processor_fence(struct pipe_video_codec *codec,
    assert(codec);
 
    SIVPE_INFO(vpeproc->log_level, "Wait processor fence\n");
-   while (!vpeproc->ws->fence_wait(vpeproc->ws, fence, timeout))
+   if (!vpeproc->ws->fence_wait(vpeproc->ws, fence, timeout)) {
       SIVPE_DBG(vpeproc->log_level, "Wait processor fence fail\n");
+      return 0;
+   }
    SIVPE_INFO(vpeproc->log_level, "Wait processor fence success\n");
    return 1;
 }
@@ -977,6 +1043,7 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
    struct vpe_video_processor *vpeproc;
    struct vpe_init_data *init_data;
    const char *str = getenv("AMDGPU_SIVPE_LOG_LEVEL");
+   unsigned int i;
 
    vpeproc = CALLOC_STRUCT(vpe_video_processor);
    if (!vpeproc) {
@@ -1034,23 +1101,49 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
       SIVPE_ERR("Get command submission context failed.\n");
       goto fail;
    }
-   vpeproc->vpe_build_bufs->cmd_buf.size = vpeproc->cs.current.max_dw;
 
-   /* Creste Vpblit Descriptor buffer.
-    * This buffer will store plane config / VPEP config commands
+   /* Allocate Vpblit Descriptor buffers
+    * Descriptor buffer is used to store plane config and VPEP commands
     */
-   if (!si_vid_create_buffer(vpeproc->screen, &vpeproc->emb_buffer, VPE_BUILD_BUFS_SIZE,
-                                PIPE_USAGE_DEFAULT)) {
-      SIVPE_ERR("Allocate VPE emb buffers failed.\n");
+   vpeproc->bufs_num = (uint8_t)debug_get_num_option("AMDGPU_SIVPE_BUF_NUM", VPE_BUFFERS_NUM);
+   vpeproc->cur_buf = 0;
+   vpeproc->emb_buffers = (struct rvid_buffer *)CALLOC(vpeproc->bufs_num, sizeof(struct rvid_buffer));
+   if (!vpeproc->emb_buffers) {
+      SIVPE_ERR("Allocate command buffer list failed\n");
       goto fail;
+   } else
+      SIVPE_INFO(vpeproc->log_level, "Number of emb_buf is %d\n", vpeproc->bufs_num);
+
+   vpeproc->mapped_cpu_va = (void **)CALLOC(vpeproc->bufs_num, sizeof(void *));
+   if (!vpeproc->mapped_cpu_va) {
+       SIVPE_ERR("Can't allocated mapped_cpu_va for emb_buf buffers.\n");
+       goto fail;
    }
-   si_vid_clear_buffer(context, &vpeproc->emb_buffer);
-   vpeproc->vpe_build_bufs->emb_buf.size = VPE_BUILD_BUFS_SIZE;
+
+   for (i = 0; i < vpeproc->bufs_num; i++) {
+      if (!si_vid_create_buffer(vpeproc->screen, &vpeproc->emb_buffers[i], VPE_EMBBUF_SIZE, PIPE_USAGE_DEFAULT)) {
+          SIVPE_ERR("Can't allocated emb_buf buffers.\n");
+          goto fail;
+      }
+      si_vid_clear_buffer(context, &vpeproc->emb_buffers[i]);
+
+      vpeproc->mapped_cpu_va[i] = vpeproc->ws->buffer_map(vpeproc->ws, vpeproc->emb_buffers[i].res->buf,
+                                                          &vpeproc->cs, PIPE_MAP_WRITE);
+      if (!vpeproc->mapped_cpu_va[i])
+         goto fail;
+   }
 
    /* Create VPE parameters structure */
    vpeproc->vpe_build_param = CALLOC_STRUCT(vpe_build_param);
    if (!vpeproc->vpe_build_param) {
-      SIVPE_ERR("Allocate build-paramaters sturcture  failed\n");
+      SIVPE_ERR("Allocate build-paramaters sturcture failed\n");
+      goto fail;
+   }
+
+   /* Pre-allocate the streams */
+   vpeproc->vpe_build_param->streams = (struct vpe_stream *)CALLOC(VPE_STREAM_MAX_NUM, sizeof(struct vpe_stream));
+   if (!vpeproc->vpe_build_param->streams) {
+      SIVPE_ERR("Allocate streams sturcture failed\n");
       goto fail;
    }
 

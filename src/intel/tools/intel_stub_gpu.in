@@ -70,7 +70,13 @@ done
 
 INTEL_STUB_GPU_PLATFORM=$platform
 
-ld_preload="@install_libdir@/libintel_noop_drm_shim.so${LD_PRELOAD:+:$LD_PRELOAD}"
+drm_shim_dir="@install_libdir@"
+
+if [ -n "$MESON_DEVENV" ]; then
+    drm_shim_dir=$(realpath "$(dirname "$0")")
+fi
+
+ld_preload="$drm_shim_dir/libintel_noop_drm_shim.so${LD_PRELOAD:+:$LD_PRELOAD}"
 if [ -n "$gdb" ]; then
     gdb -iex "set exec-wrapper env LD_PRELOAD=$ld_preload INTEL_STUB_GPU_PLATFORM=$platform" --args "$@"
 elif [ -n "$valgrind" ]; then

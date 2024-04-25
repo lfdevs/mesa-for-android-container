@@ -30,7 +30,7 @@
 
 
 #include "xf86drm.h"
-#include "nouveau_drm.h"
+#include "drm-uapi/nouveau_drm.h"
 
 
 static void
@@ -578,8 +578,8 @@ void
 nvc0_bufctx_fence(struct nvc0_context *nvc0, struct nouveau_bufctx *bufctx,
                   bool on_flush)
 {
-   struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
-   struct nouveau_list *it;
+   struct list_head *list = on_flush ? &bufctx->current : &bufctx->pending;
+   struct list_head *it;
    NOUVEAU_DRV_STAT_IFD(unsigned count = 0);
 
    for (it = list->next; it != list; it = it->next) {

@@ -63,6 +63,10 @@ nouveau_ws_alloc_vma(struct nouveau_ws_device *dev,
 {
    assert(dev->has_vm_bind);
 
+   /* if the caller doesn't care, use the GPU page size */
+   if (align == 0)
+      align = 0x1000;
+
    uint64_t offset;
    simple_mtx_lock(&dev->vma_mutex);
    if (bda_capture_replay) {
@@ -159,7 +163,7 @@ nouveau_ws_bo_new_mapped(struct nouveau_ws_device *dev,
    if (!bo)
       return NULL;
 
-   void *map = nouveau_ws_bo_map(bo, map_flags);
+   void *map = nouveau_ws_bo_map(bo, map_flags, NULL);
    if (map == NULL) {
       nouveau_ws_bo_destroy(bo);
       return NULL;
@@ -355,16 +359,23 @@ nouveau_ws_bo_destroy(struct nouveau_ws_bo *bo)
 }
 
 void *
-nouveau_ws_bo_map(struct nouveau_ws_bo *bo, enum nouveau_ws_bo_map_flags flags)
+nouveau_ws_bo_map(struct nouveau_ws_bo *bo,
+                  enum nouveau_ws_bo_map_flags flags,
+                  void *fixed_addr)
 {
-   size_t prot = 0;
+   int prot = 0, map_flags = 0;
 
    if (flags & NOUVEAU_WS_BO_RD)
       prot |= PROT_READ;
    if (flags & NOUVEAU_WS_BO_WR)
       prot |= PROT_WRITE;
 
-   void *res = mmap(NULL, bo->size, prot, MAP_SHARED, bo->dev->fd, bo->map_handle);
+   map_flags = MAP_SHARED;
+   if (fixed_addr != NULL)
+      map_flags |= MAP_FIXED;
+
+   void *res = mmap(fixed_addr, bo->size, prot, map_flags,
+                    bo->dev->fd, bo->map_handle);
    if (res == MAP_FAILED)
       return NULL;
 

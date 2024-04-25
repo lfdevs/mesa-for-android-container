@@ -12,8 +12,6 @@
 
 #include "vk_pipeline_layout.h"
 
-#include "util/mesa-sha1.h"
-
 static bool
 binding_has_immutable_samplers(const VkDescriptorSetLayoutBinding *binding)
 {
@@ -38,11 +36,17 @@ nvk_descriptor_stride_align_for_type(const struct nvk_physical_device *pdev,
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       /* TODO: How do samplers work? */
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      *stride = *alignment = sizeof(struct nvk_sampled_image_descriptor);
+      break;
+
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      *stride = *alignment = sizeof(struct nvk_storage_image_descriptor);
+      break;
+
    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-      *stride = *alignment = sizeof(struct nvk_image_descriptor);
+      *stride = *alignment = sizeof(struct nvk_buffer_view_descriptor);
       break;
 
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
@@ -257,26 +261,36 @@ nvk_CreateDescriptorSetLayout(VkDevice device,
    layout->non_variable_descriptor_buffer_size = buffer_size;
    layout->dynamic_buffer_count = dynamic_buffer_count;
 
-   struct mesa_sha1 sha1_ctx;
-   _mesa_sha1_init(&sha1_ctx);
+   struct mesa_blake3 blake3_ctx;
+   _mesa_blake3_init(&blake3_ctx);
 
-#define SHA1_UPDATE_VALUE(x) _mesa_sha1_update(&sha1_ctx, &(x), sizeof(x));
-   SHA1_UPDATE_VALUE(layout->non_variable_descriptor_buffer_size);
-   SHA1_UPDATE_VALUE(layout->dynamic_buffer_count);
-   SHA1_UPDATE_VALUE(layout->binding_count);
+#define BLAKE3_UPDATE_VALUE(x) _mesa_blake3_update(&blake3_ctx, &(x), sizeof(x));
+   BLAKE3_UPDATE_VALUE(layout->non_variable_descriptor_buffer_size);
+   BLAKE3_UPDATE_VALUE(layout->dynamic_buffer_count);
+   BLAKE3_UPDATE_VALUE(layout->binding_count);
 
    for (uint32_t b = 0; b < num_bindings; b++) {
-      SHA1_UPDATE_VALUE(layout->binding[b].type);
-      SHA1_UPDATE_VALUE(layout->binding[b].flags);
-      SHA1_UPDATE_VALUE(layout->binding[b].array_size);
-      SHA1_UPDATE_VALUE(layout->binding[b].offset);
-      SHA1_UPDATE_VALUE(layout->binding[b].stride);
-      SHA1_UPDATE_VALUE(layout->binding[b].dynamic_buffer_index);
-      /* Immutable samplers are ignored for now */
-   }
-#undef SHA1_UPDATE_VALUE
+      BLAKE3_UPDATE_VALUE(layout->binding[b].type);
+      BLAKE3_UPDATE_VALUE(layout->binding[b].flags);
+      BLAKE3_UPDATE_VALUE(layout->binding[b].array_size);
+      BLAKE3_UPDATE_VALUE(layout->binding[b].offset);
+      BLAKE3_UPDATE_VALUE(layout->binding[b].stride);
+      BLAKE3_UPDATE_VALUE(layout->binding[b].dynamic_buffer_index);
 
-   _mesa_sha1_final(&sha1_ctx, layout->sha1);
+      if (layout->binding[b].immutable_samplers != NULL) {
+         for (uint32_t i = 0; i < layout->binding[b].array_size; i++) {
+            const struct nvk_sampler *sampler =
+               layout->binding[b].immutable_samplers[i];
+
+            /* We zalloc the object, so it's safe to hash the whole thing */
+            if (sampler != NULL && sampler->vk.ycbcr_conversion != NULL)
+               BLAKE3_UPDATE_VALUE(sampler->vk.ycbcr_conversion->state);
+         }
+      }
+   }
+#undef BLAKE3_UPDATE_VALUE
+
+   _mesa_blake3_final(&blake3_ctx, layout->vk.blake3);
 
    *pSetLayout = nvk_descriptor_set_layout_to_handle(layout);
 
@@ -402,21 +416,4 @@ nvk_GetDescriptorSetLayoutSupport(VkDevice device,
          break;
       }
    }
-}
-
-uint8_t
-nvk_descriptor_set_layout_dynbuf_start(const struct vk_pipeline_layout *pipeline_layout,
-                                 int set_layout_idx)
-{
-   uint8_t dynamic_buffer_start = 0;
-
-   assert(set_layout_idx <= pipeline_layout->set_count);
-
-   for (uint32_t i = 0; i < set_layout_idx; i++) {
-      const struct nvk_descriptor_set_layout *set_layout =
-         vk_to_nvk_descriptor_set_layout(pipeline_layout->set_layouts[i]);
-
-      dynamic_buffer_start += set_layout->dynamic_buffer_count;
-   }
-   return dynamic_buffer_start;
 }

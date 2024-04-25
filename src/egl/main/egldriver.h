@@ -163,10 +163,6 @@ struct _egl_driver {
                                       struct wl_resource *buffer,
                                       EGLint attribute, EGLint *value);
 
-   /* for EGL_WL_create_wayland_buffer_from_image */
-   struct wl_buffer *(*CreateWaylandBufferFromImageWL)(_EGLDisplay *disp,
-                                                       _EGLImage *img);
-
    /* for EGL_EXT_swap_buffers_with_damage */
    EGLBoolean (*SwapBuffersWithDamageEXT)(_EGLDisplay *disp,
                                           _EGLSurface *surface,

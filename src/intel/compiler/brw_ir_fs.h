@@ -25,11 +25,10 @@
 #ifndef BRW_IR_FS_H
 #define BRW_IR_FS_H
 
-#include "brw_shader.h"
+#include "brw_ir.h"
+#include "brw_ir_allocator.h"
 
-class fs_inst;
-
-class fs_reg : public backend_reg {
+class fs_reg : private brw_reg {
 public:
    DECLARE_RALLOC_CXX_OPERATORS(fs_reg)
 
@@ -40,15 +39,60 @@ public:
    fs_reg(enum brw_reg_file file, unsigned nr);
    fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type);
 
+   const brw_reg &as_brw_reg() const
+   {
+      assert(file == ARF || file == FIXED_GRF || file == IMM);
+      assert(offset == 0);
+      return static_cast<const brw_reg &>(*this);
+   }
+
+   brw_reg &as_brw_reg()
+   {
+      assert(file == ARF || file == FIXED_GRF || file == IMM);
+      assert(offset == 0);
+      return static_cast<brw_reg &>(*this);
+   }
+
    bool equals(const fs_reg &r) const;
    bool negative_equals(const fs_reg &r) const;
    bool is_contiguous() const;
+
+   bool is_zero() const;
+   bool is_one() const;
+   bool is_negative_one() const;
+   bool is_null() const;
+   bool is_accumulator() const;
 
    /**
     * Return the size in bytes of a single logical component of the
     * register assuming the given execution width.
     */
    unsigned component_size(unsigned width) const;
+
+   using brw_reg::type;
+   using brw_reg::file;
+   using brw_reg::negate;
+   using brw_reg::abs;
+   using brw_reg::address_mode;
+   using brw_reg::subnr;
+   using brw_reg::nr;
+
+   using brw_reg::swizzle;
+   using brw_reg::writemask;
+   using brw_reg::indirect_offset;
+   using brw_reg::vstride;
+   using brw_reg::width;
+   using brw_reg::hstride;
+
+   using brw_reg::df;
+   using brw_reg::f;
+   using brw_reg::d;
+   using brw_reg::ud;
+   using brw_reg::d64;
+   using brw_reg::u64;
+
+   /** Offset from the start of the (virtual) register in bytes. */
+   uint16_t offset;
 
    /** Register region horizontal stride */
    uint8_t stride;
@@ -80,12 +124,6 @@ byte_offset(fs_reg reg, unsigned delta)
    case UNIFORM:
       reg.offset += delta;
       break;
-   case MRF: {
-      const unsigned suboffset = reg.offset + delta;
-      reg.nr += suboffset / REG_SIZE;
-      reg.offset = suboffset % REG_SIZE;
-      break;
-   }
    case ARF:
    case FIXED_GRF: {
       const unsigned suboffset = reg.subnr + delta;
@@ -113,7 +151,6 @@ horiz_offset(const fs_reg &reg, unsigned delta)
        */
       return reg;
    case VGRF:
-   case MRF:
    case ATTR:
       return byte_offset(reg, delta * reg.stride * type_sz(reg.type));
    case ARF:
@@ -144,7 +181,6 @@ offset(fs_reg reg, unsigned width, unsigned delta)
       break;
    case ARF:
    case FIXED_GRF:
-   case MRF:
    case VGRF:
    case ATTR:
    case UNIFORM:
@@ -212,31 +248,6 @@ reg_padding(const fs_reg &r)
    return (MAX2(1, stride) - 1) * type_sz(r.type);
 }
 
-/* Do not call this directly. Call regions_overlap() instead. */
-static inline bool
-regions_overlap_MRF(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
-{
-   if (r.nr & BRW_MRF_COMPR4) {
-      fs_reg t = r;
-      t.nr &= ~BRW_MRF_COMPR4;
-      /* COMPR4 regions are translated by the hardware during decompression
-       * into two separate half-regions 4 MRFs apart from each other.
-       *
-       * Note: swapping s and t in this parameter list eliminates one possible
-       * level of recursion (since the s in the called versions of
-       * regions_overlap_MRF can't be COMPR4), and that makes the compiled
-       * code a lot smaller.
-       */
-      return regions_overlap_MRF(s, ds, t, dr / 2) ||
-             regions_overlap_MRF(s, ds, byte_offset(t, 4 * REG_SIZE), dr / 2);
-   } else if (s.nr & BRW_MRF_COMPR4) {
-      return regions_overlap_MRF(s, ds, r, dr);
-   }
-
-   return !((r.nr * REG_SIZE + r.offset + dr) <= (s.nr * REG_SIZE + s.offset) ||
-            (s.nr * REG_SIZE + s.offset + ds) <= (r.nr * REG_SIZE + r.offset));
-}
-
 /**
  * Return whether the register region starting at \p r and spanning \p dr
  * bytes could potentially overlap the register region starting at \p s and
@@ -251,11 +262,9 @@ regions_overlap(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
    if (r.file == VGRF) {
       return r.nr == s.nr &&
              !(r.offset + dr <= s.offset || s.offset + ds <= r.offset);
-   } else if (r.file != MRF) {
+   } else {
       return !(reg_offset(r) + dr <= reg_offset(s) ||
                reg_offset(s) + ds <= reg_offset(r));
-   } else {
-      return regions_overlap_MRF(r, dr, s, ds);
    }
 }
 
@@ -356,9 +365,14 @@ horiz_stride(fs_reg reg, unsigned s)
    return reg;
 }
 
+bool fs_reg_saturate_immediate(fs_reg *reg);
+bool fs_reg_negate_immediate(fs_reg *reg);
+bool fs_reg_abs_immediate(fs_reg *reg);
+
 static const fs_reg reg_undef;
 
-class fs_inst : public backend_instruction {
+struct fs_inst : public exec_node {
+private:
    fs_inst &operator=(const fs_inst &);
 
    void init(enum opcode opcode, uint8_t exec_width, const fs_reg &dst,
@@ -389,10 +403,42 @@ public:
    unsigned components_read(unsigned i) const;
    unsigned size_read(int arg) const;
    bool can_do_source_mods(const struct intel_device_info *devinfo) const;
-   bool can_do_cmod();
+   bool can_do_cmod() const;
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;
-   unsigned implied_mrf_writes() const;
+
+   bool is_3src(const struct brw_compiler *compiler) const;
+   bool is_math() const;
+   bool is_control_flow_begin() const;
+   bool is_control_flow_end() const;
+   bool is_control_flow() const;
+   bool is_commutative() const;
+   bool can_do_saturate() const;
+   bool reads_accumulator_implicitly() const;
+   bool writes_accumulator_implicitly(const struct intel_device_info *devinfo) const;
+
+   /**
+    * Instructions that use indirect addressing have additional register
+    * regioning restrictions.
+    */
+   bool uses_indirect_addressing() const;
+
+   void remove(bblock_t *block, bool defer_later_block_ip_updates = false);
+   void insert_after(bblock_t *block, fs_inst *inst);
+   void insert_before(bblock_t *block, fs_inst *inst);
+
+   /**
+    * True if the instruction has side effects other than writing to
+    * its destination registers.  You are expected not to reorder or
+    * optimize these out unless you know what you are doing.
+    */
+   bool has_side_effects() const;
+
+   /**
+    * True if the instruction might be affected by side effects of other
+    * instructions.
+    */
+   bool is_volatile() const;
 
    /**
     * Return whether \p arg is a control source of a virtual instruction which
@@ -419,16 +465,108 @@ public:
     */
    bool has_sampler_residency() const;
 
-   fs_reg dst;
-   fs_reg *src;
+   /** @{
+    * Annotation for the generated IR.  One of the two can be set.
+    */
+   const void *ir;
+   const char *annotation;
+   /** @} */
 
    uint8_t sources; /**< Number of fs_reg sources. */
 
-   bool last_rt:1;
-   bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
-   bool keep_payload_trailing_zeros;
+   /**
+    * Execution size of the instruction.  This is used by the generator to
+    * generate the correct binary for the given instruction.  Current valid
+    * values are 1, 4, 8, 16, 32.
+    */
+   uint8_t exec_size;
+
+   /**
+    * Channel group from the hardware execution and predication mask that
+    * should be applied to the instruction.  The subset of channel enable
+    * signals (calculated from the EU control flow and predication state)
+    * given by [group, group + exec_size) will be used to mask GRF writes and
+    * any other side effects of the instruction.
+    */
+   uint8_t group;
+
+   uint8_t mlen; /**< SEND message length */
+   uint8_t ex_mlen; /**< SENDS extended message length */
+   uint8_t sfid; /**< SFID for SEND instructions */
+   /** The number of hardware registers used for a message header. */
+   uint8_t header_size;
+   uint8_t target; /**< MRT target. */
+   uint32_t desc; /**< SEND[S] message descriptor immediate */
+   uint32_t ex_desc; /**< SEND[S] extended message descriptor immediate */
+
+   uint32_t offset; /**< spill/unspill offset or texture offset bitfield */
+   unsigned size_written; /**< Data written to the destination register in bytes. */
+
+   enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
+   enum brw_conditional_mod conditional_mod; /**< BRW_CONDITIONAL_* */
+   enum brw_predicate predicate;
 
    tgl_swsb sched; /**< Scheduling info. */
+
+   union {
+      struct {
+         /* Chooses which flag subregister (f0.0 to f3.1) is used for
+          * conditional mod and predication.
+          */
+         unsigned flag_subreg:3;
+
+         /**
+          * Systolic depth used by DPAS instruction.
+          */
+         unsigned sdepth:4;
+
+         /**
+          * Repeat count used by DPAS instruction.
+          */
+         unsigned rcount:4;
+
+         unsigned pad:3;
+
+         bool predicate_inverse:1;
+         bool writes_accumulator:1; /**< instruction implicitly writes accumulator */
+         bool force_writemask_all:1;
+         bool no_dd_clear:1;
+         bool no_dd_check:1;
+         bool saturate:1;
+         bool shadow_compare:1;
+         bool check_tdr:1; /**< Only valid for SEND; turns it into a SENDC */
+         bool send_has_side_effects:1; /**< Only valid for SHADER_OPCODE_SEND */
+         bool send_is_volatile:1; /**< Only valid for SHADER_OPCODE_SEND */
+         bool send_ex_desc_scratch:1; /**< Only valid for SHADER_OPCODE_SEND, use
+                                       *   the scratch surface offset to build
+                                       *   extended descriptor
+                                       */
+         bool send_ex_bso:1; /**< Only for SHADER_OPCODE_SEND, use extended
+                              *   bindless surface offset (26bits instead of
+                              *   20bits)
+                              */
+         /**
+          * The predication mask applied to this instruction is guaranteed to
+          * be uniform and a superset of the execution mask of the present block.
+          * No currently enabled channel will be disabled by the predicate.
+          */
+         bool predicate_trivial:1;
+         bool eot:1;
+         bool last_rt:1;
+         bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
+         bool keep_payload_trailing_zeros:1;
+
+         /**
+          * Hint that this instruction has combined LOD/LOD bias with array index
+          */
+         bool has_packed_lod_ai_src:1;
+      };
+      uint32_t bits;
+   };
+
+   fs_reg dst;
+   fs_reg *src;
+   fs_reg builtin_src[4];
 };
 
 /**
@@ -582,6 +720,43 @@ is_unordered(const intel_device_info *devinfo, const fs_inst *inst)
             inst->dst.type == BRW_REGISTER_TYPE_DF));
 }
 
+/*
+ * Return the stride between channels of the specified register in
+ * byte units, or ~0u if the region cannot be represented with a
+ * single one-dimensional stride.
+ */
+static inline unsigned
+byte_stride(const fs_reg &reg)
+{
+   switch (reg.file) {
+   case BAD_FILE:
+   case UNIFORM:
+   case IMM:
+   case VGRF:
+   case ATTR:
+      return reg.stride * type_sz(reg.type);
+   case ARF:
+   case FIXED_GRF:
+      if (reg.is_null()) {
+         return 0;
+      } else {
+         const unsigned hstride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
+         const unsigned vstride = reg.vstride ? 1 << (reg.vstride - 1) : 0;
+         const unsigned width = 1 << reg.width;
+
+         if (width == 1) {
+            return vstride * type_sz(reg.type);
+         } else if (hstride * width == vstride) {
+            return hstride * type_sz(reg.type);
+         } else {
+            return ~0u;
+         }
+      }
+   default:
+      unreachable("Invalid register file");
+   }
+}
+
 /**
  * Return whether the following regioning restriction applies to the specified
  * instruction.  From the Cherryview PRM Vol 7. "Register Region
@@ -614,9 +789,7 @@ has_dst_aligned_region_restriction(const intel_device_info *devinfo,
 
    if (type_sz(dst_type) > 4 || type_sz(exec_type) > 4 ||
        (type_sz(exec_type) == 4 && is_dword_multiply))
-      return devinfo->platform == INTEL_PLATFORM_CHV ||
-             intel_device_info_is_9lp(devinfo) ||
-             devinfo->verx10 >= 125;
+      return intel_device_info_is_9lp(devinfo) || devinfo->verx10 >= 125;
 
    else if (brw_reg_type_is_floating_point(dst_type))
       return devinfo->verx10 >= 125;
@@ -630,6 +803,38 @@ has_dst_aligned_region_restriction(const intel_device_info *devinfo,
                                    const fs_inst *inst)
 {
    return has_dst_aligned_region_restriction(devinfo, inst, inst->dst.type);
+}
+
+/**
+ * Return true if the instruction can be potentially affected by the Xe2+
+ * regioning restrictions that apply to integer types smaller than a dword.
+ * The restriction isn't quoted here due to its length, see BSpec #56640 for
+ * details.
+ */
+static inline bool
+has_subdword_integer_region_restriction(const intel_device_info *devinfo,
+                                        const fs_inst *inst,
+                                        const fs_reg *srcs, unsigned num_srcs)
+{
+   if (devinfo->ver >= 20 &&
+       brw_reg_type_is_integer(inst->dst.type) &&
+       MAX2(byte_stride(inst->dst), type_sz(inst->dst.type)) < 4) {
+      for (unsigned i = 0; i < num_srcs; i++) {
+         if (brw_reg_type_is_integer(srcs[i].type) &&
+             type_sz(srcs[i].type) < 4 && byte_stride(srcs[i]) >= 4)
+            return true;
+      }
+   }
+
+   return false;
+}
+
+static inline bool
+has_subdword_integer_region_restriction(const intel_device_info *devinfo,
+                                        const fs_inst *inst)
+{
+   return has_subdword_integer_region_restriction(devinfo, inst,
+                                                  inst->src, inst->sources);
 }
 
 /**
@@ -733,5 +938,37 @@ is_coalescing_payload(const brw::simple_allocator &alloc, const fs_inst *inst)
 
 bool
 has_bank_conflict(const struct brw_isa_info *isa, const fs_inst *inst);
+
+/* Return the subset of flag registers that an instruction could
+ * potentially read or write based on the execution controls and flag
+ * subregister number of the instruction.
+ */
+static inline unsigned
+brw_fs_flag_mask(const fs_inst *inst, unsigned width)
+{
+   assert(util_is_power_of_two_nonzero(width));
+   const unsigned start = (inst->flag_subreg * 16 + inst->group) &
+                          ~(width - 1);
+  const unsigned end = start + ALIGN(inst->exec_size, width);
+   return ((1 << DIV_ROUND_UP(end, 8)) - 1) & ~((1 << (start / 8)) - 1);
+}
+
+static inline unsigned
+brw_fs_bit_mask(unsigned n)
+{
+   return (n >= CHAR_BIT * sizeof(brw_fs_bit_mask(n)) ? ~0u : (1u << n) - 1);
+}
+
+static inline unsigned
+brw_fs_flag_mask(const fs_reg &r, unsigned sz)
+{
+   if (r.file == ARF) {
+      const unsigned start = (r.nr - BRW_ARF_FLAG) * 4 + r.subnr;
+      const unsigned end = start + sz;
+      return brw_fs_bit_mask(end) & ~brw_fs_bit_mask(start);
+   } else {
+      return 0;
+   }
+}
 
 #endif

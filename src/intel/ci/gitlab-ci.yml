@@ -32,7 +32,8 @@ anv-tgl:
     VK_DRIVER: intel
   parallel: 5  # 5 - 5 # -1 for zink, but it's disabled now
 
-anv-tgl-full:
+# Takes too long since the 1.3.7.0 CTS uprev.
+.anv-tgl-full:
   extends:
     - anv-tgl
     - .intel-manual-rules
@@ -43,7 +44,8 @@ anv-tgl-full:
   timeout: 100m
   parallel: 4
 
-hasvk-hsw-full:
+# Takes too long since the 1.3.7.0 CTS uprev.
+.hasvk-hsw-full:
   extends:
     - .anholt-hsw-test
     - .test-vk
@@ -58,7 +60,7 @@ hasvk-hsw-full:
 
 hasvk-hsw:
   extends:
-    - hasvk-hsw-full
+    - .hasvk-hsw-full
   variables:
     DEQP_FRACTION: 10
 

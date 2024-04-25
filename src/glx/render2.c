@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: SGI-B-2.0
  */
 
-#ifndef GLX_USE_APPLEGL
+#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
 
 #include "packrender.h"
 #include "indirect.h"

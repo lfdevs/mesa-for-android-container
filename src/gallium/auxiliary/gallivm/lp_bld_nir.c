@@ -644,43 +644,26 @@ do_alu_action(struct lp_build_nir_context *bld_base,
                               bld_base->dbl_bld.vec_type, "");
       break;
    case nir_op_f2i8:
-      result = LLVMBuildFPToSI(builder,
-                               src[0],
-                               bld_base->uint8_bld.vec_type, "");
-      break;
    case nir_op_f2i16:
-      result = LLVMBuildFPToSI(builder,
-                               src[0],
-                               bld_base->uint16_bld.vec_type, "");
-      break;
    case nir_op_f2i32:
-      result = LLVMBuildFPToSI(builder, src[0], bld_base->base.int_vec_type, "");
-      break;
-   case nir_op_f2u8:
-      result = LLVMBuildFPToUI(builder,
-                               src[0],
-                               bld_base->uint8_bld.vec_type, "");
-      break;
-   case nir_op_f2u16:
-      result = LLVMBuildFPToUI(builder,
-                               src[0],
-                               bld_base->uint16_bld.vec_type, "");
-      break;
-   case nir_op_f2u32:
-      result = LLVMBuildFPToUI(builder,
-                               src[0],
-                               bld_base->base.int_vec_type, "");
-      break;
    case nir_op_f2i64:
-      result = LLVMBuildFPToSI(builder,
-                               src[0],
-                               bld_base->int64_bld.vec_type, "");
+   case nir_op_f2u8:
+   case nir_op_f2u16:
+   case nir_op_f2u32:
+   case nir_op_f2u64: {
+      nir_alu_type dst_type = nir_op_infos[instr->op].output_type;
+      bool is_unsigned = nir_alu_type_get_base_type(dst_type) == nir_type_uint;
+      LLVMTypeRef int_type = get_int_bld(bld_base, is_unsigned, nir_alu_type_get_type_size(dst_type))->vec_type;
+
+      char name[64];
+      char tmp[64];
+      char intrinsic[64];
+      snprintf(name, sizeof(name), "llvm.fpto%ci.sat", is_unsigned ? 'u' : 's');
+      lp_format_intrinsic(tmp, 64, name, int_type);
+      lp_format_intrinsic(intrinsic, 64, tmp, LLVMTypeOf(src[0]));
+      result = lp_build_intrinsic_unary(builder, intrinsic, int_type, src[0]);
       break;
-   case nir_op_f2u64:
-      result = LLVMBuildFPToUI(builder,
-                               src[0],
-                               bld_base->uint64_bld.vec_type, "");
-      break;
+   }
    case nir_op_fabs:
       result = lp_build_abs(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
       break;

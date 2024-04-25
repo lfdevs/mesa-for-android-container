@@ -483,13 +483,18 @@ reg_create(struct ir3 *shader, int num, int flags)
 }
 
 static void
-insert_instr(struct ir3_block *block, struct ir3_instruction *instr)
+insert_instr(struct ir3_block *block, struct ir3_instruction *instr,
+             bool at_end)
 {
    struct ir3 *shader = block->shader;
 
    instr->serialno = ++shader->instr_count;
 
+   struct ir3_instruction *terminator = ir3_block_get_terminator(block);
    list_addtail(&instr->node, &block->instr_list);
+
+   if (!at_end && terminator)
+      ir3_instr_move_before(instr, terminator);
 
    if (is_input(instr))
       array_insert(shader, shader->baryfs, instr);
@@ -499,13 +504,75 @@ struct ir3_block *
 ir3_block_create(struct ir3 *shader)
 {
    struct ir3_block *block = ir3_alloc(shader, sizeof(*block));
-#ifdef DEBUG
+#if MESA_DEBUG
    block->serialno = ++shader->block_count;
 #endif
    block->shader = shader;
    list_inithead(&block->node);
    list_inithead(&block->instr_list);
    return block;
+}
+
+static struct ir3_instruction *
+block_get_last_instruction(struct ir3_block *block)
+{
+   if (list_is_empty(&block->instr_list))
+      return NULL;
+   return list_last_entry(&block->instr_list, struct ir3_instruction, node);
+}
+
+struct ir3_instruction *
+ir3_block_get_terminator(struct ir3_block *block)
+{
+   struct ir3_instruction *last = block_get_last_instruction(block);
+
+   if (last && is_terminator(last))
+      return last;
+
+   return NULL;
+}
+
+struct ir3_instruction *
+ir3_block_take_terminator(struct ir3_block *block)
+{
+   struct ir3_instruction *terminator = ir3_block_get_terminator(block);
+
+   if (terminator)
+      list_delinit(&terminator->node);
+
+   return terminator;
+}
+
+struct ir3_instruction *
+ir3_block_get_last_non_terminator(struct ir3_block *block)
+{
+   struct ir3_instruction *last = block_get_last_instruction(block);
+
+   if (!last)
+      return NULL;
+
+   if (!is_terminator(last))
+      return last;
+
+   if (last->node.prev != &block->instr_list)
+      return list_entry(last->node.prev, struct ir3_instruction, node);
+
+   return NULL;
+}
+
+struct ir3_instruction *
+ir3_block_get_last_phi(struct ir3_block *block)
+{
+   struct ir3_instruction *last_phi = NULL;
+
+   foreach_instr (instr, &block->instr_list) {
+      if (instr->opc != OPC_META_PHI)
+         break;
+
+      last_phi = instr;
+   }
+
+   return last_phi;
 }
 
 void
@@ -515,10 +582,11 @@ ir3_block_add_predecessor(struct ir3_block *block, struct ir3_block *pred)
 }
 
 void
-ir3_block_add_physical_predecessor(struct ir3_block *block,
-                                   struct ir3_block *pred)
+ir3_block_link_physical(struct ir3_block *pred,
+                        struct ir3_block *succ)
 {
-   array_insert(block, block->physical_predecessors, pred);
+   array_insert(pred, pred->physical_successors, succ);
+   array_insert(succ, succ->physical_predecessors, pred);
 }
 
 void
@@ -532,22 +600,6 @@ ir3_block_remove_predecessor(struct ir3_block *block, struct ir3_block *pred)
          }
 
          block->predecessors_count--;
-         return;
-      }
-   }
-}
-
-void
-ir3_block_remove_physical_predecessor(struct ir3_block *block, struct ir3_block *pred)
-{
-   for (unsigned i = 0; i < block->physical_predecessors_count; i++) {
-      if (block->physical_predecessors[i] == pred) {
-         if (i < block->physical_predecessors_count - 1) {
-            block->physical_predecessors[i] =
-               block->physical_predecessors[block->physical_predecessors_count - 1];
-         }
-
-         block->physical_predecessors_count--;
          return;
       }
    }
@@ -581,7 +633,7 @@ instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
    instr->dsts = (struct ir3_register **)ptr;
    instr->srcs = instr->dsts + ndst;
 
-#ifdef DEBUG
+#if MESA_DEBUG
    instr->dsts_max = ndst;
    instr->srcs_max = nsrc;
 #endif
@@ -589,14 +641,44 @@ instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
    return instr;
 }
 
-struct ir3_instruction *
-ir3_instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
+static struct ir3_instruction *
+instr_create_impl(struct ir3_block *block, opc_t opc, int ndst, int nsrc,
+                  bool at_end)
 {
    struct ir3_instruction *instr = instr_create(block, opc, ndst, nsrc);
    instr->block = block;
    instr->opc = opc;
-   insert_instr(block, instr);
+   insert_instr(block, instr, at_end);
    return instr;
+}
+
+static void
+add_to_address_users(struct ir3_instruction *instr)
+{
+   assert(instr->address != NULL);
+
+   struct ir3 *ir = instr->block->shader;
+   struct ir3_register *addr_reg = instr->address->def;
+   assert(reg_num(addr_reg) == REG_A0);
+   unsigned comp = reg_comp(addr_reg);
+   if (comp == 0) {
+      array_insert(ir, ir->a0_users, instr);
+   } else {
+      assert(comp == 1);
+      array_insert(ir, ir->a1_users, instr);
+   }
+}
+
+struct ir3_instruction *
+ir3_instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
+{
+   return instr_create_impl(block, opc, ndst, nsrc, false);
+}
+
+struct ir3_instruction *
+ir3_instr_create_at_end(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
+{
+   return instr_create_impl(block, opc, ndst, nsrc, true);
 }
 
 struct ir3_instruction *
@@ -612,7 +694,7 @@ ir3_instr_clone(struct ir3_instruction *instr)
    new_instr->dsts = dsts;
    new_instr->srcs = srcs;
 
-   insert_instr(instr->block, new_instr);
+   insert_instr(instr->block, new_instr, false);
 
    /* clone registers: */
    new_instr->dsts_count = 0;
@@ -633,6 +715,7 @@ ir3_instr_clone(struct ir3_instruction *instr)
    if (instr->address) {
       assert(instr->srcs_count > 0);
       new_instr->address = new_instr->srcs[instr->srcs_count - 1];
+      add_to_address_users(new_instr);
    }
 
    return new_instr;
@@ -654,7 +737,7 @@ struct ir3_register *
 ir3_src_create(struct ir3_instruction *instr, int num, int flags)
 {
    struct ir3 *shader = instr->block->shader;
-#ifdef DEBUG
+#if MESA_DEBUG
    assert(instr->srcs_count < instr->srcs_max);
 #endif
    struct ir3_register *reg = reg_create(shader, num, flags);
@@ -666,7 +749,7 @@ struct ir3_register *
 ir3_dst_create(struct ir3_instruction *instr, int num, int flags)
 {
    struct ir3 *shader = instr->block->shader;
-#ifdef DEBUG
+#if MESA_DEBUG
    assert(instr->dsts_count < instr->dsts_max);
 #endif
    struct ir3_register *reg = reg_create(shader, num, flags);
@@ -698,21 +781,12 @@ ir3_instr_set_address(struct ir3_instruction *instr,
                       struct ir3_instruction *addr)
 {
    if (!instr->address) {
-      struct ir3 *ir = instr->block->shader;
-
       assert(instr->block == addr->block);
 
       instr->address =
          ir3_src_create(instr, addr->dsts[0]->num, addr->dsts[0]->flags);
       instr->address->def = addr->dsts[0];
-      assert(reg_num(addr->dsts[0]) == REG_A0);
-      unsigned comp = reg_comp(addr->dsts[0]);
-      if (comp == 0) {
-         array_insert(ir, ir->a0_users, instr);
-      } else {
-         assert(comp == 1);
-         array_insert(ir, ir->a1_users, instr);
-      }
+      add_to_address_users(instr);
    } else {
       assert(instr->address->def->instr == addr);
    }
@@ -741,6 +815,21 @@ ir3_count_instructions(struct ir3 *ir)
       block->start_ip = cnt;
       foreach_instr (instr, &block->instr_list) {
          instr->ip = cnt++;
+      }
+      block->end_ip = cnt;
+   }
+   return cnt;
+}
+
+unsigned
+ir3_count_instructions_sched(struct ir3 *ir)
+{
+   unsigned cnt = 1;
+   foreach_block (block, &ir->block_list) {
+      block->start_ip = cnt;
+      foreach_instr (instr, &block->instr_list) {
+         if (!is_terminator(instr))
+            instr->ip = cnt++;
       }
       block->end_ip = cnt;
    }
@@ -779,8 +868,7 @@ ir3_lookup_array(struct ir3 *ir, unsigned id)
    return NULL;
 }
 
-void
-ir3_find_ssa_uses(struct ir3 *ir, void *mem_ctx, bool falsedeps)
+void ir3_find_ssa_uses_for(struct ir3 *ir, void *mem_ctx, use_filter_cb filter)
 {
    /* We could do this in a single pass if we can assume instructions
     * are always sorted.  Which currently might not always be true.
@@ -793,7 +881,7 @@ ir3_find_ssa_uses(struct ir3 *ir, void *mem_ctx, bool falsedeps)
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
          foreach_ssa_src_n (src, n, instr) {
-            if (__is_false_dep(instr, n) && !falsedeps)
+            if (!filter(instr, n))
                continue;
             if (!src->uses)
                src->uses = _mesa_pointer_set_create(mem_ctx);
@@ -801,6 +889,26 @@ ir3_find_ssa_uses(struct ir3 *ir, void *mem_ctx, bool falsedeps)
          }
       }
    }
+}
+
+static bool
+no_false_deps(struct ir3_instruction *instr, unsigned src_n)
+{
+   return !__is_false_dep(instr, src_n);
+}
+
+static bool
+any_src(struct ir3_instruction *instr, unsigned src_n)
+{
+   return true;
+}
+
+void
+ir3_find_ssa_uses(struct ir3 *ir, void *mem_ctx, bool falsedeps)
+{
+   if (falsedeps)
+      return ir3_find_ssa_uses_for(ir, mem_ctx, any_src);
+   return ir3_find_ssa_uses_for(ir, mem_ctx, no_false_deps);
 }
 
 /**
@@ -1188,4 +1296,19 @@ ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed)
 
    /* Other than cat1 (mov) we can only encode up to 10 bits, sign-extended: */
    return !(immed & ~0x1ff) || !(-immed & ~0x1ff);
+}
+
+struct ir3_instruction *
+ir3_get_cond_for_nonzero_compare(struct ir3_instruction *instr)
+{
+   /* If instr is a negation (likely as a result of an nir_b2n), we can ignore
+    * that and use its source, since the nonzero-ness stays the same.
+    */
+   if (instr->opc == OPC_ABSNEG_S && instr->flags == 0 &&
+       (instr->srcs[0]->flags & (IR3_REG_SNEG | IR3_REG_SABS)) ==
+          IR3_REG_SNEG) {
+      return instr->srcs[0]->def->instr;
+   }
+
+   return instr;
 }

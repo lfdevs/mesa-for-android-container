@@ -29,7 +29,7 @@
 #include "nir/nir_serialize.h"
 #include "anv_private.h"
 #include "nir/nir_xfb_info.h"
-#include "vulkan/util/vk_util.h"
+#include "vk_util.h"
 
 static bool
 anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
@@ -70,18 +70,18 @@ anv_shader_bin_create(struct anv_device *device,
                       gl_shader_stage stage,
                       const void *key_data, uint32_t key_size,
                       const void *kernel_data, uint32_t kernel_size,
-                      const struct brw_stage_prog_data *prog_data_in,
+                      const struct elk_stage_prog_data *prog_data_in,
                       uint32_t prog_data_size,
-                      const struct brw_compile_stats *stats, uint32_t num_stats,
+                      const struct elk_compile_stats *stats, uint32_t num_stats,
                       const nir_xfb_info *xfb_info_in,
                       const struct anv_pipeline_bind_map *bind_map)
 {
    VK_MULTIALLOC(ma);
    VK_MULTIALLOC_DECL(&ma, struct anv_shader_bin, shader, 1);
    VK_MULTIALLOC_DECL_SIZE(&ma, void, obj_key_data, key_size);
-   VK_MULTIALLOC_DECL_SIZE(&ma, struct brw_stage_prog_data, prog_data,
+   VK_MULTIALLOC_DECL_SIZE(&ma, struct elk_stage_prog_data, prog_data,
                                 prog_data_size);
-   VK_MULTIALLOC_DECL(&ma, struct brw_shader_reloc, prog_data_relocs,
+   VK_MULTIALLOC_DECL(&ma, struct elk_shader_reloc, prog_data_relocs,
                            prog_data_in->num_relocs);
    VK_MULTIALLOC_DECL(&ma, uint32_t, prog_data_param, prog_data_in->nr_params);
 
@@ -114,20 +114,20 @@ anv_shader_bin_create(struct anv_device *device,
                                prog_data_in->const_data_offset;
 
    int rv_count = 0;
-   struct brw_shader_reloc_value reloc_values[5];
-   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-      .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
+   struct elk_shader_reloc_value reloc_values[5];
+   reloc_values[rv_count++] = (struct elk_shader_reloc_value) {
+      .id = ELK_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
    };
-   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-      .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
+   reloc_values[rv_count++] = (struct elk_shader_reloc_value) {
+      .id = ELK_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
       .value = shader_data_addr >> 32,
    };
-   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-      .id = BRW_SHADER_RELOC_SHADER_START_OFFSET,
+   reloc_values[rv_count++] = (struct elk_shader_reloc_value) {
+      .id = ELK_SHADER_RELOC_SHADER_START_OFFSET,
       .value = shader->kernel.offset,
    };
-   brw_write_shader_relocs(&device->physical->compiler->isa,
+   elk_write_shader_relocs(&device->physical->compiler->isa,
                            shader->kernel.map, prog_data_in,
                            reloc_values, rv_count);
 
@@ -234,7 +234,7 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
    if (blob->overrun)
       return NULL;
 
-   union brw_any_prog_data prog_data;
+   union elk_any_prog_data prog_data;
    memcpy(&prog_data, prog_data_bytes,
           MIN2(sizeof(prog_data), prog_data_size));
    prog_data.base.relocs =
@@ -242,7 +242,7 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
                             sizeof(prog_data.base.relocs[0]));
 
    uint32_t num_stats = blob_read_uint32(blob);
-   const struct brw_compile_stats *stats =
+   const struct elk_compile_stats *stats =
       blob_read_bytes(blob, num_stats * sizeof(stats[0]));
 
    const nir_xfb_info *xfb_info = NULL;
@@ -309,9 +309,9 @@ anv_device_upload_kernel(struct anv_device *device,
                          gl_shader_stage stage,
                          const void *key_data, uint32_t key_size,
                          const void *kernel_data, uint32_t kernel_size,
-                         const struct brw_stage_prog_data *prog_data,
+                         const struct elk_stage_prog_data *prog_data,
                          uint32_t prog_data_size,
-                         const struct brw_compile_stats *stats,
+                         const struct elk_compile_stats *stats,
                          uint32_t num_stats,
                          const nir_xfb_info *xfb_info,
                          const struct anv_pipeline_bind_map *bind_map)

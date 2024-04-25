@@ -12,20 +12,41 @@ if rc.version().version_compare('< 1.73.0')
   error('NAK requires Rust 1.73.0')
 endif
 
+nak_rust_args = [
+  '-Aclippy::identity_op',
+  '-Aclippy::len_zero',
+  '-Aclippy::manual_range_contains',
+  # normally this is a good one, but we use it where the "better" code is worse
+  '-Aclippy::needless_range_loop',
+  '-Aclippy::redundant_field_names',
+  '-Aclippy::upper_case_acronyms',
+  '-Aclippy::vec_box',
+  '-Aclippy::write_with_newline',
+  '-Anon_snake_case',
+]
+
 dep_syn = dependency('syn',
   version : '>= 2.0.15',
   fallback : ['syn', 'dep_syn'],
   required : true,
 )
 
+dep_paste = dependency('paste',
+  version : '>= 1.0.14',
+  fallback : ['paste', 'dep_paste'],
+  required : true,
+)
+
 libnak_c_files = files(
   'nak.h',
   'nak_nir.c',
-  'nak_nir_add_barriers.c',
+  'nak_nir_lower_cf.c',
+  'nak_nir_lower_fs_inputs.c',
+  'nak_nir_lower_gs_intrinsics.c',
   'nak_nir_lower_scan_reduce.c',
   'nak_nir_lower_tex.c',
   'nak_nir_lower_vtg_io.c',
-  'nak_nir_lower_gs_intrinsics.c',
+  'nak_memstream.c',
 )
 
 _libbitview_rs = static_library(
@@ -33,17 +54,11 @@ _libbitview_rs = static_library(
   files('bitview/lib.rs'),
   gnu_symbol_visibility : 'hidden',
   rust_abi : 'rust',
-  rust_args : [
-    # we error on all clippy warnings unless they are disabled
-    '-Dclippy::all',
-    # we want to add asserts in control flow
-    '-Aclippy::assertions_on_constants',
-    # dunno, kind of looks nicier being explicit
-    '-Aclippy::redundant_field_names',
-    '-Aclippy::too_many_arguments',
-    '-Aclippy::type_complexity',
-    '-Anon_snake_case',
-  ],
+  rust_args : nak_rust_args,
+)
+
+idep_bitview_rs = declare_dependency(
+  link_with : _libbitview_rs,
 )
 
 libnak_deps = [
@@ -106,28 +121,27 @@ _libnak_rs = static_library(
   files('nak/lib.rs'),
   gnu_symbol_visibility : 'hidden',
   rust_abi : 'c',
-  rust_args : [
-    # we error on all clippy warnings unless they are disabled
-    '-Dclippy::all',
-    # we want to add asserts in control flow
-    '-Aclippy::assertions_on_constants',
-    # dunno, kind of looks nicier being explicit
-    '-Aclippy::redundant_field_names',
-    '-Aclippy::too_many_arguments',
-    '-Aclippy::type_complexity',
-    '-Anon_snake_case',
+  rust_args : nak_rust_args,
+  dependencies : [
+    dep_paste,
+    idep_nvidia_headers_rs,
   ],
   link_with: [_libbitview_rs, libnak_bindings_gen, _libnak_ir_proc_rs],
 )
+
+if with_tests
+  rust.test('nak', _libnak_rs, suite : ['nouveau'])
+endif
 
 nak_nir_algebraic_c = custom_target(
   'nak_nir_algebraic.c',
   input : 'nak_nir_algebraic.py',
   output : 'nak_nir_algebraic.c',
   command : [
-    prog_python, '@INPUT@', '-p', dir_compiler_nir,
+    prog_python, '@INPUT@',
+    '-p', dir_compiler_nir,
+    '--out', '@OUTPUT@',
   ],
-  capture : true,
   depend_files : nir_algebraic_depends,
 )
 

@@ -30,6 +30,8 @@
 
 #include <stdbool.h>
 
+#include "util/detect_os.h"
+
 #include "egltypedefs.h"
 
 #ifdef __cplusplus
@@ -64,7 +66,7 @@ struct _egl_thread_info {
 static inline EGLBoolean
 _eglIsApiValid(EGLenum api)
 {
-#if HAVE_OPENGL && !defined(ANDROID)
+#if HAVE_OPENGL && !DETECT_OS_ANDROID
    /* OpenGL is not a valid/supported API on Android */
    if (api == EGL_OPENGL_API)
       return true;

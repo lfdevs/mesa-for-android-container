@@ -26,7 +26,7 @@
  * This file implements the dead control flow elimination optimization pass.
  */
 
-#include "brw_shader.h"
+#include "brw_fs.h"
 #include "brw_cfg.h"
 
 using namespace brw;
@@ -38,18 +38,18 @@ using namespace brw;
  *   - then in if/else/endif
  */
 bool
-dead_control_flow_eliminate(backend_shader *s)
+brw_fs_opt_dead_control_flow_eliminate(fs_visitor &s)
 {
    bool progress = false;
 
-   foreach_block_safe (block, s->cfg) {
+   foreach_block_safe (block, s.cfg) {
       bblock_t *prev_block = block->prev();
 
       if (!prev_block)
          continue;
 
-      backend_instruction *const inst = block->start();
-      backend_instruction *const prev_inst = prev_block->end();
+      fs_inst *const inst = block->start();
+      fs_inst *const prev_inst = prev_block->end();
 
       /* ENDIF instructions, by definition, can only be found at the start of
        * basic blocks.
@@ -57,7 +57,7 @@ dead_control_flow_eliminate(backend_shader *s)
       if (inst->opcode == BRW_OPCODE_ENDIF &&
           prev_inst->opcode == BRW_OPCODE_ELSE) {
          bblock_t *const else_block = prev_block;
-         backend_instruction *const else_inst = prev_inst;
+         fs_inst *const else_inst = prev_inst;
 
          else_inst->remove(else_block);
          progress = true;
@@ -65,8 +65,8 @@ dead_control_flow_eliminate(backend_shader *s)
                  prev_inst->opcode == BRW_OPCODE_IF) {
          bblock_t *const endif_block = block;
          bblock_t *const if_block = prev_block;
-         backend_instruction *const endif_inst = inst;
-         backend_instruction *const if_inst = prev_inst;
+         fs_inst *const endif_inst = inst;
+         fs_inst *const if_inst = prev_inst;
 
          bblock_t *earlier_block = NULL, *later_block = NULL;
 
@@ -101,8 +101,8 @@ dead_control_flow_eliminate(backend_shader *s)
       } else if (inst->opcode == BRW_OPCODE_ELSE &&
                  prev_inst->opcode == BRW_OPCODE_IF) {
          bblock_t *const else_block = block;
-         backend_instruction *const if_inst = prev_inst;
-         backend_instruction *const else_inst = inst;
+         fs_inst *const if_inst = prev_inst;
+         fs_inst *const else_inst = inst;
 
          /* Since the else-branch is becoming the new then-branch, the
           * condition has to be inverted.
@@ -115,7 +115,7 @@ dead_control_flow_eliminate(backend_shader *s)
    }
 
    if (progress)
-      s->invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
+      s.invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

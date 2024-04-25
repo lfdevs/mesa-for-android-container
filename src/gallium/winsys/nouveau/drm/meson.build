@@ -18,12 +18,35 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+files_libnouveauwinsys = files(
+  'nouveau.h',
+  'nouveau.c',
+  'nouveau_drm_public.h',
+  'nouveau_drm_winsys.c',
+)
+
 libnouveauwinsys = static_library(
   'nouveauwinsys',
-  files('nouveau_drm_public.h', 'nouveau_drm_winsys.c'),
+  files_libnouveauwinsys,
   include_directories : [
-    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
+    inc_src,
+    inc_include,
+    inc_nouveau_drm,
+    inc_gallium,
+    inc_gallium_aux,
+    inc_gallium_drivers,
+  ],
+  c_args: [
+    cc.get_supported_arguments('-Wno-gnu-variable-sized-type-not-at-end')
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm_nouveau, idep_mesautil],
+  dependencies : [dep_libdrm, idep_mesautil],
+)
+
+idep_libnouveauwinsys = declare_dependency(
+  include_directories : [
+    include_directories('.'),
+    inc_nouveau_drm,
+  ],
+  link_with : [libnouveauwinsys],
 )

@@ -21,7 +21,6 @@ impl BitSet {
         }
     }
 
-    #[allow(dead_code)]
     pub fn reserve(&mut self, bits: usize) {
         self.reserve_words(bits.div_ceil(32));
     }
@@ -42,7 +41,6 @@ impl BitSet {
         }
     }
 
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         for w in self.words.iter() {
             if *w != 0 {
@@ -56,7 +54,6 @@ impl BitSet {
         self.words.get(word).cloned().unwrap_or(0)
     }
 
-    #[allow(dead_code)]
     pub fn next_set(&self, start: usize) -> Option<usize> {
         if start >= self.words.len() * 32 {
             return None;
@@ -75,7 +72,6 @@ impl BitSet {
         None
     }
 
-    #[allow(dead_code)]
     pub fn next_unset(&self, start: usize) -> usize {
         if start >= self.words.len() * 32 {
             return start;

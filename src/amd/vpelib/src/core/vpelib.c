@@ -36,6 +36,7 @@
 #include "dpp.h"
 #include "mpc.h"
 #include "opp.h"
+#include "geometric_scaling.h"
 
 static void override_debug_option(
     struct vpe_debug_options *debug, const struct vpe_debug_options *user_debug)
@@ -113,7 +114,26 @@ static void override_debug_option(
 
     if (user_debug->flags.visual_confirm)
         debug->visual_confirm_params = user_debug->visual_confirm_params;
+
+    if (user_debug->flags.skip_optimal_tap_check)
+        debug->skip_optimal_tap_check = user_debug->skip_optimal_tap_check;
 }
+
+#ifdef VPE_BUILD_1_1
+static void verify_collaboration_mode(struct vpe_priv *vpe_priv)
+{
+    if (vpe_priv->pub.level == VPE_IP_LEVEL_1_1) {
+        if (vpe_priv->collaboration_mode == true) {
+            vpe_priv->collaborate_sync_index = 1;
+        } else {
+            // after the f_model support collaborate sync command
+            // return VPE_STATUS_ERROR
+        }
+    } else if (vpe_priv->pub.level == VPE_IP_LEVEL_1_0) {
+        vpe_priv->collaboration_mode = false;
+    }
+}
+#endif
 
 struct vpe *vpe_create(const struct vpe_init_data *params)
 {
@@ -177,6 +197,32 @@ void vpe_destroy(struct vpe **vpe)
     vpe_free(vpe_priv);
 
     *vpe = NULL;
+}
+
+/*
+ * Geometric scaling feature has two requirement when enabled:
+ * 1. only support single input stream, no blending support.
+ * 2. the target rect must equal to destination rect.
+ */
+
+static enum vpe_status validate_geometric_scaling_support(const struct vpe_build_param *param)
+{
+    if (param->streams[0].flags.geometric_scaling)
+    {
+        /* only support 1 stream */
+        if (param->num_streams > 1)
+        {
+            return VPE_STATUS_GEOMETRICSCALING_ERROR;
+        }
+
+        /* dest rect must equal to target rect */
+        if (param->target_rect.height != param->streams[0].scaling_info.dst_rect.height ||
+                param->target_rect.width != param->streams[0].scaling_info.dst_rect.width ||
+                param->target_rect.x != param->streams[0].scaling_info.dst_rect.x ||
+                param->target_rect.y != param->streams[0].scaling_info.dst_rect.y)
+            return VPE_STATUS_GEOMETRICSCALING_ERROR;
+    }
+    return VPE_STATUS_OK;
 }
 
 /*****************************************************************************************
@@ -296,6 +342,7 @@ static enum vpe_status handle_zero_input(struct vpe *vpe, const struct vpe_build
         stream->lower_luma_bound            = 0;
         stream->upper_luma_bound            = 0;
         stream->flags.hdr_metadata          = 0;
+        stream->flags.geometric_scaling     = 0;
         stream->use_external_scaling_coeffs = false;
         *out_param                          = vpe_priv->dummy_input_param;
     } else {
@@ -325,6 +372,12 @@ enum vpe_status vpe_check_support(
     if (status != VPE_STATUS_OK)
         status = VPE_STATUS_NUM_STREAM_NOT_SUPPORTED;
 
+#ifdef VPE_BUILD_1_1
+    vpe_priv->collaboration_mode = param->collaboration_mode;
+    vpe_priv->vpe_num_instance   = param->num_instances;
+    verify_collaboration_mode(vpe_priv);
+#endif
+
     if (!vpe_priv->stream_ctx || vpe_priv->num_streams != param->num_streams) {
         if (vpe_priv->stream_ctx)
             vpe_free_stream_ctx(vpe_priv);
@@ -340,10 +393,10 @@ enum vpe_status vpe_check_support(
     //  Need a sticky bit to tell vpe to program the 3dlut on next jobs submission even
     //  if 3dlut has not changed
     for (i = 0; i < param->num_streams; i++) {
-        vpe_cache_tone_map_params(&vpe_priv->stream_ctx[i], param);
+        vpe_cache_tone_map_params(&vpe_priv->stream_ctx[i], &param->streams[i]);
     }
 
-    if (status == VPE_STATUS_OK) {
+    if (status == VPE_STATUS_OK) {  
         // output checking - check per asic support
         status = vpe_check_output_support(vpe, param);
         if (status != VPE_STATUS_OK) {
@@ -430,7 +483,7 @@ enum vpe_status vpe_check_support(
         // if the bg_color support is false, there is a flag to verify if the bg_color falls in the
         // output gamut
         if (!vpe_priv->pub.caps->bg_color_check_support) {
-            status = vpe_bg_color_outside_cs_gamut(&output_ctx->surface.cs, &output_ctx->bg_color);
+            status = vpe_is_valid_bg_color(vpe_priv, &output_ctx->bg_color);
             if (status != VPE_STATUS_OK) {
                 vpe_log(
                     "failed in checking the background color versus the output color space %d\n",
@@ -444,6 +497,10 @@ enum vpe_status vpe_check_support(
         vpe_priv->resource.get_bufs_req(vpe_priv, &vpe_priv->bufs_required);
         *req                  = vpe_priv->bufs_required;
         vpe_priv->ops_support = true;
+    }
+
+    if (status == VPE_STATUS_OK) {
+        status = validate_geometric_scaling_support(param);
     }
 
     if (vpe_priv->init.debug.assert_when_not_support)
@@ -478,6 +535,14 @@ static bool validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_bu
     if (vpe_priv->num_streams != param->num_streams)
         return false;
 
+#ifdef VPE_BUILD_1_1
+    if (vpe_priv->collaboration_mode != param->collaboration_mode)
+        return false;
+
+    if (param->num_instances > 0 && vpe_priv->vpe_num_instance != param->num_instances)
+        return false;
+#endif
+
     for (i = 0; i < param->num_streams; i++) {
         struct vpe_stream stream = param->streams[i];
 
@@ -504,28 +569,6 @@ static bool validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_bu
     return true;
 }
 
-static bool validate_color_pipeline(struct vpe_priv *vpe_priv, const struct vpe_build_param *param)
-{
-    uint32_t           stream_idx;
-    struct stream_ctx *stream_ctx;
-    struct output_ctx *output_ctx;
-
-    output_ctx = &vpe_priv->output_ctx;
-
-    /* For BG color, we need to make sure degamm / regamm is not bypass,
-     * as we want to have input in the range of 0-1 in mpc,
-     * since mpc only allows 0-1 range for BG color
-     */
-    for (stream_idx = 0; stream_idx < param->num_streams; stream_idx++) {
-        stream_ctx = &vpe_priv->stream_ctx[stream_idx];
-        if (output_ctx->output_tf->type == TF_TYPE_BYPASS &&
-            stream_ctx->input_tf->type == TF_TYPE_BYPASS)
-            return false;
-    }
-
-    return true;
-}
-
 enum vpe_status vpe_build_commands(
     struct vpe *vpe, const struct vpe_build_param *param, struct vpe_build_bufs *bufs)
 {
@@ -538,6 +581,9 @@ enum vpe_status vpe_build_commands(
     int64_t               emb_buf_size;
     uint64_t              cmd_buf_gpu_a, cmd_buf_cpu_a;
     uint64_t              emb_buf_gpu_a, emb_buf_cpu_a;
+#ifdef VPE_BUILD_1_1
+    bool is_collaborate_sync_end = false;
+#endif
 
     if (!vpe || !param || !bufs)
         return VPE_STATUS_ERROR;
@@ -562,17 +608,20 @@ enum vpe_status vpe_build_commands(
     }
 
     if (status == VPE_STATUS_OK) {
+        if (param->streams->flags.geometric_scaling) {
+            geometric_scaling_feature_skip(vpe_priv, param);
+        }
 
         if (bufs->cmd_buf.size == 0 || bufs->emb_buf.size == 0) {
             /* Here we directly return without setting ops_support to false
              *  becaues the supported check is already passed
              * and the caller can come again with correct buffer size.
              */
-            bufs->cmd_buf.size = (int64_t)vpe_priv->bufs_required.cmd_buf_size;
-            bufs->emb_buf.size = (int64_t)vpe_priv->bufs_required.emb_buf_size;
+            bufs->cmd_buf.size = vpe_priv->bufs_required.cmd_buf_size;
+            bufs->emb_buf.size = vpe_priv->bufs_required.emb_buf_size;
             return VPE_STATUS_OK;
-        } else if ((bufs->cmd_buf.size < (int32_t)vpe_priv->bufs_required.cmd_buf_size) ||
-                   (bufs->emb_buf.size < (int32_t)vpe_priv->bufs_required.emb_buf_size)) {
+        } else if ((bufs->cmd_buf.size < vpe_priv->bufs_required.cmd_buf_size) ||
+                   (bufs->emb_buf.size < vpe_priv->bufs_required.emb_buf_size)) {
             status = VPE_STATUS_INVALID_BUFFER_SIZE;
         }
     }
@@ -622,20 +671,46 @@ enum vpe_status vpe_build_commands(
             vpe_log("failed updating whitepoint gain %d\n", (int)status);
         }
     }
+
     if (status == VPE_STATUS_OK) {
-        VPE_ASSERT(validate_color_pipeline(vpe_priv, param));
-    }
-    if (status == VPE_STATUS_OK) {
+        /* since the background is generated by the first stream,
+         * the 3dlut enablement for the background color conversion
+         * is used based on the information of the first stream.
+         */
         vpe_bg_color_convert(vpe_priv->output_ctx.cs, vpe_priv->output_ctx.output_tf,
-            &vpe_priv->output_ctx.bg_color);
+            &vpe_priv->output_ctx.bg_color, vpe_priv->stream_ctx[0].enable_3dlut);
 
         for (cmd_idx = 0; cmd_idx < vpe_priv->num_vpe_cmds; cmd_idx++) {
+#ifdef VPE_BUILD_1_1
+            if ((vpe_priv->collaboration_mode == true) &&
+                (vpe_priv->vpe_cmd_info[cmd_idx].is_begin == true)) {
+                status = builder->build_collaborate_sync_cmd(
+                    vpe_priv, &curr_bufs, is_collaborate_sync_end);
+                if (status != VPE_STATUS_OK) {
+                    vpe_log("failed in building collaborate sync cmd %d\n", (int)status);
+                } else {
+                    is_collaborate_sync_end = true;
+                }
+            }
+#endif
 
             status = builder->build_vpe_cmd(vpe_priv, &curr_bufs, cmd_idx);
             if (status != VPE_STATUS_OK) {
                 vpe_log("failed in building vpe cmd %d\n", (int)status);
             }
 
+#ifdef VPE_BUILD_1_1
+            if ((vpe_priv->collaboration_mode == true) &&
+                (vpe_priv->vpe_cmd_info[cmd_idx].is_end == true)) {
+                status = builder->build_collaborate_sync_cmd(
+                    vpe_priv, &curr_bufs, is_collaborate_sync_end);
+                if (status != VPE_STATUS_OK) {
+                    vpe_log("failed in building collaborate sync cmd %d\n", (int)status);
+                } else {
+                    is_collaborate_sync_end = false;
+                }
+            }
+#endif
         }
     }
 

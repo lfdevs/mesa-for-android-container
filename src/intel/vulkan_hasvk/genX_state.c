@@ -300,7 +300,7 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
        * lit sample and that it's the same for all samples in a pixel; they
        * have no requirement that it be the one closest to center.
        */
-      for (uint32_t i = 1; i <= (GFX_VER >= 9 ? 16 : 8); i *= 2) {
+      for (uint32_t i = 1; i <= 8; i *= 2) {
          switch (i) {
          case VK_SAMPLE_COUNT_1_BIT:
             if (sl && sl->per_pixel == i) {
@@ -330,15 +330,6 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
                INTEL_SAMPLE_POS_8X(sp._8xSample);
             }
             break;
-#if GFX_VER >= 9
-         case VK_SAMPLE_COUNT_16_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_16X_ARRAY(sp._16xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_16X(sp._16xSample);
-            }
-            break;
-#endif
          default:
             unreachable("Invalid sample count");
          }

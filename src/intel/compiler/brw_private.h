@@ -27,6 +27,23 @@
 
 #include "brw_compiler.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* brw_fs_reg_allocate.cpp */
+void brw_fs_alloc_reg_sets(struct brw_compiler *compiler);
+
+/* brw_disasm.c */
+extern const char *const conditional_modifier[16];
+extern const char *const pred_ctrl_align16[16];
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+
 #include <variant>
 
 unsigned brw_required_dispatch_width(const struct shader_info *info);
@@ -72,5 +89,7 @@ int brw_simd_select_for_workgroup_size(const struct intel_device_info *devinfo,
                                        const unsigned *sizes);
 
 bool brw_should_print_shader(const nir_shader *shader, uint64_t debug_flag);
+
+#endif // __cplusplus
 
 #endif // BRW_PRIVATE_H

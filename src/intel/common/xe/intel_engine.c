@@ -102,3 +102,39 @@ error_free_xe_engines:
    free(xe_engines);
    return NULL;
 }
+
+bool
+xe_engines_is_guc_semaphore_functional(int fd, const struct intel_device_info *info)
+{
+   struct drm_xe_query_uc_fw_version uc_fw_version = {
+      .uc_type = XE_QUERY_UC_TYPE_GUC_SUBMISSION,
+   };
+   struct drm_xe_device_query query = {
+      .query = DRM_XE_DEVICE_QUERY_UC_FW_VERSION,
+      .data = (uintptr_t)&uc_fw_version,
+      .size = sizeof(uc_fw_version)
+   };
+   uint32_t read_ver, min_ver;
+
+   if (intel_ioctl(fd, DRM_IOCTL_XE_DEVICE_QUERY, &query))
+      return false;
+
+   /* branch == 0 is mainline branch, any other branch value indicates that
+    * other version numbers cannot be used to infer whether features or fixes
+    * are present in the release.
+    *
+    * major, minor and patch are u8 for GuC, uAPI have it as u32 because of HuC.
+    */
+   if (uc_fw_version.branch_ver == 0) {
+      read_ver = uc_fw_version.major_ver << 16;
+      read_ver |= uc_fw_version.minor_ver << 8;
+      read_ver |= uc_fw_version.patch_ver;
+   } else {
+      read_ver = 0;
+   }
+
+   /* Requires at least GuC submission version 1.1.3 */
+   min_ver = 1ULL << 16 | 1ULL << 8 | 3;
+
+   return read_ver >= min_ver;
+}

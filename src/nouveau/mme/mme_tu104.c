@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 #include "mme_tu104.h"
-#include "mme_tu104_encode.h"
 
-#include "util/u_math.h"
+#include "mme_bitpack_helpers.h"
 
 #include <stdlib.h>
 
@@ -88,34 +87,35 @@ mme_tu104_encode(uint32_t *out, uint32_t inst_count,
                  const struct mme_tu104_inst *insts)
 {
    for (uint32_t i = 0; i < inst_count; i++) {
-      bitmask_t enc = encode__instruction(NULL, NULL, insts[i]);
+      uint32_t b[3] = { 0, 0, 0};
+
+      pack_uint(b,  0,  0, insts[i].end_next);
+      pack_uint(b,  1,  4, insts[i].pred_mode);
+      pack_uint(b,  5,  9, insts[i].pred);
+
+      pack_uint(b, 10, 14, insts[i].alu[0].op);
+      pack_uint(b, 15, 19, insts[i].alu[0].dst);
+      pack_uint(b, 20, 24, insts[i].alu[0].src[0]);
+      pack_uint(b, 25, 29, insts[i].alu[0].src[1]);
+      pack_uint(b, 30, 45, insts[i].imm[0]);
+
+      pack_uint(b, 46, 50, insts[i].alu[1].op);
+      pack_uint(b, 51, 55, insts[i].alu[1].dst);
+      pack_uint(b, 56, 60, insts[i].alu[1].src[0]);
+      pack_uint(b, 61, 65, insts[i].alu[1].src[1]);
+      pack_uint(b, 66, 81, insts[i].imm[1]);
+
+      pack_uint(b, 82, 84, insts[i].out[0].mthd);
+      pack_uint(b, 85, 88, insts[i].out[0].emit);
+
+      pack_uint(b, 89, 91, insts[i].out[1].mthd);
+      pack_uint(b, 92, 95, insts[i].out[1].emit);
 
       /* Annoyingly, the words are reversed in the actual encoding */
-      out[i * 3 + 0] = enc.bitset[2];
-      out[i * 3 + 1] = enc.bitset[1];
-      out[i * 3 + 2] = enc.bitset[0];
+      out[i * 3 + 2] = b[0];
+      out[i * 3 + 1] = b[1];
+      out[i * 3 + 0] = b[2];
    }
-}
-
-static uint64_t
-unpack_field(bitmask_t bitmask, unsigned low, unsigned high, bool is_signed)
-{
-   bitmask_t field, mask;
-
-   assert(high >= low);
-
-   BITSET_ZERO(mask.bitset);
-   BITSET_SET_RANGE(mask.bitset, 0, high - low);
-
-   BITSET_COPY(field.bitset, bitmask.bitset);
-   BITSET_SHR(field.bitset, low);
-   BITSET_AND(field.bitset, field.bitset, mask.bitset);
-
-   uint64_t data = bitmask_to_uint64_t(field);
-   if (is_signed)
-      data = util_sign_extend(data, high - low + 1);
-
-   return data;
 }
 
 void
@@ -124,32 +124,33 @@ mme_tu104_decode(struct mme_tu104_inst *insts,
 {
    for (uint32_t i = 0; i < inst_count; i++) {
       /* Annoyingly, the words are reversed in the actual encoding */
-      bitmask_t enc;
-      enc.bitset[0] = in[i * 3 + 2];
-      enc.bitset[1] = in[i * 3 + 1];
-      enc.bitset[2] = in[i * 3 + 0];
+      const uint32_t b[3] = {
+         in[i * 3 + 2],
+         in[i * 3 + 1],
+         in[i * 3 + 0],
+      };
 
-      insts[i].end_next       = unpack_field(enc,  0,  0, false);
-      insts[i].pred_mode      = unpack_field(enc,  1,  4, false);
-      insts[i].pred           = unpack_field(enc,  5,  9, false);
+      insts[i].end_next       = unpack_uint(b,  0,  0);
+      insts[i].pred_mode      = unpack_uint(b,  1,  4);
+      insts[i].pred           = unpack_uint(b,  5,  9);
 
-      insts[i].alu[0].op      = unpack_field(enc, 10, 14, false);
-      insts[i].alu[0].dst     = unpack_field(enc, 15, 19, false);
-      insts[i].alu[0].src[0]  = unpack_field(enc, 20, 24, false);
-      insts[i].alu[0].src[1]  = unpack_field(enc, 25, 29, false);
-      insts[i].imm[0]         = unpack_field(enc, 30, 45, false);
+      insts[i].alu[0].op      = unpack_uint(b, 10, 14);
+      insts[i].alu[0].dst     = unpack_uint(b, 15, 19);
+      insts[i].alu[0].src[0]  = unpack_uint(b, 20, 24);
+      insts[i].alu[0].src[1]  = unpack_uint(b, 25, 29);
+      insts[i].imm[0]         = unpack_uint(b, 30, 45);
 
-      insts[i].alu[1].op      = unpack_field(enc, 46, 50, false);
-      insts[i].alu[1].dst     = unpack_field(enc, 51, 55, false);
-      insts[i].alu[1].src[0]  = unpack_field(enc, 56, 60, false);
-      insts[i].alu[1].src[1]  = unpack_field(enc, 61, 65, false);
-      insts[i].imm[1]         = unpack_field(enc, 66, 81, false);
+      insts[i].alu[1].op      = unpack_uint(b, 46, 50);
+      insts[i].alu[1].dst     = unpack_uint(b, 51, 55);
+      insts[i].alu[1].src[0]  = unpack_uint(b, 56, 60);
+      insts[i].alu[1].src[1]  = unpack_uint(b, 61, 65);
+      insts[i].imm[1]         = unpack_uint(b, 66, 81);
 
-      insts[i].out[0].mthd    = unpack_field(enc, 82, 84, false);
-      insts[i].out[0].emit    = unpack_field(enc, 85, 88, false);
+      insts[i].out[0].mthd    = unpack_uint(b, 82, 84);
+      insts[i].out[0].emit    = unpack_uint(b, 85, 88);
 
-      insts[i].out[1].mthd    = unpack_field(enc, 89, 91, false);
-      insts[i].out[1].emit    = unpack_field(enc, 92, 95, false);
+      insts[i].out[1].mthd    = unpack_uint(b, 89, 91);
+      insts[i].out[1].emit    = unpack_uint(b, 92, 95);
    }
 }
 
@@ -550,5 +551,16 @@ mme_tu104_print(FILE *fp, const struct mme_tu104_inst *insts,
    for (uint32_t i = 0; i < inst_count; i++) {
       fprintf(fp, "%u:\n", i);
       mme_tu104_print_inst(fp, 1, &insts[i]);
+   }
+}
+
+void
+mme_tu104_dump(FILE *fp, uint32_t *encoded, size_t encoded_size)
+{
+   uint32_t inst_count = encoded_size / 12;
+   for (uint32_t i = 0; i < inst_count; i++) {
+      struct mme_tu104_inst inst;
+      mme_tu104_decode(&inst, &encoded[i * 3], 1);
+      mme_tu104_print_inst(fp, 1, &inst);
    }
 }

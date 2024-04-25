@@ -209,7 +209,7 @@ i915_optimize_nir(struct nir_shader *s)
       NIR_PASS(progress, s, nir_opt_algebraic);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_shrink_stores, true);
-      NIR_PASS(progress, s, nir_opt_shrink_vectors);
+      NIR_PASS(progress, s, nir_opt_shrink_vectors, false);
       NIR_PASS(progress, s, nir_opt_loop);
       NIR_PASS(progress, s, nir_opt_undef);
       NIR_PASS(progress, s, nir_opt_loop_unroll);

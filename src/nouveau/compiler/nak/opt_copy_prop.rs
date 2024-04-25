@@ -10,8 +10,18 @@ struct CopyEntry {
     src: Src,
 }
 
+struct PrmtEntry {
+    srcs: [Src; 2],
+    selection: u16,
+}
+
+enum CopyPropEntry {
+    Copy(CopyEntry),
+    Prmt(PrmtEntry),
+}
+
 struct CopyPropPass {
-    ssa_map: HashMap<SSAValue, CopyEntry>,
+    ssa_map: HashMap<SSAValue, CopyPropEntry>,
 }
 
 impl CopyPropPass {
@@ -23,13 +33,17 @@ impl CopyPropPass {
 
     fn add_copy(&mut self, dst: SSAValue, src_type: SrcType, src: Src) {
         assert!(src.src_ref.get_reg().is_none());
-        self.ssa_map.insert(
-            dst,
-            CopyEntry {
-                src_type: src_type,
-                src: src,
-            },
+        self.ssa_map
+            .insert(dst, CopyPropEntry::Copy(CopyEntry { src_type, src }));
+    }
+
+    fn add_prmt(&mut self, dst: SSAValue, srcs: [Src; 2], selection: u16) {
+        assert!(
+            srcs[0].src_ref.get_reg().is_none()
+                && srcs[1].src_ref.get_reg().is_none()
         );
+        self.ssa_map
+            .insert(dst, CopyPropEntry::Prmt(PrmtEntry { srcs, selection }));
     }
 
     fn add_fp64_copy(&mut self, dst: &SSARef, src: Src) {
@@ -44,6 +58,7 @@ impl CopyPropPass {
                 let hi32 = Src {
                     src_ref: SrcRef::CBuf(cb.offset(4)),
                     src_mod: src.src_mod,
+                    src_swizzle: src.src_swizzle,
                 };
                 self.add_copy(dst[0], SrcType::ALU, lo32);
                 self.add_copy(dst[1], SrcType::F64, hi32);
@@ -54,6 +69,7 @@ impl CopyPropPass {
                 let hi32 = Src {
                     src_ref: ssa[1].into(),
                     src_mod: src.src_mod,
+                    src_swizzle: src.src_swizzle,
                 };
                 self.add_copy(dst[0], SrcType::ALU, lo32);
                 self.add_copy(dst[1], SrcType::F64, hi32);
@@ -62,7 +78,7 @@ impl CopyPropPass {
         }
     }
 
-    fn get_copy(&self, dst: &SSAValue) -> Option<&CopyEntry> {
+    fn get_copy(&self, dst: &SSAValue) -> Option<&CopyPropEntry> {
         self.ssa_map.get(dst)
     }
 
@@ -73,9 +89,9 @@ impl CopyPropPass {
                 _ => return,
             };
 
-            let entry = match self.get_copy(&src_ssa) {
-                Some(e) => e,
-                None => return,
+            let Some(CopyPropEntry::Copy(entry)) = self.get_copy(src_ssa)
+            else {
+                return;
             };
 
             match entry.src.src_ref {
@@ -108,9 +124,8 @@ impl CopyPropPass {
 
         for c in 0..src_ssa.comps() {
             let c_ssa = &mut src_ssa[usize::from(c)];
-            let entry = match self.get_copy(c_ssa) {
-                Some(e) => e,
-                None => continue,
+            let Some(CopyPropEntry::Copy(entry)) = self.get_copy(c_ssa) else {
+                continue;
             };
 
             if entry.src.src_mod.is_none() {
@@ -150,9 +165,10 @@ impl CopyPropPass {
             };
 
             for c in 0..usize::from(src_ssa.comps()) {
-                let entry = match self.get_copy(&src_ssa[c]) {
-                    Some(e) => e,
-                    None => return,
+                let Some(CopyPropEntry::Copy(entry)) =
+                    self.get_copy(&src_ssa[c])
+                else {
+                    return;
                 };
 
                 match entry.src.src_ref {
@@ -179,13 +195,86 @@ impl CopyPropPass {
                 None => return,
             };
 
-            // If there are modifiers, the source types have to match
-            if !entry.src.src_mod.is_none() && entry.src_type != src_type {
-                return;
-            }
+            match entry {
+                CopyPropEntry::Copy(entry) => {
+                    // If there are modifiers, the source types have to match
+                    if !entry.src.src_mod.is_none()
+                        && entry.src_type != src_type
+                    {
+                        return;
+                    }
 
-            src.src_ref = entry.src.src_ref;
-            src.src_mod = entry.src.src_mod.modify(src.src_mod);
+                    src.src_ref = entry.src.src_ref;
+                    src.src_mod = entry.src.src_mod.modify(src.src_mod);
+                }
+                CopyPropEntry::Prmt(entry) => {
+                    // Turn the swizzle into a permute. For F16, we use Xx to indicate
+                    // that it only takes the bottom 16 bits.
+                    let swizzle_prmt: [u8; 4] = match src_type {
+                        SrcType::F16 => [0, 1, 0, 1],
+                        SrcType::F16v2 => match src.src_swizzle {
+                            SrcSwizzle::None => [0, 1, 2, 3],
+                            SrcSwizzle::Xx => [0, 1, 0, 1],
+                            SrcSwizzle::Yy => [2, 3, 2, 3],
+                        },
+                        _ => [0, 1, 2, 3],
+                    };
+
+                    let mut entry_src_idx = None;
+                    let mut combined = [0_u8; 4];
+
+                    for i in 0..4 {
+                        let val = ((entry.selection >> (swizzle_prmt[i] * 4))
+                            & 0xF) as u8;
+
+                        // If we have a sign extension, we cannot simplify it.
+                        if val & 8 != 0 {
+                            return;
+                        }
+
+                        let target_src_idx = val / 4;
+
+                        // Ensure we are using the same source, we cannot combine
+                        // multiple sources.
+                        if entry_src_idx.is_none() {
+                            entry_src_idx = Some(target_src_idx);
+                        } else if entry_src_idx != Some(target_src_idx) {
+                            return;
+                        }
+
+                        combined[i] = val & 0x3;
+                    }
+
+                    let entry_src_idx = usize::from(entry_src_idx.unwrap());
+                    let entry_src = entry.srcs[entry_src_idx];
+
+                    // See if that permute is a valid swizzle
+                    let new_swizzle = match src_type {
+                        SrcType::F16 => {
+                            if combined != [0, 1, 0, 1] {
+                                return;
+                            }
+                            SrcSwizzle::None
+                        }
+                        SrcType::F16v2 => match combined {
+                            [0, 1, 2, 3] => SrcSwizzle::None,
+                            [0, 1, 0, 1] => SrcSwizzle::Xx,
+                            [2, 3, 2, 3] => SrcSwizzle::Yy,
+                            _ => return,
+                        },
+                        _ => {
+                            if combined != [0, 1, 2, 3] {
+                                return;
+                            }
+                            SrcSwizzle::None
+                        }
+                    };
+
+                    src.src_ref = entry_src.src_ref;
+                    src.src_mod = entry_src.src_mod.modify(src.src_mod);
+                    src.src_swizzle = new_swizzle;
+                }
+            }
         }
     }
 
@@ -203,7 +292,7 @@ impl CopyPropPass {
             // any copies with source modifiers in the low bits and apply
             // source modifiers as needed when propagating the high bits.
             let lo_entry_or_none = self.get_copy(&src_ssa[0]);
-            if let Some(lo_entry) = lo_entry_or_none {
+            if let Some(CopyPropEntry::Copy(lo_entry)) = lo_entry_or_none {
                 if lo_entry.src.src_mod.is_none() {
                     if let SrcRef::SSA(lo_entry_ssa) = lo_entry.src.src_ref {
                         src_ssa[0] = lo_entry_ssa[0];
@@ -213,7 +302,7 @@ impl CopyPropPass {
             }
 
             let hi_entry_or_none = self.get_copy(&src_ssa[1]);
-            if let Some(hi_entry) = hi_entry_or_none {
+            if let Some(CopyPropEntry::Copy(hi_entry)) = hi_entry_or_none {
                 if hi_entry.src.src_mod.is_none()
                     || hi_entry.src_type == SrcType::F64
                 {
@@ -225,11 +314,11 @@ impl CopyPropPass {
                 }
             }
 
-            let Some(lo_entry) = lo_entry_or_none else {
+            let Some(CopyPropEntry::Copy(lo_entry)) = lo_entry_or_none else {
                 return;
             };
 
-            let Some(hi_entry) = hi_entry_or_none else {
+            let Some(CopyPropEntry::Copy(hi_entry)) = hi_entry_or_none else {
                 return;
             };
 
@@ -289,6 +378,8 @@ impl CopyPropPass {
                 self.prop_to_gpr_src(src);
             }
             SrcType::ALU
+            | SrcType::F16
+            | SrcType::F16v2
             | SrcType::F32
             | SrcType::I32
             | SrcType::B32
@@ -304,6 +395,19 @@ impl CopyPropPass {
 
     fn try_add_instr(&mut self, instr: &Instr) {
         match &instr.op {
+            Op::HAdd2(add) => {
+                let dst = add.dst.as_ssa().unwrap();
+                assert!(dst.comps() == 1);
+                let dst = dst[0];
+
+                if !add.saturate {
+                    if add.srcs[0].is_fneg_zero(SrcType::F16v2) {
+                        self.add_copy(dst, SrcType::F16v2, add.srcs[1]);
+                    } else if add.srcs[1].is_fneg_zero(SrcType::F16v2) {
+                        self.add_copy(dst, SrcType::F16v2, add.srcs[0]);
+                    }
+                }
+            }
             Op::FAdd(add) => {
                 let dst = add.dst.as_ssa().unwrap();
                 assert!(dst.comps() == 1);
@@ -415,6 +519,12 @@ impl CopyPropPass {
                     }
                     if is_imm {
                         self.add_copy(dst[0], SrcType::GPR, imm.into());
+                    } else {
+                        self.add_prmt(
+                            dst[0],
+                            prmt.srcs,
+                            sel.try_into().unwrap(),
+                        );
                     }
                 }
             }

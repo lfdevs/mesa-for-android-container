@@ -44,6 +44,19 @@ vk_swizzle_to_pipe(VkComponentSwizzle swizzle)
 }
 
 static void
+image_single_level_view(struct nil_image *image,
+                        struct nil_view *view,
+                        uint64_t *base_addr)
+{
+   assert(view->num_levels == 1);
+
+   uint64_t offset_B;
+   *image = nil_image_for_level(image, view->base_level, &offset_B);
+   *base_addr += offset_B;
+   view->base_level = 0;
+}
+
+static void
 image_uncompressed_view(struct nil_image *image,
                         struct nil_view *view,
                         uint64_t *base_addr)
@@ -51,7 +64,7 @@ image_uncompressed_view(struct nil_image *image,
    assert(view->num_levels == 1);
 
    uint64_t offset_B;
-   nil_image_level_as_uncompressed(image, view->base_level, image, &offset_B);
+   *image = nil_image_level_as_uncompressed(image, view->base_level, &offset_B);
    *base_addr += offset_B;
    view->base_level = 0;
 }
@@ -61,12 +74,12 @@ image_3d_view_as_2d_array(struct nil_image *image,
                           struct nil_view *view,
                           uint64_t *base_addr)
 {
-   assert(view->type == NIL_VIEW_TYPE_2D ||
-          view->type == NIL_VIEW_TYPE_2D_ARRAY);
+   assert(view->view_type == NIL_VIEW_TYPE_2D ||
+          view->view_type == NIL_VIEW_TYPE_2D_ARRAY);
    assert(view->num_levels == 1);
 
    uint64_t offset_B;
-   nil_image_3d_level_as_2d_array(image, view->base_level, image, &offset_B);
+   *image = nil_image_3d_level_as_2d_array(image, view->base_level, &offset_B);
    *base_addr += offset_B;
    view->base_level = 0;
 }
@@ -89,6 +102,7 @@ nvk_image_view_init(struct nvk_device *dev,
                     bool driver_internal,
                     const VkImageViewCreateInfo *pCreateInfo)
 {
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VK_FROM_HANDLE(nvk_image, image, pCreateInfo->image);
    VkResult result;
 
@@ -136,8 +150,8 @@ nvk_image_view_init(struct nvk_device *dev,
          p_format = get_stencil_format(p_format);
 
       struct nil_view nil_view = {
-         .type = vk_image_view_type_to_nil_view_type(view->vk.view_type),
-         .format = p_format,
+         .view_type = vk_image_view_type_to_nil_view_type(view->vk.view_type),
+         .format = nil_format(p_format),
          .base_level = view->vk.base_mip_level,
          .num_levels = view->vk.level_count,
          .base_array_layer = view->vk.base_array_layer,
@@ -151,19 +165,21 @@ nvk_image_view_init(struct nvk_device *dev,
          .min_lod_clamp = view->vk.min_lod,
       };
 
-      if (util_format_is_compressed(nil_image.format) &&
-         !util_format_is_compressed(nil_view.format))
+      if (util_format_is_compressed(nil_image.format.p_format) &&
+         !util_format_is_compressed(nil_view.format.p_format))
          image_uncompressed_view(&nil_image, &nil_view, &base_addr);
 
       if (nil_image.dim == NIL_IMAGE_DIM_3D &&
-         nil_view.type != NIL_VIEW_TYPE_3D)
+         nil_view.view_type != NIL_VIEW_TYPE_3D)
          image_3d_view_as_2d_array(&nil_image, &nil_view, &base_addr);
+
+      view->planes[view_plane].sample_layout = nil_image.sample_layout;
 
       if (view->vk.usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
          uint32_t tic[8];
-         nil_image_fill_tic(&nvk_device_physical(dev)->info,
-                           &nil_image, &nil_view, base_addr, tic);
+         nil_image_fill_tic(&nil_image, &pdev->info,
+                            &nil_view, base_addr, &tic);
 
          result = nvk_descriptor_table_add(dev, &dev->images, tic, sizeof(tic),
                                           &view->planes[view_plane].sampled_desc_index);
@@ -177,7 +193,7 @@ nvk_image_view_init(struct nvk_device *dev,
          /* For storage images, we can't have any cubes */
          if (view->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE ||
             view->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
-            nil_view.type = NIL_VIEW_TYPE_2D_ARRAY;
+            nil_view.view_type = NIL_VIEW_TYPE_2D_ARRAY;
 
          if (view->vk.view_type == VK_IMAGE_VIEW_TYPE_3D) {
             /* Without VK_AMD_shader_image_load_store_lod, the client can only
@@ -185,16 +201,23 @@ nvk_image_view_init(struct nvk_device *dev,
              */
             assert(view->vk.base_array_layer == 0);
             assert(view->vk.layer_count == 1);
-            nil_view.type = NIL_VIEW_TYPE_2D_ARRAY;
             nil_view.num_levels = 1;
-            nil_view.base_array_layer = view->vk.storage.z_slice_offset;
-            nil_view.array_len = view->vk.storage.z_slice_count;
-            image_3d_view_as_2d_array(&nil_image, &nil_view, &base_addr);
+            image_single_level_view(&nil_image, &nil_view, &base_addr);
+
+            if (view->vk.storage.z_slice_offset > 0 ||
+                view->vk.storage.z_slice_count < nil_image.extent_px.depth) {
+               nil_view.view_type = NIL_VIEW_TYPE_3D_SLICED;
+               nil_view.base_array_layer = view->vk.storage.z_slice_offset;
+               nil_view.array_len = view->vk.storage.z_slice_count;
+            }
          }
 
+         if (image->vk.samples != VK_SAMPLE_COUNT_1_BIT)
+            nil_image = nil_msaa_image_as_sa(&nil_image);
+
          uint32_t tic[8];
-         nil_image_fill_tic(&nvk_device_physical(dev)->info,
-                           &nil_image, &nil_view, base_addr, tic);
+         nil_image_fill_tic(&nil_image, &pdev->info, &nil_view,
+                            base_addr, &tic);
 
          result = nvk_descriptor_table_add(dev, &dev->images, tic, sizeof(tic),
                                           &view->planes[view_plane].storage_desc_index);

@@ -22,6 +22,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "brw_disasm_info.h"
 #include "brw_eu.h"
 #include "brw_eu_defines.h"
 #include "util/bitset.h"
@@ -30,15 +31,6 @@
 static const struct intel_gfx_info {
    const char *name;
 } gfx_names[] = {
-   { "brw", },
-   { "g4x", },
-   { "ilk", },
-   { "snb", },
-   { "ivb", },
-   { "hsw", },
-   { "byt", },
-   { "bdw", },
-   { "chv", },
    { "skl", },
    { "bxt", },
    { "kbl", },
@@ -167,25 +159,15 @@ TEST_P(validation_test, src1_null_reg)
 
 TEST_P(validation_test, math_src0_null_reg)
 {
-   if (devinfo.ver >= 6) {
-      gfx6_math(p, g0, BRW_MATH_FUNCTION_SIN, null, null);
-   } else {
-      gfx4_math(p, g0, BRW_MATH_FUNCTION_SIN, 0, null, BRW_MATH_PRECISION_FULL);
-   }
+   gfx6_math(p, g0, BRW_MATH_FUNCTION_SIN, null, null);
 
    EXPECT_FALSE(validate(p));
 }
 
 TEST_P(validation_test, math_src1_null_reg)
 {
-   if (devinfo.ver >= 6) {
-      gfx6_math(p, g0, BRW_MATH_FUNCTION_POW, g0, null);
-      EXPECT_FALSE(validate(p));
-   } else {
-      /* Math instructions on Gfx4/5 are actually SEND messages with payloads.
-       * src1 is an immediate message descriptor set by gfx4_math.
-       */
-   }
+   gfx6_math(p, g0, BRW_MATH_FUNCTION_POW, g0, null);
+   EXPECT_FALSE(validate(p));
 }
 
 TEST_P(validation_test, opcode46)
@@ -197,11 +179,7 @@ TEST_P(validation_test, opcode46)
     */
    brw_next_insn(p, brw_opcode_decode(&isa, 46));
 
-   if (devinfo.ver == 7) {
-      EXPECT_FALSE(validate(p));
-   } else {
-      EXPECT_TRUE(validate(p));
-   }
+   EXPECT_TRUE(validate(p));
 }
 
 TEST_P(validation_test, invalid_exec_size_encoding)
@@ -244,37 +222,6 @@ TEST_P(validation_test, invalid_exec_size_encoding)
    }
 }
 
-TEST_P(validation_test, invalid_file_encoding)
-{
-   /* Register file on Gfx12 is only one bit */
-   if (devinfo.ver >= 12)
-      return;
-
-   brw_MOV(p, g0, g0);
-   brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_MESSAGE_REGISTER_FILE, BRW_REGISTER_TYPE_F);
-
-   if (devinfo.ver > 6) {
-      EXPECT_FALSE(validate(p));
-   } else {
-      EXPECT_TRUE(validate(p));
-   }
-
-   clear_instructions(p);
-
-   if (devinfo.ver < 6) {
-      gfx4_math(p, g0, BRW_MATH_FUNCTION_SIN, 0, g0, BRW_MATH_PRECISION_FULL);
-   } else {
-      gfx6_math(p, g0, BRW_MATH_FUNCTION_SIN, g0, null);
-   }
-   brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_MESSAGE_REGISTER_FILE, BRW_REGISTER_TYPE_F);
-
-   if (devinfo.ver > 6) {
-      EXPECT_FALSE(validate(p));
-   } else {
-      EXPECT_TRUE(validate(p));
-   }
-}
-
 TEST_P(validation_test, invalid_type_encoding)
 {
    enum brw_reg_file files[2] = {
@@ -284,7 +231,7 @@ TEST_P(validation_test, invalid_type_encoding)
 
    for (unsigned i = 0; i < ARRAY_SIZE(files); i++) {
       const enum brw_reg_file file = files[i];
-      const int num_bits = devinfo.ver >= 8 ? 4 : 3;
+      const int num_bits = 4;
       const int num_encodings = 1 << num_bits;
 
       /* The data types are encoded into <num_bits> bits to be used in hardware
@@ -298,9 +245,9 @@ TEST_P(validation_test, invalid_type_encoding)
          bool expected_result;
       } test_case[] = {
          { BRW_REGISTER_TYPE_NF, devinfo.ver == 11 && file != IMM },
-         { BRW_REGISTER_TYPE_DF, devinfo.has_64bit_float && (devinfo.ver >= 8 || file != IMM) },
+         { BRW_REGISTER_TYPE_DF, devinfo.has_64bit_float },
          { BRW_REGISTER_TYPE_F,  true },
-         { BRW_REGISTER_TYPE_HF, devinfo.ver >= 8 },
+         { BRW_REGISTER_TYPE_HF, true },
          { BRW_REGISTER_TYPE_VF, file == IMM },
          { BRW_REGISTER_TYPE_Q,  devinfo.has_64bit_int },
          { BRW_REGISTER_TYPE_UQ, devinfo.has_64bit_int },
@@ -311,7 +258,7 @@ TEST_P(validation_test, invalid_type_encoding)
          { BRW_REGISTER_TYPE_B,  file == FIXED_GRF },
          { BRW_REGISTER_TYPE_UB, file == FIXED_GRF },
          { BRW_REGISTER_TYPE_V,  file == IMM },
-         { BRW_REGISTER_TYPE_UV, devinfo.ver >= 6 && file == IMM },
+         { BRW_REGISTER_TYPE_UV, file == IMM },
       };
 
       /* Initially assume all hardware encodings are invalid */
@@ -1280,11 +1227,7 @@ TEST_P(validation_test, byte_destination_relaxed_alignment)
    brw_inst_set_dst_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_2);
    brw_inst_set_dst_da1_subreg_nr(&devinfo, last_inst, 1);
 
-   if (devinfo.verx10 >= 45) {
-      EXPECT_TRUE(validate(p));
-   } else {
-      EXPECT_FALSE(validate(p));
-   }
+   EXPECT_TRUE(validate(p));
 }
 
 TEST_P(validation_test, byte_64bit_conversion)
@@ -1355,75 +1298,70 @@ TEST_P(validation_test, half_float_conversion)
       enum brw_reg_type src_type;
       unsigned dst_stride;
       unsigned dst_subnr;
-      bool expected_result_bdw;
-      bool expected_result_chv_gfx9;
+      bool expected_result_gfx9;
       bool expected_result_gfx125;
    } inst[] = {
 #define INST(dst_type, src_type, dst_stride, dst_subnr,                     \
-             expected_result_bdw, expected_result_chv_gfx9,                 \
+             expected_result_gfx9,                                          \
              expected_result_gfx125)                                        \
       {                                                                     \
          BRW_REGISTER_TYPE_##dst_type,                                      \
          BRW_REGISTER_TYPE_##src_type,                                      \
          BRW_HORIZONTAL_STRIDE_##dst_stride,                                \
          dst_subnr,                                                         \
-         expected_result_bdw,                                               \
-         expected_result_chv_gfx9,                                          \
+         expected_result_gfx9,                                              \
          expected_result_gfx125,                                            \
       }
 
       /* MOV to half-float destination */
-      INST(HF,  B, 1, 0, false, false, false), /* 0 */
-      INST(HF,  W, 1, 0, false, false, false),
-      INST(HF, HF, 1, 0, true,  true,  true),
-      INST(HF, HF, 1, 2, true,  true,  false),
-      INST(HF,  D, 1, 0, false, false, false),
-      INST(HF,  F, 1, 0, false, true,  false),
-      INST(HF,  Q, 1, 0, false, false, false),
-      INST(HF,  B, 2, 0, true,  true,  false),
-      INST(HF,  B, 2, 2, false, false, false),
-      INST(HF,  W, 2, 0, true,  true,  false),
-      INST(HF,  W, 2, 2, false, false, false), /* 10 */
-      INST(HF, HF, 2, 0, true,  true,  false),
-      INST(HF, HF, 2, 2, true,  true,  false),
-      INST(HF,  D, 2, 0, true,  true,  true),
-      INST(HF,  D, 2, 2, false, false, false),
-      INST(HF,  F, 2, 0, true,  true,  true),
-      INST(HF,  F, 2, 2, false, true,  false),
-      INST(HF,  Q, 2, 0, false, false, false),
-      INST(HF, DF, 2, 0, false, false, false),
-      INST(HF,  B, 4, 0, false, false, false),
-      INST(HF,  W, 4, 0, false, false, false), /* 20 */
-      INST(HF, HF, 4, 0, true,  true,  false),
-      INST(HF, HF, 4, 2, true,  true,  false),
-      INST(HF,  D, 4, 0, false, false, false),
-      INST(HF,  F, 4, 0, false, false, false),
-      INST(HF,  Q, 4, 0, false, false, false),
-      INST(HF, DF, 4, 0, false, false, false),
+      INST(HF,  B, 1, 0, false, false), /* 0 */
+      INST(HF,  W, 1, 0, false, false),
+      INST(HF, HF, 1, 0, true,  true),
+      INST(HF, HF, 1, 2, true,  false),
+      INST(HF,  D, 1, 0, false, false),
+      INST(HF,  F, 1, 0, true,  false),
+      INST(HF,  Q, 1, 0, false, false),
+      INST(HF,  B, 2, 0, true,  false),
+      INST(HF,  B, 2, 2, false, false),
+      INST(HF,  W, 2, 0, true,  false),
+      INST(HF,  W, 2, 2, false, false), /* 10 */
+      INST(HF, HF, 2, 0, true,  false),
+      INST(HF, HF, 2, 2, true,  false),
+      INST(HF,  D, 2, 0, true,  true),
+      INST(HF,  D, 2, 2, false, false),
+      INST(HF,  F, 2, 0, true,  true),
+      INST(HF,  F, 2, 2, true,  false),
+      INST(HF,  Q, 2, 0, false, false),
+      INST(HF, DF, 2, 0, false, false),
+      INST(HF,  B, 4, 0, false, false),
+      INST(HF,  W, 4, 0, false, false), /* 20 */
+      INST(HF, HF, 4, 0, true,  false),
+      INST(HF, HF, 4, 2, true,  false),
+      INST(HF,  D, 4, 0, false, false),
+      INST(HF,  F, 4, 0, false, false),
+      INST(HF,  Q, 4, 0, false, false),
+      INST(HF, DF, 4, 0, false, false),
 
       /* MOV from half-float source */
-      INST( B, HF, 1, 0, false, false, false),
-      INST( W, HF, 1, 0, false, false, false),
-      INST( D, HF, 1, 0, true,  true,  true),
-      INST( D, HF, 1, 4, true,  true,  true),  /* 30 */
-      INST( F, HF, 1, 0, true,  true,  false),
-      INST( F, HF, 1, 4, true,  true,  false),
-      INST( Q, HF, 1, 0, false, false, false),
-      INST(DF, HF, 1, 0, false, false, false),
-      INST( B, HF, 2, 0, false, false, false),
-      INST( W, HF, 2, 0, true,  true,  true),
-      INST( W, HF, 2, 2, false, false, false),
-      INST( D, HF, 2, 0, false, false, false),
-      INST( F, HF, 2, 0, true,  true,  false),
-      INST( B, HF, 4, 0, true,  true,  true),  /* 40 */
-      INST( B, HF, 4, 1, false, false, false),
-      INST( W, HF, 4, 0, false, false, false),
+      INST( B, HF, 1, 0, false, false),
+      INST( W, HF, 1, 0, false, false),
+      INST( D, HF, 1, 0, true,  true),
+      INST( D, HF, 1, 4, true,  true),  /* 30 */
+      INST( F, HF, 1, 0, true,  false),
+      INST( F, HF, 1, 4, true,  false),
+      INST( Q, HF, 1, 0, false, false),
+      INST(DF, HF, 1, 0, false, false),
+      INST( B, HF, 2, 0, false, false),
+      INST( W, HF, 2, 0, true,  true),
+      INST( W, HF, 2, 2, false, false),
+      INST( D, HF, 2, 0, false, false),
+      INST( F, HF, 2, 0, true,  false),
+      INST( B, HF, 4, 0, true,  true),  /* 40 */
+      INST( B, HF, 4, 1, false, false),
+      INST( W, HF, 4, 0, false, false),
 
 #undef INST
    };
-
-   if (devinfo.ver < 8)
-      return;
 
    for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       if (!devinfo.has_64bit_float &&
@@ -1458,11 +1396,8 @@ TEST_P(validation_test, half_float_conversion)
       if (devinfo.verx10 >= 125) {
          EXPECT_EQ(inst[i].expected_result_gfx125, validate(p)) <<
             "Failing test is: " << i;
-      } else if (devinfo.platform == INTEL_PLATFORM_CHV || devinfo.ver >= 9) {
-         EXPECT_EQ(inst[i].expected_result_chv_gfx9, validate(p)) <<
-            "Failing test is: " << i;
       } else {
-         EXPECT_EQ(inst[i].expected_result_bdw, validate(p)) <<
+         EXPECT_EQ(inst[i].expected_result_gfx9, validate(p)) <<
             "Failing test is: " << i;
       }
 

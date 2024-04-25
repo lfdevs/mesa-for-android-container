@@ -64,25 +64,6 @@ dump_anv_vm_bind(struct anv_device *device,
 }
 
 static void
-dump_vk_sparse_memory_bind(const VkSparseMemoryBind *bind)
-{
-   if (!INTEL_DEBUG(DEBUG_SPARSE))
-      return;
-
-   if (bind->memory != VK_NULL_HANDLE) {
-      struct anv_bo *bo = anv_device_memory_from_handle(bind->memory)->bo;
-      sparse_debug("bo:%04u ", bo->gem_handle);
-   } else {
-      sparse_debug("bo:---- ");
-   }
-
-   sparse_debug("res_offset:%08"PRIx64" size:%08"PRIx64" "
-                "mem_offset:%08"PRIx64" flags:0x%08x\n",
-                bind->resourceOffset, bind->size, bind->memoryOffset,
-                bind->flags);
-}
-
-static void
 dump_anv_image(struct anv_image *i)
 {
    if (!INTEL_DEBUG(DEBUG_SPARSE))
@@ -201,7 +182,7 @@ vk_extent3d_el_to_px(const VkExtent3D extent_el,
 static bool
 isl_tiling_supports_standard_block_shapes(enum isl_tiling tiling)
 {
-   return tiling == ISL_TILING_64 ||
+   return isl_tiling_is_64(tiling) ||
           tiling == ISL_TILING_ICL_Ys ||
           tiling == ISL_TILING_SKL_Ys;
 }
@@ -327,7 +308,9 @@ trtt_make_page_table_bo(struct anv_device *device, struct anv_bo **bo)
    struct anv_trtt *trtt = &device->trtt;
 
    result = anv_device_alloc_bo(device, "trtt-page-table",
-                                ANV_TRTT_PAGE_TABLE_BO_SIZE, 0, 0, bo);
+                                ANV_TRTT_PAGE_TABLE_BO_SIZE |
+                                ANV_BO_ALLOC_INTERNAL,
+                                0, 0, bo);
    if (result != VK_SUCCESS)
       return result;
 
@@ -594,6 +577,9 @@ anv_sparse_bind_trtt(struct anv_device *device,
    if (trtt_submit.l3l2_binds_len || trtt_submit.l1_binds_len)
       result = anv_genX(device->info, write_trtt_entries)(&trtt_submit);
 
+   if (result == VK_SUCCESS)
+      ANV_RMV(vm_binds, device, sparse_submit->binds, sparse_submit->binds_len);
+
 out:
    pthread_mutex_unlock(&trtt->mutex);
    STACK_ARRAY_FINISH(l1_binds);
@@ -606,48 +592,11 @@ anv_sparse_bind_vm_bind(struct anv_device *device,
                         struct anv_sparse_submission *submit)
 {
    struct anv_queue *queue = submit->queue;
-   VkResult result;
 
    if (!queue)
       assert(submit->wait_count == 0 && submit->signal_count == 0);
 
-   /* TODO: make both the syncs and signals be passed as part of the vm_bind
-    * ioctl so they can be waited asynchronously. For now this doesn't matter
-    * as we're doing synchronous vm_bind, but later when we make it async this
-    * will make a difference.
-    */
-   result = vk_sync_wait_many(&device->vk, submit->wait_count, submit->waits,
-                              VK_SYNC_WAIT_COMPLETE, INT64_MAX);
-   if (result != VK_SUCCESS)
-      return vk_queue_set_lost(&queue->vk, "vk_sync_wait failed");
-
-   /* FIXME: here we were supposed to issue a single vm_bind ioctl by calling
-    * vm_bind(device, num_binds, binds), but for an unknown reason some
-    * shader-related tests fail when we do that, so work around it for now.
-    * See: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/746
-    */
-   for (int b = 0; b < submit->binds_len; b++) {
-      struct anv_sparse_submission s = {
-         .queue = submit->queue,
-         .binds = &submit->binds[b],
-         .binds_len = 1,
-         .binds_capacity = 1,
-         .wait_count = 0,
-         .signal_count = 0,
-      };
-      int rc = device->kmd_backend->vm_bind(device, &s);
-      if (rc)
-         return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-   }
-
-   for (uint32_t i = 0; i < submit->signal_count; i++) {
-      struct vk_sync_signal *s = &submit->signals[i];
-      result = vk_sync_signal(&device->vk, s->sync, s->signal_value);
-      if (result != VK_SUCCESS)
-         return vk_queue_set_lost(&queue->vk, "vk_sync_signal failed");
-   }
-
-   return VK_SUCCESS;
+   return device->kmd_backend->vm_bind(device, submit, ANV_VM_BIND_FLAG_NONE);
 }
 
 VkResult
@@ -659,7 +608,7 @@ anv_sparse_bind(struct anv_device *device,
          dump_anv_vm_bind(device, &submit->binds[b]);
    }
 
-   return device->physical->sparse_uses_trtt ?
+   return device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT ?
             anv_sparse_bind_trtt(device, submit) :
             anv_sparse_bind_vm_bind(device, submit);
 }
@@ -674,7 +623,7 @@ anv_init_sparse_bindings(struct anv_device *device,
 {
    uint64_t size = align64(size_, ANV_SPARSE_BLOCK_SIZE);
 
-   if (device->physical->sparse_uses_trtt)
+   if (device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT)
       alloc_flags |= ANV_BO_ALLOC_TRTT;
 
    sparse->address = anv_vma_alloc(device, size, ANV_SPARSE_BLOCK_SIZE,
@@ -707,18 +656,21 @@ anv_init_sparse_bindings(struct anv_device *device,
       return res;
    }
 
+   p_atomic_inc(&device->num_sparse_resources);
    return VK_SUCCESS;
 }
 
-VkResult
+void
 anv_free_sparse_bindings(struct anv_device *device,
                          struct anv_sparse_binding_data *sparse)
 {
    if (!sparse->address)
-      return VK_SUCCESS;
+      return;
 
    sparse_debug("%s: address:0x%016"PRIx64" size:0x%08"PRIx64"\n",
                 __func__, sparse->address, sparse->size);
+
+   p_atomic_dec(&device->num_sparse_resources);
 
    struct anv_vm_bind unbind = {
       .bo = 0,
@@ -736,12 +688,16 @@ anv_free_sparse_bindings(struct anv_device *device,
       .signal_count = 0,
    };
    VkResult res = anv_sparse_bind(device, &submit);
+
+   /* Our callers don't have a way to signal failure to the upper layers, so
+    * just keep the vma if we fail to unbind it. Still, let's have an
+    * assertion because this really shouldn't be happening.
+    */
+   assert(res == VK_SUCCESS);
    if (res != VK_SUCCESS)
-      return res;
+      return;
 
    anv_vma_free(device, sparse->vma_heap, sparse->address, sparse->size);
-
-   return VK_SUCCESS;
 }
 
 static VkExtent3D
@@ -880,7 +836,6 @@ anv_sparse_calc_miptail_properties(struct anv_device *device,
                                    VkDeviceSize *imageMipTailOffset,
                                    VkDeviceSize *imageMipTailStride)
 {
-   assert(__builtin_popcount(vk_aspect) == 1);
    const uint32_t plane = anv_image_aspect_to_plane(image, vk_aspect);
    struct isl_surf *surf = &image->planes[plane].primary_surface.isl;
    uint64_t binding_plane_offset =
@@ -988,18 +943,50 @@ vk_bind_to_anv_vm_bind(struct anv_sparse_binding_data *sparse,
    return anv_bind;
 }
 
-VkResult
+static VkResult
 anv_sparse_bind_resource_memory(struct anv_device *device,
                                 struct anv_sparse_binding_data *sparse,
+                                uint64_t resource_size,
                                 const VkSparseMemoryBind *vk_bind,
                                 struct anv_sparse_submission *submit)
 {
    struct anv_vm_bind bind = vk_bind_to_anv_vm_bind(sparse, vk_bind);
+   uint64_t rem = vk_bind->size % ANV_SPARSE_BLOCK_SIZE;
 
-   if (vk_bind->size % ANV_SPARSE_BLOCK_SIZE != 0)
-      return vk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+   if (rem != 0) {
+      if (vk_bind->resourceOffset + vk_bind->size == resource_size)
+         bind.size += ANV_SPARSE_BLOCK_SIZE - rem;
+      else
+         return vk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+   }
 
    return anv_sparse_submission_add(device, submit, &bind);
+}
+
+VkResult
+anv_sparse_bind_buffer(struct anv_device *device,
+                       struct anv_buffer *buffer,
+                       const VkSparseMemoryBind *vk_bind,
+                       struct anv_sparse_submission *submit)
+{
+   return anv_sparse_bind_resource_memory(device, &buffer->sparse_data,
+                                          buffer->vk.size,
+                                          vk_bind, submit);
+}
+
+VkResult
+anv_sparse_bind_image_opaque(struct anv_device *device,
+                             struct anv_image *image,
+                             const VkSparseMemoryBind *vk_bind,
+                             struct anv_sparse_submission *submit)
+{
+   struct anv_image_binding *b =
+      &image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN];
+   assert(!image->disjoint);
+
+   return anv_sparse_bind_resource_memory(device, &b->sparse_data,
+                                          b->memory_range.size,
+                                          vk_bind, submit);
 }
 
 VkResult
@@ -1013,7 +1000,6 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
    uint32_t mip_level = bind->subresource.mipLevel;
    uint32_t array_layer = bind->subresource.arrayLayer;
 
-   assert(__builtin_popcount(aspect) == 1);
    assert(!(bind->flags & VK_SPARSE_MEMORY_BIND_METADATA_BIT));
 
    struct anv_image_binding *img_binding = image->disjoint ?
@@ -1027,18 +1013,19 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
       image->planes[plane].primary_surface.memory_range.offset;
    const struct isl_format_layout *layout =
       isl_format_get_layout(surf->format);
-   struct isl_tile_info tile_info;
-   isl_surf_get_tile_info(surf, &tile_info);
 
-   sparse_debug("\n=== [%s:%d] [%s] BEGIN\n", __FILE__, __LINE__, __func__);
-   sparse_debug("--> mip_level:%d array_layer:%d\n",
-                mip_level, array_layer);
-   sparse_debug("aspect:0x%x plane:%d\n", aspect, plane);
-   sparse_debug("binding offset: [%d, %d, %d] extent: [%d, %d, %d]\n",
-                bind->offset.x, bind->offset.y, bind->offset.z,
-                bind->extent.width, bind->extent.height, bind->extent.depth);
-   dump_anv_image(image);
-   dump_isl_surf(surf);
+   if (INTEL_DEBUG(DEBUG_SPARSE)) {
+      sparse_debug("%s:", __func__);
+      sparse_debug("mip_level:%d array_layer:%d\n", mip_level, array_layer);
+      sparse_debug("aspect:0x%x plane:%d\n", aspect, plane);
+      sparse_debug("binding offset: [%d, %d, %d] extent: [%d, %d, %d]\n",
+                   bind->offset.x, bind->offset.y, bind->offset.z,
+                   bind->extent.width, bind->extent.height,
+                   bind->extent.depth);
+      dump_anv_image(image);
+      dump_isl_surf(surf);
+      sparse_debug("\n");
+   }
 
    VkExtent3D block_shape_px =
       anv_sparse_calc_block_shape(device->physical, surf);
@@ -1125,7 +1112,6 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
       }
    }
 
-   sparse_debug("\n=== [%s:%d] [%s] END\n", __FILE__, __LINE__, __func__);
    return VK_SUCCESS;
 }
 

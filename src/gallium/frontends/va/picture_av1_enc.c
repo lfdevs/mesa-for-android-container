@@ -133,6 +133,7 @@ VAStatus vlVaHandleVAEncSequenceParameterBufferTypeAV1(vlVaDriver *drv, vlVaCont
 VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAEncPictureParameterBufferAV1 *av1 = buf->data;
+   struct pipe_video_buffer *video_buf = NULL;
    vlVaBuffer *coded_buf;
    int i;
 
@@ -142,6 +143,7 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
    context->desc.av1enc.enable_frame_obu = av1->picture_flags.bits.enable_frame_obu;
    context->desc.av1enc.allow_high_precision_mv = av1->picture_flags.bits.allow_high_precision_mv;
    context->desc.av1enc.palette_mode_enable = av1->picture_flags.bits.palette_mode_enable;
+   context->desc.av1enc.long_term_reference = av1->picture_flags.bits.long_term_reference;
    context->desc.av1enc.num_tiles_in_pic = av1->tile_cols * av1->tile_rows;
    context->desc.av1enc.tile_rows = av1->tile_rows;
    context->desc.av1enc.tile_cols = av1->tile_cols;
@@ -157,14 +159,14 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
    /* The last tile column or row size needs to be derived. */
     for (uint8_t i = 0 ; i < ARRAY_SIZE(av1->width_in_sbs_minus_1); i++)
         context->desc.av1enc.width_in_sbs_minus_1[i] = av1->width_in_sbs_minus_1[i];
-    
+
     /* The last tile column or row size needs to be derived. */
     for (uint8_t i = 0 ; i < ARRAY_SIZE(av1->height_in_sbs_minus_1); i++)
         context->desc.av1enc.height_in_sbs_minus_1[i] = av1->height_in_sbs_minus_1[i];
 
    context->desc.av1enc.cdef.cdef_damping_minus_3 = av1->cdef_damping_minus_3;
    context->desc.av1enc.cdef.cdef_bits = av1->cdef_bits;
-   
+
    for (uint8_t i = 0 ; i < ARRAY_SIZE(av1->cdef_y_strengths); i++)
       context->desc.av1enc.cdef.cdef_y_strengths[i] = av1->cdef_y_strengths[i];
 
@@ -219,17 +221,6 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
                                             PIPE_USAGE_STAGING, coded_buf->size);
    context->coded_buf = coded_buf;
 
-   for (i = 0; i < ARRAY_SIZE(context->desc.av1enc.rc); i++) {
-      context->desc.av1enc.rc[i].qp = av1->base_qindex ? av1->base_qindex : 60;
-      /* Distinguishes from the default params set for these values and app specific params passed down */
-      context->desc.av1enc.rc[i].app_requested_initial_qp = (av1->base_qindex != 0);
-      context->desc.av1enc.rc[i].min_qp = av1->min_base_qindex ? av1->min_base_qindex : 1;
-      context->desc.av1enc.rc[i].max_qp = av1->max_base_qindex ? av1->max_base_qindex : 255;
-      /* Distinguishes from the default params set for these values and app specific params passed down */
-      context->desc.av1enc.rc[i].app_requested_qp_range = 
-         ((context->desc.av1enc.rc[i].max_qp != AV1_MAX_QP_DEFAULT) || (context->desc.av1enc.rc[i].min_qp != AV1_MIN_QP_DEFAULT));
-   }
-
    /* these frame types will need to be seen as force type */
    switch(av1->picture_flags.bits.frame_type)
    {
@@ -247,10 +238,44 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
          break;
    };
 
+   for (i = 0; i < ARRAY_SIZE(context->desc.av1enc.rc); i++) {
+      unsigned qindex = av1->base_qindex ? av1->base_qindex : 60;
+      if (context->desc.av1enc.frame_type == PIPE_AV1_ENC_FRAME_TYPE_KEY ||
+          context->desc.av1enc.frame_type == PIPE_AV1_ENC_FRAME_TYPE_INTRA_ONLY)
+         context->desc.av1enc.rc[i].qp = qindex;
+      else
+         context->desc.av1enc.rc[i].qp_inter = qindex;
+      /* Distinguishes from the default params set for these values and app specific params passed down */
+      context->desc.av1enc.rc[i].app_requested_initial_qp = (av1->base_qindex != 0);
+      context->desc.av1enc.rc[i].min_qp = av1->min_base_qindex ? av1->min_base_qindex : 1;
+      context->desc.av1enc.rc[i].max_qp = av1->max_base_qindex ? av1->max_base_qindex : 255;
+      /* Distinguishes from the default params set for these values and app specific params passed down */
+      context->desc.av1enc.rc[i].app_requested_qp_range =
+         ((context->desc.av1enc.rc[i].max_qp != AV1_MAX_QP_DEFAULT) || (context->desc.av1enc.rc[i].min_qp != AV1_MIN_QP_DEFAULT));
+   }
+
    if (context->desc.av1enc.frame_type == FRAME_TYPE_KEY_FRAME)
       context->desc.av1enc.last_key_frame_num = context->desc.av1enc.frame_num;
 
-   for (uint8_t i = 0 ; i < ARRAY_SIZE(av1->ref_frame_idx); i++)
+   if (av1->reconstructed_frame != VA_INVALID_ID) {
+      vlVaGetReferenceFrame(drv, av1->reconstructed_frame, &video_buf);
+      context->desc.av1enc.recon_frame = video_buf;
+   }
+   else
+      context->desc.av1enc.recon_frame = NULL;
+
+   for (int i = 0 ; i < ARRAY_SIZE(context->desc.av1enc.ref_list); i++) {
+      if (av1->reference_frames[i] != VA_INVALID_ID) {
+         vlVaGetReferenceFrame(drv, av1->reference_frames[i], &video_buf);
+         context->desc.av1enc.ref_list[i] = video_buf;
+      }
+      else
+         context->desc.av1enc.ref_list[i] = NULL;
+   }
+
+   context->desc.av1enc.ref_frame_ctrl_l0 = av1->ref_frame_ctrl_l0.value;
+
+   for (int i = 0 ; i < ARRAY_SIZE(av1->ref_frame_idx); i++)
         context->desc.av1enc.ref_frame_idx[i] = av1->ref_frame_idx[i];
 
     /* Initialize slice descriptors for this picture */
@@ -817,7 +842,7 @@ void getEncParamPresetAV1(vlVaContext *context)
 VAStatus vlVaHandleVAEncSliceParameterBufferTypeAV1(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
     VAEncTileGroupBufferAV1 *tile_buf = (VAEncTileGroupBufferAV1*) buf->data;
-    
+
     if (context->desc.av1enc.num_tile_groups < ARRAY_SIZE(context->desc.av1enc.tile_groups)) {
         context->desc.av1enc.tile_groups[context->desc.av1enc.num_tile_groups].tile_group_start = tile_buf->tg_start;
         context->desc.av1enc.tile_groups[context->desc.av1enc.num_tile_groups].tile_group_end = tile_buf->tg_end;
@@ -825,7 +850,7 @@ VAStatus vlVaHandleVAEncSliceParameterBufferTypeAV1(vlVaDriver *drv, vlVaContext
     } else {
         return VA_STATUS_ERROR_NOT_ENOUGH_BUFFER;
     }
-    
+
     return VA_STATUS_SUCCESS;
 }
 #endif /* VA_CHECK_VERSION(1, 16, 0) */

@@ -1,7 +1,10 @@
 // Copyright © 2022 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::ir::*;
+use crate::{
+    api::{GetDebugFlags, DEBUG},
+    ir::*,
+};
 
 use std::cmp::max;
 
@@ -156,8 +159,7 @@ impl LowerCopySwap {
 
         if x == y {
             // Nothing to do
-        } else if x.is_predicate() {
-            // TODO: Transform this in PLOP2 for SM5x-SM6x
+        } else if x.is_predicate() && b.sm() >= 70 {
             b.push_op(OpPLop3 {
                 dsts: [x.into(), y.into()],
                 srcs: [x.into(), y.into(), Src::new_imm_bool(true)],
@@ -180,12 +182,24 @@ impl LowerCopySwap {
                 Op::Copy(copy) => {
                     debug_assert!(instr.pred.is_true());
                     let mut b = InstrBuilder::new(sm);
+                    if DEBUG.annotate() {
+                        b.push_instr(Instr::new_boxed(OpAnnotate {
+                            annotation: "copy lowered by lower_copy_swap"
+                                .into(),
+                        }));
+                    }
                     self.lower_copy(&mut b, copy);
                     b.as_mapped_instrs()
                 }
                 Op::Swap(swap) => {
                     debug_assert!(instr.pred.is_true());
                     let mut b = InstrBuilder::new(sm);
+                    if DEBUG.annotate() {
+                        b.push_instr(Instr::new_boxed(OpAnnotate {
+                            annotation: "swap lowered by lower_copy_swap"
+                                .into(),
+                        }));
+                    }
                     self.lower_swap(&mut b, swap);
                     b.as_mapped_instrs()
                 }

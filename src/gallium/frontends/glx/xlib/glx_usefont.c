@@ -38,7 +38,7 @@
 
 /* Some debugging info.  */
 
-#ifdef DEBUG
+#if MESA_DEBUG
 #include <ctype.h>
 
 int debug_xfonts = 0;
@@ -95,7 +95,7 @@ dump_bitmap(unsigned int width, unsigned int height, GLubyte * bitmap)
       putchar('\n');
    }
 }
-#endif /* DEBUG */
+#endif /* MESA_DEBUG */
 
 
 /* Implementation.  */
@@ -286,7 +286,7 @@ glXUseXFont(Font font, int first, int count, int listbase)
    gc = XCreateGC(dpy, pixmap, valuemask, &values);
    XFreePixmap(dpy, pixmap);
 
-#ifdef DEBUG
+#if MESA_DEBUG
    if (debug_xfonts)
       dump_font_struct(fs);
 #endif
@@ -310,7 +310,7 @@ glXUseXFont(Font font, int first, int count, int listbase)
 	 valid = 1;
       }
 
-#ifdef DEBUG
+#if MESA_DEBUG
       if (debug_xfonts) {
 	 char s[7];
 	 sprintf(s, isprint(c) ? "%c> " : "\\%03o> ", c);
@@ -345,7 +345,7 @@ glXUseXFont(Font font, int first, int count, int listbase)
 	 fill_bitmap(dpy, win, gc, bm_width, bm_height, x, y, c, bm);
 
 	 glBitmap(width, height, x0, y0, dx, dy, bm);
-#ifdef DEBUG
+#if MESA_DEBUG
 	 if (debug_xfonts) {
 	    printf("width/height = %u/%u\n", width, height);
 	    printf("bm_width/bm_height = %u/%u\n", bm_width, bm_height);

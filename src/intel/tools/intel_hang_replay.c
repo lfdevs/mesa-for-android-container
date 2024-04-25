@@ -42,9 +42,12 @@
 
 #include <xf86drm.h>
 
-#include "common/intel_disasm.h"
 #include "common/intel_gem.h"
 #include "common/intel_hang_dump.h"
+#include "compiler/elk/elk_disasm.h"
+#include "compiler/elk/elk_isa_info.h"
+#include "compiler/brw_disasm.h"
+#include "compiler/brw_isa_info.h"
 #include "dev/intel_device_info.h"
 
 #include "drm-uapi/i915_drm.h"
@@ -139,7 +142,7 @@ get_drm_device(struct intel_device_info *devinfo)
          if (fd < 0)
             continue;
 
-         if (!intel_get_device_info_from_fd(fd, devinfo) ||
+         if (!intel_get_device_info_from_fd(fd, devinfo, -1, -1) ||
              devinfo->ver < 8) {
             close(fd);
             fd = -1;
@@ -415,11 +418,19 @@ main(int argc, char *argv[])
          found = true;
          fprintf(stderr, "shader at 0x%016"PRIx64" file_offset=0%016"PRIx64" addr_offset=%016"PRIx64":\n", *addr,
                  (bo->file_offset - aligned_offset), (*addr - bo->offset));
-         struct brw_isa_info _isa, *isa = &_isa;
-         brw_init_isa_info(isa, &devinfo);
-         intel_disassemble(isa,
-                           map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
-                           0, stderr);
+         if (devinfo.ver >= 9) {
+            struct brw_isa_info _isa, *isa = &_isa;
+            brw_init_isa_info(isa, &devinfo);
+            brw_disassemble_with_errors(isa,
+                                        map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
+                                        0, stderr);
+         } else {
+            struct elk_isa_info _isa, *isa = &_isa;
+            elk_init_isa_info(isa, &devinfo);
+            elk_disassemble_with_errors(isa,
+                                        map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
+                                        0, stderr);
+         }
 
          munmap(map, remaining_length);
       }

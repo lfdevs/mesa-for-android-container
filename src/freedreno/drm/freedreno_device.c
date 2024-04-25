@@ -31,6 +31,7 @@
 #include "util/os_file.h"
 
 #include "freedreno_drmif.h"
+#include "freedreno_drm_perfetto.h"
 #include "freedreno_priv.h"
 
 struct fd_device *msm_device_new(int fd, drmVersionPtr version);
@@ -87,6 +88,8 @@ out:
 
    if (!dev)
       return NULL;
+
+   fd_drm_perfetto_init();
 
    p_atomic_set(&dev->refcnt, 1);
    dev->fd = fd;

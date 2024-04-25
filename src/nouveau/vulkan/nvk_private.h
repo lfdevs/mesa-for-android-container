@@ -29,6 +29,7 @@
 
 #define NVK_SPARSE_ADDR_SPACE_SIZE (1ull << 39)
 #define NVK_MAX_BUFFER_SIZE (1ull << 31)
+#define NVK_MAX_SHARED_SIZE (48 * 1024)
 
 /* Max size of a bound cbuf */
 #define NVK_MAX_CBUF_SIZE (1u << 16)

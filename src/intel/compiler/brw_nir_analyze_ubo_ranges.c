@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "brw_eu.h"
 #include "brw_nir.h"
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
@@ -33,10 +34,11 @@
  * having to issue expensive memory reads to pull the data.
  *
  * The 3DSTATE_CONSTANT_* mechanism can push data from up to 4 different
- * buffers, in GRF (256-bit/32-byte) units.
+ * buffers, in GRF sized units.  This was always 256 bits (32 bytes).
+ * Starting with Xe2, it is 512 bits (64 bytes).
  *
  * To do this, we examine NIR load_ubo intrinsics, recording the number of
- * loads at each offset.  We track offsets at a 32-byte granularity, so even
+ * loads at each offset.  We track offsets at a sizeof(GRF) granularity, so even
  * fields with a bit of padding between them tend to fall into contiguous
  * ranges.  We build a list of these ranges, tracking their "cost" (number
  * of registers required) and "benefit" (number of pull loads eliminated
@@ -95,6 +97,7 @@ struct ubo_analysis_state
 {
    struct hash_table *blocks;
    bool uses_regular_uniforms;
+   const struct intel_device_info *devinfo;
 };
 
 static struct ubo_block_info *
@@ -145,7 +148,8 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
           nir_src_is_const(intrin->src[1])) {
          const int block = brw_nir_ubo_surface_index_get_push_block(intrin->src[0]);
          const unsigned byte_offset = nir_src_as_uint(intrin->src[1]);
-         const int offset = byte_offset / 32;
+         const unsigned sizeof_GRF = REG_SIZE * reg_unit(state->devinfo);
+         const int offset = byte_offset / sizeof_GRF;
 
          /* Avoid shifting by larger than the width of our bitfield, as this
           * is undefined in C.  Even if we require multiple bits to represent
@@ -156,12 +160,12 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          if (offset >= 64)
             continue;
 
-         /* The value might span multiple 32-byte chunks. */
+         /* The value might span multiple sizeof(GRF) chunks. */
          const int bytes = nir_intrinsic_dest_components(intrin) *
                            (intrin->def.bit_size / 8);
-         const int start = ROUND_DOWN_TO(byte_offset, 32);
-         const int end = ALIGN(byte_offset + bytes, 32);
-         const int chunks = (end - start) / 32;
+         const int start = ROUND_DOWN_TO(byte_offset, sizeof_GRF);
+         const int end = ALIGN(byte_offset + bytes, sizeof_GRF);
+         const int chunks = (end - start) / sizeof_GRF;
 
          /* TODO: should we count uses in loops as higher benefit? */
 
@@ -197,6 +201,7 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
       .uses_regular_uniforms = false,
       .blocks =
          _mesa_hash_table_create(mem_ctx, NULL, _mesa_key_pointer_equal),
+      .devinfo = compiler->devinfo,
    };
 
    /* Compute shaders use push constants to get the subgroup ID so it's
@@ -212,7 +217,9 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
       }
    }
 
-   /* Find ranges: a block, starting 32-byte offset, and length. */
+   /* Find ranges: a block, starting register-size aligned byte offset, and
+    * length.
+    */
    struct util_dynarray ranges;
    util_dynarray_init(&ranges, mem_ctx);
 
@@ -300,12 +307,19 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
     * unfortunately can't truncate it here, because we don't know what
     * the backend is planning to do with regular uniforms.
     */
-   const int max_ubos = (compiler->constant_buffer_0_is_relative ? 3 : 4) -
-                        state.uses_regular_uniforms;
+   const int max_ubos = 4 - state.uses_regular_uniforms;
    nr_entries = MIN2(nr_entries, max_ubos);
 
    for (int i = 0; i < nr_entries; i++) {
       out_ranges[i] = entries[i].range;
+
+      /* To this point, various values have been tracked in terms of the real
+       * hardware register sizes.  However, the rest of the compiler expects
+       * values in terms of pre-Xe2 256-bit registers. Scale start and length
+       * to account for this.
+       */
+      out_ranges[i].start *= reg_unit(compiler->devinfo);
+      out_ranges[i].length *= reg_unit(compiler->devinfo);
    }
    for (int i = nr_entries; i < 4; i++) {
       out_ranges[i].block = 0;

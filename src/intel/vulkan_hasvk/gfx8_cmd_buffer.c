@@ -137,7 +137,7 @@ want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer,
       return false;
 
    /* !(3DSTATE_WM::EDSC_Mode == EDSC_PREPS) */
-   const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
+   const struct elk_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
    if (wm_prog_data->early_fragment_tests)
       return false;
 

@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+subdir('drm')
 subdir('headers')
 if with_nouveau_vk
   subdir('compiler')

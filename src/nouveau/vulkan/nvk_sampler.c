@@ -291,6 +291,7 @@ nvk_CreateSampler(VkDevice device,
                   VkSampler *pSampler)
 {
    VK_FROM_HANDLE(nvk_device, dev, device);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_sampler *sampler;
    VkResult result;
 
@@ -301,7 +302,7 @@ nvk_CreateSampler(VkDevice device,
 
    uint32_t samp[8] = {};
    sampler->plane_count = 1;
-   nvk_sampler_fill_header(dev->pdev, pCreateInfo, &sampler->vk, samp);
+   nvk_sampler_fill_header(pdev, pCreateInfo, &sampler->vk, samp);
    result = nvk_descriptor_table_add(dev, &dev->samplers,
                                      samp, sizeof(samp),
                                      &sampler->planes[0].desc_index);
@@ -332,7 +333,7 @@ nvk_CreateSampler(VkDevice device,
 
          memset(samp, 0, sizeof(samp));
          sampler->plane_count = 2;
-         nvk_sampler_fill_header(dev->pdev, &plane2_info, &sampler->vk, samp);
+         nvk_sampler_fill_header(pdev, &plane2_info, &sampler->vk, samp);
          result = nvk_descriptor_table_add(dev, &dev->samplers,
                                            samp, sizeof(samp),
                                            &sampler->planes[1].desc_index);

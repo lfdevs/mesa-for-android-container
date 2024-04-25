@@ -35,9 +35,9 @@
 #include "util/u_atomic.h"
 #include "util/os_time.h"
 
+#include "vk_format.h"
 #include "vk_nir_convert_ycbcr.h"
 #include "vk_pipeline.h"
-#include "vulkan/util/vk_format.h"
 
 static VkResult
 compute_vpm_config(struct v3dv_pipeline *pipeline);
@@ -167,7 +167,11 @@ static const struct spirv_to_nir_options default_spirv_options =  {
       .multiview = true,
       .storage_8bit = true,
       .storage_16bit = true,
+      .subgroup_ballot = true,
       .subgroup_basic = true,
+      .subgroup_quad = true,
+      .subgroup_shuffle = true,
+      .subgroup_vote = true,
       .variable_pointers = true,
       .vk_memory_model = true,
       .vk_memory_model_device_scope = true,
@@ -1091,9 +1095,74 @@ static const enum pipe_logicop vk_to_pipe_logicop[] = {
    [VK_LOGIC_OP_SET] = PIPE_LOGICOP_SET,
 };
 
+static bool
+enable_line_smooth(uint8_t topology,
+                   const VkPipelineRasterizationStateCreateInfo *rs_info)
+{
+   if (!rs_info || rs_info->rasterizerDiscardEnable)
+      return false;
+
+   const VkPipelineRasterizationLineStateCreateInfoKHR *ls_info =
+      vk_find_struct_const(rs_info->pNext,
+                           PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_KHR);
+
+   if (!ls_info)
+      return false;
+
+   switch(topology) {
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return ls_info->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR;
+   default:
+      return false;
+   }
+}
+
+static void
+v3d_fs_key_set_color_attachment(struct v3d_fs_key *key,
+                                const struct v3dv_pipeline_stage *p_stage,
+                                uint32_t index,
+                                VkFormat fb_format)
+{
+   key->cbufs |= 1 << index;
+
+   enum pipe_format fb_pipe_format = vk_format_to_pipe_format(fb_format);
+
+   /* If logic operations are enabled then we might emit color reads and we
+    * need to know the color buffer format and swizzle for that
+    */
+   if (key->logicop_func != PIPE_LOGICOP_COPY) {
+      /* Framebuffer formats should be single plane */
+      assert(vk_format_get_plane_count(fb_format) == 1);
+      key->color_fmt[index].format = fb_pipe_format;
+      memcpy(key->color_fmt[index].swizzle,
+             v3dv_get_format_swizzle(p_stage->pipeline->device, fb_format, 0),
+             sizeof(key->color_fmt[index].swizzle));
+   }
+
+   const struct util_format_description *desc =
+      vk_format_description(fb_format);
+
+   if (desc->channel[0].type == UTIL_FORMAT_TYPE_FLOAT &&
+       desc->channel[0].size == 32) {
+      key->f32_color_rb |= 1 << index;
+   }
+
+   if (p_stage->nir->info.fs.untyped_color_outputs) {
+      if (util_format_is_pure_uint(fb_pipe_format))
+         key->uint_color_rb |= 1 << index;
+      else if (util_format_is_pure_sint(fb_pipe_format))
+         key->int_color_rb |= 1 << index;
+   }
+}
+
 static void
 pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
                              const VkGraphicsPipelineCreateInfo *pCreateInfo,
+                             const struct vk_render_pass_state *rendering_info,
                              const struct v3dv_pipeline_stage *p_stage,
                              bool has_geometry_shader,
                              uint32_t ucp_enables)
@@ -1136,6 +1205,7 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
                        PIPE_LOGICOP_COPY;
 
    const bool raster_enabled =
+      pCreateInfo->pRasterizationState &&
       !pCreateInfo->pRasterizationState->rasterizerDiscardEnable;
 
    /* Multisample rasterization state must be ignored if rasterization
@@ -1154,53 +1224,18 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
       key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
 
+   key->line_smoothing = enable_line_smooth(topology, pCreateInfo->pRasterizationState);
+
    /* This is intended for V3D versions before 4.1, otherwise we just use the
     * tile buffer load/store swap R/B bit.
     */
    key->swap_color_rb = 0;
 
-   const struct v3dv_render_pass *pass =
-      v3dv_render_pass_from_handle(pCreateInfo->renderPass);
-   const struct v3dv_subpass *subpass = p_stage->pipeline->subpass;
-   for (uint32_t i = 0; i < subpass->color_count; i++) {
-      const uint32_t att_idx = subpass->color_attachments[i].attachment;
-      if (att_idx == VK_ATTACHMENT_UNUSED)
+   for (uint32_t i = 0; i < rendering_info->color_attachment_count; i++) {
+      if (rendering_info->color_attachment_formats[i] == VK_FORMAT_UNDEFINED)
          continue;
-
-      key->cbufs |= 1 << i;
-
-      VkFormat fb_format = pass->attachments[att_idx].desc.format;
-      enum pipe_format fb_pipe_format = vk_format_to_pipe_format(fb_format);
-
-      /* If logic operations are enabled then we might emit color reads and we
-       * need to know the color buffer format and swizzle for that
-       *
-       */
-      if (key->logicop_func != PIPE_LOGICOP_COPY) {
-         /* Framebuffer formats should be single plane */
-         assert(vk_format_get_plane_count(fb_format) == 1);
-         key->color_fmt[i].format = fb_pipe_format;
-         memcpy(key->color_fmt[i].swizzle,
-                v3dv_get_format_swizzle(p_stage->pipeline->device,
-                                        fb_format,
-                                        0),
-                sizeof(key->color_fmt[i].swizzle));
-      }
-
-      const struct util_format_description *desc =
-         vk_format_description(fb_format);
-
-      if (desc->channel[0].type == UTIL_FORMAT_TYPE_FLOAT &&
-          desc->channel[0].size == 32) {
-         key->f32_color_rb |= 1 << i;
-      }
-
-      if (p_stage->nir->info.fs.untyped_color_outputs) {
-         if (util_format_is_pure_uint(fb_pipe_format))
-            key->uint_color_rb |= 1 << i;
-         else if (util_format_is_pure_sint(fb_pipe_format))
-            key->int_color_rb |= 1 << i;
-      }
+      v3d_fs_key_set_color_attachment(key, p_stage, i,
+                                      rendering_info->color_attachment_formats[i]);
    }
 }
 
@@ -1918,8 +1953,8 @@ pipeline_compile_fragment_shader(struct v3dv_pipeline *pipeline,
       pipeline->stages[BROADCOM_SHADER_GEOMETRY];
 
    struct v3d_fs_key key;
-   pipeline_populate_v3d_fs_key(&key, pCreateInfo, p_stage_fs,
-                                p_stage_gs != NULL,
+   pipeline_populate_v3d_fs_key(&key, pCreateInfo, &pipeline->rendering_info,
+                                p_stage_fs, p_stage_gs != NULL,
                                 get_ucp_enable_mask(p_stage_vs));
 
    if (key.is_points) {
@@ -1945,7 +1980,10 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
 
    memset(key, 0, sizeof(*key));
 
+   key->line_smooth = pipeline->line_smooth;
+
    const bool raster_enabled =
+      pCreateInfo->pRasterizationState &&
       !pCreateInfo->pRasterizationState->rasterizerDiscardEnable;
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
@@ -1975,17 +2013,14 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
       key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
 
-   const struct v3dv_render_pass *pass =
-      v3dv_render_pass_from_handle(pCreateInfo->renderPass);
-   const struct v3dv_subpass *subpass = pipeline->subpass;
-   for (uint32_t i = 0; i < subpass->color_count; i++) {
-      const uint32_t att_idx = subpass->color_attachments[i].attachment;
-      if (att_idx == VK_ATTACHMENT_UNUSED)
+   struct vk_render_pass_state *ri = &pipeline->rendering_info;
+   for (uint32_t i = 0; i < ri->color_attachment_count; i++) {
+      if (ri->color_attachment_formats[i] == VK_FORMAT_UNDEFINED)
          continue;
 
       key->cbufs |= 1 << i;
 
-      VkFormat fb_format = pass->attachments[att_idx].desc.format;
+      VkFormat fb_format = ri->color_attachment_formats[i];
       enum pipe_format fb_pipe_format = vk_format_to_pipe_format(fb_format);
 
       /* If logic operations are enabled then we might emit color reads and we
@@ -2021,8 +2056,7 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
       }
    }
 
-   assert(pipeline->subpass);
-   key->has_multiview = pipeline->subpass->view_mask != 0;
+   key->has_multiview = ri->view_mask != 0;
 }
 
 static void
@@ -2074,7 +2108,7 @@ v3dv_pipeline_shared_data_new_empty(const unsigned char sha1_key[20],
       if (stage == BROADCOM_SHADER_GEOMETRY &&
           !pipeline->stages[BROADCOM_SHADER_GEOMETRY]) {
          /* We always inject a custom GS if we have multiview */
-         if (!pipeline->subpass->view_mask)
+         if (!pipeline->rendering_info.view_mask)
             continue;
       }
 
@@ -2433,9 +2467,10 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
    /* If multiview is enabled, we inject a custom passthrough geometry shader
     * to broadcast draw calls to the appropriate views.
     */
-   assert(!pipeline->subpass->view_mask ||
+   const uint32_t view_mask = pipeline->rendering_info.view_mask;
+   assert(!view_mask ||
           (!pipeline->has_gs && !pipeline->stages[BROADCOM_SHADER_GEOMETRY]));
-   if (pipeline->subpass->view_mask) {
+   if (view_mask) {
       if (!pipeline_add_multiview_gs(pipeline, cache, pAllocator))
          return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
@@ -2530,7 +2565,8 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
 
    /* We should have got all the variants or no variants from the cache */
    assert(!pipeline->shared_data->variants[BROADCOM_SHADER_FRAGMENT]);
-   vk_result = pipeline_compile_fragment_shader(pipeline, pAllocator, pCreateInfo);
+   vk_result = pipeline_compile_fragment_shader(pipeline, pAllocator,
+                                                pCreateInfo);
    if (vk_result != VK_SUCCESS)
       return vk_result;
 
@@ -2768,18 +2804,8 @@ enable_depth_bias(struct v3dv_pipeline *pipeline,
    /* Check the depth/stencil attachment description for the subpass used with
     * this pipeline.
     */
-   assert(pipeline->pass && pipeline->subpass);
-   struct v3dv_render_pass *pass = pipeline->pass;
-   struct v3dv_subpass *subpass = pipeline->subpass;
-
-   if (subpass->ds_attachment.attachment == VK_ATTACHMENT_UNUSED)
-      return;
-
-   assert(subpass->ds_attachment.attachment < pass->attachment_count);
-   struct v3dv_render_pass_attachment *att =
-      &pass->attachments[subpass->ds_attachment.attachment];
-
-   if (att->desc.format == VK_FORMAT_D16_UNORM)
+   VkFormat ds_format = pipeline->rendering_info.depth_attachment_format;
+   if (ds_format == VK_FORMAT_D16_UNORM)
       pipeline->depth_bias.is_z16 = true;
 
    pipeline->depth_bias.enabled = true;
@@ -2853,6 +2879,92 @@ pipeline_set_sample_rate_shading(struct v3dv_pipeline *pipeline,
       ms_info->sampleShadingEnable;
 }
 
+static void
+pipeline_setup_rendering_info(struct v3dv_device *device,
+                              struct v3dv_pipeline *pipeline,
+                              const VkGraphicsPipelineCreateInfo *pCreateInfo,
+                              const VkAllocationCallbacks *alloc)
+{
+   struct vk_render_pass_state *rp = &pipeline->rendering_info;
+
+   if (pipeline->pass) {
+      assert(pipeline->subpass);
+      struct v3dv_render_pass *pass = pipeline->pass;
+      struct v3dv_subpass *subpass = pipeline->subpass;
+      const uint32_t attachment_idx = subpass->ds_attachment.attachment;
+
+      rp->view_mask = subpass->view_mask;
+
+      rp->depth_attachment_format = VK_FORMAT_UNDEFINED;
+      rp->stencil_attachment_format = VK_FORMAT_UNDEFINED;
+      rp->attachments = MESA_VK_RP_ATTACHMENT_NONE;
+      if (attachment_idx != VK_ATTACHMENT_UNUSED) {
+         VkFormat ds_format = pass->attachments[attachment_idx].desc.format;
+         if (vk_format_has_depth(ds_format)) {
+            rp->depth_attachment_format = ds_format;
+            rp->attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
+         }
+         if (vk_format_has_stencil(ds_format)) {
+            rp->stencil_attachment_format = ds_format;
+            rp->attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
+         }
+      }
+
+      rp->color_attachment_count = subpass->color_count;
+      for (uint32_t i = 0; i < subpass->color_count; i++) {
+         const uint32_t attachment_idx = subpass->color_attachments[i].attachment;
+         if (attachment_idx == VK_ATTACHMENT_UNUSED) {
+            rp->color_attachment_formats[i] = VK_FORMAT_UNDEFINED;
+            continue;
+         }
+         rp->color_attachment_formats[i] =
+            pass->attachments[attachment_idx].desc.format;
+         rp->attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
+      }
+      return;
+   }
+
+   const VkPipelineRenderingCreateInfo *ri =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           PIPELINE_RENDERING_CREATE_INFO);
+   if (ri) {
+      rp->view_mask = ri->viewMask;
+
+      rp->color_attachment_count = ri->colorAttachmentCount;
+      for (int i = 0; i < ri->colorAttachmentCount; i++) {
+         rp->color_attachment_formats[i] = ri->pColorAttachmentFormats[i];
+         if (rp->color_attachment_formats[i] != VK_FORMAT_UNDEFINED) {
+            rp->attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
+         }
+      }
+
+      rp->depth_attachment_format = ri->depthAttachmentFormat;
+      if (ri->depthAttachmentFormat != VK_FORMAT_UNDEFINED)
+         rp->attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
+
+      rp->stencil_attachment_format = ri->stencilAttachmentFormat;
+      if (ri->stencilAttachmentFormat != VK_FORMAT_UNDEFINED)
+         rp->attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
+
+      return;
+   }
+
+   /* From the Vulkan spec for VkPipelineRenderingCreateInfo:
+    *
+    *    "if this structure is not specified, and the pipeline does not include
+    *     a VkRenderPass, viewMask and colorAttachmentCount are 0, and
+    *     depthAttachmentFormat and stencilAttachmentFormat are
+    *     VK_FORMAT_UNDEFINED.
+    */
+   pipeline->rendering_info = (struct vk_render_pass_state) {
+      .view_mask = 0,
+      .attachments = 0,
+      .color_attachment_count = 0,
+      .depth_attachment_format = VK_FORMAT_UNDEFINED,
+      .stencil_attachment_format = VK_FORMAT_UNDEFINED,
+   };
+}
+
 static VkResult
 pipeline_init(struct v3dv_pipeline *pipeline,
               struct v3dv_device *device,
@@ -2870,9 +2982,13 @@ pipeline_init(struct v3dv_pipeline *pipeline,
    v3dv_pipeline_layout_ref(pipeline->layout);
 
    V3DV_FROM_HANDLE(v3dv_render_pass, render_pass, pCreateInfo->renderPass);
-   assert(pCreateInfo->subpass < render_pass->subpass_count);
-   pipeline->pass = render_pass;
-   pipeline->subpass = &render_pass->subpasses[pCreateInfo->subpass];
+   if (render_pass) {
+      assert(pCreateInfo->subpass < render_pass->subpass_count);
+      pipeline->pass = render_pass;
+      pipeline->subpass = &render_pass->subpasses[pCreateInfo->subpass];
+   }
+
+   pipeline_setup_rendering_info(device, pipeline, pCreateInfo, pAllocator);
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
@@ -2882,6 +2998,7 @@ pipeline_init(struct v3dv_pipeline *pipeline,
     * ignored.
     */
    const bool raster_enabled =
+      pCreateInfo->pRasterizationState &&
       !pCreateInfo->pRasterizationState->rasterizerDiscardEnable;
 
    const VkPipelineViewportStateCreateInfo *vp_info =
@@ -2894,13 +3011,13 @@ pipeline_init(struct v3dv_pipeline *pipeline,
       raster_enabled ? pCreateInfo->pRasterizationState : NULL;
 
    const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info =
-      rs_info ? vk_find_struct_const(
+      raster_enabled ? vk_find_struct_const(
          rs_info->pNext,
          PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT) :
             NULL;
 
    const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info =
-      rs_info ? vk_find_struct_const(
+      raster_enabled ? vk_find_struct_const(
          rs_info->pNext,
          PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT) :
             NULL;
@@ -2916,13 +3033,13 @@ pipeline_init(struct v3dv_pipeline *pipeline,
                                      PIPELINE_COLOR_WRITE_CREATE_INFO_EXT) :
                 NULL;
 
-   if (vp_info) {
-      const VkPipelineViewportDepthClipControlCreateInfoEXT *depth_clip_control =
-         vk_find_struct_const(vp_info->pNext,
-                              PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT);
-      if (depth_clip_control)
-         pipeline->negative_one_to_one = depth_clip_control->negativeOneToOne;
-   }
+   const VkPipelineViewportDepthClipControlCreateInfoEXT *depth_clip_control =
+      vp_info ? vk_find_struct_const(vp_info->pNext,
+                                     PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT) :
+                NULL;
+
+   if (depth_clip_control)
+      pipeline->negative_one_to_one = depth_clip_control->negativeOneToOne;
 
    pipeline_init_dynamic_state(pipeline,
                                pCreateInfo->pDynamicState,
@@ -2943,6 +3060,7 @@ pipeline_init(struct v3dv_pipeline *pipeline,
 
    pipeline_set_sample_mask(pipeline, ms_info);
    pipeline_set_sample_rate_shading(pipeline, ms_info);
+   pipeline->line_smooth = enable_line_smooth(pipeline->topology, rs_info);
 
    pipeline->primitive_restart =
       pCreateInfo->pInputAssemblyState->primitiveRestartEnable;
@@ -3004,9 +3122,7 @@ graphics_pipeline_create(VkDevice _device,
    if (pipeline == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   result = pipeline_init(pipeline, device, cache,
-                          pCreateInfo,
-                          pAllocator);
+   result = pipeline_init(pipeline, device, cache, pCreateInfo, pAllocator);
 
    if (result != VK_SUCCESS) {
       v3dv_destroy_pipeline(pipeline, device, pAllocator);

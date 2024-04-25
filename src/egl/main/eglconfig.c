@@ -466,8 +466,8 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
       }
 
       if (!matched) {
-#ifndef DEBUG
-         /* only print the common errors when DEBUG is not defined */
+#if !MESA_DEBUG
+         /* only print the common errors when MESA_DEBUG is defined to 0 */
          if (attr != EGL_RENDERABLE_TYPE)
             break;
 #endif

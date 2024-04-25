@@ -444,6 +444,11 @@ generate_compute(struct llvmpipe_context *lp,
    lp_build_nir_prepasses(nir);
    struct hash_table *fns = _mesa_pointer_hash_table_create(NULL);
 
+   sampler = lp_llvm_sampler_soa_create(lp_cs_variant_key_samplers(key),
+                                        MAX2(key->nr_samplers,
+                                             key->nr_sampler_views));
+   image = lp_bld_llvm_image_soa_create(lp_cs_variant_key_images(key), key->nr_images);
+
    if (exec_list_length(&nir->functions) > 1) {
       LLVMTypeRef call_context_type = lp_build_cs_func_call_context(gallivm, cs_type.length,
                                                                     variant->jit_cs_context_type,
@@ -531,9 +536,15 @@ generate_compute(struct llvmpipe_context *lp,
          params.consts_ptr = lp_jit_resources_constants(gallivm,
                                                         variant->jit_resources_type,
                                                         params.resources_ptr);
+         params.sampler = sampler;
          params.ssbo_ptr = lp_jit_resources_ssbos(gallivm,
                                                   variant->jit_resources_type,
                                                   params.resources_ptr);
+         params.image = image;
+         params.aniso_filter_table = lp_jit_resources_aniso_filter_table(gallivm,
+                                                                         variant->jit_resources_type,
+                                                                         params.resources_ptr);
+
          lp_build_nir_soa_func(gallivm, shader->base.ir.nir,
                                func->impl,
                                &params,
@@ -550,10 +561,6 @@ generate_compute(struct llvmpipe_context *lp,
    builder = gallivm->builder;
    assert(builder);
    LLVMPositionBuilderAtEnd(builder, block);
-   sampler = lp_llvm_sampler_soa_create(lp_cs_variant_key_samplers(key),
-                                        MAX2(key->nr_samplers,
-                                             key->nr_sampler_views));
-   image = lp_bld_llvm_image_soa_create(lp_cs_variant_key_images(key), key->nr_images);
 
    if (is_mesh) {
       LLVMTypeRef output_type = create_mesh_jit_output_type_deref(gallivm);
@@ -937,7 +944,7 @@ llvmpipe_create_compute_state(struct pipe_context *pipe,
    shader->req_local_mem += nir->info.shared_size;
    shader->zero_initialize_shared_memory = nir->info.zero_initialize_shared_memory;
 
-   llvmpipe_register_shader(pipe, &shader->base, false);
+   llvmpipe_register_shader(pipe, &shader->base);
 
    list_inithead(&shader->variants.list);
 
@@ -1017,8 +1024,6 @@ llvmpipe_delete_compute_state(struct pipe_context *pipe,
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    struct lp_compute_shader *shader = cs;
    struct lp_cs_variant_list_item *li, *next;
-
-   llvmpipe_register_shader(pipe, &shader->base, true);
 
    if (llvmpipe->cs == cs)
       llvmpipe->cs = NULL;
@@ -1857,7 +1862,7 @@ llvmpipe_create_ts_state(struct pipe_context *pipe,
    if (!shader)
       return NULL;
 
-   llvmpipe_register_shader(pipe, templ, false);
+   llvmpipe_register_shader(pipe, templ);
 
    shader->no = task_no++;
    shader->base.type = templ->type;
@@ -1894,8 +1899,6 @@ llvmpipe_delete_ts_state(struct pipe_context *pipe, void *_task)
    struct lp_compute_shader *shader = _task;
    struct lp_cs_variant_list_item *li, *next;
 
-   llvmpipe_register_shader(pipe, &shader->base, true);
-
    /* Delete all the variants */
    LIST_FOR_EACH_ENTRY_SAFE(li, next, &shader->variants.list, list) {
       llvmpipe_remove_cs_shader_variant(llvmpipe, li->base);
@@ -1930,7 +1933,7 @@ llvmpipe_create_ms_state(struct pipe_context *pipe,
    if (!shader)
       return NULL;
 
-   llvmpipe_register_shader(pipe, templ, false);
+   llvmpipe_register_shader(pipe, templ);
 
    shader->no = mesh_no++;
    shader->base.type = templ->type;
@@ -1942,7 +1945,6 @@ llvmpipe_create_ms_state(struct pipe_context *pipe,
    shader->draw_mesh_data = draw_create_mesh_shader(llvmpipe->draw, templ);
    if (shader->draw_mesh_data == NULL) {
       FREE(shader);
-      llvmpipe_register_shader(pipe, templ, true);
       return NULL;
    }
 
@@ -1976,8 +1978,6 @@ llvmpipe_delete_ms_state(struct pipe_context *pipe, void *_mesh)
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    struct lp_compute_shader *shader = _mesh;
    struct lp_cs_variant_list_item *li, *next;
-
-   llvmpipe_register_shader(pipe, &shader->base, true);
 
    /* Delete all the variants */
    LIST_FOR_EACH_ENTRY_SAFE(li, next, &shader->variants.list, list) {

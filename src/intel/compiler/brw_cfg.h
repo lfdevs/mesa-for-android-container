@@ -28,10 +28,13 @@
 #ifndef BRW_CFG_H
 #define BRW_CFG_H
 
-#include "brw_ir.h"
+struct bblock_t;
+
 #ifdef __cplusplus
+
+#include "brw_ir.h"
 #include "brw_ir_analysis.h"
-#endif
+#include "brw_ir_fs.h"
 
 struct bblock_t;
 
@@ -54,14 +57,12 @@ enum bblock_link_kind {
 };
 
 struct bblock_link {
-#ifdef __cplusplus
    DECLARE_RALLOC_CXX_OPERATORS(bblock_link)
 
    bblock_link(bblock_t *block, enum bblock_link_kind kind)
       : block(block), kind(kind)
    {
    }
-#endif
 
    struct exec_node link;
    struct bblock_t *block;
@@ -73,11 +74,10 @@ struct bblock_link {
    enum bblock_link_kind kind;
 };
 
-struct backend_shader;
+struct fs_visitor;
 struct cfg_t;
 
 struct bblock_t {
-#ifdef __cplusplus
    DECLARE_RALLOC_CXX_OPERATORS(bblock_t)
 
    explicit bblock_t(cfg_t *cfg);
@@ -92,10 +92,10 @@ struct bblock_t {
    void combine_with(bblock_t *that);
    void dump(FILE *file = stderr) const;
 
-   backend_instruction *start();
-   const backend_instruction *start() const;
-   backend_instruction *end();
-   const backend_instruction *end() const;
+   fs_inst *start();
+   const fs_inst *start() const;
+   fs_inst *end();
+   const fs_inst *end() const;
 
    bblock_t *next();
    const bblock_t *next() const;
@@ -105,8 +105,8 @@ struct bblock_t {
    bool starts_with_control_flow() const;
    bool ends_with_control_flow() const;
 
-   backend_instruction *first_non_control_flow_inst();
-   backend_instruction *last_non_control_flow_inst();
+   fs_inst *first_non_control_flow_inst();
+   fs_inst *last_non_control_flow_inst();
 
 private:
    /**
@@ -124,7 +124,6 @@ public:
    {
       unlink_list(&children);
    }
-#endif
 
    struct exec_node link;
    struct cfg_t *cfg;
@@ -143,28 +142,28 @@ public:
    int num;
 };
 
-static inline struct backend_instruction *
+static inline fs_inst *
 bblock_start(struct bblock_t *block)
 {
-   return (struct backend_instruction *)exec_list_get_head(&block->instructions);
+   return (fs_inst *)exec_list_get_head(&block->instructions);
 }
 
-static inline const struct backend_instruction *
+static inline const fs_inst *
 bblock_start_const(const struct bblock_t *block)
 {
-   return (const struct backend_instruction *)exec_list_get_head_const(&block->instructions);
+   return (const fs_inst *)exec_list_get_head_const(&block->instructions);
 }
 
-static inline struct backend_instruction *
+static inline fs_inst *
 bblock_end(struct bblock_t *block)
 {
-   return (struct backend_instruction *)exec_list_get_tail(&block->instructions);
+   return (fs_inst *)exec_list_get_tail(&block->instructions);
 }
 
-static inline const struct backend_instruction *
+static inline const fs_inst *
 bblock_end_const(const struct bblock_t *block)
 {
-   return (const struct backend_instruction *)exec_list_get_tail_const(&block->instructions);
+   return (const fs_inst *)exec_list_get_tail_const(&block->instructions);
 }
 
 static inline struct bblock_t *
@@ -221,52 +220,51 @@ bblock_ends_with_control_flow(const struct bblock_t *block)
           op == BRW_OPCODE_CONTINUE;
 }
 
-static inline struct backend_instruction *
+static inline fs_inst *
 bblock_first_non_control_flow_inst(struct bblock_t *block)
 {
-   struct backend_instruction *inst = bblock_start(block);
+   fs_inst *inst = bblock_start(block);
    if (bblock_starts_with_control_flow(block))
 #ifdef __cplusplus
-      inst = (struct backend_instruction *)inst->next;
+      inst = (fs_inst *)inst->next;
 #else
-      inst = (struct backend_instruction *)inst->link.next;
+      inst = (fs_inst *)inst->link.next;
 #endif
    return inst;
 }
 
-static inline struct backend_instruction *
+static inline fs_inst *
 bblock_last_non_control_flow_inst(struct bblock_t *block)
 {
-   struct backend_instruction *inst = bblock_end(block);
+   fs_inst *inst = bblock_end(block);
    if (bblock_ends_with_control_flow(block))
 #ifdef __cplusplus
-      inst = (struct backend_instruction *)inst->prev;
+      inst = (fs_inst *)inst->prev;
 #else
-      inst = (struct backend_instruction *)inst->link.prev;
+      inst = (fs_inst *)inst->link.prev;
 #endif
    return inst;
 }
 
-#ifdef __cplusplus
-inline backend_instruction *
+inline fs_inst *
 bblock_t::start()
 {
    return bblock_start(this);
 }
 
-inline const backend_instruction *
+inline const fs_inst *
 bblock_t::start() const
 {
    return bblock_start_const(this);
 }
 
-inline backend_instruction *
+inline fs_inst *
 bblock_t::end()
 {
    return bblock_end(this);
 }
 
-inline const backend_instruction *
+inline const fs_inst *
 bblock_t::end() const
 {
    return bblock_end_const(this);
@@ -308,24 +306,22 @@ bblock_t::ends_with_control_flow() const
    return bblock_ends_with_control_flow(this);
 }
 
-inline backend_instruction *
+inline fs_inst *
 bblock_t::first_non_control_flow_inst()
 {
    return bblock_first_non_control_flow_inst(this);
 }
 
-inline backend_instruction *
+inline fs_inst *
 bblock_t::last_non_control_flow_inst()
 {
    return bblock_last_non_control_flow_inst(this);
 }
-#endif
 
 struct cfg_t {
-#ifdef __cplusplus
    DECLARE_RALLOC_CXX_OPERATORS(cfg_t)
 
-   cfg_t(const backend_shader *s, exec_list *instructions);
+   cfg_t(const fs_visitor *s, exec_list *instructions);
    ~cfg_t();
 
    void remove_block(bblock_t *block);
@@ -353,8 +349,7 @@ struct cfg_t {
     */
    inline void adjust_block_ips();
 
-#endif
-   const struct backend_shader *s;
+   const struct fs_visitor *s;
    void *mem_ctx;
 
    /** Ordered list (by ip) of basic blocks */
@@ -387,7 +382,6 @@ cfg_last_block_const(const struct cfg_t *cfg)
    return (const struct bblock_t *)exec_list_get_tail_const(&cfg->block_list);
 }
 
-#ifdef __cplusplus
 inline bblock_t *
 cfg_t::first_block()
 {
@@ -411,7 +405,6 @@ cfg_t::last_block() const
 {
    return cfg_last_block_const(this);
 }
-#endif
 
 /* Note that this is implemented with a double for loop -- break will
  * break from the inner loop only!
@@ -465,7 +458,6 @@ cfg_t::last_block() const
         !__scan_inst->is_head_sentinel();                      \
         __scan_inst = (__type *)__scan_inst->prev)
 
-#ifdef __cplusplus
 inline void
 cfg_t::adjust_block_ips()
 {
@@ -486,11 +478,11 @@ namespace brw {
     * Immediate dominator tree analysis of a shader.
     */
    struct idom_tree {
-      idom_tree(const backend_shader *s);
+      idom_tree(const fs_visitor *s);
       ~idom_tree();
 
       bool
-      validate(const backend_shader *) const
+      validate(const fs_visitor *) const
       {
          /* FINISHME */
          return true;
@@ -527,6 +519,7 @@ namespace brw {
       bblock_t **parents;
    };
 }
+
 #endif
 
 #endif /* BRW_CFG_H */

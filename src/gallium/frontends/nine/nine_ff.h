@@ -1,3 +1,8 @@
+/*
+ * Copyright 2011 Joakim Sindholt <opensource@zhasha.com>
+ * Copyright Axel Davy <davyaxel0@gmail.com>
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef _NINE_FF_H_
 #define _NINE_FF_H_

@@ -697,9 +697,9 @@ nir_replace_instr(nir_builder *build, nir_alu_instr *instr,
 
 #if 0
    fprintf(stderr, "matched: ");
-   dump_value(&search->value);
+   dump_value(table, &search->value);
    fprintf(stderr, " -> ");
-   dump_value(replace);
+   dump_value(table, replace);
    fprintf(stderr, " ssa_%d\n", instr->def.index);
 #endif
 

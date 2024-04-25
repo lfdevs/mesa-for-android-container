@@ -49,17 +49,17 @@
  * so it preserves all compressed information, and this WA is not needed.
  */
 
-VKAPI_ATTR void VKAPI_CALL
-doom64_CmdPipelineBarrier(VkCommandBuffer commandBuffer,
-                          VkPipelineStageFlags srcStageMask,
-                          VkPipelineStageFlags dstStageMask,
-                          VkDependencyFlags dependencyFlags,
-                          uint32_t memoryBarrierCount,
-                          const VkMemoryBarrier* pMemoryBarriers,
-                          uint32_t bufferMemoryBarrierCount,
-                          const VkBufferMemoryBarrier* pBufferMemoryBarriers,
-                          uint32_t imageMemoryBarrierCount,
-                          const VkImageMemoryBarrier* pImageMemoryBarriers)
+void anv_doom64_CmdPipelineBarrier(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags                        srcStageMask,
+    VkPipelineStageFlags                        dstStageMask,
+    VkDependencyFlags                           dependencyFlags,
+    uint32_t                                    memoryBarrierCount,
+    const VkMemoryBarrier*                      pMemoryBarriers,
+    uint32_t                                    bufferMemoryBarrierCount,
+    const VkBufferMemoryBarrier*                pBufferMemoryBarriers,
+    uint32_t                                    imageMemoryBarrierCount,
+    const VkImageMemoryBarrier*                 pImageMemoryBarriers)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, command_buffer, commandBuffer);
    assert(command_buffer && command_buffer->device);
@@ -93,9 +93,11 @@ doom64_CmdPipelineBarrier(VkCommandBuffer commandBuffer,
                                 pImageMemoryBarriers);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-doom64_CreateImage(VkDevice _device, const VkImageCreateInfo* pCreateInfo,
-                   const VkAllocationCallbacks* pAllocator, VkImage* pImage)
+VkResult anv_doom64_CreateImage(
+    VkDevice                                    _device,
+    const VkImageCreateInfo*                    pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkImage*                                    pImage)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    assert(device);
@@ -111,9 +113,10 @@ doom64_CreateImage(VkDevice _device, const VkImageCreateInfo* pCreateInfo,
    return anv_CreateImage(_device, pCreateInfo, pAllocator, pImage);
 }
 
-VKAPI_ATTR void VKAPI_CALL
-doom64_DestroyImage(VkDevice _device, VkImage _image,
-                    const VkAllocationCallbacks *pAllocator)
+void anv_doom64_DestroyImage(
+    VkDevice                                    _device,
+    VkImage                                     _image,
+    const VkAllocationCallbacks*                pAllocator)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_image, image, _image);

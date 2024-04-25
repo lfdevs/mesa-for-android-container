@@ -64,8 +64,7 @@ void
 intel_get_urb_config(const struct intel_device_info *devinfo,
                      const struct intel_l3_config *l3_cfg,
                      bool tess_present, bool gs_present,
-                     const unsigned entry_size[4],
-                     unsigned entries[4], unsigned start[4],
+                     struct intel_urb_config *urb_cfg,
                      enum intel_urb_deref_block_size *deref_block_size,
                      bool *constrained)
 {
@@ -110,7 +109,7 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
     */
    unsigned granularity[4];
    for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
-      granularity[i] = (entry_size[i] < 9) ? 8 : 1;
+      granularity[i] = (urb_cfg->size[i] < 9) ? 8 : 1;
    }
 
    unsigned min_entries[4] = {
@@ -148,7 +147,7 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
 
    unsigned entry_size_bytes[4];
    for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
-      entry_size_bytes[i] = 64 * entry_size[i];
+      entry_size_bytes[i] = 64 * urb_cfg->size[i];
    }
 
    /* Initially, assign each stage the minimum amount of URB space it needs,
@@ -208,20 +207,21 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
     * allocated to each stage.
     */
    for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
-      entries[i] = chunks[i] * chunk_size_bytes / entry_size_bytes[i];
+      urb_cfg->entries[i] = chunks[i] * chunk_size_bytes / entry_size_bytes[i];
 
       /* Since we rounded up when computing wants[], this may be slightly
        * more than the maximum allowed amount, so correct for that.
        */
-      entries[i] = MIN2(entries[i], devinfo->urb.max_entries[i]);
+      urb_cfg->entries[i] = MIN2(urb_cfg->entries[i],
+                                 devinfo->urb.max_entries[i]);
 
       /* Ensure that we program a multiple of the granularity. */
-      entries[i] = ROUND_DOWN_TO(entries[i], granularity[i]);
+      urb_cfg->entries[i] = ROUND_DOWN_TO(urb_cfg->entries[i], granularity[i]);
 
       /* Finally, sanity check to make sure we have at least the minimum
        * number of entries needed for each stage.
        */
-      assert(entries[i] >= min_entries[i]);
+      assert(urb_cfg->entries[i] >= min_entries[i]);
    }
 
    /* Lay out the URB in pipeline order: push constants, VS, HS, DS, GS. */
@@ -245,12 +245,12 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
 
    int next_urb = first_urb;
    for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
-      if (entries[i]) {
-         start[i] = next_urb;
+      if (urb_cfg->entries[i]) {
+         urb_cfg->start[i] = next_urb;
          next_urb += chunks[i];
       } else {
          /* Put disabled stages at the beginning of the valid range */
-         start[i] = first_urb;
+         urb_cfg->start[i] = first_urb;
       }
    }
 
@@ -278,12 +278,12 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
          if (gs_present) {
             *deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
          } else if (tess_present) {
-            if (entries[MESA_SHADER_TESS_EVAL] < 324)
+            if (urb_cfg->entries[MESA_SHADER_TESS_EVAL] < 324)
                *deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
             else
                *deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_32;
          } else {
-            if (entries[MESA_SHADER_VERTEX] < 192)
+            if (urb_cfg->entries[MESA_SHADER_VERTEX] < 192)
                *deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
             else
                *deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_32;

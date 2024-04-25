@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #include "common/intel_engine.h"
 
 #include "drm-uapi/i915_drm.h"
@@ -31,3 +33,6 @@ enum drm_i915_gem_engine_class
 intel_engine_class_to_i915(enum intel_engine_class intel);
 struct intel_query_engine_info *
 i915_engine_get_info(int fd);
+
+bool
+i915_engines_is_guc_semaphore_functional(int fd, const struct intel_device_info *info);

@@ -433,6 +433,23 @@ class GenXml(object):
         if changed:
             self.et.getroot()[:] = items
 
+    def filter_symbols(self, symbol_list):
+        symbols_allowed = {}
+        for sym in symbol_list:
+            symbols_allowed[sym] = sym
+
+        changed = False
+        items = []
+        for item in self.et.getroot():
+            if item.tag in ('instruction', 'struct', 'register') and \
+               item.attrib['name'] not in symbols_allowed:
+                # Drop the item from the tree
+                changed = True
+                continue
+            items.append(item)
+        if changed:
+            self.et.getroot()[:] = items
+
     def sort(self):
         sort_xml(self.et)
 

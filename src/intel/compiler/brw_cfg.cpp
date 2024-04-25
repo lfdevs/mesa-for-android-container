@@ -27,7 +27,7 @@
 
 #include "brw_cfg.h"
 #include "util/u_dynarray.h"
-#include "brw_shader.h"
+#include "brw_fs.h"
 
 /** @file brw_cfg.cpp
  *
@@ -106,7 +106,7 @@ bblock_t::is_successor_of(const bblock_t *block,
 }
 
 static bool
-ends_block(const backend_instruction *inst)
+ends_block(const fs_inst *inst)
 {
    enum opcode op = inst->opcode;
 
@@ -119,7 +119,7 @@ ends_block(const backend_instruction *inst)
 }
 
 static bool
-starts_block(const backend_instruction *inst)
+starts_block(const fs_inst *inst)
 {
    enum opcode op = inst->opcode;
 
@@ -157,10 +157,10 @@ bblock_t::combine_with(bblock_t *that)
 void
 bblock_t::dump(FILE *file) const
 {
-   const backend_shader *s = this->cfg->s;
+   const fs_visitor *s = this->cfg->s;
 
    int ip = this->start_ip;
-   foreach_inst_in_block(backend_instruction, inst, this) {
+   foreach_inst_in_block(fs_inst, inst, this) {
       fprintf(file, "%5d: ", ip);
       s->dump_instruction(inst, file);
       ip++;
@@ -189,7 +189,7 @@ bblock_t::unlink_list(exec_list *list)
    }
 }
 
-cfg_t::cfg_t(const backend_shader *s, exec_list *instructions) :
+cfg_t::cfg_t(const fs_visitor *s, exec_list *instructions) :
    s(s)
 {
    mem_ctx = ralloc_context(NULL);
@@ -210,7 +210,7 @@ cfg_t::cfg_t(const backend_shader *s, exec_list *instructions) :
 
    set_next_block(&cur, entry, ip);
 
-   foreach_in_list_safe(backend_instruction, inst, instructions) {
+   foreach_in_list_safe(fs_inst, inst, instructions) {
       /* set_next_block wants the post-incremented ip */
       ip++;
 
@@ -658,7 +658,7 @@ cfg_t::dump(FILE *file)
  * (less than 1000 nodes) that this algorithm is significantly faster than
  * others like Lengauer-Tarjan.
  */
-idom_tree::idom_tree(const backend_shader *s) :
+idom_tree::idom_tree(const fs_visitor *s) :
    num_parents(s->cfg->num_blocks),
    parents(new bblock_t *[num_parents]())
 {
@@ -734,6 +734,14 @@ cfg_t::dump_cfg()
    printf("}\n");
 }
 
+void
+fs_visitor::calculate_cfg()
+{
+   if (this->cfg)
+      return;
+   cfg = new(mem_ctx) cfg_t(this, &this->instructions);
+}
+
 #define cfgv_assert(assertion)                                          \
    {                                                                    \
       if (!(assertion)) {                                               \
@@ -800,7 +808,7 @@ cfg_t::validate(const char *stage_abbrev)
          }
       }
 
-      backend_instruction *first_inst = block->start();
+      fs_inst *first_inst = block->start();
       if (first_inst->opcode == BRW_OPCODE_DO) {
          /* DO instructions both begin and end a block, so the DO instruction
           * must be the only instruction in the block.

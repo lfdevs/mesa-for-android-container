@@ -112,7 +112,8 @@ error_create_exec_queue:
 }
 
 static void
-iris_xe_map_intel_engine_class(const struct intel_query_engine_info *engines_info,
+iris_xe_map_intel_engine_class(struct iris_bufmgr *bufmgr,
+                               const struct intel_query_engine_info *engines_info,
                                enum intel_engine_class *engine_classes)
 {
    engine_classes[IRIS_BATCH_RENDER] = INTEL_ENGINE_CLASS_RENDER;
@@ -120,8 +121,7 @@ iris_xe_map_intel_engine_class(const struct intel_query_engine_info *engines_inf
    engine_classes[IRIS_BATCH_BLITTER] = INTEL_ENGINE_CLASS_COPY;
    STATIC_ASSERT(IRIS_BATCH_COUNT == 3);
 
-   if (debug_get_bool_option("INTEL_COMPUTE_CLASS", false) &&
-       intel_engines_count(engines_info, INTEL_ENGINE_CLASS_COMPUTE) > 0)
+   if (iris_bufmgr_compute_engine_supported(bufmgr))
       engine_classes[IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_COMPUTE;
 }
 
@@ -137,7 +137,7 @@ void iris_xe_init_batches(struct iris_context *ice)
    assert(engines_info);
    if (!engines_info)
       return;
-   iris_xe_map_intel_engine_class(engines_info, engine_classes);
+   iris_xe_map_intel_engine_class(bufmgr, engines_info, engine_classes);
 
    iris_foreach_batch(ice, batch) {
       const enum iris_batch_name name = batch - &ice->batches[0];
@@ -182,7 +182,7 @@ iris_xe_wait_exec_queue_idle(struct iris_batch *batch)
    if (ret == 0) {
       assert(iris_wait_syncobj(bufmgr, syncobj, INT64_MAX));
    } else {
-      assert(iris_batch_is_banned(bufmgr, errno) == true);
+      assert(iris_batch_is_banned(bufmgr, -errno) == true);
    }
 
    iris_syncobj_destroy(bufmgr, syncobj);
@@ -226,7 +226,7 @@ bool iris_xe_replace_batch(struct iris_batch *batch)
                                         INTEL_KMD_TYPE_XE);
    if (!engines_info)
       return false;
-   iris_xe_map_intel_engine_class(engines_info, engine_classes);
+   iris_xe_map_intel_engine_class(bufmgr, engines_info, engine_classes);
 
    ret = iris_xe_init_batch(bufmgr, engines_info, engine_classes[batch->name],
                             ice->priority, &new_exec_queue_id);

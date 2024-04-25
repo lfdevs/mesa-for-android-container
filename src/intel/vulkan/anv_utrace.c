@@ -29,7 +29,7 @@
 #include "perf/intel_perf.h"
 #include "util/perf/cpu_trace.h"
 
-#include "vulkan/runtime/vk_common_entrypoints.h"
+#include "vk_common_entrypoints.h"
 
 /** Timestamp structure format */
 union anv_utrace_timestamp {
@@ -138,15 +138,13 @@ anv_device_utrace_emit_cs_copy_ts_buffer(struct u_trace_context *utctx,
    struct anv_memcpy_params *params = push_data_state.map;
 
    *params = (struct anv_memcpy_params) {
-      .copy = {
-         .num_dwords = count * sizeof(union anv_utrace_timestamp) / 4,
-      },
-      .src_addr = anv_address_physical(from_addr),
-      .dst_addr = anv_address_physical(to_addr),
+      .num_dwords = count * sizeof(union anv_utrace_timestamp) / 4,
+      .src_addr   = anv_address_physical(from_addr),
+      .dst_addr   = anv_address_physical(to_addr),
    };
 
    anv_genX(device->info, emit_simple_shader_dispatch)(
-      &submit->simple_state, DIV_ROUND_UP(params->copy.num_dwords, 4),
+      &submit->simple_state, DIV_ROUND_UP(params->num_dwords, 4),
       push_data_state);
 }
 
@@ -281,6 +279,14 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
 
          anv_genX(device->info, emit_so_memcpy_end)(&submit->memcpy_state);
       } else {
+         struct anv_shader_bin *copy_kernel;
+         VkResult ret =
+            anv_device_get_internal_shader(device,
+                                           ANV_INTERNAL_KERNEL_MEMCPY_COMPUTE,
+                                           &copy_kernel);
+         if (ret != VK_SUCCESS)
+            goto error_batch;
+
          trace_intel_begin_trace_copy_cb(&submit->ds.trace, &submit->batch);
 
          submit->simple_state = (struct anv_simple_shader) {
@@ -288,8 +294,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
             .dynamic_state_stream = &submit->dynamic_state_stream,
             .general_state_stream = &submit->general_state_stream,
             .batch                = &submit->batch,
-            .kernel               = device->internal_kernels[
-               ANV_INTERNAL_KERNEL_MEMCPY_COMPUTE],
+            .kernel               = copy_kernel,
             .l3_config            = device->internal_kernels_l3_config,
          };
          anv_genX(device->info, emit_simple_shader_init)(&submit->simple_state);

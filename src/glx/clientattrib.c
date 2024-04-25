@@ -12,7 +12,7 @@
 
 /*****************************************************************************/
 
-#ifndef GLX_USE_APPLEGL
+#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
 static void
 do_enable_disable(GLenum array, GLboolean val)
 {

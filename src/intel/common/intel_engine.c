@@ -75,3 +75,41 @@ intel_engines_class_to_string(enum intel_engine_class engine_class)
       return "unknown";
    }
 }
+
+static bool
+is_guc_semaphore_functional(int fd, const struct intel_device_info *info)
+{
+   switch (info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return i915_engines_is_guc_semaphore_functional(fd, info);
+   case INTEL_KMD_TYPE_XE:
+      return xe_engines_is_guc_semaphore_functional(fd, info);
+   default:
+      unreachable("Missing");
+      return false;
+   }
+}
+
+int
+intel_engines_supported_count(int fd, const struct intel_device_info *info,
+                              const struct intel_query_engine_info *engine_info,
+                              enum intel_engine_class engine_class)
+{
+   bool supported;
+
+   /* check if user set the force enabled engine with run-time parameter */
+   switch (engine_class) {
+   case INTEL_ENGINE_CLASS_COMPUTE:
+      supported = debug_get_bool_option("INTEL_ENGINE_CLASS_COMPUTE", false);
+      supported |= is_guc_semaphore_functional(fd, info);
+      break;
+   case INTEL_ENGINE_CLASS_COPY:
+      supported = debug_get_bool_option("INTEL_ENGINE_CLASS_COPY", true);
+      break;
+   default:
+      /* There is no restrictions or parameters for other engines */
+      supported = true;
+   }
+
+   return supported ? intel_engines_count(engine_info, engine_class) : 0;
+}

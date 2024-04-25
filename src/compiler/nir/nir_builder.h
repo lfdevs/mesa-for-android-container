@@ -413,28 +413,66 @@ nir_imm_ivec2(nir_builder *build, int x, int y)
 }
 
 static inline nir_def *
-nir_imm_ivec3(nir_builder *build, int x, int y, int z)
+nir_imm_ivec3_intN(nir_builder *build, int x, int y, int z, unsigned bit_size)
 {
    nir_const_value v[3] = {
-      nir_const_value_for_int(x, 32),
-      nir_const_value_for_int(y, 32),
-      nir_const_value_for_int(z, 32),
+      nir_const_value_for_int(x, bit_size),
+      nir_const_value_for_int(y, bit_size),
+      nir_const_value_for_int(z, bit_size),
    };
 
-   return nir_build_imm(build, 3, 32, v);
+   return nir_build_imm(build, 3, bit_size, v);
+}
+
+static inline nir_def *
+nir_imm_uvec2_intN(nir_builder *build, unsigned x, unsigned y,
+                   unsigned bit_size)
+{
+   nir_const_value v[2] = {
+      nir_const_value_for_uint(x, bit_size),
+      nir_const_value_for_uint(y, bit_size),
+   };
+
+   return nir_build_imm(build, 2, bit_size, v);
+}
+
+static inline nir_def *
+nir_imm_uvec3_intN(nir_builder *build, unsigned x, unsigned y, unsigned z,
+                   unsigned bit_size)
+{
+   nir_const_value v[3] = {
+      nir_const_value_for_uint(x, bit_size),
+      nir_const_value_for_uint(y, bit_size),
+      nir_const_value_for_uint(z, bit_size),
+   };
+
+   return nir_build_imm(build, 3, bit_size, v);
+}
+
+static inline nir_def *
+nir_imm_ivec3(nir_builder *build, int x, int y, int z)
+{
+   return nir_imm_ivec3_intN(build, x, y, z, 32);
+}
+
+static inline nir_def *
+nir_imm_ivec4_intN(nir_builder *build, int x, int y, int z, int w,
+                   unsigned bit_size)
+{
+   nir_const_value v[4] = {
+      nir_const_value_for_int(x, bit_size),
+      nir_const_value_for_int(y, bit_size),
+      nir_const_value_for_int(z, bit_size),
+      nir_const_value_for_int(w, bit_size),
+   };
+
+   return nir_build_imm(build, 4, bit_size, v);
 }
 
 static inline nir_def *
 nir_imm_ivec4(nir_builder *build, int x, int y, int z, int w)
 {
-   nir_const_value v[4] = {
-      nir_const_value_for_int(x, 32),
-      nir_const_value_for_int(y, 32),
-      nir_const_value_for_int(z, 32),
-      nir_const_value_for_int(w, 32),
-   };
-
-   return nir_build_imm(build, 4, 32, v);
+   return nir_imm_ivec4_intN(build, x, y, z, w, 32);
 }
 
 nir_def *
@@ -866,6 +904,18 @@ nir_isub_imm(nir_builder *build, uint64_t y, nir_def *x)
 }
 
 static inline nir_def *
+nir_imax_imm(nir_builder *build, nir_def *x, int64_t y)
+{
+   return nir_imax(build, x, nir_imm_intN_t(build, y, x->bit_size));
+}
+
+static inline nir_def *
+nir_imin_imm(nir_builder *build, nir_def *x, int64_t y)
+{
+   return nir_imin(build, x, nir_imm_intN_t(build, y, x->bit_size));
+}
+
+static inline nir_def *
 _nir_mul_imm(nir_builder *build, nir_def *x, uint64_t y, bool amul)
 {
    assert(x->bit_size <= 64);
@@ -920,6 +970,12 @@ static inline nir_def *
 nir_fdiv_imm(nir_builder *build, nir_def *x, double y)
 {
    return nir_fdiv(build, x, nir_imm_floatN_t(build, y, x->bit_size));
+}
+
+static inline nir_def *
+nir_fpow_imm(nir_builder *build, nir_def *x, double y)
+{
+   return nir_fpow(build, x, nir_imm_floatN_t(build, y, x->bit_size));
 }
 
 static inline nir_def *
@@ -1003,7 +1059,7 @@ nir_udiv_imm(nir_builder *build, nir_def *x, uint64_t y)
 
    if (y == 1) {
       return x;
-   } else if (util_is_power_of_two_nonzero(y)) {
+   } else if (util_is_power_of_two_nonzero64(y)) {
       return nir_ushr_imm(build, x, ffsll(y) - 1);
    } else {
       return nir_udiv(build, x, nir_imm_intN_t(build, y, x->bit_size));
@@ -1015,7 +1071,7 @@ nir_umod_imm(nir_builder *build, nir_def *x, uint64_t y)
 {
    assert(y > 0 && y <= u_uintN_max(x->bit_size));
 
-   if (util_is_power_of_two_nonzero(y)) {
+   if (util_is_power_of_two_nonzero64(y)) {
       return nir_iand_imm(build, x, y - 1);
    } else {
       return nir_umod(build, x, nir_imm_intN_t(build, y, x->bit_size));
@@ -1600,6 +1656,16 @@ nir_build_deref_follower(nir_builder *b, nir_deref_instr *parent,
                                                  leader->cast.ptr_stride,
                                                  leader->cast.align_mul,
                                                  leader->cast.align_offset);
+
+   case nir_deref_type_ptr_as_array: {
+      assert(parent->deref_type == nir_deref_type_array ||
+             parent->deref_type == nir_deref_type_ptr_as_array ||
+             parent->deref_type == nir_deref_type_cast);
+      nir_def *index = nir_i2iN(b, leader->arr.index.ssa,
+                                parent->def.bit_size);
+      return nir_build_deref_ptr_as_array(b, parent, index);
+   }
+
    default:
       unreachable("Invalid deref instruction type");
    }
@@ -2030,12 +2096,12 @@ nir_goto(nir_builder *build, struct nir_block *target)
 }
 
 static inline void
-nir_goto_if(nir_builder *build, struct nir_block *target, nir_src cond,
+nir_goto_if(nir_builder *build, struct nir_block *target, nir_def *cond,
             struct nir_block *else_target)
 {
    assert(!build->impl->structured);
    nir_jump_instr *jump = nir_jump_instr_create(build->shader, nir_jump_goto_if);
-   jump->condition = cond;
+   jump->condition = nir_src_for_ssa(cond);
    jump->target = target;
    jump->else_target = else_target;
    nir_builder_instr_insert(build, &jump->instr);

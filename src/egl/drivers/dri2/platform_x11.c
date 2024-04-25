@@ -744,6 +744,11 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
          strndup(driver_name, xcb_dri2_connect_driver_name_length(connect));
    }
 
+   if (!strcmp(dri2_dpy->driver_name, "zink")) {
+      close(dri2_dpy->fd_render_gpu);
+      return EGL_FALSE;
+   }
+
    if (dri2_dpy->driver_name == NULL) {
       close(dri2_dpy->fd_render_gpu);
       free(connect);
@@ -768,13 +773,12 @@ dri2_x11_authenticate(_EGLDisplay *disp, uint32_t id)
    return dri2_x11_do_authenticate(dri2_dpy, id);
 }
 
-static EGLBoolean
+static void
 dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
                                  _EGLDisplay *disp, bool supports_preserved)
 {
    xcb_depth_iterator_t d;
    xcb_visualtype_t *visuals;
-   int config_count = 0;
    EGLint surface_type;
 
    d = xcb_screen_allowed_depths_iterator(dri2_dpy->screen);
@@ -797,38 +801,37 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
 
          class_added[visuals[i]._class] = EGL_TRUE;
 
+         const int rgb_shifts[3] = {
+            ffs(visuals[i].red_mask) - 1,
+            ffs(visuals[i].green_mask) - 1,
+            ffs(visuals[i].blue_mask) - 1,
+         };
+
+         const unsigned int rgb_sizes[3] = {
+            util_bitcount(visuals[i].red_mask),
+            util_bitcount(visuals[i].green_mask),
+            util_bitcount(visuals[i].blue_mask),
+         };
+
+         const EGLint config_attrs[] = {
+            EGL_NATIVE_VISUAL_ID,
+            visuals[i].visual_id,
+            EGL_NATIVE_VISUAL_TYPE,
+            visuals[i]._class,
+            EGL_NONE,
+         };
+
          for (int j = 0; dri2_dpy->driver_configs[j]; j++) {
-            struct dri2_egl_config *dri2_conf;
             const __DRIconfig *config = dri2_dpy->driver_configs[j];
+            int shifts[4];
+            unsigned int sizes[4];
 
-            const EGLint config_attrs[] = {
-               EGL_NATIVE_VISUAL_ID,
-               visuals[i].visual_id,
-               EGL_NATIVE_VISUAL_TYPE,
-               visuals[i]._class,
-               EGL_NONE,
-            };
+            dri2_get_shifts_and_sizes(dri2_dpy->core, config, shifts, sizes);
 
-            int rgba_shifts[4] = {
-               ffs(visuals[i].red_mask) - 1,
-               ffs(visuals[i].green_mask) - 1,
-               ffs(visuals[i].blue_mask) - 1,
-               -1,
-            };
-
-            unsigned int rgba_sizes[4] = {
-               util_bitcount(visuals[i].red_mask),
-               util_bitcount(visuals[i].green_mask),
-               util_bitcount(visuals[i].blue_mask),
-               0,
-            };
-
-            dri2_conf =
-               dri2_add_config(disp, config, config_count + 1, surface_type,
-                               config_attrs, rgba_shifts, rgba_sizes);
-            if (dri2_conf)
-               if (dri2_conf->base.ConfigID == config_count + 1)
-                  config_count++;
+            if (memcmp(shifts, rgb_shifts, sizeof(rgb_shifts)) != 0 ||
+                memcmp(sizes, rgb_sizes, sizeof(rgb_sizes)) != 0) {
+               continue;
+            }
 
             /* Allow a 24-bit RGB visual to match a 32-bit RGBA EGLConfig.
              * Ditto for 30-bit RGB visuals to match a 32-bit RGBA EGLConfig.
@@ -838,31 +841,25 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
              * compositor.  This is probably not what the application
              * wants... especially on drivers that only have 32-bit RGBA
              * EGLConfigs! */
-            if (d.data->depth == 24 || d.data->depth == 30) {
+            if (sizes[3] != 0) {
+               if (d.data->depth != 24 && d.data->depth != 30)
+                  continue;
+
                unsigned int rgba_mask =
                   ~(visuals[i].red_mask | visuals[i].green_mask |
                     visuals[i].blue_mask);
-               rgba_shifts[3] = ffs(rgba_mask) - 1;
-               rgba_sizes[3] = util_bitcount(rgba_mask);
-               dri2_conf =
-                  dri2_add_config(disp, config, config_count + 1, surface_type,
-                                  config_attrs, rgba_shifts, rgba_sizes);
-               if (dri2_conf)
-                  if (dri2_conf->base.ConfigID == config_count + 1)
-                     config_count++;
+
+               if (shifts[3] != ffs(rgba_mask) - 1 ||
+                   sizes[3] != util_bitcount(rgba_mask))
+                  continue;
             }
+
+            dri2_add_config(disp, config, surface_type, config_attrs);
          }
       }
 
       xcb_depth_next(&d);
    }
-
-   if (!config_count) {
-      _eglLog(_EGL_WARNING, "DRI2: failed to create any config");
-      return EGL_FALSE;
-   }
-
-   return EGL_TRUE;
 }
 
 static EGLBoolean
@@ -1011,6 +1008,28 @@ dri2_x11_post_sub_buffer(_EGLDisplay *disp, _EGLSurface *draw, EGLint x,
       _eglError(EGL_BAD_PARAMETER, "eglPostSubBufferNV");
 
    return dri2_x11_swap_buffers_region(disp, draw, 1, rect);
+}
+
+static EGLBoolean
+dri2_x11_kopper_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
+                                         const EGLint *rects, EGLint numRects)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+   /* swrast path unsupported for now */
+   assert(dri2_dpy->kopper);
+   if (numRects) {
+      if (dri2_dpy->kopper)
+         dri2_dpy->kopper->swapBuffersWithDamage(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY, numRects, rects);
+      else
+         dri2_dpy->core->swapBuffersWithDamage(dri2_surf->dri_drawable, numRects, rects);
+   } else {
+      if (dri2_dpy->kopper)
+         dri2_dpy->kopper->swapBuffers(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+      else
+         dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
+   }
+   return EGL_TRUE;
 }
 
 static EGLBoolean
@@ -1212,6 +1231,7 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(display);
 
+#ifdef HAVE_DRI3
    loader_update_screen_resources(&dri2_dpy->screen_resources);
 
    if (dri2_dpy->screen_resources.num_crtcs == 0) {
@@ -1228,6 +1248,10 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
    /* If there's only one active CRTC, we're done */
    if (dri2_dpy->screen_resources.num_crtcs == 1)
       return EGL_TRUE;
+#else
+   *numerator = 0;
+   *denominator = 1;
+#endif
 
    /* In a multi-monitor setup, look at each CRTC and perform a box
     * intersection between the CRTC and surface.  Use the CRTC whose
@@ -1250,6 +1274,7 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
       return EGL_FALSE;
    }
 
+#ifdef HAVE_DRI3
    int area = 0;
 
    for (unsigned c = 0; c < dri2_dpy->screen_resources.num_crtcs; c++) {
@@ -1264,6 +1289,7 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
          area = c_area;
       }
    }
+#endif
 
    /* If the window is entirely off-screen, then area will still be 0.
     * We defaulted to the first CRTC in the list's refresh rate, earlier.
@@ -1317,8 +1343,20 @@ dri2_kopper_query_buffer_age(_EGLDisplay *disp, _EGLSurface *surf)
    /* This can legitimately be null for lavapipe */
    if (dri2_dpy->kopper)
       return dri2_dpy->kopper->queryBufferAge(dri2_surf->dri_drawable);
+   else
+      return dri2_dpy->swrast->queryBufferAge(dri2_surf->dri_drawable);
 
    return 0;
+}
+
+static EGLint
+dri2_swrast_query_buffer_age(_EGLDisplay *disp, _EGLSurface *surf)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
+
+   assert(dri2_dpy->swrast);
+   return dri2_dpy->swrast->queryBufferAge(dri2_surf->dri_drawable);
 }
 
 static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
@@ -1332,6 +1370,7 @@ static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .swap_buffers_region = dri2_x11_swap_buffers_region,
    .post_sub_buffer = dri2_x11_post_sub_buffer,
    .copy_buffers = dri2_x11_copy_buffers,
+   .query_buffer_age = dri2_swrast_query_buffer_age,
    /* XXX: should really implement this since X11 has pixmaps */
    .query_surface = dri2_query_surface,
    .get_msc_rate = dri2_x11_get_msc_rate,
@@ -1348,6 +1387,7 @@ static const struct dri2_egl_display_vtbl dri2_x11_kopper_display_vtbl = {
    .swap_interval = dri2_kopper_swap_interval,
    .swap_buffers = dri2_x11_swap_buffers,
    .swap_buffers_region = dri2_x11_swap_buffers_region,
+   .swap_buffers_with_damage = dri2_x11_kopper_swap_buffers_with_damage,
    .post_sub_buffer = dri2_x11_post_sub_buffer,
    .copy_buffers = dri2_x11_copy_buffers,
    .query_buffer_age = dri2_kopper_query_buffer_age,
@@ -1517,9 +1557,11 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
     * here will allow is to simply free the memory at dri2_terminate().
     */
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
+#ifdef HAVE_DRI3
    if (disp->Options.Zink &&
        !debug_get_bool_option("LIBGL_DRI3_DISABLE", false))
       dri3_x11_connect(dri2_dpy);
+#endif
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 
@@ -1549,19 +1591,18 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
          disp->Extensions.KHR_image_pixmap = EGL_TRUE;
       disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
       disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
-      disp->Extensions.ANGLE_sync_control_rate = EGL_TRUE;
-      disp->Extensions.EXT_buffer_age = EGL_TRUE;
-      disp->Extensions.EXT_swap_buffers_with_damage = EGL_TRUE;
+      /* FIXME: if mesa vk wsi ever checks VkPresentRegionKHR in sw mode */
+      disp->Extensions.EXT_swap_buffers_with_damage = !disp->Options.ForceSoftware && dri2_dpy->kopper;
 
+#ifdef HAVE_DRI3
       if (dri2_dpy->multibuffers_available)
          dri2_set_WL_bind_wayland_display(disp);
-   } else {
-      /* swrast */
-      disp->Extensions.ANGLE_sync_control_rate = EGL_TRUE;
+#endif
    }
+   disp->Extensions.EXT_buffer_age = EGL_TRUE;
+   disp->Extensions.ANGLE_sync_control_rate = EGL_TRUE;
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, !disp->Options.Zink))
-      goto cleanup;
+   dri2_x11_add_configs_for_visuals(dri2_dpy, disp, !disp->Options.Zink);
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.
@@ -1588,18 +1629,19 @@ static const __DRIextension *dri3_image_loader_extensions[] = {
    NULL,
 };
 
-static EGLBoolean
+static enum dri2_egl_driver_fail
 dri2_initialize_x11_dri3(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_display_create();
-
+   enum dri2_egl_driver_fail status = DRI2_EGL_DRIVER_FAILED;
    if (!dri2_dpy)
-      return EGL_FALSE;
+      return DRI2_EGL_DRIVER_FAILED;
 
    if (!dri2_get_xcb_connection(disp, dri2_dpy))
       goto cleanup;
 
-   if (!dri3_x11_connect(dri2_dpy))
+   status = dri3_x11_connect(dri2_dpy);
+   if (status != DRI2_EGL_DRIVER_LOADED)
       goto cleanup;
 
    if (!dri2_load_driver_dri3(disp))
@@ -1635,8 +1677,7 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
 
    dri2_set_WL_bind_wayland_display(disp);
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false))
-      goto cleanup;
+   dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false);
 
    loader_init_screen_resources(&dri2_dpy->screen_resources, dri2_dpy->conn,
                                 dri2_dpy->screen);
@@ -1655,11 +1696,11 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
 
    _eglLog(_EGL_INFO, "Using DRI3");
 
-   return EGL_TRUE;
+   return DRI2_EGL_DRIVER_LOADED;
 
 cleanup:
    dri2_display_destroy(disp);
-   return EGL_FALSE;
+   return status;
 }
 #endif
 
@@ -1742,8 +1783,7 @@ dri2_initialize_x11_dri2(_EGLDisplay *disp)
 
    dri2_set_WL_bind_wayland_display(disp);
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true))
-      goto cleanup;
+   dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true);
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.
@@ -1762,16 +1802,21 @@ cleanup:
 EGLBoolean
 dri2_initialize_x11(_EGLDisplay *disp)
 {
-   if (disp->Options.ForceSoftware || disp->Options.Zink)
+   enum dri2_egl_driver_fail status = DRI2_EGL_DRIVER_FAILED;
+   if (disp->Options.ForceSoftware ||
+       (disp->Options.Zink && !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false)))
       return dri2_initialize_x11_swrast(disp);
 
 #ifdef HAVE_DRI3
-   if (!debug_get_bool_option("LIBGL_DRI3_DISABLE", false))
-      if (dri2_initialize_x11_dri3(disp))
+   if (!debug_get_bool_option("LIBGL_DRI3_DISABLE", false)) {
+      status = dri2_initialize_x11_dri3(disp);
+      if (status == DRI2_EGL_DRIVER_LOADED)
          return EGL_TRUE;
+   }
 #endif
 
-   if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false))
+   if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false) &&
+       status != DRI2_EGL_DRIVER_PREFER_ZINK)
       if (dri2_initialize_x11_dri2(disp))
          return EGL_TRUE;
 
@@ -1781,8 +1826,10 @@ dri2_initialize_x11(_EGLDisplay *disp)
 void
 dri2_teardown_x11(struct dri2_egl_display *dri2_dpy)
 {
+#ifdef HAVE_DRI3
    if (dri2_dpy->dri2_major >= 3)
       loader_destroy_screen_resources(&dri2_dpy->screen_resources);
+#endif
 
    if (dri2_dpy->own_device)
       xcb_disconnect(dri2_dpy->conn);

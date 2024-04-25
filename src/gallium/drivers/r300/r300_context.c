@@ -1,24 +1,7 @@
 /*
  * Copyright 2008 Corbin Simpson <MostAwesomeDude@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE. */
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "draw/draw_context.h"
 
@@ -483,7 +466,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
         vb.depth0 = 1;
 
         r300->dummy_vb.buffer.resource = screen->resource_create(screen, &vb);
-        r300->context.set_vertex_buffers(&r300->context, 1, 0, false, &r300->dummy_vb);
+        util_set_vertex_buffers(&r300->context, 1, false, &r300->dummy_vb);
     }
 
     {
@@ -503,7 +486,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     rc_init_regalloc_state(&r300->vs_regalloc_state, RC_VERTEX_PROGRAM);
 
     /* Print driver info. */
-#ifdef DEBUG
+#if MESA_DEBUG
     {
 #else
     if (DBG_ON(r300, DBG_INFO)) {

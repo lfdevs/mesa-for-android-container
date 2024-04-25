@@ -11,8 +11,8 @@
 #include "nvk_event.h"
 #include "nvk_mme.h"
 #include "nvk_physical_device.h"
-#include "nvk_pipeline.h"
 
+#include "vk_common_entrypoints.h"
 #include "vk_meta.h"
 #include "vk_pipeline.h"
 
@@ -973,24 +973,22 @@ nvk_meta_copy_query_pool_results(struct nvk_cmd_buffer *cmd,
    }
 
    /* Save pipeline and push constants */
-   struct nvk_compute_pipeline *pipeline_save = cmd->state.cs.pipeline;
+   struct nvk_shader *shader_save = cmd->state.cs.shader;
    uint8_t push_save[NVK_MAX_PUSH_SIZE];
    memcpy(push_save, desc->root.push, NVK_MAX_PUSH_SIZE);
 
-   nvk_CmdBindPipeline(nvk_cmd_buffer_to_handle(cmd),
-                       VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+   dev->vk.dispatch_table.CmdBindPipeline(nvk_cmd_buffer_to_handle(cmd),
+                                          VK_PIPELINE_BIND_POINT_COMPUTE,
+                                          pipeline);
 
-   nvk_CmdPushConstants(nvk_cmd_buffer_to_handle(cmd), layout,
-                        VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
+   vk_common_CmdPushConstants(nvk_cmd_buffer_to_handle(cmd), layout,
+                              VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
 
    nvk_CmdDispatchBase(nvk_cmd_buffer_to_handle(cmd), 0, 0, 0, 1, 1, 1);
 
    /* Restore pipeline and push constants */
-   if (pipeline_save) {
-      nvk_CmdBindPipeline(nvk_cmd_buffer_to_handle(cmd),
-                          VK_PIPELINE_BIND_POINT_COMPUTE,
-                          nvk_pipeline_to_handle(&pipeline_save->base));
-   }
+   if (shader_save)
+      nvk_cmd_bind_compute_shader(cmd, shader_save);
    memcpy(desc->root.push, push_save, NVK_MAX_PUSH_SIZE);
 }
 
@@ -1097,7 +1095,8 @@ nvk_cmd_copy_query_pool_results_mme(struct nvk_cmd_buffer *cmd,
                                     VkQueryResultFlags flags)
 {
    /* TODO: vkCmdCopyQueryPoolResults() with a compute shader */
-   assert(nvk_cmd_buffer_device(cmd)->pdev->info.cls_eng3d >= TURING_A);
+   ASSERTED struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   assert(nvk_device_physical(dev)->info.cls_eng3d >= TURING_A);
 
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 13);
    P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);

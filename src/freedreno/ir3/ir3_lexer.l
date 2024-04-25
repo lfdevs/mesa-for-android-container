@@ -309,6 +309,7 @@ static int parse_reg(const char *str)
                                   /* category 6: */
 "ldg"                             return TOKEN(T_OP_LDG);
 "ldg.a"                           return TOKEN(T_OP_LDG_A);
+"ldg.k"                           return TOKEN(T_OP_LDG_K);
 "ldl"                             return TOKEN(T_OP_LDL);
 "ldp"                             return TOKEN(T_OP_LDP);
 "stg"                             return TOKEN(T_OP_STG);

@@ -440,8 +440,8 @@ out_err:
 void
 nv50_bufctx_fence(struct nv50_context *nv50, struct nouveau_bufctx *bufctx, bool on_flush)
 {
-   struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
-   struct nouveau_list *it;
+   struct list_head *list = on_flush ? &bufctx->current : &bufctx->pending;
+   struct list_head *it;
 
    for (it = list->next; it != list; it = it->next) {
       struct nouveau_bufref *ref = (struct nouveau_bufref *)it;

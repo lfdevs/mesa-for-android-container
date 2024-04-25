@@ -222,11 +222,11 @@ struct vn_graphics_pipeline_fix_tmp {
     *
     * TODO: extend when below or more extensions are supported:
     * - VK_KHR_maintenance5
-    * - VK_KHR_fragment_shading_rate
     * - VK_EXT_pipeline_robustness
     */
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl_infos;
    VkPipelineCreationFeedbackCreateInfo *feedback_infos;
+   VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr_infos;
    VkPipelineLibraryCreateInfoKHR *library_infos;
    VkPipelineRenderingCreateInfo *rendering_infos;
 };
@@ -390,7 +390,6 @@ vn_CreatePipelineCache(VkDevice device,
                        const VkAllocationCallbacks *pAllocator,
                        VkPipelineCache *pPipelineCache)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
@@ -429,7 +428,6 @@ vn_DestroyPipelineCache(VkDevice device,
                         VkPipelineCache pipelineCache,
                         const VkAllocationCallbacks *pAllocator)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_pipeline_cache *cache =
       vn_pipeline_cache_from_handle(pipelineCache);
@@ -461,8 +459,6 @@ vn_get_target_ring(struct vn_device *dev)
        * ready on the renderer side.
        *
        * TODO:
-       * - For pipeline objects, avoid object id re-use between async pipeline
-       *   destroy on the primary ring and sync pipeline create on TLS ring.
        * - For pipeline create, track ring seqnos of layout and renderpass
        *   objects it depends on, and only wait for those seqnos once.
        * - For pipeline cache retrieval, track ring seqno of pipeline cache
@@ -479,7 +475,6 @@ vn_GetPipelineCacheData(VkDevice device,
                         size_t *pDataSize,
                         void *pData)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_physical_device *physical_dev = dev->physical_device;
    struct vn_ring *target_ring = vn_get_target_ring(dev);
@@ -527,7 +522,6 @@ vn_MergePipelineCaches(VkDevice device,
                        uint32_t srcCacheCount,
                        const VkPipelineCache *pSrcCaches)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
 
    vn_async_vkMergePipelineCaches(dev->primary_ring, device, dstCache,
@@ -628,6 +622,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
    /* for pNext */
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl_infos;
    VkPipelineCreationFeedbackCreateInfo *feedback_infos;
+   VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr_infos;
    VkPipelineLibraryCreateInfoKHR *library_infos;
    VkPipelineRenderingCreateInfo *rendering_infos;
 
@@ -643,6 +638,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
       vk_multialloc_add(&ma, &gpl_infos, __typeof__(*gpl_infos), info_count);
       vk_multialloc_add(&ma, &feedback_infos, __typeof__(*feedback_infos),
                         info_count);
+      vk_multialloc_add(&ma, &fsr_infos, __typeof__(*fsr_infos), info_count);
       vk_multialloc_add(&ma, &library_infos, __typeof__(*library_infos),
                         info_count);
       vk_multialloc_add(&ma, &rendering_infos, __typeof__(*rendering_infos),
@@ -659,6 +655,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
    if (alloc_pnext) {
       tmp->gpl_infos = gpl_infos;
       tmp->feedback_infos = feedback_infos;
+      tmp->fsr_infos = fsr_infos;
       tmp->library_infos = library_infos;
       tmp->rendering_infos = rendering_infos;
    }
@@ -848,10 +845,6 @@ vn_render_pass_state_update(
    /* We must set validity before early returns, to ensure we don't erase
     * valid info during fixup.  We must not erase valid info because, even if
     * we don't read it, the host driver may read it.
-    */
-
-   /* XXX: Should this ignore the render pass for some state subsets when
-    * rasterization is statically disabled? The spec suggests "yes" and "no".
     */
 
    /* VUID-VkGraphicsPipelineCreateInfo-flags-06643
@@ -1382,6 +1375,8 @@ vn_graphics_pipeline_create_info_pnext_init(
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl = &fix_tmp->gpl_infos[index];
    VkPipelineCreationFeedbackCreateInfo *feedback =
       &fix_tmp->feedback_infos[index];
+   VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr =
+      &fix_tmp->fsr_infos[index];
    VkPipelineLibraryCreateInfoKHR *library = &fix_tmp->library_infos[index];
    VkPipelineRenderingCreateInfo *rendering =
       &fix_tmp->rendering_infos[index];
@@ -1398,6 +1393,10 @@ vn_graphics_pipeline_create_info_pnext_init(
       case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO:
          memcpy(feedback, src, sizeof(*feedback));
          next = feedback;
+         break;
+      case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR:
+         memcpy(fsr, src, sizeof(*fsr));
+         next = fsr;
          break;
       case VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR:
          memcpy(library, src, sizeof(*library));
@@ -1460,7 +1459,7 @@ vn_fix_graphics_pipeline_create_infos(
    }
 
    /* tell whether fixes are applied in tracing */
-   VN_TRACE_SCOPE("apply_fixes");
+   VN_TRACE_SCOPE("sanitize pipeline");
 
    struct vn_graphics_pipeline_fix_tmp *fix_tmp =
       vn_graphics_pipeline_fix_tmp_alloc(alloc, info_count, pnext_mask);
@@ -1517,7 +1516,6 @@ vn_CreateGraphicsPipelines(VkDevice device,
                            const VkAllocationCallbacks *pAllocator,
                            VkPipeline *pPipelines)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
@@ -1551,10 +1549,6 @@ vn_CreateGraphicsPipelines(VkDevice device,
 
    for (uint32_t i = 0; i < createInfoCount; i++) {
       struct vn_pipeline *pipeline = vn_pipeline_from_handle(pPipelines[i]);
-
-      /* Grab a refcount on the pipeline layout when needed. Take care; the
-       * pipeline layout may be omitted or ignored in incomplete pipelines.
-       */
       struct vn_pipeline_layout *layout =
          vn_pipeline_layout_from_handle(pCreateInfos[i].layout);
       if (layout && (layout->push_descriptor_set_layout ||
@@ -1578,6 +1572,10 @@ vn_CreateGraphicsPipelines(VkDevice device,
    }
 
    if (want_sync || target_ring != dev->primary_ring) {
+      if (target_ring == dev->primary_ring) {
+         VN_TRACE_SCOPE("want sync");
+      }
+
       result = vn_call_vkCreateGraphicsPipelines(
          target_ring, device, pipelineCache, createInfoCount, pCreateInfos,
          NULL, pPipelines);
@@ -1603,7 +1601,6 @@ vn_CreateComputePipelines(VkDevice device,
                           const VkAllocationCallbacks *pAllocator,
                           VkPipeline *pPipelines)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
@@ -1658,7 +1655,6 @@ vn_DestroyPipeline(VkDevice device,
                    VkPipeline _pipeline,
                    const VkAllocationCallbacks *pAllocator)
 {
-   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_pipeline *pipeline = vn_pipeline_from_handle(_pipeline);
    const VkAllocationCallbacks *alloc =

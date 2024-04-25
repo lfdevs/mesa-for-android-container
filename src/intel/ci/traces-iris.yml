@@ -95,29 +95,6 @@ traces:
       checksum: 06d587a2b934295da6ad874b750b9c9d
     gl-intel-cml:
       checksum: 06d587a2b934295da6ad874b750b9c9d
-  gputest/pixmark-piano-v2.trace:
-    gl-intel-apl:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      text: |-
-        Sometimes hangchecks -- has triggered on glk at least, but is a common
-        trigger of hangchecks across multiple drivers because it's a very slow scene
-        to render.
-    gl-intel-glk:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
-    gl-intel-amly:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
-    gl-intel-kbl:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
-    gl-intel-whl:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
-    gl-intel-cml:
-      label: [crash]
-      checksum: 3899d6cd893b7c3ef6baa637cbd79690
   gputest/triangle-v2.trace:
     gl-intel-apl:
       checksum: 0a1524303e0772f6d869e4875fe1f401

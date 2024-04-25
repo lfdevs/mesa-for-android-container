@@ -437,7 +437,7 @@ vk_to_grl_IndexFormat(VkIndexType type)
 {
    switch (type) {
    case VK_INDEX_TYPE_NONE_KHR:  return INDEX_FORMAT_NONE;
-   case VK_INDEX_TYPE_UINT8_EXT: unreachable("No UINT8 support yet");
+   case VK_INDEX_TYPE_UINT8_KHR: unreachable("No UINT8 support yet");
    case VK_INDEX_TYPE_UINT16:    return INDEX_FORMAT_R16_UINT;
    case VK_INDEX_TYPE_UINT32:    return INDEX_FORMAT_R32_UINT;
    default:
@@ -835,8 +835,7 @@ cmd_build_acceleration_structures(
                    &data, sizeof(data));
    }
 
-   if (anv_cmd_buffer_is_render_queue(cmd_buffer))
-      genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+   genX(flush_pipeline_select_gpgpu)(cmd_buffer);
 
    /* Due to the nature of GRL and its heavy use of jumps/predication, we
     * cannot tell exactly in what order the CFE_STATE we insert are going to

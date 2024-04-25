@@ -516,8 +516,8 @@ v3d_get_compiled_shader(struct v3d_context *v3d,
         if (ht) {
                 struct v3d_cache_key *dup_cache_key =
                         ralloc_size(shader, sizeof(struct v3d_cache_key));
-                dup_cache_key->key = ralloc_size(shader, key_size);
-                memcpy(dup_cache_key->key, cache_key.key, key_size);
+                dup_cache_key->key = ralloc_memdup(shader, cache_key.key,
+                                                   key_size);
                 memcpy(dup_cache_key->sha1, cache_key.sha1 ,sizeof(dup_cache_key->sha1));
                 _mesa_hash_table_insert(ht, dup_cache_key, shader);
         }

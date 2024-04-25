@@ -193,7 +193,7 @@ uint32_t intel_debug_bkp_before_draw_count = 0;
 uint32_t intel_debug_bkp_after_draw_count = 0;
 
 static void
-brw_process_intel_debug_variable_once(void)
+process_intel_debug_variable_once(void)
 {
    intel_debug = parse_debug_string(getenv("INTEL_DEBUG"), debug_control);
    intel_simd = parse_debug_string(getenv("INTEL_SIMD_DEBUG"), simd_control);
@@ -228,12 +228,12 @@ brw_process_intel_debug_variable_once(void)
 }
 
 void
-brw_process_intel_debug_variable(void)
+process_intel_debug_variable(void)
 {
    static once_flag process_intel_debug_variable_flag = ONCE_FLAG_INIT;
 
    call_once(&process_intel_debug_variable_flag,
-             brw_process_intel_debug_variable_once);
+             process_intel_debug_variable_once);
 }
 
 static uint64_t debug_identifier[4] = {

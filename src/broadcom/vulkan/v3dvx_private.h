@@ -81,6 +81,11 @@ void
 v3dX(job_emit_enable_double_buffer)(struct v3dv_job *job);
 
 void
+v3dX(job_patch_resume_address)(struct v3dv_job *first_suspend,
+                               struct v3dv_job *suspend,
+                               struct v3dv_job *resume);
+
+void
 v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
                                      uint32_t cmd_buffer_count,
                                      const VkCommandBuffer *cmd_buffers);
@@ -123,6 +128,12 @@ v3dX(cmd_buffer_emit_indexed_indirect)(struct v3dv_cmd_buffer *cmd_buffer,
                                        uint32_t stride);
 
 void
+v3dX(cmd_buffer_suspend)(struct v3dv_cmd_buffer *cmd_buffer);
+
+struct v3dv_job *
+v3dX(cmd_buffer_prepare_suspend_job_for_submit)(struct v3dv_job *job);
+
+void
 v3dX(get_hw_clear_color)(const VkClearColorValue *color,
                          uint32_t internal_type,
                          uint32_t internal_size,
@@ -144,7 +155,7 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(const struct v3dv_framebuffer *frame
                                             uint8_t *total_color_bpp,
                                             bool *msaa);
 
-#ifdef DEBUG
+#if MESA_DEBUG
 void
 v3dX(device_check_prepacked_sizes)(void);
 #endif

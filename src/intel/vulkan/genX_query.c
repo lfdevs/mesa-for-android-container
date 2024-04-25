@@ -258,6 +258,8 @@ VkResult genX(CreateQueryPool)(
       }
    }
 
+   ANV_RMV(query_pool_create, device, pool, false);
+
    *pQueryPool = anv_query_pool_to_handle(pool);
 
    return VK_SUCCESS;
@@ -278,6 +280,8 @@ void genX(DestroyQueryPool)(
 
    if (!pool)
       return;
+
+   ANV_RMV(resource_destroy, device, pool);
 
    anv_device_release_bo(device, pool->bo);
    vk_object_free(&device->vk, pAllocator, pool);
@@ -778,10 +782,9 @@ void genX(CmdResetQueryPool)(
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_physical_device *pdevice = cmd_buffer->device->physical;
 
-   /* Temporarily disable on MTL until we understand why some tests hang.
-    */
-   if (queryCount >= pdevice->instance->query_clear_with_blorp_threshold &&
-       !intel_device_info_is_mtl(cmd_buffer->device->info)) {
+   /* Shader clearing is only possible on render/compute */
+   if (anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer) &&
+       queryCount >= pdevice->instance->query_clear_with_blorp_threshold) {
       trace_intel_begin_query_clear_blorp(&cmd_buffer->trace);
 
       anv_cmd_buffer_fill_area(cmd_buffer,
@@ -789,10 +792,17 @@ void genX(CmdResetQueryPool)(
                                queryCount * pool->stride,
                                0);
 
-      cmd_buffer->state.queries.clear_bits =
-         (cmd_buffer->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 ?
-         ANV_QUERY_COMPUTE_WRITES_PENDING_BITS :
-         ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(cmd_buffer->device->info);
+      /* The pending clearing writes are in compute if we're in gpgpu mode on
+       * the render engine or on the compute engine.
+       */
+      if (anv_cmd_buffer_is_compute_queue(cmd_buffer) ||
+          cmd_buffer->state.current_pipeline == pdevice->gpgpu_pipeline_value) {
+         cmd_buffer->state.queries.clear_bits =
+            ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+      } else {
+         cmd_buffer->state.queries.clear_bits =
+            ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(&pdevice->info);
+      }
 
       trace_intel_end_query_clear_blorp(&cmd_buffer->trace, queryCount);
       return;
@@ -1729,17 +1739,28 @@ copy_query_results_with_shader(struct anv_cmd_buffer *cmd_buffer,
       genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
    }
 
+   struct anv_shader_bin *copy_kernel;
+   VkResult ret =
+      anv_device_get_internal_shader(
+         cmd_buffer->device,
+         cmd_buffer->state.current_pipeline == GPGPU ?
+         ANV_INTERNAL_KERNEL_COPY_QUERY_RESULTS_COMPUTE :
+         ANV_INTERNAL_KERNEL_COPY_QUERY_RESULTS_FRAGMENT,
+         &copy_kernel);
+   if (ret != VK_SUCCESS) {
+      anv_batch_set_error(&cmd_buffer->batch, ret);
+      return;
+   }
+
    struct anv_simple_shader state = {
       .device               = cmd_buffer->device,
       .cmd_buffer           = cmd_buffer,
       .dynamic_state_stream = &cmd_buffer->dynamic_state_stream,
       .general_state_stream = &cmd_buffer->general_state_stream,
       .batch                = &cmd_buffer->batch,
-      .kernel               = device->internal_kernels[
-         cmd_buffer->state.current_pipeline == GPGPU ?
-         ANV_INTERNAL_KERNEL_COPY_QUERY_RESULTS_COMPUTE :
-         ANV_INTERNAL_KERNEL_COPY_QUERY_RESULTS_FRAGMENT],
+      .kernel               = copy_kernel,
       .l3_config            = device->internal_kernels_l3_config,
+      .urb_cfg              = &cmd_buffer->state.gfx.urb_cfg,
    };
    genX(emit_simple_shader_init)(&state);
 
@@ -1794,20 +1815,18 @@ copy_query_results_with_shader(struct anv_cmd_buffer *cmd_buffer,
    }
 
    *params = (struct anv_query_copy_params) {
-      .copy = {
-         .flags              = copy_flags,
-         .num_queries        = query_count,
-         .num_items          = num_items,
-         .query_base         = first_query,
-         .query_stride       = pool->stride,
-         .query_data_offset  = data_offset,
-         .destination_stride = dest_stride,
-      },
-      .query_data_addr  = anv_address_physical(
+      .flags              = copy_flags,
+      .num_queries        = query_count,
+      .num_items          = num_items,
+      .query_base         = first_query,
+      .query_stride       = pool->stride,
+      .query_data_offset  = data_offset,
+      .destination_stride = dest_stride,
+      .query_data_addr    = anv_address_physical(
          (struct anv_address) {
             .bo = pool->bo,
          }),
-      .destination_addr = anv_address_physical(dest_addr),
+      .destination_addr   = anv_address_physical(dest_addr),
    };
 
    genX(emit_simple_shader_dispatch)(&state, query_count, push_data_state);
@@ -1837,8 +1856,7 @@ void genX(CmdCopyQueryPoolResults)(
    struct anv_device *device = cmd_buffer->device;
    struct anv_physical_device *pdevice = device->physical;
 
-   if (queryCount > pdevice->instance->query_copy_with_shader_threshold &&
-       !intel_device_info_is_mtl(device->info)) {
+   if (queryCount > pdevice->instance->query_copy_with_shader_threshold) {
       copy_query_results_with_shader(cmd_buffer, pool,
                                      anv_address_add(buffer->address,
                                                      destOffset),

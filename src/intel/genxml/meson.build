@@ -45,7 +45,7 @@ endforeach
 
 genX_xml_h = custom_target(
   'genX_xml.h',
-  input : ['gen_zipped_file.py', gen_xml_files],
+  input : ['../../util/gen_zipped_xml_file.py', gen_xml_files],
   output : 'genX_xml.h',
   command : [prog_python, '@INPUT@'],
   capture : true,
@@ -117,9 +117,40 @@ foreach f : gen_xml_files + gen_xml_rt_files
   )
 endforeach
 
+genX_cl_included_symbols = [
+  # instructions
+  '3DSTATE_INDEX_BUFFER',
+  '3DSTATE_VERTEX_BUFFERS',
+  '3DPRIMITIVE',
+  '3DPRIMITIVE_EXTENDED',
+  'MI_ARB_CHECK',
+  'MI_BATCH_BUFFER_START',
+  # structures
+  'VERTEX_BUFFER_STATE',
+]
+
+gen_cl_xml_pack = []
+foreach f : gen_xml_files + gen_xml_rt_files
+  _name = '@0@_cl_pack.h'.format(f.split('.')[0])
+  gen_cl_xml_pack += custom_target(
+    _name,
+    input : ['gen_pack_header.py', f],
+    output : _name,
+    command : [prog_python, '@INPUT@', '--engines=render,blitter,video',
+               '--opencl', '--repack',
+               '--include-symbols', ','.join(genX_cl_included_symbols)],
+    capture : true,
+    depend_files: gen_pack_header_deps
+  )
+endforeach
+
 gen_pack_header_py = files('gen_pack_header.py')
 
-idep_genxml = declare_dependency(sources : [gen_xml_pack, genX_bits_h, genX_xml_h])
+idep_genxml = declare_dependency(
+  include_directories : include_directories('.'),
+  dependencies : idep_mesautil,
+  sources : [gen_xml_pack, gen_cl_xml_pack, genX_bits_h, genX_xml_h]
+)
 
 foreach f : gen_xml_files + gen_xml_rt_files
   test(

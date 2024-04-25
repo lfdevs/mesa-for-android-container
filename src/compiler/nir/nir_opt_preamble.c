@@ -151,7 +151,6 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_work_dim:
    case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_ray_launch_size:
-   case nir_intrinsic_load_ray_launch_size_addr_amd:
    case nir_intrinsic_load_sbt_base_amd:
    case nir_intrinsic_load_is_indexed_draw:
    case nir_intrinsic_load_viewport_scale:

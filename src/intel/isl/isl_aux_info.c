@@ -22,6 +22,7 @@
  */
 
 #include "isl/isl.h"
+#include "dev/intel_device_info.h"
 
 #ifdef IN_UNIT_TEST
 /* STATIC_ASSERT is a do { ... } while(0) statement */
@@ -124,6 +125,87 @@ aux_state_possible(enum isl_aux_state state,
    }
 
    unreachable("Invalid aux state.");
+}
+
+enum isl_aux_state
+isl_aux_get_initial_state(const struct intel_device_info *devinfo,
+                          enum isl_aux_usage usage,
+                          bool zeroed)
+{
+   switch (usage) {
+   case ISL_AUX_USAGE_HIZ:
+   case ISL_AUX_USAGE_HIZ_CCS:
+   case ISL_AUX_USAGE_HIZ_CCS_WT:
+      return ISL_AUX_STATE_AUX_INVALID;
+   case ISL_AUX_USAGE_MCS:
+   case ISL_AUX_USAGE_MCS_CCS:
+      if (zeroed) {
+         /* From the Sky Lake PRM, "Compressed Multisampled Surfaces":
+          *
+          *    "An MCS value of 0x00 indicates that both samples are stored in
+          *    sample slice 0 (thus have the same color). This is the fully
+          *    compressed case."
+          *
+          * This quote is from the 2x MSAA section, but the same mapping
+          * exists for 4-16x MSAA. This state can avoid the need to ambiguate
+          * in some cases.
+          */
+         return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+      } else {
+         return ISL_AUX_STATE_AUX_INVALID;
+      }
+   case ISL_AUX_USAGE_CCS_D:
+   case ISL_AUX_USAGE_CCS_E:
+   case ISL_AUX_USAGE_FCV_CCS_E:
+   case ISL_AUX_USAGE_STC_CCS:
+      if (zeroed) {
+         /* From the Sky Lake PRM, "MCS Buffer for Render Target(s)":
+          *
+          *    "If Software wants to enable Color Compression without Fast
+          *     clear, Software needs to initialize MCS with zeros."
+          *
+          * Although MCS is mentioned, CCS seems to have been intended. This
+          * can be seen in Bspec 14091, in the row containing
+          * WaDisableCCSClearsIfRtCompressionEnabledInGT3.
+          *
+          * A CCS surface initialized to zero is in the pass-through state.
+          * This state can avoid the need to ambiguate in some cases.
+          */
+         return ISL_AUX_STATE_PASS_THROUGH;
+      } else if (devinfo->ver >= 12) {
+         assert(!devinfo->has_illegal_ccs_values);
+         /* From Bspec 47709, "MCS/CCS Buffers for Render Target(s)":
+          *
+          *    "CCS surface does not require initialization. Illegal CCS
+          *     [values] are treated as uncompressed memory."
+          *
+          * The above quote is from the render target section, but we assume
+          * it applies to CCS in general (e.g., STC_CCS). The uninitialized
+          * CCS may be in any aux state. We choose the one which is most
+          * convenient.
+          *
+          * We avoid states with CLEAR because stencil does not support it.
+          * Those states also create a dependency on the clear color, which
+          * can have negative performance implications. Even though some
+          * blocks may actually be encoded with CLEAR, we can get away with
+          * ignoring them - there are no known issues that require fast
+          * cleared blocks to be tracked and avoided.
+          *
+          * We specifically avoid the AUX_INVALID state because it could
+          * trigger an ambiguate. BLORP does not have support for ambiguating
+          * stencil. Also, ambiguating some LODs of mipmapped 8bpp surfaces
+          * seems to stomp on neighboring miplevels.
+          *
+          * There is only one remaining aux state which can give us correct
+          * behavior, COMPRESSED_NO_CLEAR.
+          */
+         return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+      } else {
+         unreachable("Unsupported gfx version");
+      }
+   default:
+      unreachable("Unsupported aux mode");
+   }
 }
 
 enum isl_aux_op

@@ -96,6 +96,7 @@ struct zwp_linux_dmabuf_feedback_v1;
 #include "util/bitset.h"
 #include "util/u_dynarray.h"
 #include "util/u_vector.h"
+#include "util/format/u_format.h"
 
 struct wl_buffer;
 
@@ -157,10 +158,6 @@ struct dri2_egl_display_vtbl {
                                EGLint attribute, EGLint *value);
 
    /* optional */
-   struct wl_buffer *(*create_wayland_buffer_from_image)(_EGLDisplay *disp,
-                                                         _EGLImage *img);
-
-   /* optional */
    EGLBoolean (*get_sync_values)(_EGLDisplay *display, _EGLSurface *surface,
                                  EGLuint64KHR *ust, EGLuint64KHR *msc,
                                  EGLuint64KHR *sbc);
@@ -216,6 +213,12 @@ struct dmabuf_feedback {
    struct dmabuf_feedback_tranche pending_tranche;
 };
 #endif
+
+enum dri2_egl_driver_fail {
+   DRI2_EGL_DRIVER_LOADED = 0,
+   DRI2_EGL_DRIVER_FAILED = 1,
+   DRI2_EGL_DRIVER_PREFER_ZINK = 2,
+};
 
 struct dri2_egl_display {
    const struct dri2_egl_display_vtbl *vtbl;
@@ -407,7 +410,7 @@ struct dri2_egl_surface {
 
    /* surfaceless and device */
    __DRIimage *front;
-   unsigned int visual;
+   enum pipe_format visual;
 
    int out_fence_fd;
    EGLBoolean enable_out_fence;
@@ -509,16 +512,15 @@ void
 dri2_get_render_type_float(const __DRIcoreExtension *core,
                            const __DRIconfig *config, bool *is_float);
 
-unsigned int
+enum pipe_format
 dri2_image_format_for_pbuffer_config(struct dri2_egl_display *dri2_dpy,
                                      const __DRIconfig *config);
 
 struct dri2_egl_config *
-dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
-                EGLint surface_type, const EGLint *attr_list,
-                const int *rgba_shifts, const unsigned int *rgba_sizes);
+dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config,
+                EGLint surface_type, const EGLint *attr_list);
 
-EGLBoolean
+void
 dri2_add_pbuffer_configs_for_visuals(_EGLDisplay *disp);
 
 _EGLImage *

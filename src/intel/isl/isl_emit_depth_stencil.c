@@ -63,6 +63,7 @@ static const uint8_t isl_encode_tiling[] = {
 #if GFX_VERx10 >= 125
    [ISL_TILING_4]          = TILE4,
    [ISL_TILING_64]         = TILE64,
+   [ISL_TILING_64_XE2]     = TILE64,
 #else
    [ISL_TILING_Y0]         = NONE,
    [ISL_TILING_SKL_Yf]     = TILEYF,

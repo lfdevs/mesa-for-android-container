@@ -95,7 +95,16 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    const bool is_sampler =
       (nir_intrinsic_resource_access_intel(intrin) &
        nir_resource_intel_sampler) != 0;
+   const bool is_embedded_sampler =
+      (nir_intrinsic_resource_access_intel(intrin) &
+       nir_resource_intel_sampler_embedded) != 0;
    const struct lower_resource_state *state = data;
+
+   /* Ignore binding table accesses & embedded samplers */
+   if (is_embedded_sampler) {
+      assert(state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER);
+      return false;
+   }
 
    if (!is_bindless)
       return true;
@@ -108,7 +117,8 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    /* When using indirect descriptor, the surface handles are loaded from the
     * descriptor buffer and do not need any offset.
     */
-   if (state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_DIRECT) {
+   if (state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_DIRECT ||
+       state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER) {
       if (!state->device->uses_ex_bso) {
          /* We're trying to reduce the number of instructions in the shaders
           * to compute surface handles. The assumption is that we're using
@@ -128,12 +138,6 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
           * done for the push constant value provided in
           * resource_intel::src[0]. That way the shader can just do a single
           * ADD and get the surface handle.
-          *
-          * Samplers have a 4Gb heap and in the message they're in bits 31:6
-          * of the component 3 of the sampler message header. But since we
-          * push only a single offset for the base offset of the descriptor
-          * set, resource_intel::src[0] has to be shifted right by 6 (bringing
-          * it back in bytes).
           */
          if (!is_sampler)
             binding_offset = nir_ishl_imm(b, binding_offset, 6);

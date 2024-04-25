@@ -9,7 +9,7 @@
  * we can disassemble them correctly.
  */
 
-#include "compiler/isaspec/isaspec.h"
+#include "etnaviv/isa/etnaviv-isa.h"
 #include <gtest/gtest.h>
 
 struct disasm_state {
@@ -46,7 +46,7 @@ struct DisasmTest : testing::Test, testing::WithParamInterface<disasm_state> {
          return;
       }
 
-      isa_disasm((void *)GetParam().bin, 16, fdisasm, &options);
+      etnaviv_isa_disasm((void *)GetParam().bin, 16, fdisasm, &options);
       fflush(fdisasm);
    }
 };
@@ -61,8 +61,8 @@ TEST_P(DisasmTest, basicOpCodes)
 INSTANTIATE_TEST_SUITE_P(Default, DisasmTest,
    testing::Values(
       disasm_state{ {0x00000000, 0x00000000, 0x00000000, 0x00000000}, "nop               void, void, void, void\n" },
-      disasm_state{ {0x07811018, 0x15001f20, 0x00000000, 0x00000000}, "texld.xyzw        t1, tex0, t1.xyyy, void, void\n" },
-      disasm_state{ {0x07831018, 0x39003f20, 0x00000000, 0x00000000}, "texld.xyzw        t3, tex0, t3.xyzw, void, void\n" },
+      disasm_state{ {0x07811018, 0x15001f20, 0x00000000, 0x00000000}, "texld             t1, tex0.xyzw, t1.xyyy, void, void\n" },
+      disasm_state{ {0x07831018, 0x39003f20, 0x00000000, 0x00000000}, "texld             t3, tex0.xyzw, t3.xyzw, void, void\n" },
       disasm_state{ {0x07811009, 0x00000000, 0x00000000, 0x20390008}, "mov.pack          t1, void, void, u0.xyzw\n" },
       disasm_state{ {0x01821009, 0x00000000, 0x00000000, 0x00150028}, "mov.pack          t2.xy__, void, void, t2.xyyy\n"},
       disasm_state{ {0x01821009, 0x00000000, 0x00000000, 0x00550028}, "mov.pack          t2.xy__, void, void, -t2.xyyy\n"},
@@ -89,13 +89,14 @@ INSTANTIATE_TEST_SUITE_P(OperandTypes, DisasmTest,
 // clang-format off
 INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
    testing::Values(
-      // GC3000
       disasm_state{ {0x00000000, 0x00000000, 0x00000000, 0x00000000}, "nop               void, void, void, void\n" },
       disasm_state{ {0x00801001, 0x00001804, 0x00000000, 0x00000008}, "add               t0.x___, t1.xxxx, void, t0.xxxx\n" },
       disasm_state{ {0x07801002, 0x39002805, 0x01c800c0, 0x00390038}, "mad.rtz           t0, t2.xyzw, t1.xyzw, t3.xyzw\n" },
       disasm_state{ {0x00801003, 0x00001804, 0x00000040, 0x00000000}, "mul               t0.x___, t1.xxxx, t0.xxxx, void\n" },
       disasm_state{ {0x00801005, 0x09000802, 0x00000040, 0x00000002}, "dp3.pack.rtne     t0.x___, t0.xyzx, u0.xxxx, void\n" },
       disasm_state{ {0x00801006, 0x39001804, 0x01c800c0, 0x00000000}, "dp4               t0.x___, t1.xyzw, t1.xyzw, void\n" },
+      disasm_state{ {0x00811007, 0x00001804, 0x00000000, 0x00000018}, "dsx               t1.x___, t1.xxxx, void, t1.xxxx\n" },
+      disasm_state{ {0x00811008, 0x00001804, 0x00000000, 0x00000018}, "dsy               t1.x___, t1.xxxx, void, t1.xxxx\n" },
       disasm_state{ {0x01821009, 0x00000000, 0x00000000, 0x00150028}, "mov.pack          t2.xy__, void, void, t2.xyyy\n"},
       disasm_state{ {0x0081100c, 0x00000000, 0x00000000, 0x00000018}, "rcp.pack          t1.x___, void, void, t1.xxxx\n" },
       disasm_state{ {0x0080100d, 0x00000004, 0x00000000, 0x00000008}, "rsq               t0.x___, void, void, t0.xxxx\n" },
@@ -103,15 +104,20 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
       disasm_state{ {0x008010d0, 0x00000800, 0x00000040, 0x00000002}, "set.ge.pack       t0.x___, t0.xxxx, u0.xxxx, void\n" },
       disasm_state{ {0x01001011, 0x00000004, 0x00000000, 0x00154008}, "exp               t0._y__, void, void, t0.yyyy\n" },
       disasm_state{ {0x01801012, 0x00000005, 0x00000000, 0x00000008}, "log.rtz           t0.xy__, void, void, t0.xxxx\n" },
+      disasm_state{ {0x07811013, 0x00000004, 0x00000000, 0x000e4018}, "frc               t1, void, void, t1.yzwx\n" },
       disasm_state{ {0x00000014, 0x00000000, 0x00000000, 0x00000380}, "call              void, void, void, 7\n" },
       disasm_state{ {0x00000015, 0x00000000, 0x00000000, 0x00000000}, "ret               void, void, void, void\n" },
       disasm_state{ {0x00000016, 0x00000000, 0x00000000, 0x00001080}, "branch            void, void, void, 33\n"},
       disasm_state{ {0x00000017, 0x00000000, 0x00000000, 0x00000000}, "texkill.pack      void, void, void, void\n" },
       disasm_state{ {0x00000057, 0x00002800, 0x00000040, 0x00000002}, "texkill.gt.pack   void, t2.xxxx, u0.xxxx, void\n" },
-      disasm_state{ {0x07811018, 0x15001f20, 0x00000000, 0x00000000}, "texld.xyzw        t1, tex0, t1.xyyy, void, void\n" },
+      disasm_state{ {0x07811018, 0x15001f20, 0x00000000, 0x00000000}, "texld             t1, tex0.xyzw, t1.xyyy, void, void\n" },
+      disasm_state{ {0x07811019, 0x39002f20, 0x00000000, 0x00000000}, "texldb            t1, tex0.xyzw, t2.xyzw, void, void\n" },
+      disasm_state{ {0x0781101a, 0x15001f20, 0x00a80140, 0x003f8018}, "texldd            t1, tex0.xyzw, t1.xyyy, t2.xyyy, t1.zwww\n" },
+      disasm_state{ {0x4781101b, 0x39003f20, 0x00000000, 0x00000000}, "texldl            t1, tex8.xyzw, t3.xyzw, void, void\n" },
       disasm_state{ {0x00801021, 0x00000004, 0x00000000, 0x00000008}, "sqrt              t0.x___, void, void, t0.xxxx\n" },
       disasm_state{ {0x03001022, 0x00000005, 0x00000000, 0x00154008}, "sin.rtz           t0.zy, void, void, t0.yyyy\n" },
       disasm_state{ {0x01801023, 0x00000005, 0x00000000, 0x00000008}, "cos.rtz           t0.xy__, void, void, t0.xxxx\n" },
+      disasm_state{ {0x000001a4, 0x3e401804, 0x500000c0, 0x00000487}, "branch_any.ne.s32 void, t1.yzww, 1, 9\t; dontcare bits in branch_any: 00000000000000000000000400000000\n" },
       disasm_state{ {0x00801025, 0x00000004, 0x00000000, 0x00000008}, "floor             t0.x___, void, void, t0.xxxx\n"},
       disasm_state{ {0x00801026, 0x00000004, 0x00000000, 0x00000008}, "ceil              t0.x___, void, void, t0.xxxx\n"},
       disasm_state{ {0x00801027, 0x00000004, 0x00000000, 0x00000008}, "sign              t0.x___, void, void, t0.xxxx\n" },
@@ -133,21 +139,29 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
       disasm_state{ {0x0082101d, 0x00001804, 0x40010000, 0x00000008}, "and.s32           t2.x___, t1.xxxx, void, t0.xxxx\n"},
       disasm_state{ {0x0080101e, 0x00001804, 0x40010000, 0x00000008}, "xor.s32           t0.x___, t1.xxxx, void, t0.xxxx\n"},
       disasm_state{ {0x0080101f, 0x00000004, 0x40010000, 0x00000018}, "not.s32           t0.x___, void, void, t1.xxxx\n"},
+      disasm_state{ {0x00811020, 0x00001804, 0x40010140, 0x00000038}, "bit_extract.s32   t1.x___, t1.xxxx, t2.xxxx, t3.xxxx\n"},
       disasm_state{ {0x00801021, 0x00000004, 0x00010000, 0x00000008}, "popcount          t0.x___, void, void, t0.xxxx\n"},
+      disasm_state{ {0x02000016, 0x00200000, 0x80010000, 0x003fc018}, "movai.u32.pack    void, void, void, t1.wwww\n"},
       disasm_state{ {0x00801017, 0x00000004, 0x40010000, 0x00000018}, "iabs.s32          t0.x___, void, void, t1.xxxx\n"},
       disasm_state{ {0x00801018, 0x00000004, 0x40010000, 0x00000008}, "leadzero.s32      t0.x___, void, void, t0.xxxx\n"},
       disasm_state{ {0x00801019, 0x15400804, 0x40010000, 0x74000028}, "lshift.s32        t0.x___, t0.yyyy, void, 2\n"},
       disasm_state{ {0x0080101a, 0x00001804, 0x40010000, 0x78000018}, "rshift.s32        t0.x___, t1.xxxx, void, 1\n"},
       disasm_state{ {0x0080101b, 0x00001804, 0x40010000, 0x00000008}, "rotate.s32        t0.x___, t1.xxxx, void, t0.xxxx\n"},
+      disasm_state{ {0x03001024, 0x00000005, 0x04098040, 0x0015400f}, "div.rtz           t0.zy, void, 4.500000, t0.yyyy\n"},
       disasm_state{ {0x01061025, 0x2aa00804, 0xa0010050, 0x7800001f}, "atomic_add.u32    t6._y__, u0.zzzz, 0, 1\n"},
-      disasm_state{ {0x00801025, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_add.s32    t0.x___, u0.zzzz, 0, t0.xxxx\t; dontcare bits in atomic_add: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x00821026, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_xchg.s32   t2.x___, u0.zzzz, 0, t1.xxxx\t; dontcare bits in atomic_xchg: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x00801027, 0x2a800884, 0x50010050, 0x0015000f}, "atomic_cmp_xchg.s32 t0.x___, u0.zzzz, 0, t0.xyyy\t; dontcare bits in atomic_cmp_xchg: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x00821028, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_min.s32    t2.x___, u0.zzzz, 0, t1.xxxx\t; dontcare bits in atomic_min: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x00821029, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_max.s32    t2.x___, u0.zzzz, 0, t0.xxxx\t; dontcare bits in atomic_max: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x0080102a, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_or.s32     t0.x___, u0.zzzz, 0, t0.xxxx\t; dontcare bits in atomic_or: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x0082102b, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_and.s32    t2.x___, u0.zzzz, 0, t1.xxxx\t; dontcare bits in atomic_and: 00000000000000000000008000000000\n"},
-      disasm_state{ {0x0080102c, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_xor.s32    t0.x___, u0.zzzz, 0, t1.xxxx\t; dontcare bits in atomic_xor: 00000000000000000000008000000000\n"}
+      disasm_state{ {0x00801025, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_add.skpHp.s32 t0.x___, u0.zzzz, 0, t0.xxxx\n"},
+      disasm_state{ {0x00821026, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_xchg.skpHp.s32 t2.x___, u0.zzzz, 0, t1.xxxx\n"},
+      disasm_state{ {0x00801027, 0x2a800884, 0x50010050, 0x0015000f}, "atomic_cmp_xchg.skpHp.s32 t0.x___, u0.zzzz, 0, t0.xyyy\n"},
+      disasm_state{ {0x00821028, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_min.skpHp.s32 t2.x___, u0.zzzz, 0, t1.xxxx\n"},
+      disasm_state{ {0x00821029, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_max.skpHp.s32 t2.x___, u0.zzzz, 0, t0.xxxx\n"},
+      disasm_state{ {0x0080102a, 0x2a800884, 0x50010050, 0x0000000f}, "atomic_or.skpHp.s32 t0.x___, u0.zzzz, 0, t0.xxxx\n"},
+      disasm_state{ {0x0082102b, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_and.skpHp.s32 t2.x___, u0.zzzz, 0, t1.xxxx\n"},
+      disasm_state{ {0x0080102c, 0x2a800884, 0x50010050, 0x0000001f}, "atomic_xor.skpHp.s32 t0.x___, u0.zzzz, 0, t1.xxxx\n"},
+      disasm_state{ {0x0081102d, 0x00001804, 0x40010000, 0x00000000}, "bit_rev.s32       t1.x___, t1.xxxx, void, void\n"},
+      disasm_state{ {0x00811033, 0x04402804, 0x00ef00c0, 0x00000000}, "dp2               t1.x___, t2.yxyx, t1.wywy, void\n"},
+      disasm_state{ {0x00811034, 0x15c01804, 0x00010000, 0x00000000}, "norm_dp2          t1.x___, t1.wyyy, void, void\n"},
+      disasm_state{ {0x04011035, 0x14801804, 0x00010000, 0x00000000}, "norm_dp3          t1.___w, t1.zxyy, void, void\n"},
+      disasm_state{ {0x00821036, 0x0e401804, 0x00010000, 0x00000000}, "norm_dp4          t2.x___, t1.yzwx, void, void\n"}
    )
 );
 // clang-format on
@@ -218,7 +232,7 @@ INSTANTIATE_TEST_SUITE_P(Threads, DisasmTest,
       disasm_state{ {0x0101102e, 0x00202804, 0x80000020, 0x01000000}, "f2i.u32.t1        t1._y__, th2.xxxx, void, void\n"},
       disasm_state{ {0x00811171, 0x15601804, 0x80000040, 0x76fffffa}, "cmp.eq.u32.t0     t1.x___, t1.yyyy, u0.xxxx, -1\n"},
       disasm_state{ {0x00811171, 0x15601804, 0x80000040, 0x77ffdffa}, "cmp.eq.u32.t1     t1.x___, t1.yyyy, u0.xxxx, -1\n"},
-      disasm_state{ {0x0081158f, 0x00201804, 0x700000c0, 0x7c00000f}, "select.0x16.s16   t1.x___, t1.xxxx, 0.000000, 0.000000\n"},
+      disasm_state{ {0x0081158f, 0x00201804, 0x700000c0, 0x7c00000f}, "select.selmsb.s16 t1.x___, t1.xxxx, 0.000000, 0.000000\n"},
       disasm_state{ {0x0381102d, 0x00201804, 0x40000000, 0x00000000}, "i2f.s16           t1.xyz_, t1.xxxx, void, void\n"},
       disasm_state{ {0x04011009, 0x00000004, 0x00000000, 0x20154008}, "mov               t1.___w, void, void, u0.yyyy\n"}
    )
@@ -292,7 +306,7 @@ INSTANTIATE_TEST_SUITE_P(texldlpcf, DisasmTest,
    testing::Values(
       // taken from dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2dshadow_vertex (GC7000)
       disasm_state{ {0x04011809, 0x00000004, 0x00000000, 0x002a8018}, "mov.sat           t1.___w, void, void, t1.zzzz\n"},
-      disasm_state{ {0x0081102f, 0x29001800, 0x00010140, 0x003fc018}, "texldlpcf.xxxx    t1.x___, tex0, t1.xyzz, t1.xxxx, t1.wwww\n"},
+      disasm_state{ {0x0081102f, 0x29001800, 0x00010140, 0x003fc018}, "texldlpcf         t1.x___, tex0.xxxx, t1.xyzz, t2.xxxx, t1.wwww\n"},
       disasm_state{ {0x07011009, 0x00000004, 0x00000000, 0x20390018}, "mov               t1._yzw, void, void, u1.xyzw\n"}
    )
 );

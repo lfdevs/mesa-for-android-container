@@ -28,6 +28,7 @@ struct lower_intrinsics_state {
    nir_shader *nir;
    nir_function_impl *impl;
    bool progress;
+   bool hw_generated_local_id;
    nir_builder builder;
 };
 
@@ -189,8 +190,12 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
 
       nir_def *sysval;
       switch (intrinsic->intrinsic) {
-      case nir_intrinsic_load_local_invocation_index:
-      case nir_intrinsic_load_local_invocation_id: {
+      case nir_intrinsic_load_local_invocation_id:
+         if (state->hw_generated_local_id)
+            continue;
+
+         FALLTHROUGH;
+      case nir_intrinsic_load_local_invocation_index: {
          if (!local_index && !nir->info.workgroup_size_variable) {
             const uint16_t *ws = nir->info.workgroup_size;
             if (ws[0] * ws[1] * ws[2] == 1) {
@@ -207,6 +212,21 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
                 * information from the payload.
                 */
                continue;
+            }
+
+            if (state->hw_generated_local_id) {
+               nir_def *local_id_vec = nir_load_local_invocation_id(b);
+               nir_def *local_id[3] = { nir_channel(b, local_id_vec, 0),
+                                        nir_channel(b, local_id_vec, 1),
+                                        nir_channel(b, local_id_vec, 2) };
+               nir_def *size_x = nir_imm_int(b, nir->info.workgroup_size[0]);
+               nir_def *size_y = nir_imm_int(b, nir->info.workgroup_size[1]);
+
+               sysval = nir_imul(b, local_id[2], nir_imul(b, size_x, size_y));
+               sysval = nir_iadd(b, sysval, nir_imul(b, local_id[1], size_x));
+               sysval = nir_iadd(b, sysval, local_id[0]);
+               local_index = sysval;
+               break;
             }
 
             /* First time we are using those, so let's calculate them. */
@@ -275,12 +295,15 @@ lower_cs_intrinsics_convert_impl(struct lower_intrinsics_state *state)
 }
 
 bool
-brw_nir_lower_cs_intrinsics(nir_shader *nir)
+brw_nir_lower_cs_intrinsics(nir_shader *nir,
+                            const struct intel_device_info *devinfo,
+                            struct brw_cs_prog_data *prog_data)
 {
    assert(gl_shader_stage_uses_workgroup(nir->info.stage));
 
    struct lower_intrinsics_state state = {
       .nir = nir,
+      .hw_generated_local_id = false,
    };
 
    /* Constraints from NV_compute_shader_derivatives. */
@@ -296,6 +319,38 @@ brw_nir_lower_cs_intrinsics(nir_shader *nir)
             nir->info.workgroup_size[2];
          assert(workgroup_size % 4 == 0);
       }
+   }
+
+   if (devinfo->verx10 >= 125 && prog_data &&
+       nir->info.stage == MESA_SHADER_COMPUTE &&
+       nir->info.cs.derivative_group != DERIVATIVE_GROUP_QUADS &&
+       !nir->info.workgroup_size_variable &&
+       util_is_power_of_two_nonzero(nir->info.workgroup_size[0]) &&
+       util_is_power_of_two_nonzero(nir->info.workgroup_size[1])) {
+
+      state.hw_generated_local_id = true;
+
+      /* TODO: more heuristics about 1D/SLM access vs. 2D access */
+      bool linear =
+         BITSET_TEST(nir->info.system_values_read,
+                     SYSTEM_VALUE_LOCAL_INVOCATION_INDEX) ||
+         (nir->info.workgroup_size[1] == 1 &&
+          nir->info.workgroup_size[2] == 1) ||
+         (nir->info.num_images == 0 && nir->info.num_textures == 0);
+
+      prog_data->walk_order =
+         linear ? INTEL_WALK_ORDER_XYZ : INTEL_WALK_ORDER_YXZ;
+
+      /* nir_lower_compute_system_values will replace any references to
+       * SYSTEM_VALUE_LOCAL_INVOCATION_ID vector components with zero for
+       * any dimension where the workgroup size is 1, so we can skip
+       * generating those.  However, the hardware can only generate
+       * X, XY, or XYZ - it can't skip earlier components.
+       */
+      prog_data->generate_local_id =
+         (nir->info.workgroup_size[0] > 1 ? WRITEMASK_X   : 0) |
+         (nir->info.workgroup_size[1] > 1 ? WRITEMASK_XY  : 0) |
+         (nir->info.workgroup_size[2] > 1 ? WRITEMASK_XYZ : 0);
    }
 
    nir_foreach_function_impl(impl, nir) {

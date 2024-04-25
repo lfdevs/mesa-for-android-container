@@ -23,9 +23,12 @@
 #include "i915/iris_bufmgr.h"
 
 #include "common/intel_gem.h"
+#include "intel/dev/intel_debug.h"
 #include "iris/iris_bufmgr.h"
 
 #include "drm-uapi/i915_drm.h"
+
+#define FILE_DEBUG_FLAG DEBUG_BUFMGR
 
 bool iris_i915_bo_busy_gem(struct iris_bo *bo)
 {
@@ -64,4 +67,58 @@ bool iris_i915_init_global_vm(struct iris_bufmgr *bufmgr, uint32_t *vm_id)
    if (ret)
       *vm_id = value;
    return ret;
+}
+
+int iris_i915_bo_get_tiling(struct iris_bo *bo, uint32_t *tiling)
+{
+   struct iris_bufmgr *bufmgr = bo->bufmgr;
+   struct drm_i915_gem_get_tiling ti = { .handle = bo->gem_handle };
+   int ret = intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_I915_GEM_GET_TILING, &ti);
+
+   if (ret) {
+      DBG("gem_get_tiling failed for BO %u: %s\n",
+          bo->gem_handle, strerror(errno));
+   }
+
+   *tiling = ti.tiling_mode;
+
+   return ret;
+}
+
+int iris_i915_bo_set_tiling(struct iris_bo *bo, const struct isl_surf *surf)
+{
+   struct iris_bufmgr *bufmgr = bo->bufmgr;
+   uint32_t tiling_mode = isl_tiling_to_i915_tiling(surf->tiling);
+   int ret;
+
+   /* GEM_SET_TILING is slightly broken and overwrites the input on the
+    * error path, so we have to open code intel_ioctl().
+    */
+   struct drm_i915_gem_set_tiling set_tiling = {
+      .handle = bo->gem_handle,
+      .tiling_mode = tiling_mode,
+      .stride = surf->row_pitch_B,
+   };
+
+   ret = intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
+   if (ret) {
+      DBG("gem_set_tiling failed for BO %u: %s\n",
+          bo->gem_handle, strerror(errno));
+   }
+
+   return ret;
+}
+
+uint64_t
+iris_i915_tiling_to_modifier(uint32_t tiling)
+{
+   static const uint64_t map[] = {
+      [I915_TILING_NONE]   = DRM_FORMAT_MOD_LINEAR,
+      [I915_TILING_X]      = I915_FORMAT_MOD_X_TILED,
+      [I915_TILING_Y]      = I915_FORMAT_MOD_Y_TILED,
+   };
+
+   assert(tiling < ARRAY_SIZE(map));
+
+   return map[tiling];
 }

@@ -53,6 +53,8 @@ gcd_pow2_u64(uint64_t a, uint64_t b)
 
 static void
 emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
+                      const struct intel_urb_config *urb_cfg_in,
+                      struct intel_urb_config *urb_cfg_out,
                       const struct intel_l3_config *l3_config)
 {
    anv_batch_emit(batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
@@ -104,9 +106,11 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
     * store the data that VF is going to pass to SOL.
     */
    const unsigned entry_size[4] = { DIV_ROUND_UP(32, 64), 1, 1, 1 };
+   memcpy(urb_cfg_out->size, &entry_size, sizeof(entry_size));
 
    genX(emit_urb_setup)(device, batch, l3_config,
-                        VK_SHADER_STAGE_VERTEX_BIT, entry_size, NULL);
+                        VK_SHADER_STAGE_VERTEX_BIT, urb_cfg_in, urb_cfg_out,
+                        NULL);
 
 #if GFX_VER >= 12
    /* Disable Primitive Replication. */
@@ -260,7 +264,10 @@ genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
    genX(emit_l3_config)(batch, device, cfg);
    genX(emit_pipeline_select)(batch, _3D, device);
 
-   emit_common_so_memcpy(batch, device, cfg);
+   struct intel_urb_config urb_cfg_in = { 0 };
+   struct intel_urb_config urb_cfg = { 0 };
+
+   emit_common_so_memcpy(batch, device, &urb_cfg_in, &urb_cfg, cfg);
 }
 
 void
@@ -327,7 +334,11 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
+   struct intel_urb_config urb_cfg;
+
    emit_common_so_memcpy(&cmd_buffer->batch, cmd_buffer->device,
+                         &cmd_buffer->state.gfx.urb_cfg,
+                         &urb_cfg,
                          cmd_buffer->state.current_l3_config);
    emit_so_memcpy(&cmd_buffer->batch, cmd_buffer->device, dst, src, size);
 
@@ -335,6 +346,10 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer, SEQUENTIAL,
                                                        1ull << 32);
 #endif
+
+   /* Update urb config after memcpy. */
+   memcpy(&cmd_buffer->state.gfx.urb_cfg, &urb_cfg,
+          sizeof(struct intel_urb_config));
 
    /* Flag all the instructions emitted by the memcpy. */
    struct anv_gfx_dynamic_state *hw_state =

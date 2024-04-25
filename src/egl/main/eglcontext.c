@@ -288,6 +288,18 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *disp,
             break;
          }
 
+         /* The EGL_EXT_create_context_robustness spec says:
+          *
+          *     "EGL_BAD_CONFIG is generated if
+          *     [EGL_CONTEXT_OPENGL_ROBUST_ACCESS_EXT] is set to EGL_TRUE and
+          *     no GL context supporting the GL_EXT_robustness extension and
+          *     robust access as described therein can be created."
+          */
+         if (val == EGL_TRUE && !disp->RobustBufferAccess) {
+            err = EGL_BAD_CONFIG;
+            break;
+         }
+
          if (val == EGL_TRUE)
             ctx->Flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
          break;

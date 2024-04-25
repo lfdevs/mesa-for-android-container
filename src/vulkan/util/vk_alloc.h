@@ -181,7 +181,7 @@ struct vk_multialloc {
     size_t align;
 
     uint32_t ptr_count;
-    void **ptrs[12];
+    void **ptrs[16];
 };
 
 #define VK_MULTIALLOC(_name) \
@@ -191,7 +191,7 @@ static ALWAYS_INLINE void
 vk_multialloc_add_size_align(struct vk_multialloc *ma,
                              void **ptr, size_t size, size_t align)
 {
-   assert(util_is_power_of_two_nonzero(align));
+   assert(util_is_power_of_two_nonzero_uintptr(align));
    if (size == 0) {
       *ptr = NULL;
       return;
@@ -244,7 +244,7 @@ vk_multialloc_alloc(struct vk_multialloc *ma,
     * constant, GCC is incapable of figuring this out and unrolling the loop
     * so we have to give it a little help.
     */
-   STATIC_ASSERT(ARRAY_SIZE(ma->ptrs) == 12);
+   STATIC_ASSERT(ARRAY_SIZE(ma->ptrs) == 16);
 #define _VK_MULTIALLOC_UPDATE_POINTER(_i) \
    if ((_i) < ma->ptr_count) \
       *ma->ptrs[_i] = (char *)ptr + (uintptr_t)*ma->ptrs[_i]
@@ -260,6 +260,10 @@ vk_multialloc_alloc(struct vk_multialloc *ma,
    _VK_MULTIALLOC_UPDATE_POINTER(9);
    _VK_MULTIALLOC_UPDATE_POINTER(10);
    _VK_MULTIALLOC_UPDATE_POINTER(11);
+   _VK_MULTIALLOC_UPDATE_POINTER(12);
+   _VK_MULTIALLOC_UPDATE_POINTER(13);
+   _VK_MULTIALLOC_UPDATE_POINTER(14);
+   _VK_MULTIALLOC_UPDATE_POINTER(15);
 #undef _VK_MULTIALLOC_UPDATE_POINTER
 
    return ptr;

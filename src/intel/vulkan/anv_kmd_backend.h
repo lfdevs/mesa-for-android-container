@@ -42,8 +42,12 @@ struct anv_sparse_submission;
 struct anv_trtt_batch_bo;
 
 enum anv_vm_bind_op {
+   /* bind vma specified in anv_vm_bind */
    ANV_VM_BIND,
+   /* unbind vma specified in anv_vm_bind */
    ANV_VM_UNBIND,
+   /* unbind all vmas of anv_vm_bind::bo, address and size fields must be set to 0 */
+   ANV_VM_UNBIND_ALL,
 };
 
 struct anv_vm_bind {
@@ -52,6 +56,20 @@ struct anv_vm_bind {
    uint64_t bo_offset; /* Also known as the memory offset. */
    uint64_t size;
    enum anv_vm_bind_op op;
+};
+
+/* These flags apply only to the vm_bind() ioctl backend operations, not to
+ * the higher-level concept of resource address binding. In other words: they
+ * don't apply to TR-TT, which also uses other structs with "vm_bind" in their
+ * names.
+ */
+enum anv_vm_bind_flags {
+   ANV_VM_BIND_FLAG_NONE = 0,
+   /* The most recent bind_timeline wait point is waited for during every
+    * command submission. This flag allows the vm_bind operation to create a
+    * new timeline point and signal it upon completion.
+    */
+   ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE = 1 << 0,
 };
 
 struct anv_kmd_backend {
@@ -68,13 +86,26 @@ struct anv_kmd_backend {
    void (*gem_close)(struct anv_device *device, struct anv_bo *bo);
    /* Returns MAP_FAILED on error */
    void *(*gem_mmap)(struct anv_device *device, struct anv_bo *bo,
-                     uint64_t offset, uint64_t size);
-   /* Bind things however you want. */
-   int (*vm_bind)(struct anv_device *device,
-                  struct anv_sparse_submission *submit);
-   /* Fully bind or unbind a BO. */
-   int (*vm_bind_bo)(struct anv_device *device, struct anv_bo *bo);
-   int (*vm_unbind_bo)(struct anv_device *device, struct anv_bo *bo);
+                     uint64_t offset, uint64_t size, void *placed_addr);
+
+   /*
+    * Bind things however you want.
+    * This is intended for sparse resources, so it's a little lower level and
+    * the _bo variants.
+    */
+   VkResult (*vm_bind)(struct anv_device *device,
+                       struct anv_sparse_submission *submit,
+                       enum anv_vm_bind_flags flags);
+
+   /*
+    * Fully bind or unbind a BO.
+    * This is intended for general buffer creation/destruction, so it creates
+    * a new point in the bind_timeline, which will be waited for the next time
+    * a batch is submitted.
+    */
+   VkResult (*vm_bind_bo)(struct anv_device *device, struct anv_bo *bo);
+   VkResult (*vm_unbind_bo)(struct anv_device *device, struct anv_bo *bo);
+
    VkResult (*execute_simple_batch)(struct anv_queue *queue,
                                     struct anv_bo *batch_bo,
                                     uint32_t batch_bo_size,

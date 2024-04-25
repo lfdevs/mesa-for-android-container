@@ -1199,10 +1199,11 @@ anv_get_image_format_properties(
       /* Nothing to check. */
    }
 
-   if (image_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
-      /* Ignore this flag because it was removed from the
-       * provisional_I_20150910 header.
-       */
+   if (view_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+      if (!(format_feature_flags & (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
+                                    VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT))) {
+         goto unsupported;
+      }
    }
 
    /* From the bspec section entitled "Surface Layout and Tiling",

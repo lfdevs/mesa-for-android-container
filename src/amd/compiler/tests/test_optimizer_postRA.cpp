@@ -1,25 +1,7 @@
 /*
  * Copyright © 2021 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "helpers.h"
@@ -84,9 +66,9 @@ BEGIN_TEST(optimizer_postRA.vcmp)
 
       //! s2: %b:vcc = v_cmp_eq_u32 0, %a:v[0]
       //! s2: %c:s[0-1], s1: %d:scc = s_and_b64 %b:vcc, %x:exec
-      //! s1: %f:s[107] = s_mov_b32 0
+      //! s1: %f:vcc_hi = s_mov_b32 0
       //! s2: %e:s[2-3] = p_cbranch_z %d:scc
-      //! p_unit_test 1, %e:s[2-3], %f:vcc
+      //! p_unit_test 1, %e:s[2-3], %f:vcc_hi
       auto vcmp = bld.vopc(aco_opcode::v_cmp_eq_u32, bld.def(bld.lm, vcc), Operand::zero(),
                            Operand(v_in, reg_v0));
       auto sand = bld.sop2(Builder::s_and, bld.def(bld.lm, reg_s0), bld.def(s1, scc), bld.vcc(vcmp),
@@ -94,7 +76,7 @@ BEGIN_TEST(optimizer_postRA.vcmp)
       auto ovrwr = bld.sop1(aco_opcode::s_mov_b32, bld.def(s1, vcc_hi), Operand::zero());
       auto br =
          bld.branch(aco_opcode::p_cbranch_z, bld.def(s2, reg_s2), bld.scc(sand.def(1).getTemp()));
-      writeout(1, Operand(br, reg_s2), Operand(ovrwr, vcc));
+      writeout(1, Operand(br, reg_s2), Operand(ovrwr, vcc_hi));
    }
 
    //; del b, c, d, e, f

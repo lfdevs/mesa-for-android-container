@@ -80,9 +80,9 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
          enc->enc_pic.crop_bottom = pic->seq.conf_win_bottom_offset;
    } else {
          enc->enc_pic.crop_left = 0;
-         enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
+         enc->enc_pic.crop_right = 0;
          enc->enc_pic.crop_top = 0;
-         enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+         enc->enc_pic.crop_bottom = 0;
    }
 
    enc->enc_pic.general_tier_flag = pic->seq.general_tier_flag;

@@ -38,7 +38,7 @@ libintel_driver_ds = static_library(
   sources : ['intel_driver_ds.cc', intel_tracepoint_files],
   include_directories : [inc_src, inc_include, inc_intel],
   link_with : [libintel_perf, libintel_common],
-  dependencies : [libintel_driver_ds_deps, idep_intel_dev],
+  dependencies : [libintel_driver_ds_deps, idep_intel_dev, idep_intel_blorp],
   gnu_symbol_visibility : 'hidden',
 )
 

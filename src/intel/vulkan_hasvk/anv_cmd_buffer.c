@@ -84,6 +84,7 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
 
 static VkResult
 anv_create_cmd_buffer(struct vk_command_pool *pool,
+                      VkCommandBufferLevel level,
                       struct vk_command_buffer **cmd_buffer_out)
 {
    struct anv_device *device =
@@ -97,7 +98,7 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
       return vk_error(pool, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    result = vk_command_buffer_init(pool, &cmd_buffer->vk,
-                                   &anv_cmd_buffer_ops, 0);
+                                   &anv_cmd_buffer_ops, level);
    if (result != VK_SUCCESS)
       goto fail_alloc;
 
@@ -575,13 +576,13 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
    struct anv_push_constants *data =
       &cmd_buffer->state.compute.base.push_constants;
    struct anv_compute_pipeline *pipeline = cmd_buffer->state.compute.pipeline;
-   const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
+   const struct elk_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
    const struct anv_push_range *range = &pipeline->cs->bind_map.push_ranges[0];
 
-   const struct brw_cs_dispatch_info dispatch =
-      brw_cs_get_dispatch_info(devinfo, cs_prog_data, NULL);
+   const struct intel_cs_dispatch_info dispatch =
+      elk_cs_get_dispatch_info(devinfo, cs_prog_data, NULL);
    const unsigned total_push_constants_size =
-      brw_cs_push_const_total_size(cs_prog_data, dispatch.threads);
+      elk_cs_push_const_total_size(cs_prog_data, dispatch.threads);
    if (total_push_constants_size == 0)
       return (struct anv_state) { .offset = 0 };
 

@@ -1,30 +1,12 @@
 /*
  * Copyright © 2020 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 #include "helpers.h"
 
 #include "common/amd_family.h"
-#include "vulkan/vk_format.h"
+#include "vk_format.h"
 
 #include <llvm-c/Target.h>
 
@@ -43,6 +25,11 @@ aco_shader_info info;
 std::unique_ptr<Program> program;
 Builder bld(NULL);
 Temp inputs[16];
+
+static radeon_info rad_info;
+static nir_shader_compiler_options nir_options;
+static nir_builder _nb;
+nir_builder *nb;
 
 static VkInstance instance_cache[CHIP_LAST] = {VK_NULL_HANDLE};
 static VkDevice device_cache[CHIP_LAST] = {VK_NULL_HANDLE};
@@ -124,14 +111,48 @@ setup_cs(const char* input_spec, enum amd_gfx_level gfx_level, enum radeon_famil
             input_spec++;
       }
 
-      aco_ptr<Instruction> startpgm{create_instruction<Pseudo_instruction>(
-         aco_opcode::p_startpgm, Format::PSEUDO, 0, input_classes.size())};
+      aco_ptr<Instruction> startpgm{
+         create_instruction(aco_opcode::p_startpgm, Format::PSEUDO, 0, input_classes.size())};
       for (unsigned i = 0; i < input_classes.size(); i++) {
          inputs[i] = bld.tmp(input_classes[i]);
          startpgm->definitions[i] = Definition(inputs[i]);
       }
       bld.insert(std::move(startpgm));
    }
+
+   return true;
+}
+
+bool
+setup_nir_cs(enum amd_gfx_level gfx_level, gl_shader_stage stage, enum radeon_family family, const char* subvariant)
+{
+   if (!set_variant(gfx_level, subvariant))
+      return false;
+
+   if (family == CHIP_UNKNOWN) {
+      switch (gfx_level) {
+      case GFX6: family = CHIP_TAHITI; break;
+      case GFX7: family = CHIP_BONAIRE; break;
+      case GFX8: family = CHIP_POLARIS10; break;
+      case GFX9: family = CHIP_VEGA10; break;
+      case GFX10: family = CHIP_NAVI10; break;
+      case GFX10_3: family = CHIP_NAVI21; break;
+      case GFX11: family = CHIP_NAVI31; break;
+      default: family = CHIP_UNKNOWN; break;
+      }
+   }
+
+   memset(&rad_info, 0, sizeof(rad_info));
+   rad_info.gfx_level = gfx_level;
+   rad_info.family = family;
+
+   memset(&nir_options, 0, sizeof(nir_options));
+   ac_set_nir_options(&rad_info, false, &nir_options);
+
+   glsl_type_singleton_init_or_ref();
+
+   _nb = nir_builder_init_simple_shader(stage, &nir_options, "aco_test");
+   nb = &_nb;
 
    return true;
 }
@@ -211,7 +232,7 @@ finish_ra_test(ra_test_policy policy, bool lower)
 
    program->workgroup_size = program->wave_size;
    aco::live live_vars = aco::live_var_analysis(program.get());
-   aco::register_allocation(program.get(), live_vars.live_out, policy);
+   aco::register_allocation(program.get(), live_vars, policy);
 
    if (aco::validate_ra(program.get())) {
       fail_test("Validation after register allocation failed");
@@ -239,6 +260,14 @@ finish_to_hw_instr_test()
 {
    finish_program(program.get());
    aco::lower_to_hw_instr(program.get());
+   aco_print_program(program.get(), output);
+}
+
+void
+finish_schedule_vopd_test()
+{
+   finish_program(program.get());
+   aco::schedule_vopd(program.get());
    aco_print_program(program.get(), output);
 }
 
@@ -281,6 +310,62 @@ finish_assembler_test()
       // TODO: maybe we should use CLRX and skip this test if it's not available?
       for (uint32_t dword : binary)
          fprintf(output, "%.8x\n", dword);
+   }
+}
+
+void
+live_var_analysis_debug_func(void* private_data, enum aco_compiler_debug_level level, const char* message)
+{
+   if (level == ACO_COMPILER_DEBUG_LEVEL_ERROR)
+      *(bool *)private_data = true;
+}
+
+void
+finish_isel_test(enum ac_hw_stage hw_stage, unsigned wave_size)
+{
+   nir_validate_shader(nb->shader, "in finish_isel_test");
+   nir_validate_ssa_dominance(nb->shader, "in finish_isel_test");
+
+   program.reset(new Program);
+   program->debug.func = nullptr;
+   program->debug.private_data = nullptr;
+
+   ac_shader_args args = {};
+
+   aco_compiler_options options = {};
+   options.family = rad_info.family;
+   options.gfx_level = rad_info.gfx_level;
+
+   memset(&info, 0, sizeof(info));
+   info.hw_stage = hw_stage;
+   info.wave_size = wave_size;
+   info.workgroup_size = nb->shader->info.workgroup_size[0] * nb->shader->info.workgroup_size[1] * nb->shader->info.workgroup_size[2];
+
+   memset(&config, 0, sizeof(config));
+
+   select_program(program.get(), 1, &nb->shader, &config, &options, &info, &args);
+
+   ralloc_free(nb->shader);
+   glsl_type_singleton_decref();
+
+   aco_print_program(program.get(), output);
+
+   if (!aco::validate_ir(program.get())) {
+      fail_test("Validation after instruction selection failed");
+      return;
+   }
+   if (!aco::validate_cfg(program.get())) {
+      fail_test("Invalidate CFG");
+      return;
+   }
+
+   bool live_var_fail = false;
+   program->debug.func = &live_var_analysis_debug_func;
+   program->debug.private_data = &live_var_fail;
+   aco::live_var_analysis(program.get());
+   if (live_var_fail) {
+      fail_test("Live var analysis failed");
+      return;
    }
 }
 

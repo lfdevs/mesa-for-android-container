@@ -680,8 +680,10 @@ struct vtn_builder {
    /* True if we need to ignore OpReturn after OpEmitMeshTasksEXT. */
    bool wa_ignore_return_after_emit_mesh_tasks;
 
-   /* Workaround discard bugs in HLSL -> SPIR-V compilers */
+   /* True if DemoteToHelperInvocation capability is used by the shader. */
    bool uses_demote_to_helper_invocation;
+
+   /* Workaround discard bugs in HLSL -> SPIR-V compilers */
    bool convert_discard_to_demote;
 
    gl_shader_stage entry_point_stage;

@@ -18,7 +18,7 @@ Build EGL
 #. Configure your build with the desired client APIs and enable the
    driver for your hardware. For example:
 
-   .. code-block:: console
+   .. code-block:: sh
 
       $ meson configure \
               -D egl=enabled \
@@ -26,10 +26,9 @@ Build EGL
               -D gles2=enabled \
               -D gallium-drivers=...
 
-   The main library and OpenGL is enabled by default. The first two
-   options above enables :doc:`OpenGL ES 1.x and 2.x <opengles>`. The
-   last two options enables the listed classic and Gallium drivers
-   respectively.
+   The main EGL library and OpenGL are enabled by default. The two
+   ``gles*`` options after enable :doc:`OpenGL ES 1.x and 2.x+
+   <opengles>`. The last option enables the listed Gallium drivers.
 
 #. Build and install Mesa as usual.
 

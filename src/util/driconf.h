@@ -422,6 +422,10 @@
    DRI_CONF_OPT_B(vk_x11_ensure_min_image_count, def, \
                   "Force the X11 WSI to create at least the number of image specified by the driver in VkSurfaceCapabilitiesKHR::minImageCount")
 
+#define DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(def) \
+   DRI_CONF_OPT_B(vk_x11_ignore_suboptimal, def, \
+                  "Force the X11 WSI to never report VK_SUBOPTIMAL_KHR")
+
 #define DRI_CONF_VK_KHR_PRESENT_WAIT(def) \
    DRI_CONF_OPT_B(vk_khr_present_wait, def, \
                   "Expose VK_KHR_present_wait and id extensions despite them not being implemented for all supported surface types")
@@ -590,6 +594,10 @@
    DRI_CONF_OPT_B(tu_dont_reserve_descriptor_set, def, \
                   "Don't internally reserve one of the HW descriptor sets for descriptor set dynamic offset support, this frees up an extra descriptor set at the cost of that feature")
 
+#define DRI_CONF_TU_ALLOW_OOB_INDIRECT_UBO_LOADS(def) \
+   DRI_CONF_OPT_B(tu_allow_oob_indirect_ubo_loads, def, \
+                  "Some D3D11 games rely on out-of-bounds indirect UBO loads to return real values from underlying bound descriptor, this prevents us from lowering indirectly accessed UBOs to consts")
+
 /**
  * \brief venus specific configuration options
  */
@@ -720,9 +728,8 @@
 #define DRI_CONF_RADV_CLEAR_LDS(def) \
    DRI_CONF_OPT_B(radv_clear_lds, def, "Clear LDS at the end of shaders. Might decrease performance.")
 
-#define DRI_CONF_RADV_FORCE_ACTIVE_ACCEL_STRUCT_LEAVES(def) \
-   DRI_CONF_OPT_B(radv_force_active_accel_struct_leaves, def, \
-                  "Force leaf nodes of acceleration structures to be marked active.")
+#define DRI_CONF_RADV_DISABLE_NGG_GS(def) \
+   DRI_CONF_OPT_B(radv_disable_ngg_gs, def, "Disable NGG GS on GFX10/GFX10.3.")
 
 /**
  * \brief ANV specific configuration options
@@ -777,7 +784,17 @@
    DRI_CONF_OPT_B(anv_disable_fcv, def, \
                   "Disable FCV optimization")
 
-#define DRI_CONF_ANV_HASVK_OVERRIDE_API_VERSION(def) \
+#define DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(def) \
+   DRI_CONF_OPT_B(anv_external_memory_implicit_sync, def, "Implicit sync on external BOs")
+
+#define DRI_CONF_ANV_COMPRESSION_CONTROL_ENABLED(def) \
+   DRI_CONF_OPT_B(compression_control_enabled, def, "Enable VK_EXT_image_compression_control support")
+
+/**
+ * \brief HASVK specific configuration options
+ */
+
+#define DRI_CONF_HASVK_OVERRIDE_API_VERSION(def) \
    DRI_CONF_OPT_B(hasvk_report_vk_1_3_version, def, \
                   "Override intel_hasvk API version")
 
@@ -790,5 +807,8 @@
 
 #define DRI_CONF_DZN_ENABLE_8BIT_LOADS_STORES(def) \
    DRI_CONF_OPT_B(dzn_enable_8bit_loads_stores, def, "Enable VK_KHR_8bit_loads_stores")
+
+#define DRI_CONF_DZN_DISABLE(def) \
+   DRI_CONF_OPT_B(dzn_disable, def, "Fail instance creation")
 
 #endif

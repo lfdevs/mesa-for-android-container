@@ -58,8 +58,7 @@
 static nir_def *
 build_dither_mask(nir_builder *b, nir_def *color)
 {
-   assert(color->num_components == 4);
-   nir_def *alpha = nir_channel(b, color, 3);
+   nir_def *alpha = nir_channel(b, color, color->num_components - 1);
 
    nir_def *m =
       nir_f2i32(b, nir_fmul_imm(b, nir_fsat(b, alpha), 16.0));
@@ -130,6 +129,11 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
 
          if (location == FRAG_RESULT_COLOR ||
              location == FRAG_RESULT_DATA0) {
+            uint32_t mask = nir_intrinsic_write_mask(intrin) <<
+                            nir_intrinsic_component(intrin);
+            /* need the w component */
+            if (!(mask & BITFIELD_BIT(3)))
+               continue;
             assert(color0_write == NULL);
             color0_write = intrin;
          }
@@ -137,22 +141,19 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
    }
 
    /* It's possible that shader_info may be out-of-date and the writes to
-    * either gl_SampleMask or the first color value may have been removed.
+    * either gl_SampleMask, or the first color value may have been removed,
+    * or that the w component is not written.
     * This can happen if, for instance a nir_undef is written to the
     * color value.  In that case, just bail and don't do anything rather
     * than crashing.
+    * It's also possible that the color value isn't actually a vec4.  In this case,
+    * assuming an alpha of 1.0 and letting the sample mask pass through
+    * unaltered seems like the kindest thing to do to apps.
     */
    if (color0_write == NULL || sample_mask_write == NULL)
       goto skip;
 
-   /* It's possible that the color value isn't actually a vec4.  In this case,
-    * assuming an alpha of 1.0 and letting the sample mask pass through
-    * unaltered seems like the kindest thing to do to apps.
-    */
    nir_def *color0 = color0_write->src[0].ssa;
-   if (color0->num_components < 4)
-      goto skip;
-
    nir_def *sample_mask = sample_mask_write->src[0].ssa;
 
    if (sample_mask_write_first) {
@@ -175,7 +176,7 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
       nir_def *push_flags =
          nir_load_uniform(&b, 1, 32, nir_imm_int(&b, prog_data->msaa_flags_param * 4));
       nir_def *alpha_to_coverage =
-         nir_test_mask(&b, push_flags, BRW_WM_MSAA_FLAG_ALPHA_TO_COVERAGE);
+         nir_test_mask(&b, push_flags, INTEL_MSAA_FLAG_ALPHA_TO_COVERAGE);
       dither_mask = nir_bcsel(&b, alpha_to_coverage,
                               dither_mask, sample_mask_write->src[0].ssa);
    }

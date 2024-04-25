@@ -365,6 +365,18 @@ ralloc_set_destructor(const void *ptr, void(*destructor)(void *))
    info->destructor = destructor;
 }
 
+void *
+ralloc_memdup(const void *ctx, const void *mem, size_t n)
+{
+   void *ptr = ralloc_size(ctx, n);
+
+   if (unlikely(ptr == NULL))
+      return NULL;
+
+   memcpy(ptr, mem, n);
+   return ptr;
+}
+
 char *
 ralloc_strdup(const void *ctx, const char *str)
 {
@@ -806,7 +818,7 @@ void *
 gc_alloc_size(gc_ctx *ctx, size_t size, size_t alignment)
 {
    assert(ctx);
-   assert(util_is_power_of_two_nonzero(alignment));
+   assert(util_is_power_of_two_nonzero_uintptr(alignment));
 
    alignment = MAX2(alignment, alignof(gc_block_header));
 
