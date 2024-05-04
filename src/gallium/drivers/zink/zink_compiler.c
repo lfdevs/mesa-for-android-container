@@ -6397,57 +6397,72 @@ zink_shader_free(struct zink_screen *screen, struct zink_shader *shader)
    ralloc_free(shader);
 }
 
+static bool
+gfx_shader_prune(struct zink_screen *screen, struct zink_shader *shader)
+{
+   /* this shader may still be precompiling, so access here must be locked and singular */
+   simple_mtx_lock(&shader->lock);
+   struct set_entry *entry = _mesa_set_next_entry(shader->programs, NULL);
+   struct zink_gfx_program *prog = (void*)(entry ? entry->key : NULL);
+   if (entry)
+      _mesa_set_remove(shader->programs, entry);
+   simple_mtx_unlock(&shader->lock);
+   if (!prog)
+      return false;
+   gl_shader_stage stage = shader->info.stage;
+   assert(stage < ZINK_GFX_SHADER_COUNT);
+   unsigned stages_present = prog->stages_present;
+   if (prog->shaders[MESA_SHADER_TESS_CTRL] &&
+         prog->shaders[MESA_SHADER_TESS_CTRL]->non_fs.is_generated)
+      stages_present &= ~BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
+   unsigned idx = zink_program_cache_stages(stages_present);
+   if (!prog->base.removed && prog->stages_present == prog->stages_remaining &&
+         (stage == MESA_SHADER_FRAGMENT || !shader->non_fs.is_generated)) {
+      struct hash_table *ht = &prog->base.ctx->program_cache[idx];
+      simple_mtx_lock(&prog->base.ctx->program_lock[idx]);
+      struct hash_entry *he = _mesa_hash_table_search(ht, prog->shaders);
+      assert(he && he->data == prog);
+      _mesa_hash_table_remove(ht, he);
+      prog->base.removed = true;
+      simple_mtx_unlock(&prog->base.ctx->program_lock[idx]);
+      util_queue_fence_wait(&prog->base.cache_fence);
+
+      for (unsigned r = 0; r < ARRAY_SIZE(prog->pipelines); r++) {
+         for (int i = 0; i < ARRAY_SIZE(prog->pipelines[0]); ++i) {
+            hash_table_foreach(&prog->pipelines[r][i], table_entry) {
+               struct zink_gfx_pipeline_cache_entry *pc_entry = table_entry->data;
+
+               util_queue_fence_wait(&pc_entry->fence);
+            }
+         }
+      }
+   }
+   if (stage == MESA_SHADER_FRAGMENT || !shader->non_fs.is_generated) {
+      prog->shaders[stage] = NULL;
+      prog->stages_remaining &= ~BITFIELD_BIT(stage);
+   }
+   /* only remove generated tcs during parent tes destruction */
+   if (stage == MESA_SHADER_TESS_EVAL && shader->non_fs.generated_tcs)
+      prog->shaders[MESA_SHADER_TESS_CTRL] = NULL;
+   if (stage != MESA_SHADER_FRAGMENT &&
+      prog->shaders[MESA_SHADER_GEOMETRY] &&
+      prog->shaders[MESA_SHADER_GEOMETRY]->non_fs.parent ==
+      shader) {
+      prog->shaders[MESA_SHADER_GEOMETRY] = NULL;
+   }
+   zink_gfx_program_reference(screen, &prog, NULL);
+   return true;
+}
+
 void
 zink_gfx_shader_free(struct zink_screen *screen, struct zink_shader *shader)
 {
    assert(shader->info.stage != MESA_SHADER_COMPUTE);
    util_queue_fence_wait(&shader->precompile.fence);
-   set_foreach(shader->programs, entry) {
-      struct zink_gfx_program *prog = (void*)entry->key;
-      gl_shader_stage stage = shader->info.stage;
-      assert(stage < ZINK_GFX_SHADER_COUNT);
-      unsigned stages_present = prog->stages_present;
-      if (prog->shaders[MESA_SHADER_TESS_CTRL] &&
-            prog->shaders[MESA_SHADER_TESS_CTRL]->non_fs.is_generated)
-         stages_present &= ~BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
-      unsigned idx = zink_program_cache_stages(stages_present);
-      if (!prog->base.removed && prog->stages_present == prog->stages_remaining &&
-          (stage == MESA_SHADER_FRAGMENT || !shader->non_fs.is_generated)) {
-         struct hash_table *ht = &prog->base.ctx->program_cache[idx];
-         simple_mtx_lock(&prog->base.ctx->program_lock[idx]);
-         struct hash_entry *he = _mesa_hash_table_search(ht, prog->shaders);
-         assert(he && he->data == prog);
-         _mesa_hash_table_remove(ht, he);
-         prog->base.removed = true;
-         simple_mtx_unlock(&prog->base.ctx->program_lock[idx]);
-         util_queue_fence_wait(&prog->base.cache_fence);
 
-         for (unsigned r = 0; r < ARRAY_SIZE(prog->pipelines); r++) {
-            for (int i = 0; i < ARRAY_SIZE(prog->pipelines[0]); ++i) {
-               hash_table_foreach(&prog->pipelines[r][i], table_entry) {
-                  struct zink_gfx_pipeline_cache_entry *pc_entry = table_entry->data;
+   /* if the shader is still precompiling, the program set must be pruned under lock */
+   while (gfx_shader_prune(screen, shader));
 
-                  util_queue_fence_wait(&pc_entry->fence);
-               }
-            }
-         }
-
-      }
-      if (stage == MESA_SHADER_FRAGMENT || !shader->non_fs.is_generated) {
-         prog->shaders[stage] = NULL;
-         prog->stages_remaining &= ~BITFIELD_BIT(stage);
-      }
-      /* only remove generated tcs during parent tes destruction */
-      if (stage == MESA_SHADER_TESS_EVAL && shader->non_fs.generated_tcs)
-         prog->shaders[MESA_SHADER_TESS_CTRL] = NULL;
-      if (stage != MESA_SHADER_FRAGMENT &&
-          prog->shaders[MESA_SHADER_GEOMETRY] &&
-          prog->shaders[MESA_SHADER_GEOMETRY]->non_fs.parent ==
-          shader) {
-         prog->shaders[MESA_SHADER_GEOMETRY] = NULL;
-      }
-      zink_gfx_program_reference(screen, &prog, NULL);
-   }
    while (util_dynarray_contains(&shader->pipeline_libs, struct zink_gfx_lib_cache*)) {
       struct zink_gfx_lib_cache *libs = util_dynarray_pop(&shader->pipeline_libs, struct zink_gfx_lib_cache*);
       if (!libs->removed) {

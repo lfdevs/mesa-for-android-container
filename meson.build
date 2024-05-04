@@ -962,18 +962,13 @@ endif
 pre_args += '-DMESA_DEBUG=' + (with_mesa_debug ? '1' : '0')
 
 with_split_debug = get_option('split-debug') \
-  .disable_if(not cc.compiles('''#include<stdio.h>
-                                 int main() {
-                                 printf("\n");
-                                 };''',
-                    args : '-gsplit-dwarf',
-                    name : 'split-dwarf support'),
+  .disable_if(not cc.has_argument('-gsplit-dwarf'),
     error_message : 'split-debug requires compiler -gsplit-dwarf support') \
   .disable_if(not cc.has_link_argument('-Wl,--gdb-index'),
     error_message : 'split-debug requires the linker argument -Wl,--gdb-index')
 
 if with_split_debug.allowed() and get_option('debug')
-  add_project_arguments('-gsplit-dwarf', langauge : ['c', 'cpp'])
+  add_project_arguments('-gsplit-dwarf', language : ['c', 'cpp'])
   add_project_link_arguments('-Wl,--gdb-index', language : ['c', 'cpp'])
 endif
 
@@ -1932,7 +1927,7 @@ if get_option('b_sanitize') == 'thread'
   # meson versions prior to 1.4 will warn "Consider using the built-in option for sanitizers ..." 
   # later on because it only checks whether the option starts with "-fsanitize",
   # but there is no built-in option for adding a blacklist
-  tsan_blacklist = '-fsanitize-blacklist=@0@'.format(join_paths(meson.project_source_root(), 'tsan-blacklist.txt'))
+  tsan_blacklist = '-fsanitize-blacklist=@0@'.format(join_paths(meson.project_source_root(), 'build-support', 'tsan-blacklist.txt'))
   if cc.has_argument(tsan_blacklist)
     pre_args += tsan_blacklist
   else

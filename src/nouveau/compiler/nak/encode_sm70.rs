@@ -109,6 +109,14 @@ impl ALUSrc {
         assert!(src.is_uniform());
         ALUSrc::from_src_file(src, RegFile::UGPR)
     }
+
+    pub fn has_src_mod(&self) -> bool {
+        match self {
+            ALUSrc::Reg(reg) | ALUSrc::UReg(reg) => reg.abs || reg.neg,
+            ALUSrc::CBuf(cb) => cb.abs || cb.neg,
+            _ => false,
+        }
+    }
 }
 
 struct SM70Instr {
@@ -399,10 +407,14 @@ impl SM70Instr {
             self.set_dst(dst);
         }
 
-        // For opcodes like OpHAdd, both sources support full modifiers and swizzle,
-        // even when we use a form where the two sources go in src0 and src2.
-        // For OpHFma, however, which uses both src1 and src2, only src1 supports modifiers.
-        let src2_has_mod = !is_fp16_alu || matches!(src1, ALUSrc::None);
+        // Bits 74..76 are used both for the swizzle on src0 and for the source
+        // modifier for the register source of src1 and src2.  When both are
+        // registers, it's used for src2.  The hardware elects to always support
+        // a swizzle and not support source modifiers in that case.
+        let bit74_75_are_mod = !is_fp16_alu
+            || matches!(src1, ALUSrc::None)
+            || matches!(src2, ALUSrc::None);
+        debug_assert!(bit74_75_are_mod || !src0.has_src_mod());
 
         self.set_alu_reg_src(24..32, 73, 72, 74..76, is_fp16_alu, true, &src0);
 
@@ -414,7 +426,7 @@ impl SM70Instr {
                     75,
                     81..83,
                     is_fp16_alu,
-                    src2_has_mod,
+                    bit74_75_are_mod,
                     &src2,
                 );
 
@@ -469,7 +481,7 @@ impl SM70Instr {
                     63,
                     60..62,
                     is_fp16_alu,
-                    src2_has_mod,
+                    true,
                     reg2,
                 );
                 self.set_alu_reg_src(
@@ -478,7 +490,7 @@ impl SM70Instr {
                     75,
                     81..83,
                     is_fp16_alu,
-                    true,
+                    bit74_75_are_mod,
                     &src1,
                 );
                 7_u8 // form
@@ -491,29 +503,21 @@ impl SM70Instr {
                     75,
                     81..83,
                     is_fp16_alu,
-                    true,
+                    bit74_75_are_mod,
                     &src1,
                 );
                 2_u8 // form
             }
             ALUSrc::CBuf(cb) => {
                 // TODO set_src_cx
-                self.set_alu_cb(
-                    38..59,
-                    62,
-                    63,
-                    60..62,
-                    is_fp16_alu,
-                    src2_has_mod,
-                    cb,
-                );
+                self.set_alu_cb(38..59, 62, 63, 60..62, is_fp16_alu, true, cb);
                 self.set_alu_reg_src(
                     64..72,
                     74,
                     75,
                     81..83,
                     is_fp16_alu,
-                    true,
+                    bit74_75_are_mod,
                     &src1,
                 );
                 3_u8 // form

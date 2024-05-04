@@ -1639,13 +1639,17 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
    nir_foreach_variable_with_modes(var, state->shader, var_mode) {
       if (!var->name)
          continue;
-      if (((instr->intrinsic == nir_intrinsic_load_uniform &&
-            var->data.driver_location == nir_intrinsic_base(instr)) ||
-           (instr->intrinsic != nir_intrinsic_load_uniform &&
-            var->data.location == nir_intrinsic_io_semantics(instr).location)) &&
-          ((nir_intrinsic_component(instr) >= var->data.location_frac &&
-            nir_intrinsic_component(instr) <
-               (var->data.location_frac + glsl_get_components(var->type))))) {
+      
+      bool match;
+      if (instr->intrinsic == nir_intrinsic_load_uniform) {
+         match = var->data.driver_location == nir_intrinsic_base(instr);
+      } else {
+         match = nir_intrinsic_component(instr) >= var->data.location_frac &&
+                 nir_intrinsic_component(instr) <
+                    (var->data.location_frac + glsl_get_components(var->type));
+      }
+
+      if (match) {
          fprintf(fp, "  // %s", var->name);
          break;
       }

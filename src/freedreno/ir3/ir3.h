@@ -1006,6 +1006,7 @@ is_subgroup_cond_mov_macro(struct ir3_instruction *instr)
    case OPC_READ_FIRST_MACRO:
    case OPC_SWZ_SHARED_MACRO:
    case OPC_SCAN_MACRO:
+   case OPC_SCAN_CLUSTERS_MACRO:
       return true;
    default:
       return false;

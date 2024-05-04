@@ -77,7 +77,7 @@ static const struct debug_named_value etna_debug_options[] = {
    {"no_msaa",        ETNA_DBG_NO_MSAA, "Disable MSAA support"},
    {"shared_ts",      ETNA_DBG_SHARED_TS, "Enable TS sharing"},
    {"perf",           ETNA_DBG_PERF, "Enable performance warnings"},
-   {"npu_no_parallel",ETNA_DBG_NPU_NO_PARALLEL, "Disable parallelism inside NPU batches"},
+   {"npu_parallel",   ETNA_DBG_NPU_PARALLEL, "Enable parallelism inside NPU batches (unsafe)"},
    {"npu_no_batching",ETNA_DBG_NPU_NO_BATCHING, "Disable batching NPU jobs"},
    DEBUG_NAMED_VALUE_END
 };

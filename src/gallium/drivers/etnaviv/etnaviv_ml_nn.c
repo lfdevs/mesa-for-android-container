@@ -1377,7 +1377,7 @@ etna_ml_emit_operation_nn(struct etna_ml_subgraph *subgraph,
    unsigned offset = idx + 1;
    unsigned nn_config = VIVS_GL_NN_CONFIG_NN_CORE_COUNT(0x0); /* This disables power control of NN cores and enables all of them */
 
-   if (DBG_ENABLED(ETNA_DBG_NPU_NO_PARALLEL)) {
+   if (!DBG_ENABLED(ETNA_DBG_NPU_PARALLEL)) {
       nn_config |= VIVS_GL_NN_CONFIG_SMALL_BATCH;
       offset = 0;
    }

@@ -516,6 +516,13 @@ try_demote_instruction(struct ra_ctx *ctx, struct ir3_instruction *instr)
    /* First, check restrictions. */
    switch (opc_cat(instr->opc)) {
    case 1:
+      /* MOVMSK is special and can't be demoted. It also has no sources so must
+       * go before the check below.
+       */
+      if (instr->opc == OPC_MOVMSK)
+         return false;
+
+      assert(instr->srcs_count >= 1);
       if (!(instr->srcs[0]->flags & (IR3_REG_CONST | IR3_REG_IMMED)))
          return false;
       break;

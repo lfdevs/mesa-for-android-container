@@ -1526,6 +1526,24 @@ radv_enc_input_format(struct radv_cmd_buffer *cmd_buffer)
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   struct radv_video_session *vid = cmd_buffer->video.vid;
+   uint32_t color_bit_depth;
+   uint32_t color_packing_format;
+
+   switch (vid->vk.picture_format) {
+   case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+      color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+      color_packing_format = RENCODE_COLOR_PACKING_FORMAT_NV12;
+      break;
+   case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+      color_bit_depth = RENCODE_COLOR_BIT_DEPTH_10_BIT;
+      color_packing_format = RENCODE_COLOR_PACKING_FORMAT_P010;
+      break;
+   default:
+      assert(0);
+      return;
+   }
+
    ENC_BEGIN;
    radeon_emit(cs, pdev->vcn_enc_cmds.input_format);
    radeon_emit(cs, 0);                          // input color volume
@@ -1533,8 +1551,8 @@ radv_enc_input_format(struct radv_cmd_buffer *cmd_buffer)
    radeon_emit(cs, RENCODE_COLOR_RANGE_STUDIO); // input color range
    radeon_emit(cs, 0);                          // input chroma subsampling
    radeon_emit(cs, 0);                          // input chroma location
-   radeon_emit(cs, 0);                          // input color bit depth
-   radeon_emit(cs, 0);                          // input color packing format
+   radeon_emit(cs, color_bit_depth);            // input color bit depth
+   radeon_emit(cs, color_packing_format);       // input color packing format
    ENC_END;
 }
 
@@ -1544,12 +1562,30 @@ radv_enc_output_format(struct radv_cmd_buffer *cmd_buffer)
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   struct radv_video_session *vid = cmd_buffer->video.vid;
+   uint32_t color_bit_depth;
+
+   switch (vid->vk.op) {
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
+      color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+      break;
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
+      if (vid->vk.h265.profile_idc == STD_VIDEO_H265_PROFILE_IDC_MAIN_10)
+         color_bit_depth = RENCODE_COLOR_BIT_DEPTH_10_BIT;
+      else
+         color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+      break;
+   default:
+      assert(0);
+      return;
+   }
+
    ENC_BEGIN;
    radeon_emit(cs, pdev->vcn_enc_cmds.output_format);
    radeon_emit(cs, 0);                          // output color volume
    radeon_emit(cs, RENCODE_COLOR_RANGE_STUDIO); // output color range
    radeon_emit(cs, 0);                          // output chroma location
-   radeon_emit(cs, 0);                          // output color bit depth
+   radeon_emit(cs, color_bit_depth);            // output color bit depth
    ENC_END;
 }
 

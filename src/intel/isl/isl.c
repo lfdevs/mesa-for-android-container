@@ -175,6 +175,8 @@ isl_device_setup_mocs(struct isl_device *dev)
          dev->mocs.external = 5 << 1;
          /* UC */
          dev->mocs.uncached = 1 << 1;
+         dev->mocs.blitter_dst = 1 << 1;
+         dev->mocs.blitter_src = 1 << 1;
       } else {
          /* TC=1/LLC Only, LeCC=1/UC, LRUM=0, L3CC=3/WB */
          dev->mocs.external = 61 << 1;
@@ -185,6 +187,10 @@ isl_device_setup_mocs(struct isl_device *dev)
 
          /* L1 - HDC:L1 + L3 + LLC */
          dev->mocs.l1_hdc_l3_llc = 48 << 1;
+
+         /* Uncached */
+         dev->mocs.blitter_dst = 3 << 1;
+         dev->mocs.blitter_src = 3 << 1;
       }
       /* Protected is just an additional flag. */
       dev->mocs.protected_mask = 1 << 0;

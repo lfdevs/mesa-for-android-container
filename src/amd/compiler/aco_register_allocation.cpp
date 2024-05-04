@@ -846,7 +846,7 @@ update_renames(ra_ctx& ctx, RegisterFile& reg_file,
       assert(ctx.assignments.size() == ctx.program->peekAllocationId());
 
       /* check if we moved an operand */
-      bool first = true;
+      bool first[2] = {true, true};
       bool fill = true;
       for (unsigned i = 0; i < instr->operands.size(); i++) {
          Operand& op = instr->operands[i];
@@ -854,25 +854,31 @@ update_renames(ra_ctx& ctx, RegisterFile& reg_file,
             continue;
          if (op.tempId() == copy.first.tempId()) {
             /* only rename precolored operands if the copy-location matches */
-            if ((flags & rename_precolored_ops) && op.isFixed() &&
-                op.physReg() != copy.second.physReg())
+            bool omit_renaming = (flags & rename_precolored_ops) && op.isFixed() &&
+                                 op.physReg() != copy.second.physReg();
+
+            /* Omit renaming in some cases for p_create_vector in order to avoid
+             * unnecessary shuffle code. */
+            if (!(flags & rename_not_killed_ops) && !op.isKillBeforeDef()) {
+               omit_renaming = true;
+               for (std::pair<Operand, Definition>& pc : parallelcopies) {
+                  PhysReg def_reg = pc.second.physReg();
+                  omit_renaming &= def_reg > copy.first.physReg()
+                                      ? (copy.first.physReg() + copy.first.size() <= def_reg.reg())
+                                      : (def_reg + pc.second.size() <= copy.first.physReg().reg());
+               }
+            }
+
+            /* Fix the kill flags */
+            if (first[omit_renaming])
+               op.setFirstKill(omit_renaming || op.isKill());
+            else
+               op.setKill(omit_renaming || op.isKill());
+            first[omit_renaming] = false;
+
+            if (omit_renaming)
                continue;
 
-            bool omit_renaming = !(flags & rename_not_killed_ops) && !op.isKillBeforeDef();
-            for (std::pair<Operand, Definition>& pc : parallelcopies) {
-               PhysReg def_reg = pc.second.physReg();
-               omit_renaming &= def_reg > copy.first.physReg()
-                                   ? (copy.first.physReg() + copy.first.size() <= def_reg.reg())
-                                   : (def_reg + pc.second.size() <= copy.first.physReg().reg());
-            }
-            if (omit_renaming) {
-               if (first)
-                  op.setFirstKill(true);
-               else
-                  op.setKill(true);
-               first = false;
-               continue;
-            }
             op.setTemp(copy.second.getTemp());
             op.setFixed(copy.second.physReg());
 

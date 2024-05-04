@@ -1,19 +1,21 @@
 # Copyright © 2023 Intel Corporation
 # SPDX-License-Identifier: MIT
 
-intel_float64_spv_h = custom_target(
-  'float64_spv.h',
-  input : [glsl2spirv, float64_glsl_file],
-  output : 'float64_spv.h',
-  command : [
-    prog_python, '@INPUT@', '@OUTPUT@',
-    prog_glslang,
-    '--create-entry', 'main',
-    '--vn', 'float64_spv_source',
-    '--glsl-version', '450',
-    '-Olib',
-  ]
-)
+if with_intel_vk
+  intel_float64_spv_h = custom_target(
+    'float64_spv.h',
+    input : [glsl2spirv, float64_glsl_file],
+    output : 'float64_spv.h',
+    command : [
+      prog_python, '@INPUT@', '@OUTPUT@',
+      prog_glslang,
+      '--create-entry', 'main',
+      '--vn', 'float64_spv_source',
+      '--glsl-version', '450',
+      '-Olib',
+    ]
+  )
+endif
 
 intel_shader_files = files(
   'libintel_shaders.h',

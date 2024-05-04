@@ -1078,6 +1078,12 @@ anv_format_supports_usage(
       }
    }
 
+   if (usage_flags & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) {
+      if (!(format_feature_flags & VK_FORMAT_FEATURE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)) {
+         return false;
+      }
+   }
+
    return true;
 }
 

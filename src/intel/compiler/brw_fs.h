@@ -566,7 +566,8 @@ void shuffle_from_32bit_read(const brw::fs_builder &bld,
                              uint32_t first_component,
                              uint32_t components);
 
-enum brw_barycentric_mode brw_barycentric_mode(nir_intrinsic_instr *intr);
+enum brw_barycentric_mode brw_barycentric_mode(const struct brw_wm_prog_key *key,
+                                               nir_intrinsic_instr *intr);
 
 uint32_t brw_fb_write_msg_control(const fs_inst *inst,
                                   const struct brw_wm_prog_data *prog_data);

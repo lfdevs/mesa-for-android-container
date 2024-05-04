@@ -664,6 +664,36 @@ zink_get_physical_device_info(struct zink_screen *screen)
 
    info->num_extensions = num_extensions;
 
+   info->feats.pNext = NULL;
+
+%for version in versions:
+%if version.device_version < (1,2,0):
+      if (VK_MAKE_VERSION(1,2,0) <= screen->vk_version) {
+         /* VkPhysicalDeviceVulkan11Features was added in 1.2, not 1.1 as one would think */
+%else:
+      if (${version.version()} <= screen->vk_version) {
+%endif
+         info->feats${version.struct()}.pNext = info->feats.pNext;
+         info->feats.pNext = &info->feats${version.struct()};
+      }
+%endfor
+
+%for ext in extensions:
+%if ext.has_features:
+<%helpers:guard ext="${ext}">
+%if ext.features_promoted:
+      if (info->have_${ext.name_with_vendor()} && !info->have_vulkan${ext.core_since.struct()}) {
+%else:
+      if (info->have_${ext.name_with_vendor()}) {
+%endif
+         info->${ext.field("feats")}.sType = ${ext.stype("FEATURES")};
+         info->${ext.field("feats")}.pNext = info->feats.pNext;
+         info->feats.pNext = &info->${ext.field("feats")};
+      }
+</%helpers:guard>
+%endif
+%endfor
+
    return true;
 
 fail:

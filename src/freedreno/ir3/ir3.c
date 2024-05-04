@@ -1098,6 +1098,12 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
       case OPC_SCAN_MACRO:
          return flags == 0;
          break;
+      case OPC_SCAN_CLUSTERS_MACRO:
+         if (n == 0)
+            return flags == IR3_REG_SHARED;
+         else
+            return flags == 0;
+         break;
       default:
          valid_flags =
             IR3_REG_IMMED | IR3_REG_CONST | IR3_REG_RELATIV | IR3_REG_SHARED;

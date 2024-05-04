@@ -759,7 +759,7 @@ etna_ml_emit_operation_tp(struct etna_ml_subgraph *subgraph,
    unsigned tp_core_count = ctx->screen->specs.tp_core_count;
    struct etna_cmd_stream *stream = ctx->stream;
    bool more_than_one_tp_job = operation->configs[1] != NULL;
-   bool parallel = !DBG_ENABLED(ETNA_DBG_NPU_NO_PARALLEL);
+   bool parallel = DBG_ENABLED(ETNA_DBG_NPU_PARALLEL);
 
    for (unsigned j = 0; j < tp_core_count && operation->configs[j]; j++) {
       unsigned offset = parallel ? idx + 1 : 0;

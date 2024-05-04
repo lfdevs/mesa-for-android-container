@@ -61,6 +61,8 @@ python-test:
     - !reference [.never-post-merge-rules, rules]
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: on_success
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_NAMESPACE == "mesa" && $GITLAB_USER_LOGIN != "marge-bot"
+      when: on_success
     - if: $GITLAB_USER_LOGIN == "marge-bot"
       changes: &bin_ci_files
         - .gitlab-ci.yml

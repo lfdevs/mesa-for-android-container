@@ -315,6 +315,15 @@ genX(rasterization_mode)(VkPolygonMode raster_mode,
    }
 }
 
+static bool
+is_src1_blend_factor(enum GENX(3D_Color_Buffer_Blend_Factor) factor)
+{
+   return factor == BLENDFACTOR_SRC1_COLOR ||
+          factor == BLENDFACTOR_SRC1_ALPHA ||
+          factor == BLENDFACTOR_INV_SRC1_COLOR ||
+          factor == BLENDFACTOR_INV_SRC1_ALPHA;
+}
+
 #if GFX_VERx10 == 125
 /**
  * Return the dimensions of the current rendering area, defined as the
@@ -1030,6 +1039,16 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
                dyn->cb.attachments[i].src_alpha_blend_factor];
             DestinationAlphaBlendFactor = genX(vk_to_intel_blend)[
                dyn->cb.attachments[i].dst_alpha_blend_factor];
+         }
+
+         /* Replace and Src1 value by 1.0 if dual source blending is not
+          * enabled.
+          */
+         if (wm_prog_data && !wm_prog_data->dual_src_blend) {
+            if (is_src1_blend_factor(SourceBlendFactor))
+               SourceBlendFactor = BLENDFACTOR_ONE;
+            if (is_src1_blend_factor(DestinationBlendFactor))
+               DestinationBlendFactor = BLENDFACTOR_ONE;
          }
 
          if (instance->intel_enable_wa_14018912822 &&

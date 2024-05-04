@@ -939,6 +939,18 @@ vn_queue_submission_cleanup_semaphore_feedback(
          uint64_t counter = 0;
          vn_GetSemaphoreCounterValue(dev_handle, sem_handle, &counter);
       }
+
+      const uint32_t signal_count = vn_get_signal_semaphore_count(submit, i);
+      for (uint32_t j = 0; j < signal_count; j++) {
+         VkSemaphore sem_handle = vn_get_signal_semaphore(submit, i, j);
+         struct vn_semaphore *sem = vn_semaphore_from_handle(sem_handle);
+         if (!sem->feedback.slot)
+            continue;
+
+         /* sfb pending cmds are recycled when signaled counter is updated */
+         uint64_t counter = 0;
+         vn_GetSemaphoreCounterValue(dev_handle, sem_handle, &counter);
+      }
    }
 }
 

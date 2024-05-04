@@ -1531,6 +1531,11 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
       }
    }
 
+   if (image_usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) {
+      if (!(format_feature_flags & VK_FORMAT_FEATURE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR))
+         goto unsupported;
+   }
+
    /* Sparse resources with multi-planar formats are unsupported. */
    if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
       if (vk_format_get_plane_count(format) > 1)

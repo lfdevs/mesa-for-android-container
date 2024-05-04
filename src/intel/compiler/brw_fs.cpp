@@ -1091,7 +1091,8 @@ fs_visitor::import_uniforms(fs_visitor *v)
 }
 
 enum brw_barycentric_mode
-brw_barycentric_mode(nir_intrinsic_instr *intr)
+brw_barycentric_mode(const struct brw_wm_prog_key *key,
+                     nir_intrinsic_instr *intr)
 {
    const glsl_interp_mode mode =
       (enum glsl_interp_mode) nir_intrinsic_interp_mode(intr);
@@ -1103,7 +1104,13 @@ brw_barycentric_mode(nir_intrinsic_instr *intr)
    switch (intr->intrinsic) {
    case nir_intrinsic_load_barycentric_pixel:
    case nir_intrinsic_load_barycentric_at_offset:
-      bary = BRW_BARYCENTRIC_PERSPECTIVE_PIXEL;
+      /* When per sample interpolation is dynamic, assume sample
+       * interpolation. We'll dynamically remap things so that the FS thread
+       * payload is not affected.
+       */
+      bary = key->persample_interp == BRW_SOMETIMES ?
+             BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE :
+             BRW_BARYCENTRIC_PERSPECTIVE_PIXEL;
       break;
    case nir_intrinsic_load_barycentric_centroid:
       bary = BRW_BARYCENTRIC_PERSPECTIVE_CENTROID;
@@ -3473,6 +3480,7 @@ is_used_in_not_interp_frag_coord(nir_def *def)
  */
 static unsigned
 brw_compute_barycentric_interp_modes(const struct intel_device_info *devinfo,
+                                     const struct brw_wm_prog_key *key,
                                      const nir_shader *shader)
 {
    unsigned barycentric_interp_modes = 0;
@@ -3501,7 +3509,7 @@ brw_compute_barycentric_interp_modes(const struct intel_device_info *devinfo,
 
             nir_intrinsic_op bary_op = intrin->intrinsic;
             enum brw_barycentric_mode bary =
-               brw_barycentric_mode(intrin);
+               brw_barycentric_mode(key, intrin);
 
             barycentric_interp_modes |= 1 << bary;
 
@@ -3701,7 +3709,7 @@ brw_nir_populate_wm_prog_data(nir_shader *shader,
    prog_data->inner_coverage = shader->info.fs.inner_coverage;
 
    prog_data->barycentric_interp_modes =
-      brw_compute_barycentric_interp_modes(devinfo, shader);
+      brw_compute_barycentric_interp_modes(devinfo, key, shader);
 
    /* From the BDW PRM documentation for 3DSTATE_WM:
     *

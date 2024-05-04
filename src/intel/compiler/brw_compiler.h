@@ -908,8 +908,34 @@ wm_prog_data_barycentric_modes(const struct brw_wm_prog_data *prog_data,
        *    "MSDISPMODE_PERSAMPLE is required in order to select Perspective
        *     Sample or Non-perspective Sample barycentric coordinates."
        */
-      modes &= ~(BITFIELD_BIT(BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
-                 BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
+      uint32_t sample_bits = (BITFIELD_BIT(BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
+                              BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
+      uint32_t requested_sample = modes & sample_bits;
+      modes &= ~sample_bits;
+      /*
+       * If the shader requested some sample modes and we have to disable
+       * them, make sure we add back the pixel variant back to not mess up the
+       * thread payload.
+       *
+       * Why does this works out? Because of the ordering in the thread payload :
+       *
+       *   R7:10  Perspective Centroid Barycentric
+       *   R11:14 Perspective Sample Barycentric
+       *   R15:18 Linear Pixel Location Barycentric
+       *
+       * In the backend when persample dispatch is dynamic, we always select
+       * the sample barycentric and turn off the pixel location (even if
+       * requested through intrinsics). That way when we dynamically select
+       * pixel or sample dispatch, the barycentric always match, since the
+       * pixel location barycentric register offset will align with the sample
+       * barycentric.
+       */
+      if (requested_sample) {
+         if (requested_sample & BITFIELD_BIT(BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE))
+            modes |= BITFIELD_BIT(BRW_BARYCENTRIC_PERSPECTIVE_PIXEL);
+         if (requested_sample & BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
+            modes |= BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL);
+      }
    }
 
    return modes;

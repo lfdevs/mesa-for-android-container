@@ -835,6 +835,23 @@ zink_gfx_program_compile_queue(struct zink_context *ctx, struct zink_gfx_pipelin
    }
 }
 
+void
+zink_program_finish(struct zink_context *ctx, struct zink_program *pg)
+{
+   util_queue_fence_wait(&pg->cache_fence);
+   if (pg->is_compute)
+      return;
+   struct zink_gfx_program *prog = (struct zink_gfx_program*)pg;
+   for (int r = 0; r < ARRAY_SIZE(prog->pipelines); ++r) {
+      for (int i = 0; i < ARRAY_SIZE(prog->pipelines[0]); ++i) {
+         hash_table_foreach(&prog->pipelines[r][i], entry) {
+            struct zink_gfx_pipeline_cache_entry *pc_entry = entry->data;
+            util_queue_fence_wait(&pc_entry->fence);
+         }
+      }
+   }
+}
+
 static void
 update_cs_shader_module(struct zink_context *ctx, struct zink_compute_program *comp)
 {

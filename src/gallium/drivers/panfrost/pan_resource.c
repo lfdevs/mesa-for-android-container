@@ -725,13 +725,14 @@ panfrost_resource_create_with_modifier(struct pipe_screen *screen,
       }
       assert(handle.type == WINSYS_HANDLE_TYPE_FD);
       so->bo = panfrost_bo_import(dev, handle.handle);
-      so->image.data.base = so->bo->ptr.gpu;
       close(handle.handle);
 
       if (!so->bo) {
          free(so);
          return NULL;
       }
+
+      so->image.data.base = so->bo->ptr.gpu;
    } else {
       /* We create a BO immediately but don't bother mapping, since we don't
        * care to map e.g. FBOs which the CPU probably won't touch */

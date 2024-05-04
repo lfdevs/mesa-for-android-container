@@ -62,7 +62,7 @@ enum etna_dbg {
    ETNA_DBG_LINEAR_PE       = BITFIELD_BIT(25), /* Enable linear PE */
    ETNA_DBG_NO_MSAA         = BITFIELD_BIT(26), /* Disable MSAA */
    ETNA_DBG_SHARED_TS       = BITFIELD_BIT(27), /* Enable TS sharing */
-   ETNA_DBG_NPU_NO_PARALLEL = BITFIELD_BIT(28), /* Disable parallelism inside NPU batches */
+   ETNA_DBG_NPU_PARALLEL    = BITFIELD_BIT(28), /* Enable parallelism inside NPU batches (unsafe) */
    ETNA_DBG_NPU_NO_BATCHING = BITFIELD_BIT(29), /* Disable batching NPU jobs */
 };
 

@@ -133,6 +133,8 @@ uint32_t hash_gfx_input_dynamic(const void *key);
 
 void
 zink_gfx_program_compile_queue(struct zink_context *ctx, struct zink_gfx_pipeline_cache_entry *pc_entry);
+void
+zink_program_finish(struct zink_context *ctx, struct zink_program *pg);
 
 static inline unsigned
 get_primtype_idx(enum mesa_prim mode)

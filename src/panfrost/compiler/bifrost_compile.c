@@ -3587,7 +3587,7 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
             /* Copy XY (for 2D+) or XX (for 1D) */
             sregs[VALHALL_TEX_SREG_X_COORD] = index;
 
-            if (components >= 2)
+            if ((components == 2 && !instr->is_array) || components > 2)
                sregs[VALHALL_TEX_SREG_Y_COORD] = bi_extract(b, index, 1);
 
             if (components == 3 && !instr->is_array) {

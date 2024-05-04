@@ -89,7 +89,7 @@ anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
        bits & ANV_PIPE_END_OF_PIPE_SYNC_BIT)
       fputs("+cs_stall ", f);
    if (bits & ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT)
-      fputs("+utdp_flush", f);
+      fputs("+utdp_flush ", f);
    if (bits & ANV_PIPE_CCS_CACHE_FLUSH_BIT)
       fputs("+ccs_flush ", f);
 }

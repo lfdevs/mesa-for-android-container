@@ -1974,6 +1974,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                const VkPresentRegionKHR *damage)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
+   bool queue_dispatched = false;
 
    /* While the specification suggests we can keep presenting already acquired
     * images on a retired swapchain, there is no requirement to support that.
@@ -2003,6 +2004,8 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                           wsi_wl_surface->display->queue);
       if (ret < 0)
          return VK_ERROR_OUT_OF_DATE_KHR;
+
+      queue_dispatched = true;
    }
 
    if (chain->base.image_info.explicit_sync) {
@@ -2073,6 +2076,11 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
    chain->images[image_index].busy = true;
    wl_surface_commit(wsi_wl_surface->surface);
    wl_display_flush(wsi_wl_surface->display->wl_display);
+
+   if (!queue_dispatched && wsi_chain->image_info.explicit_sync) {
+      wl_display_dispatch_queue_pending(wsi_wl_surface->display->wl_display,
+                                        wsi_wl_surface->display->queue);
+   }
 
    return VK_SUCCESS;
 }

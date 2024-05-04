@@ -342,7 +342,7 @@ close_batch(struct pipe_context *pctx)
    struct etna_cmd_stream *stream = ctx->stream;
 
    unsigned cache = VIVS_GL_FLUSH_CACHE_DEPTH | VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_UNK10;
-   if (DBG_ENABLED(ETNA_DBG_NPU_NO_PARALLEL))
+   if (!DBG_ENABLED(ETNA_DBG_NPU_PARALLEL))
       cache |= VIVS_GL_FLUSH_CACHE_UNK11 | VIVS_GL_FLUSH_CACHE_SHADER_L1;
 
    etna_set_state(stream, VIVS_GL_FLUSH_CACHE, cache);

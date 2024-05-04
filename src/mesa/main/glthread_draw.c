@@ -816,7 +816,9 @@ draw_elements(GLuint drawid, GLenum mode, GLsizei count, GLenum type,
          !_mesa_is_index_type_valid(type) ||    /* GL_INVALID_VALUE */
          ctx->Dispatch.Current == ctx->Dispatch.ContextLost || /* GL_INVALID_OPERATION */
          ctx->GLThread.inside_begin_end ||      /* GL_INVALID_OPERATION */
-         ctx->GLThread.ListMode))) {            /* GL_INVALID_OPERATION */
+         ctx->GLThread.ListMode ||              /* GL_INVALID_OPERATION */
+         mode >= 32 || !((1u << mode) & ctx->SupportedPrimMask) /* GL_INVALID_ENUM */
+         ))) {
       if (drawid == 0 && baseinstance == 0) {
          if (instance_count == 1 && basevertex == 0) {
             if ((count & 0xffff) == count && (uintptr_t)indices <= UINT16_MAX) {
@@ -1156,7 +1158,8 @@ _mesa_marshal_MultiDrawElementsBaseVertex(GLenum mode, const GLsizei *count,
     */
    if (draw_count > 0 && _mesa_is_index_type_valid(type) &&
        ctx->Dispatch.Current != ctx->Dispatch.ContextLost &&
-       !ctx->GLThread.inside_begin_end) {
+       !ctx->GLThread.inside_begin_end &&
+       !(mode >= 32 || !((1u << mode) & ctx->SupportedPrimMask))) {
       user_buffer_mask = _mesa_is_desktop_gl_core(ctx) ? 0 : get_user_buffer_mask(ctx);
       has_user_indices = vao->CurrentElementBufferName == 0;
    }
