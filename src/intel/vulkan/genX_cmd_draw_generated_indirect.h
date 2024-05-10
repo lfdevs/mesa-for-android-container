@@ -176,9 +176,8 @@ genX(cmd_buffer_get_draw_id_addr)(struct anv_cmd_buffer *cmd_buffer,
       return ANV_NULL_ADDRESS;
 
    struct anv_state draw_id_state =
-      anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, 4 * draw_id_count, 4);
-   return anv_state_pool_state_address(&cmd_buffer->device->dynamic_state_pool,
-                                       draw_id_state);
+      anv_cmd_buffer_alloc_temporary_state(cmd_buffer, 4 * draw_id_count, 4);
+   return anv_cmd_buffer_temporary_state_address(cmd_buffer, draw_id_state);
 #endif
 }
 

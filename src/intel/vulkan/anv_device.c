@@ -4032,6 +4032,9 @@ void anv_DestroyDevice(
                                    device->companion_rcs_cmd_pool, NULL);
    }
 
+   if (device->vk.enabled_extensions.EXT_descriptor_buffer)
+      anv_state_reserved_array_pool_finish(&device->custom_border_colors_db);
+
 #ifdef HAVE_VALGRIND
    /* We only need to free these to prevent valgrind errors.  The backing
     * BO will go away in a couple of lines so we don't actually leak.
@@ -4045,7 +4048,6 @@ void anv_DestroyDevice(
       anv_state_pool_free(&device->dynamic_state_db_pool, device->cps_states_db);
       anv_state_pool_free(&device->dynamic_state_db_pool, device->slice_hash_db);
       anv_state_pool_free(&device->dynamic_state_db_pool, device->border_colors_db);
-      anv_state_reserved_array_pool_finish(&device->custom_border_colors_db);
    }
 #endif
 

@@ -510,6 +510,9 @@ optimize_extract_to_float(nir_to_brw_state &ntb, nir_alu_instr *instr,
    const intel_device_info *devinfo = ntb.devinfo;
    const fs_builder &bld = ntb.bld;
 
+   /* No fast path for f16 (yet) or f64. */
+   assert(instr->op == nir_op_i2f32 || instr->op == nir_op_u2f32);
+
    if (!instr->src[0].src.ssa->parent_instr)
       return false;
 
@@ -519,16 +522,46 @@ optimize_extract_to_float(nir_to_brw_state &ntb, nir_alu_instr *instr,
    nir_alu_instr *src0 =
       nir_instr_as_alu(instr->src[0].src.ssa->parent_instr);
 
-   if (src0->op != nir_op_extract_u8 && src0->op != nir_op_extract_u16 &&
-       src0->op != nir_op_extract_i8 && src0->op != nir_op_extract_i16)
+   unsigned bytes;
+   bool is_signed;
+
+   switch (src0->op) {
+   case nir_op_extract_u8:
+   case nir_op_extract_u16:
+      bytes = src0->op == nir_op_extract_u8 ? 1 : 2;
+
+      /* i2f(extract_u8(a, b)) and u2f(extract_u8(a, b)) produce the same
+       * result. Ditto for extract_u16.
+       */
+      is_signed = false;
+      break;
+
+   case nir_op_extract_i8:
+   case nir_op_extract_i16:
+      bytes = src0->op == nir_op_extract_i8 ? 1 : 2;
+
+      /* The fast path can't handle u2f(extract_i8(a, b)) because the implicit
+       * sign extension of the extract_i8 is lost. For example,
+       * u2f(extract_i8(0x0000ff00, 1)) should produce 4294967295.0, but a
+       * fast path could either give 255.0 (by implementing the fast path as
+       * u2f(extract_u8(x))) or -1.0 (by implementing the fast path as
+       * i2f(extract_i8(x))). At one point in time, we incorrectly implemented
+       * the former.
+       */
+      if (instr->op != nir_op_i2f32)
+         return false;
+
+      is_signed = true;
+      break;
+
+   default:
       return false;
+   }
 
    unsigned element = nir_src_as_uint(src0->src[1].src);
 
    /* Element type to extract.*/
-   const brw_reg_type type = brw_int_type(
-      src0->op == nir_op_extract_u16 || src0->op == nir_op_extract_i16 ? 2 : 1,
-      src0->op == nir_op_extract_i16 || src0->op == nir_op_extract_i8);
+   const brw_reg_type type = brw_int_type(bytes, is_signed);
 
    fs_reg op0 = get_nir_src(ntb, src0->src[0].src);
    op0.type = brw_type_for_nir_type(devinfo,

@@ -1112,20 +1112,26 @@ anv_state_reserved_array_pool_init(struct anv_state_reserved_array_pool *pool,
                                    struct anv_state_pool *parent,
                                    uint32_t count, uint32_t size, uint32_t alignment)
 {
+   struct anv_device *device = parent->block_pool.device;
+
    pool->pool = parent;
    pool->count = count;
    pool->size = size;
    pool->stride = align(size, alignment);
-   pool->states = vk_zalloc(&pool->pool->block_pool.device->vk.alloc,
+   pool->states = vk_zalloc(&device->vk.alloc,
                             sizeof(BITSET_WORD) * BITSET_WORDS(pool->count), 8,
                             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (pool->states == NULL)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return vk_error(&device->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    BITSET_SET_RANGE(pool->states, 0, pool->count - 1);
    simple_mtx_init(&pool->mutex, mtx_plain);
 
    pool->state = anv_state_pool_alloc(pool->pool, pool->stride * count, alignment);
+   if (pool->state.alloc_size == 0) {
+      vk_free(&device->vk.alloc, pool->states);
+      return vk_error(&device->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   }
 
    return VK_SUCCESS;
 }

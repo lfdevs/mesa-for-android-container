@@ -693,7 +693,7 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
          },
       };
       struct nir_opt_16bit_tex_image_options opt_16bit_options = {
-         .rounding_mode = nir_rounding_mode_rtz,
+         .rounding_mode = nir_rounding_mode_undef,
          .opt_tex_dest_types = nir_type_float,
          .opt_image_dest_types = nir_type_float,
          .opt_image_store_data = true,

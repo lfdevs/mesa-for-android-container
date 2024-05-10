@@ -4712,10 +4712,18 @@ struct anv_ray_tracing_pipeline {
    }
 
 ANV_DECL_PIPELINE_DOWNCAST(graphics, ANV_PIPELINE_GRAPHICS)
-ANV_DECL_PIPELINE_DOWNCAST(graphics_base, ANV_PIPELINE_GRAPHICS)
 ANV_DECL_PIPELINE_DOWNCAST(graphics_lib, ANV_PIPELINE_GRAPHICS_LIB)
 ANV_DECL_PIPELINE_DOWNCAST(compute, ANV_PIPELINE_COMPUTE)
 ANV_DECL_PIPELINE_DOWNCAST(ray_tracing, ANV_PIPELINE_RAY_TRACING)
+
+/* Can't use the macro because we need to handle both types. */
+static inline struct anv_graphics_base_pipeline *
+anv_pipeline_to_graphics_base(struct anv_pipeline *pipeline)
+{
+   assert(pipeline->type == ANV_PIPELINE_GRAPHICS ||
+          pipeline->type == ANV_PIPELINE_GRAPHICS_LIB);
+   return (struct anv_graphics_base_pipeline *) pipeline;
+}
 
 static inline bool
 anv_pipeline_has_stage(const struct anv_graphics_pipeline *pipeline,

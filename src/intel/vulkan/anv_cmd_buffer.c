@@ -873,7 +873,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
             assert((offset & ~ANV_DESCRIPTOR_SET_OFFSET_MASK) == 0);
             push->desc_surface_offsets[set_index] &= ~ANV_DESCRIPTOR_SET_OFFSET_MASK;
             push->desc_surface_offsets[set_index] |= offset;
-            push->desc_sampler_offsets[set_index] |=
+            push->desc_sampler_offsets[set_index] =
                anv_address_physical(set->desc_sampler_addr) -
                cmd_buffer->device->physical->va.dynamic_state_pool.addr;
 

@@ -4322,7 +4322,7 @@ static inline nir_function *
 nir_shader_get_function_for_name(const nir_shader *shader, const char *name)
 {
    nir_foreach_function(func, shader) {
-      if (strcmp(func->name, name) == 0)
+      if (func->name && strcmp(func->name, name) == 0)
          return func;
    }
 

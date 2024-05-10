@@ -299,7 +299,11 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->screen = pscreen;
    ctx->priv = priv;
 
-   ctx->stream_uploader = u_upload_create_default(ctx);
+   ctx->stream_uploader = u_upload_create(ctx, 1024 * 1024 * 2,
+                                          PIPE_BIND_VERTEX_BUFFER |
+                                          PIPE_BIND_INDEX_BUFFER |
+                                          PIPE_BIND_CONSTANT_BUFFER,
+                                          PIPE_USAGE_STREAM, 0);
    if (!ctx->stream_uploader) {
       ralloc_free(ice);
       return NULL;

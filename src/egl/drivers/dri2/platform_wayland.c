@@ -170,6 +170,9 @@ static const struct dri2_wl_visual {
 static int
 dri2_wl_visual_idx_from_pipe_format(enum pipe_format pipe_format)
 {
+   if (util_format_is_srgb(pipe_format))
+      pipe_format = util_format_linear(pipe_format);
+
    for (int i = 0; i < ARRAY_SIZE(dri2_wl_visuals); i++) {
       if (dri2_wl_visuals[i].pipe_format == pipe_format)
          return i;
