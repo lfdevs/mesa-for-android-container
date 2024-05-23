@@ -579,6 +579,8 @@ nvk_attachment_init(struct nvk_attachment *att,
       att->resolve_mode = info->resolveMode;
       att->resolve_iview = res_iview;
    }
+
+   att->store_op = info->storeOp;
 }
 
 static uint32_t
@@ -605,6 +607,30 @@ nvk_GetRenderingAreaGranularityKHR(
     VkExtent2D *pGranularity)
 {
    *pGranularity = (VkExtent2D) { .width = 1, .height = 1 };
+}
+
+static bool
+nvk_rendering_all_linear(const struct nvk_rendering_state *render)
+{
+   /* Depth and stencil are never linear */
+   if (render->depth_att.iview || render->stencil_att.iview)
+      return false;
+
+   for (uint32_t i = 0; i < render->color_att_count; i++) {
+      const struct nvk_image_view *iview = render->color_att[i].iview;
+      if (iview == NULL)
+         continue;
+
+      const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
+      const uint8_t ip = iview->planes[0].image_plane;
+      const struct nil_image_level *level =
+         &image->planes[ip].nil.levels[iview->vk.base_mip_level];
+
+      if (level->tiling.is_tiled)
+         return false;
+   }
+
+   return true;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -641,7 +667,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
    /* Always emit at least one color attachment, even if it's just a dummy. */
    uint32_t color_att_count = MAX2(1, render->color_att_count);
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, color_att_count * 10 + 27);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, color_att_count * 12 + 29);
 
    P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_VIEW_MASK),
           render->view_mask);
@@ -656,6 +682,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       .height  = render->area.extent.height,
    });
 
+   const bool all_linear = nvk_rendering_all_linear(render);
+
    enum nil_sample_layout sample_layout = NIL_SAMPLE_LAYOUT_INVALID;
    for (uint32_t i = 0; i < color_att_count; i++) {
       if (render->color_att[i].iview) {
@@ -667,7 +695,18 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
           */
          assert(iview->plane_count == 1);
          const uint8_t ip = iview->planes[0].image_plane;
-         const struct nil_image *nil_image = &image->planes[ip].nil;
+         const struct nvk_image_plane *plane = &image->planes[ip];
+
+         const VkAttachmentLoadOp load_op =
+            pRenderingInfo->pColorAttachments[i].loadOp;
+         if (!all_linear && !plane->nil.levels[0].tiling.is_tiled) {
+            if (load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
+               nvk_linear_render_copy(cmd, iview, render->area, true);
+
+            plane = &image->linear_tiled_shadow;
+         }
+
+         const struct nil_image *nil_image = &plane->nil;
          const struct nil_image_level *level =
             &nil_image->levels[iview->vk.base_mip_level];
          struct nil_Extent4D_Samples level_extent_sa =
@@ -678,7 +717,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          sample_layout = nil_image->sample_layout;
          render->samples = image->vk.samples;
 
-         uint64_t addr = nvk_image_base_address(image, ip) + level->offset_B;
+         uint64_t addr = nvk_image_plane_base_address(plane) + level->offset_B;
 
          if (nil_image->dim == NIL_IMAGE_DIM_3D) {
             addr += nil_image_level_z_offset_B(nil_image,
@@ -752,6 +791,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
             P_NV9097_SET_COLOR_TARGET_ARRAY_PITCH(p, i, 0);
             P_NV9097_SET_COLOR_TARGET_LAYER(p, i, 0);
          }
+
+         P_IMMD(p, NV9097, SET_COLOR_COMPRESSION(i), nil_image->compressed);
       } else {
          P_MTHD(p, NV9097, SET_COLOR_TARGET_A(i));
          P_NV9097_SET_COLOR_TARGET_A(p, i, 0);
@@ -765,6 +806,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          P_NV9097_SET_COLOR_TARGET_THIRD_DIMENSION(p, i, layer_count);
          P_NV9097_SET_COLOR_TARGET_ARRAY_PITCH(p, i, 0);
          P_NV9097_SET_COLOR_TARGET_LAYER(p, i, 0);
+
+         P_IMMD(p, NV9097, SET_COLOR_COMPRESSION(i), ENABLE_TRUE);
       }
    }
 
@@ -820,6 +863,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          vk_format_to_pipe_format(iview->vk.format);
       const uint8_t zs_format = nil_format_to_depth_stencil(p_format);
       P_NV9097_SET_ZT_FORMAT(p, zs_format);
+      assert(level->tiling.is_tiled);
       assert(level->tiling.z_log2 == 0);
       P_NV9097_SET_ZT_BLOCK_SIZE(p, {
          .width = WIDTH_ONE_GOB,
@@ -849,6 +893,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       });
 
       P_IMMD(p, NV9097, SET_ZT_LAYER, base_array_layer);
+
+      P_IMMD(p, NV9097, SET_Z_COMPRESSION, nil_image.compressed);
 
       if (nvk_cmd_buffer_3d_cls(cmd) >= MAXWELL_B) {
          P_IMMD(p, NVC597, SET_ZT_SPARSE, {
@@ -944,6 +990,20 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
+
+   const bool all_linear = nvk_rendering_all_linear(render);
+   for (uint32_t i = 0; i < render->color_att_count; i++) {
+      struct nvk_image_view *iview = render->color_att[i].iview;
+      if (iview == NULL)
+         continue;
+
+      struct nvk_image *image = (struct nvk_image *)iview->vk.image;
+      const uint8_t ip = iview->planes[0].image_plane;
+      const struct nvk_image_plane *plane = &image->planes[ip];
+      if (!all_linear && !plane->nil.levels[0].tiling.is_tiled &&
+          render->color_att[i].store_op == VK_ATTACHMENT_STORE_OP_STORE)
+         nvk_linear_render_copy(cmd, iview, render->area, false);
+   }
 
    bool need_resolve = false;
 
@@ -1713,13 +1773,15 @@ nvk_flush_ms_state(struct nvk_cmd_buffer *cmd)
       });
    }
 
-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS) ||
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE)) {
       const struct vk_sample_locations_state *sl;
       if (dyn->ms.sample_locations_enable) {
          sl = dyn->ms.sample_locations;
       } else {
-         sl = vk_standard_sample_locations_state(dyn->ms.rasterization_samples);
+         const uint32_t samples = MAX2(1, dyn->ms.rasterization_samples);
+         sl = vk_standard_sample_locations_state(samples);
       }
 
       for (uint32_t i = 0; i < sl->per_pixel; i++) {

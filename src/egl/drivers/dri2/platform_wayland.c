@@ -261,6 +261,12 @@ server_supports_pipe_format(struct dri2_wl_formats *formats,
                                  dri2_wl_visual_idx_from_pipe_format(format));
 }
 
+static bool
+server_supports_fourcc(struct dri2_wl_formats *formats, uint32_t fourcc)
+{
+   return server_supports_format(formats, dri2_wl_visual_idx_from_fourcc(fourcc));
+}
+
 static int
 roundtrip(struct dri2_egl_display *dri2_dpy)
 {
@@ -1604,6 +1610,38 @@ dri2_wl_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    return dri2_wl_swap_buffers_with_damage(disp, draw, NULL, 0);
 }
 
+static struct wl_buffer *
+dri2_wl_create_wayland_buffer_from_image(_EGLDisplay *disp, _EGLImage *img)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_image *dri2_img = dri2_egl_image(img);
+   __DRIimage *image = dri2_img->dri_image;
+   struct wl_buffer *buffer;
+   int fourcc;
+
+   /* Check the upstream display supports this buffer's format. */
+   dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_FOURCC, &fourcc);
+   if (!server_supports_fourcc(&dri2_dpy->formats, fourcc))
+      goto bad_format;
+
+   buffer = create_wl_buffer(dri2_dpy, NULL, image);
+
+   /* The buffer object will have been created with our internal event queue
+    * because it is using wl_dmabuf/wl_drm as a proxy factory. We want the
+    * buffer to be used by the application so we'll reset it to the display's
+    * default event queue. This isn't actually racy, as the only event the
+    * buffer can get is a buffer release, which doesn't happen with an explicit
+    * attach. */
+   if (buffer)
+      wl_proxy_set_queue((struct wl_proxy *)buffer, NULL);
+
+   return buffer;
+
+bad_format:
+   _eglError(EGL_BAD_MATCH, "unsupported image format");
+   return NULL;
+}
+
 static int
 dri2_wl_authenticate(_EGLDisplay *disp, uint32_t id)
 {
@@ -1920,6 +1958,7 @@ static const struct dri2_egl_display_vtbl dri2_wl_display_vtbl = {
    .swap_buffers = dri2_wl_swap_buffers,
    .swap_buffers_with_damage = dri2_wl_swap_buffers_with_damage,
    .query_buffer_age = dri2_wl_query_buffer_age,
+   .create_wayland_buffer_from_image = dri2_wl_create_wayland_buffer_from_image,
    .get_dri_drawable = dri2_surface_get_dri_drawable,
 };
 
@@ -2139,6 +2178,12 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    dri2_wl_add_configs_for_visuals(disp);
 
    dri2_set_WL_bind_wayland_display(disp);
+   /* When cannot convert EGLImage to wl_buffer when on a different gpu,
+    * because the buffer of the EGLImage has likely a tiling mode the server
+    * gpu won't support. These is no way to check for now. Thus do not support
+    * the extension */
+   if (dri2_dpy->fd_render_gpu == dri2_dpy->fd_display_gpu)
+      disp->Extensions.WL_create_wayland_buffer_from_image = EGL_TRUE;
 
    disp->Extensions.EXT_buffer_age = EGL_TRUE;
 

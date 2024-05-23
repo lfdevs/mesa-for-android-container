@@ -180,15 +180,38 @@ get_sampler_lowered_simd_width(const struct intel_device_info *devinfo,
    /* Calculate the total number of argument components that need to be passed
     * to the sampler unit.
     */
-   const unsigned num_payload_components =
-      inst->components_read(TEX_LOGICAL_SRC_COORDINATE) +
+   assert(inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].file == IMM);
+   const unsigned grad_components =
+      inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].ud;
+   assert(inst->src[TEX_LOGICAL_SRC_COORD_COMPONENTS].file == IMM);
+   const unsigned coord_components =
+      inst->src[TEX_LOGICAL_SRC_COORD_COMPONENTS].ud;
+
+   unsigned num_payload_components =
+      coord_components +
       inst->components_read(TEX_LOGICAL_SRC_SHADOW_C) +
       (implicit_lod ? 0 : inst->components_read(TEX_LOGICAL_SRC_LOD)) +
       inst->components_read(TEX_LOGICAL_SRC_LOD2) +
       inst->components_read(TEX_LOGICAL_SRC_SAMPLE_INDEX) +
       (inst->opcode == SHADER_OPCODE_TG4_OFFSET_LOGICAL ?
        inst->components_read(TEX_LOGICAL_SRC_TG4_OFFSET) : 0) +
-      inst->components_read(TEX_LOGICAL_SRC_MCS);
+      inst->components_read(TEX_LOGICAL_SRC_MCS) +
+      inst->components_read(TEX_LOGICAL_SRC_MIN_LOD);
+
+
+   if (inst->opcode == FS_OPCODE_TXB_LOGICAL &&
+       devinfo->ver >= 20 && inst->has_packed_lod_ai_src) {
+      num_payload_components += 3 - coord_components;
+   } else if (inst->opcode == SHADER_OPCODE_TXD_LOGICAL &&
+            devinfo->verx10 >= 125 && devinfo->ver < 20) {
+      num_payload_components +=
+         3 - coord_components + (2 - grad_components) * 2;
+   } else {
+      num_payload_components += 4 - coord_components;
+      if (inst->opcode == SHADER_OPCODE_TXD_LOGICAL)
+         num_payload_components += (3 - grad_components) * 2;
+   }
+
 
    const unsigned simd_limit = reg_unit(devinfo) *
       (num_payload_components > MAX_SAMPLER_MESSAGE_SIZE / 2 ? 8 : 16);

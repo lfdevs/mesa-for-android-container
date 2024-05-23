@@ -919,9 +919,11 @@ __glXInitialize(Display * dpy)
 #endif /* HAVE_DRI3 */
       if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false))
          dpyPriv->dri2Display = dri2CreateDisplay(dpy);
+#if defined(HAVE_ZINK)
       if (!dpyPriv->dri3Display && !dpyPriv->dri2Display)
          try_zink = !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false) &&
                     !getenv("GALLIUM_DRIVER");
+#endif /* HAVE_ZINK */
    }
 #endif /* GLX_USE_DRM */
    if (glx_direct)

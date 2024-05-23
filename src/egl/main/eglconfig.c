@@ -249,6 +249,9 @@ static const struct {
    { EGL_COLOR_COMPONENT_TYPE_EXT,  ATTRIB_TYPE_ENUM,
                                     ATTRIB_CRITERION_EXACT,
                                     EGL_COLOR_COMPONENT_TYPE_FIXED_EXT },
+   { EGL_CONFIG_SELECT_GROUP_EXT,   ATTRIB_TYPE_INTEGER,
+                                    ATTRIB_CRITERION_IGNORE,
+                                    0 },
    /* clang-format on */
 };
 
@@ -286,6 +289,8 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
             /* there can be at most 1 sample buffer */
             if (val > 1 || val < 0)
                valid = EGL_FALSE;
+            break;
+         case EGL_CONFIG_SELECT_GROUP_EXT:
             break;
          default:
             if (val < 0)
@@ -586,6 +591,10 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
 
    if (conf1 == conf2)
       return 0;
+
+   val1 = conf1->ConfigSelectGroup - conf2->ConfigSelectGroup;
+   if (val1)
+      return val1;
 
    /* the enum values have the desired ordering */
    STATIC_ASSERT(EGL_NONE < EGL_SLOW_CONFIG);

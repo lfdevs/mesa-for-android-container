@@ -58,6 +58,20 @@ impl Format {
         unsafe { util_format_is_pure_integer((*self).into()) }
     }
 
+    pub(crate) fn has_depth(&self) -> bool {
+        self.description().colorspace == UTIL_FORMAT_COLORSPACE_ZS
+            && u32::from(self.description().swizzle[0]) != PIPE_SWIZZLE_NONE
+    }
+
+    pub(crate) fn has_stencil(&self) -> bool {
+        self.description().colorspace == UTIL_FORMAT_COLORSPACE_ZS
+            && u32::from(self.description().swizzle[1]) != PIPE_SWIZZLE_NONE
+    }
+
+    pub(crate) fn is_depth_or_stencil(&self) -> bool {
+        self.has_depth() || self.has_stencil()
+    }
+
     pub(crate) fn is_srgb(&self) -> bool {
         self.description().colorspace == UTIL_FORMAT_COLORSPACE_SRGB
     }

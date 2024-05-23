@@ -60,7 +60,7 @@ if [ -n "$S3_ARTIFACT_NAME" ]; then
     # Pass needed files to the test stage
     S3_ARTIFACT_NAME="$S3_ARTIFACT_NAME.tar.zst"
     zstd artifacts/install.tar -o ${S3_ARTIFACT_NAME}
-    ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" ${S3_ARTIFACT_NAME} https://${PIPELINE_ARTIFACTS_BASE}/${S3_ARTIFACT_NAME}
+    ci-fairy s3cp --token-file "${S3_JWT_FILE}" ${S3_ARTIFACT_NAME} https://${PIPELINE_ARTIFACTS_BASE}/${S3_ARTIFACT_NAME}
 fi
 
 section_end prepare-artifacts

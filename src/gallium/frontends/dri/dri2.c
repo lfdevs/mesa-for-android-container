@@ -2345,7 +2345,7 @@ dri2_init_screen(struct dri_screen *screen, bool implicit)
 #endif
 
    if (!pscreen)
-       goto fail;
+       return NULL;
 
    dri_init_options(screen);
    screen->throttle = pscreen->get_param(pscreen, PIPE_CAP_THROTTLE);
@@ -2379,7 +2379,7 @@ dri2_init_screen(struct dri_screen *screen, bool implicit)
    return configs;
 
 fail:
-   dri_release_screen(screen);
+   pipe_loader_release(&screen->dev, 1);
 
    return NULL;
 }

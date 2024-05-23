@@ -411,18 +411,20 @@ check_instr(wait_ctx& ctx, wait_imm& wait, alu_delay_info& delay, Instruction* i
          if (it == ctx.gpr_map.end())
             continue;
 
+         wait_imm reg_imm = it->second.imm;
+
          /* Vector Memory reads and writes return in the order they were issued */
          uint8_t vmem_type = get_vmem_type(instr);
          if (vmem_type && ((it->second.events & vm_events) == event_vmem) &&
              it->second.vmem_types == vmem_type)
-            continue;
+            reg_imm.vm = wait_imm::unset_counter;
 
          /* LDS reads and writes return in the order they were issued. same for GDS */
          if (instr->isDS() &&
              (it->second.events & lgkm_events) == (instr->ds().gds ? event_gds : event_lds))
-            continue;
+            reg_imm.lgkm = wait_imm::unset_counter;
 
-         wait.combine(it->second.imm);
+         wait.combine(reg_imm);
       }
    }
 }

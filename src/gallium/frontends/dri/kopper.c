@@ -116,6 +116,8 @@ kopper_init_screen(struct dri_screen *screen, bool implicit)
    const __DRIconfig **configs;
    struct pipe_screen *pscreen = NULL;
 
+   (void) mtx_init(&screen->opencl_func_mutex, mtx_plain);
+
    if (!screen->kopper_loader) {
       fprintf(stderr, "mesa: Kopper interface not found!\n"
                       "      Ensure the versions of %s built with this version of Zink are\n"
@@ -139,7 +141,7 @@ kopper_init_screen(struct dri_screen *screen, bool implicit)
       pscreen = pipe_loader_create_screen(screen->dev, implicit);
 
    if (!pscreen)
-      goto fail;
+      return NULL;
 
    dri_init_options(screen);
    screen->unwrapped_screen = trace_screen_unwrap(pscreen);
@@ -172,7 +174,7 @@ kopper_init_screen(struct dri_screen *screen, bool implicit)
 
    return configs;
 fail:
-   dri_release_screen(screen);
+   pipe_loader_release(&screen->dev, 1);
    return NULL;
 }
 

@@ -23,6 +23,11 @@ BEGIN_TEST(setup_reduce_temp.divergent_if_phi)
    if (!setup_cs("s2 v1", GFX9))
       return;
 
+   //>> p_logical_start
+   //>> p_logical_end
+   bld.pseudo(aco_opcode::p_logical_start);
+   bld.pseudo(aco_opcode::p_logical_end);
+
    //>> lv1: %lv = p_start_linear_vgpr
    emit_divergent_if_else(
       program.get(), bld, Operand(inputs[0]),

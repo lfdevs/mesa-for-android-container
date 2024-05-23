@@ -3031,6 +3031,7 @@ init_driver_workarounds(struct zink_screen *screen)
    switch (screen->info.driver_props.driverID) {
    case VK_DRIVER_ID_MESA_TURNIP:
    case VK_DRIVER_ID_MESA_VENUS:
+   case VK_DRIVER_ID_MESA_NVK:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
    default:

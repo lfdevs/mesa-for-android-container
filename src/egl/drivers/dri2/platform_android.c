@@ -838,7 +838,12 @@ droid_add_configs_for_visuals(_EGLDisplay *disp)
          const struct gl_config *gl_config =
             (struct gl_config *) dri2_dpy->driver_configs[j];
 
-         if (gl_config->color_format != visuals[i].pipe_format)
+         /* Rather than have duplicate table entries for _SRGB formats, just
+          * use the linear version of the format for the comparision:
+          */
+         enum pipe_format linear_format =
+            util_format_linear(gl_config->color_format);
+         if (linear_format != visuals[i].pipe_format)
             continue;
 
          const EGLint surface_type = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;

@@ -346,7 +346,7 @@ emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
 
    if (const_offset_in_bounds) {
       load = ir3_LDG(b, addr, 0,
-                     create_immed(b, nir_src_as_int(intr->src[1]) << shift),
+                     create_immed(b, (nir_src_as_int(intr->src[1]) * 4) << shift),
                      0, create_immed(b, dest_components), 0);
    } else {
       offset = ir3_get_src(ctx, &intr->src[1])[0];
@@ -389,7 +389,7 @@ emit_intrinsic_store_global_ir3(struct ir3_context *ctx,
 
    if (const_offset_in_bounds) {
       stg = ir3_STG(b, addr, 0,
-                    create_immed(b, nir_src_as_int(intr->src[2])), 0,
+                    create_immed(b, nir_src_as_int(intr->src[2]) * 4), 0,
                     value, 0,
                     create_immed(b, ncomp), 0);
    } else {

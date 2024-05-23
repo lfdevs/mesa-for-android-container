@@ -489,8 +489,11 @@ cmd_buffer_flush_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer,
     /* Setting NULL resets the push constant state so that we allocate a new one
     * if needed. If push constant data not dirty, get_push_range_address can
     * re-use existing allocation.
+    *
+    * Always reallocate on gfx9, gfx11 to fix push constant related flaky tests.
+    * See https://gitlab.freedesktop.org/mesa/mesa/-/issues/11064
     */
-   if (gfx_state->base.push_constants_data_dirty)
+   if (gfx_state->base.push_constants_data_dirty || GFX_VER < 12)
       gfx_state->base.push_constants_state = ANV_STATE_NULL;
 
    anv_foreach_stage(stage, dirty_stages) {

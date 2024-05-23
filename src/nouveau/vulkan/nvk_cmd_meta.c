@@ -65,6 +65,7 @@ struct nvk_meta_save {
    struct nvk_descriptor_set *desc0;
    bool has_push_desc0;
    struct nvk_push_descriptor_set push_desc0;
+   uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
    uint8_t push[128];
 };
 
@@ -85,6 +86,12 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
    save->has_push_desc0 = cmd->state.gfx.descriptors.push[0];
    if (save->has_push_desc0)
       save->push_desc0 = *cmd->state.gfx.descriptors.push[0];
+
+   STATIC_ASSERT(sizeof(save->set_dynamic_buffer_start) ==
+                sizeof(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start));
+   memcpy(save->set_dynamic_buffer_start,
+          cmd->state.gfx.descriptors.root.set_dynamic_buffer_start,
+          sizeof(save->set_dynamic_buffer_start));
 
    STATIC_ASSERT(sizeof(save->push) ==
                  sizeof(cmd->state.gfx.descriptors.root.push));
@@ -132,6 +139,7 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
 {
    if (save->desc0) {
       cmd->state.gfx.descriptors.sets[0] = save->desc0;
+      cmd->state.gfx.descriptors.set_sizes[0] = save->desc0->size;
       cmd->state.gfx.descriptors.root.sets[0] = nvk_descriptor_set_addr(save->desc0);
       cmd->state.gfx.descriptors.sets_dirty |= BITFIELD_BIT(0);
       cmd->state.gfx.descriptors.push_dirty &= ~BITFIELD_BIT(0);
@@ -139,6 +147,15 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
       *cmd->state.gfx.descriptors.push[0] = save->push_desc0;
       cmd->state.gfx.descriptors.push_dirty |= BITFIELD_BIT(0);
    }
+
+   /* Restore set_dynaic_buffer_start because meta binding set 0 can disturb
+    * all dynamic buffers starts for all sets.
+    */
+   STATIC_ASSERT(sizeof(save->set_dynamic_buffer_start) ==
+                sizeof(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start));
+   memcpy(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start,
+          save->set_dynamic_buffer_start,
+          sizeof(save->set_dynamic_buffer_start));
 
    /* Restore the dynamic state */
    assert(save->dynamic.vi == &cmd->state.gfx._dynamic_vi);

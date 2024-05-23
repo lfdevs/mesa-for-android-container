@@ -145,7 +145,8 @@ uint32_t radv_translate_buffer_dataformat(const struct util_format_description *
 
 uint32_t radv_translate_buffer_numformat(const struct util_format_description *desc, int first_non_void);
 
-uint32_t radv_translate_tex_dataformat(VkFormat format, const struct util_format_description *desc, int first_non_void);
+uint32_t radv_translate_tex_dataformat(const struct radv_physical_device *pdev, VkFormat format,
+                                       const struct util_format_description *desc, int first_non_void);
 
 uint32_t radv_translate_tex_numformat(VkFormat format, const struct util_format_description *desc, int first_non_void);
 

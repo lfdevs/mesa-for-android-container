@@ -821,6 +821,16 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
             EGL_NONE,
          };
 
+         const EGLint config_attrs_2nd_group[] = {
+            EGL_NATIVE_VISUAL_ID,
+            visuals[i].visual_id,
+            EGL_NATIVE_VISUAL_TYPE,
+            visuals[i]._class,
+            EGL_CONFIG_SELECT_GROUP_EXT,
+            1,
+            EGL_NONE,
+         };
+
          for (int j = 0; dri2_dpy->driver_configs[j]; j++) {
             const __DRIconfig *config = dri2_dpy->driver_configs[j];
             int shifts[4];
@@ -833,8 +843,7 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
                continue;
             }
 
-            /* Allow a 24-bit RGB visual to match a 32-bit RGBA EGLConfig.
-             * Ditto for 30-bit RGB visuals to match a 32-bit RGBA EGLConfig.
+            /* Allows RGB visuals to match a 32-bit RGBA EGLConfig.
              * Otherwise it will only match a 32-bit RGBA visual.  On a
              * composited window manager on X11, this will make all of the
              * EGLConfigs with destination alpha get blended by the
@@ -842,9 +851,6 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
              * wants... especially on drivers that only have 32-bit RGBA
              * EGLConfigs! */
             if (sizes[3] != 0) {
-               if (d.data->depth != 24 && d.data->depth != 30)
-                  continue;
-
                unsigned int rgba_mask =
                   ~(visuals[i].red_mask | visuals[i].green_mask |
                     visuals[i].blue_mask);
@@ -854,7 +860,12 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
                   continue;
             }
 
-            dri2_add_config(disp, config, surface_type, config_attrs);
+            unsigned int bit_per_pixel = sizes[0] + sizes[1] + sizes[2] + sizes[3];
+            if (sizes[3] != 0 && d.data->depth == bit_per_pixel) {
+               dri2_add_config(disp, config, surface_type, config_attrs_2nd_group);
+            } else {
+               dri2_add_config(disp, config, surface_type, config_attrs);
+            }
          }
       }
 
@@ -1559,7 +1570,8 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
 #ifdef HAVE_DRI3
    if (disp->Options.Zink &&
-       !debug_get_bool_option("LIBGL_DRI3_DISABLE", false))
+       !debug_get_bool_option("LIBGL_DRI3_DISABLE", false) &&
+       !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
       dri3_x11_connect(dri2_dpy);
 #endif
    if (!dri2_load_driver_swrast(disp))
@@ -1700,7 +1712,9 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
 
 cleanup:
    dri2_display_destroy(disp);
-   return status;
+   return status == DRI2_EGL_DRIVER_PREFER_ZINK ?
+          DRI2_EGL_DRIVER_PREFER_ZINK :
+          DRI2_EGL_DRIVER_FAILED;
 }
 #endif
 

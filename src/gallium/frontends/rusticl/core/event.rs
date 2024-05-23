@@ -10,6 +10,7 @@ use mesa_rust_util::static_assert;
 use rusticl_opencl_gen::*;
 
 use std::collections::HashSet;
+use std::mem;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
@@ -259,6 +260,27 @@ impl Event {
             .iter()
             .filter_map(|e| e.queue.clone())
             .collect()
+    }
+}
+
+impl Drop for Event {
+    // implement drop in order to prevent stack overflows of long dependency chains.
+    //
+    // This abuses the fact that `Arc::into_inner` only succeeds when there is one strong reference
+    // so we turn a recursive drop chain into a drop list for events having no other references.
+    fn drop(&mut self) {
+        if self.deps.is_empty() {
+            return;
+        }
+
+        let mut deps_list = vec![mem::take(&mut self.deps)];
+        while let Some(deps) = deps_list.pop() {
+            for dep in deps {
+                if let Some(mut dep) = Arc::into_inner(dep) {
+                    deps_list.push(mem::take(&mut dep.deps));
+                }
+            }
+        }
     }
 }
 

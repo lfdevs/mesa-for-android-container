@@ -161,9 +161,9 @@ nvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
 
    VkFormatFeatureFlags2 linear2, optimal2, buffer2;
    linear2 = nvk_get_image_format_features(pdevice, format,
-                                           VK_IMAGE_TILING_LINEAR);
+                                           VK_IMAGE_TILING_LINEAR, 0);
    optimal2 = nvk_get_image_format_features(pdevice, format,
-                                            VK_IMAGE_TILING_OPTIMAL);
+                                            VK_IMAGE_TILING_OPTIMAL, 0);
    buffer2 = nvk_get_buffer_format_features(pdevice, format);
 
    pFormatProperties->formatProperties = (VkFormatProperties) {
@@ -181,6 +181,11 @@ nvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
          p->bufferFeatures = buffer2;
          break;
       }
+
+      case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
+      case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
+         nvk_get_drm_format_modifier_properties_list(pdevice, format, ext);
+         break;
 
       default:
          nvk_debug_ignored_stype(ext->sType);

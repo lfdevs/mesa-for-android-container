@@ -547,8 +547,6 @@ union radv_shader_arena_block *radv_replay_shader_arena_block(struct radv_device
                                                               const struct radv_serialized_shader_arena_block *src,
                                                               void *ptr);
 
-struct radv_serialized_shader_arena_block radv_serialize_shader_arena_block(union radv_shader_arena_block *block);
-
 void radv_free_shader_memory(struct radv_device *device, union radv_shader_arena_block *alloc);
 
 struct radv_shader *radv_create_trap_handler_shader(struct radv_device *device);

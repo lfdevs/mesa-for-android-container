@@ -1455,7 +1455,7 @@ nir_assign_io_var_locations(nir_shader *shader, nir_variable_mode mode,
                             unsigned *size, gl_shader_stage stage)
 {
    unsigned location = 0;
-   unsigned assigned_locations[VARYING_SLOT_TESS_MAX];
+   unsigned assigned_locations[VARYING_SLOT_TESS_MAX][2];
    uint64_t processed_locs[2] = { 0 };
 
    struct exec_list io_vars;
@@ -1547,7 +1547,7 @@ nir_assign_io_var_locations(nir_shader *shader, nir_variable_mode mode,
       if (processed) {
          /* TODO handle overlapping per-view variables */
          assert(!var->data.per_view);
-         unsigned driver_location = assigned_locations[var->data.location];
+         unsigned driver_location = assigned_locations[var->data.location][var->data.index];
          var->data.driver_location = driver_location;
 
          /* An array may be packed such that is crosses multiple other arrays
@@ -1568,7 +1568,7 @@ nir_assign_io_var_locations(nir_shader *shader, nir_variable_mode mode,
             unsigned num_unallocated_slots = last_slot_location - location;
             unsigned first_unallocated_slot = var_size - num_unallocated_slots;
             for (unsigned i = first_unallocated_slot; i < var_size; i++) {
-               assigned_locations[var->data.location + i] = location;
+               assigned_locations[var->data.location + i][var->data.index] = location;
                location++;
             }
          }
@@ -1576,7 +1576,7 @@ nir_assign_io_var_locations(nir_shader *shader, nir_variable_mode mode,
       }
 
       for (unsigned i = 0; i < var_size; i++) {
-         assigned_locations[var->data.location + i] = location + i;
+         assigned_locations[var->data.location + i][var->data.index] = location + i;
       }
 
       var->data.driver_location = location;

@@ -10,6 +10,7 @@
 #include "nv_push.h"
 #include "nvk_cmd_pool.h"
 #include "nvk_descriptor_set.h"
+#include "nvk_image.h"
 
 #include "util/u_dynarray.h"
 
@@ -85,6 +86,10 @@ struct nvk_attachment {
 
    VkResolveModeFlagBits resolve_mode;
    struct nvk_image_view *resolve_iview;
+
+   /* Needed to track the value of storeOp in case we need to copy images for
+    * the DRM_FORMAT_MOD_LINEAR case */
+   VkAttachmentStoreOp store_op;
 };
 
 struct nvk_rendering_state {
@@ -279,5 +284,10 @@ void nvk_meta_resolve_rendering(struct nvk_cmd_buffer *cmd,
                                 const VkRenderingInfo *pRenderingInfo);
 
 void nvk_cmd_buffer_dump(struct nvk_cmd_buffer *cmd, FILE *fp);
+
+void nvk_linear_render_copy(struct nvk_cmd_buffer *cmd,
+                            const struct nvk_image_view *iview,
+                            VkRect2D copy_rect,
+                            bool copy_to_tiled_shadow);
 
 #endif

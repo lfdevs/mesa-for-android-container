@@ -14,7 +14,7 @@ export LLVM_VERSION="${LLVM_VERSION:=15}"
 
 check_minio()
 {
-    S3_PATH="${S3_HOST}/mesa-lava/$1/${DISTRIBUTION_TAG}/${DEBIAN_ARCH}"
+    S3_PATH="${S3_HOST}/${S3_KERNEL_BUCKET}/$1/${DISTRIBUTION_TAG}/${DEBIAN_ARCH}"
     if curl -L --retry 4 -f --retry-delay 60 -s -X HEAD \
       "https://${S3_PATH}/done"; then
         echo "Remote files are up-to-date, skip rebuilding them."
@@ -365,8 +365,8 @@ popd
 
 . .gitlab-ci/container/container_post_build.sh
 
-ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/"${ROOTFSTAR}" \
+ci-fairy s3cp --token-file "${S3_JWT_FILE}" /lava-files/"${ROOTFSTAR}" \
       https://${S3_PATH}/"${ROOTFSTAR}"
 
 touch /lava-files/done
-ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/done https://${S3_PATH}/done
+ci-fairy s3cp --token-file "${S3_JWT_FILE}" /lava-files/done https://${S3_PATH}/done

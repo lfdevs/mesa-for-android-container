@@ -309,6 +309,11 @@ zink_batch_state_destroy(struct zink_screen *screen, struct zink_batch_state *bs
    util_dynarray_fini(&bs->bindless_releases[0]);
    util_dynarray_fini(&bs->bindless_releases[1]);
    util_dynarray_fini(&bs->acquires);
+   util_dynarray_fini(&bs->signal_semaphores);
+   util_dynarray_fini(&bs->wait_semaphores);
+   util_dynarray_fini(&bs->wait_semaphore_stages);
+   util_dynarray_fini(&bs->fd_wait_semaphores);
+   util_dynarray_fini(&bs->fd_wait_semaphore_stages);
    util_dynarray_fini(&bs->acquire_flags);
    unsigned num_mfences = util_dynarray_num_elements(&bs->fence.mfences, void *);
    struct zink_tc_fence **mfence = bs->fence.mfences.data;

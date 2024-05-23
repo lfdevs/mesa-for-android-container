@@ -906,6 +906,7 @@ alloc_block_obj(struct radv_device *device)
 static void
 free_block_obj(struct radv_device *device, union radv_shader_arena_block *block)
 {
+   list_del(&block->pool);
    list_add(&block->pool, &device->shader_block_obj_pool);
 }
 
@@ -1196,7 +1197,6 @@ radv_free_shader_memory(struct radv_device *device, union radv_shader_arena_bloc
          remove_hole(free_list, hole_prev);
 
       hole_prev->size += hole->size;
-      list_del(&hole->list);
       free_block_obj(device, hole);
 
       hole = hole_prev;
@@ -1209,7 +1209,6 @@ radv_free_shader_memory(struct radv_device *device, union radv_shader_arena_bloc
 
       hole_next->offset -= hole->size;
       hole_next->size += hole->size;
-      list_del(&hole->list);
       free_block_obj(device, hole);
 
       hole = hole_next;
@@ -1221,24 +1220,24 @@ radv_free_shader_memory(struct radv_device *device, union radv_shader_arena_bloc
 
       radv_bo_destroy(device, NULL, arena->bo);
       list_del(&arena->list);
+
+      if (device->capture_replay_arena_vas) {
+         struct hash_entry *arena_entry = NULL;
+         hash_table_foreach (device->capture_replay_arena_vas->table, entry) {
+            if (entry->data == arena) {
+               arena_entry = entry;
+               break;
+            }
+         }
+         _mesa_hash_table_remove(device->capture_replay_arena_vas->table, arena_entry);
+      }
+
       free(arena);
    } else if (free_list) {
       add_hole(free_list, hole);
    }
 
    mtx_unlock(&device->shader_arena_mutex);
-}
-
-struct radv_serialized_shader_arena_block
-radv_serialize_shader_arena_block(union radv_shader_arena_block *block)
-{
-   struct radv_serialized_shader_arena_block serialized_block = {
-      .offset = block->offset,
-      .size = block->size,
-      .arena_va = block->arena->bo->va,
-      .arena_size = block->arena->size,
-   };
-   return serialized_block;
 }
 
 union radv_shader_arena_block *

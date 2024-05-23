@@ -10,6 +10,25 @@ a306_gl:
     FDO_CI_CONCURRENT: 6
   parallel: 5
 
+# New jobs. Leave it as manual for now.
+.a306_piglit:
+  extends:
+    - .piglit-test
+    - .a306-test
+    - .google-freedreno-manual-rules
+  variables:
+    HWCI_START_XORG: 1
+
+# Something happened and now this hangchecks and doesn't recover.  Unkown when
+# it started.
+.a306_piglit_gl:
+  extends:
+    - .a306_piglit
+  variables:
+    PIGLIT_PROFILES: quick_gl
+    BM_KERNEL_EXTRA_ARGS: "msm.num_hw_submissions=1"
+    FDO_CI_CONCURRENT: 3
+
 a306_piglit_shader:
   extends:
     - .a306_piglit
@@ -268,7 +287,7 @@ a630-traces-restricted:
     - .google-freedreno-rules-restricted
   variables:
     PIGLIT_TRACES_FILE: restricted-traces-freedreno.yml
-    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=http://10.42.0.1:8888/cache/?uri= --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}"
+    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=http://10.42.0.1:8888/cache/?uri= --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=${S3_TRACIE_PRIVATE_BUCKET} --jwt-file=${S3_JWT_FILE}"
   allow_failure: true
 
 a630-traces-performance:

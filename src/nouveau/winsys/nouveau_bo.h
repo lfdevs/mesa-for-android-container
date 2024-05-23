@@ -20,10 +20,10 @@ extern "C" {
 
 enum nouveau_ws_bo_flags {
    /* vram or gart depending on GPU */
-   NOUVEAU_WS_BO_LOCAL = 0 << 0,
-   NOUVEAU_WS_BO_GART  = 1 << 0,
-   NOUVEAU_WS_BO_MAP   = 1 << 1,
-   NOUVEAU_WS_BO_NO_SHARE = 1 << 2,
+   NOUVEAU_WS_BO_LOCAL = 1 << 0,
+   NOUVEAU_WS_BO_GART  = 1 << 1,
+   NOUVEAU_WS_BO_MAP   = 1 << 2,
+   NOUVEAU_WS_BO_NO_SHARE = 1 << 3,
 };
 
 enum nouveau_ws_bo_map_flags {
@@ -68,6 +68,11 @@ struct nouveau_ws_bo *nouveau_ws_bo_new_mapped(struct nouveau_ws_device *,
                                                enum nouveau_ws_bo_flags,
                                                enum nouveau_ws_bo_map_flags map_flags,
                                                void **map_out);
+struct nouveau_ws_bo *nouveau_ws_bo_new_tiled(struct nouveau_ws_device *,
+                                              uint64_t size, uint64_t align,
+                                              uint8_t pte_kind,
+                                              uint16_t tile_mode,
+                                              enum nouveau_ws_bo_flags);
 struct nouveau_ws_bo *nouveau_ws_bo_from_dma_buf(struct nouveau_ws_device *,
                                                  int fd);
 void nouveau_ws_bo_destroy(struct nouveau_ws_bo *);

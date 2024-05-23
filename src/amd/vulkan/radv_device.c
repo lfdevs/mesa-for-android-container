@@ -1294,9 +1294,6 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    if (!device)
       return;
 
-   if (device->capture_replay_arena_vas)
-      _mesa_hash_table_u64_destroy(device->capture_replay_arena_vas);
-
    radv_device_finish_perf_counter_lock_cs(device);
    if (device->perf_counter_bo)
       radv_bo_destroy(device, NULL, device->perf_counter_bo);
@@ -1347,6 +1344,8 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    radv_finish_trace(device);
 
    radv_destroy_shader_arenas(device);
+   if (device->capture_replay_arena_vas)
+      _mesa_hash_table_u64_destroy(device->capture_replay_arena_vas);
 
    radv_printf_data_finish(device);
 

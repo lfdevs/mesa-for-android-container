@@ -288,6 +288,13 @@ dri2_get_dri_config(struct dri2_egl_config *conf, EGLint surface_type,
 static EGLBoolean
 dri2_match_config(const _EGLConfig *conf, const _EGLConfig *criteria)
 {
+#ifdef HAVE_X11_PLATFORM
+   if (conf->Display->Platform == _EGL_PLATFORM_X11 &&
+       conf->AlphaSize > 0 &&
+       conf->NativeVisualID != criteria->NativeVisualID)
+      return EGL_FALSE;
+#endif
+
    if (_eglCompareConfigs(conf, criteria, NULL, EGL_FALSE) != 0)
       return EGL_FALSE;
 
@@ -790,6 +797,8 @@ dri2_setup_screen(_EGLDisplay *disp)
       disp->Extensions.KHR_gl_colorspace = EGL_TRUE;
    }
 
+   disp->Extensions.EXT_config_select_group = EGL_TRUE;
+
    disp->Extensions.EXT_create_context_robustness =
       get_screen_param(disp, PIPE_CAP_DEVICE_RESET_STATUS_QUERY);
    disp->RobustBufferAccess =
@@ -833,6 +842,8 @@ dri2_setup_screen(_EGLDisplay *disp)
          if (dri2_dpy->image->base.version >= 11)
             disp->Extensions.MESA_image_dma_buf_export = EGL_TRUE;
       }
+
+      disp->Extensions.MESA_x11_native_visual_id = EGL_TRUE;
 
       disp->Extensions.KHR_image_base = EGL_TRUE;
       disp->Extensions.KHR_gl_renderbuffer_image = EGL_TRUE;
@@ -2391,6 +2402,20 @@ dri2_query_surface(_EGLDisplay *disp, _EGLSurface *surf, EGLint attribute,
    return ret;
 }
 
+static struct wl_buffer *
+dri2_create_wayland_buffer_from_image(_EGLDisplay *disp, _EGLImage *img)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   struct wl_buffer *ret = NULL;
+
+   if (dri2_dpy->vtbl->create_wayland_buffer_from_image)
+      ret = dri2_dpy->vtbl->create_wayland_buffer_from_image(disp, img);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
+}
+
 #ifdef HAVE_LIBDRM
 static _EGLImage *
 dri2_create_image_mesa_drm_buffer(_EGLDisplay *disp, _EGLContext *ctx,
@@ -3643,6 +3668,7 @@ const _EGLDriver _eglDriver = {
    .QueryBufferAge = dri2_query_buffer_age,
    .CreateImageKHR = dri2_create_image,
    .DestroyImageKHR = dri2_destroy_image_khr,
+   .CreateWaylandBufferFromImageWL = dri2_create_wayland_buffer_from_image,
    .QuerySurface = dri2_query_surface,
    .QueryDriverName = dri2_query_driver_name,
    .QueryDriverConfig = dri2_query_driver_config,

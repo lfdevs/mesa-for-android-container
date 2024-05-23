@@ -32,7 +32,9 @@
 #include <dlfcn.h>
 #include "dri_common.h"
 #include "drisw_priv.h"
+#ifdef HAVE_DRI3
 #include "dri3_priv.h"
+#endif
 #include <X11/extensions/shmproto.h>
 #include <assert.h>
 #include <vulkan/vulkan_core.h>

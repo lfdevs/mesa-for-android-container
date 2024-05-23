@@ -3,6 +3,7 @@
 
 use crate::extent::{units, Extent4D};
 use crate::format::Format;
+use crate::modifiers::*;
 use crate::tiling::Tiling;
 use crate::Minify;
 
@@ -80,6 +81,7 @@ pub struct ImageInitInfo {
     pub levels: u32,
     pub samples: u32,
     pub usage: ImageUsageFlags,
+    pub modifier: u64,
 }
 
 /// Represents the data layout of a single slice (level + lod) of an image.
@@ -104,6 +106,7 @@ pub struct Image {
     pub array_stride_B: u64,
     pub align_B: u32,
     pub size_B: u64,
+    pub compressed: bool,
     pub tile_mode: u16,
     pub pte_kind: u8,
 }
@@ -138,7 +141,24 @@ impl Image {
 
         let sample_layout = SampleLayout::choose_sample_layout(info.samples);
 
-        let tiling = if (info.usage & IMAGE_USAGE_SPARSE_RESIDENCY_BIT) != 0 {
+        let tiling = if info.modifier != DRM_FORMAT_MOD_INVALID {
+            assert!((info.usage & IMAGE_USAGE_SPARSE_RESIDENCY_BIT) == 0);
+            assert!(info.dim == ImageDim::_2D);
+            assert!(sample_layout == SampleLayout::_1x1);
+            if info.modifier == DRM_FORMAT_MOD_LINEAR {
+                Tiling::default()
+            } else {
+                let bl_mod =
+                    BlockLinearModifier::try_from(info.modifier).unwrap();
+
+                // We don't support compression yet
+                assert!(bl_mod.compression_type() == CompressionType::None);
+
+                bl_mod
+                    .tiling()
+                    .clamp(info.extent_px.to_B(info.format, sample_layout))
+            }
+        } else if (info.usage & IMAGE_USAGE_SPARSE_RESIDENCY_BIT) != 0 {
             Tiling::sparse(info.format, info.dim)
         } else {
             Tiling::choose(
@@ -159,6 +179,7 @@ impl Image {
             array_stride_B: 0,
             align_B: 0,
             size_B: 0,
+            compressed: false,
             tile_mode: 0,
             pte_kind: 0,
             mip_tail_first_lod: 0,
@@ -232,12 +253,23 @@ impl Image {
         }
 
         if image.levels[0].tiling.is_tiled {
+            image.pte_kind = Self::choose_pte_kind(
+                dev,
+                info.format,
+                info.samples,
+                image.compressed,
+            );
+
+            if info.modifier != DRM_FORMAT_MOD_INVALID {
+                let bl_mod =
+                    BlockLinearModifier::try_from(info.modifier).unwrap();
+                assert!(bl_mod.pte_kind() == image.pte_kind);
+            }
+        }
+
+        if image.levels[0].tiling.is_tiled {
             image.tile_mode = u16::from(image.levels[0].tiling.y_log2) << 4
                 | u16::from(image.levels[0].tiling.z_log2) << 8;
-
-            // TODO: compressed
-            image.pte_kind =
-                Self::choose_pte_kind(dev, info.format, info.samples, false);
 
             image.align_B = std::cmp::max(image.align_B, 4096);
             if image.pte_kind >= 0xb && image.pte_kind <= 0xe {
@@ -481,7 +513,7 @@ impl Image {
         image_2d_out
     }
 
-    fn choose_pte_kind(
+    pub fn choose_pte_kind(
         dev: &nil_rs_bindings::nv_device_info,
         format: Format,
         samples: u32,
@@ -539,7 +571,7 @@ impl Image {
                     NV_MMU_PTE_KIND_S8
                 }
             }
-            _ => NV_MMU_PTE_KIND_PITCH,
+            _ => NV_MMU_PTE_KIND_GENERIC_MEMORY,
         }
         .try_into()
         .unwrap()
@@ -576,6 +608,13 @@ impl Image {
                     NV_MMU_PTE_KIND_S8Z24_2CZ + ms
                 } else {
                     NV_MMU_PTE_KIND_S8Z24
+                }
+            }
+            PIPE_FORMAT_Z32_FLOAT => {
+                if compressed {
+                    NV_MMU_PTE_KIND_ZF32_2CZ + ms
+                } else {
+                    NV_MMU_PTE_KIND_ZF32
                 }
             }
             PIPE_FORMAT_X32_S8X24_UINT | PIPE_FORMAT_Z32_FLOAT_S8X24_UINT => {

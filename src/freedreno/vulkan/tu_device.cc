@@ -910,7 +910,7 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->lineWidthRange[1] = pdevice->info->a6xx.line_width_max;
    props->pointSizeGranularity = 	0.0625;
    props->lineWidthGranularity =
-      pdevice->info->a6xx.line_width_max == 1.0 ? 1.0 : 0.5;
+      pdevice->info->a6xx.line_width_max == 1.0 ? 0.0 : 0.5;
    props->strictLines = true;
    props->standardSampleLocations = true;
    props->optimalBufferCopyOffsetAlignment = 128;

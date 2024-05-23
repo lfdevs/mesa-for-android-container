@@ -591,3 +591,7 @@ KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Crash
 spec@arb_shader_storage_buffer_object@max-ssbo-size@fs,Crash
 spec@arb_shader_storage_buffer_object@max-ssbo-size@vs,Crash
 
+# Failing on a bunch of drivers with an assert on the weak_ref
+# pipeline cache, seems to be a zink issue not destroying a
+# shader/pipeline before calling vkDestroyPipeline()
+spec@ext_external_objects@vk-vert-buf-reuse,Crash

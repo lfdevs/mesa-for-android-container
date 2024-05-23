@@ -29,6 +29,7 @@ nvk_init_wsi(struct nvk_physical_device *pdev)
       return result;
 
    pdev->wsi_device.supports_scanout = false;
+   pdev->wsi_device.supports_modifiers = true;
 
    pdev->vk.wsi_device = &pdev->wsi_device;
 

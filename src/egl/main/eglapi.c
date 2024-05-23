@@ -547,6 +547,7 @@ _eglCreateExtensionsString(_EGLDisplay *disp)
    _EGL_CHECK_EXTENSION(ANGLE_sync_control_rate);
 
    _EGL_CHECK_EXTENSION(EXT_buffer_age);
+   _EGL_CHECK_EXTENSION(EXT_config_select_group);
    _EGL_CHECK_EXTENSION(EXT_create_context_robustness);
    _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import);
    _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import_modifiers);
@@ -593,6 +594,7 @@ _eglCreateExtensionsString(_EGLDisplay *disp)
    _EGL_CHECK_EXTENSION(MESA_gl_interop);
    _EGL_CHECK_EXTENSION(MESA_image_dma_buf_export);
    _EGL_CHECK_EXTENSION(MESA_query_driver);
+   _EGL_CHECK_EXTENSION(MESA_x11_native_visual_id);
 
    _EGL_CHECK_EXTENSION(NOK_swap_region);
    _EGL_CHECK_EXTENSION(NOK_texture_from_pixmap);
@@ -600,6 +602,7 @@ _eglCreateExtensionsString(_EGLDisplay *disp)
    _EGL_CHECK_EXTENSION(NV_post_sub_buffer);
 
    _EGL_CHECK_EXTENSION(WL_bind_wayland_display);
+   _EGL_CHECK_EXTENSION(WL_create_wayland_buffer_from_image);
 
 #undef _EGL_CHECK_EXTENSION
 }
@@ -2375,11 +2378,23 @@ static struct wl_buffer *EGLAPIENTRY
 eglCreateWaylandBufferFromImageWL(EGLDisplay dpy, EGLImage image)
 {
    _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLImage *img;
+   struct wl_buffer *ret;
 
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL);
 
    _EGL_CHECK_DISPLAY(disp, NULL);
-   RETURN_EGL_EVAL(disp, NULL);
+   if (!disp->Extensions.WL_create_wayland_buffer_from_image)
+      RETURN_EGL_EVAL(disp, NULL);
+
+   img = _eglLookupImage(image, disp);
+
+   if (!img)
+      RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, NULL);
+
+   ret = disp->Driver->CreateWaylandBufferFromImageWL(disp, img);
+
+   RETURN_EGL_EVAL(disp, ret);
 }
 
 static EGLBoolean EGLAPIENTRY

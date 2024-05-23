@@ -317,7 +317,7 @@ nvk_upload_queue_upload_locked(struct nvk_device *dev,
       P_NV90B5_PITCH_IN(&p, data_size);
       P_NV90B5_PITCH_OUT(&p, data_size);
       P_NV90B5_LINE_LENGTH_IN(&p, data_size);
-      P_NV90B5_LINE_COUNT(&p, data_size);
+      P_NV90B5_LINE_COUNT(&p, 1);
 
       P_IMMD(&p, NV90B5, LAUNCH_DMA, {
          .data_transfer_type = DATA_TRANSFER_TYPE_NON_PIPELINED,

@@ -6,6 +6,7 @@
 #define NVK_IMAGE_H 1
 
 #include "nvk_private.h"
+#include "nvk_device_memory.h"
 
 #include "vk_image.h"
 
@@ -37,13 +38,15 @@
 struct nvk_device_memory;
 struct nvk_physical_device;
 
-static VkFormatFeatureFlags2
-nvk_get_image_plane_format_features(struct nvk_physical_device *pdev,
-                                    VkFormat vk_format, VkImageTiling tiling);
-
 VkFormatFeatureFlags2
 nvk_get_image_format_features(struct nvk_physical_device *pdevice,
-                              VkFormat format, VkImageTiling tiling);
+                              VkFormat format, VkImageTiling tiling,
+                              uint64_t drm_format_mod);
+
+void
+nvk_get_drm_format_modifier_properties_list(struct nvk_physical_device *pdev,
+                                            VkFormat vk_format,
+                                            VkBaseOutStructure *ext);
 
 uint32_t
 nvk_image_max_dimension(const struct nv_device_info *info,
@@ -76,6 +79,14 @@ struct nvk_image {
     * copied again down to the 8-bit result.
     */
    struct nvk_image_plane stencil_copy_temp;
+
+   /* The hardware doesn't support rendering to linear images except
+    * under certain conditions, so to support DRM_FORMAT_MOD_LINEAR
+    * rendering in the general case, we need to keep a tiled copy, which would
+    * be used to fake support if the conditions aren't satisfied.
+    */
+   struct nvk_image_plane linear_tiled_shadow;
+   struct nouveau_ws_bo *linear_tiled_shadow_bo;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_image, vk.base, VkImage, VK_OBJECT_TYPE_IMAGE)
@@ -96,6 +107,12 @@ static inline uint8_t
 nvk_image_aspects_to_plane(ASSERTED const struct nvk_image *image,
                            VkImageAspectFlags aspectMask)
 {
+   /* Memory planes are only allowed for memory operations */
+   assert(!(aspectMask & (VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT |
+                          VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
+                          VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT |
+                          VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)));
+
    /* Verify that the aspects are actually in the image */
    assert(!(aspectMask & ~image->vk.aspects));
 
@@ -108,6 +125,24 @@ nvk_image_aspects_to_plane(ASSERTED const struct nvk_image *image,
    case VK_IMAGE_ASPECT_PLANE_1_BIT: return 1;
    case VK_IMAGE_ASPECT_PLANE_2_BIT: return 2;
    default: return 0;
+   }
+}
+
+static inline uint8_t
+nvk_image_memory_aspects_to_plane(ASSERTED const struct nvk_image *image,
+                                  VkImageAspectFlags aspectMask)
+{
+   if (aspectMask & (VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT |
+                     VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
+                     VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT |
+                     VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)) {
+      /* We don't support DRM format modifiers on anything but single-plane
+       * color at the moment.
+       */
+      assert(aspectMask == VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT);
+      return 0;
+   } else {
+      return nvk_image_aspects_to_plane(image, aspectMask);
    }
 }
 

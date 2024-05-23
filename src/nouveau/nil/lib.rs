@@ -7,6 +7,7 @@ extern crate nvidia_headers;
 mod extent;
 mod format;
 mod image;
+mod modifiers;
 mod tic;
 mod tiling;
 

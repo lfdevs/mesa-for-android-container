@@ -193,7 +193,7 @@ class LAVAJobDefinition:
                     "set +x  # HIDE_START",
                     f'echo -n "{jwt_file.read()}" > "{self.job_submitter.jwt_file}"',
                     "set -x  # HIDE_END",
-                    f'echo "export CI_JOB_JWT_FILE={self.job_submitter.jwt_file}" >> /set-job-env-vars.sh',
+                    f'echo "export S3_JWT_FILE={self.job_submitter.jwt_file}" >> /set-job-env-vars.sh',
                 ]
         else:
             download_steps += [

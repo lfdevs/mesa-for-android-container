@@ -8,7 +8,7 @@ set -ex
 export PAGER=cat  # FIXME: export everywhere
 
 INSTALL=$(realpath -s "$PWD"/install)
-S3_ARGS="--token-file ${CI_JOB_JWT_FILE}"
+S3_ARGS="--token-file ${S3_JWT_FILE}"
 
 RESULTS=$(realpath -s "$PWD"/results)
 mkdir -p "$RESULTS"

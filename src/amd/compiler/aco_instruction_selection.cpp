@@ -10404,6 +10404,86 @@ create_continue_phis(isel_context* ctx, unsigned first, unsigned last,
    return vals[last - first];
 }
 
+static bool
+all_uses_inside_loop(nir_def* def, nir_block* block_before_loop, nir_block* block_after_loop)
+{
+   nir_foreach_use_including_if (use, def) {
+      if (nir_src_is_if(use)) {
+         nir_block* branch_block =
+            nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+         if (branch_block->index <= block_before_loop->index || branch_block->index >= block_after_loop->index)
+            return false;
+      } else {
+         nir_instr* instr = nir_src_parent_instr(use);
+         if ((instr->block->index <= block_before_loop->index || instr->block->index >= block_after_loop->index) &&
+             !(instr->type == nir_instr_type_phi && instr->block == block_after_loop)) {
+            return false;
+         }
+      }
+   }
+
+   return true;
+}
+
+Temp
+rename_temp(const std::map<unsigned, unsigned>& renames, Temp tmp)
+{
+   auto it = renames.find(tmp.id());
+   if (it != renames.end())
+      return Temp(it->second, tmp.regClass());
+   return tmp;
+}
+
+static void
+lcssa_workaround(isel_context* ctx, nir_loop* loop)
+{
+   assert(ctx->block->linear_preds.size() == ctx->block->logical_preds.size() + 1);
+
+   nir_block* block_before_loop = nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
+   nir_block* block_after_loop = nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
+
+   std::map<unsigned, unsigned> renames;
+   nir_foreach_block_in_cf_node (block, &loop->cf_node) {
+      nir_foreach_instr (instr, block) {
+         nir_def* def = nir_instr_def(instr);
+         if (!def)
+            continue;
+
+         Temp tmp = get_ssa_temp(ctx, def);
+         if (!tmp.is_linear() || all_uses_inside_loop(def, block_before_loop, block_after_loop))
+            continue;
+
+         Temp new_tmp = ctx->program->allocateTmp(tmp.regClass());
+         aco_ptr<Instruction> phi(create_instruction(aco_opcode::p_linear_phi, Format::PSEUDO,
+                                                     ctx->block->linear_preds.size(), 1));
+         for (unsigned i = 0; i < ctx->block->logical_preds.size(); i++)
+            phi->operands[i] = Operand(new_tmp);
+         phi->operands.back() = Operand(tmp.regClass());
+         phi->definitions[0] = Definition(tmp);
+         ctx->block->instructions.emplace(ctx->block->instructions.begin(), std::move(phi));
+
+         renames.emplace(tmp.id(), new_tmp.id());
+      }
+   }
+
+   if (renames.empty())
+      return;
+
+   for (unsigned i = ctx->block->index - 1;
+        ctx->program->blocks[i].loop_nest_depth > ctx->block->loop_nest_depth; i--) {
+      for (aco_ptr<Instruction>& instr : ctx->program->blocks[i].instructions) {
+         for (Definition& def : instr->definitions) {
+            if (def.isTemp())
+               def.setTemp(rename_temp(renames, def.getTemp()));
+         }
+         for (Operand& op : instr->operands) {
+            if (op.isTemp())
+               op.setTemp(rename_temp(renames, op.getTemp()));
+         }
+      }
+   }
+}
+
 static void begin_uniform_if_then(isel_context* ctx, if_context* ic, Temp cond);
 static void begin_uniform_if_else(isel_context* ctx, if_context* ic);
 static void end_uniform_if(isel_context* ctx, if_context* ic);
@@ -10439,6 +10519,10 @@ visit_loop(isel_context* ctx, nir_loop* loop)
    }
 
    end_loop(ctx, &lc);
+
+   /* Create extra LCSSA phis for continue_or_break */
+   if (ctx->block->linear_preds.size() > ctx->block->logical_preds.size())
+      lcssa_workaround(ctx, loop);
 }
 
 static void

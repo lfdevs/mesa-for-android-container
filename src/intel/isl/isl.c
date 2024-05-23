@@ -4583,6 +4583,7 @@ isl_tiling_to_name(enum isl_tiling tiling)
       [ISL_TILING_ICL_Ys]    = "ICL-Ys",
       [ISL_TILING_4]         = "4",
       [ISL_TILING_64]        = "64",
+      [ISL_TILING_64_XE2]    = "64-Xe2",
       [ISL_TILING_HIZ]       = "hiz",
       [ISL_TILING_CCS]       = "ccs",
       [ISL_TILING_GFX12_CCS] = "gfx12-ccs",

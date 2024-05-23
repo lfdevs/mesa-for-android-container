@@ -167,7 +167,8 @@ radv_is_vertex_buffer_format_supported(VkFormat format)
 }
 
 uint32_t
-radv_translate_tex_dataformat(VkFormat format, const struct util_format_description *desc, int first_non_void)
+radv_translate_tex_dataformat(const struct radv_physical_device *pdev, VkFormat format,
+                              const struct util_format_description *desc, int first_non_void)
 {
    bool uniform = true;
    int i;
@@ -297,6 +298,9 @@ radv_translate_tex_dataformat(VkFormat format, const struct util_format_descript
       uniform = uniform && desc->channel[0].size == desc->channel[i].size;
    }
 
+   if (first_non_void < 0 || first_non_void > 3)
+      goto out_unknown;
+
    /* Non-uniform formats. */
    if (!uniform) {
       switch (desc->nr_channels) {
@@ -306,6 +310,12 @@ radv_translate_tex_dataformat(VkFormat format, const struct util_format_descript
          }
          goto out_unknown;
       case 4:
+         /* 5551 and 1555 UINT formats fail on Gfx8/Carrizo´. */
+         if (pdev->info.family == CHIP_CARRIZO && desc->channel[1].size == 5 && desc->channel[2].size == 5 &&
+             desc->channel[first_non_void].type == UTIL_FORMAT_TYPE_UNSIGNED &&
+             desc->channel[first_non_void].pure_integer)
+            goto out_unknown;
+
          if (desc->channel[0].size == 5 && desc->channel[1].size == 5 && desc->channel[2].size == 5 &&
              desc->channel[3].size == 1) {
             return V_008F14_IMG_DATA_FORMAT_1_5_5_5;
@@ -326,9 +336,6 @@ radv_translate_tex_dataformat(VkFormat format, const struct util_format_descript
       goto out_unknown;
    }
 
-   if (first_non_void < 0 || first_non_void > 3)
-      goto out_unknown;
-
    /* uniform formats */
    switch (desc->channel[first_non_void].size) {
    case 4:
@@ -338,6 +345,11 @@ radv_translate_tex_dataformat(VkFormat format, const struct util_format_descript
 			return V_008F14_IMG_DATA_FORMAT_4_4;
 #endif
       case 4:
+         /* 4444 UINT formats fail on Gfx8/Carrizo´. */
+         if (pdev->info.family == CHIP_CARRIZO && desc->channel[first_non_void].type == UTIL_FORMAT_TYPE_UNSIGNED &&
+             desc->channel[first_non_void].pure_integer)
+            goto out_unknown;
+
          return V_008F14_IMG_DATA_FORMAT_4_4_4_4;
       }
       break;
@@ -447,7 +459,7 @@ radv_translate_tex_numformat(VkFormat format, const struct util_format_descripti
 }
 
 static bool
-radv_is_sampler_format_supported(VkFormat format, bool *linear_sampling)
+radv_is_sampler_format_supported(const struct radv_physical_device *pdev, VkFormat format, bool *linear_sampling)
 {
    const struct util_format_description *desc = vk_format_description(format);
    uint32_t num_format;
@@ -463,7 +475,7 @@ radv_is_sampler_format_supported(VkFormat format, bool *linear_sampling)
       *linear_sampling = true;
    else
       *linear_sampling = false;
-   return radv_translate_tex_dataformat(format, vk_format_description(format),
+   return radv_translate_tex_dataformat(pdev, format, vk_format_description(format),
                                         vk_format_get_first_non_void_channel(format)) != ~0U;
 }
 
@@ -485,7 +497,7 @@ radv_is_storage_image_format_supported(const struct radv_physical_device *pdev, 
    if (vk_format_is_depth_or_stencil(format))
       return false;
 
-   data_format = radv_translate_tex_dataformat(format, desc, vk_format_get_first_non_void_channel(format));
+   data_format = radv_translate_tex_dataformat(pdev, format, desc, vk_format_get_first_non_void_channel(format));
    num_format = radv_translate_tex_numformat(format, desc, vk_format_get_first_non_void_channel(format));
 
    if (data_format == ~0 || num_format == ~0)
@@ -790,7 +802,7 @@ radv_physical_device_get_format_properties(struct radv_physical_device *pdev, Vk
       }
    } else {
       bool linear_sampling;
-      if (radv_is_sampler_format_supported(format, &linear_sampling)) {
+      if (radv_is_sampler_format_supported(pdev, format, &linear_sampling)) {
          linear |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_2_BLIT_SRC_BIT;
          tiled |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_2_BLIT_SRC_BIT;
 

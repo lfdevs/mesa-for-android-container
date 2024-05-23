@@ -671,6 +671,9 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
 
    csf_emit_shader_regs(batch, PIPE_SHADER_VERTEX,
                         batch->rsd[PIPE_SHADER_VERTEX]);
+   /* force a barrier to avoid read/write sync issues with buffers */
+   cs_wait_slot(b, 2, false);
+
    /* XXX: Choose correctly */
    cs_run_compute(b, 1, MALI_TASK_AXIS_Z, false, cs_shader_res_sel(0, 0, 0, 0));
 }

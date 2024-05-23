@@ -770,7 +770,7 @@ build_desc_addr_for_res_index(nir_builder *b,
 static nir_def *
 build_desc_addr_for_binding(nir_builder *b,
                             unsigned set, unsigned binding,
-                            nir_def *array_index,
+                            nir_def *array_index, unsigned plane,
                             const struct apply_pipeline_layout_state *state)
 {
    const struct anv_descriptor_set_binding_layout *bind_layout =
@@ -786,6 +786,10 @@ build_desc_addr_for_binding(nir_builder *b,
                                    array_index,
                                    bind_layout->descriptor_surface_stride),
                       bind_layout->descriptor_surface_offset);
+      if (plane != 0) {
+         desc_offset = nir_iadd_imm(
+            b, desc_offset, plane * bind_layout->descriptor_data_surface_size);
+      }
 
       return nir_vec4(b, nir_unpack_64_2x32_split_x(b, set_addr),
                          nir_unpack_64_2x32_split_y(b, set_addr),
@@ -793,14 +797,21 @@ build_desc_addr_for_binding(nir_builder *b,
                          desc_offset);
    }
 
-   case nir_address_format_32bit_index_offset:
+   case nir_address_format_32bit_index_offset: {
+      nir_def *desc_offset =
+         nir_iadd_imm(b,
+                      nir_imul_imm(b,
+                                   array_index,
+                                   bind_layout->descriptor_surface_stride),
+                      bind_layout->descriptor_surface_offset);
+      if (plane != 0) {
+         desc_offset = nir_iadd_imm(
+            b, desc_offset, plane * bind_layout->descriptor_data_surface_size);
+      }
       return nir_vec2(b,
                       nir_imm_int(b, state->set[set].desc_offset),
-                      nir_iadd_imm(b,
-                                   nir_imul_imm(b,
-                                                array_index,
-                                                bind_layout->descriptor_surface_stride),
-                                   bind_layout->descriptor_surface_offset));
+                      desc_offset);
+   }
 
    default:
       unreachable("Unhandled address format");
@@ -854,7 +865,8 @@ build_surface_index_for_binding(nir_builder *b,
          set_offset = nir_imm_int(b, 0xdeaddead);
 
          nir_def *desc_addr =
-            build_desc_addr_for_binding(b, set, binding, array_index, state);
+            build_desc_addr_for_binding(b, set, binding, array_index,
+                                        plane, state);
 
          surface_index =
             build_load_descriptor_mem(b, desc_addr, 0, 1, 32, state);
@@ -943,7 +955,8 @@ build_sampler_handle_for_binding(nir_builder *b,
          set_offset = nir_imm_int(b, 0xdeaddead);
 
          nir_def *desc_addr =
-            build_desc_addr_for_binding(b, set, binding, array_index, state);
+            build_desc_addr_for_binding(b, set, binding, array_index,
+                                        plane, state);
 
          /* This is anv_sampled_image_descriptor, the sampler handle is always
           * in component 1.
@@ -1428,7 +1441,8 @@ lower_load_accel_struct_desc(nir_builder *b,
 
    struct res_index_defs res = unpack_res_index(b, res_index);
    nir_def *desc_addr =
-      build_desc_addr_for_binding(b, set, binding, res.array_index, state);
+      build_desc_addr_for_binding(b, set, binding, res.array_index,
+                                  0 /* plane */, state);
 
    /* Acceleration structure descriptors are always uint64_t */
    nir_def *desc = build_load_descriptor_mem(b, desc_addr, 0, 1, 64, state);
@@ -1657,7 +1671,7 @@ lower_image_size_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    nir_def *desc_addr = build_desc_addr_for_binding(
-      b, set, binding, array_index, state);
+      b, set, binding, array_index, 0 /* plane */, state);
 
    b->cursor = nir_after_instr(&intrin->instr);
 

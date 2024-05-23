@@ -4860,8 +4860,11 @@ zink_resource_commit(struct pipe_context *pctx, struct pipe_resource *pres, unsi
    VkSemaphore sem = VK_NULL_HANDLE;
    bool ret = zink_bo_commit(ctx, res, level, box, commit, &sem);
    if (ret) {
-      if (sem)
+      if (sem) {
          zink_batch_add_wait_semaphore(&ctx->batch, sem);
+         zink_batch_reference_resource_rw(&ctx->batch, res, true);
+         ctx->batch.has_work = true;
+      }
    } else {
       check_device_lost(ctx);
    }

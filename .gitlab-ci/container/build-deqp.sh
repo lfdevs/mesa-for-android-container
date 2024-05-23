@@ -70,6 +70,8 @@ gles_cts_commits_to_backport=(
 
 # shellcheck disable=SC2034
 gles_cts_patch_files=(
+  # Correct detection mechanism for EGL_EXT_config_select_group extension
+  build-deqp-egl_Correct-EGL_EXT_config_select_group-extension-query.patch
 )
 
 if [ "${DEQP_TARGET}" = 'android' ]; then
