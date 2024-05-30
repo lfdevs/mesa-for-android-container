@@ -2194,7 +2194,7 @@ tu_get_budget_memory(struct tu_physical_device *physical_device, uint64_t heap_u
     * Let's not incite the app to starve the system: report at most 90% of
     * available system memory.
     */
-   const float percent = 0.9f;
+   const float percent = 15.0 / 16; //gabe hack to allow using more memory
 
    return vk_physical_device_heap_budget_from_system(&physical_device->vk,
                                                      percent, heap_size,
