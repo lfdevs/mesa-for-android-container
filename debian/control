@@ -38,6 +38,7 @@ Build-Depends:
  python3,
  python3-mako,
  python3-ply,
+ python3-pycparser [arm64 armhf],
  python3-setuptools,
  flex,
  bison,
