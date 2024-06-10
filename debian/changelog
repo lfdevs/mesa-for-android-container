@@ -1,3 +1,9 @@
+mesa (24.1.1-2) unstable; urgency=medium
+
+  * rules, control: Revert back to llvm 17. (Closes: #1072941)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 10 Jun 2024 19:59:35 +0300
+
 mesa (24.1.1-1) unstable; urgency=medium
 
   * New upstream release.
