@@ -603,6 +603,11 @@ struct v3d_ra_node_info {
                 bool is_program_end;
                 bool unused;
 
+                /* If this node may have an allocation conflict with a
+                 * payload register.
+                 */
+                bool payload_conflict;
+
                 /* V3D 7.x */
                 bool is_ldunif_dst;
         } *info;

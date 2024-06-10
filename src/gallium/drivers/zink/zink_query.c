@@ -982,7 +982,7 @@ zink_begin_query(struct pipe_context *pctx,
    util_dynarray_clear(&query->starts);
    query->start_offset = 0;
 
-   if (batch->in_rp) {
+   if (batch->in_rp || (query->type == PIPE_QUERY_TIME_ELAPSED)) {
       begin_query(ctx, batch, query);
    } else {
       /* never directly start queries out of renderpass, always defer */

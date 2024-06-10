@@ -8,7 +8,7 @@ Build-Depends:
  debhelper-compat (= 13),
  directx-headers-dev (>= 1.610.0) [linux-amd64 linux-arm64],
  glslang-tools [@LLVM_ARCHS@],
- meson (>= 1.3.1),
+ meson (>= 1.4.0),
  quilt (>= 0.63-8.2~),
  pkg-config,
  libdrm-dev (>= 2.4.119),

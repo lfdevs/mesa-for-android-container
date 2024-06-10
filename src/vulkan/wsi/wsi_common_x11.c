@@ -1240,12 +1240,16 @@ x11_wait_for_explicit_sync_release_submission(struct x11_swapchain *chain,
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       images[i] = &chain->images[i].base;
 
-   VkResult result =
-      wsi_drm_wait_for_explicit_sync_release(&chain->base,
-                                             chain->base.image_count,
-                                             images,
-                                             rel_timeout_ns,
-                                             image_index);
+   VkResult result;
+#ifdef HAVE_LIBDRM
+   result = wsi_drm_wait_for_explicit_sync_release(&chain->base,
+                                                   chain->base.image_count,
+                                                   images,
+                                                   rel_timeout_ns,
+                                                   image_index);
+#else
+   result = VK_ERROR_FEATURE_NOT_PRESENT;
+#endif
    STACK_ARRAY_FINISH(images);
    return result;
 }

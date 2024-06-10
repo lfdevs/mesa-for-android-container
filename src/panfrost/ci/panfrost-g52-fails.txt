@@ -100,7 +100,6 @@ spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8I,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_SRGB8_ALPHA8,Fail
-spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drect,Crash
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow,Crash
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Crash
@@ -383,8 +382,6 @@ spec@!opengl 3.1@primitive-restart-xfb flush,Fail
 spec@!opengl 3.1@primitive-restart-xfb generated,Fail
 spec@!opengl 3.1@primitive-restart-xfb written,Fail
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
-
-dEQP-GLES31.functional.texture.border_clamp.range_clamp.linear_float_color,Fail
 
 # Resolve operations not supported
 dEQP-VK.rasterization.interpolation_multisample_4_bit.lines,Crash

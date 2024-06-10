@@ -4951,6 +4951,8 @@ strip_tex_ms_instr(nir_builder *b, nir_instr *in, void *data)
       break;
    case nir_intrinsic_image_deref_store:
    case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
       break;
    default:
       return false;

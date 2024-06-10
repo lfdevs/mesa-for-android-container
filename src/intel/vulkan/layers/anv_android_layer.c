@@ -38,7 +38,8 @@ VkResult anv_android_CreateImageView(
     * format.
     */
    if (fmt && fmt->layout == UTIL_FORMAT_LAYOUT_ASTC &&
-       device->info->verx10 >= 125) {
+       device->info->verx10 >= 125 &&
+       !(device->physical->has_astc_ldr || device->physical->emu_astc_ldr)) {
       return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
                        "ASTC format not supported (%s).", __func__);
    }

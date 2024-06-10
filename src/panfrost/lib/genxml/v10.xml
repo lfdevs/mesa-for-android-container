@@ -1018,7 +1018,7 @@
     <field name="Wrap Mode R" size="4" start="0:8" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode T" size="4" start="0:12" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode S" size="4" start="0:16" type="Wrap Mode" default="Clamp to Edge"/>
-    <field name="Round to nearest even" size="1" start="0:21" type="bool" default="false"/>
+    <field name="Round to nearest even" size="1" start="0:21" type="bool" default="true"/>
     <!--- Disable sRGB-to-linear conversion (assume linear) -->
     <field name="sRGB override" size="1" start="0:22" type="bool" default="false"/>
     <field name="Seamless Cube Map" size="1" start="0:23" type="bool" default="true"/>

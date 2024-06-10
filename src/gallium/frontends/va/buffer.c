@@ -316,7 +316,7 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
 
    if (buf->type == VAEncCodedBufferType) {
       VACodedBufferSegment* node = buf->data;
-      while(!node) {
+      while (node) {
          VACodedBufferSegment* next = (VACodedBufferSegment*) node->next;
          FREE(node);
          node = next;

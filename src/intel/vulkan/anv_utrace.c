@@ -49,7 +49,7 @@ union anv_utrace_timestamp {
     *        [2] = 32b Context Timestamp End
     *        [3] = 32b Global Timestamp End"
     */
-   uint32_t compute_walker[4];
+   uint32_t compute_walker[8];
 };
 
 static uint32_t
@@ -504,6 +504,8 @@ anv_device_utrace_init(struct anv_device *device)
                                  intel_engines_class_to_string(queue->family->engine_class),
                                  queue->vk.index_in_family);
    }
+
+   device->utrace_timestamp_size = sizeof(union anv_utrace_timestamp);
 }
 
 void

@@ -100,7 +100,7 @@ impl Event {
         self.state().status
     }
 
-    fn set_status(&self, lock: &mut MutexGuard<EventMutState>, new: cl_int) {
+    fn set_status(&self, mut lock: MutexGuard<EventMutState>, new: cl_int) {
         lock.status = new;
 
         // signal on completion or an error
@@ -113,14 +113,17 @@ impl Event {
 
         if [CL_COMPLETE, CL_RUNNING, CL_SUBMITTED].contains(&cb_idx) {
             if let Some(cbs) = lock.cbs.get_mut(cb_idx as usize) {
-                cbs.drain(..).for_each(|cb| cb.call(self, new));
+                let cbs = mem::take(cbs);
+                // applications might want to access the event in the callback, so drop the lock
+                // before calling into the callbacks.
+                drop(lock);
+                cbs.into_iter().for_each(|cb| cb.call(self, new));
             }
         }
     }
 
     pub fn set_user_status(&self, status: cl_int) {
-        let mut lock = self.state();
-        self.set_status(&mut lock, status);
+        self.set_status(self.state(), status);
     }
 
     pub fn is_error(&self) -> bool {
@@ -166,10 +169,8 @@ impl Event {
     }
 
     pub(super) fn signal(&self) {
-        let mut lock = self.state();
-
-        self.set_status(&mut lock, CL_RUNNING as cl_int);
-        self.set_status(&mut lock, CL_COMPLETE as cl_int);
+        self.set_status(self.state(), CL_RUNNING as cl_int);
+        self.set_status(self.state(), CL_COMPLETE as cl_int);
     }
 
     pub fn wait(&self) -> cl_int {
@@ -225,7 +226,7 @@ impl Event {
                 lock.time_start = query_start.unwrap().read_blocked();
                 lock.time_end = query_end.unwrap().read_blocked();
             }
-            self.set_status(&mut lock, new);
+            self.set_status(lock, new);
         }
     }
 

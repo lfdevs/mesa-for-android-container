@@ -51,6 +51,9 @@ struct lp_sampler_matrix {
 
    struct llvmpipe_context *ctx;
 
+   /* Use a separate LLVMContext since it is not thread safe but can be accessed by shaders. */
+   LLVMContextRef context;
+
    struct util_dynarray gallivms;
 };
 

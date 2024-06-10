@@ -2606,11 +2606,12 @@ v3dX(cmd_buffer_emit_index_buffer)(struct v3dv_cmd_buffer *cmd_buffer)
          &job->bcl, cl_packet_length(INDEX_BUFFER_SETUP));
       v3dv_return_if_oom(cmd_buffer, NULL);
 
-      const uint32_t offset = cmd_buffer->state.index_buffer.offset;
+      const uint32_t offset = ibuffer->mem_offset +
+                              cmd_buffer->state.index_buffer.offset;
+      assert(ibuffer->mem->bo->size >= offset);
       cl_emit(&job->bcl, INDEX_BUFFER_SETUP, ib) {
-         ib.address = v3dv_cl_address(ibuffer->mem->bo,
-                                      ibuffer->mem_offset + offset);
-         ib.size = ibuffer->mem->bo->size;
+         ib.address = v3dv_cl_address(ibuffer->mem->bo, offset);
+         ib.size = ibuffer->mem->bo->size - offset;
       }
    }
 

@@ -3696,13 +3696,14 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
       uint64_t va = 0;
 
       if (vrs_surface_enable) {
-         struct radv_image *vrs_image = render->vrs_att.iview->image;
+         const struct radv_image_view *vrs_iview = render->vrs_att.iview;
+         struct radv_image *vrs_image = vrs_iview->image;
 
          va = radv_buffer_get_va(vrs_image->bindings[0].bo) + vrs_image->bindings[0].offset;
          va |= vrs_image->planes[0].surface.tile_swizzle << 8;
 
-         xmax = vrs_image->vk.extent.width - 1;
-         ymax = vrs_image->vk.extent.height - 1;
+         xmax = vrs_iview->vk.extent.width - 1;
+         ymax = vrs_iview->vk.extent.height - 1;
       }
 
       radeon_set_context_reg_seq(cmd_buffer->cs, R_0283F0_PA_SC_VRS_RATE_BASE, 3);
@@ -8318,7 +8319,7 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
                 render->area.offset.x + render->area.extent.height <= ds_image->vk.extent.height);
 
          /* Copy the VRS rates to the HTILE buffer. */
-         radv_copy_vrs_htile(cmd_buffer, render->vrs_att.iview->image, &render->area, ds_image, &htile_buffer, true);
+         radv_copy_vrs_htile(cmd_buffer, render->vrs_att.iview, &render->area, ds_image, &htile_buffer, true);
 
          radv_buffer_finish(&htile_buffer);
       } else {
@@ -8337,7 +8338,7 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
             area.extent.height = MIN2(area.extent.height, ds_image->vk.extent.height - area.offset.y);
 
             /* Copy the VRS rates to the HTILE buffer. */
-            radv_copy_vrs_htile(cmd_buffer, render->vrs_att.iview->image, &area, ds_image, htile_buffer, false);
+            radv_copy_vrs_htile(cmd_buffer, render->vrs_att.iview, &area, ds_image, htile_buffer, false);
          }
       }
    }

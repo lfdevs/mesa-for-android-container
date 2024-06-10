@@ -11,9 +11,9 @@
 #include "util/os_misc.h"
 
 #include <fcntl.h>
-#include <nouveau/nvif/ioctl.h>
 #include "nvif/cl0080.h"
 #include "nvif/class.h"
+#include "nvif/ioctl.h"
 #include <unistd.h>
 #include <xf86drm.h>
 

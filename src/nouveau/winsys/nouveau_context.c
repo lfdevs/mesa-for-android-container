@@ -3,9 +3,9 @@
 #include "nouveau_device.h"
 
 #include "drm-uapi/nouveau_drm.h"
+#include "nvif/ioctl.h"
 
 #include <errno.h>
-#include <nouveau/nvif/ioctl.h>
 #include <xf86drm.h>
 
 static void

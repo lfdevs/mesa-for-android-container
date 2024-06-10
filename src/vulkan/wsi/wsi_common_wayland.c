@@ -1835,11 +1835,16 @@ wsi_wl_swapchain_acquire_next_image_explicit(struct wsi_swapchain *wsi_chain,
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       images[i] = &chain->images[i].base;
 
-   VkResult result = wsi_drm_wait_for_explicit_sync_release(wsi_chain,
-                                                            wsi_chain->image_count,
-                                                            images,
-                                                            info->timeout,
-                                                            image_index);
+   VkResult result;
+#ifdef HAVE_LIBDRM
+   result = wsi_drm_wait_for_explicit_sync_release(wsi_chain,
+                                                   wsi_chain->image_count,
+                                                   images,
+                                                   info->timeout,
+                                                   image_index);
+#else
+   result = VK_ERROR_FEATURE_NOT_PRESENT;
+#endif
    STACK_ARRAY_FINISH(images);
 
    return result;

@@ -6,12 +6,11 @@
 #include <stdlib.h>
 #include <xf86drm.h>
 
-#include <nouveau/nvif/ioctl.h>
-
 #include "drm-uapi/nouveau_drm.h"
 #include "nouveau.h"
 #include "nvif/class.h"
 #include "nvif/cl0080.h"
+#include "nvif/ioctl.h"
 
 #include "util/bitscan.h"
 #include "util/list.h"

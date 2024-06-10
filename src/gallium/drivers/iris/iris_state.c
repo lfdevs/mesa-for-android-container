@@ -8810,6 +8810,7 @@ static void iris_emit_execute_indirect_dispatch(struct iris_context *ice,
    const struct iris_screen *screen = batch->screen;
    struct iris_compiled_shader *shader =
       ice->shaders.prog[MESA_SHADER_COMPUTE];
+   const struct iris_cs_data *cs_data = iris_cs_data(shader);
    const struct intel_cs_dispatch_info dispatch =
       iris_get_cs_dispatch_info(screen->devinfo, shader, grid->block);
    struct iris_bo *indirect = iris_resource_bo(grid->indirect);
@@ -8818,6 +8819,11 @@ static void iris_emit_execute_indirect_dispatch(struct iris_context *ice,
    struct GENX(COMPUTE_WALKER_BODY) body = {};
    body.SIMDSize            = dispatch_size;
    body.MessageSIMD         = dispatch_size;
+   body.GenerateLocalID     = cs_data->generate_local_id != 0;
+   body.EmitLocal           = cs_data->generate_local_id;
+   body.WalkOrder           = cs_data->walk_order;
+   body.TileLayout          = cs_data->walk_order == INTEL_WALK_ORDER_YXZ ?
+                              TileY32bpe : Linear;
    body.LocalXMaximum       = grid->block[0] - 1;
    body.LocalYMaximum       = grid->block[1] - 1;
    body.LocalZMaximum       = grid->block[2] - 1;

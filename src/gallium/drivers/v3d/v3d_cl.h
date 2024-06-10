@@ -234,6 +234,7 @@ cl_get_emit_space(struct v3d_cl_out **cl, size_t size)
                 cl_advance(&cl_out, cl_packet_length(packet));   \
                 cl_end(cl, cl_out);                              \
                 _loop_terminate = NULL;                          \
+                assert(cl_offset(cl) <= (cl)->size);             \
         }))                                                      \
 
 #define cl_emit_with_prepacked(cl, packet, prepacked, name)      \
@@ -253,9 +254,10 @@ cl_get_emit_space(struct v3d_cl_out **cl, size_t size)
                 _loop_terminate = NULL;                          \
         }))                                                      \
 
-#define cl_emit_prepacked_sized(cl, packet, size) do {                \
-        memcpy((cl)->next, packet, size);             \
-        cl_advance(&(cl)->next, size);                \
+#define cl_emit_prepacked_sized(cl, packet, psize) do {          \
+        memcpy((cl)->next, packet, psize);                       \
+        cl_advance(&(cl)->next, psize);                          \
+        assert(cl_offset(cl) <= (cl)->size);                     \
 } while (0)
 
 #define cl_emit_prepacked(cl, packet) \

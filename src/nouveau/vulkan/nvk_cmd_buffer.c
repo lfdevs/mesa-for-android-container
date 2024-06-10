@@ -20,8 +20,6 @@
 
 #include "nouveau_context.h"
 
-#include "nouveau/nouveau.h"
-
 #include "nvk_cl906f.h"
 #include "nvk_cl90b5.h"
 #include "nvk_cla097.h"

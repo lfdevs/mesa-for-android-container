@@ -3177,14 +3177,16 @@ cmd_buffer_emit_copy_ts_buffer(struct u_trace_context *utctx,
                                void *ts_to, uint32_t to_offset,
                                uint32_t count)
 {
+   struct anv_device *device =
+      container_of(utctx, struct anv_device, ds.trace_context);
    struct anv_memcpy_state *memcpy_state = cmdstream;
    struct anv_address from_addr = (struct anv_address) {
-      .bo = ts_from, .offset = from_offset * sizeof(uint64_t) };
+      .bo = ts_from, .offset = from_offset * device->utrace_timestamp_size };
    struct anv_address to_addr = (struct anv_address) {
-      .bo = ts_to, .offset = to_offset * sizeof(uint64_t) };
+      .bo = ts_to, .offset = to_offset * device->utrace_timestamp_size };
 
    genX(emit_so_memcpy)(memcpy_state, to_addr, from_addr,
-                        count * sizeof(uint64_t));
+                        count * device->utrace_timestamp_size);
 }
 
 void

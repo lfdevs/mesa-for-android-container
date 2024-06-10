@@ -56,6 +56,15 @@ vk_pipeline_shader_stage_is_null(const VkPipelineShaderStageCreateInfo *info)
    return true;
 }
 
+bool
+vk_pipeline_shader_stage_has_identifier(const VkPipelineShaderStageCreateInfo *info)
+{
+   const VkPipelineShaderStageModuleIdentifierCreateInfoEXT *id_info =
+      vk_find_struct_const(info->pNext, PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT);
+
+   return id_info && id_info->identifierSize != 0;
+}
+
 static nir_shader *
 get_builtin_nir(const VkPipelineShaderStageCreateInfo *info)
 {

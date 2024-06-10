@@ -387,13 +387,18 @@ brw_fs_lower_find_live_channel(fs_visitor &s)
        * instruction has execution masking disabled, so it's kind of
        * useless there.
        */
-      fs_reg exec_mask(retype(brw_mask_reg(0), BRW_REGISTER_TYPE_UD));
 
       const fs_builder ibld(&s, block, inst);
       if (!inst->is_partial_write())
          ibld.emit_undef_for_dst(inst);
 
       const fs_builder ubld = fs_builder(&s, block, inst).exec_all().group(1, 0);
+
+      fs_reg exec_mask = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      ubld.UNDEF(exec_mask);
+      ubld.emit(SHADER_OPCODE_READ_ARCH_REG, exec_mask,
+                                             retype(brw_mask_reg(0),
+                                                    BRW_REGISTER_TYPE_UD));
 
       /* ce0 doesn't consider the thread dispatch mask (DMask or VMask),
        * so combine the execution and dispatch masks to obtain the true mask.
@@ -405,7 +410,9 @@ brw_fs_lower_find_live_channel(fs_visitor &s)
       if (!(first && packed_dispatch)) {
          fs_reg mask = ubld.vgrf(BRW_REGISTER_TYPE_UD);
          ubld.UNDEF(mask);
-         ubld.emit(SHADER_OPCODE_READ_SR_REG, mask, brw_imm_ud(vmask ? 3 : 2));
+         ubld.emit(SHADER_OPCODE_READ_ARCH_REG, mask,
+                                                retype(brw_sr0_reg(vmask ? 3 : 2),
+                                                       BRW_REGISTER_TYPE_UD));
 
          /* Quarter control has the effect of magically shifting the value of
           * ce0 so you'll get the first/last active channel relative to the
@@ -703,4 +710,3 @@ brw_fs_lower_vgrfs_to_fixed_grfs(fs_visitor &s)
    s.invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
                          DEPENDENCY_VARIABLES);
 }
-

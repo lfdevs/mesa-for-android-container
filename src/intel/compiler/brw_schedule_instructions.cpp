@@ -1048,7 +1048,7 @@ has_cross_lane_access(const fs_inst *inst)
     * accesses.
     */
    if (inst->opcode == SHADER_OPCODE_BROADCAST ||
-       inst->opcode == SHADER_OPCODE_READ_SR_REG ||
+       inst->opcode == SHADER_OPCODE_READ_ARCH_REG ||
        inst->opcode == SHADER_OPCODE_CLUSTER_BROADCAST ||
        inst->opcode == SHADER_OPCODE_SHUFFLE ||
        inst->opcode == FS_OPCODE_LOAD_LIVE_CHANNELS ||

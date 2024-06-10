@@ -908,7 +908,6 @@ wsi_drm_wait_for_explicit_sync_release(struct wsi_swapchain *chain,
                                        uint64_t rel_timeout_ns,
                                        uint32_t *image_index)
 {
-#ifdef HAVE_LIBDRM
    STACK_ARRAY(uint32_t, handles, image_count);
    STACK_ARRAY(uint64_t, points, image_count);
    STACK_ARRAY(uint32_t, indices, image_count);
@@ -989,7 +988,4 @@ done:
       return rel_timeout_ns ? VK_TIMEOUT : VK_NOT_READY;
    else
       return VK_ERROR_OUT_OF_DATE_KHR;
-#else
-   return VK_ERROR_FEATURE_NOT_PRESENT;
-#endif
 }

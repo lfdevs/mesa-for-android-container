@@ -42,6 +42,7 @@ librusticl = shared_library(
   ],
   link_whole : librusticl,
   link_with : [
+    libgalliumvl_stub,
     libpipe_loader_static,
     libswdri,
     libswkmsdri,

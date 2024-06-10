@@ -1680,8 +1680,12 @@ iris_resource_get_param(struct pipe_screen *pscreen,
        * Also, although modifiers which use a clear color plane specify that
        * the plane's pitch should be ignored, some kernels have been found to
        * require 64-byte alignment.
+       *
+       * Also, for OpenCL gl_sharing we have to support exporting buffers, for
+       * which we report a stride of 0 here.
        */
-      assert(*value != 0 && (!wants_cc || *value % 64 == 0));
+      assert((*value != 0 || resource->target == PIPE_BUFFER) &&
+             (!wants_cc || *value % 64 == 0));
 
       return true;
    case PIPE_RESOURCE_PARAM_OFFSET:

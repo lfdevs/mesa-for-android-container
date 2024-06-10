@@ -6291,7 +6291,7 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
 
    for (unsigned i = 0; i < 4; ++i)
       si_pm4_set_reg(pm4, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 + i * 4,
-                     i < sscreen->info.num_se ? compute_cu_en : 0x0);
+                     i < sscreen->info.max_se ? compute_cu_en : 0x0);
 
    si_pm4_set_reg(pm4, R_00B890_COMPUTE_USER_ACCUM_0, 0);
    si_pm4_set_reg(pm4, R_00B894_COMPUTE_USER_ACCUM_1, 0);
@@ -6301,7 +6301,7 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
    if (sctx->gfx_level >= GFX11) {
       for (unsigned i = 4; i < 8; ++i)
          si_pm4_set_reg(pm4, R_00B8AC_COMPUTE_STATIC_THREAD_MGMT_SE4 + (i - 4) * 4,
-                        i < sscreen->info.num_se ? compute_cu_en : 0x0);
+                        i < sscreen->info.max_se ? compute_cu_en : 0x0);
 
       /* How many threads should go to 1 SE before moving onto the next. Think of GL1 cache hits.
        * Only these values are valid: 0 (disabled), 64, 128, 256, 512

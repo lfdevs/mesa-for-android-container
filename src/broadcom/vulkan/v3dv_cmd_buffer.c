@@ -1435,7 +1435,7 @@ cmd_buffer_emit_subpass_clears(struct v3dv_cmd_buffer *cmd_buffer)
     */
    if (cmd_buffer->state.tile_aligned_render_area &&
        !subpass->do_depth_clear_with_draw &&
-       !subpass->do_depth_clear_with_draw) {
+       !subpass->do_stencil_clear_with_draw) {
       return;
    }
 

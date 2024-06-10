@@ -3496,6 +3496,22 @@ anv_can_fast_clear_color_view(struct anv_device *device,
          return false;
    }
 
+   /* Disable sRGB fast-clears for non-0/1 color values on Gfx9. For texturing
+    * and draw calls, HW expects the clear color to be in two different color
+    * spaces after sRGB fast-clears - sRGB in the former and linear in the
+    * latter. By limiting the allowable values to 0/1, both color space
+    * requirements are satisfied.
+    *
+    * Gfx11+ is fine as the fast clear generate 2 colors at the clear color
+    * address, raw & converted such that all fixed functions can find the
+    * value they need.
+    */
+   if (device->info->ver == 9 &&
+       isl_format_is_srgb(iview->planes[0].isl.format) &&
+       !isl_color_value_is_zero_one(clear_color,
+                                    iview->planes[0].isl.format))
+      return false;
+
    return true;
 }
 

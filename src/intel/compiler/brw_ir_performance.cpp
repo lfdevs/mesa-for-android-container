@@ -312,7 +312,7 @@ namespace {
       case FS_OPCODE_DDY_COARSE:
       case FS_OPCODE_PIXEL_X:
       case FS_OPCODE_PIXEL_Y:
-      case SHADER_OPCODE_READ_SR_REG:
+      case SHADER_OPCODE_READ_ARCH_REG:
          if (devinfo->ver >= 11) {
             return calculate_desc(info, EU_UNIT_FPU, 0, 2, 0, 0, 2,
                                   0, 10, 6 /* XXX */, 14, 0, 0);

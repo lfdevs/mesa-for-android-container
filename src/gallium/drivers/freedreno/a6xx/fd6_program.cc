@@ -119,7 +119,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
 #endif
 
    gl_shader_stage type = so->type;
-   if (type == MESA_SHADER_COMPUTE)
+   if (type == MESA_SHADER_KERNEL)
       type = MESA_SHADER_COMPUTE;
 
    enum a6xx_threadsize thrsz =

@@ -182,6 +182,7 @@ void v3dv_cl_ensure_space_with_branch(struct v3dv_cl *cl, uint32_t space);
                 cl_packet_pack(packet)(cl, (uint8_t *)cl_out, &name); \
                 cl_advance_and_end(cl, cl_packet_length(packet)); \
                 _loop_terminate = NULL;                          \
+                assert(v3dv_cl_offset(cl) <= (cl)->size);        \
         }))                                                      \
 
 #define cl_emit_with_prepacked(cl, packet, prepacked, name)      \
@@ -215,9 +216,10 @@ cl_pack_emit_reloc(struct v3dv_cl *cl, const struct v3dv_cl_reloc *reloc)
                 v3dv_job_add_bo(cl->job, reloc->bo);
 }
 
-#define cl_emit_prepacked_sized(cl, packet, size) do {                \
-        memcpy((cl)->next, packet, size);             \
-        cl_advance(&(cl)->next, size);                \
+#define cl_emit_prepacked_sized(cl, packet, psize) do {          \
+        memcpy((cl)->next, packet, psize);                       \
+        cl_advance(&(cl)->next, psize);                          \
+        assert(v3dv_cl_offset(cl) <= (cl)->size);                \
 } while (0)
 
 #define cl_emit_prepacked(cl, packet) \

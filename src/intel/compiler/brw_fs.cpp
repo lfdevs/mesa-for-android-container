@@ -2472,8 +2472,8 @@ brw_instruction_name(const struct brw_isa_info *isa, enum opcode op)
       return "btd_spawn_logical";
    case SHADER_OPCODE_BTD_RETIRE_LOGICAL:
       return "btd_retire_logical";
-   case SHADER_OPCODE_READ_SR_REG:
-      return "read_sr_reg";
+   case SHADER_OPCODE_READ_ARCH_REG:
+      return "read_arch_reg";
    }
 
    unreachable("not reached");

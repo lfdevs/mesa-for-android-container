@@ -612,7 +612,7 @@ radv_emit_graphics_scratch(struct radv_device *device, struct radeon_cmdbuf *cs,
       uint64_t va = radv_buffer_get_va(scratch_bo);
 
       /* WAVES is per SE for SPI_TMPRING_SIZE. */
-      waves /= gpu_info->num_se;
+      waves /= gpu_info->max_se;
 
       radeon_set_context_reg_seq(cs, R_0286E8_SPI_TMPRING_SIZE, 3);
       radeon_emit(cs, S_0286E8_WAVES(waves) | S_0286E8_WAVESIZE(DIV_ROUND_UP(size_per_wave, 256)));
@@ -651,7 +651,7 @@ radv_emit_compute_scratch(struct radv_device *device, struct radeon_cmdbuf *cs, 
       radeon_emit(cs, scratch_va >> 8);
       radeon_emit(cs, scratch_va >> 40);
 
-      waves /= gpu_info->num_se;
+      waves /= gpu_info->max_se;
    }
 
    radeon_set_sh_reg_seq(cs, R_00B900_COMPUTE_USER_DATA_0, 2);
@@ -789,7 +789,7 @@ radv_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs)
    /* R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 / SE1,
     * renamed COMPUTE_DESTINATION_EN_SEn on gfx10. */
    for (unsigned i = 0; i < 2; ++i) {
-      unsigned cu_mask = i < gpu_info->num_se ? gpu_info->spi_cu_en : 0x0;
+      unsigned cu_mask = i < gpu_info->max_se ? gpu_info->spi_cu_en : 0x0;
       radeon_emit(cs, S_00B8AC_SA0_CU_EN(cu_mask) | S_00B8AC_SA1_CU_EN(cu_mask));
    }
 
@@ -797,7 +797,7 @@ radv_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs)
       /* Also set R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE2 / SE3 */
       radeon_set_sh_reg_seq(cs, R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2, 2);
       for (unsigned i = 2; i < 4; ++i) {
-         unsigned cu_mask = i < gpu_info->num_se ? gpu_info->spi_cu_en : 0x0;
+         unsigned cu_mask = i < gpu_info->max_se ? gpu_info->spi_cu_en : 0x0;
          radeon_emit(cs, S_00B8AC_SA0_CU_EN(cu_mask) | S_00B8AC_SA1_CU_EN(cu_mask));
       }
 

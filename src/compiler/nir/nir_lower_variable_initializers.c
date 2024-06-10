@@ -28,19 +28,22 @@ static void
 build_constant_load(nir_builder *b, nir_deref_instr *deref, nir_constant *c)
 {
    if (glsl_type_is_vector_or_scalar(deref->type)) {
-      nir_load_const_instr *load =
-         nir_load_const_instr_create(b->shader,
-                                     glsl_get_vector_elements(deref->type),
-                                     glsl_get_bit_size(deref->type));
-      memcpy(load->value, c->values, sizeof(*load->value) * load->def.num_components);
-      nir_builder_instr_insert(b, &load->instr);
-      nir_store_deref(b, deref, &load->def, ~0);
+      const unsigned num_components = glsl_get_vector_elements(deref->type);
+      const unsigned bit_size = glsl_get_bit_size(deref->type);
+      nir_def *imm = nir_build_imm(b, num_components, bit_size, c->values);
+      nir_store_deref(b, deref, imm, ~0);
    } else if (glsl_type_is_struct_or_ifc(deref->type)) {
       unsigned len = glsl_get_length(deref->type);
       for (unsigned i = 0; i < len; i++) {
          build_constant_load(b, nir_build_deref_struct(b, deref, i),
                              c->elements[i]);
       }
+   } else if (glsl_type_is_cmat(deref->type)) {
+      const struct glsl_type *elem_type = glsl_get_cmat_element(deref->type);
+      assert(glsl_type_is_scalar(elem_type));
+      const unsigned bit_size = glsl_get_bit_size(elem_type);
+      nir_def *elem = nir_build_imm(b, 1, bit_size, c->values);
+      nir_cmat_construct(b, &deref->def, elem);
    } else {
       assert(glsl_type_is_array(deref->type) ||
              glsl_type_is_matrix(deref->type));

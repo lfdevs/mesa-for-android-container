@@ -452,7 +452,7 @@ blorp_exec_on_blitter(struct blorp_batch *batch,
    assert(batch->flags & BLORP_BATCH_USE_BLITTER);
 
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-   assert(cmd_buffer->queue_family->queueFlags == VK_QUEUE_TRANSFER_BIT);
+   assert(anv_cmd_buffer_is_blitter_queue(cmd_buffer));
 
    blorp_exec(batch, params);
 }

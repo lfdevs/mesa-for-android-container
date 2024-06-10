@@ -7715,7 +7715,9 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
        *   [2:0]   : Thread ID
        */
       fs_reg raw_id = bld.vgrf(BRW_REGISTER_TYPE_UD);
-      bld.emit(SHADER_OPCODE_READ_SR_REG, raw_id, brw_imm_ud(0));
+      bld.UNDEF(raw_id);
+      bld.emit(SHADER_OPCODE_READ_ARCH_REG, raw_id, retype(brw_sr0_reg(0),
+                                                           BRW_REGISTER_TYPE_UD));
       switch (nir_intrinsic_base(instr)) {
       case BRW_TOPOLOGY_ID_DSS:
          if (devinfo->ver >= 20) {

@@ -1168,7 +1168,7 @@ void ac_get_scratch_tmpring_size(const struct radeon_info *info,
 
    unsigned max_scratch_waves = info->max_scratch_waves;
    if (info->gfx_level >= GFX11)
-      max_scratch_waves /= info->num_se; /* WAVES is per SE */
+      max_scratch_waves /= info->max_se; /* WAVES is per SE */
 
    /* TODO: We could decrease WAVES to make the whole buffer fit into the infinity cache. */
    *tmpring_size = S_0286E8_WAVES(max_scratch_waves) |

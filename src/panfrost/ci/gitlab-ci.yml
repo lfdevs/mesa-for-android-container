@@ -17,6 +17,7 @@
         - src/panfrost/ci/$PIGLIT_TRACES_FILE
         - src/panfrost/include/*
         - src/panfrost/lib/*
+        - src/panfrost/lib/genxml/*
         - src/panfrost/lib/kmod/*
         - src/panfrost/shared/*
         - src/panfrost/util/*

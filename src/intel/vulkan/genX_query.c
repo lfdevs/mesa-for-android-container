@@ -558,7 +558,8 @@ VkResult genX(GetQueryPoolResults)(
          while (statistics) {
             UNUSED uint32_t stat = u_bit_scan(&statistics);
             if (write_results) {
-               uint64_t result = slot[idx * 2 + 2] - slot[idx * 2 + 1];
+               /* If a query is not available but VK_QUERY_RESULT_PARTIAL_BIT is set, write 0. */
+               uint64_t result = available ? slot[idx * 2 + 2] - slot[idx * 2 + 1] : 0;
                cpu_write_query_result(pData, flags, idx, result);
             }
             idx++;
@@ -569,11 +570,17 @@ VkResult genX(GetQueryPoolResults)(
 
       case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
          uint64_t *slot = query_slot(pool, firstQuery + i);
-         if (write_results)
-            cpu_write_query_result(pData, flags, idx, slot[2] - slot[1]);
+         if (write_results) {
+            /* If a query is not available but VK_QUERY_RESULT_PARTIAL_BIT is set, write 0. */
+            uint64_t result = available ? slot[2] - slot[1] : 0;
+            cpu_write_query_result(pData, flags, idx, result);
+         }
          idx++;
-         if (write_results)
-            cpu_write_query_result(pData, flags, idx, slot[4] - slot[3]);
+         if (write_results) {
+            /* If a query is not available but VK_QUERY_RESULT_PARTIAL_BIT is set, write 0. */
+            uint64_t result = available ? slot[4] - slot[3] : 0;
+            cpu_write_query_result(pData, flags, idx, result);
+         }
          idx++;
          break;
       }
