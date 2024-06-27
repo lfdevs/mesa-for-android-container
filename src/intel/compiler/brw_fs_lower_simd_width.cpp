@@ -485,6 +485,12 @@ brw_fs_get_lowered_simd_width(const fs_visitor *shader, const fs_inst *inst)
 static inline bool
 needs_src_copy(const fs_builder &lbld, const fs_inst *inst, unsigned i)
 {
+   /* The indirectly indexed register stays the same even if we split the
+    * instruction.
+    */
+   if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT && i == 0)
+      return false;
+
    return !(is_periodic(inst->src[i], lbld.dispatch_width()) ||
             (inst->components_read(i) == 1 &&
              lbld.dispatch_width() <= inst->exec_size)) ||
@@ -512,10 +518,13 @@ emit_unzip(const fs_builder &lbld, fs_inst *inst, unsigned i)
          lbld.MOV(offset(tmp, lbld, k), offset(src, inst->exec_size, k));
 
       return tmp;
-
-   } else if (is_periodic(inst->src[i], lbld.dispatch_width())) {
+   } else if (is_periodic(inst->src[i], lbld.dispatch_width()) ||
+              (inst->opcode == SHADER_OPCODE_MOV_INDIRECT && i == 0)) {
       /* The source is invariant for all dispatch_width-wide groups of the
        * original region.
+       *
+       * The src[0] of MOV_INDIRECT is invariant regardless of the execution
+       * size.
        */
       return inst->src[i];
 

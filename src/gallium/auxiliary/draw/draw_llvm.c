@@ -2165,9 +2165,10 @@ draw_llvm_set_mapped_texture(struct draw_context *draw,
    jit_tex->depth = depth;
    jit_tex->first_level = first_level;
    jit_tex->last_level = last_level;
-   jit_tex->mip_offsets[0] = 0;
    jit_tex->base = base_ptr;
+   jit_tex->mip_offsets[0] = 0;
    if (num_samples > 1) {
+      jit_tex->mip_offsets[0] = mip_offsets[0];
       jit_tex->mip_offsets[LP_JIT_TEXTURE_SAMPLE_STRIDE] = sample_stride;
       jit_tex->row_stride[0] = row_stride[0];
       jit_tex->img_stride[0] = img_stride[0];

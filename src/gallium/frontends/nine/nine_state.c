@@ -901,9 +901,8 @@ update_vertex_elements(struct NineDevice9 *device)
         index = vdecl_index_map[n];
         if (index >= 0) {
             ve.velems[n] = vdecl->elems[index];
-            ve.velems[n].vertex_buffer_index =
-                vtxbuf_holes_map[ve.velems[n].vertex_buffer_index];
             b = ve.velems[n].vertex_buffer_index;
+            ve.velems[n].vertex_buffer_index = vtxbuf_holes_map[b];
             ve.velems[n].src_stride = context->vtxstride[b];
             context->stream_usage_mask |= 1 << b;
             /* XXX wine just uses 1 here: */
@@ -3173,9 +3172,8 @@ update_vertex_elements_sw(struct NineDevice9 *device)
         index = vdecl_index_map[n];
         if (index >= 0) {
             ve.velems[n] = vdecl->elems[index];
-            ve.velems[n].vertex_buffer_index =
-                vtxbuf_holes_map[ve.velems[n].vertex_buffer_index];
             b = ve.velems[n].vertex_buffer_index;
+            ve.velems[n].vertex_buffer_index = vtxbuf_holes_map[b];
             /* XXX wine just uses 1 here: */
             if (state->stream_freq[b] & D3DSTREAMSOURCE_INSTANCEDATA)
                 ve.velems[n].instance_divisor = state->stream_freq[b] & 0x7FFFFF;

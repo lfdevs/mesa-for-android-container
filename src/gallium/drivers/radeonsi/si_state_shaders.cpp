@@ -4747,9 +4747,9 @@ static void si_emit_spi_ge_ring_state(struct si_context *sctx, unsigned index)
          else if (sctx->gfx_level == GFX9)
             radeon_set_uconfig_reg(R_030944_VGT_TF_MEMORY_BASE_HI, S_030944_BASE_HI(factor_va >> 40));
       } else {
-         radeon_set_uconfig_reg(R_008988_VGT_TF_RING_SIZE, S_008988_SIZE(tf_ring_size_field));
-         radeon_set_uconfig_reg(R_0089B8_VGT_TF_MEMORY_BASE, factor_va >> 8);
-         radeon_set_uconfig_reg(R_0089B0_VGT_HS_OFFCHIP_PARAM, sscreen->hs.hs_offchip_param);
+         radeon_set_config_reg(R_008988_VGT_TF_RING_SIZE, S_008988_SIZE(tf_ring_size_field));
+         radeon_set_config_reg(R_0089B8_VGT_TF_MEMORY_BASE, factor_va >> 8);
+         radeon_set_config_reg(R_0089B0_VGT_HS_OFFCHIP_PARAM, sscreen->hs.hs_offchip_param);
       }
       radeon_end();
    }

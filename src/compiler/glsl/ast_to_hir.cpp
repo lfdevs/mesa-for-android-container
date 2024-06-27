@@ -7902,7 +7902,11 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
 
                   fields[i].image_format = qual->image_format;
                } else {
-                  if (!qual->flags.q.write_only) {
+                  if (state->has_image_load_formatted()) {
+                     if (state->EXT_shader_image_load_formatted_warn) {
+                        _mesa_glsl_warning(&loc, state, "GL_EXT_image_load_formatted used");
+                     }
+                  } else if (!qual->flags.q.write_only) {
                      _mesa_glsl_error(&loc, state, "image not qualified with "
                                       "`writeonly' must have a format layout "
                                       "qualifier");

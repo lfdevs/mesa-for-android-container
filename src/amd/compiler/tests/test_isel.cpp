@@ -177,6 +177,7 @@ BEGIN_TEST(isel.discard_early_exit.mrtz)
    //! s_endpgm                             ; $_
    //! BB1:
    //! exp mrtz off, off, off, off done     ; $_ $_
+   //! s_nop 0                              ; $_
    //! s_sendmsg sendmsg(MSG_DEALLOC_VGPRS) ; $_
    //! s_endpgm                             ; $_
 
@@ -205,6 +206,7 @@ BEGIN_TEST(isel.discard_early_exit.mrt0)
    //! s_endpgm                             ; $_
    //! BB1:
    //! exp mrt0 off, off, off, off done     ; $_ $_
+   //! s_nop 0                              ; $_
    //! s_sendmsg sendmsg(MSG_DEALLOC_VGPRS) ; $_
    //! s_endpgm                             ; $_
 

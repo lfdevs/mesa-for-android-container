@@ -888,10 +888,11 @@ nvc0_screen_resize_text_area(struct nvc0_screen *screen, struct nouveau_pushbuf 
    nouveau_heap_free(&screen->lib_code);
    nouveau_heap_destroy(&screen->text_heap);
 
-   /* XXX: getting a page fault at the end of the code buffer every few
-    *  launches, don't use the last 256 bytes to work around them - prefetch ?
+   /*
+    * Shader storage needs a 2K (from NVIDIA) overallocations at the end
+    * to avoid prefetch bugs.
     */
-   nouveau_heap_init(&screen->text_heap, 0, size - 0x100);
+   nouveau_heap_init(&screen->text_heap, 0, size - 0x800);
 
    /* update the code segment setup */
    if (screen->eng3d->oclass < GV100_3D_CLASS) {

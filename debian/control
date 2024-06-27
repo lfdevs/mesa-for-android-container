@@ -6,7 +6,7 @@ Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
  debhelper-compat (= 13),
- directx-headers-dev (>= 1.610.0) [linux-amd64 linux-arm64],
+ directx-headers-dev (>= 1.613.0) [linux-amd64 linux-arm64],
  glslang-tools [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  meson (>= 1.4.0),
  quilt (>= 0.63-8.2~),
@@ -19,7 +19,7 @@ Build-Depends:
  libxfixes-dev,
  libxext-dev,
  libva-dev (>= 1.6.0) [linux-any] <!pkg.mesa.nolibva>,
- libvdpau-dev (>= 1.1.1) [linux-any],
+ libvdpau-dev (>= 1.5) [linux-any],
  libvulkan-dev [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  x11proto-dev,
  linux-libc-dev (>= 2.6.31) [linux-any],
@@ -49,7 +49,7 @@ Build-Depends:
  libclang-17-dev [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  libclang-cpp17-dev [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
  libclc-17-dev [amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
- wayland-protocols (>= 1.24),
+ wayland-protocols (>= 1.34),
  zlib1g-dev,
  libglvnd-core-dev (>= 1.3.2),
  valgrind [amd64 arm64 armhf i386 mips64el powerpc ppc64 ppc64el s390x],

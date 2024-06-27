@@ -2454,8 +2454,10 @@ lower_to_hw_instr(Program* program)
                   if (program->stage == fragment_fs)
                      bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0,
                              target, false, true, true);
-                  if (should_dealloc_vgprs)
+                  if (should_dealloc_vgprs) {
+                     bld.sopp(aco_opcode::s_nop, 0);
                      bld.sopp(aco_opcode::s_sendmsg, sendmsg_dealloc_vgprs);
+                  }
                   bld.sopp(aco_opcode::s_endpgm);
 
                   bld.reset(&ctx.instructions);

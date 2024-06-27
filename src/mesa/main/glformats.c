@@ -1772,7 +1772,7 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
          break; /* OK */
       }
       if (format == GL_RGB_INTEGER_EXT &&
-          _mesa_has_texture_rgb10_a2ui(ctx)) {
+          _mesa_has_ARB_texture_rgb10_a2ui(ctx)) {
          break; /* OK */
       }
       return GL_INVALID_OPERATION;
@@ -1787,7 +1787,7 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
          break; /* OK */
       }
       if ((format == GL_RGBA_INTEGER_EXT || format == GL_BGRA_INTEGER_EXT) &&
-          _mesa_has_texture_rgb10_a2ui(ctx)) {
+          _mesa_has_ARB_texture_rgb10_a2ui(ctx)) {
          break; /* OK */
       }
       return GL_INVALID_OPERATION;
@@ -1801,7 +1801,11 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
          break; /* OK */
       }
       if ((format == GL_RGBA_INTEGER_EXT || format == GL_BGRA_INTEGER_EXT) &&
-          _mesa_has_texture_rgb10_a2ui(ctx)) {
+          _mesa_has_ARB_texture_rgb10_a2ui(ctx)) {
+         break; /* OK */
+      }
+      if ((format == GL_RGBA_INTEGER_EXT || format == GL_BGRA_INTEGER_EXT) &&
+          type == GL_UNSIGNED_INT_2_10_10_10_REV && _mesa_is_gles3(ctx)) {
          break; /* OK */
       }
       if (type == GL_UNSIGNED_INT_2_10_10_10_REV && format == GL_RGB &&
@@ -2060,7 +2064,7 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_BYTE_2_3_3_REV:
             case GL_UNSIGNED_SHORT_5_6_5:
             case GL_UNSIGNED_SHORT_5_6_5_REV:
-               return _mesa_has_texture_rgb10_a2ui(ctx)
+               return _mesa_has_ARB_texture_rgb10_a2ui(ctx)
                   ? GL_NO_ERROR : GL_INVALID_ENUM;
             default:
                return GL_INVALID_ENUM;

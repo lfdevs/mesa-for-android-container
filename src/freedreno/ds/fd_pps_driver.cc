@@ -10,6 +10,12 @@
 #include <iostream>
 #include <perfetto.h>
 
+#include "common/freedreno_dev_info.h"
+#include "drm/freedreno_drmif.h"
+#include "drm/freedreno_ringbuffer.h"
+#include "perfcntrs/freedreno_dt.h"
+#include "perfcntrs/freedreno_perfcntr.h"
+
 #include "pps/pps.h"
 #include "pps/pps_algorithm.h"
 

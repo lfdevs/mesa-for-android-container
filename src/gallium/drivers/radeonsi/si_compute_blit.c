@@ -1029,10 +1029,19 @@ void si_compute_clear_render_target(struct pipe_context *ctx, struct pipe_surfac
 {
    struct si_context *sctx = (struct si_context *)ctx;
    unsigned num_layers = dstsurf->u.tex.last_layer - dstsurf->u.tex.first_layer + 1;
-   unsigned data[4 + sizeof(color->ui)] = {dstx, dsty, dstsurf->u.tex.first_layer, 0};
+   unsigned access = 0;
+   enum pipe_format format = util_format_linear(dstsurf->format);
 
    if (width == 0 || height == 0)
       return;
+
+   if (util_format_is_subsampled_422(dstsurf->texture->format)) {
+      access |= SI_IMAGE_ACCESS_BLOCK_FORMAT_AS_UINT;
+      format = PIPE_FORMAT_R32_UINT;
+      dstx = util_format_get_nblocksx(dstsurf->texture->format, dstx);
+   }
+
+   unsigned data[4 + sizeof(color->ui)] = {dstx, dsty, dstsurf->u.tex.first_layer, 0};
 
    if (util_format_is_srgb(dstsurf->format)) {
       union pipe_color_union color_srgb;
@@ -1054,8 +1063,8 @@ void si_compute_clear_render_target(struct pipe_context *ctx, struct pipe_surfac
 
    struct pipe_image_view image = {0};
    image.resource = dstsurf->texture;
-   image.shader_access = image.access = PIPE_IMAGE_ACCESS_WRITE;
-   image.format = util_format_linear(dstsurf->format);
+   image.shader_access = image.access = PIPE_IMAGE_ACCESS_WRITE | access;
+   image.format = format;
    image.u.tex.level = dstsurf->u.tex.level;
    image.u.tex.first_layer = 0; /* 3D images ignore first_layer (BASE_ARRAY) */
    image.u.tex.last_layer = dstsurf->u.tex.last_layer;

@@ -816,17 +816,17 @@ fn legalize_instr(
     ip: usize,
     instr: &mut Instr,
 ) {
+    let src_types = instr.src_types();
+    for (i, src) in instr.srcs_mut().iter_mut().enumerate() {
+        *src = src.fold_imm(src_types[i]);
+    }
+
     if b.sm() >= 70 {
         legalize_sm70_instr(b, bl, ip, instr);
     } else if b.sm() >= 50 {
         legalize_sm50_instr(b, bl, ip, instr);
     } else {
         panic!("Unknown shader model SM{}", b.sm());
-    }
-
-    let src_types = instr.src_types();
-    for (i, src) in instr.srcs_mut().iter_mut().enumerate() {
-        *src = src.fold_imm(src_types[i]);
     }
 
     let mut vec_src_map: HashMap<SSARef, SSARef> = HashMap::new();

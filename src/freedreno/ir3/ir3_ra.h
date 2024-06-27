@@ -175,6 +175,8 @@ void ir3_merge_regs(struct ir3_liveness *live, struct ir3 *ir);
 void ir3_force_merge(struct ir3_register *a, struct ir3_register *b,
                      int b_offset);
 
+void ir3_index_instrs_for_merge_sets(struct ir3 *ir);
+
 struct ir3_pressure {
    unsigned full, half, shared;
 };
@@ -188,7 +190,7 @@ bool ir3_spill(struct ir3 *ir, struct ir3_shader_variant *v,
 
 bool ir3_lower_spill(struct ir3 *ir);
 
-void ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness *live);
+void ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness **live);
 
 void ir3_ra_validate(struct ir3_shader_variant *v, unsigned full_size,
                      unsigned half_size, unsigned block_count, bool shared_ra);

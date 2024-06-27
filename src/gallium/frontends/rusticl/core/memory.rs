@@ -369,7 +369,7 @@ fn sw_copy(
     for z in 0..region[2] {
         for y in 0..region[1] {
             unsafe {
-                ptr::copy_nonoverlapping(
+                ptr::copy(
                     src.add(
                         (*src_origin + [0, y, z])
                             * [pixel_size as usize, src_row_pitch, src_slice_pitch],
@@ -928,7 +928,7 @@ impl Buffer {
         let tx = self.tx(q, ctx, offset, size, RWFlags::RD)?;
 
         unsafe {
-            ptr::copy_nonoverlapping(tx.ptr(), ptr, size);
+            ptr::copy(tx.ptr(), ptr, size);
         }
 
         Ok(())

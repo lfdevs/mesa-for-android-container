@@ -285,17 +285,19 @@ impl SPIRVBin {
 
     pub fn args(&self, name: &str) -> Vec<SPIRVKernelArg> {
         match self.kernel_info(name) {
-            None => Vec::new(),
-            Some(info) => unsafe { slice::from_raw_parts(info.args, info.num_args) }
-                .iter()
-                .map(|a| SPIRVKernelArg {
-                    name: c_string_to_string(a.name),
-                    type_name: c_string_to_string(a.type_name),
-                    access_qualifier: clc_kernel_arg_access_qualifier(a.access_qualifier),
-                    address_qualifier: a.address_qualifier,
-                    type_qualifier: clc_kernel_arg_type_qualifier(a.type_qualifier),
-                })
-                .collect(),
+            Some(info) if info.num_args > 0 => {
+                unsafe { slice::from_raw_parts(info.args, info.num_args) }
+                    .iter()
+                    .map(|a| SPIRVKernelArg {
+                        name: c_string_to_string(a.name),
+                        type_name: c_string_to_string(a.type_name),
+                        access_qualifier: clc_kernel_arg_access_qualifier(a.access_qualifier),
+                        address_qualifier: a.address_qualifier,
+                        type_qualifier: clc_kernel_arg_type_qualifier(a.type_qualifier),
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
         }
     }
 

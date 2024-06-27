@@ -731,9 +731,6 @@ extern void
 _mesa_uncompressed_format_to_type_and_comps(mesa_format format,
                                GLenum *datatype, GLuint *comps);
 
-extern void
-_mesa_test_formats(void);
-
 extern mesa_format
 _mesa_get_srgb_format_linear(mesa_format format);
 

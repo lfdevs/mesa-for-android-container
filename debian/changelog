@@ -1,3 +1,11 @@
+mesa (24.1.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Bump build-deps on directx-headers-dev, libvdpau-dev,
+    wayland-protocols.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 27 Jun 2024 15:23:32 +0300
+
 mesa (24.1.1-2) unstable; urgency=medium
 
   * rules, control: Revert back to llvm 17. (Closes: #1072941)

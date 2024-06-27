@@ -293,7 +293,7 @@ pub struct ProgramDevBuild {
 
 fn prepare_options(options: &str, dev: &Device) -> Vec<CString> {
     let mut options = options.to_owned();
-    if !options.contains("-cl-std=CL") {
+    if !options.contains("-cl-std=") {
         options.push_str(" -cl-std=CL");
         options.push_str(dev.clc_version.api_str());
     }

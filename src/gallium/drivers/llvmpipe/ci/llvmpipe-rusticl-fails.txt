@@ -26,11 +26,6 @@ api@clgetkernelarginfo,Fail
 # Failed (error code: CL_SUCCESS): Trigger CL_LINK_PROGRAM_FAILURE if there is a failure to link the compiled binaries and/or libraries.
 api@cllinkprogram,Fail
 
-# input.cl:31:2: error: use of undeclared identifier 'double2'; did you mean 'double'?
-# [...]
-# Program built when it should have failed: CL_SUCCESS
-program@build@fail@invalid-version-declaration,Fail
-
 # "input.cl:8:10: fatal error: 'include_test.h' file not found"
 # build-piglit.sh removes all the *.[ch] files from the piglit tree, so it's a Mesa CI bug.
 program@build@include-directories,Fail

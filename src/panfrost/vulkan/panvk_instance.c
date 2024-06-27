@@ -35,10 +35,6 @@ static const struct debug_control panvk_debug_options[] = {
    {"no_known_warn", PANVK_DEBUG_NO_KNOWN_WARN},
    {NULL, 0}};
 
-#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-#define PANVK_USE_WSI_PLATFORM
-#endif
-
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_EnumerateInstanceVersion(uint32_t *pApiVersion)
 {

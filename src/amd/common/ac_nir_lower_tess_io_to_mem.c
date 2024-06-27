@@ -353,14 +353,18 @@ hs_output_lds_map_io_location(nir_shader *shader,
 {
    if (!per_vertex) {
       const uint64_t tf_mask = tcs_lds_tf_out_mask(shader, st);
-      if (BITFIELD64_BIT(loc) & TESS_LVL_MASK)
+      if (loc == VARYING_SLOT_TESS_LEVEL_INNER || loc == VARYING_SLOT_TESS_LEVEL_OUTER) {
+         assert(tf_mask & BITFIELD64_BIT(loc));
          return util_bitcount64(tf_mask & BITFIELD64_MASK(loc));
+      }
 
       const uint32_t patch_out_mask = tcs_lds_per_patch_out_mask(shader);
+      assert(patch_out_mask & BITFIELD_BIT(loc - VARYING_SLOT_PATCH0));
       return util_bitcount64(tf_mask) +
              util_bitcount(patch_out_mask & BITFIELD_MASK(loc - VARYING_SLOT_PATCH0));
    } else {
       const uint64_t per_vertex_mask = tcs_lds_per_vtx_out_mask(shader);
+      assert(per_vertex_mask & BITFIELD64_BIT(loc));
       return util_bitcount64(per_vertex_mask & BITFIELD64_MASK(loc));
    }
 }

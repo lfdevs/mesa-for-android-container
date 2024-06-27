@@ -1316,7 +1316,7 @@ panvk_meta_copy_img2buf_shader(struct panvk_device *dev,
          nir_iadd(&b, nir_channel(&b, coord, 1),
                   panvk_meta_copy_img2buf_get_info_field(&b, img.offset.y)),
          nir_iadd(&b, nir_channel(&b, coord, 2),
-                  panvk_meta_copy_img2buf_get_info_field(&b, img.offset.y)));
+                  panvk_meta_copy_img2buf_get_info_field(&b, img.offset.z)));
       inbounds = nir_iand(
          &b,
          nir_iand(&b, nir_uge(&b, imgmaxx, nir_channel(&b, imgcoords, 0)),
@@ -1498,6 +1498,7 @@ panvk_meta_copy_img2buf(struct panvk_cmd_buffer *cmdbuf,
       info.img.extent.maxy = region->imageSubresource.layerCount - 1;
    } else {
       info.img.offset.y = MAX2(region->imageOffset.y & ~15, 0);
+      info.buf.ptr -= (region->imageOffset.y & 15) * info.buf.stride.line;
       info.img.offset.z = MAX2(region->imageOffset.z, 0);
       info.img.extent.miny = MAX2(region->imageOffset.y, 0);
       info.img.extent.maxy =

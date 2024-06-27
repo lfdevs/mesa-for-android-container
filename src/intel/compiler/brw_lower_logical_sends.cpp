@@ -941,41 +941,44 @@ lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst,
       coordinate_done = true;
       break;
    case SHADER_OPCODE_TXS_LOGICAL:
-      bld.MOV(retype(sources[length], payload_unsigned_type), lod);
-      length++;
+      sources[length] = retype(sources[length], payload_unsigned_type);
+      bld.MOV(sources[length++], lod);
       break;
    case SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
       /* We need an LOD; just use 0 */
-      bld.MOV(retype(sources[length], payload_unsigned_type), brw_imm_ud(0));
-      length++;
+      sources[length] = retype(sources[length], payload_unsigned_type);
+      bld.MOV(sources[length++], brw_imm_ud(0));
       break;
    case SHADER_OPCODE_TXF_LOGICAL:
        /* On Gfx9 the parameters are intermixed they are u, v, lod, r. */
-      bld.MOV(retype(sources[length++], payload_signed_type), coordinate);
+      sources[length] = retype(sources[length], payload_signed_type);
+      bld.MOV(sources[length++], coordinate);
 
       if (coord_components >= 2) {
-         bld.MOV(retype(sources[length], payload_signed_type),
-                 offset(coordinate, bld, 1));
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length], offset(coordinate, bld, 1));
       } else {
          sources[length] = brw_imm_d(0);
       }
       length++;
 
       if (!lod_is_zero) {
-         bld.MOV(retype(sources[length], payload_signed_type), lod);
-         length++;
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], lod);
       }
 
-      for (unsigned i = 2; i < coord_components; i++)
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(coordinate, bld, i));
+      for (unsigned i = 2; i < coord_components; i++) {
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(coordinate, bld, i));
+      }
 
       coordinate_done = true;
       break;
 
    case SHADER_OPCODE_TXF_CMS_W_LOGICAL:
    case SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL:
-      bld.MOV(retype(sources[length++], payload_unsigned_type), sample_index);
+      sources[length] = retype(sources[length], payload_unsigned_type);
+      bld.MOV(sources[length++], sample_index);
 
       /* Data from the multisample control surface. */
       for (unsigned i = 0; i < 2; ++i) {
@@ -991,14 +994,18 @@ lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst,
           */
          if (op == SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL) {
             fs_reg tmp = offset(mcs, bld, i);
-            bld.MOV(retype(sources[length++], payload_unsigned_type),
+            sources[length] = retype(sources[length], payload_unsigned_type);
+            bld.MOV(sources[length++],
                     mcs.file == IMM ? mcs :
                     subscript(tmp, payload_unsigned_type, 0));
-            bld.MOV(retype(sources[length++], payload_unsigned_type),
+
+            sources[length] = retype(sources[length], payload_unsigned_type);
+            bld.MOV(sources[length++],
                     mcs.file == IMM ? mcs :
                     subscript(tmp, payload_unsigned_type, 1));
          } else {
-            bld.MOV(retype(sources[length++], payload_unsigned_type),
+            sources[length] = retype(sources[length], payload_unsigned_type);
+            bld.MOV(sources[length++],
                     mcs.file == IMM ? mcs : offset(mcs, bld, i));
          }
       }
@@ -1008,9 +1015,10 @@ lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst,
       /* There is no offsetting for this message; just copy in the integer
        * texture coordinates.
        */
-      for (unsigned i = 0; i < coord_components; i++)
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(coordinate, bld, i));
+      for (unsigned i = 0; i < coord_components; i++) {
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(coordinate, bld, i));
+      }
 
       coordinate_done = true;
       break;
@@ -1019,9 +1027,10 @@ lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst,
       for (unsigned i = 0; i < 2; i++) /* u, v */
          bld.MOV(sources[length++], offset(coordinate, bld, i));
 
-      for (unsigned i = 0; i < 2; i++) /* offu, offv */
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(tg4_offset, bld, i));
+      for (unsigned i = 0; i < 2; i++) { /* offu, offv */
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(tg4_offset, bld, i));
+      }
 
       if (coord_components == 3) /* r if present */
          bld.MOV(sources[length++], offset(coordinate, bld, 2));

@@ -1167,6 +1167,7 @@ dri2_display_destroy(_EGLDisplay *disp)
 
    switch (disp->Platform) {
    case _EGL_PLATFORM_X11:
+   case _EGL_PLATFORM_XCB:
       dri2_teardown_x11(dri2_dpy);
       break;
    case _EGL_PLATFORM_DRM:

@@ -678,8 +678,10 @@ radv_rt_compile_shaders(struct radv_device *device, struct vk_pipeline_cache *ca
     * shaders.
     */
    bool traversal_needed = !library && (!monolithic || raygen_imported);
-   if (!traversal_needed)
-      return VK_SUCCESS;
+   if (!traversal_needed) {
+      result = VK_SUCCESS;
+      goto cleanup;
+   }
 
    struct radv_ray_tracing_stage_info traversal_info = {
       .set_flags = 0xFFFFFFFF,

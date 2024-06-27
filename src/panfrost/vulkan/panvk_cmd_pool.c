@@ -51,6 +51,9 @@ panvk_DestroyCommandPool(VkDevice _device, VkCommandPool commandPool,
    VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_cmd_pool, pool, commandPool);
 
+   if (!pool)
+      return;
+
    vk_command_pool_finish(&pool->vk);
 
    panvk_bo_pool_cleanup(&pool->desc_bo_pool);

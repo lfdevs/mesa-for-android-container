@@ -457,7 +457,7 @@ radv_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enu
        * All operations that invalidate L2 also seem to invalidate
        * metadata. Volatile (VOL) and WC flushes are not listed here.
        *
-       * TC    | TC_WB         = writeback & invalidate L2 & L1
+       * TC    | TC_WB         = writeback & invalidate L2
        * TC    | TC_WB | TC_NC = writeback & invalidate L2 for MTYPE == NC
        *         TC_WB | TC_NC = writeback L2 for MTYPE == NC
        * TC            | TC_NC = invalidate L2 for MTYPE == NC
@@ -470,11 +470,11 @@ radv_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enu
 
       /* Ideally flush TC together with CB/DB. */
       if (flush_bits & RADV_CMD_FLAG_INV_L2) {
-         /* Writeback and invalidate everything in L2 & L1. */
+         /* Writeback and invalidate everything in L2. */
          tc_flags = EVENT_TC_ACTION_ENA | EVENT_TC_WB_ACTION_ENA;
 
          /* Clear the flags. */
-         flush_bits &= ~(RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_WB_L2 | RADV_CMD_FLAG_INV_VCACHE);
+         flush_bits &= ~(RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_WB_L2);
 
          *sqtt_flush_bits |= RGP_FLUSH_INVAL_L2;
       }

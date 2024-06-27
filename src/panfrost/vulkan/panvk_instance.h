@@ -23,6 +23,10 @@ enum panvk_debug_flags {
    PANVK_DEBUG_NO_KNOWN_WARN = 1 << 7,
 };
 
+#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
+#define PANVK_USE_WSI_PLATFORM
+#endif
+
 struct panvk_instance {
    struct vk_instance vk;
 

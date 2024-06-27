@@ -5268,6 +5268,7 @@ emit_single_mubuf_store(isel_context* ctx, Temp descriptor, Temp voffset, Temp s
    bool idxen = idx.id();
 
    Operand soffset_op = soffset.id() ? Operand(soffset) : Operand::zero();
+   glc |= ctx->program->gfx_level == GFX6 && vdata.bytes() < 4;
    glc &= ctx->program->gfx_level < GFX11;
 
    Operand vaddr_op(v1);
@@ -6755,7 +6756,7 @@ visit_store_ssbo(isel_context* ctx, nir_intrinsic_instr* instr)
       store->operands[3] = Operand(write_datas[i]);
       store->mubuf().offset = offsets[i];
       store->mubuf().offen = (offset.type() == RegType::vgpr);
-      store->mubuf().glc = glc;
+      store->mubuf().glc = glc || (ctx->program->gfx_level == GFX6 && write_datas[i].bytes() < 4);
       store->mubuf().dlc = false;
       store->mubuf().disable_wqm = true;
       store->mubuf().sync = sync;
@@ -6952,7 +6953,7 @@ visit_store_global(isel_context* ctx, nir_intrinsic_instr* instr)
             write_address.type() == RegType::vgpr ? Operand(write_address) : Operand(v1);
          mubuf->operands[2] = Operand(write_offset);
          mubuf->operands[3] = Operand(write_datas[i]);
-         mubuf->mubuf().glc = glc;
+         mubuf->mubuf().glc = glc || write_datas[i].bytes() < 4;
          mubuf->mubuf().dlc = false;
          mubuf->mubuf().offset = write_const_offset;
          mubuf->mubuf().addr64 = write_address.type() == RegType::vgpr;
@@ -7693,6 +7694,7 @@ visit_store_scratch(isel_context* ctx, nir_intrinsic_instr* instr)
          Instruction* mubuf = bld.mubuf(op, rsrc, offset, ctx->program->scratch_offset,
                                         write_datas[i], offsets[i], true, true);
          mubuf->mubuf().sync = memory_sync_info(storage_scratch, semantic_private);
+         mubuf->mubuf().glc = ctx->program->gfx_level == GFX6 && write_datas[i].bytes() < 4;
       }
    }
 }

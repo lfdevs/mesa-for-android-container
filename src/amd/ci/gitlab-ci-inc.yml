@@ -69,7 +69,7 @@
     - !reference [.vulkan-manual-rules, rules]
     - changes:
         *amd_common_file_list
-      when: on_success
+      when: manual
     - changes:
         *radv_file_list
       when: manual

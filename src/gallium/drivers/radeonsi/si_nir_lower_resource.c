@@ -337,7 +337,8 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    case nir_intrinsic_bindless_image_fragment_mask_load_amd:
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_bindless_image_atomic:
-   case nir_intrinsic_bindless_image_atomic_swap: {
+   case nir_intrinsic_bindless_image_atomic_swap:
+   case nir_intrinsic_bindless_image_descriptor_amd: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
       enum ac_descriptor_type desc_type;

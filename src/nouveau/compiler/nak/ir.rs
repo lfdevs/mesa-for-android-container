@@ -5700,13 +5700,10 @@ impl Instr {
             Op::Bra(_) | Op::Exit(_) => true,
             Op::WarpSync(_) => false,
 
-            // BMOV: barriers only when using gprs (and only valid for the gpr),
-            // no barriers for the others.
-            Op::BMov(op) => match &op.dst {
-                Dst::None => true,
-                Dst::SSA(vec) => vec.file() == RegFile::Bar,
-                Dst::Reg(reg) => reg.file() == RegFile::Bar,
-            },
+            // The barrier half is HW scoreboarded by the GPR isn't.  When
+            // moving from a GPR to a barrier, we still need a token for WaR
+            // hazards.
+            Op::BMov(_) => false,
 
             // Geometry ops
             Op::Out(_) | Op::OutFinal(_) => false,

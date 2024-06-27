@@ -748,8 +748,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 }
 
 static brw_inst *
-brw_dpas_three_src(struct brw_codegen *p, enum gfx12_systolic_depth opcode,
-                   unsigned sdepth, unsigned rcount, struct brw_reg dest,
+brw_dpas_three_src(struct brw_codegen *p, enum opcode opcode,
+                   enum gfx12_systolic_depth sdepth, unsigned rcount, struct brw_reg dest,
                    struct brw_reg src0, struct brw_reg src1, struct brw_reg src2)
 {
    const struct intel_device_info *devinfo = p->devinfo;

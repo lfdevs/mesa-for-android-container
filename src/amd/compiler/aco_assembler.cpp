@@ -611,7 +611,7 @@ emit_mtbuf_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction
       encoding |= reg(ctx, instr->definitions[0], 8) << 8;
    encoding |= reg(ctx, instr->operands[1], 8);
 
-   if (ctx.gfx_level >= GFX10) {
+   if (ctx.gfx_level >= GFX10 && ctx.gfx_level < GFX11) {
       encoding |= (((opcode & 0x08) >> 3) << 21); /* MSB of 4-bit OPCODE */
    }
 

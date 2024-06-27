@@ -675,6 +675,25 @@ struct ir3_block {
 #endif
 };
 
+enum ir3_cursor_option {
+   IR3_CURSOR_BEFORE_BLOCK,
+   IR3_CURSOR_AFTER_BLOCK,
+   IR3_CURSOR_BEFORE_INSTR,
+   IR3_CURSOR_AFTER_INSTR,
+};
+
+struct ir3_cursor {
+   enum ir3_cursor_option option;
+   union {
+      struct ir3_block *block;
+      struct ir3_instruction *instr;
+   };
+};
+
+struct ir3_builder {
+   struct ir3_cursor cursor;
+};
+
 static inline uint32_t
 block_id(struct ir3_block *block)
 {
@@ -751,6 +770,10 @@ bool ir3_should_double_threadsize(struct ir3_shader_variant *v,
 
 struct ir3_block *ir3_block_create(struct ir3 *shader);
 
+struct ir3_instruction *ir3_build_instr(struct ir3_builder *builder, opc_t opc,
+                                        int ndst, int nsrc);
+struct ir3_instruction *ir3_instr_create_at(struct ir3_cursor cursor, opc_t opc,
+                                            int ndst, int nsrc);
 struct ir3_instruction *ir3_instr_create(struct ir3_block *block, opc_t opc,
                                          int ndst, int nsrc);
 struct ir3_instruction *ir3_instr_create_at_end(struct ir3_block *block,
@@ -2072,6 +2095,79 @@ ir3_has_latency_to_hide(struct ir3 *ir)
 
    return false;
 }
+
+static inline struct ir3_cursor
+ir3_before_block(struct ir3_block *block)
+{
+   assert(block);
+   struct ir3_cursor cursor;
+   cursor.option = IR3_CURSOR_BEFORE_BLOCK;
+   cursor.block = block;
+   return cursor;
+}
+
+static inline struct ir3_cursor
+ir3_after_block(struct ir3_block *block)
+{
+   assert(block);
+   struct ir3_cursor cursor;
+   cursor.option = IR3_CURSOR_AFTER_BLOCK;
+   cursor.block = block;
+   return cursor;
+}
+
+static inline struct ir3_cursor
+ir3_before_instr(struct ir3_instruction *instr)
+{
+   assert(instr);
+   struct ir3_cursor cursor;
+   cursor.option = IR3_CURSOR_BEFORE_INSTR;
+   cursor.instr = instr;
+   return cursor;
+}
+
+static inline struct ir3_cursor
+ir3_after_instr(struct ir3_instruction *instr)
+{
+   assert(instr);
+   struct ir3_cursor cursor;
+   cursor.option = IR3_CURSOR_AFTER_INSTR;
+   cursor.instr = instr;
+   return cursor;
+}
+
+static inline struct ir3_cursor
+ir3_before_terminator(struct ir3_block *block)
+{
+   assert(block);
+   struct ir3_instruction *terminator = ir3_block_get_terminator(block);
+
+   if (terminator)
+      return ir3_before_instr(terminator);
+   return ir3_after_block(block);
+}
+
+static inline struct ir3_cursor
+ir3_after_phis(struct ir3_block *block)
+{
+   assert(block);
+
+   foreach_instr (instr, &block->instr_list) {
+      if (instr->opc != OPC_META_PHI)
+         return ir3_before_instr(instr);
+   }
+
+   return ir3_after_block(block);
+}
+
+static inline struct ir3_builder
+ir3_builder_at(struct ir3_cursor cursor)
+{
+   struct ir3_builder builder;
+   builder.cursor = cursor;
+   return builder;
+}
+
 
 /* ************************************************************************* */
 /* instruction helpers */

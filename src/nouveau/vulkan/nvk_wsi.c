@@ -29,7 +29,8 @@ nvk_init_wsi(struct nvk_physical_device *pdev)
       return result;
 
    pdev->wsi_device.supports_scanout = false;
-   pdev->wsi_device.supports_modifiers = true;
+   pdev->wsi_device.supports_modifiers =
+      pdev->vk.supported_extensions.table.EXT_image_drm_format_modifier;
 
    pdev->vk.wsi_device = &pdev->wsi_device;
 

@@ -790,6 +790,10 @@
 #define DRI_CONF_ANV_COMPRESSION_CONTROL_ENABLED(def) \
    DRI_CONF_OPT_B(compression_control_enabled, def, "Enable VK_EXT_image_compression_control support")
 
+#define DRI_CONF_ANV_FAKE_NONLOCAL_MEMORY(def) \
+   DRI_CONF_OPT_B(anv_fake_nonlocal_memory, def, \
+                  "Present host-visible device-local memory types as non device-local")
+
 /**
  * \brief HASVK specific configuration options
  */

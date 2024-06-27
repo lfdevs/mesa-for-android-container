@@ -880,6 +880,27 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
       tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
                                        .write_sample_count = true).value);
       tu_cs_emit_qw(cs, begin_iova);
+
+      /* ZPASS_DONE events should come in begin-end pairs. When emitting and
+       * occlusion query outside of a renderpass, we emit a fake end event that
+       * closes the previous one since the autotuner's ZPASS_DONE use could end
+       * up causing problems. This events writes into the end field of the query
+       * slot, but it will be overwritten by events in emit_end_occlusion_query
+       * with the proper value.
+       * When inside a renderpass, the corresponding ZPASS_DONE event will be
+       * emitted in emit_end_occlusion_query. We note the use of ZPASS_DONE on
+       * the state object, enabling autotuner to optimize its own events.
+       */
+      if (!cmdbuf->state.pass) {
+         tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
+         tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
+                                          .write_sample_count = true,
+                                          .sample_count_end_offset = true,
+                                          .write_accum_sample_count_diff = true).value);
+         tu_cs_emit_qw(cs, begin_iova);
+      } else {
+         cmdbuf->state.rp.has_zpass_done_sample_count_write_in_rp = true;
+      }
    }
 }
 
@@ -1188,6 +1209,20 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
          tu_cs_emit(cs, CCU_CLEAN_DEPTH);
       }
    } else {
+      /* When outside of renderpass, potential autotuner activity can cause
+       * interference between ZPASS_DONE event pairs. In that case, like at the
+       * beginning of the occlusion query, a fake ZPASS_DONE event is emitted to
+       * compose a begin-end event pair. The first event will write into the end
+       * field, but that will be overwritten by the second ZPASS_DONE which will
+       * also handle the diff accumulation.
+       */
+      if (!cmdbuf->state.pass) {
+         tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
+         tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
+                                          .write_sample_count = true).value);
+         tu_cs_emit_qw(cs, end_iova);
+      }
+
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
       tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = ZPASS_DONE,
                                        .write_sample_count = true,

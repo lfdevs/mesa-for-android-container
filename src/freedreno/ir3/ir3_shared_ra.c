@@ -1388,9 +1388,10 @@ finalize(struct ir3 *ir)
 }
 
 void
-ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness *live)
+ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness **live_ptr)
 {
    struct ra_ctx ctx;
+   struct ir3_liveness *live = *live_ptr;
 
    ra_ctx_init(&ctx);
    ctx.intervals = rzalloc_array(NULL, struct ra_interval,
@@ -1418,5 +1419,17 @@ ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness *live)
 
    ir3_ra_validate(v, RA_FULL_SIZE, RA_HALF_SIZE, live->block_count, true);
    finalize(v->ir);
+
+   /* Recalculate liveness and register pressure now that additional values have
+    * been added.
+    * TODO we should only do this if any values have been spilled/reloaded.
+    * Note: since we don't have to recreate merge sets, we have to manually copy
+    * interval_offset to the new liveness struct.
+    */
+   unsigned interval_offset = live->interval_offset;
+   void *live_mem_ctx = ralloc_parent(live);
+   ralloc_free(live);
+   *live_ptr = ir3_calc_liveness(live_mem_ctx, v->ir);
+   (*live_ptr)->interval_offset = interval_offset;
 }
 

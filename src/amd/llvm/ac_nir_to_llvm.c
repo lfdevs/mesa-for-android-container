@@ -555,12 +555,6 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
    case nir_op_fneg:
       src[0] = ac_to_float(&ctx->ac, src[0]);
       result = LLVMBuildFNeg(ctx->ac.builder, src[0], "");
-      if (ctx->ac.float_mode == AC_FLOAT_MODE_DENORM_FLUSH_TO_ZERO) {
-         /* fneg will be optimized by backend compiler with sign
-          * bit removed via XOR. This is probably a LLVM bug.
-          */
-         result = ac_build_canonicalize(&ctx->ac, result, instr->def.bit_size);
-      }
       break;
    case nir_op_inot:
       result = LLVMBuildNot(ctx->ac.builder, src[0], "");
@@ -704,12 +698,6 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
    case nir_op_fabs:
       result =
          emit_intrin_1f_param(&ctx->ac, "llvm.fabs", ac_to_float_type(&ctx->ac, def_type), src[0]);
-      if (ctx->ac.float_mode == AC_FLOAT_MODE_DENORM_FLUSH_TO_ZERO) {
-         /* fabs will be optimized by backend compiler with sign
-          * bit removed via AND.
-          */
-         result = ac_build_canonicalize(&ctx->ac, result, instr->def.bit_size);
-      }
       break;
    case nir_op_fsat:
       src[0] = ac_to_float(&ctx->ac, src[0]);
@@ -1247,6 +1235,11 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
    }
 
    if (result) {
+      LLVMTypeKind type_kind = LLVMGetTypeKind(LLVMTypeOf(result));
+      bool is_float = type_kind == LLVMHalfTypeKind || type_kind == LLVMFloatTypeKind || type_kind == LLVMDoubleTypeKind;
+      if (ctx->ac.float_mode == AC_FLOAT_MODE_DENORM_FLUSH_TO_ZERO && is_float)
+         result = ac_build_canonicalize(&ctx->ac, result, instr->def.bit_size);
+
       result = ac_to_integer_or_pointer(&ctx->ac, result);
       ctx->ssa_defs[instr->def.index] = result;
    }
@@ -3294,10 +3287,14 @@ static bool visit_intrinsic(struct ac_nir_context *ctx, nir_intrinsic_instr *ins
    }
    case nir_intrinsic_vote_all: {
       result = ac_build_vote_all(&ctx->ac, get_src(ctx, instr->src[0]));
+      if (ctx->info->stage == MESA_SHADER_FRAGMENT)
+         result = ac_build_wqm(&ctx->ac, result);
       break;
    }
    case nir_intrinsic_vote_any: {
       result = ac_build_vote_any(&ctx->ac, get_src(ctx, instr->src[0]));
+      if (ctx->info->stage == MESA_SHADER_FRAGMENT)
+         result = ac_build_wqm(&ctx->ac, result);
       break;
    }
    case nir_intrinsic_quad_vote_any: {

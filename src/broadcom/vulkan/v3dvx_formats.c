@@ -266,7 +266,10 @@ v3dX(get_format)(VkFormat format)
 
    switch (ext_number) {
    case _VK_EXT_4444_formats_number:
-      return &format_table_4444[enum_offset];
+      if (enum_offset < ARRAY_SIZE(format_table_4444))
+         return &format_table_4444[enum_offset];
+      else
+         return NULL;
    case _VK_KHR_sampler_ycbcr_conversion_number:
       if (enum_offset < ARRAY_SIZE(format_table_ycbcr))
          return &format_table_ycbcr[enum_offset];

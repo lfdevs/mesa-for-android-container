@@ -1415,6 +1415,7 @@ v3d_register_allocate(struct v3d_compile *c)
                 c->nodes.info[i].unused = false;
                 c->nodes.info[i].priority = 0;
                 c->nodes.info[i].class_bits = 0;
+                c->nodes.info[i].payload_conflict = false;
                 if (c->devinfo->has_accumulators && i < ACC_COUNT) {
                         acc_nodes[i] = i;
                         ra_set_node_reg(c->g, acc_nodes[i], ACC_INDEX + i);

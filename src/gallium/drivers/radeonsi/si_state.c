@@ -6289,9 +6289,13 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
    /* Compute registers. */
    si_pm4_set_reg(pm4, R_00B834_COMPUTE_PGM_HI, S_00B834_DATA(sscreen->info.address32_hi >> 8));
 
-   for (unsigned i = 0; i < 4; ++i)
+   for (unsigned i = 0; i < 2; ++i)
       si_pm4_set_reg(pm4, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 + i * 4,
                      i < sscreen->info.max_se ? compute_cu_en : 0x0);
+
+   for (unsigned i = 2; i < 4; ++i)
+      si_pm4_set_reg(pm4, R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2 + (i - 2) * 4,
+                     i < sscreen->info.num_se ? compute_cu_en : 0x0);
 
    si_pm4_set_reg(pm4, R_00B890_COMPUTE_USER_ACCUM_0, 0);
    si_pm4_set_reg(pm4, R_00B894_COMPUTE_USER_ACCUM_1, 0);

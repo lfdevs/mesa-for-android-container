@@ -1300,6 +1300,7 @@ struct anv_instance {
     bool                                        has_fake_sparse;
     bool                                        disable_fcv;
     bool                                        compression_control_enabled;
+    bool                                        anv_fake_nonlocal_memory;
 
     /* HW workarounds */
     bool                                        no_16bit;
@@ -4434,9 +4435,9 @@ struct anv_pipeline {
    void *                                       mem_ctx;
 
    enum anv_pipeline_type                       type;
-   VkPipelineCreateFlags                        flags;
+   VkPipelineCreateFlags2KHR                    flags;
 
-   VkPipelineCreateFlags2KHR                    active_stages;
+   VkShaderStageFlags                           active_stages;
 
    uint32_t                                     ray_queries;
 

@@ -125,13 +125,6 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
 
       state->old_graphics_pipeline = cmd_buffer->state.graphics_pipeline;
 
-      for (unsigned i = 0; i <= MESA_SHADER_MESH; i++) {
-         if (i == MESA_SHADER_COMPUTE)
-            continue;
-
-         state->old_shader_objs[i] = cmd_buffer->state.shader_objs[i];
-      }
-
       /* Save all dynamic states. */
       state->dynamic = cmd_buffer->state.dynamic;
    }
@@ -140,8 +133,10 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
       assert(!(state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE));
 
       state->old_compute_pipeline = cmd_buffer->state.compute_pipeline;
+   }
 
-      state->old_shader_objs[MESA_SHADER_COMPUTE] = cmd_buffer->state.shader_objs[MESA_SHADER_COMPUTE];
+   for (unsigned i = 0; i <= MESA_SHADER_MESH; i++) {
+      state->old_shader_objs[i] = cmd_buffer->state.shader_objs[i];
    }
 
    if (state->flags & RADV_META_SAVE_DESCRIPTORS) {
@@ -177,21 +172,6 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       if (state->old_graphics_pipeline) {
          radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS,
                               radv_pipeline_to_handle(&state->old_graphics_pipeline->base));
-      } else {
-         cmd_buffer->state.graphics_pipeline = NULL;
-
-         for (unsigned i = 0; i <= MESA_SHADER_MESH; i++) {
-            if (i == MESA_SHADER_COMPUTE)
-               continue;
-
-            if (!state->old_shader_objs[i])
-               continue;
-
-            VkShaderEXT old_shader_obj = radv_shader_object_to_handle(state->old_shader_objs[i]);
-            VkShaderStageFlagBits s = mesa_to_vk_shader_stage(i);
-
-            radv_CmdBindShadersEXT(radv_cmd_buffer_to_handle(cmd_buffer), 1, &s, &old_shader_obj);
-         }
       }
 
       /* Restore all dynamic states. */
@@ -206,16 +186,23 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       if (state->old_compute_pipeline) {
          radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE,
                               radv_pipeline_to_handle(&state->old_compute_pipeline->base));
-      } else {
-         cmd_buffer->state.compute_pipeline = NULL;
-
-         if (state->old_shader_objs[MESA_SHADER_COMPUTE]) {
-            VkShaderEXT old_shader_obj = radv_shader_object_to_handle(state->old_shader_objs[MESA_SHADER_COMPUTE]);
-            VkShaderStageFlagBits s = VK_SHADER_STAGE_COMPUTE_BIT;
-
-            radv_CmdBindShadersEXT(radv_cmd_buffer_to_handle(cmd_buffer), 1, &s, &old_shader_obj);
-         }
       }
+   }
+
+   VkShaderEXT shaders[MESA_SHADER_MESH + 1];
+   VkShaderStageFlagBits stages[MESA_SHADER_MESH + 1];
+   uint32_t stage_count = 0;
+
+   for (unsigned i = 0; i <= MESA_SHADER_MESH; i++) {
+      if (state->old_shader_objs[i]) {
+         stages[stage_count] = mesa_to_vk_shader_stage(i);
+         shaders[stage_count] = radv_shader_object_to_handle(state->old_shader_objs[i]);
+         stage_count++;
+      }
+   }
+
+   if (stage_count > 0) {
+      radv_CmdBindShadersEXT(radv_cmd_buffer_to_handle(cmd_buffer), stage_count, stages, shaders);
    }
 
    if (state->flags & RADV_META_SAVE_DESCRIPTORS) {
@@ -223,12 +210,12 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
    }
 
    if (state->flags & RADV_META_SAVE_CONSTANTS) {
-      VkShaderStageFlags stages = VK_SHADER_STAGE_COMPUTE_BIT;
+      VkShaderStageFlags stage_flags = VK_SHADER_STAGE_COMPUTE_BIT;
 
       if (state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE)
-         stages |= VK_SHADER_STAGE_ALL_GRAPHICS;
+         stage_flags |= VK_SHADER_STAGE_ALL_GRAPHICS;
 
-      vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), VK_NULL_HANDLE, stages, 0,
+      vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), VK_NULL_HANDLE, stage_flags, 0,
                                  MAX_PUSH_CONSTANTS_SIZE, state->push_constants);
    }
 

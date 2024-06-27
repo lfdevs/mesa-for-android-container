@@ -849,27 +849,29 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
       coordinate_done = true;
       break;
    case ELK_SHADER_OPCODE_TXS:
-      bld.MOV(retype(sources[length], payload_unsigned_type), lod);
-      length++;
+      sources[length] = retype(sources[length], payload_unsigned_type);
+      bld.MOV(sources[length++], lod);
       break;
    case ELK_SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
       /* We need an LOD; just use 0 */
-      bld.MOV(retype(sources[length], payload_unsigned_type), elk_imm_ud(0));
-      length++;
+      sources[length] = retype(sources[length], payload_unsigned_type);
+      bld.MOV(sources[length++], elk_imm_ud(0));
       break;
    case ELK_SHADER_OPCODE_TXF:
    case ELK_SHADER_OPCODE_TXF_LZ:
       /* Unfortunately, the parameters for LD are intermixed: u, lod, v, r. */
-      bld.MOV(retype(sources[length++], payload_signed_type), coordinate);
+      sources[length] = retype(sources[length], payload_signed_type);
+      bld.MOV(sources[length++], coordinate);
 
       if (op != ELK_SHADER_OPCODE_TXF_LZ) {
-         bld.MOV(retype(sources[length], payload_signed_type), lod);
-         length++;
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], lod);
       }
 
-      for (unsigned i = 1; i < coord_components; i++)
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(coordinate, bld, i));
+      for (unsigned i = 1; i < coord_components; i++) {
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(coordinate, bld, i));
+      }
 
       coordinate_done = true;
       break;
@@ -881,7 +883,8 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
       if (op == ELK_SHADER_OPCODE_TXF_UMS ||
           op == ELK_SHADER_OPCODE_TXF_CMS ||
           op == ELK_SHADER_OPCODE_TXF_CMS_W) {
-         bld.MOV(retype(sources[length++], payload_unsigned_type), sample_index);
+         sources[length] = retype(sources[length], payload_unsigned_type);
+         bld.MOV(sources[length++], sample_index);
       }
 
       /* Data from the multisample control surface. */
@@ -902,7 +905,8 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
              * payload, we need to split 2-32bit register into 4-16-bit
              * payload.
              */
-            bld.MOV(retype(sources[length++], payload_unsigned_type),
+            sources[length] = retype(sources[length], payload_unsigned_type);
+            bld.MOV(sources[length++],
                     mcs.file == IMM ? mcs : offset(mcs, bld, i));
          }
       }
@@ -910,9 +914,10 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
       /* There is no offsetting for this message; just copy in the integer
        * texture coordinates.
        */
-      for (unsigned i = 0; i < coord_components; i++)
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(coordinate, bld, i));
+      for (unsigned i = 0; i < coord_components; i++) {
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(coordinate, bld, i));
+      }
 
       coordinate_done = true;
       break;
@@ -921,9 +926,10 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
       for (unsigned i = 0; i < 2; i++) /* u, v */
          bld.MOV(sources[length++], offset(coordinate, bld, i));
 
-      for (unsigned i = 0; i < 2; i++) /* offu, offv */
-         bld.MOV(retype(sources[length++], payload_signed_type),
-                 offset(tg4_offset, bld, i));
+      for (unsigned i = 0; i < 2; i++) { /* offu, offv */
+         sources[length] = retype(sources[length], payload_signed_type);
+         bld.MOV(sources[length++], offset(tg4_offset, bld, i));
+      }
 
       if (coord_components == 3) /* r if present */
          bld.MOV(sources[length++], offset(coordinate, bld, 2));

@@ -92,6 +92,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_SHADER_SPILLING_RATE(0)
       DRI_CONF_OPT_B(intel_tbimr, true, "Enable TBIMR tiled rendering")
       DRI_CONF_ANV_COMPRESSION_CONTROL_ENABLED(false)
+      DRI_CONF_ANV_FAKE_NONLOCAL_MEMORY(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -2645,6 +2646,8 @@ anv_init_dri_options(struct anv_instance *instance)
             driQueryOptionb(&instance->dri_options, "anv_external_memory_implicit_sync");
     instance->compression_control_enabled =
        driQueryOptionb(&instance->dri_options, "compression_control_enabled");
+    instance->anv_fake_nonlocal_memory =
+            driQueryOptionb(&instance->dri_options, "anv_fake_nonlocal_memory");
 }
 
 VkResult anv_CreateInstance(
@@ -2859,6 +2862,26 @@ void anv_GetPhysicalDeviceMemoryProperties(
          .size    = physical_device->memory.heaps[i].size,
          .flags   = physical_device->memory.heaps[i].flags,
       };
+   }
+
+   /* Some games (e.g. Total War: WARHAMMER III) sometimes completely refuse
+    * to use memory types with VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT set.
+    * On iGPUs we have only device-local memory, so we must hide it
+    * from the flags.
+    *
+    * Additionally, TW also seems to crash if a non-local but also
+    * non host-visible memory is present, so we should be careful which
+    * memory types we hide this flag from.
+    */
+   if (physical_device->instance->anv_fake_nonlocal_memory &&
+       !anv_physical_device_has_vram(physical_device)) {
+      for (uint32_t i = 0; i < physical_device->memory.type_count; i++) {
+         if (pMemoryProperties->memoryTypes[i].propertyFlags &
+             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            pMemoryProperties->memoryTypes[i].propertyFlags &=
+                  ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+         }
+      }
    }
 }
 

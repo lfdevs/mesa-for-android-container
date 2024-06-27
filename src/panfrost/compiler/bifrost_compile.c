@@ -4810,8 +4810,6 @@ bi_lower_load_push_const_with_dyn_offset(nir_builder *b,
    uint32_t base = nir_intrinsic_base(intr);
    uint32_t range = nir_intrinsic_range(intr);
    uint32_t nwords = intr->def.num_components;
-   uint32_t first_word = base / 4;
-   uint32_t last_word = (base + range) / 4;
 
    b->cursor = nir_before_instr(&intr->instr);
 
@@ -4821,12 +4819,12 @@ bi_lower_load_push_const_with_dyn_offset(nir_builder *b,
     */
    nir_def *lut[64] = {0};
 
-   assert(last_word <= ARRAY_SIZE(lut));
+   assert(range / 4 <= ARRAY_SIZE(lut));
 
    /* Load all words in the range. */
-   for (uint32_t w = first_word; w < last_word; w++) {
+   for (uint32_t w = 0; w < range / 4; w++) {
       lut[w] = nir_load_push_constant(b, 1, 32, nir_imm_int(b, 0),
-                                      .base = w * 4, .range = 4);
+                                      .base = base + (w * 4), .range = 4);
    }
 
    nir_def *index = intr->src[0].ssa;
@@ -4839,10 +4837,10 @@ bi_lower_load_push_const_with_dyn_offset(nir_builder *b,
       uint32_t stride = lut_sz / 2;
       nir_def *bit_test = NULL;
 
-      /* Stop when the first and last component don't fit in the new LUT
-       * window.
+      /* Stop when the LUT is smaller than the number of words we're trying to
+       * extract.
        */
-      if (((first_word + nwords - 1) & stride) != (first_word & stride))
+      if (lut_sz <= nwords)
          break;
 
       for (uint32_t i = 0; i < stride; i++) {
@@ -4862,14 +4860,9 @@ bi_lower_load_push_const_with_dyn_offset(nir_builder *b,
             lut[i] = lut[i + stride];
          }
       }
-
-      /* Adjust first_word so it always points to the bottom half of our LUT,
-       * which contains the result of the CSELs we've just done.
-       */
-      first_word &= stride - 1;
    }
 
-   nir_def *res = nir_vec(b, &lut[first_word], nwords);
+   nir_def *res = nir_vec(b, &lut[0], nwords);
 
    nir_def_rewrite_uses(&intr->def, res);
    nir_instr_remove(&intr->instr);

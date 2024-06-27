@@ -551,9 +551,41 @@ impl CopyPropPass {
 
                 self.prop_to_pred(&mut instr.pred);
 
-                let src_types = instr.src_types();
-                for (i, src) in instr.srcs_mut().iter_mut().enumerate() {
-                    self.prop_to_src(src_types[i], src);
+                match &mut instr.op {
+                    Op::IAdd2(add) => {
+                        // Carry-out interacts funny with SrcMod::INeg so we can
+                        // only propagate with modifiers if no carry is written.
+                        if add.carry_out.is_none() {
+                            self.prop_to_src(SrcType::I32, &mut add.srcs[0]);
+                            self.prop_to_src(SrcType::I32, &mut add.srcs[1]);
+                        } else {
+                            self.prop_to_src(SrcType::ALU, &mut add.srcs[0]);
+                            self.prop_to_src(SrcType::ALU, &mut add.srcs[1]);
+                        }
+                    }
+                    Op::IAdd3(add) => {
+                        // Overflow interacts funny with SrcMod::INeg so we can
+                        // only propagate with modifiers if no overflow values
+                        // are written.
+                        if add.overflow[0].is_none()
+                            && add.overflow[0].is_none()
+                        {
+                            self.prop_to_src(SrcType::I32, &mut add.srcs[0]);
+                            self.prop_to_src(SrcType::I32, &mut add.srcs[1]);
+                            self.prop_to_src(SrcType::I32, &mut add.srcs[2]);
+                        } else {
+                            self.prop_to_src(SrcType::ALU, &mut add.srcs[0]);
+                            self.prop_to_src(SrcType::ALU, &mut add.srcs[1]);
+                            self.prop_to_src(SrcType::ALU, &mut add.srcs[2]);
+                        }
+                    }
+                    _ => {
+                        let src_types = instr.src_types();
+                        for (i, src) in instr.srcs_mut().iter_mut().enumerate()
+                        {
+                            self.prop_to_src(src_types[i], src);
+                        }
+                    }
                 }
             }
         }

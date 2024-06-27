@@ -1,5 +1,3 @@
-KHR-GL45.texture_view.view_sampling,Fail
-
 dEQP-GLES31.functional.texture.border_clamp.range_clamp.linear_float_color,Fail
 
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.compute,Fail

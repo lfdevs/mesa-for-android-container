@@ -866,8 +866,9 @@ try_evict_regs(struct ra_ctx *ctx, struct ra_file *file,
          unsigned conflicting_size =
             conflicting->physreg_end - conflicting->physreg_start;
          if (size >= conflicting_size &&
-             !check_dst_overlap(ctx, file, reg, avail_start, avail_start +
-                                conflicting_size)) {
+             (is_source ||
+              !check_dst_overlap(ctx, file, reg, avail_start,
+                                 avail_start + conflicting_size))) {
             for (unsigned i = 0;
                  i < conflicting->physreg_end - conflicting->physreg_start; i++)
                BITSET_CLEAR(available_to_evict, avail_start + i);
@@ -2448,7 +2449,8 @@ calc_min_limit_pressure(struct ir3_shader_variant *v,
          cur_pressure = (struct ir3_pressure) {0};
 
          ra_foreach_dst (dst, instr) {
-            if (dst->tied && !(dst->tied->flags & IR3_REG_KILL))
+            if ((dst->tied && !(dst->tied->flags & IR3_REG_KILL)) ||
+                (dst->flags & IR3_REG_EARLY_CLOBBER))
                add_pressure(&cur_pressure, dst, v->mergedregs);
          }
 
@@ -2559,6 +2561,7 @@ ir3_ra(struct ir3_shader_variant *v)
 
    ir3_debug_print(v->ir, "AFTER: create_parallel_copies");
 
+   ir3_index_instrs_for_merge_sets(v->ir);
    ir3_merge_regs(live, v->ir);
 
    bool has_shared_vectors = false;
@@ -2603,13 +2606,7 @@ ir3_ra(struct ir3_shader_variant *v)
       calc_min_limit_pressure(v, live, &limit_pressure);
 
    if (max_pressure.shared > limit_pressure.shared || has_shared_vectors) {
-      ir3_ra_shared(v, live);
-
-      /* Recalculate liveness and register pressure now that additional values
-       * have been added.
-       */
-      ralloc_free(live);
-      live = ir3_calc_liveness(ctx, v->ir);
+      ir3_ra_shared(v, &live);
       ir3_calc_pressure(v, live, &max_pressure);
 
       ir3_debug_print(v->ir, "AFTER: shared register allocation");

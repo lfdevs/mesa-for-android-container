@@ -362,25 +362,42 @@ nouveau_ws_bo_from_dma_buf(struct nouveau_ws_device *dev, int fd)
    return bo;
 }
 
+static bool
+atomic_dec_not_one(atomic_uint_fast32_t *counter)
+{
+   uint_fast32_t old = *counter;
+   while (1) {
+      assert(old != 0);
+      if (old == 1)
+         return false;
+
+      if (atomic_compare_exchange_weak(counter, &old, old - 1))
+         return true;
+   }
+}
+
 void
 nouveau_ws_bo_destroy(struct nouveau_ws_bo *bo)
 {
-   if (--bo->refcnt)
+   if (atomic_dec_not_one(&bo->refcnt))
       return;
 
    struct nouveau_ws_device *dev = bo->dev;
 
+   /* Lock the device before we drop the final reference */
    simple_mtx_lock(&dev->bos_lock);
 
-   _mesa_hash_table_remove_key(dev->bos, (void *)(uintptr_t)bo->handle);
+   if (--bo->refcnt == 0) {
+      _mesa_hash_table_remove_key(dev->bos, (void *)(uintptr_t)bo->handle);
 
-   if (dev->has_vm_bind) {
-      nouveau_ws_bo_unbind_vma(bo->dev, bo->offset, bo->size);
-      nouveau_ws_free_vma(bo->dev, bo->offset, bo->size, false, false);
+      if (dev->has_vm_bind) {
+         nouveau_ws_bo_unbind_vma(bo->dev, bo->offset, bo->size);
+         nouveau_ws_free_vma(bo->dev, bo->offset, bo->size, false, false);
+      }
+
+      drmCloseBufferHandle(bo->dev->fd, bo->handle);
+      FREE(bo);
    }
-
-   drmCloseBufferHandle(bo->dev->fd, bo->handle);
-   FREE(bo);
 
    simple_mtx_unlock(&dev->bos_lock);
 }

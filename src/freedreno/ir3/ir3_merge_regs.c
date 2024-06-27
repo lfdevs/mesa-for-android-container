@@ -80,6 +80,12 @@ index_instrs(struct ir3_block *block, unsigned index)
    return index;
 }
 
+void
+ir3_index_instrs_for_merge_sets(struct ir3 *ir)
+{
+   index_instrs(ir3_start_block(ir), 0);
+}
+
 /* Definitions within a merge set are ordered by instr->ip as set above: */
 
 static bool
@@ -554,8 +560,6 @@ dump_merge_sets(struct ir3 *ir)
 void
 ir3_merge_regs(struct ir3_liveness *live, struct ir3 *ir)
 {
-   index_instrs(ir3_start_block(ir), 0);
-
    /* First pass: coalesce phis, which must be together. */
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
