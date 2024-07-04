@@ -1309,11 +1309,8 @@ impl Image {
         // make sure we allocate multiples of 4 bytes so drivers don't read out of bounds or
         // unaligned.
         // TODO: use div_ceil once it's available
-        let pixel_size = align(
-            self.image_format.pixel_size().unwrap().into(),
-            size_of::<u32>(),
-        );
-        let mut new_pattern: Vec<u32> = vec![0; pixel_size / size_of::<u32>()];
+        let pixel_size = self.image_format.pixel_size().unwrap().into();
+        let mut new_pattern: Vec<u32> = vec![0; div_round_up(pixel_size, size_of::<u32>())];
 
         // we don't support CL_DEPTH for now
         assert!(pattern.len() == 4);

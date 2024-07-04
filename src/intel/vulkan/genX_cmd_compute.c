@@ -66,16 +66,18 @@ genX(cmd_buffer_ensure_cfe_state)(struct anv_cmd_buffer *cmd_buffer,
 
       uint32_t scratch_surf = 0xffffffff;
       if (total_scratch > 0) {
+         struct anv_scratch_pool *scratch_pool =
+            (cmd_buffer->vk.pool->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT) ?
+            &cmd_buffer->device->protected_scratch_pool :
+            &cmd_buffer->device->scratch_pool;
          struct anv_bo *scratch_bo =
-               anv_scratch_pool_alloc(cmd_buffer->device,
-                                      &cmd_buffer->device->scratch_pool,
+               anv_scratch_pool_alloc(cmd_buffer->device, scratch_pool,
                                       MESA_SHADER_COMPUTE,
                                       total_scratch);
          anv_reloc_list_add_bo(cmd_buffer->batch.relocs,
                                scratch_bo);
          scratch_surf =
-            anv_scratch_pool_get_surf(cmd_buffer->device,
-                                      &cmd_buffer->device->scratch_pool,
+            anv_scratch_pool_get_surf(cmd_buffer->device, scratch_pool,
                                       total_scratch);
          cfe.ScratchSpaceBuffer = scratch_surf >> 4;
       }

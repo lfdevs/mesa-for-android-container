@@ -10,6 +10,7 @@ use mesa_rust_util::properties::*;
 use rusticl_opencl_gen::*;
 
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -71,7 +72,7 @@ struct QueueState {
     last: Weak<Event>,
     // `Sync` on `Sender` was stabilized in 1.72, until then, put it into our Mutex.
     // see https://github.com/rust-lang/rust/commit/5f56956b3c7edb9801585850d1f41b0aeb1888ff
-    chan_in: mpsc::Sender<Vec<Arc<Event>>>,
+    chan_in: ManuallyDrop<mpsc::Sender<Vec<Arc<Event>>>>,
 }
 
 pub struct Queue {
@@ -81,7 +82,7 @@ pub struct Queue {
     pub props: cl_command_queue_properties,
     pub props_v2: Option<Properties<cl_queue_properties>>,
     state: Mutex<QueueState>,
-    _thrd: JoinHandle<()>,
+    thrd: ManuallyDrop<JoinHandle<()>>,
 }
 
 impl_cl_type_trait!(cl_command_queue, Queue, CL_INVALID_COMMAND_QUEUE);
@@ -113,9 +114,9 @@ impl Queue {
             state: Mutex::new(QueueState {
                 pending: Vec::new(),
                 last: Weak::new(),
-                chan_in: tx_q,
+                chan_in: ManuallyDrop::new(tx_q),
             }),
-            _thrd: thread::Builder::new()
+            thrd: ManuallyDrop::new(thread::Builder::new()
                 .name("rusticl queue thread".into())
                 .spawn(move || loop {
                     let r = rx_t.recv();
@@ -167,7 +168,7 @@ impl Queue {
 
                     flush_events(&mut flushed, &ctx);
                 })
-                .unwrap(),
+                .unwrap()),
         }))
     }
 
@@ -230,5 +231,15 @@ impl Drop for Queue {
         // commands in command_queue.
         // TODO: maybe we have to do it on every release?
         let _ = self.flush(true);
+
+        let state = self.state.get_mut().unwrap();
+
+        unsafe {
+            // disconnect the channel
+            ManuallyDrop::drop(&mut state.chan_in);
+
+            // and now explicitly wait on the thread to quit, because it won't happen implicitly.
+            ManuallyDrop::take(&mut self.thrd).join().unwrap();
+        }
     }
 }

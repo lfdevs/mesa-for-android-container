@@ -261,9 +261,13 @@ bool ac_is_modifier_supported(const struct radeon_info *info,
       if (!options->dcc)
          return false;
 
-      if (ac_modifier_has_dcc_retile(modifier) &&
-          (!info->use_display_dcc_with_retile_blit || !options->dcc_retile))
-         return false;
+      if (ac_modifier_has_dcc_retile(modifier)) {
+         /* radeonsi and radv retiling shaders only support bpe == 32. */
+         if (util_format_get_blocksizebits(format) != 32)
+            return false;
+         if (!info->use_display_dcc_with_retile_blit || !options->dcc_retile)
+            return false;
+      }
    }
 
    return true;

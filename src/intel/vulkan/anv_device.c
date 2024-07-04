@@ -3791,7 +3791,8 @@ VkResult anv_CreateDevice(
    isl_null_fill_state(&device->isl_dev, &device->host_null_surface_state,
                        .size = isl_extent3d(1, 1, 1) /* This shouldn't matter */);
 
-   anv_scratch_pool_init(device, &device->scratch_pool);
+   anv_scratch_pool_init(device, &device->scratch_pool, false);
+   anv_scratch_pool_init(device, &device->protected_scratch_pool, true);
 
    /* TODO(RT): Do we want some sort of data structure for this? */
    memset(device->rt_scratch_bos, 0, sizeof(device->rt_scratch_bos));
@@ -3936,6 +3937,7 @@ VkResult anv_CreateDevice(
       anv_device_release_bo(device, device->btd_fifo_bo);
  fail_trivial_batch_bo_and_scratch_pool:
    anv_scratch_pool_finish(device, &device->scratch_pool);
+   anv_scratch_pool_finish(device, &device->protected_scratch_pool);
  fail_trivial_batch:
    anv_device_release_bo(device, device->trivial_batch_bo);
  fail_ray_query_bo:
@@ -4083,6 +4085,7 @@ void anv_DestroyDevice(
    }
 
    anv_scratch_pool_finish(device, &device->scratch_pool);
+   anv_scratch_pool_finish(device, &device->protected_scratch_pool);
 
    if (device->vk.enabled_extensions.KHR_ray_query) {
       for (unsigned i = 0; i < ARRAY_SIZE(device->ray_query_shadow_bos); i++) {

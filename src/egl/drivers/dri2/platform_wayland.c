@@ -1981,6 +1981,9 @@ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
       bool conversion = false;
       int idx = dri2_wl_visual_idx_from_config(dri2_dpy->driver_configs[i]);
 
+      if (idx < 0)
+         continue;
+
       /* Check if the server natively supports the colour buffer format */
       if (!server_supports_format(&dri2_dpy->formats, idx)) {
          /* In multi-GPU scenarios, we usually have a different buffer, so a

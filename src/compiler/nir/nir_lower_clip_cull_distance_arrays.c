@@ -367,10 +367,11 @@ lower_distance_to_vec4(nir_shader *shader, struct lower_distance_state *state)
    if (!state->old_distance_in_var && !state->old_distance_out_var)
       return;
 
-   /* Replace derefs */
+   /* Replace derefs, we may have indirect store lowering which will change
+    * control flow of the shader.
+    */
    nir_shader_intrinsics_pass(shader, replace_with_derefs_to_vec4,
-                              nir_metadata_block_index |
-                              nir_metadata_dominance, state);
+                              nir_metadata_none, state);
 
    /* Mark now lowered vars as ordinary globals to be dead code eliminated.
     * Also clear the compact flag to avoid issues with validation.

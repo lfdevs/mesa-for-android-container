@@ -64,6 +64,7 @@ librusticl = shared_library(
   link_args : [
     ld_args_build_id,
     ld_args_gc_sections,
+    ld_args_bsymbolic,
     rusticl_ld_args,
   ],
   link_depends : rusticl_ld_depends,

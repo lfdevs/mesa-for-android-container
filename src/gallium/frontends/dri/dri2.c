@@ -2332,7 +2332,7 @@ dri2_create_drawable(struct dri_screen *screen, const struct gl_config *visual,
  * Returns the struct gl_config supported by this driver.
  */
 static const __DRIconfig **
-dri2_init_screen(struct dri_screen *screen, bool implicit)
+dri2_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 {
    const __DRIconfig **configs;
    struct pipe_screen *pscreen = NULL;
@@ -2341,7 +2341,7 @@ dri2_init_screen(struct dri_screen *screen, bool implicit)
 
 #ifdef HAVE_LIBDRM
    if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false))
-      pscreen = pipe_loader_create_screen(screen->dev, implicit);
+      pscreen = pipe_loader_create_screen(screen->dev, driver_name_is_inferred);
 #endif
 
    if (!pscreen)
@@ -2390,7 +2390,7 @@ fail:
  * Returns the struct gl_config supported by this driver.
  */
 static const __DRIconfig **
-dri_swrast_kms_init_screen(struct dri_screen *screen, bool implicit)
+dri_swrast_kms_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 {
 #if defined(GALLIUM_SOFTPIPE)
    const __DRIconfig **configs;
@@ -2398,7 +2398,7 @@ dri_swrast_kms_init_screen(struct dri_screen *screen, bool implicit)
 
 #ifdef HAVE_DRISW_KMS
    if (pipe_loader_sw_probe_kms(&screen->dev, screen->fd))
-      pscreen = pipe_loader_create_screen(screen->dev, implicit);
+      pscreen = pipe_loader_create_screen(screen->dev, driver_name_is_inferred);
 #endif
 
    if (!pscreen)

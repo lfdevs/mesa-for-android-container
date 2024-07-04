@@ -1454,10 +1454,10 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
 static void
 llvmpipe_query_dmabuf_modifiers(struct pipe_screen *pscreen, enum pipe_format format, int max, uint64_t *modifiers, unsigned int *external_only, int *count)
 {
-   if (max) {
-      *count = 1;
+   *count = 1;
+
+   if (max)
       *modifiers = DRM_FORMAT_MOD_LINEAR;
-   }
 }
 
 static bool

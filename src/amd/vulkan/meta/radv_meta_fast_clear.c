@@ -672,7 +672,8 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
    struct radv_image_view load_iview = {0};
    struct radv_image_view store_iview = {0};
 
-   cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
+   cmd_buffer->state.flush_bits |=
+      radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
    if (!device->meta_state.fast_clear_flush.cmask_eliminate_pipeline) {
       VkResult ret = radv_device_init_meta_fast_clear_flush_state_internal(device);

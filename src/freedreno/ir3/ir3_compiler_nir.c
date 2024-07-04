@@ -907,6 +907,12 @@ emit_intrinsic_copy_ubo_to_uniform(struct ir3_context *ctx,
 
    ir3_instr_set_address(ldc, addr1);
 
+   /* The assembler isn't aware of what value a1.x has, so make sure that
+    * constlen includes the ldc.k here.
+    */
+   ctx->so->constlen =
+      MAX2(ctx->so->constlen, DIV_ROUND_UP(base + size * 4, 4));
+
    array_insert(b, b->keeps, ldc);
 }
 
@@ -939,6 +945,12 @@ emit_intrinsic_copy_global_to_uniform(struct ir3_context *ctx,
       ir3_instr_set_address(ldg, a1);
       ldg->flags |= IR3_INSTR_A1EN;
    }
+
+   /* The assembler isn't aware of what value a1.x has, so make sure that
+    * constlen includes the ldg.k here.
+    */
+   ctx->so->constlen =
+      MAX2(ctx->so->constlen, DIV_ROUND_UP(dst + size * 4, 4));
 
    array_insert(b, b->keeps, ldg);
 }
@@ -2772,6 +2784,11 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
          ir3_instr_set_address(stc, a1);
          stc->flags |= IR3_INSTR_A1EN;
       }
+      /* The assembler isn't aware of what value a1.x has, so make sure that
+       * constlen includes the stc here.
+       */
+      ctx->so->constlen =
+         MAX2(ctx->so->constlen, DIV_ROUND_UP(dst + components, 4));
       array_insert(b, b->keeps, stc);
       break;
    }

@@ -940,6 +940,7 @@ VkResult anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
 void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo);
 
 struct anv_scratch_pool {
+   enum anv_bo_alloc_flags alloc_flags;
    /* Indexed by Per-Thread Scratch Space number (the hardware value) and stage */
    struct anv_bo *bos[16][MESA_SHADER_STAGES];
    uint32_t surfs[16];
@@ -947,7 +948,8 @@ struct anv_scratch_pool {
 };
 
 void anv_scratch_pool_init(struct anv_device *device,
-                           struct anv_scratch_pool *pool);
+                           struct anv_scratch_pool *pool,
+                           bool protected);
 void anv_scratch_pool_finish(struct anv_device *device,
                              struct anv_scratch_pool *pool);
 struct anv_bo *anv_scratch_pool_alloc(struct anv_device *device,
@@ -1874,6 +1876,7 @@ struct anv_device {
     struct anv_queue  *                         queues;
 
     struct anv_scratch_pool                     scratch_pool;
+    struct anv_scratch_pool                     protected_scratch_pool;
     struct anv_bo                              *rt_scratch_bos[16];
     struct anv_bo                              *btd_fifo_bo;
     struct anv_address                          rt_uuid_addr;
@@ -2382,6 +2385,25 @@ _anv_combine_address(struct anv_batch *batch, void *location,
            for (uint32_t i = 0; i < __anv_cmd_length(cmd); i++) {       \
               ((uint32_t *)_dst)[i] = _partial[i] |                     \
                  (pipeline)->batch_data[(pipeline)->state.offset + i];  \
+           }                                                            \
+           VG(VALGRIND_CHECK_MEM_IS_DEFINED(_dst, __anv_cmd_length(cmd) * 4)); \
+           _dst = NULL;                                                 \
+         }))
+
+#define anv_batch_emit_merge_protected(batch, cmd, pipeline, state,     \
+                                       name, protected)                 \
+   for (struct cmd name = { 0 },                                        \
+        *_dst = anv_batch_emit_dwords(batch, __anv_cmd_length(cmd));    \
+        __builtin_expect(_dst != NULL, 1);                              \
+        ({ struct anv_gfx_state_ptr *_cmd_state = protected ?           \
+              &(pipeline)->state##_protected :                          \
+              &(pipeline)->state;                                       \
+           uint32_t _partial[__anv_cmd_length(cmd)];                    \
+           assert(_cmd_state->len == __anv_cmd_length(cmd));            \
+           __anv_cmd_pack(cmd)(batch, _partial, &name);                 \
+           for (uint32_t i = 0; i < __anv_cmd_length(cmd); i++) {       \
+              ((uint32_t *)_dst)[i] = _partial[i] |                     \
+                 (pipeline)->batch_data[_cmd_state->offset + i];        \
            }                                                            \
            VG(VALGRIND_CHECK_MEM_IS_DEFINED(_dst, __anv_cmd_length(cmd) * 4)); \
            _dst = NULL;                                                 \
@@ -4590,7 +4612,7 @@ struct anv_graphics_pipeline {
    /* Pre computed CS instructions that can directly be copied into
     * anv_cmd_buffer.
     */
-   uint32_t                                     batch_data[416];
+   uint32_t                                     batch_data[480];
 
    /* Urb setup utilized by this pipeline. */
    struct intel_urb_config urb_cfg;
@@ -4612,12 +4634,18 @@ struct anv_graphics_pipeline {
       struct anv_gfx_state_ptr                  hs;
       struct anv_gfx_state_ptr                  ds;
       struct anv_gfx_state_ptr                  ps;
+      struct anv_gfx_state_ptr                  vs_protected;
+      struct anv_gfx_state_ptr                  hs_protected;
+      struct anv_gfx_state_ptr                  ds_protected;
+      struct anv_gfx_state_ptr                  ps_protected;
 
       struct anv_gfx_state_ptr                  task_control;
+      struct anv_gfx_state_ptr                  task_control_protected;
       struct anv_gfx_state_ptr                  task_shader;
       struct anv_gfx_state_ptr                  task_redistrib;
       struct anv_gfx_state_ptr                  clip_mesh;
       struct anv_gfx_state_ptr                  mesh_control;
+      struct anv_gfx_state_ptr                  mesh_control_protected;
       struct anv_gfx_state_ptr                  mesh_shader;
       struct anv_gfx_state_ptr                  mesh_distrib;
       struct anv_gfx_state_ptr                  sbe_mesh;
@@ -4634,6 +4662,7 @@ struct anv_graphics_pipeline {
       struct anv_gfx_state_ptr                  wm;
       struct anv_gfx_state_ptr                  so;
       struct anv_gfx_state_ptr                  gs;
+      struct anv_gfx_state_ptr                  gs_protected;
       struct anv_gfx_state_ptr                  te;
       struct anv_gfx_state_ptr                  vfg;
    } partial;
@@ -4663,6 +4692,21 @@ struct anv_graphics_pipeline {
          break;                                                         \
       memcpy(dw, &(pipeline)->batch_data[(pipeline)->state.offset],     \
              4 * (pipeline)->state.len);                                \
+   } while (0)
+
+#define anv_batch_emit_pipeline_state_protected(batch, pipeline,        \
+                                                state, protected)       \
+   do {                                                                 \
+      struct anv_gfx_state_ptr *_cmd_state = protected ?                \
+         &(pipeline)->state##_protected : &(pipeline)->state;           \
+      if (_cmd_state->len == 0)                                         \
+         break;                                                         \
+      uint32_t *dw;                                                     \
+      dw = anv_batch_emit_dwords((batch), _cmd_state->len);             \
+      if (!dw)                                                          \
+         break;                                                         \
+      memcpy(dw, &(pipeline)->batch_data[_cmd_state->offset],           \
+             4 * _cmd_state->len);                                      \
    } while (0)
 
 

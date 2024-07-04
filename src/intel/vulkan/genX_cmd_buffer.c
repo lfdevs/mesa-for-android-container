@@ -3743,62 +3743,73 @@ mask_is_transfer_write(const VkAccessFlags2 access)
 
 static void
 cmd_buffer_barrier_video(struct anv_cmd_buffer *cmd_buffer,
-                        const VkDependencyInfo *dep_info)
+                         uint32_t n_dep_infos,
+                         const VkDependencyInfo *dep_infos)
 {
    assert(anv_cmd_buffer_is_video_queue(cmd_buffer));
 
    bool flush_llc = false;
    bool flush_ccs = false;
-   for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
-      const VkImageMemoryBarrier2 *img_barrier =
-         &dep_info->pImageMemoryBarriers[i];
 
-      ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
-      const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
+   for (uint32_t d = 0; d < n_dep_infos; d++) {
+      const VkDependencyInfo *dep_info = &dep_infos[d];
 
-      /* If srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this
-       * memory barrier defines a queue family ownership transfer.
-       */
-      if (img_barrier->srcQueueFamilyIndex != img_barrier->dstQueueFamilyIndex)
-         flush_llc = true;
 
-      VkImageAspectFlags img_aspects =
+      for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
+         const VkImageMemoryBarrier2 *img_barrier =
+            &dep_info->pImageMemoryBarriers[i];
+
+         ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
+         const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
+
+         /* If srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this
+          * memory barrier defines a queue family ownership transfer.
+          */
+         if (img_barrier->srcQueueFamilyIndex != img_barrier->dstQueueFamilyIndex)
+            flush_llc = true;
+
+         VkImageAspectFlags img_aspects =
             vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
-      anv_foreach_image_aspect_bit(aspect_bit, image, img_aspects) {
-         const uint32_t plane =
-            anv_image_aspect_to_plane(image, 1UL << aspect_bit);
-         if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage)) {
-            flush_ccs = true;
+         anv_foreach_image_aspect_bit(aspect_bit, image, img_aspects) {
+            const uint32_t plane =
+               anv_image_aspect_to_plane(image, 1UL << aspect_bit);
+            if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage)) {
+               flush_ccs = true;
+            }
          }
       }
-   }
 
-   for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
-      /* Flush the cache if something is written by the video operations and
-       * used by any other stages except video encode/decode stages or if
-       * srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this memory
-       * barrier defines a queue family ownership transfer.
-       */
-      if ((stage_is_video(dep_info->pBufferMemoryBarriers[i].srcStageMask) &&
-           mask_is_write(dep_info->pBufferMemoryBarriers[i].srcAccessMask) &&
-           !stage_is_video(dep_info->pBufferMemoryBarriers[i].dstStageMask)) ||
-          (dep_info->pBufferMemoryBarriers[i].srcQueueFamilyIndex !=
-           dep_info->pBufferMemoryBarriers[i].dstQueueFamilyIndex)) {
-         flush_llc = true;
-         break;
+      for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
+         /* Flush the cache if something is written by the video operations and
+          * used by any other stages except video encode/decode stages or if
+          * srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this memory
+          * barrier defines a queue family ownership transfer.
+          */
+         if ((stage_is_video(dep_info->pBufferMemoryBarriers[i].srcStageMask) &&
+              mask_is_write(dep_info->pBufferMemoryBarriers[i].srcAccessMask) &&
+              !stage_is_video(dep_info->pBufferMemoryBarriers[i].dstStageMask)) ||
+             (dep_info->pBufferMemoryBarriers[i].srcQueueFamilyIndex !=
+              dep_info->pBufferMemoryBarriers[i].dstQueueFamilyIndex)) {
+            flush_llc = true;
+            break;
+         }
       }
-   }
 
-   for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
-      /* Flush the cache if something is written by the video operations and
-       * used by any other stages except video encode/decode stage.
-       */
-      if (stage_is_video(dep_info->pMemoryBarriers[i].srcStageMask) &&
-          mask_is_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
-          !stage_is_video(dep_info->pMemoryBarriers[i].dstStageMask)) {
-         flush_llc = true;
-         break;
+      for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
+         /* Flush the cache if something is written by the video operations and
+          * used by any other stages except video encode/decode stage.
+          */
+         if (stage_is_video(dep_info->pMemoryBarriers[i].srcStageMask) &&
+             mask_is_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
+             !stage_is_video(dep_info->pMemoryBarriers[i].dstStageMask)) {
+            flush_llc = true;
+            break;
+         }
       }
+
+      /* We cannot gather more information than that. */
+      if (flush_ccs && flush_llc)
+         break;
    }
 
    if (flush_ccs || flush_llc) {
@@ -3819,7 +3830,8 @@ cmd_buffer_barrier_video(struct anv_cmd_buffer *cmd_buffer,
 
 static void
 cmd_buffer_barrier_blitter(struct anv_cmd_buffer *cmd_buffer,
-                           const VkDependencyInfo *dep_info)
+                           uint32_t n_dep_infos,
+                           const VkDependencyInfo *dep_infos)
 {
 #if GFX_VERx10 >= 125
    assert(anv_cmd_buffer_is_blitter_queue(cmd_buffer));
@@ -3829,65 +3841,74 @@ cmd_buffer_barrier_blitter(struct anv_cmd_buffer *cmd_buffer,
     */
    bool flush_llc = false;
    bool flush_ccs = false;
-   for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
-      const VkImageMemoryBarrier2 *img_barrier =
-         &dep_info->pImageMemoryBarriers[i];
 
-      ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
-      const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
+   for (uint32_t d = 0; d < n_dep_infos; d++) {
+      const VkDependencyInfo *dep_info = &dep_infos[d];
 
-      /* If srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this
-       * memory barrier defines a queue family transfer operation.
-       */
-      if (img_barrier->srcQueueFamilyIndex != img_barrier->dstQueueFamilyIndex)
-         flush_llc = true;
+      for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
+         const VkImageMemoryBarrier2 *img_barrier =
+            &dep_info->pImageMemoryBarriers[i];
 
-      /* Flush cache if transfer command reads the output of the previous
-       * transfer command, ideally we should just wait for the completion but
-       * for now just flush the cache to make the data visible.
-       */
-      if ((img_barrier->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
-            img_barrier->oldLayout == VK_IMAGE_LAYOUT_GENERAL) &&
-          (img_barrier->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
-           img_barrier->newLayout == VK_IMAGE_LAYOUT_GENERAL)) {
-         flush_llc = true;
-      }
+         ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
+         const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
 
-      VkImageAspectFlags img_aspects =
+         /* If srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this
+          * memory barrier defines a queue family transfer operation.
+          */
+         if (img_barrier->srcQueueFamilyIndex != img_barrier->dstQueueFamilyIndex)
+            flush_llc = true;
+
+         /* Flush cache if transfer command reads the output of the previous
+          * transfer command, ideally we should just wait for the completion
+          * but for now just flush the cache to make the data visible.
+          */
+         if ((img_barrier->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+              img_barrier->oldLayout == VK_IMAGE_LAYOUT_GENERAL) &&
+             (img_barrier->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+              img_barrier->newLayout == VK_IMAGE_LAYOUT_GENERAL)) {
+            flush_llc = true;
+         }
+
+         VkImageAspectFlags img_aspects =
             vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
-      anv_foreach_image_aspect_bit(aspect_bit, image, img_aspects) {
-         const uint32_t plane =
-            anv_image_aspect_to_plane(image, 1UL << aspect_bit);
-         if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage)) {
-            flush_ccs = true;
+         anv_foreach_image_aspect_bit(aspect_bit, image, img_aspects) {
+            const uint32_t plane =
+               anv_image_aspect_to_plane(image, 1UL << aspect_bit);
+            if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage)) {
+               flush_ccs = true;
+            }
          }
       }
-   }
 
-   for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
-      /* Flush the cache if something is written by the transfer command and
-       * used by any other stages except transfer stage or if
-       * srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this memory
-       * barrier defines a queue family transfer operation.
-       */
-      if ((stage_is_transfer(dep_info->pBufferMemoryBarriers[i].srcStageMask) &&
-           mask_is_write(dep_info->pBufferMemoryBarriers[i].srcAccessMask)) ||
-          (dep_info->pBufferMemoryBarriers[i].srcQueueFamilyIndex !=
-           dep_info->pBufferMemoryBarriers[i].dstQueueFamilyIndex)) {
-         flush_llc = true;
-         break;
+      for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
+         /* Flush the cache if something is written by the transfer command
+          * and used by any other stages except transfer stage or if
+          * srcQueueFamilyIndex is not equal to dstQueueFamilyIndex, this
+          * memory barrier defines a queue family transfer operation.
+          */
+         if ((stage_is_transfer(dep_info->pBufferMemoryBarriers[i].srcStageMask) &&
+              mask_is_write(dep_info->pBufferMemoryBarriers[i].srcAccessMask)) ||
+             (dep_info->pBufferMemoryBarriers[i].srcQueueFamilyIndex !=
+              dep_info->pBufferMemoryBarriers[i].dstQueueFamilyIndex)) {
+            flush_llc = true;
+            break;
+         }
       }
-   }
 
-   for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
-      /* Flush the cache if something is written by the transfer command and
-       * used by any other stages except transfer stage.
-       */
-      if (stage_is_transfer(dep_info->pMemoryBarriers[i].srcStageMask) &&
-          mask_is_write(dep_info->pMemoryBarriers[i].srcAccessMask)) {
-         flush_llc = true;
-         break;
+      for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
+         /* Flush the cache if something is written by the transfer command
+          * and used by any other stages except transfer stage.
+          */
+         if (stage_is_transfer(dep_info->pMemoryBarriers[i].srcStageMask) &&
+             mask_is_write(dep_info->pMemoryBarriers[i].srcAccessMask)) {
+            flush_llc = true;
+            break;
+         }
       }
+
+      /* We cannot gather more information than that. */
+      if (flush_ccs && flush_llc)
+         break;
    }
 
    if (flush_ccs || flush_llc) {
@@ -3916,24 +3937,25 @@ cmd_buffer_has_pending_copy_query(struct anv_cmd_buffer *cmd_buffer)
 
 static void
 cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
-                   const VkDependencyInfo *dep_info,
+                   uint32_t n_dep_infos,
+                   const VkDependencyInfo *dep_infos,
                    const char *reason)
 {
    if (anv_cmd_buffer_is_video_queue(cmd_buffer)) {
-      cmd_buffer_barrier_video(cmd_buffer, dep_info);
+      cmd_buffer_barrier_video(cmd_buffer, n_dep_infos, dep_infos);
       return;
    }
 
    if (anv_cmd_buffer_is_blitter_queue(cmd_buffer)) {
-      cmd_buffer_barrier_blitter(cmd_buffer, dep_info);
+      cmd_buffer_barrier_blitter(cmd_buffer, n_dep_infos, dep_infos);
       return;
    }
 
    struct anv_device *device = cmd_buffer->device;
 
    /* XXX: Right now, we're really dumb and just flush whatever categories
-    * the app asks for.  One of these days we may make this a bit better
-    * but right now that's all the hardware allows for in most areas.
+    * the app asks for. One of these days we may make this a bit better but
+    * right now that's all the hardware allows for in most areas.
     */
    VkAccessFlags2 src_flags = 0;
    VkAccessFlags2 dst_flags = 0;
@@ -3941,166 +3963,170 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
    bool apply_sparse_flushes = false;
    bool flush_query_copies = false;
 
-   for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
-      src_flags |= dep_info->pMemoryBarriers[i].srcAccessMask;
-      dst_flags |= dep_info->pMemoryBarriers[i].dstAccessMask;
+   for (uint32_t d = 0; d < n_dep_infos; d++) {
+      const VkDependencyInfo *dep_info = &dep_infos[d];
 
-      /* Shader writes to buffers that could then be written by a transfer
-       * command (including queries).
-       */
-      if (stage_is_shader(dep_info->pMemoryBarriers[i].srcStageMask) &&
-          mask_is_shader_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
-          stage_is_transfer(dep_info->pMemoryBarriers[i].dstStageMask)) {
-         cmd_buffer->state.queries.buffer_write_bits |=
-            ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+      for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
+         src_flags |= dep_info->pMemoryBarriers[i].srcAccessMask;
+         dst_flags |= dep_info->pMemoryBarriers[i].dstAccessMask;
+
+         /* Shader writes to buffers that could then be written by a transfer
+          * command (including queries).
+          */
+         if (stage_is_shader(dep_info->pMemoryBarriers[i].srcStageMask) &&
+             mask_is_shader_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
+             stage_is_transfer(dep_info->pMemoryBarriers[i].dstStageMask)) {
+            cmd_buffer->state.queries.buffer_write_bits |=
+               ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+         }
+
+         if (stage_is_transfer(dep_info->pMemoryBarriers[i].srcStageMask) &&
+             mask_is_transfer_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
+             cmd_buffer_has_pending_copy_query(cmd_buffer))
+            flush_query_copies = true;
+
+         /* There's no way of knowing if this memory barrier is related to
+          * sparse buffers! This is pretty horrible.
+          */
+         if (mask_is_write(src_flags) &&
+             p_atomic_read(&device->num_sparse_resources) > 0)
+            apply_sparse_flushes = true;
       }
 
-      if (stage_is_transfer(dep_info->pMemoryBarriers[i].srcStageMask) &&
-          mask_is_transfer_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
-          cmd_buffer_has_pending_copy_query(cmd_buffer))
-         flush_query_copies = true;
+      for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
+         const VkBufferMemoryBarrier2 *buf_barrier =
+            &dep_info->pBufferMemoryBarriers[i];
+         ANV_FROM_HANDLE(anv_buffer, buffer, buf_barrier->buffer);
 
-      /* There's no way of knowing if this memory barrier is related to sparse
-       * buffers! This is pretty horrible.
-       */
-      if (mask_is_write(src_flags) &&
-          p_atomic_read(&device->num_sparse_resources) > 0)
-         apply_sparse_flushes = true;
-   }
+         src_flags |= buf_barrier->srcAccessMask;
+         dst_flags |= buf_barrier->dstAccessMask;
 
-   for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
-      const VkBufferMemoryBarrier2 *buf_barrier =
-         &dep_info->pBufferMemoryBarriers[i];
-      ANV_FROM_HANDLE(anv_buffer, buffer, buf_barrier->buffer);
+         /* Shader writes to buffers that could then be written by a transfer
+          * command (including queries).
+          */
+         if (stage_is_shader(buf_barrier->srcStageMask) &&
+             mask_is_shader_write(buf_barrier->srcAccessMask) &&
+             stage_is_transfer(buf_barrier->dstStageMask)) {
+            cmd_buffer->state.queries.buffer_write_bits |=
+               ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+         }
 
-      src_flags |= buf_barrier->srcAccessMask;
-      dst_flags |= buf_barrier->dstAccessMask;
+         if (stage_is_transfer(buf_barrier->srcStageMask) &&
+             mask_is_transfer_write(buf_barrier->srcAccessMask) &&
+             cmd_buffer_has_pending_copy_query(cmd_buffer))
+            flush_query_copies = true;
 
-      /* Shader writes to buffers that could then be written by a transfer
-       * command (including queries).
-       */
-      if (stage_is_shader(buf_barrier->srcStageMask) &&
-          mask_is_shader_write(buf_barrier->srcAccessMask) &&
-          stage_is_transfer(buf_barrier->dstStageMask)) {
-         cmd_buffer->state.queries.buffer_write_bits |=
-            ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+         if (anv_buffer_is_sparse(buffer) && mask_is_write(src_flags))
+            apply_sparse_flushes = true;
       }
 
-      if (stage_is_transfer(buf_barrier->srcStageMask) &&
-          mask_is_transfer_write(buf_barrier->srcAccessMask) &&
-          cmd_buffer_has_pending_copy_query(cmd_buffer))
-         flush_query_copies = true;
+      for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
+         const VkImageMemoryBarrier2 *img_barrier =
+            &dep_info->pImageMemoryBarriers[i];
 
-      if (anv_buffer_is_sparse(buffer) && mask_is_write(src_flags))
-         apply_sparse_flushes = true;
-   }
+         src_flags |= img_barrier->srcAccessMask;
+         dst_flags |= img_barrier->dstAccessMask;
 
-   for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
-      const VkImageMemoryBarrier2 *img_barrier =
-         &dep_info->pImageMemoryBarriers[i];
+         ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
+         const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
 
-      src_flags |= img_barrier->srcAccessMask;
-      dst_flags |= img_barrier->dstAccessMask;
+         uint32_t base_layer, layer_count;
+         if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
+            base_layer = 0;
+            layer_count = u_minify(image->vk.extent.depth, range->baseMipLevel);
+         } else {
+            base_layer = range->baseArrayLayer;
+            layer_count = vk_image_subresource_layer_count(&image->vk, range);
+         }
+         const uint32_t level_count =
+            vk_image_subresource_level_count(&image->vk, range);
 
-      ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
-      const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
+         VkImageLayout old_layout = img_barrier->oldLayout;
+         VkImageLayout new_layout = img_barrier->newLayout;
 
-      uint32_t base_layer, layer_count;
-      if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
-         base_layer = 0;
-         layer_count = u_minify(image->vk.extent.depth, range->baseMipLevel);
-      } else {
-         base_layer = range->baseArrayLayer;
-         layer_count = vk_image_subresource_layer_count(&image->vk, range);
-      }
-      const uint32_t level_count =
-         vk_image_subresource_level_count(&image->vk, range);
+         /* If we're inside a render pass, the runtime might have converted
+          * some layouts from GENERAL to FEEDBACK_LOOP. Check if that's the
+          * case and reconvert back to the original layout so that application
+          * barriers within renderpass are operating with consistent layouts.
+          */
+         if (!cmd_buffer->vk.runtime_rp_barrier &&
+             cmd_buffer->vk.render_pass != NULL) {
+            assert(anv_cmd_graphics_state_has_image_as_attachment(&cmd_buffer->state.gfx,
+                                                                  image));
+            VkImageLayout subpass_att_layout, subpass_stencil_att_layout;
 
-      VkImageLayout old_layout = img_barrier->oldLayout;
-      VkImageLayout new_layout = img_barrier->newLayout;
+            vk_command_buffer_get_attachment_layout(
+               &cmd_buffer->vk, &image->vk,
+               &subpass_att_layout, &subpass_stencil_att_layout);
 
-      /* If we're inside a render pass, the runtime might have converted some
-       * layouts from GENERAL to FEEDBACK_LOOP. Check if that's the case and
-       * reconvert back to the original layout so that application barriers
-       * within renderpass are operating with consistent layouts.
-       */
-      if (!cmd_buffer->vk.runtime_rp_barrier &&
-          cmd_buffer->vk.render_pass != NULL) {
-         assert(anv_cmd_graphics_state_has_image_as_attachment(&cmd_buffer->state.gfx,
-                                                               image));
-         VkImageLayout subpass_att_layout, subpass_stencil_att_layout;
+            old_layout = subpass_att_layout;
+            new_layout = subpass_att_layout;
+         }
 
-         vk_command_buffer_get_attachment_layout(
-            &cmd_buffer->vk, &image->vk,
-            &subpass_att_layout, &subpass_stencil_att_layout);
-
-         old_layout = subpass_att_layout;
-         new_layout = subpass_att_layout;
-      }
-
-      if (range->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) {
-         transition_depth_buffer(cmd_buffer, image,
-                                 range->baseMipLevel, level_count,
-                                 base_layer, layer_count,
-                                 old_layout, new_layout,
-                                 false /* will_full_fast_clear */);
-      }
-
-      if (range->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
-         transition_stencil_buffer(cmd_buffer, image,
-                                   range->baseMipLevel, level_count,
-                                   base_layer, layer_count,
-                                   old_layout, new_layout,
-                                   false /* will_full_fast_clear */);
-      }
-
-      if (range->aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
-         VkImageAspectFlags color_aspects =
-            vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
-         anv_foreach_image_aspect_bit(aspect_bit, image, color_aspects) {
-            transition_color_buffer(cmd_buffer, image, 1UL << aspect_bit,
+         if (range->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) {
+            transition_depth_buffer(cmd_buffer, image,
                                     range->baseMipLevel, level_count,
                                     base_layer, layer_count,
                                     old_layout, new_layout,
-                                    img_barrier->srcQueueFamilyIndex,
-                                    img_barrier->dstQueueFamilyIndex,
                                     false /* will_full_fast_clear */);
          }
-      }
 
-      /* Mark image as compressed if the destination layout has untracked
-       * writes to the aux surface.
-       */
-      VkImageAspectFlags aspects =
-         vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
-      anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
-         VkImageAspectFlagBits aspect = 1UL << aspect_bit;
-         if (anv_layout_has_untracked_aux_writes(
-                device->info,
-                image, aspect,
-                img_barrier->newLayout,
-                cmd_buffer->queue_family->queueFlags)) {
-            for (uint32_t l = 0; l < level_count; l++) {
-               const uint32_t level = range->baseMipLevel + l;
-               const uint32_t aux_layers =
-                  anv_image_aux_layers(image, aspect, level);
+         if (range->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
+            transition_stencil_buffer(cmd_buffer, image,
+                                      range->baseMipLevel, level_count,
+                                      base_layer, layer_count,
+                                      old_layout, new_layout,
+                                      false /* will_full_fast_clear */);
+         }
 
-               if (base_layer >= aux_layers)
-                  break; /* We will only get fewer layers as level increases */
-
-               uint32_t level_layer_count =
-                  MIN2(layer_count, aux_layers - base_layer);
-
-               set_image_compressed_bit(cmd_buffer, image, aspect,
-                                        level,
-                                        base_layer, level_layer_count,
-                                        true);
+         if (range->aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
+            VkImageAspectFlags color_aspects =
+               vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
+            anv_foreach_image_aspect_bit(aspect_bit, image, color_aspects) {
+               transition_color_buffer(cmd_buffer, image, 1UL << aspect_bit,
+                                       range->baseMipLevel, level_count,
+                                       base_layer, layer_count,
+                                       old_layout, new_layout,
+                                       img_barrier->srcQueueFamilyIndex,
+                                       img_barrier->dstQueueFamilyIndex,
+                                       false /* will_full_fast_clear */);
             }
          }
-      }
 
-      if (anv_image_is_sparse(image) && mask_is_write(src_flags))
-         apply_sparse_flushes = true;
+         /* Mark image as compressed if the destination layout has untracked
+          * writes to the aux surface.
+          */
+         VkImageAspectFlags aspects =
+            vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
+         anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
+            VkImageAspectFlagBits aspect = 1UL << aspect_bit;
+            if (anv_layout_has_untracked_aux_writes(
+                   device->info,
+                   image, aspect,
+                   img_barrier->newLayout,
+                   cmd_buffer->queue_family->queueFlags)) {
+               for (uint32_t l = 0; l < level_count; l++) {
+                  const uint32_t level = range->baseMipLevel + l;
+                  const uint32_t aux_layers =
+                     anv_image_aux_layers(image, aspect, level);
+
+                  if (base_layer >= aux_layers)
+                     break; /* We will only get fewer layers as level increases */
+
+                  uint32_t level_layer_count =
+                     MIN2(layer_count, aux_layers - base_layer);
+
+                  set_image_compressed_bit(cmd_buffer, image, aspect,
+                                           level,
+                                           base_layer, level_layer_count,
+                                           true);
+               }
+            }
+         }
+
+         if (anv_image_is_sparse(image) && mask_is_write(src_flags))
+            apply_sparse_flushes = true;
+      }
    }
 
    enum anv_pipe_bits bits =
@@ -4137,7 +4163,7 @@ void genX(CmdPipelineBarrier2)(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   cmd_buffer_barrier(cmd_buffer, pDependencyInfo, "pipe barrier");
+   cmd_buffer_barrier(cmd_buffer, 1, pDependencyInfo, "pipe barrier");
 }
 
 void
@@ -5640,7 +5666,7 @@ void genX(CmdWaitEvents2)(
       }
    }
 
-   cmd_buffer_barrier(cmd_buffer, pDependencyInfos, "wait event");
+   cmd_buffer_barrier(cmd_buffer, eventCount, pDependencyInfos, "wait event");
 }
 
 static uint32_t vk_to_intel_index_type(VkIndexType type)

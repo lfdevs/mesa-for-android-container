@@ -578,8 +578,10 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    s.ResourceMinLOD = info->view->min_lod_clamp;
 
 #if GFX_VERx10 >= 200
-   s.EnableSamplerRoutetoLSC = isl_format_support_sampler_route_to_lsc(info->view->format);
-   s.EnableSamplerRoutetoLSC &= (s.SurfaceType == SURFTYPE_2D);
+   s.EnableSamplerRoutetoLSC =
+      isl_format_support_sampler_route_to_lsc(info->view->format);
+   s.EnableSamplerRoutetoLSC &= (s.SurfaceType == SURFTYPE_2D &&
+                                 info->view->array_len == 1);
 
 /* Wa_14018471104:
  * For APIs that use ResourceMinLod, do the following: (remains same as before)

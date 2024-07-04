@@ -111,7 +111,7 @@ static const __DRIextension *drivk_sw_screen_extensions[] = {
 };
 
 static const __DRIconfig **
-kopper_init_screen(struct dri_screen *screen, bool implicit)
+kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 {
    const __DRIconfig **configs;
    struct pipe_screen *pscreen = NULL;
@@ -138,7 +138,7 @@ kopper_init_screen(struct dri_screen *screen, bool implicit)
 #endif
 
    if (success)
-      pscreen = pipe_loader_create_screen(screen->dev, implicit);
+      pscreen = pipe_loader_create_screen(screen->dev, driver_name_is_inferred);
 
    if (!pscreen)
       return NULL;

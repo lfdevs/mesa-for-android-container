@@ -790,7 +790,7 @@ static const struct glx_screen_vtable dri3_screen_vtable = {
  */
 
 static struct glx_screen *
-dri3_create_screen(int screen, struct glx_display * priv, bool implicit)
+dri3_create_screen(int screen, struct glx_display * priv, bool driver_name_is_inferred)
 {
    xcb_connection_t *c = XGetXCBConnection(priv->dpy);
    const __DRIconfig **driver_configs;
@@ -868,7 +868,7 @@ dri3_create_screen(int screen, struct glx_display * priv, bool implicit)
                psc->image_driver->createNewScreen3(screen, psc->fd_display_gpu,
                                                    pdp->loader_extensions,
                                                    extensions,
-                                                   &driver_configs, implicit, psc);
+                                                   &driver_configs, driver_name_is_inferred, psc);
          }
 
          free(driverNameDisplayGPU);
@@ -879,7 +879,7 @@ dri3_create_screen(int screen, struct glx_display * priv, bool implicit)
       psc->image_driver->createNewScreen3(screen, psc->fd_render_gpu,
                                           pdp->loader_extensions,
                                           extensions,
-                                          &driver_configs, implicit, psc);
+                                          &driver_configs, driver_name_is_inferred, psc);
 
    if (psc->driScreenRenderGPU == NULL) {
       ErrorMessageF("glx: failed to create dri3 screen\n");

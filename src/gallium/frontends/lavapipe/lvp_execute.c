@@ -5257,8 +5257,7 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
       }
    }
 
-   if (util_dynarray_num_elements(&state->push_desc_sets, struct lvp_descriptor_set *))
-      finish_fence(state);
+   finish_fence(state);
 
    util_dynarray_foreach (&state->push_desc_sets, struct lvp_descriptor_set *, set)
       lvp_descriptor_set_destroy(device, *set);

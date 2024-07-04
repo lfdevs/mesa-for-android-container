@@ -1077,7 +1077,7 @@ disk_cache_touch_cache_user_marker(char *path)
       if (fd != -1) {
          close(fd);
       }
-   } else if (now - attr.st_mtime < 60 * 60 * 24 /* One day */) {
+   } else if (now - attr.st_mtime > 60 * 60 * 24 /* One day */) {
       (void)utime(marker_path, NULL);
    }
    free(marker_path);

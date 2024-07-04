@@ -1270,6 +1270,26 @@ void genX(CmdEndQueryIndexedEXT)(
                                    ANV_PIPE_CS_STALL_BIT |
                                    ANV_PIPE_STALL_AT_SCOREBOARD_BIT);
       emit_xfb_query(&b, index, anv_address_add(query_addr, 16));
+#if GFX_VER == 11
+      /* Running the following CTS pattern on ICL will likely report a failure :
+       *
+       * dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.32bit.geom.*
+       *
+       * If you dump the returned values in genX(GetQueryPoolResults)(), you
+       * will notice that the last 64bit value is 0 and rereading the value
+       * once more will return a non-zero value. This seems to indicate that
+       * the memory writes are not ordered somehow... Otherwise the
+       * availability write below would ensure the previous writes above have
+       * completed.
+       *
+       * So as a workaround, we stall CS to make sure the previous writes have
+       * landed before emitting the availability.
+       */
+      genx_batch_emit_pipe_control(&cmd_buffer->batch,
+                                   cmd_buffer->device->info,
+                                   cmd_buffer->state.current_pipeline,
+                                   ANV_PIPE_CS_STALL_BIT);
+#endif
       emit_query_mi_availability(&b, query_addr, true);
       break;
 

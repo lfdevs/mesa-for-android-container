@@ -4476,6 +4476,8 @@ vtn_handle_barrier(struct vtn_builder *b, SpvOp opcode,
                                SpvMemorySemanticsSequentiallyConsistentMask);
          memory_semantics |= SpvMemorySemanticsAcquireReleaseMask |
                              SpvMemorySemanticsOutputMemoryMask;
+         if (memory_scope == SpvScopeSubgroup || memory_scope == SpvScopeInvocation)
+            memory_scope = SpvScopeWorkgroup;
       }
 
       vtn_emit_scoped_control_barrier(b, execution_scope, memory_scope,

@@ -41,6 +41,7 @@ VULKAN_LAYERS =
 confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA = -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
+confflags_TEFLON = -Dteflon=false
 
 LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
 RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x x32
@@ -140,6 +141,11 @@ else
 	confflags_GALLIUM += -Dgallium-va=enabled
 	confflags_GALLIUM += -Dvideo-codecs="all"
   endif
+
+  # Teflon only supports arm64
+  ifneq (,$(filter $(DEB_HOST_ARCH), arm64))
+	confflags_TEFLON = -Dteflon=true
+  endif
 endif
 
 ifeq ($(DEB_HOST_ARCH), i386)
@@ -180,7 +186,8 @@ confflags += \
 	$(confflags_GLES) \
 	$(confflags_OSMESA) \
 	$(confflags_SSE2) \
-	$(confflags_VALGRIND)
+	$(confflags_VALGRIND) \
+	$(confflags_TEFLON)
 
 override_dh_clean: regen_control
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' | sed 's/-.*//;s/~/-/' > VERSION

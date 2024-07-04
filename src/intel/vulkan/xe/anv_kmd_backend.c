@@ -42,7 +42,8 @@ xe_gem_create(struct anv_device *device,
    /* TODO: protected content */
    assert((alloc_flags & ANV_BO_ALLOC_PROTECTED) == 0);
    /* WB+0 way coherent not supported by Xe KMD */
-   assert(alloc_flags & ANV_BO_ALLOC_HOST_COHERENT);
+   assert((alloc_flags & ANV_BO_ALLOC_HOST_CACHED) == 0 ||
+          (alloc_flags & ANV_BO_ALLOC_HOST_CACHED_COHERENT) == ANV_BO_ALLOC_HOST_CACHED_COHERENT);
 
    uint32_t flags = 0;
    if (alloc_flags & ANV_BO_ALLOC_SCANOUT)

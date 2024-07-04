@@ -151,7 +151,7 @@ anv_xe_physical_device_init_memory_types(struct anv_physical_device *device)
       device->memory.types[device->memory.type_count++] = (struct anv_memory_type) {
          .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                           VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
          .heapIndex = 0,
       };

@@ -1320,6 +1320,12 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
 
    info->has_export_conflict_bug = info->gfx_level == GFX11;
 
+   /* When LLVM is fixed to handle multiparts shaders, this value will depend
+    * on the known good versions of LLVM. Until then, enable the equivalent WA
+    * in the nir -> llvm backend.
+    */
+   info->needs_llvm_wait_wa = info->gfx_level == GFX11;
+
    /* Convert the SDMA version in the current GPU to an enum. */
    info->sdma_ip_version =
       (enum sdma_version)SDMA_VERSION_VALUE(info->ip[AMD_IP_SDMA].ver_major,

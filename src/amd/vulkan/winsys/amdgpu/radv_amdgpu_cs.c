@@ -527,6 +527,17 @@ radv_amdgpu_cs_reset(struct radeon_cmdbuf *_cs)
    cs->annotations = NULL;
 }
 
+static bool
+radv_amdgpu_cs_has_external_ib(const struct radv_amdgpu_cs *cs)
+{
+   for (unsigned i = 0; i < cs->num_ib_buffers; i++) {
+      if (cs->ib_buffers[i].is_external)
+         return true;
+   }
+
+   return false;
+}
+
 static void
 radv_amdgpu_cs_unchain(struct radeon_cmdbuf *cs)
 {
@@ -561,6 +572,12 @@ radv_amdgpu_cs_chain(struct radeon_cmdbuf *cs, struct radeon_cmdbuf *next_cs, bo
 
    /* Only some HW IP types have packets that we can use for chaining. */
    if (!acs->use_ib)
+      return false;
+
+   /* Do not chain if the next CS has external IBs because it will chain to newly created IB instead
+    * of the first one.
+    */
+   if (radv_amdgpu_cs_has_external_ib(next_acs))
       return false;
 
    assert(cs->cdw <= cs->max_dw + 4);
@@ -950,17 +967,6 @@ static void
 radv_assign_last_submit(struct radv_amdgpu_ctx *ctx, struct radv_amdgpu_cs_request *request)
 {
    radv_amdgpu_request_to_fence(ctx, &ctx->last_submission[request->ip_type][request->ring], request);
-}
-
-static bool
-radv_amdgpu_cs_has_external_ib(const struct radv_amdgpu_cs *cs)
-{
-   for (unsigned i = 0; i < cs->num_ib_buffers; i++) {
-      if (cs->ib_buffers[i].is_external)
-         return true;
-   }
-
-   return false;
 }
 
 static unsigned

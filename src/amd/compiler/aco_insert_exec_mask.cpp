@@ -270,6 +270,7 @@ add_coupling_code(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instruction>>
          for (unsigned i = 1; i < phi->operands.size(); i++)
             phi->operands[i] =
                get_exec_op(ctx.info[header_preds[i]].exec[info.num_exec_masks - 1].first);
+         restore_exec = true;
       }
 
       if (info.has_divergent_break) {

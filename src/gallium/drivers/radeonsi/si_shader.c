@@ -788,6 +788,8 @@ bool si_shader_binary_open(struct si_screen *screen, struct si_shader *shader,
                                        .options =
                                           {
                                              .halt_at_entry = screen->options.halt_shaders,
+                                             .waitcnt_wa = num_parts > 1 &&
+                                                           screen->info.needs_llvm_wait_wa,
                                           },
                                        .shader_type = sel->stage,
                                        .wave_size = shader->wave_size,

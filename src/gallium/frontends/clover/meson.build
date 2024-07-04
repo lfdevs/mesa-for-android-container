@@ -44,7 +44,7 @@ if with_opencl_icd
   clover_cpp_args += '-DHAVE_CLOVER_ICD'
 endif
 
-if with_opencl_spirv
+if with_clover_spirv
   clover_spirv_cpp_args += '-DHAVE_CLOVER_SPIRV'
 endif
 
@@ -76,7 +76,7 @@ libclllvm = static_library(
 )
 
 idep_opencl_spirv = null_dep
-if with_opencl_spirv
+if with_clover_spirv
   libclspirv = static_library(
     'clspirv',
     files('spirv/invocation.cpp', 'spirv/invocation.hpp'),

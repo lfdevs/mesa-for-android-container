@@ -10446,6 +10446,17 @@ lcssa_workaround(isel_context* ctx, nir_loop* loop)
 
    std::map<unsigned, unsigned> renames;
    nir_foreach_block_in_cf_node (block, &loop->cf_node) {
+      /* These values are reachable from the loop exit even when continue_or_break is used. We
+       * shouldn't create phis with undef operands in case the contents are important even if exec
+       * is zero (for example, memory access addresses). */
+      if (nir_block_dominates(block, nir_loop_last_block(loop)))
+         continue;
+
+      /* Definitions in this block are not reachable from the loop exit, and so all uses are inside
+       * the loop. */
+      if (!nir_block_dominates(block, block_after_loop))
+         continue;
+
       nir_foreach_instr (instr, block) {
          nir_def* def = nir_instr_def(instr);
          if (!def)

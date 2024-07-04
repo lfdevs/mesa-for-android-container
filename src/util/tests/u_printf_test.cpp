@@ -217,5 +217,5 @@ TEST_F(u_printf_test, util_printf_mixed_multiple)
    add_arg<float>(3.0);
    add_arg<float, 4>(floats);
 
-   EXPECT_EQ(parse(), "ABCED\n-5 6\n%%%%mesa 10 3.000000 1.0,2.0,3.0,4.0 ");
+   EXPECT_EQ(parse(), "ABCED\n-5 6\n%%mesa 10 3.000000 1.0,2.0,3.0,4.0 ");
 }

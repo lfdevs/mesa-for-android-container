@@ -87,7 +87,7 @@ struct __GLXDRIdisplayRec
      */
    void (*destroyDisplay) (__GLXDRIdisplay * display);
 
-   struct glx_screen *(*createScreen)(int screen, struct glx_display * priv, bool implicit);
+   struct glx_screen *(*createScreen)(int screen, struct glx_display * priv, bool driver_name_is_inferred);
 };
 
 struct __GLXDRIscreenRec {

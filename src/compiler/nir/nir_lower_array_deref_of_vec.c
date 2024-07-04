@@ -30,6 +30,7 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
                                   nir_lower_array_deref_of_vec_options options)
 {
    bool progress = false;
+   bool has_indirect_store = false;
 
    nir_builder b = nir_builder_create(impl);
 
@@ -91,6 +92,8 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
                nir_def *index = deref->arr.index.ssa;
                nir_build_write_masked_stores(&b, vec_deref, value, index,
                                              0, num_components);
+
+               has_indirect_store = true;
             }
             nir_instr_remove(&intrin->instr);
 
@@ -127,8 +130,8 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
    }
 
    if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+      /* indirect store lower will change control flow */
+      nir_metadata_preserve(impl, has_indirect_store ? nir_metadata_none : (nir_metadata_block_index | nir_metadata_dominance));
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }

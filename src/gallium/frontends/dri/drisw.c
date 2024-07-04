@@ -575,7 +575,7 @@ drisw_create_drawable(struct dri_screen *screen, const struct gl_config * visual
 }
 
 static const __DRIconfig **
-drisw_init_screen(struct dri_screen *screen, bool implicit)
+drisw_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 {
    const __DRIswrastLoaderExtension *loader = screen->swrast_loader;
    const __DRIconfig **configs;
@@ -600,7 +600,7 @@ drisw_init_screen(struct dri_screen *screen, bool implicit)
       success = pipe_loader_sw_probe_dri(&screen->dev, lf);
 
    if (success)
-      pscreen = pipe_loader_create_screen(screen->dev, implicit);
+      pscreen = pipe_loader_create_screen(screen->dev, driver_name_is_inferred);
 
    if (!pscreen)
       return NULL;

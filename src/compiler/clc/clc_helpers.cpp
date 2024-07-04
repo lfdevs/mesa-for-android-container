@@ -1039,9 +1039,7 @@ llvm_mod_to_spirv(std::unique_ptr<::llvm::Module> mod,
       return -1;
    }
 
-   const char *const *extensions = NULL;
-   if (args)
-      extensions = args->allowed_spirv_extensions;
+   const char *const *extensions = args->allowed_spirv_extensions;
    if (!extensions) {
       /* The SPIR-V parser doesn't handle all extensions */
       static const char *default_extensions[] = {

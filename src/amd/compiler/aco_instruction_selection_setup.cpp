@@ -288,7 +288,7 @@ init_context(isel_context* ctx, nir_shader* shader)
    nir_metadata_preserve(impl, nir_metadata_none);
 
    /* we'll need these for isel */
-   nir_metadata_require(impl, nir_metadata_block_index);
+   nir_metadata_require(impl, nir_metadata_block_index | nir_metadata_dominance);
 
    if (ctx->options->dump_preoptir) {
       fprintf(stderr, "NIR shader before instruction selection:\n");

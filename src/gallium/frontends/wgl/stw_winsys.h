@@ -125,13 +125,6 @@ struct stw_winsys
                ULONGLONG PresentHistoryToken );
 
    /**
-    * Query whether the driver can support GDI and/or double-buffering in its
-    * pixel formats (optional).
-    */
-   unsigned
-   (*get_pfd_flags)( struct pipe_screen *screen );
-
-   /**
     * Create a winsys-specific object for a given DC's framebuffer
     */
    struct stw_winsys_framebuffer *

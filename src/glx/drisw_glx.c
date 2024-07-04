@@ -936,7 +936,7 @@ kopperGetSwapInterval(__GLXDRIdrawable *pdraw)
 
 static struct glx_screen *
 driswCreateScreenDriver(int screen, struct glx_display *priv,
-                        const char *driver, bool implicit)
+                        const char *driver, bool driver_name_is_inferred)
 {
    __GLXDRIscreen *psp;
    const __DRIconfig **driver_configs;
@@ -980,9 +980,9 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
    psc->driScreen =
       psc->swrast->createNewScreen3(screen, loader_extensions_local,
                                     extensions,
-                                    &driver_configs, implicit, psc);
+                                    &driver_configs, driver_name_is_inferred, psc);
    if (psc->driScreen == NULL) {
-      if (!pdpyp->zink || !implicit)
+      if (!pdpyp->zink || !driver_name_is_inferred)
          ErrorMessageF("glx: failed to create drisw screen\n");
       goto handle_error;
    }
@@ -1056,21 +1056,21 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
    glx_screen_cleanup(&psc->base);
    free(psc);
 
-   if (pdpyp->zink == TRY_ZINK_YES && !implicit)
+   if (pdpyp->zink == TRY_ZINK_YES && !driver_name_is_inferred)
       CriticalErrorMessageF("failed to load driver: %s\n", driver);
 
    return NULL;
 }
 
 static struct glx_screen *
-driswCreateScreen(int screen, struct glx_display *priv, bool implicit)
+driswCreateScreen(int screen, struct glx_display *priv, bool driver_name_is_inferred)
 {
    const struct drisw_display *pdpyp = (struct drisw_display *)priv->driswDisplay;
    if (pdpyp->zink && !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false)) {
-      return driswCreateScreenDriver(screen, priv, "zink", implicit);
+      return driswCreateScreenDriver(screen, priv, "zink", driver_name_is_inferred);
    }
 
-   return driswCreateScreenDriver(screen, priv, "swrast", implicit);
+   return driswCreateScreenDriver(screen, priv, "swrast", driver_name_is_inferred);
 }
 
 /* Called from __glXFreeDisplayPrivate.

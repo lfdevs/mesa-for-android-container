@@ -330,11 +330,8 @@ get_live_in_demand(spill_ctx& ctx, unsigned block_idx)
 
    reg_pressure += get_demand_before(ctx, block_idx, idx);
 
-   /* Consider register pressure from linear predecessors. This can affect
-    * reg_pressure if the branch instructions define sgprs. */
-   for (unsigned pred : block.linear_preds)
-      reg_pressure.sgpr =
-         std::max<int16_t>(reg_pressure.sgpr, ctx.live_vars.register_demand[pred].back().sgpr);
+   /* In order to create long jumps, we might need an empty SGPR pair. */
+   reg_pressure.sgpr += 2;
 
    return reg_pressure;
 }

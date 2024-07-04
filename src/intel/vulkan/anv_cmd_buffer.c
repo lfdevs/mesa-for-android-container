@@ -553,6 +553,9 @@ anv_cmd_buffer_flush_pipeline_state(struct anv_cmd_buffer *cmd_buffer,
 
    /* Compare all states, including partial packed ones, the dynamic part is
     * left at 0 but the static part could still change.
+    *
+    * We avoid comparing protected packets as all the fields but the scratch
+    * surface are identical. we just need to select the right one at emission.
     */
    diff_fix_state(URB,                      final.urb);
    diff_fix_state(VF_SGVS,                  final.vf_sgvs);

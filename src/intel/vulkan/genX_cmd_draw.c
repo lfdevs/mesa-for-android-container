@@ -659,7 +659,11 @@ genX(emit_ds)(struct anv_cmd_buffer *cmd_buffer)
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
       return;
 
-   anv_batch_emit_pipeline_state(&cmd_buffer->batch, pipeline, final.ds);
+   const bool protected = cmd_buffer->vk.pool->flags &
+                          VK_COMMAND_POOL_CREATE_PROTECTED_BIT;
+
+   anv_batch_emit_pipeline_state_protected(&cmd_buffer->batch, pipeline,
+                                           final.ds, protected);
 #endif
 }
 

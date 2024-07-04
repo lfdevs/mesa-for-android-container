@@ -7,6 +7,7 @@ Standards-Version: 4.1.4
 Build-Depends:
  debhelper-compat (= 13),
  directx-headers-dev (>= 1.613.0) [linux-amd64 linux-arm64],
+ flatbuffers-compiler [linux-arm64],
  glslang-tools [@LLVM_ARCHS@],
  meson (>= 1.4.0),
  quilt (>= 0.63-8.2~),
@@ -15,6 +16,7 @@ Build-Depends:
  libx11-dev,
  libxxf86vm-dev,
  libexpat1-dev,
+ libflatbuffers-dev [linux-arm64],
  libsensors-dev [!hurd-any],
  libxfixes-dev,
  libxext-dev,
@@ -34,6 +36,7 @@ Build-Depends:
  libxcb-sync-dev,
  libxrandr-dev,
  libxshmfence-dev (>= 1.1),
+ libxtensor-dev [linux-arm64],
  libzstd-dev,
  python3,
  python3-mako,
@@ -319,6 +322,19 @@ Description: Mesa Off-screen rendering extension -- development files
  that use the off-screen rendering extension of Mesa.
  .
  For more information on OSmesa see the libosmesa6 package.
+
+Package: mesa-teflon-delegate
+Section: libs
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: Mesa TensorFlow Lite external delegate
+ TensorFlow Lite delegate which can make use of NPUs to accelerate ML
+ inference. It is implemented in the form of a external delegate, a shared
+ library which the TensorFlow Lite runtime can load at startup.
 
 Package: mesa-va-drivers
 Section: libs

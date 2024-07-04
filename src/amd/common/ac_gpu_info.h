@@ -120,6 +120,9 @@ struct radeon_info {
    bool sdma_supports_compression; /* Whether SDMA supports DCC and HTILE. */
    bool has_set_context_pairs_packed;
    bool has_set_sh_pairs_packed;
+   bool needs_llvm_wait_wa; /* True if the chip needs to workarounds based on s_waitcnt_deptr but
+                             * the LLVM version doesn't work with multiparts shaders.
+                             */
 
    /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
     *

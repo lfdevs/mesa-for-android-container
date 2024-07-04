@@ -152,6 +152,14 @@ llvmpipe_delete_image_handle(struct pipe_context *pctx, uint64_t handle)
 static uint64_t
 get_sample_function(uint64_t _matrix, uint64_t _texture_functions, uint64_t _sampler_desc, uint32_t sample_key);
 
+struct sample_function_cache_key {
+   struct lp_texture_functions *texture_functions;
+   uint32_t sampler_index;
+   uint32_t sample_key;
+};
+
+DERIVE_HASH_TABLE(sample_function_cache_key)
+
 void
 llvmpipe_init_sampler_matrix(struct llvmpipe_context *ctx)
 {
@@ -165,7 +173,7 @@ llvmpipe_init_sampler_matrix(struct llvmpipe_context *ctx)
    ctx->sampler_matrix.ctx = ctx;
 
    ctx->sampler_matrix.compile_function = get_sample_function;
-   ctx->sampler_matrix.cache = _mesa_pointer_hash_table_create(NULL);
+   ctx->sampler_matrix.cache = sample_function_cache_key_table_create(NULL);
    simple_mtx_init(&ctx->sampler_matrix.lock, mtx_plain);
 }
 
@@ -507,21 +515,27 @@ static uint64_t
 get_sample_function(uint64_t _matrix, uint64_t _texture_functions, uint64_t _sampler_desc, uint32_t sample_key)
 {
    struct lp_sampler_matrix *matrix = (void *)(uintptr_t)_matrix;
-   struct lp_texture_functions *texture_functions = (void *)(uintptr_t)_texture_functions;
    struct lp_descriptor *sampler_desc = (void *)(uintptr_t)_sampler_desc;
-
    uint32_t sampler_index = sampler_desc->texture.sampler_index;
-   void *key = &texture_functions->sample_functions[sampler_index][sample_key];
 
    simple_mtx_lock(&matrix->lock);
 
+   struct lp_texture_functions *texture_functions = (void *)(uintptr_t)_texture_functions;
+   struct sample_function_cache_key key = {
+      .texture_functions = texture_functions,
+      .sampler_index = sampler_index,
+      .sample_key = sample_key,
+   };
+
    void *result;
-   struct hash_entry *entry = _mesa_hash_table_search(matrix->cache, key);
+   struct hash_entry *entry = _mesa_hash_table_search(matrix->cache, &key);
    if (entry) {
       result = entry->data;
    } else {
       result = compile_sample_function(matrix->ctx, &texture_functions->state, matrix->samplers + sampler_index, sample_key);
-      _mesa_hash_table_insert(matrix->cache, key, result);
+      struct sample_function_cache_key *allocated_key = malloc(sizeof(struct sample_function_cache_key));
+      *allocated_key = key;
+      _mesa_hash_table_insert(matrix->cache, allocated_key, result);
    }
 
    simple_mtx_unlock(&matrix->lock);
@@ -1007,12 +1021,14 @@ llvmpipe_clear_sample_functions_cache(struct llvmpipe_context *ctx, struct pipe_
 
    simple_mtx_unlock(&matrix->lock);
 
-   if (fence)
+   if (fence) {
       ctx->pipe.screen->fence_finish(ctx->pipe.screen, NULL, *fence, OS_TIMEOUT_INFINITE);
 
-   /* All work is finished, it's safe to move cache entries into the table.
-    * The key is the intended address of the sample function.
-    */
-   hash_table_foreach_remove(matrix->cache, entry)
-      *(void **)entry->key = entry->data;
+      /* All work is finished, it's safe to move cache entries into the table. */
+      hash_table_foreach_remove(matrix->cache, entry) {
+         struct sample_function_cache_key *key = (void *)entry->key;
+         key->texture_functions->sample_functions[key->sampler_index][key->sample_key] = entry->data;
+         free(key);
+      }
+   }
 }

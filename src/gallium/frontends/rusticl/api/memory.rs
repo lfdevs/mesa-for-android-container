@@ -21,6 +21,7 @@ use rusticl_proc_macros::cl_info_entrypoint;
 
 use std::alloc;
 use std::alloc::Layout;
+use std::cmp;
 use std::cmp::Ordering;
 use std::mem::{self, MaybeUninit};
 use std::os::raw::c_void;
@@ -274,12 +275,25 @@ fn create_buffer_with_properties(
         return Err(CL_INVALID_BUFFER_SIZE);
     }
 
-    // ... or if size is greater than CL_DEVICE_MAX_MEM_ALLOC_SIZE for all devices in context.
+    // ... or if size is greater than CL_DEVICE_MAX_MEM_ALLOC_SIZE for all devices in context,
     if checked_compare(size, Ordering::Greater, c.max_mem_alloc()) {
         return Err(CL_INVALID_BUFFER_SIZE);
     }
 
     validate_host_ptr(host_ptr, flags)?;
+
+    // or if CL_MEM_USE_HOST_PTR is set in flags and host_ptr is a pointer returned by clSVMAlloc
+    // and size is greater than the size passed to clSVMAlloc.
+    if let Some((svm_ptr, svm_layout)) = c.find_svm_alloc(host_ptr as usize) {
+        // SAFETY: they are part of the same allocation, and because host_ptr >= svm_ptr we can cast
+        // to usize.
+        let diff = unsafe { host_ptr.offset_from(svm_ptr) } as usize;
+
+        // technically we don't have to account for the offset, but it's almost for free.
+        if size > svm_layout.size() - diff {
+            return Err(CL_INVALID_BUFFER_SIZE);
+        }
+    }
 
     let props = Properties::from_ptr_raw(properties);
     // CL_INVALID_PROPERTY if a property name in properties is not a supported property name, if
@@ -512,7 +526,7 @@ fn validate_image_desc(
             desc.image_row_pitch = desc.image_width * elem_size;
         }
         if desc.image_slice_pitch == 0 {
-            desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
+            desc.image_slice_pitch = desc.image_row_pitch * cmp::max(1, desc.image_height);
         }
 
         if has_buf_parent && desc.image_type != CL_MEM_OBJECT_IMAGE1D_BUFFER {
@@ -533,8 +547,7 @@ fn validate_image_desc(
         }
 
         if dims == 3 || array {
-            let valid_slice_pitch =
-                desc.image_row_pitch * if dims == 1 { 1 } else { desc.image_height };
+            let valid_slice_pitch = desc.image_row_pitch * cmp::max(1, desc.image_height);
             if desc.image_slice_pitch == 0 {
                 desc.image_slice_pitch = valid_slice_pitch;
             } else if desc.image_slice_pitch < valid_slice_pitch
@@ -721,7 +734,11 @@ impl CLInfo<cl_image_info> for cl_mem {
             CL_IMAGE_NUM_MIP_LEVELS => cl_prop::<cl_uint>(mem.image_desc.num_mip_levels),
             CL_IMAGE_NUM_SAMPLES => cl_prop::<cl_uint>(mem.image_desc.num_samples),
             CL_IMAGE_ROW_PITCH => cl_prop::<usize>(mem.image_desc.image_row_pitch),
-            CL_IMAGE_SLICE_PITCH => cl_prop::<usize>(mem.image_desc.image_slice_pitch),
+            CL_IMAGE_SLICE_PITCH => cl_prop::<usize>(if mem.image_desc.dims() == 1 {
+                0
+            } else {
+                mem.image_desc.image_slice_pitch
+            }),
             CL_IMAGE_WIDTH => cl_prop::<usize>(mem.image_desc.image_width),
             _ => return Err(CL_INVALID_VALUE),
         })

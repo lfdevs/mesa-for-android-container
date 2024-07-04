@@ -271,6 +271,7 @@ v3d_choose_spill_node(struct v3d_compile *c)
         float block_scale = 1.0;
         float spill_costs[c->num_temps];
         bool in_tmu_operation = false;
+        bool rtop_hazard = false;
         bool started_last_seg = false;
 
         for (unsigned i = 0; i < c->num_temps; i++)
@@ -279,6 +280,20 @@ v3d_choose_spill_node(struct v3d_compile *c)
         /* XXX: Scale the cost up when inside of a loop. */
         vir_for_each_block(block, c) {
                 vir_for_each_inst(inst, block) {
+                        /* RTOP is not preserved across thread switches, so
+                         * we can't spill in the middle of multop + umul24.
+                         */
+                        bool is_multop = false;
+                        bool is_umul24 = false;
+                        if (inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU) {
+                                if (inst->qpu.alu.mul.op == V3D_QPU_M_MULTOP) {
+                                    is_multop = true;
+                                    rtop_hazard = true;
+                                } else if (inst->qpu.alu.mul.op == V3D_QPU_M_UMUL24) {
+                                    is_umul24 = true;
+                                }
+                        }
+
                         /* We can't insert new thread switches after
                          * starting output writes.
                          */
@@ -297,7 +312,7 @@ v3d_choose_spill_node(struct v3d_compile *c)
 
                                 if (spill_type != SPILL_TYPE_TMU) {
                                         spill_costs[temp] += block_scale;
-                                } else if (!no_spilling) {
+                                } else if (!no_spilling && (!rtop_hazard || is_multop)) {
                                         float tmu_op_scale = in_tmu_operation ?
                                                 3.0 : 1.0;
                                         spill_costs[temp] += (block_scale *
@@ -315,7 +330,7 @@ v3d_choose_spill_node(struct v3d_compile *c)
 
                                 if (spill_type != SPILL_TYPE_TMU) {
                                         /* We just rematerialize it later */
-                                } else if (!no_spilling) {
+                                } else if (!no_spilling && (!rtop_hazard || is_umul24)) {
                                         spill_costs[temp] += (block_scale *
                                                               tmu_scale);
                                 } else {
@@ -344,6 +359,9 @@ v3d_choose_spill_node(struct v3d_compile *c)
 
                         if (qinst_writes_tmu(c->devinfo, inst))
                                 in_tmu_operation = true;
+
+                        if (is_umul24)
+                                rtop_hazard = false;
                 }
         }
 
@@ -492,14 +510,19 @@ v3d_emit_spill_tmua(struct v3d_compile *c,
         add_node(c, offset.index, get_class_bit_any(c->devinfo));
 
         /* We always enable per-quad on spills/fills to ensure we spill
-         * any channels involved with helper invocations.
+         * any channels involved with helper invocations, but only if
+         * the spill is not conditional, since otherwise we may be spilling
+         * invalida lanes and overwriting valid data from a previous spill
+         * to the same address.
          */
         struct qreg tmua = vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUAU);
         struct qinst *inst = vir_ADD_dest(c, tmua, c->spill_base, offset);
         inst->qpu.flags.ac = cond;
         inst->ldtmu_count = 1;
-        inst->uniform = vir_get_uniform_index(c, QUNIFORM_CONSTANT,
-                                              0xffffff7f); /* per-quad */
+        inst->uniform =
+                vir_get_uniform_index(c, QUNIFORM_CONSTANT,
+                                      cond != V3D_QPU_COND_NONE ?
+                                              0xffffffff : 0xffffff7f /* per-quad*/);
 
         vir_emit_thrsw(c);
 
