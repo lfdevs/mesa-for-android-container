@@ -2335,7 +2335,7 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
                P_INLINE_DATA(p, group | (c << 4));
 
                nv_push_update_count(p, 3);
-               nvk_cmd_buffer_push_indirect(cmd, desc_addr, 3);
+               nvk_cmd_buffer_push_indirect(cmd, desc_addr, 12);
             }
          }
       }

@@ -64,7 +64,7 @@ class PoERun:
         if not boot_detected:
             self.print_error(
                 "Something wrong; couldn't detect the boot start up sequence")
-            return 1
+            return 2
 
         self.logger.create_job_phase("test")
         for line in self.ser.lines(timeout=self.test_timeout, phase="test"):

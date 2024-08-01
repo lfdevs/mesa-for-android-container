@@ -860,7 +860,10 @@ struct si_shader {
     * in use.
     */
    uint64_t gpu_address;
-   struct si_resource *scratch_bo;
+   /* Only used on GFX6-10 where the scratch address must be inserted into the shader binary.
+    * This is the scratch address that the current shader binary contains.
+    */
+   uint64_t scratch_va;
    union si_shader_key key;
    struct util_queue_fence ready;
    bool compilation_failed;

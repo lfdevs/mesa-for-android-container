@@ -19,7 +19,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::mem::size_of;
-use std::ptr;
 use std::ptr::addr_of;
 use std::slice;
 use std::sync::Arc;
@@ -27,12 +26,21 @@ use std::sync::Mutex;
 use std::sync::MutexGuard;
 use std::sync::Once;
 
-const BIN_HEADER_SIZE_V1: usize =
-    // 1. format version
+// 8 bytes so we don't have any padding.
+const BIN_RUSTICL_MAGIC_STRING: &[u8; 8] = b"rusticl\0";
+
+const BIN_HEADER_SIZE_BASE: usize =
+    // 1. magic number
+    size_of::<[u8; 8]>() +
+    // 2. format version
+    size_of::<u32>();
+
+const BIN_HEADER_SIZE_V1: usize = BIN_HEADER_SIZE_BASE +
+    // 3. device name length
     size_of::<u32>() +
-    // 2. spirv len
+    // 4. spirv len
     size_of::<u32>() +
-    // 3. binary_type
+    // 5. binary_type
     size_of::<cl_program_binary_type>();
 
 const BIN_HEADER_SIZE: usize = BIN_HEADER_SIZE_V1;
@@ -282,6 +290,7 @@ impl ProgramBuild {
     }
 }
 
+#[derive(Default)]
 pub struct ProgramDevBuild {
     spirv: Option<spirv::SPIRVBin>,
     status: cl_build_status,
@@ -373,63 +382,105 @@ impl Program {
         })
     }
 
+    fn spirv_from_bin_for_dev(
+        dev: &Device,
+        bin: &[u8],
+    ) -> CLResult<(SPIRVBin, cl_program_binary_type)> {
+        if bin.is_empty() {
+            return Err(CL_INVALID_VALUE);
+        }
+
+        if bin.len() < BIN_HEADER_SIZE_BASE {
+            return Err(CL_INVALID_BINARY);
+        }
+
+        unsafe {
+            let mut blob = blob_reader::default();
+            blob_reader_init(&mut blob, bin.as_ptr().cast(), bin.len());
+
+            let read_magic: &[u8] = slice::from_raw_parts(
+                blob_read_bytes(&mut blob, BIN_RUSTICL_MAGIC_STRING.len()).cast(),
+                BIN_RUSTICL_MAGIC_STRING.len(),
+            );
+            if read_magic != *BIN_RUSTICL_MAGIC_STRING {
+                return Err(CL_INVALID_BINARY);
+            }
+
+            let version = u32::from_le(blob_read_uint32(&mut blob));
+            match version {
+                1 => {
+                    let name_length = u32::from_le(blob_read_uint32(&mut blob)) as usize;
+                    let spirv_size = u32::from_le(blob_read_uint32(&mut blob)) as usize;
+                    let bin_type = u32::from_le(blob_read_uint32(&mut blob));
+
+                    debug_assert!(
+                        // `blob_read_*` doesn't advance the pointer on failure to read
+                        blob.current.offset_from(blob.data) == BIN_HEADER_SIZE_V1 as isize
+                            || blob.overrun,
+                    );
+
+                    let name = blob_read_bytes(&mut blob, name_length);
+                    let spirv_data = blob_read_bytes(&mut blob, spirv_size);
+
+                    // check that all the reads are valid before accessing the data, which might
+                    // be uninitialized otherwise.
+                    if blob.overrun {
+                        return Err(CL_INVALID_BINARY);
+                    }
+
+                    let name: &[u8] = slice::from_raw_parts(name.cast(), name_length);
+                    if dev.screen().name().as_bytes() != name {
+                        return Err(CL_INVALID_BINARY);
+                    }
+
+                    let spirv = spirv::SPIRVBin::from_bin(slice::from_raw_parts(
+                        spirv_data.cast(),
+                        spirv_size,
+                    ));
+
+                    Ok((spirv, bin_type))
+                }
+                _ => Err(CL_INVALID_BINARY),
+            }
+        }
+    }
+
     pub fn from_bins(
         context: Arc<Context>,
         devs: Vec<&'static Device>,
         bins: &[&[u8]],
-    ) -> Arc<Program> {
+    ) -> Result<Arc<Program>, Vec<cl_int>> {
         let mut builds = HashMap::new();
         let mut kernels = HashSet::new();
 
-        for (&d, b) in devs.iter().zip(bins) {
-            let mut ptr = b.as_ptr();
-            let bin_type;
-            let spirv;
-
-            unsafe {
-                // 1. version
-                let version = ptr.cast::<u32>().read();
-                ptr = ptr.add(size_of::<u32>());
-
-                match version {
-                    1 => {
-                        // 2. size of the spirv
-                        let spirv_size = ptr.cast::<u32>().read();
-                        ptr = ptr.add(size_of::<u32>());
-
-                        // 3. binary_type
-                        bin_type = ptr.cast::<cl_program_binary_type>().read();
-                        ptr = ptr.add(size_of::<cl_program_binary_type>());
-
-                        // 4. the spirv
-                        assert!(b.as_ptr().add(BIN_HEADER_SIZE_V1) == ptr);
-                        assert!(b.len() == BIN_HEADER_SIZE_V1 + spirv_size as usize);
-                        spirv = Some(spirv::SPIRVBin::from_bin(slice::from_raw_parts(
-                            ptr,
-                            spirv_size as usize,
-                        )));
+        let mut errors = vec![CL_SUCCESS as cl_int; devs.len()];
+        for (idx, (&d, b)) in devs.iter().zip(bins).enumerate() {
+            let build = match Self::spirv_from_bin_for_dev(d, b) {
+                Ok((spirv, bin_type)) => {
+                    for k in spirv.kernels() {
+                        kernels.insert(k);
                     }
-                    _ => panic!("unknown version"),
-                }
-            }
 
-            if let Some(spirv) = &spirv {
-                for k in spirv.kernels() {
-                    kernels.insert(k);
+                    ProgramDevBuild {
+                        spirv: Some(spirv),
+                        bin_type: bin_type,
+                        ..Default::default()
+                    }
                 }
-            }
+                Err(err) => {
+                    errors[idx] = err;
+                    ProgramDevBuild {
+                        status: CL_BUILD_ERROR,
+                        ..Default::default()
+                    }
+                }
+            };
 
-            builds.insert(
-                d,
-                ProgramDevBuild {
-                    spirv: spirv,
-                    status: CL_BUILD_SUCCESS as cl_build_status,
-                    log: String::from(""),
-                    options: String::from(""),
-                    bin_type: bin_type,
-                    kernels: HashMap::new(),
-                },
-            );
+            builds.insert(d, build);
+        }
+
+        if errors.iter().any(|&e| e != CL_SUCCESS as cl_int) {
+            return Err(errors);
         }
 
         let mut build = ProgramBuild {
@@ -440,13 +491,13 @@ impl Program {
         };
         build.build_nirs(false);
 
-        Arc::new(Self {
+        Ok(Arc::new(Self {
             base: CLObjectBase::new(RusticlTypes::Program),
             context: context,
             devs: devs,
             src: ProgramSourceType::Binary,
             build: Mutex::new(build),
-        })
+        }))
     }
 
     pub fn from_spirv(context: Arc<Context>, spirv: &[u8]) -> Arc<Program> {
@@ -492,24 +543,22 @@ impl Program {
         for d in &self.devs {
             let info = lock.dev_build(d);
 
-            res.push(
-                info.spirv
-                    .as_ref()
-                    .map_or(0, |s| s.to_bin().len() + BIN_HEADER_SIZE),
-            );
+            res.push(info.spirv.as_ref().map_or(0, |s| {
+                s.to_bin().len() + d.screen().name().as_bytes().len() + BIN_HEADER_SIZE
+            }));
         }
         res
     }
 
-    pub fn binaries(&self, vals: &[u8]) -> Vec<*mut u8> {
+    pub fn binaries(&self, vals: &[u8]) -> CLResult<Vec<*mut u8>> {
         // if the application didn't provide any pointers, just return the length of devices
         if vals.is_empty() {
-            return vec![std::ptr::null_mut(); self.devs.len()];
+            return Ok(vec![std::ptr::null_mut(); self.devs.len()]);
         }
 
         // vals is an array of pointers where we should write the device binaries into
         if vals.len() != self.devs.len() * size_of::<*const u8>() {
-            panic!("wrong size")
+            return Err(CL_INVALID_VALUE);
         }
 
         let ptrs: &[*mut u8] = unsafe {
@@ -518,7 +567,6 @@ impl Program {
 
         let lock = self.build_info();
         for (i, d) in self.devs.iter().enumerate() {
-            let mut ptr = ptrs[i];
             let info = lock.dev_build(d);
 
             // no spirv means nothing to write
@@ -528,25 +576,35 @@ impl Program {
             let spirv = spirv.to_bin();
 
             unsafe {
-                // 1. binary format version
-                ptr.cast::<u32>().write(1);
-                ptr = ptr.add(size_of::<u32>());
+                let mut blob = blob::default();
 
-                // 2. size of the spirv
-                ptr.cast::<u32>().write(spirv.len() as u32);
-                ptr = ptr.add(size_of::<u32>());
+                // sadly we have to trust the buffer to be correctly sized...
+                blob_init_fixed(&mut blob, ptrs[i].cast(), usize::MAX);
 
-                // 3. binary_type
-                ptr.cast::<cl_program_binary_type>().write(info.bin_type);
-                ptr = ptr.add(size_of::<cl_program_binary_type>());
+                blob_write_bytes(
+                    &mut blob,
+                    BIN_RUSTICL_MAGIC_STRING.as_ptr().cast(),
+                    BIN_RUSTICL_MAGIC_STRING.len(),
+                );
 
-                // 4. the spirv
-                assert!(ptrs[i].add(BIN_HEADER_SIZE) == ptr);
-                ptr::copy_nonoverlapping(spirv.as_ptr(), ptr, spirv.len());
+                // binary format version
+                blob_write_uint32(&mut blob, 1_u32.to_le());
+
+                let device_name = d.screen().name();
+                let device_name = device_name.as_bytes();
+
+                blob_write_uint32(&mut blob, (device_name.len() as u32).to_le());
+                blob_write_uint32(&mut blob, (spirv.len() as u32).to_le());
+                blob_write_uint32(&mut blob, info.bin_type.to_le());
+                debug_assert!(blob.size == BIN_HEADER_SIZE);
+
+                blob_write_bytes(&mut blob, device_name.as_ptr().cast(), device_name.len());
+                blob_write_bytes(&mut blob, spirv.as_ptr().cast(), spirv.len());
+                blob_finish(&mut blob);
             }
         }
 
-        ptrs.to_vec()
+        Ok(ptrs.to_vec())
     }
 
     pub fn kernel_signatures(&self, kernel_name: &str) -> HashSet<Vec<spirv::SPIRVKernelArg>> {

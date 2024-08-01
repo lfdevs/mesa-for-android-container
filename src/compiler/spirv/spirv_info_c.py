@@ -120,11 +120,12 @@ if __name__ == "__main__":
         collect_data(spirv_info, "Dim"),
         collect_data(spirv_info, "ExecutionMode"),
         collect_data(spirv_info, "ExecutionModel"),
+        collect_data(spirv_info, "FPRoundingMode"),
+        collect_data(spirv_info, "FunctionParameterAttribute"),
         collect_data(spirv_info, "ImageFormat"),
+        collect_data(spirv_info, "ImageOperands"),
         collect_data(spirv_info, "MemoryModel"),
         collect_data(spirv_info, "StorageClass"),
-        collect_data(spirv_info, "ImageOperands"),
-        collect_data(spirv_info, "FPRoundingMode"),
         collect_opcodes(spirv_info),
     ]
 

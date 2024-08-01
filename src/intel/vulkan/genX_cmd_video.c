@@ -1001,7 +1001,7 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
          .MOCS = anv_mocs(cmd_buffer->device, bsp.BSDMPCRowStoreScratchBufferAddress.bo, 0),
       };
       bsp.MPRRowStoreScratchBufferAddress = (struct anv_address) { vid->vid_mem[ANV_VID_MEM_H264_MPR_ROW_SCRATCH].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H264_BSD_MPC_ROW_SCRATCH].offset };
+         vid->vid_mem[ANV_VID_MEM_H264_MPR_ROW_SCRATCH].offset };
 
       bsp.MPRRowStoreScratchBufferAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, bsp.MPRRowStoreScratchBufferAddress.bo, 0),

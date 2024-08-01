@@ -2151,6 +2151,8 @@ VkResult pvr_AllocateMemory(VkDevice _device,
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
          fd_info = (void *)ext;
          break;
+      case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
+         break;
       default:
          pvr_debug_ignored_stype(ext->sType);
          break;

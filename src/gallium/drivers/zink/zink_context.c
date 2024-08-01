@@ -5003,6 +5003,7 @@ zink_context_replace_buffer_storage(struct pipe_context *pctx, struct pipe_resou
    /* don't be too creative */
    zink_resource_object_reference(screen, &d->obj, s->obj);
    d->valid_buffer_range = s->valid_buffer_range;
+   s->real_buffer_range = &d->valid_buffer_range;
    zink_resource_copies_reset(d);
    /* force counter buffer reset */
    d->so_valid = false;

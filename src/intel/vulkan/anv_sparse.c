@@ -515,6 +515,7 @@ anv_sparse_bind_trtt(struct anv_device *device,
 
    /* TR-TT submission needs a queue even when the API entry point doesn't
     * give one, such as resource creation. */
+   assert(trtt->queue != NULL);
    if (!sparse_submit->queue)
       sparse_submit->queue = trtt->queue;
 

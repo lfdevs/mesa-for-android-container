@@ -4112,7 +4112,7 @@ static int si_update_scratch_buffer(struct si_context *sctx, struct si_shader *s
       return 0;
 
    /* Prevent race conditions when updating:
-    * - si_shader::scratch_bo
+    * - si_shader::scratch_va
     * - si_shader::binary::code
     * - si_shader::previous_stage::binary::code.
     */
@@ -4120,7 +4120,7 @@ static int si_update_scratch_buffer(struct si_context *sctx, struct si_shader *s
 
    /* This shader is already configured to use the current
     * scratch buffer. */
-   if (shader->scratch_bo == sctx->scratch_buffer) {
+   if (shader->scratch_va == scratch_va) {
       si_shader_unlock(shader);
       return 0;
    }
@@ -4135,8 +4135,7 @@ static int si_update_scratch_buffer(struct si_context *sctx, struct si_shader *s
 
    /* Update the shader state to use the new shader bo. */
    si_shader_init_pm4_state(sctx->screen, shader);
-
-   si_resource_reference(&shader->scratch_bo, sctx->scratch_buffer);
+   shader->scratch_va = scratch_va;
 
    si_shader_unlock(shader);
    return 1;
@@ -4224,7 +4223,7 @@ bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes)
             return false;
       }
 
-      if (sctx->gfx_level < GFX11 && !si_update_scratch_relocs(sctx))
+      if (!sctx->screen->info.has_scratch_base_registers && !si_update_scratch_relocs(sctx))
          return false;
    }
 
@@ -4450,6 +4449,11 @@ void si_update_tess_io_layout_state(struct si_context *sctx)
    } else {
       ls_current = sctx->shader.vs.current;
       ls = sctx->shader.vs.cso;
+
+      if (!ls_current) {
+         sctx->do_update_shaders = true;
+         return;
+      }
    }
 
    if (sctx->last_ls == ls_current && sctx->last_tcs == tcs &&

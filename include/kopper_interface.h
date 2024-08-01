@@ -97,6 +97,7 @@ struct kopper_loader_info {
    struct kopper_vk_surface_create_storage bos;
    int has_alpha;
    int initial_swap_interval;
+   bool present_opaque;
 };
 
 #define __DRI_KOPPER_LOADER "DRI_KopperLoader"

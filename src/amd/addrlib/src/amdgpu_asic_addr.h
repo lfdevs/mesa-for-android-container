@@ -100,6 +100,8 @@
 #define AMDGPU_NAVI33_RANGE     0x10, 0x20 //# 16 <= x < 32
 #define AMDGPU_GFX1150_RANGE    0x01, 0x40 //# 1 <= x < 64
 #define AMDGPU_GFX1151_RANGE    0xC0, 0xFF //# 192 <= x < 255
+#define AMDGPU_GFX1152_RANGE    0x40, 0x50 //# 64 <= x < 80
+
 #define AMDGPU_GFX1103_R1_RANGE 0x01, 0x80 //# 1 <= x < 128
 #define AMDGPU_GFX1103_R2_RANGE 0x80, 0xC0 //# 128 <= x < 192
 
@@ -172,6 +174,8 @@
 #define ASICREV_IS_NAVI33_P(r)         ASICREV_IS(r, NAVI33)
 #define ASICREV_IS_GFX1150(r)          ASICREV_IS(r, GFX1150)
 #define ASICREV_IS_GFX1151(r)          ASICREV_IS(r, GFX1151)
+#define ASICREV_IS_GFX1152(r)          ASICREV_IS(r, GFX1152)
+
 #define ASICREV_IS_GFX1103_R1(r)       ASICREV_IS(r, GFX1103_R1)
 #define ASICREV_IS_GFX1103_R2(r)       ASICREV_IS(r, GFX1103_R2)
 

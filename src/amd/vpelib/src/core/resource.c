@@ -88,6 +88,7 @@ enum vpe_ip_level vpe_resource_parse_ip_version(
 #if VPE_BUILD_1_X
 #if VPE_BUILD_1_0
     case VPE_VERSION(6, 1, 0):
+    case VPE_VERSION(6, 1, 3):
         ip_level = VPE_IP_LEVEL_1_0;
         break;
 #endif

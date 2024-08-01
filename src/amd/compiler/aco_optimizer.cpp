@@ -4734,6 +4734,7 @@ to_uniform_bool_instr(opt_ctx& ctx, aco_ptr<Instruction>& instr)
    }
 
    instr->definitions[0].setTemp(Temp(instr->definitions[0].tempId(), s1));
+   ctx.program->temp_rc[instr->definitions[0].tempId()] = s1;
    assert(instr->operands[0].regClass() == s1);
    assert(instr->operands[1].regClass() == s1);
    return true;

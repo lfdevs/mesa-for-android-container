@@ -3157,6 +3157,12 @@ struct anv_buffer {
 };
 
 static inline bool
+anv_buffer_is_protected(const struct anv_buffer *buffer)
+{
+   return buffer->vk.create_flags & VK_BUFFER_CREATE_PROTECTED_BIT;
+}
+
+static inline bool
 anv_buffer_is_sparse(const struct anv_buffer *buffer)
 {
    return buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
@@ -5224,6 +5230,12 @@ struct anv_image {
 };
 
 static inline bool
+anv_image_is_protected(const struct anv_image *image)
+{
+   return image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT;
+}
+
+static inline bool
 anv_image_is_sparse(const struct anv_image *image)
 {
    return image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
@@ -5587,7 +5599,8 @@ void
 anv_cmd_buffer_fill_area(struct anv_cmd_buffer *cmd_buffer,
                          struct anv_address address,
                          VkDeviceSize size,
-                         uint32_t data);
+                         uint32_t data,
+                         bool protected);
 
 VkResult
 anv_cmd_buffer_ensure_rcs_companion(struct anv_cmd_buffer *cmd_buffer);

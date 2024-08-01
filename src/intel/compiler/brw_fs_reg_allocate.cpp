@@ -34,8 +34,6 @@
 
 using namespace brw;
 
-#define REG_CLASS_COUNT 20
-
 static void
 assign_reg(const struct intel_device_info *devinfo,
            unsigned *reg_hw_locations, fs_reg *reg)

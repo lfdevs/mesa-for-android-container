@@ -768,14 +768,6 @@ fn spill_values<S: Spill>(
         }
         let s_idx = succ[0];
 
-        // If blocks[p_idx] is the unique predecessor of blocks[s_idx] then the
-        // spill/fill sets for blocks[s_idx] are just those from blocks[p_idx],
-        // filtered for liveness and there is no phi source.  There's nothing
-        // for us to do here.
-        if blocks.pred_indices(s_idx).len() == 1 {
-            continue;
-        }
-
         let pb = &mut blocks[p_idx];
         let p_out = &ssa_state_out[p_idx];
         let s_in = &ssa_state_in[s_idx];

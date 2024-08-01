@@ -2902,6 +2902,9 @@ static void radeon_dec_decode_bitstream(struct pipe_video_codec *decoder,
    if (!dec->bs_ptr)
       return;
 
+   if (dec->bs_size && dec->stream_type == RDECODE_CODEC_AV1)
+      return;
+
    unsigned long total_bs_size = dec->bs_size;
    for (i = 0; i < num_buffers; ++i)
       total_bs_size += sizes[i];

@@ -506,9 +506,9 @@ void si_copy_buffer(struct si_context *sctx, struct pipe_resource *dst, struct p
 }
 
 void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
-                                     uint64_t dst_offset, uint64_t src_offset, unsigned size, unsigned flags)
+                                     uint64_t dst_offset, uint64_t src_offset, unsigned count, unsigned flags)
 {
-   if (!size)
+   if (!count)
       return;
 
    if (!sctx->cs_ubyte_to_ushort)
@@ -525,19 +525,19 @@ void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resour
    info.block[0] = si_determine_wave_size(sctx->screen, NULL);
    info.block[1] = 1;
    info.block[2] = 1;
-   info.grid[0] = DIV_ROUND_UP(size, info.block[0]);
+   info.grid[0] = DIV_ROUND_UP(count, info.block[0]);
    info.grid[1] = 1;
    info.grid[2] = 1;
-   info.last_block[0] = size % info.block[0];
+   info.last_block[0] = count % info.block[0];
 
    struct pipe_shader_buffer sb[2] = {};
    sb[0].buffer = dst;
    sb[0].buffer_offset = dst_offset;
-   sb[0].buffer_size = dst->width0;
+   sb[0].buffer_size = count * 2;
 
    sb[1].buffer = src;
    sb[1].buffer_offset = src_offset;
-   sb[1].buffer_size = src->width0;
+   sb[1].buffer_size = count;
 
    si_launch_grid_internal_ssbos(sctx, &info, sctx->cs_ubyte_to_ushort, flags, coher,
                                  2, sb, 0x1);

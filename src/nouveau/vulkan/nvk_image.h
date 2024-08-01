@@ -146,4 +146,8 @@ nvk_image_memory_aspects_to_plane(ASSERTED const struct nvk_image *image,
    }
 }
 
+void nvk_image_plane_size_align_B(const struct nvk_image *image,
+                                  const struct nvk_image_plane *plane,
+                                  uint64_t *size_B_out, uint64_t *align_B_out);
+
 #endif

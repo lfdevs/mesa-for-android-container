@@ -17,6 +17,7 @@ LLVM_VERSION = 17
 export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
+export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 
 ifeq (,$(filter $(DEB_HOST_ARCH), armhf ppc64el sh3 sh4))
 buildflags = \
@@ -124,9 +125,10 @@ else
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
 
-	# Build rusticl for archs where rustc is available
+	# Build rusticl and nvk for archs where rustc is available
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(RUSTICL_ARCHS)))
 		confflags_GALLIUM += -Dgallium-rusticl=true
+		VULKAN_DRIVERS += nouveau
 	endif
 
 	# nine makes sense only on archs that build wine
@@ -189,6 +191,16 @@ confflags += \
 	$(confflags_VALGRIND) \
 	$(confflags_TEFLON)
 
+
+rewrite_wrap_files:
+	cp -r subprojects subprojects-save
+	for crate in paste proc-macro2 quote syn unicode-ident; \
+	do \
+		export crate_namever=`basename $$MESON_PACKAGE_CACHE_DIR/$$crate-*`; \
+		sed -e"/source.*/d" -e"s,$${crate}-.*,$${crate_namever}," -i subprojects/$${crate}.wrap; \
+	done
+	touch subprojects/rewrite
+
 override_dh_clean: regen_control
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' | sed 's/-.*//;s/~/-/' > VERSION
 	rm -rf .pc
@@ -196,14 +208,21 @@ override_dh_clean: regen_control
 	rm -rf configure bin/config.guess bin/config.sub config.h.in
 	rm -rf $$(find -name Makefile.in)
 	rm -rf bin/install-sh bin/ltmain.sh
+	rm -rf src/intel/vulkan/grl/parser.out
+	rm -rf src/intel/vulkan/grl/parsetab.py
 	for file in debian/*.links.in; do rm -f $${file%%.in}; done
 	find -name '*.pyc' -delete
 	find -name '__pycache__' -delete
+	if [ -f subprojects/rewrite ]; then \
+		rm -rf subprojects; \
+		mv subprojects-save subprojects; \
+	fi
 	dh_clean
 
-override_dh_auto_configure:
+override_dh_auto_configure: rewrite_wrap_files
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
 	$(buildflags) dh_auto_configure -- \
+		--wrap-mode=default \
 		$(confflags)
 
 override_dh_auto_install:
@@ -234,6 +253,8 @@ override_dh_install:
 	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
+	rm debian/tmp/usr/bin/mme_fermi_sim_hw_test
+	rm debian/tmp/usr/bin/mme_tu104_sim_hw_test
 	# use -f here though
 	rm -f debian/tmp/usr/lib/*/libgrl.a
 

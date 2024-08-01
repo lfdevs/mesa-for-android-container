@@ -530,10 +530,17 @@ surface_dmabuf_feedback_tranche_formats(
 {
    struct dri2_egl_surface *dri2_surf = data;
    struct dmabuf_feedback *feedback = &dri2_surf->pending_dmabuf_feedback;
+   uint32_t present_format = dri2_surf->format;
    uint64_t *modifier_ptr, modifier;
    uint32_t format;
    uint16_t *index;
    int visual_idx;
+
+   if (dri2_surf->base.PresentOpaque) {
+      visual_idx = dri2_wl_visual_idx_from_fourcc(present_format);
+      if (visual_idx != -1)
+         present_format = dri2_wl_visuals[visual_idx].opaque_wl_drm_format;
+   }
 
    /* Compositor may advertise or not a format table. If it does, we use it.
     * Otherwise, we steal the most recent advertised format table. If we don't
@@ -564,7 +571,7 @@ surface_dmabuf_feedback_tranche_formats(
 
       /* Skip formats that are not the one the surface is already using. We
        * can't switch to another format. */
-      if (format != dri2_surf->format)
+      if (format != present_format)
          continue;
 
       /* We are sure that the format is supported because of the check above. */
@@ -2753,6 +2760,7 @@ kopperSetSurfaceCreateInfo(void *_draw, struct kopper_loader_info *out)
    wlsci->flags = 0;
    wlsci->display = dri2_dpy->wl_dpy;
    wlsci->surface = dri2_surf->wl_surface_wrapper;
+   out->present_opaque = dri2_surf->base.PresentOpaque;
 }
 
 static const __DRIkopperLoaderExtension kopper_loader_extension = {

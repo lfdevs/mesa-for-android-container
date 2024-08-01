@@ -81,6 +81,7 @@ update_framebuffer(struct i915_context *i915)
    struct pipe_surface *cbuf_surface = i915->framebuffer.cbufs[0];
    struct pipe_surface *depth_surface = i915->framebuffer.zsbuf;
    unsigned x, y;
+   unsigned y1;
    int layer;
    uint32_t draw_offset, draw_size;
 
@@ -91,11 +92,19 @@ update_framebuffer(struct i915_context *i915)
 
       i915->current.cbuf_bo = tex->buffer;
       i915->current.cbuf_flags = surf->buf_info;
+      i915->current.cbuf_offset = 0;
 
       layer = cbuf_surface->u.tex.first_layer;
 
       x = tex->image_offset[cbuf_surface->u.tex.level][layer].nblocksx;
       y = tex->image_offset[cbuf_surface->u.tex.level][layer].nblocksy;
+      // Use offset if buffer not within max texture size 2048
+      if (y + i915->framebuffer.height >= (1 << (I915_MAX_TEXTURE_2D_LEVELS - 1))) {
+         // offset should be multiple of 8 to support TILE_X 
+         y1 = (y / 8) * 8;
+         y -= y1;
+         i915->current.cbuf_offset = y1 * tex->stride;
+      }
    } else {
       i915->current.cbuf_bo = NULL;
       x = y = 0;

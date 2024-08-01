@@ -60,9 +60,8 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
     * 32-bit float type so we don't lose range when we convert from
     * a 64-bit integer.
     */
-   unsigned int64_types = nir_type_int64 | nir_type_uint64;
-   if ((src_full_type == nir_type_float16 && (dst_full_type & int64_types)) ||
-       ((src_full_type & int64_types) && dst_full_type == nir_type_float16)) {
+   if ((src_full_type == nir_type_float16 && dst_bit_size == 64) ||
+       (src_bit_size == 64 && dst_full_type == nir_type_float16)) {
       split_conversion(b, alu, src_type, nir_type_float | 32,
                        dst_type | dst_bit_size);
       return true;

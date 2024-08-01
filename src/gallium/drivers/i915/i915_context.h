@@ -174,6 +174,7 @@ struct i915_state {
    unsigned dst_buf_vars;
    uint32_t draw_offset;
    uint32_t draw_size;
+   unsigned cbuf_offset;
 
    /* Reswizzle for OC writes in PIXEL_SHADER_PROGRAM, or 0 if unnecessary. */
    uint32_t fixup_swizzle;

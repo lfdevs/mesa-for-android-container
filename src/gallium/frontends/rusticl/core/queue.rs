@@ -9,6 +9,7 @@ use mesa_rust::pipe::context::PipeContext;
 use mesa_rust_util::properties::*;
 use rusticl_opencl_gen::*;
 
+use std::cmp;
 use std::mem;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
@@ -40,15 +41,18 @@ impl QueueContext {
         })
     }
 
-    pub fn update_cb0(&self, data: &[u8]) {
+    pub fn update_cb0(&self, data: &[u8]) -> CLResult<()> {
         // only update if we actually bind data
         if !data.is_empty() {
             if self.use_stream {
-                self.ctx.set_constant_buffer_stream(0, data);
+                if !self.ctx.set_constant_buffer_stream(0, data) {
+                    return Err(CL_OUT_OF_RESOURCES);
+                }
             } else {
                 self.ctx.set_constant_buffer(0, data);
             }
         }
+        Ok(())
     }
 }
 
@@ -118,7 +122,22 @@ impl Queue {
             }),
             thrd: ManuallyDrop::new(thread::Builder::new()
                 .name("rusticl queue thread".into())
-                .spawn(move || loop {
+                .spawn(move || {
+                    // Track the error of all executed events. This is only needed for in-order
+                    // queues, so for out of order we'll need to update this.
+                    // Also, the OpenCL specification gives us enough freedom to do whatever we want
+                    // in case of any event running into an error while executing:
+                    //
+                    //   Unsuccessful completion results in abnormal termination of the command
+                    //   which is indicated by setting the event status to a negative value. In this
+                    //   case, the command-queue associated with the abnormally terminated command
+                    //   and all other command-queues in the same context may no longer be available
+                    //   and their behavior is implementation-defined.
+                    //
+                    // TODO: use pipe_context::set_device_reset_callback to get notified about gone
+                    //       GPU contexts
+                    let mut last_err = CL_SUCCESS as cl_int;
+                    loop {
                     let r = rx_t.recv();
                     if r.is_err() {
                         break;
@@ -134,21 +153,31 @@ impl Queue {
                             flush_events(&mut flushed, &ctx);
                         }
 
-                        // We have to wait on user events or events from other queues.
-                        let err = e
-                            .deps
-                            .iter()
-                            .filter(|ev| ev.is_user() || ev.queue != e.queue)
-                            .map(|e| e.wait())
-                            .find(|s| *s < 0);
+                        // check if any dependency has an error
+                        for dep in &e.deps {
+                            // We have to wait on user events or events from other queues.
+                            let dep_err = if dep.is_user() || dep.queue != e.queue {
+                                dep.wait()
+                            } else {
+                                dep.status()
+                            };
 
-                        if let Some(err) = err {
+                            last_err = cmp::min(last_err, dep_err);
+                        }
+
+                        if last_err < 0 {
                             // If a dependency failed, fail this event as well.
-                            e.set_user_status(err);
+                            e.set_user_status(last_err);
                             continue;
                         }
 
-                        e.call(&ctx);
+                        // if there is an execution error don't bother signaling it as the  context
+                        // might be in a broken state. How queues behave after any event hit an
+                        // error is entirely implementation defined.
+                        last_err = e.call(&ctx);
+                        if last_err < 0 {
+                            continue;
+                        }
 
                         if e.is_user() {
                             // On each user event we flush our events as application might
@@ -167,6 +196,7 @@ impl Queue {
                     }
 
                     flush_events(&mut flushed, &ctx);
+                    }
                 })
                 .unwrap()),
         }))

@@ -299,13 +299,13 @@ nvk_get_device_features(const struct nv_device_info *info,
       .shaderResourceResidency = info->cls_eng3d >= VOLTA_A,
       .shaderResourceMinLod = info->cls_eng3d >= VOLTA_A,
       .sparseBinding = true,
-      .sparseResidency2Samples = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidency4Samples = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidency8Samples = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidencyAliased = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidencyBuffer = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidencyImage2D = info->cls_eng3d >= MAXWELL_A,
-      .sparseResidencyImage3D = info->cls_eng3d >= MAXWELL_A,
+      .sparseResidency2Samples = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidency4Samples = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidency8Samples = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidencyAliased = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidencyBuffer = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidencyImage2D = info->cls_eng3d >= MAXWELL_B,
+      .sparseResidencyImage3D = info->cls_eng3d >= MAXWELL_B,
       .variableMultisampleRate = true,
       .inheritedQueries = true,
 
@@ -1068,6 +1068,27 @@ nvk_get_vram_heap_available(struct nvk_physical_device *pdev)
    return pdev->info.vram_size_B - used;
 }
 
+static bool
+drm_device_is_nouveau(const char *path)
+{
+   int fd = open(path, O_RDWR | O_CLOEXEC);
+   if (fd < 0)
+      return false;
+
+   drmVersionPtr ver = drmGetVersion(fd);
+   if (!ver) {
+      close(fd);
+      return false;
+   }
+
+   const bool is_nouveau = !strncmp("nouveau", ver->name, ver->name_len);
+
+   drmFreeVersion(ver);
+   close(fd);
+
+   return is_nouveau;
+}
+
 VkResult
 nvk_create_drm_physical_device(struct vk_instance *_instance,
                                drmDevicePtr drm_device,
@@ -1103,6 +1124,9 @@ nvk_create_drm_physical_device(struct vk_instance *_instance,
    default:
       return VK_ERROR_INCOMPATIBLE_DRIVER;
    }
+
+   if (!drm_device_is_nouveau(drm_device->nodes[DRM_NODE_RENDER]))
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
 
    struct nouveau_ws_device *ws_dev = nouveau_ws_device_new(drm_device);
    if (!ws_dev)

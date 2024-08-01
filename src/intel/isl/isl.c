@@ -113,7 +113,7 @@ isl_device_setup_mocs(struct isl_device *dev)
       /* L3+L4=WB; BSpec: 71582 */
       dev->mocs.internal = 1 << 1;
       dev->mocs.external = 1 << 1;
-      dev->mocs.protected_mask = 3 << 0;
+      dev->mocs.protected_mask = 1 << 0;
       /* TODO: Setting to uncached
        * WA 14018443005:
        *  Ensure that any compression-enabled resource from gfx memory subject

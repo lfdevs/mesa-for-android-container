@@ -392,7 +392,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    llvm::StringMap<bool> features;
    llvm::sys::getHostCPUFeatures(features);
 
-   for (StringMapIterator<bool> f = features.begin();
+   for (llvm::StringMapIterator<bool> f = features.begin();
         f != features.end();
         ++f) {
       MAttrs.push_back(((*f).second ? "+" : "-") + (*f).first().str());

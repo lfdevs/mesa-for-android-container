@@ -101,6 +101,19 @@ else
   endif
 endif
 
+has_spirv_link_workaround = cpp.has_member(
+  'spvtools::LinkerOptions',
+  'SetAllowPtrTypeMismatch(true)',
+  prefix : [
+    '#include <spirv-tools/linker.hpp>',
+  ],
+  dependencies : dep_spirv_tools,
+)
+
+if has_spirv_link_workaround
+  _libmesaclc_c_args += ['-DHAS_SPIRV_LINK_LLVM_WORKAROUND=1']
+endif
+
 _libmesaclc = static_library(
   'libmesaclc',
   files_libmesaclc,

@@ -3379,7 +3379,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
 
    const enum pipe_texture_target target = static_texture_state->target;
    const unsigned dims = texture_dims(target);
-   const unsigned num_quads = type.length / 4;
+   const unsigned num_quads = type.length == 1 ? 1 : type.length / 4;
    struct lp_build_sample_context bld;
    struct lp_static_sampler_state derived_sampler_state = *static_sampler_state;
    LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);

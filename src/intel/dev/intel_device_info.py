@@ -319,6 +319,13 @@ Struct("intel_device_info",
                non-centroid interpolation for unlit pixels, at the expense of two extra
                fragment shader instructions.""")),
 
+        Member("bool", "needs_null_push_constant_tbimr_workaround",
+               comment=dedent("""\
+               Whether the platform needs an undocumented workaround for a hardware bug
+               that affects draw calls with a pixel shader that has 0 push constant cycles
+               when TBIMR is enabled, which has been seen to lead to hangs.  To avoid the
+               issue we simply pad the push constant payload to be at least 1 register.""")),
+
         Member("bool", "is_adl_n", comment="We need this for ADL-N specific Wa_14014966230."),
 
         Member("unsigned", "num_slices",

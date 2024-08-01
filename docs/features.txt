@@ -860,7 +860,7 @@ Rusticl OpenCL 1.2 -- all DONE:
   Separate compilation and linking of programs          DONE
   Extend cl_mem_flags                                   DONE
   clEnqueueFillBuffer, clEnqueueFillImage               DONE
-  Add CL_MAP_WRITE_INVALIDATE_REGION to cl_map_flags    in progress (flag is ignored)
+  Add CL_MAP_WRITE_INVALIDATE_REGION to cl_map_flags    DONE
   New image types                                       DONE
   clCreateImage                                         DONE
   clEnqueueMigrateMemObjects                            DONE

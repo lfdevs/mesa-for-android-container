@@ -359,15 +359,16 @@ i915_texture_layout_2d(struct i915_texture *tex)
 {
    struct pipe_resource *pt = &tex->b;
    unsigned level;
-   unsigned width = util_next_power_of_two(pt->width0);
-   unsigned height = util_next_power_of_two(pt->height0);
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, width);
+   unsigned width = pt->width0;
+   unsigned height = pt->height0;
+   unsigned nblocksy = 0;
    unsigned align_y = 2;
 
    if (util_format_is_compressed(pt->format))
       align_y = 1;
 
    tex->stride = align(util_format_get_stride(pt->format, width), 4);
+   nblocksy = align_nblocksy(pt->format, height, align_y);
    tex->total_nblocksy = 0;
 
    for (level = 0; level <= pt->last_level; level++) {
@@ -463,10 +464,10 @@ i945_texture_layout_2d(struct i915_texture *tex)
    unsigned level;
    unsigned x = 0;
    unsigned y = 0;
-   unsigned width = util_next_power_of_two(pt->width0);
-   unsigned height = util_next_power_of_two(pt->height0);
-   unsigned nblocksx = util_format_get_nblocksx(pt->format, width);
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, height);
+   unsigned width = pt->width0;
+   unsigned height = pt->height0;
+   unsigned nblocksx = 0;
+   unsigned nblocksy = 0;
 
    if (util_format_is_compressed(pt->format)) {
       align_x = 1;
@@ -474,20 +475,8 @@ i945_texture_layout_2d(struct i915_texture *tex)
    }
 
    tex->stride = align(util_format_get_stride(pt->format, width), 4);
-
-   /* May need to adjust pitch to accommodate the placement of
-    * the 2nd mipmap level.  This occurs when the alignment
-    * constraints of mipmap placement push the right edge of the
-    * 2nd mipmap level out past the width of its parent.
-    */
-   if (pt->last_level > 0) {
-      unsigned mip1_nblocksx =
-         align_nblocksx(pt->format, u_minify(width, 1), align_x) +
-         util_format_get_nblocksx(pt->format, u_minify(width, 2));
-
-      if (mip1_nblocksx > nblocksx)
-         tex->stride = mip1_nblocksx * util_format_get_blocksize(pt->format);
-   }
+   nblocksx = align_nblocksx(pt->format, width, align_x);
+   nblocksy = align_nblocksy(pt->format, height, align_y);
 
    /* Pitch must be a whole number of dwords
     */

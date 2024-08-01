@@ -42,6 +42,7 @@
 
 #include "egl_dri2.h"
 #include "egldevice.h"
+#include "eglglobals.h"
 #include "loader.h"
 
 static struct gbm_bo *
@@ -581,10 +582,26 @@ dri2_initialize_drm(_EGLDisplay *disp)
          dri2_dpy->fd_display_gpu =
             loader_open_device(drm->nodes[DRM_NODE_PRIMARY]);
       } else {
-         char buf[64];
-         int n = snprintf(buf, sizeof(buf), DRM_DEV_NAME, DRM_DIR_NAME, 0);
-         if (n != -1 && n < sizeof(buf))
-            dri2_dpy->fd_display_gpu = loader_open_device(buf);
+         _EGLDevice *dev_list = _eglGlobal.DeviceList;
+         drmDevicePtr drm;
+         while (dev_list) {
+            if (!_eglDeviceSupports(dev_list, _EGL_DEVICE_DRM))
+               goto next;
+
+            drm = _eglDeviceDrm(dev_list);
+
+            if (!(drm->available_nodes & (1 << DRM_NODE_PRIMARY)))
+               goto next;
+
+            dri2_dpy->fd_display_gpu =
+               loader_open_device(drm->nodes[DRM_NODE_PRIMARY]);
+            if (dri2_dpy->fd_display_gpu < 0)
+               goto next;
+
+            break;
+         next:
+            dev_list = _eglDeviceNext(dev_list);
+         }
       }
 
       gbm = gbm_create_device(dri2_dpy->fd_display_gpu);

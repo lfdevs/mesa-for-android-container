@@ -16,7 +16,7 @@ libvulkan_lvp = shared_library(
 
 icd_lib_path = join_paths(get_option('prefix'), get_option('libdir'))
 icd_file_name = 'libvulkan_lvp.so'
-if with_platform_windows
+if host_machine.system() == 'windows'
   icd_lib_path = import('fs').relative_to(get_option('bindir'), with_vulkan_icd_dir)
   icd_file_name = 'vulkan_lvp.dll'
 endif
@@ -27,7 +27,7 @@ icd_command = [
   '--lib-path', join_paths(icd_lib_path, icd_file_name),
   '--out', '@OUTPUT@',
 ]
-if with_platform_windows
+if host_machine.system() == 'windows'
   icd_command += '--use-backslash'
 endif
 

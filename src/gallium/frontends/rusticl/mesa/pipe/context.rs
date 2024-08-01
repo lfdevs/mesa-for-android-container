@@ -415,7 +415,9 @@ impl PipeContext {
         }
     }
 
-    pub fn set_constant_buffer_stream(&self, idx: u32, data: &[u8]) {
+    /// returns false when failing to allocate GPU memory.
+    #[must_use]
+    pub fn set_constant_buffer_stream(&self, idx: u32, data: &[u8]) -> bool {
         let mut cb = pipe_constant_buffer {
             buffer: ptr::null_mut(),
             buffer_offset: 0,
@@ -436,13 +438,19 @@ impl PipeContext {
             );
             u_upload_unmap(stream);
 
+            if cb.buffer.is_null() {
+                return false;
+            }
+
             self.pipe.as_ref().set_constant_buffer.unwrap()(
                 self.pipe.as_ptr(),
                 pipe_shader_type::PIPE_SHADER_COMPUTE,
                 idx,
-                false,
+                true,
                 &cb,
             );
+
+            true
         }
     }
 

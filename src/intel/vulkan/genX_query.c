@@ -789,15 +789,18 @@ void genX(CmdResetQueryPool)(
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_physical_device *pdevice = cmd_buffer->device->physical;
 
-   /* Shader clearing is only possible on render/compute */
+   /* Shader clearing is only possible on render/compute when not in protected
+    * mode.
+    */
    if (anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer) &&
+       (cmd_buffer->vk.pool->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT) != 0 &&
        queryCount >= pdevice->instance->query_clear_with_blorp_threshold) {
       trace_intel_begin_query_clear_blorp(&cmd_buffer->trace);
 
       anv_cmd_buffer_fill_area(cmd_buffer,
                                anv_query_address(pool, firstQuery),
                                queryCount * pool->stride,
-                               0);
+                               0, false);
 
       /* The pending clearing writes are in compute if we're in gpgpu mode on
        * the render engine or on the compute engine.

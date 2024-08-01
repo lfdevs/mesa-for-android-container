@@ -488,10 +488,12 @@ public:
                kernel.localSize[0] = ins->words[ins->operands[2].offset];
                kernel.localSize[1] = ins->words[ins->operands[3].offset];
                kernel.localSize[2] = ins->words[ins->operands[4].offset];
+               break;
             case SpvExecutionModeLocalSizeHint:
                kernel.localSizeHint[0] = ins->words[ins->operands[2].offset];
                kernel.localSizeHint[1] = ins->words[ins->operands[3].offset];
                kernel.localSizeHint[2] = ins->words[ins->operands[4].offset];
+               break;
             default:
                return;
             }
@@ -1226,10 +1228,17 @@ clc_link_spirv_binaries(const struct clc_linker_args *args,
    context.SetMessageConsumer(msgconsumer);
    spvtools::LinkerOptions options;
    options.SetAllowPartialLinkage(args->create_library);
+   #if defined(HAS_SPIRV_LINK_LLVM_WORKAROUND) && LLVM_VERSION_MAJOR >= 17
+      options.SetAllowPtrTypeMismatch(true);
+   #endif
    options.SetCreateLibrary(args->create_library);
    std::vector<uint32_t> linkingResult;
    spv_result_t status = spvtools::Link(context, binaries, &linkingResult, options);
    if (status != SPV_SUCCESS) {
+      #if !defined(HAS_SPIRV_LINK_LLVM_WORKAROUND) && LLVM_VERSION_MAJOR >= 17
+        clc_warning(logger, "SPIRV-Tools doesn't contain https://github.com/KhronosGroup/SPIRV-Tools/pull/5534\n");
+        clc_warning(logger, "Please update in order to prevent spurious linking failures\n");
+      #endif
       return -1;
    }
 

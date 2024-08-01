@@ -168,8 +168,6 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT: /* TODO: remove if it's slow */
    case PIPE_CAP_NULL_TEXTURES:
    case PIPE_CAP_HAS_CONST_BW:
-   case PIPE_CAP_FENCE_SIGNAL:
-   case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_CL_GL_SHARING:
       return 1;
 
@@ -287,8 +285,14 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
              PIPE_CONTEXT_PRIORITY_MEDIUM |
              PIPE_CONTEXT_PRIORITY_HIGH;
 
+   case PIPE_CAP_FENCE_SIGNAL:
+      return sscreen->info.has_syncobj;
+
    case PIPE_CAP_CONSTBUF0_FLAGS:
       return SI_RESOURCE_FLAG_32BIT;
+
+   case PIPE_CAP_NATIVE_FENCE_FD:
+      return sscreen->info.has_fence_to_handle;
 
    case PIPE_CAP_DRAW_PARAMETERS:
    case PIPE_CAP_MULTI_DRAW_INDIRECT:

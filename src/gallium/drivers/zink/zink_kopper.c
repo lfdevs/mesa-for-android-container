@@ -283,7 +283,9 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
       cswap->scci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       cswap->scci.queueFamilyIndexCount = 0;
       cswap->scci.pQueueFamilyIndices = NULL;
-      cswap->scci.compositeAlpha = has_alpha ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+      cswap->scci.compositeAlpha = has_alpha && !cdt->info.present_opaque
+                                   ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
+                                   : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
       cswap->scci.clipped = VK_TRUE;
    }
    cswap->scci.presentMode = cdt->present_mode;

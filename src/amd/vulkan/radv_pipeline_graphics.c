@@ -1889,15 +1889,20 @@ radv_generate_graphics_state_key(const struct radv_device *device, const struct 
    }
 
    if (device->vk.enabled_features.smoothLines) {
+      key.dynamic_line_rast_mode = BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE);
+      if (state->rs && state->rs->line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR) {
+         /* If the primitive type is dynamic, we may need to disable line smoothing dynamically. */
+         key.dynamic_line_rast_mode |= BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY);
+         key.dynamic_line_rast_mode |= BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
+      }
       /* For GPL, when the fragment shader is compiled without any pre-rasterization information,
        * ensure the line rasterization mode is considered dynamic because we can't know if it's
        * going to draw lines or not.
        */
-      if (BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE) ||
-          ((lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
-           !(lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT))) {
-         key.dynamic_line_rast_mode = true;
-      } else {
+      key.dynamic_line_rast_mode |= !!(lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
+                                    !(lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT);
+
+      if (!key.dynamic_line_rast_mode) {
          key.rs.line_smooth_enabled =
             state->rs && state->rs->line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR;
       }

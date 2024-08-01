@@ -4065,6 +4065,9 @@ tu_emit_subpass_begin_gmem(struct tu_cmd_buffer *cmd)
                             cmd->state.pass->has_cond_load_store &&
                             !cmd->state.rp.draw_cs_writes_to_cond_pred;
 
+   if (cmd->state.pass->has_fdm)
+      tu_cs_set_writeable(cs, true);
+
    tu_cond_exec_start(cs, CP_COND_EXEC_0_RENDER_MODE_GMEM);
 
    /* Emit gmem loads that are first used in this subpass. */
@@ -4094,6 +4097,10 @@ tu_emit_subpass_begin_gmem(struct tu_cmd_buffer *cmd)
    }
 
    tu_cond_exec_end(cs); /* CP_COND_EXEC_0_RENDER_MODE_GMEM */
+
+   if (cmd->state.pass->has_fdm)
+      tu_cs_set_writeable(cs, false);
+
 }
 
 /* Emits sysmem clears that are first used in this subpass. */

@@ -44,23 +44,6 @@ program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float2,F
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float4,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,Fail
 
-# Expecting 14 (0xe) with tolerance 0, but got 114 (0x72)
-# Error at int[0]
-#  Argument 1: FAIL
-program@execute@calls-large-struct,Fail
-program@execute@calls-large-struct@byval struct,Fail
-
-program@execute@calls-struct,Fail
-# Expecting 14 (0xe) with tolerance 0, but got 114 (0x72)
-# Error at int[0]
-#  Argument 1: FAIL
-program@execute@calls-struct@regs struct,Fail
-# Expecting 86 (0x56) with tolerance 0, but got 134 (0x86)
-# Error at int[0]
-#  Argument 0: FAIL
-#  Argument 1: PASS
-program@execute@calls-struct@small struct in regs,Fail
-
 # Expecting 0 (0x0) with tolerance 0, but got 9 (0x9)
 program@execute@global-offset,Fail
 program@execute@global-offset@3d- input dependent,Fail

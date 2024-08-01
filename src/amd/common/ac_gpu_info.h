@@ -212,7 +212,9 @@ struct radeon_info {
    uint32_t max_submitted_ibs[AMD_NUM_IP_TYPES];
    bool is_amdgpu;
    bool has_userptr;
+   bool has_syncobj;
    bool has_timeline_syncobj;
+   bool has_fence_to_handle;
    bool has_local_buffers;
    bool has_bo_metadata;
    bool has_eqaa_surface_allocator;
@@ -262,6 +264,7 @@ struct radeon_info {
    uint32_t wave64_vgpr_alloc_granularity;
    uint32_t max_scratch_waves;
    uint32_t attribute_ring_size_per_se;
+   bool has_scratch_base_registers;
 
    /* Render backends (color + depth blocks). */
    uint32_t r300_num_gb_pipes;

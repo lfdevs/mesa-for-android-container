@@ -2393,10 +2393,12 @@ overwrite:
          zink_resource_usage_wait(ctx, res, ZINK_RESOURCE_ACCESS_RW);
       } else
          zink_resource_usage_wait(ctx, res, ZINK_RESOURCE_ACCESS_WRITE);
-      res->obj->access = 0;
-      res->obj->access_stage = 0;
-      res->obj->last_write = 0;
-      zink_resource_copies_reset(res);
+      if (!res->real_buffer_range) {
+         res->obj->access = 0;
+         res->obj->access_stage = 0;
+         res->obj->last_write = 0;
+         zink_resource_copies_reset(res);
+      }
    }
 
    if (!ptr) {
@@ -2432,8 +2434,14 @@ overwrite:
       }
    }
    trans->base.b.usage = usage;
-   if (usage & PIPE_MAP_WRITE)
+   if (usage & PIPE_MAP_WRITE) {
       util_range_add(&res->base.b, &res->valid_buffer_range, box->x, box->x + box->width);
+
+      struct zink_resource *orig_res = zink_resource(trans->base.b.resource);
+      util_range_add(&orig_res->base.b, &orig_res->valid_buffer_range, box->x, box->x + box->width);
+      if (orig_res->real_buffer_range)
+         util_range_add(&orig_res->base.b, orig_res->real_buffer_range, box->x, box->x + box->width);
+   }
 
 success:
    /* ensure the copy context gets unlocked */

@@ -34,6 +34,8 @@
 /* Max size of a bound cbuf */
 #define NVK_MAX_CBUF_SIZE (1u << 16)
 
+#define NVK_SPARSE_BIND_ALIGN_B (1u << 12)
+
 struct nvk_addr_range {
    uint64_t addr;
    uint64_t range;

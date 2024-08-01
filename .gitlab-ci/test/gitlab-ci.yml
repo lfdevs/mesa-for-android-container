@@ -33,7 +33,7 @@
   tags:
     - placeholder-job
 
-rustfmt:
+.rustfmt:
   extends:
     - .formatting-check
     - .lint-rustfmt-rules

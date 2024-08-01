@@ -965,7 +965,7 @@ radv_emit_descriptor_pointers(struct radv_device *device, struct radeon_cmdbuf *
 }
 
 static unsigned
-radv_get_rasterization_prim(struct radv_cmd_buffer *cmd_buffer)
+radv_get_rasterization_prim(const struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_shader *last_vgt_shader = cmd_buffer->state.last_vgt_shader;
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
@@ -980,13 +980,30 @@ radv_get_rasterization_prim(struct radv_cmd_buffer *cmd_buffer)
    return radv_conv_prim_to_gs_out(d->vk.ia.primitive_topology, last_vgt_shader->info.is_ngg);
 }
 
+static ALWAYS_INLINE VkLineRasterizationModeEXT
+radv_get_line_mode(const struct radv_cmd_buffer *cmd_buffer)
+{
+   const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
+
+   const unsigned rast_prim = radv_get_rasterization_prim(cmd_buffer);
+
+   bool draw_lines = radv_rast_prim_is_line(rast_prim) || radv_polygon_mode_is_line(d->vk.rs.polygon_mode);
+   draw_lines &= !radv_rast_prim_is_point(rast_prim);
+   draw_lines &= !radv_polygon_mode_is_point(d->vk.rs.polygon_mode);
+   if (draw_lines)
+      return d->vk.rs.line.mode;
+
+   return VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+}
+
 static ALWAYS_INLINE unsigned
 radv_get_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
 
-   if (d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_KHR &&
-       radv_rast_prim_is_line(radv_get_rasterization_prim(cmd_buffer))) {
+   VkLineRasterizationModeEXT line_mode = radv_get_line_mode(cmd_buffer);
+
+   if (line_mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_KHR) {
       /* From the Vulkan spec 1.3.221:
        *
        * "When Bresenham lines are being rasterized, sample locations may all be treated as being at
@@ -999,8 +1016,7 @@ radv_get_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
       return 1;
    }
 
-   if (d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR &&
-       radv_rast_prim_is_line(radv_get_rasterization_prim(cmd_buffer))) {
+   if (line_mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR) {
       return RADV_NUM_SMOOTH_AA_SAMPLES;
    }
 
@@ -2289,7 +2305,7 @@ radv_get_pa_su_sc_mode_cntl(const struct radv_cmd_buffer *cmd_buffer)
        */
       pa_su_sc_mode_cntl |=
          S_028814_KEEP_TOGETHER_ENABLE(d->vk.rs.polygon_mode != V_028814_X_DRAW_TRIANGLES ||
-                                       d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_KHR);
+                                       radv_get_line_mode(cmd_buffer) == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_KHR);
    }
 
    return pa_su_sc_mode_cntl;
@@ -4497,7 +4513,7 @@ radv_emit_msaa_state(struct radv_cmd_buffer *cmd_buffer)
                          S_028BE0_MAX_SAMPLE_DIST(max_sample_dist) | S_028BE0_MSAA_EXPOSED_SAMPLES(log_samples) |
                          S_028BE0_COVERED_CENTROID_IS_CENTER(pdev->info.gfx_level >= GFX10_3);
 
-      if (d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR)
+      if (radv_get_line_mode(cmd_buffer) == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR)
          db_eqaa |= S_028804_OVERRASTERIZATION_AMOUNT(log_samples);
    }
 
@@ -4527,14 +4543,12 @@ radv_emit_msaa_state(struct radv_cmd_buffer *cmd_buffer)
 static void
 radv_emit_line_rasterization_mode(struct radv_cmd_buffer *cmd_buffer)
 {
-   const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
-
    /* The DX10 diamond test is unnecessary with Vulkan and it decreases line rasterization
     * performance.
     */
    radeon_set_context_reg(
       cmd_buffer->cs, R_028BDC_PA_SC_LINE_CNTL,
-      S_028BDC_PERPENDICULAR_ENDCAP_ENA(d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_KHR));
+      S_028BDC_PERPENDICULAR_ENDCAP_ENA(radv_get_line_mode(cmd_buffer) == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_KHR));
 }
 
 static void
@@ -4580,8 +4594,9 @@ radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer, const ui
       radv_emit_line_stipple(cmd_buffer);
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_CULL_MODE | RADV_CMD_DIRTY_DYNAMIC_FRONT_FACE |
-                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS_ENABLE | RADV_CMD_DIRTY_DYNAMIC_POLYGON_MODE |
-                 RADV_CMD_DIRTY_DYNAMIC_PROVOKING_VERTEX_MODE | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
+                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS_ENABLE | RADV_DYNAMIC_PRIMITIVE_TOPOLOGY |
+                 RADV_CMD_DIRTY_DYNAMIC_POLYGON_MODE | RADV_CMD_DIRTY_DYNAMIC_PROVOKING_VERTEX_MODE |
+                 RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
       radv_emit_culling(cmd_buffer);
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_PROVOKING_VERTEX_MODE | RADV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY))
@@ -4638,15 +4653,18 @@ radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer, const ui
                  RADV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_EQUATION | RADV_CMD_DIRTY_DYNAMIC_ALPHA_TO_COVERAGE_ENABLE))
       radv_emit_color_blend(cmd_buffer);
 
-   if (states & RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE)
+   if (states &
+       (RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE | RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE))
       radv_emit_line_rasterization_mode(cmd_buffer);
 
-   if (states & (RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
+   if (states & (RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE |
+                 RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE))
       radv_emit_rasterization_samples(cmd_buffer);
 
-   if (states & (RADV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE_ENABLE | RADV_CMD_DIRTY_DYNAMIC_CONSERVATIVE_RAST_MODE |
-                 RADV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS | RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES |
-                 RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
+   if (states &
+       (RADV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE_ENABLE | RADV_CMD_DIRTY_DYNAMIC_CONSERVATIVE_RAST_MODE |
+        RADV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS | RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES |
+        RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE | RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE))
       radv_emit_msaa_state(cmd_buffer);
 
    /* RADV_CMD_DIRTY_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE is handled by radv_emit_db_shader_control. */
@@ -9327,7 +9345,6 @@ static void
 radv_emit_fs_state(struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_shader *ps = cmd_buffer->state.shaders[MESA_SHADER_FRAGMENT];
-   const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
    const struct radv_userdata_info *loc;
 
    if (!ps)
@@ -9345,7 +9362,7 @@ radv_emit_fs_state(struct radv_cmd_buffer *cmd_buffer)
    const uint32_t base_reg = ps->info.user_data_0;
    const unsigned ps_state = SET_SGPR_FIELD(PS_STATE_NUM_SAMPLES, rasterization_samples) |
                              SET_SGPR_FIELD(PS_STATE_PS_ITER_MASK, ps_iter_mask) |
-                             SET_SGPR_FIELD(PS_STATE_LINE_RAST_MODE, d->vk.rs.line.mode) |
+                             SET_SGPR_FIELD(PS_STATE_LINE_RAST_MODE, radv_get_line_mode(cmd_buffer)) |
                              SET_SGPR_FIELD(PS_STATE_RAST_PRIM, rast_prim);
 
    radeon_set_sh_reg(cmd_buffer->cs, base_reg + loc->sgpr_idx * 4, ps_state);
@@ -9377,8 +9394,8 @@ radv_emit_db_shader_control(struct radv_cmd_buffer *cmd_buffer)
     * correct value.
     * Also apply the bug workaround for smoothing (overrasterization) on GFX6.
     */
-   if (uses_ds_feedback_loop ||
-       (gpu_info->gfx_level == GFX6 && d->vk.rs.line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR))
+   if (uses_ds_feedback_loop || (gpu_info->gfx_level == GFX6 &&
+                                 radv_get_line_mode(cmd_buffer) == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR))
       db_shader_control = (db_shader_control & C_02880C_Z_ORDER) | S_02880C_Z_ORDER(V_02880C_LATE_Z);
 
    if (ps && ps->info.ps.pops) {
@@ -9609,7 +9626,8 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
 
    if (cmd_buffer->state.dirty &
        (RADV_CMD_DIRTY_FRAMEBUFFER | RADV_CMD_DIRTY_DYNAMIC_COLOR_WRITE_MASK |
-        RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
+        RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE |
+        RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE))
       radv_emit_binning_state(cmd_buffer);
 
    if (cmd_buffer->state.dirty & RADV_CMD_DIRTY_PIPELINE) {
@@ -9630,7 +9648,8 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
    if (cmd_buffer->state.dirty &
        (RADV_CMD_DIRTY_DB_SHADER_CONTROL | RADV_CMD_DIRTY_DYNAMIC_COLOR_WRITE_MASK |
         RADV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_ENABLE | RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES |
-        RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE | RADV_CMD_DIRTY_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE))
+        RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE | RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE |
+        RADV_CMD_DIRTY_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE))
       radv_emit_db_shader_control(cmd_buffer);
 
    if (info->indexed && info->indirect && cmd_buffer->state.dirty & RADV_CMD_DIRTY_INDEX_BUFFER)
@@ -9645,7 +9664,8 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
       radv_cmd_buffer_flush_dynamic_state(cmd_buffer, dynamic_states);
 
       if (dynamic_states &
-          (RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE))
+          (RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES | RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE |
+           RADV_DYNAMIC_PRIMITIVE_TOPOLOGY | RADV_DYNAMIC_POLYGON_MODE))
          radv_emit_fs_state(cmd_buffer);
    }
 

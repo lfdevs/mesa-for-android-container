@@ -39,5 +39,6 @@ const char *spirv_memorymodel_to_string(SpvMemoryModel cap);
 const char *spirv_op_to_string(SpvOp op);
 const char *spirv_storageclass_to_string(SpvStorageClass sc);
 const char *spirv_fproundingmode_to_string(SpvFPRoundingMode sc);
+const char *spirv_functionparameterattribute_to_string(SpvFunctionParameterAttribute v);
 
 #endif /* SPIRV_INFO_H */

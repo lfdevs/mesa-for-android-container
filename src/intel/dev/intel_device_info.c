@@ -1088,6 +1088,7 @@ static const struct intel_device_info intel_device_info_sg1 = {
 
 #define XEHP_FEATURES(_gt, _slices, _l3)                        \
    GFX8_FEATURES,                                               \
+   .needs_null_push_constant_tbimr_workaround = true,           \
    .has_64bit_float = false,                                    \
    .has_64bit_int = false,                                      \
    .has_integer_dword_mul = false,                              \

@@ -5888,7 +5888,7 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
             try_rebuild_resource(ntb, bld, instr->src[1].ssa);
       }
       ntb.ssa_values[instr->def.index] =
-         ntb.ssa_values[instr->src[1].ssa->index];
+         get_nir_src(ntb, instr->src[1]);
       break;
 
    case nir_intrinsic_load_reg:

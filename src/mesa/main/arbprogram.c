@@ -402,6 +402,9 @@ set_program_string(struct gl_program *prog, GLenum target, GLenum format, GLsize
    }
    else {
       _mesa_error(ctx, GL_INVALID_ENUM, "glProgramStringARB(target)");
+#ifdef ENABLE_SHADER_CACHE
+      free(replacement);
+#endif
       return;
    }
 
@@ -460,6 +463,9 @@ set_program_string(struct gl_program *prog, GLenum target, GLenum format, GLsize
       }
       ralloc_free(filename);
    }
+#ifdef ENABLE_SHADER_CACHE
+   free(replacement);
+#endif
 }
 
 void GLAPIENTRY

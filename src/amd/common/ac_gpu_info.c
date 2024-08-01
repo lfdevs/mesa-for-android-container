@@ -355,6 +355,14 @@ static intptr_t readlink(const char *path, char *buf, size_t bufsiz)
 
 #define CIK_TILE_MODE_COLOR_2D 14
 
+static bool has_syncobj(int fd)
+{
+   uint64_t value;
+   if (drmGetCap(fd, DRM_CAP_SYNCOBJ, &value))
+      return false;
+   return value ? true : false;
+}
+
 static bool has_timeline_syncobj(int fd)
 {
    uint64_t value;
@@ -899,6 +907,7 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
       case FAMILY_GFX1150:
          identify_chip(GFX1150);
          identify_chip(GFX1151);
+         identify_chip(GFX1152);
          break;
       }
 
@@ -1054,7 +1063,9 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->memory_freq_mhz_effective *= ac_memory_ops_per_clock(info->vram_type);
 
    info->has_userptr = true;
+   info->has_syncobj = has_syncobj(fd);
    info->has_timeline_syncobj = has_timeline_syncobj(fd);
+   info->has_fence_to_handle = info->has_syncobj;
    info->has_local_buffers = true;
    info->has_bo_metadata = true;
    info->has_eqaa_surface_allocator = info->gfx_level < GFX11;
@@ -1558,6 +1569,8 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->max_scratch_waves = MAX2(32 * info->min_good_cu_per_sa * info->max_sa_per_se * info->num_se,
                                   max_waves_per_tg);
    info->num_rb = util_bitcount64(info->enabled_rb_mask);
+   info->has_scratch_base_registers = info->gfx_level >= GFX11 ||
+                                      (!info->has_graphics && info->family >= CHIP_GFX940);
    info->max_gflops = (info->gfx_level >= GFX11 ? 256 : 128) * info->num_cu * info->max_gpu_freq_mhz / 1000;
    info->memory_bandwidth_gbps = DIV_ROUND_UP(info->memory_freq_mhz_effective * info->memory_bus_width / 8, 1000);
    info->has_pcie_bandwidth_info = info->drm_minor >= 51;
@@ -1908,7 +1921,9 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
    fprintf(f, "Kernel & winsys capabilities:\n");
    fprintf(f, "    drm = %i.%i.%i\n", info->drm_major, info->drm_minor, info->drm_patchlevel);
    fprintf(f, "    has_userptr = %i\n", info->has_userptr);
+   fprintf(f, "    has_syncobj = %u\n", info->has_syncobj);
    fprintf(f, "    has_timeline_syncobj = %u\n", info->has_timeline_syncobj);
+   fprintf(f, "    has_fence_to_handle = %u\n", info->has_fence_to_handle);
    fprintf(f, "    has_local_buffers = %u\n", info->has_local_buffers);
    fprintf(f, "    has_bo_metadata = %u\n", info->has_bo_metadata);
    fprintf(f, "    has_eqaa_surface_allocator = %u\n", info->has_eqaa_surface_allocator);
@@ -1965,6 +1980,7 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
    fprintf(f, "    wave64_vgpr_alloc_granularity = %i\n", info->wave64_vgpr_alloc_granularity);
    fprintf(f, "    max_scratch_waves = %i\n", info->max_scratch_waves);
    fprintf(f, "    attribute_ring_size_per_se = %u\n", info->attribute_ring_size_per_se);
+   fprintf(f, "    has_scratch_base_registers = %i\n", info->has_scratch_base_registers);
 
    fprintf(f, "Render backend info:\n");
    fprintf(f, "    pa_sc_tile_steering_override = 0x%x\n", info->pa_sc_tile_steering_override);

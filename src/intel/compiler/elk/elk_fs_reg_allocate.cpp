@@ -34,8 +34,6 @@
 
 using namespace elk;
 
-#define REG_CLASS_COUNT 20
-
 static void
 assign_reg(const struct intel_device_info *devinfo,
            unsigned *reg_hw_locations, elk_fs_reg *reg)

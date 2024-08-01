@@ -154,6 +154,7 @@ fn set_user_event_status(event: cl_event, execution_status: cl_int) -> CLResult<
     Ok(())
 }
 
+/// implements CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST when `block = true`
 pub fn create_and_queue(
     q: Arc<Queue>,
     cmd_type: cl_command_type,
@@ -169,9 +170,19 @@ pub fn create_and_queue(
             event.write(Arc::clone(&e).into_cl());
         }
     }
-    q.queue(e);
     if block {
+        q.queue(Arc::clone(&e));
         q.flush(true)?;
+        if e.deps.iter().any(|dep| dep.is_error()) {
+            return Err(CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
+        }
+        // return any execution errors when blocking
+        let err = e.status();
+        if err < 0 {
+            return Err(err);
+        }
+    } else {
+        q.queue(e);
     }
     Ok(())
 }

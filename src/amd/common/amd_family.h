@@ -123,6 +123,7 @@ enum radeon_family
    CHIP_GFX1103_R2,
    CHIP_GFX1150,
    CHIP_GFX1151,
+   CHIP_GFX1152,
    CHIP_LAST,
 };
 

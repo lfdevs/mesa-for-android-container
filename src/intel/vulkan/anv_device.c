@@ -1946,6 +1946,31 @@ anv_physical_device_init_heaps(struct anv_physical_device *device, int fd)
    if (result != VK_SUCCESS)
       return result;
 
+   /* Some games (e.g., Total War: WARHAMMER III) sometimes seem to expect to
+    * find memory types both with and without
+    * VK_MEMORY_TYPE_PROPERTY_DEVICE_LOCAL_BIT. So here we duplicate all our
+    * memory types just to make these games happy.
+    * This behavior is not spec-compliant as we still only have one heap that
+    * is now inconsistent with some of the memory types, but the game doesn't
+    * seem to care about it.
+    */
+   if (device->instance->anv_fake_nonlocal_memory &&
+       !anv_physical_device_has_vram(device)) {
+      const uint32_t base_types_count = device->memory.type_count;
+      for (int i = 0; i < base_types_count; i++) {
+         if (!(device->memory.types[i].propertyFlags &
+               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            continue;
+
+         struct anv_memory_type *new_type =
+            &device->memory.types[device->memory.type_count++];
+         *new_type = device->memory.types[i];
+
+         device->memory.types[i].propertyFlags &=
+            ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+      }
+   }
+
    /* Replicate all non protected memory types for descriptor buffers because
     * we want to identify memory allocations to place them in the right memory
     * heap.
@@ -1974,6 +1999,8 @@ anv_physical_device_init_heaps(struct anv_physical_device *device, int fd)
       *new_type = device->memory.types[i];
       new_type->descriptor_buffer = true;
    }
+
+   assert(device->memory.type_count <= VK_MAX_MEMORY_TYPES);
 
    for (unsigned i = 0; i < device->memory.type_count; i++) {
       VkMemoryPropertyFlags props = device->memory.types[i].propertyFlags;
@@ -2862,26 +2889,6 @@ void anv_GetPhysicalDeviceMemoryProperties(
          .size    = physical_device->memory.heaps[i].size,
          .flags   = physical_device->memory.heaps[i].flags,
       };
-   }
-
-   /* Some games (e.g. Total War: WARHAMMER III) sometimes completely refuse
-    * to use memory types with VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT set.
-    * On iGPUs we have only device-local memory, so we must hide it
-    * from the flags.
-    *
-    * Additionally, TW also seems to crash if a non-local but also
-    * non host-visible memory is present, so we should be careful which
-    * memory types we hide this flag from.
-    */
-   if (physical_device->instance->anv_fake_nonlocal_memory &&
-       !anv_physical_device_has_vram(physical_device)) {
-      for (uint32_t i = 0; i < physical_device->memory.type_count; i++) {
-         if (pMemoryProperties->memoryTypes[i].propertyFlags &
-             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-            pMemoryProperties->memoryTypes[i].propertyFlags &=
-                  ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-         }
-      }
    }
 }
 

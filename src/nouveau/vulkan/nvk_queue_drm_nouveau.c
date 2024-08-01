@@ -310,12 +310,16 @@ next_opaque_bind_plane(const VkSparseMemoryBind *bind,
 
 static void
 push_add_image_plane_opaque_bind(struct push_builder *pb,
+                                 const struct nvk_image *image,
                                  const struct nvk_image_plane *plane,
                                  const VkSparseMemoryBind *bind,
                                  uint64_t *image_plane_offset_B)
 {
+   uint64_t plane_size_B, plane_align_B;
+   nvk_image_plane_size_align_B(image, plane, &plane_size_B, &plane_align_B);
+
    uint64_t plane_offset_B, mem_offset_B, bind_size_B;
-   if (!next_opaque_bind_plane(bind, plane->nil.size_B, plane->nil.align_B,
+   if (!next_opaque_bind_plane(bind, plane_size_B, plane_align_B,
                                &plane_offset_B, &mem_offset_B, &bind_size_B,
                                image_plane_offset_B))
       return;
@@ -339,10 +343,14 @@ push_add_image_plane_opaque_bind(struct push_builder *pb,
 
 static void
 push_add_image_plane_mip_tail_bind(struct push_builder *pb,
+                                   const struct nvk_image *image,
                                    const struct nvk_image_plane *plane,
                                    const VkSparseMemoryBind *bind,
                                    uint64_t *image_plane_offset_B)
 {
+   uint64_t plane_size_B, plane_align_B;
+   nvk_image_plane_size_align_B(image, plane, &plane_size_B, &plane_align_B);
+
    const uint64_t mip_tail_offset_B =
       nil_image_mip_tail_offset_B(&plane->nil);
    const uint64_t mip_tail_size_B =
@@ -353,7 +361,7 @@ push_add_image_plane_mip_tail_bind(struct push_builder *pb,
       mip_tail_size_B * plane->nil.extent_px.array_len;
 
    uint64_t plane_offset_B, mem_offset_B, bind_size_B;
-   if (!next_opaque_bind_plane(bind, whole_mip_tail_size_B, plane->nil.align_B,
+   if (!next_opaque_bind_plane(bind, whole_mip_tail_size_B, plane_align_B,
                                &plane_offset_B, &mem_offset_B, &bind_size_B,
                                image_plane_offset_B))
       return;
@@ -410,15 +418,15 @@ push_add_image_opaque_bind(struct push_builder *pb,
       uint64_t image_plane_offset_B = 0;
       for (unsigned plane = 0; plane < image->plane_count; plane++) {
          if (bind->resourceOffset >= NVK_MIP_TAIL_START_OFFSET) {
-            push_add_image_plane_mip_tail_bind(pb, &image->planes[plane],
+            push_add_image_plane_mip_tail_bind(pb, image, &image->planes[plane],
                                                bind, &image_plane_offset_B);
          } else {
-            push_add_image_plane_opaque_bind(pb, &image->planes[plane],
+            push_add_image_plane_opaque_bind(pb, image, &image->planes[plane],
                                              bind, &image_plane_offset_B);
          }
       }
       if (image->stencil_copy_temp.nil.size_B > 0) {
-         push_add_image_plane_opaque_bind(pb, &image->stencil_copy_temp,
+         push_add_image_plane_opaque_bind(pb, image, &image->stencil_copy_temp,
                                           bind, &image_plane_offset_B);
       }
    }

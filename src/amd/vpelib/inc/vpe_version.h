@@ -49,6 +49,7 @@ extern "C" {
 #define VPE_VERSION_REV(ver)                  ((ver) & 0xFF)
 #define VPE_VERSION_6_1_0(ver)                ((ver) == VPE_VERSION(6, 1, 0))
 #define VPE_VERSION_6_1_1(ver)                (((ver) == VPE_VERSION(6, 1, 1)) || ((ver) == VPE_VERSION(6, 1, 2)))
+#define VPE_VERSION_6_1_3(ver)                ((ver) == VPE_VERSION(6, 1, 3))
 
 #ifdef __cplusplus
 }

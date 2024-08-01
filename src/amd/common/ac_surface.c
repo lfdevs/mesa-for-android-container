@@ -1736,6 +1736,7 @@ static bool gfx9_is_dcc_supported_by_DCN(const struct radeon_info *info,
    case GFX10:
    case GFX10_3:
    case GFX11:
+   case GFX11_5:
       /* DCN requires INDEPENDENT_128B_BLOCKS = 0 only on Navi1x. */
       if (info->gfx_level == GFX10 && surf->u.gfx9.color.dcc.independent_128B_blocks)
          return false;
@@ -1743,9 +1744,6 @@ static bool gfx9_is_dcc_supported_by_DCN(const struct radeon_info *info,
       return (!gfx10_DCN_requires_independent_64B_blocks(info, config) ||
               (surf->u.gfx9.color.dcc.independent_64B_blocks &&
                surf->u.gfx9.color.dcc.max_compressed_block_size == V_028C78_MAX_BLOCK_SIZE_64B));
-   case GFX11_5:
-      // TODO: clarify DCN support for 256B compressed block sizes and other modes with the DAL team
-      return true;
    default:
       unreachable("unhandled chip");
       return false;
@@ -2363,8 +2361,6 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
          /* Don't change the DCC settings for imported buffers - they might differ. */
          if (!(surf->flags & RADEON_SURF_IMPORTED) &&
              (info->use_display_dcc_unaligned || info->use_display_dcc_with_retile_blit)) {
-            // TODO: clarify DCN support with the DAL team for gfx11.5
-
             /* Only Navi12/14 support independent 64B blocks in L2,
              * but without DCC image stores.
              */

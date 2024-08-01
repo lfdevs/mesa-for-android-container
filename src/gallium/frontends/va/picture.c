@@ -299,7 +299,7 @@ handleIQMatrixBuffer(vlVaContext *context, vlVaBuffer *buf)
 }
 
 static void
-handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf, unsigned num_slices, unsigned slice_offset)
+handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf, unsigned num_slices)
 {
    switch (u_reduce_video_profile(context->templat.profile)) {
    case PIPE_VIDEO_FORMAT_MPEG12:
@@ -331,7 +331,7 @@ handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf, unsigned num_s
       break;
 
    case PIPE_VIDEO_FORMAT_AV1:
-      vlVaHandleSliceParameterBufferAV1(context, buf, num_slices, slice_offset);
+      vlVaHandleSliceParameterBufferAV1(context, buf, num_slices);
       break;
 
    default:
@@ -968,7 +968,6 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
 
    unsigned i;
    unsigned slice_idx = 0;
-   unsigned slice_offset = 0;
    vlVaBuffer *seq_param_buf = NULL;
 
    if (!ctx)
@@ -1024,17 +1023,13 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
 
             slice_idx is the zero based number of total slices received
                before this call to handleSliceParameterBuffer
-
-            slice_offset is the slice offset in bitstream buffer
          */
-         handleSliceParameterBuffer(context, buf, slice_idx, slice_offset);
+         handleSliceParameterBuffer(context, buf, slice_idx);
          slice_idx += buf->num_elements;
       } break;
 
       case VASliceDataBufferType:
          vaStatus = handleVASliceDataBufferType(context, buf);
-         if (slice_idx)
-            slice_offset += buf->size;
          break;
 
       case VAProcPipelineParameterBufferType:

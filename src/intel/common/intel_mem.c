@@ -78,7 +78,7 @@ intel_invalidate_range(void *start, size_t size)
    if (size == 0)
       return;
 
-   intel_clflush_range(start, size);
+   intel_flush_range_no_fence(start, size);
 
    /* Modern Atom CPUs (Baytrail+) have issues with clflush serialization,
     * where mfence is not a sufficient synchronization barrier.  We must
@@ -90,6 +90,15 @@ intel_invalidate_range(void *start, size_t size)
     * ("drm: Restore double clflush on the last partial cacheline")
     * and https://bugs.freedesktop.org/show_bug.cgi?id=92845.
     */
+#ifdef HAVE___BUILTIN_IA32_CLFLUSHOPT
+   /* clflushopt doesn't include an mfence like clflush */
+   if (util_get_cpu_caps()->has_clflushopt) {
+      __builtin_ia32_mfence();
+      intel_clflushopt_range(start + size - 1, 1);
+      __builtin_ia32_mfence();
+      return;
+   }
+#endif
    __builtin_ia32_clflush(start + size - 1);
    __builtin_ia32_mfence();
 }

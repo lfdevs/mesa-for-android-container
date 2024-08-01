@@ -1230,6 +1230,9 @@ fs_visitor::assign_curb_setup()
    }
 
    prog_data->curb_read_length = uniform_push_length + ubo_push_length;
+   if (stage == MESA_SHADER_FRAGMENT &&
+       ((struct brw_wm_prog_key *)key)->null_push_constant_tbimr_workaround)
+      prog_data->curb_read_length = MAX2(1, prog_data->curb_read_length);
 
    uint64_t used = 0;
    bool is_compute = gl_shader_stage_is_compute(stage);

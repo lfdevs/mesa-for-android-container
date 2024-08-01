@@ -47,6 +47,8 @@ struct shader_info;
 struct nir_shader_compiler_options;
 typedef struct nir_shader nir_shader;
 
+#define REG_CLASS_COUNT 20
+
 struct elk_compiler {
    const struct intel_device_info *devinfo;
 
@@ -74,7 +76,7 @@ struct elk_compiler {
        * Array of the ra classes for the unaligned contiguous register
        * block sizes used, indexed by register size.
        */
-      struct ra_class *classes[16];
+      struct ra_class *classes[REG_CLASS_COUNT];
 
       /**
        * ra class for the aligned barycentrics we use for PLN, which doesn't

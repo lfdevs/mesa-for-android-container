@@ -5186,7 +5186,8 @@ iris_store_fs_state(const struct intel_device_info *devinfo,
          devinfo->max_threads_per_psd - (GFX_VER == 8 ? 2 : 1);
 
 #if GFX_VER < 20
-      ps.PushConstantEnable = shader->ubo_ranges[0].length > 0;
+      ps.PushConstantEnable = devinfo->needs_null_push_constant_tbimr_workaround ||
+                              shader->ubo_ranges[0].length > 0;
 #endif
 
       /* From the documentation for this packet:
@@ -5935,13 +5936,6 @@ iris_restore_render_saved_bos(struct iris_context *ice,
                             IRIS_DOMAIN_VF_READ);
       }
    }
-
-#if GFX_VERx10 == 125
-   iris_use_pinned_bo(batch, iris_resource_bo(ice->state.pixel_hashing_tables),
-                      false, IRIS_DOMAIN_NONE);
-#else
-   assert(!ice->state.pixel_hashing_tables);
-#endif
 }
 
 static void
@@ -6396,6 +6390,42 @@ emit_push_constant_packets(struct iris_context *ice,
 
 #if GFX_VER >= 12
 static void
+emit_null_push_constant_tbimr_workaround(struct iris_batch *batch)
+{
+   struct isl_device *isl_dev = &batch->screen->isl_dev;
+   /* Pass a single-register push constant payload for the PS
+    * stage even if empty, since PS invocations with zero push
+    * constant cycles have been found to cause hangs with TBIMR
+    * enabled.  See HSDES #22020184996.
+    *
+    * XXX - Use workaround infrastructure and final workaround
+    *       when provided by hardware team.
+    */
+   const struct iris_address null_addr = {
+      .bo = batch->screen->workaround_bo,
+      .offset = 1024,
+   };
+   const uint32_t num_dwords = 2 + 2 * 1;
+   uint32_t const_all[num_dwords];
+   uint32_t *dw = &const_all[0];
+
+   iris_pack_command(GENX(3DSTATE_CONSTANT_ALL), dw, all) {
+      all.DWordLength = num_dwords - 2;
+      all.MOCS = isl_mocs(isl_dev, 0, false);
+      all.ShaderUpdateEnable = (1 << MESA_SHADER_FRAGMENT);
+      all.PointerBufferMask = 1;
+   }
+   dw += 2;
+
+   _iris_pack_state(batch, GENX(3DSTATE_CONSTANT_ALL_DATA), dw, data) {
+      data.PointerToConstantBuffer = null_addr;
+      data.ConstantBufferReadLength = 1;
+   }
+
+   iris_batch_emit(batch, const_all, sizeof(uint32_t) * num_dwords);
+}
+
+static void
 emit_push_constant_packet_all(struct iris_context *ice,
                               struct iris_batch *batch,
                               uint32_t shader_mask,
@@ -6404,9 +6434,17 @@ emit_push_constant_packet_all(struct iris_context *ice,
    struct isl_device *isl_dev = &batch->screen->isl_dev;
 
    if (!push_bos) {
-      iris_emit_cmd(batch, GENX(3DSTATE_CONSTANT_ALL), pc) {
-         pc.ShaderUpdateEnable = shader_mask;
-         pc.MOCS = iris_mocs(NULL, isl_dev, 0);
+      if (batch->screen->devinfo->needs_null_push_constant_tbimr_workaround &&
+          (shader_mask & (1 << MESA_SHADER_FRAGMENT))) {
+         emit_null_push_constant_tbimr_workaround(batch);
+         shader_mask &= ~(1 << MESA_SHADER_FRAGMENT);
+      }
+
+      if (shader_mask) {
+         iris_emit_cmd(batch, GENX(3DSTATE_CONSTANT_ALL), pc) {
+            pc.ShaderUpdateEnable = shader_mask;
+            pc.MOCS = iris_mocs(NULL, isl_dev, 0);
+         }
       }
       return;
    }

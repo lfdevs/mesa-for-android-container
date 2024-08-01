@@ -338,17 +338,17 @@ emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
 
    struct ir3_instruction *load;
 
-   unsigned shift = ctx->compiler->gen >= 7 ? 2 : 0;
    bool const_offset_in_bounds =
       nir_src_is_const(intr->src[1]) &&
-      nir_src_as_int(intr->src[1]) < ((1 << 10) >> shift) &&
-      nir_src_as_int(intr->src[1]) > -((1 << 10) >> shift);
+      nir_src_as_int(intr->src[1]) < (1 << 8) &&
+      nir_src_as_int(intr->src[1]) > -(1 << 8);
 
    if (const_offset_in_bounds) {
       load = ir3_LDG(b, addr, 0,
-                     create_immed(b, (nir_src_as_int(intr->src[1]) * 4) << shift),
+                     create_immed(b, nir_src_as_int(intr->src[1]) * 4),
                      0, create_immed(b, dest_components), 0);
    } else {
+      unsigned shift = ctx->compiler->gen >= 7 ? 2 : 0;
       offset = ir3_get_src(ctx, &intr->src[1])[0];
       if (shift) {
          /* A7XX TODO: Move to NIR for it to be properly optimized? */

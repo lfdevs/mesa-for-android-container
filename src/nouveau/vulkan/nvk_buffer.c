@@ -28,7 +28,7 @@ nvk_get_buffer_alignment(const struct nvk_physical_device *pdev,
 
    if (create_flags & (VK_BUFFER_CREATE_SPARSE_BINDING_BIT |
                        VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT))
-      alignment = MAX2(alignment, 4096);
+      alignment = MAX2(alignment, NVK_SPARSE_BIND_ALIGN_B);
 
    return alignment;
 }

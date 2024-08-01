@@ -16,7 +16,13 @@ from lava.utils import (
     fix_lava_gitlab_section_log,
     hide_sensitive_data,
 )
-from lava.utils.constants import KNOWN_ISSUE_R8152_MAX_CONSECUTIVE_COUNTER
+from lava.utils.constants import (
+    KNOWN_ISSUE_R8152_MAX_CONSECUTIVE_COUNTER,
+    A6XX_GPU_RECOVERY_WATCH_PERIOD_MIN,
+    A6XX_GPU_RECOVERY_FAILURE_MESSAGE,
+    A6XX_GPU_RECOVERY_FAILURE_MAX_COUNT,
+)
+from lava.utils.lava_log_hints import LAVALogHints
 
 from ..lava.helpers import (
     create_lava_yaml_msg,
@@ -390,3 +396,44 @@ def test_detect_failure(messages, expectation):
     lf = LogFollower(starting_section=boot_section)
     with expectation:
         lf.feed(messages)
+
+def test_detect_a6xx_gpu_recovery_failure(frozen_time):
+    log_follower = LogFollower()
+    lava_log_hints = LAVALogHints(log_follower=log_follower)
+    failure_message = {
+        "dt": datetime.now().isoformat(),
+        "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[0],
+        "lvl": "feedback",
+    }
+    with pytest.raises(MesaCIKnownIssueException):
+        for _ in range(A6XX_GPU_RECOVERY_FAILURE_MAX_COUNT):
+            lava_log_hints.detect_a6xx_gpu_recovery_failure(failure_message)
+            # Simulate the passage of time within the watch period
+            frozen_time.tick(1)
+            failure_message["dt"] = datetime.now().isoformat()
+
+def test_detect_a6xx_gpu_recovery_success(frozen_time):
+    log_follower = LogFollower()
+    lava_log_hints = LAVALogHints(log_follower=log_follower)
+    failure_message = {
+        "dt": datetime.now().isoformat(),
+        "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[0],
+        "lvl": "feedback",
+    }
+    # Simulate sending a tolerable number of failure messages
+    for _ in range(A6XX_GPU_RECOVERY_FAILURE_MAX_COUNT - 1):
+        lava_log_hints.detect_a6xx_gpu_recovery_failure(failure_message)
+        frozen_time.tick(1)
+        failure_message["dt"] = datetime.now().isoformat()
+
+    # Simulate the passage of time outside of the watch period
+    frozen_time.tick(60 * A6XX_GPU_RECOVERY_WATCH_PERIOD_MIN + 1)
+    failure_message = {
+        "dt": datetime.now().isoformat(),
+        "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[1],
+        "lvl": "feedback",
+    }
+    with does_not_raise():
+        lava_log_hints.detect_a6xx_gpu_recovery_failure(failure_message)
+    assert lava_log_hints.a6xx_gpu_first_fail_time is None, "a6xx_gpu_first_fail_time is not None"
+    assert lava_log_hints.a6xx_gpu_recovery_fail_counter == 0, "a6xx_gpu_recovery_fail_counter is not 0"

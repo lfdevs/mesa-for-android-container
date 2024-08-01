@@ -803,7 +803,7 @@ crocus_resource_from_handle(struct pipe_screen *pscreen,
       unreachable("invalid winsys handle type");
    }
    if (!res->bo)
-      return NULL;
+      goto fail;
 
    res->offset = whandle->offset;
    res->external_format = whandle->format;
@@ -841,15 +841,15 @@ crocus_resource_from_memobj(struct pipe_screen *pscreen,
                             struct pipe_memory_object *pmemobj,
                             uint64_t offset)
 {
+   /* Disable Depth, and combined Depth+Stencil for now. */
+   if (util_format_has_depth(util_format_description(templ->format)))
+      return NULL;
+
    struct crocus_screen *screen = (struct crocus_screen *)pscreen;
    struct crocus_memory_object *memobj = (struct crocus_memory_object *)pmemobj;
    struct crocus_resource *res = crocus_alloc_resource(pscreen, templ);
 
    if (!res)
-      return NULL;
-
-   /* Disable Depth, and combined Depth+Stencil for now. */
-   if (util_format_has_depth(util_format_description(templ->format)))
       return NULL;
 
    if (templ->flags & PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY) {

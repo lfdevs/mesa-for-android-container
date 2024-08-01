@@ -51,6 +51,11 @@ MANUAL_COMMANDS = [
 
     # Incomplete struct copies which lead to an use after free.
     'CmdBuildAccelerationStructuresKHR',
+
+    # VkDispatchGraphCountInfoAMDX::infos is an array of
+    # VkDispatchGraphInfoAMDX, but the xml specifies that it is a
+    # VkDeviceOrHostAddressConstAMDX.
+    'CmdDispatchGraphAMDX',
 ]
 
 NO_ENQUEUE_COMMANDS = [

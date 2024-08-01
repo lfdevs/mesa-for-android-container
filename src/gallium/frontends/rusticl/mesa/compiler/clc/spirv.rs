@@ -224,8 +224,10 @@ impl SPIRVBin {
 
     fn kernel_infos(&self) -> &[clc_kernel_info] {
         match self.info {
-            None => &[],
-            Some(info) => unsafe { slice::from_raw_parts(info.kernels, info.num_kernels as usize) },
+            Some(info) if info.num_kernels > 0 => unsafe {
+                slice::from_raw_parts(info.kernels, info.num_kernels as usize)
+            },
+            _ => &[],
         }
     }
 
@@ -434,6 +436,10 @@ impl SPIRVBin {
 
     pub fn spec_constant(&self, spec_id: u32) -> Option<clc_spec_constant_type> {
         let info = self.info?;
+        if info.num_spec_constants == 0 {
+            return None;
+        }
+
         let spec_constants =
             unsafe { slice::from_raw_parts(info.spec_constants, info.num_spec_constants as usize) };
 

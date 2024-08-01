@@ -1605,7 +1605,7 @@ dri2_from_names(__DRIscreen *screen, int width, int height, int fourcc,
 
    img->dri_components = map->dri_components;
    img->dri_fourcc = map->dri_fourcc;
-   img->dri_format = map->pipe_format;
+   img->dri_format = map->dri_format;
 
    return img;
 }

@@ -977,12 +977,12 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
       simple_mtx_unlock(&panthor_vm->auto_va.lock);
    }
 
+out_update_vas:
    if (track_activity) {
       panthor_kmod_vm_sync_unlock(vm,
                                   ret ? vm_orig_sync_point : vm_new_sync_point);
    }
 
-out_update_vas:
    for (uint32_t i = 0; i < op_count; i++) {
       if (ops[i].type == PAN_KMOD_VM_OP_TYPE_MAP &&
           ops[i].va.start == PAN_KMOD_VM_MAP_AUTO_VA) {
