@@ -1,3 +1,19 @@
+mesa (24.1.5-2) unstable; urgency=medium
+
+  [ Adrian Bunk ]
+  * control, rules: mips64el has latest LLVM already for some time
+
+  [ Timo Aaltonen ]
+  * rules: Fix FTBFS by only cleaning some nvk test binaries if they
+    actually get built.
+  * rules: Add a new NVK_ARCHS which is a subset of RUSTICL_ARCHS, strip
+    powerpc, ppc64el and s390x from it.
+  * control: Add lua5.4 to build-depends for arm* in order to work
+    around FTBFS caused by setting MESON_PACKAGE_CACHE_DIR for nvk.
+    (Closes: #1077729)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 02 Aug 2024 11:25:02 +0300
+
 mesa (24.1.5-1) unstable; urgency=medium
 
   * New upstream release.

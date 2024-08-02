@@ -44,8 +44,9 @@ confflags_OSMESA = -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 confflags_TEFLON = -Dteflon=false
 
-LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
-RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x x32
+LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
+RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32
+NVK_ARCHS      = amd64 arm64 armel armhf i386 loong64 mips64el ppc64 riscv64 x32
 VALGRIND_ARCHS = amd64 arm64 armhf i386 mips64el powerpc ppc64 ppc64el s390x
 WINE_ARCHS     = amd64 arm64 armel armhf i386
 
@@ -125,9 +126,12 @@ else
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
 
-	# Build rusticl and nvk for archs where rustc is available
+	# Build rusticl for archs where rustc is available
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(RUSTICL_ARCHS)))
 		confflags_GALLIUM += -Dgallium-rusticl=true
+	endif
+
+	ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
 		VULKAN_DRIVERS += nouveau
 	endif
 
@@ -253,8 +257,10 @@ override_dh_install:
 	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
+  ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
 	rm debian/tmp/usr/bin/mme_fermi_sim_hw_test
 	rm debian/tmp/usr/bin/mme_tu104_sim_hw_test
+  endif
 	# use -f here though
 	rm -f debian/tmp/usr/lib/*/libgrl.a
 
