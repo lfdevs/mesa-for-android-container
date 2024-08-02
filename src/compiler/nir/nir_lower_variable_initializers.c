@@ -122,8 +122,7 @@ nir_lower_variable_initializers(nir_shader *shader, nir_variable_mode modes)
 
       if (impl_progress) {
          progress = true;
-         nir_metadata_preserve(impl, nir_metadata_block_index |
-                                        nir_metadata_dominance |
+         nir_metadata_preserve(impl, nir_metadata_control_flow |
                                         nir_metadata_live_defs);
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);

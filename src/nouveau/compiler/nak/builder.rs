@@ -407,10 +407,20 @@ pub trait SSABuilder: Builder {
 
     fn ineg(&mut self, i: Src) -> SSARef {
         let dst = self.alloc_ssa(RegFile::GPR, 1);
-        self.push_op(OpINeg {
-            dst: dst.into(),
-            src: i,
-        });
+        if self.sm() >= 70 {
+            self.push_op(OpIAdd3 {
+                dst: dst.into(),
+                overflow: [Dst::None; 2],
+                srcs: [0.into(), i.ineg(), 0.into()],
+            });
+        } else {
+            self.push_op(OpIAdd2 {
+                dst: dst.into(),
+                srcs: [0.into(), i.ineg()],
+                carry_in: 0.into(),
+                carry_out: Dst::None,
+            });
+        }
         dst
     }
 
@@ -669,7 +679,7 @@ pub trait SSABuilder: Builder {
     }
 
     fn bmov_to_bar(&mut self, src: Src) -> SSARef {
-        assert!(src.src_ref.as_ssa().unwrap().file() == RegFile::GPR);
+        assert!(src.src_ref.as_ssa().unwrap().file() == Some(RegFile::GPR));
         let dst = self.alloc_ssa(RegFile::Bar, 1);
         self.push_op(OpBMov {
             dst: dst.into(),
@@ -680,7 +690,7 @@ pub trait SSABuilder: Builder {
     }
 
     fn bmov_to_gpr(&mut self, src: Src) -> SSARef {
-        assert!(src.src_ref.as_ssa().unwrap().file() == RegFile::Bar);
+        assert!(src.src_ref.as_ssa().unwrap().file() == Some(RegFile::Bar));
         let dst = self.alloc_ssa(RegFile::GPR, 1);
         self.push_op(OpBMov {
             dst: dst.into(),
@@ -691,19 +701,21 @@ pub trait SSABuilder: Builder {
     }
 }
 
-pub struct InstrBuilder {
+pub struct InstrBuilder<'a> {
     instrs: MappedInstrs,
-    sm: u8,
+    sm: &'a dyn ShaderModel,
 }
 
-impl InstrBuilder {
-    pub fn new(sm: u8) -> Self {
+impl<'a> InstrBuilder<'a> {
+    pub fn new(sm: &'a dyn ShaderModel) -> Self {
         Self {
             instrs: MappedInstrs::None,
             sm,
         }
     }
+}
 
+impl InstrBuilder<'_> {
     pub fn as_vec(self) -> Vec<Box<Instr>> {
         match self.instrs {
             MappedInstrs::None => Vec::new(),
@@ -717,30 +729,35 @@ impl InstrBuilder {
     }
 }
 
-impl Builder for InstrBuilder {
+impl Builder for InstrBuilder<'_> {
     fn push_instr(&mut self, instr: Box<Instr>) -> &mut Instr {
         self.instrs.push(instr);
         self.instrs.last_mut().unwrap().as_mut()
     }
 
     fn sm(&self) -> u8 {
-        self.sm
+        self.sm.sm()
     }
 }
 
 pub struct SSAInstrBuilder<'a> {
-    b: InstrBuilder,
+    b: InstrBuilder<'a>,
     alloc: &'a mut SSAValueAllocator,
 }
 
 impl<'a> SSAInstrBuilder<'a> {
-    pub fn new(sm: u8, alloc: &'a mut SSAValueAllocator) -> Self {
+    pub fn new(
+        sm: &'a dyn ShaderModel,
+        alloc: &'a mut SSAValueAllocator,
+    ) -> Self {
         Self {
             b: InstrBuilder::new(sm),
             alloc: alloc,
         }
     }
+}
 
+impl SSAInstrBuilder<'_> {
     pub fn as_vec(self) -> Vec<Box<Instr>> {
         self.b.as_vec()
     }
@@ -787,6 +804,38 @@ impl<'a, T: Builder> Builder for PredicatedBuilder<'a, T> {
 
 impl<'a, T: SSABuilder> SSABuilder for PredicatedBuilder<'a, T> {
     fn alloc_ssa(&mut self, file: RegFile, comps: u8) -> SSARef {
+        self.b.alloc_ssa(file, comps)
+    }
+}
+
+pub struct UniformBuilder<'a, T: Builder> {
+    b: &'a mut T,
+    uniform: bool,
+}
+
+impl<'a, T: Builder> UniformBuilder<'a, T> {
+    pub fn new(b: &'a mut T, uniform: bool) -> Self {
+        Self { b, uniform }
+    }
+}
+
+impl<'a, T: Builder> Builder for UniformBuilder<'a, T> {
+    fn push_instr(&mut self, instr: Box<Instr>) -> &mut Instr {
+        self.b.push_instr(instr)
+    }
+
+    fn sm(&self) -> u8 {
+        self.b.sm()
+    }
+}
+
+impl<'a, T: SSABuilder> SSABuilder for UniformBuilder<'a, T> {
+    fn alloc_ssa(&mut self, file: RegFile, comps: u8) -> SSARef {
+        let file = if self.uniform {
+            file.to_uniform().unwrap()
+        } else {
+            file
+        };
         self.b.alloc_ssa(file, comps)
     }
 }

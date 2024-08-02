@@ -213,6 +213,11 @@ isl_extent3d_el_to_sa(enum isl_format fmt, struct isl_extent3d extent_el)
    };
 }
 
+bool
+_isl_surf_info_supports_ccs(const struct isl_device *dev,
+                            enum isl_format format,
+                            isl_surf_usage_flags_t usage);
+
 void
 _isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
                             uint32_t yt1, uint32_t yt2,

@@ -68,9 +68,27 @@ struct panvk_meta {
          mali_ptr rsd;
       } fillbuf;
    } copy;
+
+   struct {
+      mali_ptr rsd;
+   } desc_copy;
 };
 
 #if PAN_ARCH
+
+#if PAN_ARCH <= 7
+struct panvk_descriptor_state;
+struct panvk_shader;
+struct panvk_shader_desc_state;
+
+struct panfrost_ptr panvk_per_arch(meta_get_copy_desc_job)(
+   struct panvk_device *dev, struct pan_pool *desc_pool,
+   const struct panvk_shader *shader,
+   const struct panvk_descriptor_state *desc_state,
+   const struct panvk_shader_desc_state *shader_desc_state,
+   uint32_t attrib_buf_idx_offset);
+#endif
+
 void panvk_per_arch(meta_init)(struct panvk_device *dev);
 
 void panvk_per_arch(meta_cleanup)(struct panvk_device *dev);
@@ -86,6 +104,8 @@ void panvk_per_arch(meta_blit_init)(struct panvk_device *dev);
 void panvk_per_arch(meta_blit_cleanup)(struct panvk_device *dev);
 
 void panvk_per_arch(meta_copy_init)(struct panvk_device *dev);
+
+void panvk_per_arch(meta_desc_copy_init)(struct panvk_device *dev);
 #endif
 
 #endif

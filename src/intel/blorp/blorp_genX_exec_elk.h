@@ -30,6 +30,7 @@
 
 #include "blorp_priv.h"
 #include "dev/intel_device_info.h"
+#include "common/intel_compute_slm.h"
 #include "common/intel_sample_positions.h"
 #include "common/intel_l3_config.h"
 #include "genxml/gen_macros.h"
@@ -2060,8 +2061,8 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       .BindingTablePointer = surfaces_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
-      .SharedLocalMemorySize = elk_encode_slm_size(GFX_VER,
-                                                   prog_data->total_shared),
+      .SharedLocalMemorySize = intel_compute_slm_encode_size(GFX_VER,
+                                                             prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
 #if GFX_VER >= 8 || GFX_VERx10 == 75
       .CrossThreadConstantDataReadLength =

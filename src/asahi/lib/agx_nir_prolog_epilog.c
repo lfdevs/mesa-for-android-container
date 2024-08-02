@@ -47,16 +47,16 @@ agx_nir_lower_poly_stipple(nir_shader *s)
                                         nir_imm_int(b, 1));
 
    /* Discard fragments where the pattern is 0 */
-   nir_discard_if(b, nir_ieq_imm(b, bit, 0));
+   nir_demote_if(b, nir_ieq_imm(b, bit, 0));
    s->info.fs.uses_discard = true;
 
-   nir_metadata_preserve(b->impl,
-                         nir_metadata_dominance | nir_metadata_block_index);
+   nir_metadata_preserve(b->impl, nir_metadata_control_flow);
    return true;
 }
 
 static bool
-lower_vbo(nir_shader *s, const struct agx_velem_key *key)
+lower_vbo(nir_shader *s, const struct agx_velem_key *key,
+          const struct agx_robustness rs)
 {
    struct agx_attribute out[AGX_MAX_VBUFS];
 
@@ -65,10 +65,11 @@ lower_vbo(nir_shader *s, const struct agx_velem_key *key)
          .divisor = key[i].divisor,
          .stride = key[i].stride,
          .format = key[i].format,
+         .instanced = key[i].instanced,
       };
    }
 
-   return agx_nir_lower_vbo(s, out);
+   return agx_nir_lower_vbo(s, out, rs);
 }
 
 static int
@@ -79,12 +80,12 @@ map_vs_part_uniform(nir_intrinsic_instr *intr, unsigned nr_attribs)
       return 4 * nir_src_as_uint(intr->src[0]);
    case nir_intrinsic_load_attrib_clamp_agx:
       return (4 * nr_attribs) + (2 * nir_src_as_uint(intr->src[0]));
-   case nir_intrinsic_load_base_instance:
-      return (6 * nr_attribs);
    case nir_intrinsic_load_first_vertex:
+      return (6 * nr_attribs);
+   case nir_intrinsic_load_base_instance:
       return (6 * nr_attribs) + 2;
    case nir_intrinsic_load_input_assembly_buffer_agx:
-      return (6 * nr_attribs) + 4;
+      return (6 * nr_attribs) + 8;
    default:
       return -1;
    }
@@ -148,12 +149,13 @@ agx_nir_vs_prolog(nir_builder *b, const void *key_)
    unsigned i = 0;
    nir_def *vec = NULL;
    unsigned vec_idx = ~0;
-   BITSET_FOREACH_SET(i, key->component_mask, VERT_ATTRIB_MAX * 4) {
+   BITSET_FOREACH_SET(i, key->component_mask, AGX_MAX_ATTRIBS * 4) {
       unsigned a = i / 4;
       unsigned c = i % 4;
 
       if (vec_idx != a) {
          vec = nir_load_input(b, 4, 32, nir_imm_int(b, 0), .base = a);
+         vec_idx = a;
       }
 
       /* ABI: attributes passed starting at r8 */
@@ -164,7 +166,7 @@ agx_nir_vs_prolog(nir_builder *b, const void *key_)
    nir_export_agx(b, nir_load_instance_id(b), .base = 6 * 2);
 
    /* Now lower the resulting program using the key */
-   lower_vbo(b->shader, key->attribs);
+   lower_vbo(b->shader, key->attribs, key->robustness);
 
    if (!key->hw) {
       agx_nir_lower_index_buffer(b->shader, key->sw_index_size_B, false);
@@ -174,8 +176,7 @@ agx_nir_vs_prolog(nir_builder *b, const void *key_)
    /* Finally, lower uniforms according to our ABI */
    unsigned nr = DIV_ROUND_UP(BITSET_LAST_BIT(key->component_mask), 4);
    nir_shader_intrinsics_pass(b->shader, lower_non_monolithic_uniforms,
-                              nir_metadata_dominance | nir_metadata_block_index,
-                              &nr);
+                              nir_metadata_control_flow, &nr);
    b->shader->info.io_lowered = true;
 }
 
@@ -202,8 +203,7 @@ lower_input_to_prolog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       BITSET_SET(comps_read, base + c);
    }
 
-   nir_def_rewrite_uses(&intr->def, val);
-   nir_instr_remove(&intr->instr);
+   nir_def_replace(&intr->def, val);
    return true;
 }
 
@@ -211,10 +211,9 @@ bool
 agx_nir_lower_vs_input_to_prolog(nir_shader *s,
                                  BITSET_WORD *attrib_components_read)
 {
-   return nir_shader_intrinsics_pass(
-      s, lower_input_to_prolog,
-      nir_metadata_dominance | nir_metadata_block_index,
-      attrib_components_read);
+   return nir_shader_intrinsics_pass(s, lower_input_to_prolog,
+                                     nir_metadata_control_flow,
+                                     attrib_components_read);
 }
 
 static bool
@@ -250,19 +249,18 @@ lower_tests_zs(nir_shader *s, bool value)
    if (!s->info.fs.uses_discard)
       return false;
 
-   return nir_shader_intrinsics_pass(
-      s, lower_tests_zs_intr, nir_metadata_dominance | nir_metadata_block_index,
-      &value);
+   return nir_shader_intrinsics_pass(s, lower_tests_zs_intr,
+                                     nir_metadata_control_flow, &value);
 }
 
 static inline bool
-blend_uses_2src(nir_lower_blend_rt rt)
+blend_uses_2src(struct agx_blend_rt_key rt)
 {
    enum pipe_blendfactor factors[] = {
-      rt.rgb.src_factor,
-      rt.rgb.dst_factor,
-      rt.alpha.src_factor,
-      rt.alpha.dst_factor,
+      rt.rgb_src_factor,
+      rt.rgb_dst_factor,
+      rt.alpha_src_factor,
+      rt.alpha_dst_factor,
    };
 
    for (unsigned i = 0; i < ARRAY_SIZE(factors); ++i) {
@@ -290,7 +288,7 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
    /* First, construct a passthrough shader reading each colour and outputting
     * the value.
     */
-   u_foreach_bit(rt, key->rt_written) {
+   u_foreach_bit(rt, key->link.rt_written) {
       bool dual_src = (rt == 1) && blend_uses_2src(key->blend.rt[0]);
       unsigned read_rt = (key->link.broadcast_rt0 && !dual_src) ? 0 : rt;
       unsigned size = (key->link.size_32 & BITFIELD_BIT(read_rt)) ? 32 : 16;
@@ -306,12 +304,18 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
       nir_store_output(
          b, value, nir_imm_int(b, 0),
          .io_semantics.location = FRAG_RESULT_DATA0 + (dual_src ? 0 : rt),
-         .io_semantics.dual_source_blend_index = dual_src);
+         .io_semantics.dual_source_blend_index = dual_src,
+         .src_type = nir_type_float | size);
    }
 
+   /* Grab registers early, this has to happen in the first block. */
+   nir_def *sample_id = NULL, *write_samples = NULL;
    if (key->link.sample_shading) {
-      /* Ensure the sample ID is preserved in register */
-      nir_export_agx(b, nir_load_exported_agx(b, 1, 16, .base = 1), .base = 1);
+      sample_id = nir_load_exported_agx(b, 1, 16, .base = 1);
+   }
+
+   if (key->link.sample_mask_after_force_early) {
+      write_samples = nir_load_exported_agx(b, 1, 16, .base = 7);
    }
 
    /* Now lower the resulting program using the key */
@@ -329,10 +333,20 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
    };
 
    static_assert(ARRAY_SIZE(opts.format) == 8, "max RTs out of sync");
-   memcpy(opts.rt, key->blend.rt, sizeof(opts.rt));
 
    for (unsigned i = 0; i < 8; ++i) {
       opts.format[i] = key->rt_formats[i];
+      opts.rt[i] = (nir_lower_blend_rt){
+         .rgb.src_factor = key->blend.rt[i].rgb_src_factor,
+         .rgb.dst_factor = key->blend.rt[i].rgb_dst_factor,
+         .rgb.func = key->blend.rt[i].rgb_func,
+
+         .alpha.src_factor = key->blend.rt[i].alpha_src_factor,
+         .alpha.dst_factor = key->blend.rt[i].alpha_dst_factor,
+         .alpha.func = key->blend.rt[i].alpha_func,
+
+         .colormask = key->blend.rt[i].colormask,
+      };
    }
 
    /* It's more efficient to use masked stores (with
@@ -396,7 +410,8 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
 
    unsigned rt_spill = key->link.rt_spill_base;
    NIR_PASS(_, b->shader, agx_nir_lower_tilebuffer, &tib, colormasks, &rt_spill,
-            &force_translucent);
+            write_samples, &force_translucent);
+   NIR_PASS(_, b->shader, agx_nir_lower_texture);
    NIR_PASS(_, b->shader, agx_nir_lower_multisampled_image_store);
 
    /* If the API shader runs once per sample, then the epilog runs once per
@@ -410,36 +425,49 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
    if (key->link.sample_shading) {
       NIR_PASS(_, b->shader, agx_nir_lower_to_per_sample);
       NIR_PASS(_, b->shader, agx_nir_lower_fs_active_samples_to_register);
+
+      /* Ensure the sample ID is preserved in register. We do this late since it
+       * has to go in the last block, and the above passes might add control
+       * flow when lowering.
+       */
+      b->cursor = nir_after_impl(b->impl);
+      nir_export_agx(b, sample_id, .base = 1);
    } else {
       NIR_PASS(_, b->shader, agx_nir_lower_monolithic_msaa, key->nr_samples);
    }
 
    /* Finally, lower uniforms according to our ABI */
    nir_shader_intrinsics_pass(b->shader, lower_non_monolithic_uniforms,
-                              nir_metadata_dominance | nir_metadata_block_index,
-                              NULL);
+                              nir_metadata_control_flow, NULL);
 
    /* There is no shader part after the epilog, so we're always responsible for
-    * running our own tests.
+    * running our own tests, unless the fragment shader forced early tests.
     */
-   NIR_PASS(_, b->shader, lower_tests_zs, true);
+   NIR_PASS(_, b->shader, lower_tests_zs, !key->link.already_ran_zs);
 
    b->shader->info.io_lowered = true;
    b->shader->info.fs.uses_fbfetch_output |= force_translucent;
    b->shader->info.fs.uses_sample_shading = key->link.sample_shading;
 }
 
+struct lower_epilog_ctx {
+   struct agx_fs_epilog_link_info *info;
+   nir_variable *masked_samples;
+};
+
 static bool
 lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   struct agx_fs_epilog_link_info *info = data;
+   struct lower_epilog_ctx *ctx = data;
+   struct agx_fs_epilog_link_info *info = ctx->info;
+
    if (intr->intrinsic == nir_intrinsic_store_zs_agx) {
       assert(nir_src_as_uint(intr->src[0]) == 0xff && "msaa not yet lowered");
       b->cursor = nir_instr_remove(&intr->instr);
 
       unsigned base = nir_intrinsic_base(intr);
-      info->write_z = base & 1;
-      info->write_s = base & 2;
+      info->write_z = !!(base & 1);
+      info->write_s = !!(base & 2);
 
       /* ABI: r2 contains the written depth */
       if (info->write_z)
@@ -452,6 +480,32 @@ lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       return true;
    }
 
+   if (intr->intrinsic == nir_intrinsic_discard_agx &&
+       b->shader->info.fs.early_fragment_tests) {
+
+      if (!ctx->masked_samples) {
+         b->cursor = nir_before_impl(nir_shader_get_entrypoint(b->shader));
+
+         ctx->masked_samples =
+            nir_local_variable_create(b->impl, glsl_uint16_t_type(), NULL);
+
+         nir_store_var(b, ctx->masked_samples, nir_imm_intN_t(b, 0xFF, 16),
+                       nir_component_mask(1));
+      }
+
+      b->cursor = nir_before_instr(&intr->instr);
+
+      nir_def *mask = nir_load_var(b, ctx->masked_samples);
+      nir_def *mask_2 =
+         nir_ixor(b, intr->src[0].ssa, nir_imm_intN_t(b, 0xff, 16));
+
+      mask = nir_iand(b, mask, mask_2);
+      nir_store_var(b, ctx->masked_samples, mask, nir_component_mask(1));
+
+      nir_instr_remove(&intr->instr);
+      return true;
+   }
+
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 
@@ -461,6 +515,7 @@ lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    if (sem.location == FRAG_RESULT_COLOR) {
       sem.location = FRAG_RESULT_DATA0;
       info->broadcast_rt0 = true;
+      info->rt_written = ~0;
    }
 
    /* We don't use the epilog for sample mask writes */
@@ -471,12 +526,14 @@ lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
     * render target, so get that out of the way now.
     */
    unsigned rt = sem.location - FRAG_RESULT_DATA0;
+   rt += nir_src_as_uint(intr->src[1]);
 
    if (sem.dual_source_blend_index) {
       assert(rt == 0);
       rt = 1;
-      b->shader->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_DATA1);
    }
+
+   info->rt_written |= BITFIELD_BIT(rt);
 
    b->cursor = nir_instr_remove(&intr->instr);
    nir_def *vec = intr->src[0].ssa;
@@ -487,6 +544,7 @@ lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       assert(vec->bit_size == 16);
 
    uint32_t one_f = (vec->bit_size == 32 ? fui(1.0) : _mesa_float_to_half(1.0));
+   unsigned comp = nir_intrinsic_component(intr);
 
    u_foreach_bit(c, nir_intrinsic_write_mask(intr)) {
       nir_scalar s = nir_scalar_resolved(vec, c);
@@ -498,7 +556,7 @@ lower_output_to_epilog(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          unsigned stride = vec->bit_size / 16;
 
          nir_export_agx(b, nir_channel(b, vec, c),
-                        .base = (2 * (4 + (4 * rt))) + c * stride);
+                        .base = (2 * (4 + (4 * rt))) + (comp + c) * stride);
       }
    }
 
@@ -509,17 +567,35 @@ bool
 agx_nir_lower_fs_output_to_epilog(nir_shader *s,
                                   struct agx_fs_epilog_link_info *out)
 {
-   return nir_shader_intrinsics_pass(
-      s, lower_output_to_epilog,
-      nir_metadata_dominance | nir_metadata_block_index, out);
+   struct lower_epilog_ctx ctx = {.info = out};
+
+   nir_shader_intrinsics_pass(s, lower_output_to_epilog,
+                              nir_metadata_control_flow, &ctx);
+
+   if (ctx.masked_samples) {
+      nir_builder b =
+         nir_builder_at(nir_after_impl(nir_shader_get_entrypoint(s)));
+
+      nir_export_agx(&b, nir_load_var(&b, ctx.masked_samples), .base = 7);
+      out->sample_mask_after_force_early = true;
+
+      bool progress;
+      do {
+         progress = false;
+         NIR_PASS(progress, s, nir_lower_vars_to_ssa);
+         NIR_PASS(progress, s, nir_opt_dce);
+      } while (progress);
+   }
+
+   out->sample_shading = s->info.fs.uses_sample_shading;
+   return true;
 }
 
 bool
 agx_nir_lower_fs_active_samples_to_register(nir_shader *s)
 {
-   return nir_shader_intrinsics_pass(
-      s, lower_active_samples_to_register,
-      nir_metadata_dominance | nir_metadata_block_index, NULL);
+   return nir_shader_intrinsics_pass(s, lower_active_samples_to_register,
+                                     nir_metadata_control_flow, NULL);
 }
 
 static bool
@@ -536,8 +612,7 @@ agx_nir_lower_stats_fs(nir_shader *s)
    nir_def *addr = nir_load_stat_query_address_agx(b, .base = query);
    nir_global_atomic(b, 32, addr, samples, .atomic_op = nir_atomic_op_iadd);
 
-   nir_metadata_preserve(b->impl,
-                         nir_metadata_block_index | nir_metadata_dominance);
+   nir_metadata_preserve(b->impl, nir_metadata_control_flow);
    return true;
 }
 
@@ -572,8 +647,7 @@ agx_nir_fs_prolog(nir_builder *b, const void *key_)
    NIR_PASS(_, b->shader, agx_nir_lower_discard_zs_emit);
    NIR_PASS(_, b->shader, agx_nir_lower_sample_mask);
    NIR_PASS(_, b->shader, nir_shader_intrinsics_pass,
-            lower_non_monolithic_uniforms,
-            nir_metadata_dominance | nir_metadata_block_index, NULL);
+            lower_non_monolithic_uniforms, nir_metadata_control_flow, NULL);
    NIR_PASS(_, b->shader, lower_tests_zs, key->run_zs_tests);
 
    b->shader->info.io_lowered = true;

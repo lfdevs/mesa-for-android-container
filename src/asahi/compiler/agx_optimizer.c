@@ -376,6 +376,9 @@ agx_optimizer_cmpsel(agx_instr **defs, agx_instr *I)
 static void
 agx_optimizer_ballot(agx_context *ctx, agx_instr **defs, agx_instr *I)
 {
+   if (I->src[0].type != AGX_INDEX_NORMAL)
+      return;
+
    agx_instr *def = defs[I->src[0].value];
    if (!def || (def->op != AGX_OPCODE_ICMP && def->op != AGX_OPCODE_FCMP))
       return;

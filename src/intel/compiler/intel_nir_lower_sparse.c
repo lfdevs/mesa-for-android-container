@@ -241,7 +241,6 @@ bool
 intel_nir_lower_sparse_intrinsics(nir_shader *nir)
 {
    return nir_shader_instructions_pass(nir, lower_sparse_intrinsics,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }

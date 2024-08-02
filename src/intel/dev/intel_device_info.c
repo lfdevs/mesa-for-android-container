@@ -74,6 +74,8 @@ static const struct {
    { "dg2", 0x5690 },
    { "mtl", 0x7d60 },
    { "arl", 0x7d67 },
+   { "lnl", 0x64a0 },
+   { "bmg", 0xe202 },
 };
 
 /**
@@ -100,6 +102,7 @@ static const struct intel_device_info intel_device_info_gfx3 = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 8,
    .num_thread_per_eu = 4,
+   .grf_size = 32,
    .timestamp_frequency = 12500000,
 };
 
@@ -111,6 +114,7 @@ static const struct intel_device_info intel_device_info_i965 = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 8,
    .num_thread_per_eu = 4,
+   .grf_size = 32,
    .max_vs_threads = 16,
    .max_gs_threads = 2,
    .max_wm_threads = 8 * 4,
@@ -132,6 +136,7 @@ static const struct intel_device_info intel_device_info_g4x = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 10,
    .num_thread_per_eu = 5,
+   .grf_size = 32,
    .max_vs_threads = 32,
    .max_gs_threads = 2,
    .max_wm_threads = 10 * 5,
@@ -152,6 +157,7 @@ static const struct intel_device_info intel_device_info_ilk = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 12,
    .num_thread_per_eu = 6,
+   .grf_size = 32,
    .max_vs_threads = 72,
    .max_gs_threads = 32,
    .max_wm_threads = 12 * 6,
@@ -175,6 +181,7 @@ static const struct intel_device_info intel_device_info_snb_gt1 = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 6,
    .num_thread_per_eu = 6, /* Not confirmed */
+   .grf_size = 32,
    .max_vs_threads = 24,
    .max_gs_threads = 21, /* conservative; 24 if rendering disabled. */
    .max_wm_threads = 40,
@@ -205,6 +212,7 @@ static const struct intel_device_info intel_device_info_snb_gt2 = {
    .num_subslices = { 1, },
    .max_eus_per_subslice = 12,
    .num_thread_per_eu = 6, /* Not confirmed */
+   .grf_size = 32,
    .max_vs_threads = 60,
    .max_gs_threads = 60,
    .max_wm_threads = 80,
@@ -230,6 +238,7 @@ static const struct intel_device_info intel_device_info_snb_gt2 = {
    .has_pln = true,                                 \
    .has_64bit_float = true,                         \
    .has_surface_tile_offset = true,                 \
+   .grf_size = 32,                                  \
    .timestamp_frequency = 12500000,                 \
    .max_constant_urb_size_kb = 16
 
@@ -426,6 +435,7 @@ static const struct intel_device_info intel_device_info_hsw_gt3 = {
    .supports_simd16_3src = true,                    \
    .has_surface_tile_offset = true,                 \
    .num_thread_per_eu = 7,                          \
+   .grf_size = 32,                                  \
    .max_vs_threads = 504,                           \
    .max_tcs_threads = 504,                          \
    .max_tes_threads = 504,                          \
@@ -618,7 +628,6 @@ static const struct intel_device_info intel_device_info_chv = {
    .has_sample_with_hiz = true,                     \
    .has_illegal_ccs_values = true,                                    \
    .cooperative_matrix_configurations = {                             \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
@@ -850,7 +859,6 @@ static const struct intel_device_info intel_device_info_cfl_gt3 = {
    .num_subslices = _subslices,                       \
    .max_eus_per_subslice = 8,                                         \
    .cooperative_matrix_configurations = {                             \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
@@ -976,14 +984,18 @@ static const struct intel_device_info intel_device_info_ehl_2x4 = {
    .gt = _gt, .num_slices = _slices, .l3_banks = _l3,           \
    .simulator_id = 22,                                          \
    .max_eus_per_subslice = 16,                                  \
+   /* BSpec 45101 (r51017) */                                   \
    .pat = {                                                     \
-         .cached_coherent = PAT_ENTRY(0, WB, 2WAY),             \
-         .scanout = PAT_ENTRY(1, WC, NONE),                     \
-         .writeback_incoherent = PAT_ENTRY(0, WB, 2WAY),        \
-         .writecombining = PAT_ENTRY(1, WC, NONE),              \
+         /* CPU: WB, GPU: PAT 0 => WB, 2WAY */                  \
+         .cached_coherent = PAT_ENTRY(0, WB),                   \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .scanout = PAT_ENTRY(1, WC),                           \
+         /* CPU: WB, GPU: PAT 0 => WB, 2WAY */                  \
+         .writeback_incoherent = PAT_ENTRY(0, WB),              \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .writecombining = PAT_ENTRY(1, WC),                    \
    },                                                           \
    .cooperative_matrix_configurations = {                       \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
@@ -1057,14 +1069,7 @@ static const struct intel_device_info intel_device_info_rpl_p = {
    .has_llc = false,                                     \
    .has_local_mem = true,                                \
    .urb.size = 768,                                      \
-   .simulator_id = 30,                                   \
-   /* There is no PAT table for DG1, using TGL one */    \
-   .pat = {                                              \
-         .cached_coherent = PAT_ENTRY(0, WB, 2WAY),      \
-         .scanout = PAT_ENTRY(1, WC, NONE),              \
-         .writeback_incoherent = PAT_ENTRY(0, WB, 2WAY), \
-         .writecombining = PAT_ENTRY(1, WC, NONE),       \
-   }
+   .simulator_id = 30
 
 static const struct intel_device_info intel_device_info_dg1 = {
    GFX12_DG1_SG1_FEATURES,
@@ -1116,7 +1121,6 @@ static const struct intel_device_info intel_device_info_sg1 = {
    .has_aux_map = false,                                        \
    .simulator_id = 29,                                          \
    .cooperative_matrix_configurations = {                       \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
     { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
@@ -1126,17 +1130,21 @@ static const struct intel_device_info intel_device_info_sg1 = {
    /* (Sub)slice info comes from the kernel topology info */    \
    XEHP_FEATURES(0, 1, 0),                                      \
    .revision = 4, /* For offline compiler */                    \
-   .apply_hwconfig = true,                                      \
    .has_coarse_pixel_primitive_and_cb = true,                   \
    .has_mesh_shading = true,                                    \
    .has_ray_tracing = true,                                     \
    .has_flat_ccs = true,                                        \
    /* There is no PAT table for DG2, using TGL ones */          \
+   /* BSpec 45101 (r51017) */                                   \
    .pat = {                                                     \
-         .cached_coherent = PAT_ENTRY(0, WB, 1WAY),             \
-         .scanout = PAT_ENTRY(1, WC, NONE),                     \
-         .writeback_incoherent = PAT_ENTRY(0, WB, 2WAY),        \
-         .writecombining = PAT_ENTRY(1, WC, NONE),              \
+         /* CPU: WB, GPU: PAT 0 => WB, 2WAY */                  \
+         .cached_coherent = PAT_ENTRY(0, WB),                   \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .scanout = PAT_ENTRY(1, WC),                           \
+         /* CPU: WB, GPU: PAT 0 => WB, 2WAY */                  \
+         .writeback_incoherent = PAT_ENTRY(0, WB),              \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .writecombining = PAT_ENTRY(1, WC),                    \
    }
 
 static const struct intel_device_info intel_device_info_dg2_g10 = {
@@ -1169,18 +1177,22 @@ static const struct intel_device_info intel_device_info_atsm_g11 = {
    XEHP_FEATURES(0, 1, 0),                                      \
    .has_local_mem = false,                                      \
    .has_aux_map = true,                                         \
-   .apply_hwconfig = true,                                      \
    .has_64bit_float = true,                                     \
    .has_64bit_float_via_math_pipe = true,                       \
    .has_integer_dword_mul = false,                              \
    .has_coarse_pixel_primitive_and_cb = true,                   \
    .has_mesh_shading = true,                                    \
    .has_ray_tracing = true,                                     \
+   /* BSpec 45101 (r51017) */                                   \
    .pat = {                                                     \
-         .cached_coherent = PAT_ENTRY(3, WB, 1WAY),             \
-         .scanout = PAT_ENTRY(1, WC, NONE),                     \
-         .writeback_incoherent = PAT_ENTRY(0, WB, NONE),        \
-         .writecombining = PAT_ENTRY(1, WC, NONE),              \
+         /* CPU: WB, GPU: PAT 3 => WB, 1WAY */                  \
+         .cached_coherent = PAT_ENTRY(3, WB),                   \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .scanout = PAT_ENTRY(1, WC),                           \
+         /* CPU: WB, GPU: PAT 0 => WB, 0WAY */                  \
+         .writeback_incoherent = PAT_ENTRY(0, WB),              \
+         /* CPU: WC, GPU: PAT 1 => WC */                        \
+         .writecombining = PAT_ENTRY(1, WC),                    \
    }
 
 static const struct intel_device_info intel_device_info_mtl_u = {
@@ -1201,6 +1213,51 @@ static const struct intel_device_info intel_device_info_arl_u = {
 static const struct intel_device_info intel_device_info_arl_h = {
    MTL_FEATURES,
    .platform = INTEL_PLATFORM_ARL_H,
+};
+
+#define XE2_FEATURES                                            \
+   /* (Sub)slice info comes from the kernel topology info */    \
+   XEHP_FEATURES(0, 1, 0),                                      \
+   .ver = 20,                                                   \
+   .verx10 = 200,                                               \
+   .num_subslices = dual_subslices(1),                          \
+   .grf_size = 64,                                              \
+   .needs_null_push_constant_tbimr_workaround = false,          \
+   .has_64bit_float = true,                                     \
+   .has_64bit_int = true,                                       \
+   .has_integer_dword_mul = false,                              \
+   .has_coarse_pixel_primitive_and_cb = true,                   \
+   .has_mesh_shading = true,                                    \
+   .has_ray_tracing = true,                                     \
+   .has_indirect_unroll = true,                                 \
+   /* BSpec 71582 (r59285) */                                   \
+   .pat = {                                                     \
+      /* CPU: WB, GPU: PAT 1 => WB, 1WAY */                     \
+      .cached_coherent = PAT_ENTRY(1, WB),                      \
+      /* CPU: WC, GPU: PAT 6 => XD */                           \
+      .scanout = PAT_ENTRY(6, WC),                              \
+      /* CPU: WC, GPU: PAT 0 => WB */                           \
+      .writecombining = PAT_ENTRY(0, WC),                       \
+      /* CPU: WC, GPU: PAT 11 => XD, compressed */              \
+      .compressed = PAT_ENTRY(11, WC)                           \
+   },                                                           \
+   .cooperative_matrix_configurations = {                       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },       \
+    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },       \
+   },                                                           \
+   .has_flat_ccs = true
+
+static const struct intel_device_info intel_device_info_bmg = {
+   XE2_FEATURES,
+   .platform = INTEL_PLATFORM_BMG,
+   .has_local_mem = true,
+};
+
+static const struct intel_device_info intel_device_info_lnl = {
+   XE2_FEATURES,
+   .platform = INTEL_PLATFORM_LNL,
+   .has_local_mem = false,
 };
 
 void
@@ -1302,6 +1359,37 @@ intel_device_info_update_l3_banks(struct intel_device_info *devinfo)
    }
 }
 
+/* Returns the number of EUs of the first subslice enabled */
+uint32_t
+intel_device_info_get_eu_count_first_subslice(const struct intel_device_info *devinfo)
+{
+   uint32_t first_subslice, first_slice, offset, i;
+   uint32_t eu_count = 0;
+
+   first_slice = ffs(devinfo->slice_masks);
+   first_slice--;
+   offset = first_slice * devinfo->subslice_slice_stride;
+
+   for (i = 0; i < DIV_ROUND_UP(devinfo->max_subslices_per_slice, 8); i++) {
+      first_subslice = ffs(devinfo->subslice_masks[offset + i]);
+
+      if (first_subslice == 0)
+         continue;
+
+      break;
+   }
+
+   assert(first_subslice > 0);
+   first_subslice--;
+   offset = first_slice * devinfo->eu_slice_stride +
+            first_subslice * devinfo->eu_subslice_stride;
+   for (i = 0; i < DIV_ROUND_UP(devinfo->max_eus_per_subslice, 8); i++)
+      eu_count += __builtin_popcount(devinfo->eu_masks[offset + i]);
+
+   assert(eu_count > 0);
+   return eu_count;
+}
+
 /* Generate mask from the device data. */
 static void
 fill_masks(struct intel_device_info *devinfo)
@@ -1335,13 +1423,90 @@ intel_device_info_update_cs_workgroup_threads(struct intel_device_info *devinfo)
 }
 
 static bool
-intel_device_info_init_common(int pci_id,
+parse_force_probe_entry(int pci_id, const char *entry, bool *force_on,
+                        bool *force_off)
+{
+   const char *cp = entry;
+
+   bool negated = *cp == '!';
+   if (negated)
+      cp++;
+
+   if (*cp == '\0')
+      return false;
+
+   bool wildcard = *cp == '*';
+   long val = 0;
+
+   if (wildcard) {
+      cp++;
+   } else {
+      char *end;
+      val = strtol(cp, &end, 16);
+      if (end == cp)
+         return false;
+      cp = end;
+   }
+
+   if (*cp != '\0')
+      return false;
+
+   bool matched = wildcard || (long)pci_id == val;
+   if (matched) {
+      *force_on = !negated;
+      *force_off = negated;
+   }
+
+   return matched;
+}
+
+static void
+scan_for_force_probe(int pci_id, bool *force_on, bool *force_off)
+{
+   *force_on = false;
+   *force_off = false;
+
+   const char *env = getenv("INTEL_FORCE_PROBE");
+   if (env == NULL)
+      return;
+
+   size_t len = strlen(env);
+   if (len == 0)
+      return;
+
+   char *dup = strndup(env, len);
+   if (dup == NULL)
+      return;
+
+   for (char *entry = strtok(dup, ","); entry; entry = strtok(NULL, ","))
+      parse_force_probe_entry(pci_id, entry, force_on, force_off);
+
+   free(dup);
+   assert(!*force_on || !*force_off);
+}
+
+struct device_init_config {
+   bool require_force_probe;
+};
+
+/* Example PCI ID entry using FORCE_PROBE:
+ *
+ * CHIPSET(0x1234, foo, "FOO", "Intel(R) Graphics", FORCE_PROBE)
+ */
+#define FORCE_PROBE .require_force_probe = true
+
+static bool
+intel_device_info_init_common(int pci_id, bool building,
                               struct intel_device_info *devinfo)
 {
+   struct device_init_config device_config = { 0 };
    switch (pci_id) {
 #undef CHIPSET
-#define CHIPSET(id, family, fam_str, name) \
-      case id: *devinfo = intel_device_info_##family; break;
+#define CHIPSET(id, family, fam_str, name, ...)                         \
+      case id:                                                          \
+         *devinfo = intel_device_info_##family;                         \
+         device_config = *&(struct device_init_config) { __VA_ARGS__ }; \
+         break;
 #include "pci_ids/crocus_pci_ids.h"
 #include "pci_ids/iris_pci_ids.h"
 
@@ -1357,7 +1522,7 @@ intel_device_info_init_common(int pci_id,
 
    switch (pci_id) {
 #undef CHIPSET
-#define CHIPSET(_id, _family, _fam_str, _name) \
+#define CHIPSET(_id, _family, _fam_str, _name, ...) \
    case _id: \
       /* sizeof(str_literal) includes the null */ \
       STATIC_ASSERT(sizeof(_name) + sizeof(_fam_str) + 2 <= \
@@ -1368,6 +1533,28 @@ intel_device_info_init_common(int pci_id,
 #include "pci_ids/iris_pci_ids.h"
    default:
       strncpy(devinfo->name, "Intel Unknown", sizeof(devinfo->name));
+   }
+
+   bool force_on = false;
+   bool force_off = false;
+   if (building)
+      force_on = true;
+   else
+      scan_for_force_probe(pci_id, &force_on, &force_off);
+   if (force_off) {
+      mesa_logw("%s (0x%x) disabled with INTEL_FORCE_PROBE", devinfo->name,
+                pci_id);
+      return false;
+   } else if (device_config.require_force_probe) {
+      if (force_on) {
+         if (!building)
+            mesa_logw("Forcing probe of unsupported: %s (0x%x)", devinfo->name,
+                      pci_id);
+      } else {
+         mesa_loge("%s (0x%x) requires INTEL_FORCE_PROBE", devinfo->name,
+                   pci_id);
+         return false;
+      }
    }
 
    devinfo->pci_device_id = pci_id;
@@ -1448,11 +1635,11 @@ intel_device_info_apply_workarounds(struct intel_device_info *devinfo)
       devinfo->urb.max_entries[MESA_SHADER_GEOMETRY] = 1024;
 }
 
-bool
-intel_get_device_info_from_pci_id(int pci_id,
-                                  struct intel_device_info *devinfo)
+static bool
+intel_get_device_info_from_pci_id_common(int pci_id, bool building,
+                                         struct intel_device_info *devinfo)
 {
-   intel_device_info_init_common(pci_id, devinfo);
+   intel_device_info_init_common(pci_id, building, devinfo);
 
    /* This is a placeholder until a proper value is set. */
    devinfo->kmd_type = INTEL_KMD_TYPE_I915;
@@ -1461,6 +1648,20 @@ intel_get_device_info_from_pci_id(int pci_id,
    intel_device_info_apply_workarounds(devinfo);
 
    return true;
+}
+
+bool
+intel_get_device_info_from_pci_id(int pci_id,
+                                  struct intel_device_info *devinfo)
+{
+   return intel_get_device_info_from_pci_id_common(pci_id, false, devinfo);
+}
+
+bool
+intel_get_device_info_for_build(int pci_id,
+                                struct intel_device_info *devinfo)
+{
+   return intel_get_device_info_from_pci_id_common(pci_id, true, devinfo);
 }
 
 bool
@@ -1661,8 +1862,8 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo, int min
       mesa_loge("Failed to query drm device.");
       return false;
    }
-   if (!intel_device_info_init_common(
-          drmdev->deviceinfo.pci->device_id, devinfo)) {
+   if (!intel_device_info_init_common(drmdev->deviceinfo.pci->device_id,
+                                      false, devinfo)) {
       drmFreeDevice(&drmdev);
       return false;
    }
@@ -1781,7 +1982,29 @@ intel_device_info_wa_stepping(struct intel_device_info *devinfo)
     * 'compiler_field' in intel_device_info.py
     */
 
-   if (devinfo->platform == INTEL_PLATFORM_TGL) {
+   if (devinfo->platform == INTEL_PLATFORM_BMG) {
+      switch (devinfo->revision) {
+      case 0:
+         return INTEL_STEPPING_A0;
+      case 1:
+         return INTEL_STEPPING_A1;
+      case 4:
+         return INTEL_STEPPING_B0;
+      default:
+         return INTEL_STEPPING_RELEASE;
+      }
+   } else if (devinfo->platform == INTEL_PLATFORM_LNL) {
+      switch (devinfo->revision) {
+      case 0:
+         return INTEL_STEPPING_A0;
+      case 1:
+         return INTEL_STEPPING_A1;
+      case 4:
+         return INTEL_STEPPING_B0;
+      default:
+         return INTEL_STEPPING_RELEASE;
+      }
+   } else if (devinfo->platform == INTEL_PLATFORM_TGL) {
       /* TGL production steppings: B0 and C0 */
       switch (devinfo->revision) {
       case 1:
@@ -1797,3 +2020,33 @@ intel_device_info_wa_stepping(struct intel_device_info *devinfo)
    return INTEL_STEPPING_RELEASE;
 }
 
+uint32_t
+intel_device_info_get_max_slm_size(const struct intel_device_info *devinfo)
+{
+   uint32_t k_bytes = 0;
+
+   if (devinfo->verx10 >= 200) {
+      k_bytes = intel_device_info_get_max_preferred_slm_size(devinfo);
+   } else {
+      k_bytes = 64;
+   }
+
+   return k_bytes * 1024;
+}
+
+uint32_t
+intel_device_info_get_max_preferred_slm_size(const struct intel_device_info *devinfo)
+{
+   uint32_t k_bytes = 0;
+
+   if (devinfo->verx10 >= 200) {
+      if (intel_needs_workaround(devinfo, 16018610683))
+         k_bytes = 128;
+      else
+         k_bytes = 160;
+   } else {
+      k_bytes = 128;
+   }
+
+   return k_bytes * 1024;
+}

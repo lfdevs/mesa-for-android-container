@@ -6,8 +6,6 @@
  *
  **************************************************************************/
 
-#include <stdio.h>
-
 #include "pipe/p_video_codec.h"
 
 #include "util/u_video.h"
@@ -466,35 +464,52 @@ static void radeon_enc_av1_dpb_management(struct radeon_encoder *enc)
 
 static void radeon_enc_spec_misc_av1(struct radeon_encoder *enc)
 {
-   uint32_t num_of_tiles = enc->enc_pic.av1_spec_misc.num_tiles_per_picture;
-   uint32_t threshold_low, threshold_high;
-   uint32_t num_rows;
-   uint32_t num_columns;
+   rvcn_enc_av1_tile_config_t *p_config = &enc->enc_pic.av1_tile_config;
+   struct tile_1d_layout tile_layout;
+   uint32_t num_of_tiles;
+   uint32_t frame_width_in_sb;
+   uint32_t frame_height_in_sb;
+   uint32_t num_tiles_cols;
+   uint32_t num_tiles_rows;
+   uint32_t max_tile_area_sb = RENCODE_AV1_MAX_TILE_AREA >> (2 * 6);
+   uint32_t max_tile_width_in_sb = RENCODE_AV1_MAX_TILE_WIDTH >> 6;
+   uint32_t max_tile_ares_in_sb = 0;
+   uint32_t max_tile_height_in_sb = 0;
+   uint32_t min_log2_tiles_width_in_sb;
+   uint32_t min_log2_tiles;
 
-   num_rows = PIPE_ALIGN_IN_BLOCK_SIZE(enc->enc_pic.session_init.aligned_picture_height,
+   frame_width_in_sb = PIPE_ALIGN_IN_BLOCK_SIZE(enc->enc_pic.session_init.aligned_picture_width,
                                        PIPE_AV1_ENC_SB_SIZE);
-   num_columns = PIPE_ALIGN_IN_BLOCK_SIZE(enc->enc_pic.session_init.aligned_picture_width,
+   frame_height_in_sb = PIPE_ALIGN_IN_BLOCK_SIZE(enc->enc_pic.session_init.aligned_picture_height,
                                        PIPE_AV1_ENC_SB_SIZE);
+   num_tiles_cols = (frame_width_in_sb > max_tile_width_in_sb) ? 2 : 1;
+   num_tiles_rows = CLAMP(p_config->num_tile_rows,
+                         1, RENCODE_AV1_TILE_CONFIG_MAX_NUM_ROWS);
+   min_log2_tiles_width_in_sb = radeon_enc_av1_tile_log2(max_tile_width_in_sb, frame_width_in_sb);
+   min_log2_tiles = MAX2(min_log2_tiles_width_in_sb, radeon_enc_av1_tile_log2(max_tile_area_sb,
+                                                     frame_width_in_sb * frame_height_in_sb));
 
-   if (num_rows > 64) {
-      /* max tile size 4096 x 2304 */
-      threshold_low = ((num_rows + 63) / 64) * ((num_columns + 35) / 36);
-      num_of_tiles = (num_of_tiles & 1) ? num_of_tiles - 1 : num_of_tiles;
-   } else
-      threshold_low = 1;
+   max_tile_width_in_sb = (num_tiles_cols == 1) ? frame_width_in_sb : max_tile_width_in_sb;
 
-   threshold_high = num_rows > 16 ? 16 : num_rows;
-   threshold_high = num_columns > 64 ? threshold_high * 2 : threshold_high;
+   if (min_log2_tiles)
+      max_tile_ares_in_sb = (frame_width_in_sb * frame_height_in_sb)
+                                             >> (min_log2_tiles + 1);
+   else
+      max_tile_ares_in_sb = frame_width_in_sb * frame_height_in_sb;
 
-   num_of_tiles = CLAMP(num_of_tiles, threshold_low, threshold_high);
+   max_tile_height_in_sb = DIV_ROUND_UP(max_tile_ares_in_sb, max_tile_width_in_sb);
+   num_tiles_rows = MAX2(num_tiles_rows,
+                         DIV_ROUND_UP(frame_height_in_sb, max_tile_height_in_sb));
 
+   radeon_enc_av1_tile_layout(frame_height_in_sb, num_tiles_rows, 1, &tile_layout);
+   num_tiles_rows = tile_layout.nb_main_tile + tile_layout.nb_border_tile;
+
+   num_of_tiles = num_tiles_cols * num_tiles_rows;
    /* in case of multiple tiles, it should be an obu frame */
    if (num_of_tiles > 1)
       enc->enc_pic.stream_obu_frame = 1;
    else
       enc->enc_pic.stream_obu_frame = enc->enc_pic.is_obu_frame;
-
-   enc->enc_pic.av1_spec_misc.num_tiles_per_picture = num_of_tiles;
 
    RADEON_ENC_BEGIN(enc->cmd.spec_misc_av1);
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.palette_mode_enable);
@@ -502,9 +517,9 @@ static void radeon_enc_spec_misc_av1(struct radeon_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.cdef_mode);
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.disable_cdf_update);
    RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.disable_frame_end_update_cdf);
-   RADEON_ENC_CS(enc->enc_pic.av1_spec_misc.num_tiles_per_picture);
-   RADEON_ENC_CS(0);
-   RADEON_ENC_CS(0);
+   RADEON_ENC_CS(num_of_tiles);
+   RADEON_ENC_CS(0xFFFFFFFF);
+   RADEON_ENC_CS(0xFFFFFFFF);
    RADEON_ENC_END();
 }
 
@@ -512,7 +527,8 @@ static void radeon_enc_cdf_default_table(struct radeon_encoder *enc)
 {
    bool use_cdf_default = enc->enc_pic.frame_type == PIPE_AV1_ENC_FRAME_TYPE_KEY ||
                           enc->enc_pic.frame_type == PIPE_AV1_ENC_FRAME_TYPE_INTRA_ONLY ||
-                          enc->enc_pic.frame_type == PIPE_AV1_ENC_FRAME_TYPE_SWITCH;
+                          enc->enc_pic.frame_type == PIPE_AV1_ENC_FRAME_TYPE_SWITCH ||
+                          (enc->enc_pic.enable_error_resilient_mode);
 
    enc->enc_pic.av1_cdf_default_table.use_cdf_default = use_cdf_default ? 1 : 0;
 
@@ -530,7 +546,7 @@ uint8_t *radeon_enc_av1_header_size_offset(struct radeon_encoder *enc)
    return (uint8_t *)(bits_start) + (enc->bits_output >> 3);
 }
 
-static void radeon_enc_av1_temporal_delimiter(struct radeon_encoder *enc)
+void radeon_enc_av1_temporal_delimiter(struct radeon_encoder *enc)
 {
    bool use_extension_flag;
 
@@ -557,7 +573,7 @@ static void radeon_enc_av1_temporal_delimiter(struct radeon_encoder *enc)
    radeon_enc_code_fixed_bits(enc, 0, 8); /* obu has size */
 }
 
-static void radeon_enc_av1_sequence_header(struct radeon_encoder *enc)
+void radeon_enc_av1_sequence_header(struct radeon_encoder *enc, bool separate_delta_q)
 {
    uint8_t *size_offset;
    uint8_t obu_size_bin[2];
@@ -708,7 +724,7 @@ static void radeon_enc_av1_sequence_header(struct radeon_encoder *enc)
    /*  chroma_sample_position  */
    radeon_enc_code_fixed_bits(enc, enc->enc_pic.av1_color_description.chroma_sample_position, 2);
    /*  separate_uv_delta_q  */
-   radeon_enc_code_fixed_bits(enc, 0, 1);
+   radeon_enc_code_fixed_bits(enc, !!(separate_delta_q), 1);
    /*  film_grain_params_present  */
    radeon_enc_code_fixed_bits(enc, 0, 1);
 
@@ -936,7 +952,7 @@ static void radeon_enc_av1_frame_header(struct radeon_encoder *enc, bool frame_h
    }
 }
 
-static void radeon_enc_av1_tile_group(struct radeon_encoder *enc)
+void radeon_enc_av1_tile_group(struct radeon_encoder *enc)
 {
    uint32_t extension_flag = enc->enc_pic.num_temporal_layers > 1 ? 1 : 0;
 
@@ -977,7 +993,7 @@ static void radeon_enc_obu_instruction(struct radeon_encoder *enc)
 
    radeon_enc_av1_temporal_delimiter(enc);
    if (enc->enc_pic.need_av1_seq || enc->enc_pic.need_sequence_header)
-      radeon_enc_av1_sequence_header(enc);
+      radeon_enc_av1_sequence_header(enc, false);
 
    /* if others OBU types are needed such as meta data, then they need to be byte aligned and added here
     *
@@ -1118,7 +1134,7 @@ static void radeon_enc_ctx(struct radeon_encoder *enc)
 
    RADEON_ENC_CS(enc->enc_pic.ctx_buf.two_pass_search_center_map_offset);
    if (is_av1)
-      RADEON_ENC_CS(enc->enc_pic.ctx_buf.av1.av1_sdb_intermedidate_context_offset);
+      RADEON_ENC_CS(enc->enc_pic.ctx_buf.av1.av1_sdb_intermediate_context_offset);
    else
       RADEON_ENC_CS(enc->enc_pic.ctx_buf.colloc_buffer_offset);
    RADEON_ENC_END();
@@ -1126,8 +1142,10 @@ static void radeon_enc_ctx(struct radeon_encoder *enc)
 
 static void radeon_enc_header_av1(struct radeon_encoder *enc)
 {
+   enc->tile_config(enc);
    enc->obu_instructions(enc);
    enc->encode_params(enc);
+   enc->encode_params_codec_spec(enc);
    enc->cdf_default_table(enc);
 
    enc->enc_pic.frame_id++;
@@ -1151,9 +1169,11 @@ void radeon_enc_4_0_init(struct radeon_encoder *enc)
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_AV1) {
       enc->before_encode = radeon_enc_av1_dpb_management;
-      /* begin function need to set these two functions to dummy */
+      /* begin function need to set these functions to dummy */
       enc->slice_control = radeon_enc_dummy;
       enc->deblocking_filter = radeon_enc_dummy;
+      enc->tile_config = radeon_enc_dummy;
+      enc->encode_params_codec_spec = radeon_enc_dummy;
       enc->cmd.cdf_default_table_av1 = RENCODE_IB_PARAM_CDF_DEFAULT_TABLE_BUFFER;
       enc->cmd.bitstream_instruction_av1 = RENCODE_AV1_IB_PARAM_BITSTREAM_INSTRUCTION;
       enc->cmd.spec_misc_av1 = RENCODE_AV1_IB_PARAM_SPEC_MISC;

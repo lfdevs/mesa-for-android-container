@@ -51,6 +51,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
 {
    uint32_t header = 0, command = 0;
 
+   assert(sctx->screen->info.has_cp_dma);
    assert(size <= cp_dma_max_byte_count(sctx));
    assert(sctx->gfx_level != GFX6 || cache_policy == L2_BYPASS);
 
@@ -74,6 +75,9 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       /* GDS increments the address, not CP. */
       command |= S_415_DAS(V_415_REGISTER) | S_415_DAIC(V_415_NO_INCREMENT);
    } else if (sctx->gfx_level >= GFX7 && cache_policy != L2_BYPASS) {
+      /* GFX12: DST_CACHE_POLICY is changed to DST_TEMPORAL, but the behavior is the same
+       * for values of 0 and 1.
+       */
       header |=
          S_501_DST_SEL(V_501_DST_ADDR_TC_L2) | S_501_DST_CACHE_POLICY(cache_policy == L2_STREAM);
    }
@@ -85,6 +89,9 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       /* Both of these are required for GDS. It does increment the address. */
       command |= S_415_SAS(V_415_REGISTER) | S_415_SAIC(V_415_NO_INCREMENT);
    } else if (sctx->gfx_level >= GFX7 && cache_policy != L2_BYPASS) {
+      /* GFX12: SRC_CACHE_POLICY is changed to SRC_TEMPORAL, but the behavior is the same
+       * for values of 0 and 1.
+       */
       header |=
          S_501_SRC_SEL(V_501_SRC_ADDR_TC_L2) | S_501_SRC_CACHE_POLICY(cache_policy == L2_STREAM);
    }
@@ -190,6 +197,10 @@ void si_cp_dma_clear_buffer(struct si_context *sctx, struct radeon_cmdbuf *cs,
 
    if (user_flags & SI_OP_SYNC_PS_BEFORE)
       sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH;
+
+   /* TODO: Range-invalidate GL2 or always use compute shaders */
+   if (sctx->screen->info.cp_sdma_ge_use_system_memory_scope)
+      sctx->flags |= SI_CONTEXT_INV_L2;
 
    /* Mark the buffer range of destination as valid (initialized),
     * so that transfer_map knows it should wait for the GPU when mapping
@@ -353,6 +364,10 @@ void si_cp_dma_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
    if ((dst || src) && !(user_flags & SI_OP_SKIP_CACHE_INV_BEFORE))
          sctx->flags |= si_get_flush_flags(sctx, coher, cache_policy);
 
+   /* TODO: Range-flush GL2 for src and range-invalidate GL2 for dst, or always use compute shaders */
+   if (sctx->screen->info.cp_sdma_ge_use_system_memory_scope)
+      sctx->flags |= SI_CONTEXT_INV_L2;
+
    if (sctx->flags)
       si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
 
@@ -418,53 +433,6 @@ void si_cp_dma_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
    /* If it's not a prefetch or GDS copy... */
    if (dst && src && (dst != src || dst_offset != src_offset))
       sctx->num_cp_dma_calls++;
-}
-
-void si_test_gds(struct si_context *sctx)
-{
-   struct pipe_context *ctx = &sctx->b;
-   struct pipe_resource *src, *dst;
-   unsigned r[4] = {};
-   unsigned offset = debug_get_num_option("OFFSET", 16);
-
-   src = pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_DEFAULT, 16);
-   dst = pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_DEFAULT, 16);
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, src, 0, 4, 0xabcdef01, SI_OP_SYNC_BEFORE_AFTER,
-                          SI_COHERENCY_SHADER, L2_BYPASS);
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, src, 4, 4, 0x23456789, SI_OP_SYNC_BEFORE_AFTER,
-                          SI_COHERENCY_SHADER, L2_BYPASS);
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, src, 8, 4, 0x87654321, SI_OP_SYNC_BEFORE_AFTER,
-                          SI_COHERENCY_SHADER, L2_BYPASS);
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, src, 12, 4, 0xfedcba98, SI_OP_SYNC_BEFORE_AFTER,
-                          SI_COHERENCY_SHADER, L2_BYPASS);
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, 0, 16, 0xdeadbeef, SI_OP_SYNC_BEFORE_AFTER,
-                          SI_COHERENCY_SHADER, L2_BYPASS);
-
-   si_cp_dma_copy_buffer(sctx, NULL, src, offset, 0, 16, SI_OP_SYNC_BEFORE_AFTER,
-                         SI_COHERENCY_NONE, L2_BYPASS);
-   si_cp_dma_copy_buffer(sctx, dst, NULL, 0, offset, 16, SI_OP_SYNC_BEFORE_AFTER,
-                         SI_COHERENCY_NONE, L2_BYPASS);
-
-   pipe_buffer_read(ctx, dst, 0, sizeof(r), r);
-   printf("GDS copy  = %08x %08x %08x %08x -> %s\n", r[0], r[1], r[2], r[3],
-          r[0] == 0xabcdef01 && r[1] == 0x23456789 && r[2] == 0x87654321 && r[3] == 0xfedcba98
-             ? "pass"
-             : "fail");
-
-   si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, NULL, offset, 16, 0xc1ea4146,
-                          SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_NONE, L2_BYPASS);
-   si_cp_dma_copy_buffer(sctx, dst, NULL, 0, offset, 16, SI_OP_SYNC_BEFORE_AFTER,
-                         SI_COHERENCY_NONE, L2_BYPASS);
-
-   pipe_buffer_read(ctx, dst, 0, sizeof(r), r);
-   printf("GDS clear = %08x %08x %08x %08x -> %s\n", r[0], r[1], r[2], r[3],
-          r[0] == 0xc1ea4146 && r[1] == 0xc1ea4146 && r[2] == 0xc1ea4146 && r[3] == 0xc1ea4146
-             ? "pass"
-             : "fail");
-
-   pipe_resource_reference(&src, NULL);
-   pipe_resource_reference(&dst, NULL);
-   exit(0);
 }
 
 void si_cp_write_data(struct si_context *sctx, struct si_resource *buf, unsigned offset,

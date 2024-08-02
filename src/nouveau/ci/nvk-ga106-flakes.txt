@@ -1,0 +1,3 @@
+dEQP-VK.pipeline.*.pipeline_cache.robustness2.storage
+
+dEQP-VK.sparse_resources.image_sparse_binding.cube_array.rgba32i.256_256_6

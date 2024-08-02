@@ -174,7 +174,9 @@ static struct pipe_resource * st_omx_pipe_texture_from_eglimage(EGLDisplay egldi
    struct dri2_egl_display *dri2_egl_dpy = disp->DriverData;
    __DRIscreen *_dri_screen = dri2_egl_dpy->dri_screen;
    struct dri_screen *st_dri_screen = dri_screen(_dri_screen);
-   __DRIimage *_dri_image = st_dri_screen->lookup_egl_image(st_dri_screen, eglimage);
+   if (!st_dri_screen->validate_egl_image(st_dri_screen, eglimage))
+      return NULL;
+   __DRIimage *_dri_image = st_dri_screen->lookup_egl_image_validated(st_dri_screen, eglimage);
 
    return _dri_image->texture;
 }

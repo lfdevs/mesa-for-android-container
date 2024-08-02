@@ -108,7 +108,7 @@ type_size(const struct glsl_type *type, bool bindless)
    return glsl_count_attribute_slots(type, false);
 }
 
-void
+static void
 lima_program_optimize_vs_nir(struct nir_shader *s)
 {
    bool progress;
@@ -216,7 +216,7 @@ lima_vec_to_regs_filter_cb(const nir_instr *instr, unsigned writemask,
    return !lima_alu_to_scalar_filter_cb(instr, data);
 }
 
-void
+static void
 lima_program_optimize_fs_nir(struct nir_shader *s,
                              struct nir_lower_tex_options *tex_options)
 {

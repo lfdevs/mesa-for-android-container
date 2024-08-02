@@ -112,6 +112,7 @@
 #define RDECODE_VC1_PROFILE_ADVANCED                        0x00000002
 
 #define RDECODE_SW_MODE_LINEAR                              0x00000000
+/* for legacy VCN generations */
 #define RDECODE_256B_S                                      0x00000001
 #define RDECODE_256B_D                                      0x00000002
 #define RDECODE_4KB_S                                       0x00000005
@@ -122,6 +123,8 @@
 #define RDECODE_4KB_D_X                                     0x00000016
 #define RDECODE_64KB_S_X                                    0x00000019
 #define RDECODE_64KB_D_X                                    0x0000001A
+/* for VCN5 */
+#define RDECODE_VCN5_256B_D                                 0x00000001
 
 #define RDECODE_MESSAGE_NOT_SUPPORTED                       0x00000000
 #define RDECODE_MESSAGE_CREATE                              0x00000001
@@ -855,6 +858,7 @@ typedef struct rvcn_dec_message_hevc_s {
 
    unsigned char direct_reflist[2][15];
    unsigned int st_rps_bits;
+   unsigned char reserved_1[15];
 } rvcn_dec_message_hevc_t;
 
 typedef struct rvcn_dec_message_vp9_s {
@@ -896,6 +900,7 @@ typedef struct rvcn_dec_message_vp9_s {
    unsigned int vp9_frame_size;
    unsigned int compressed_header_size;
    unsigned int uncompressed_header_size;
+   unsigned char reserved[2];
 } rvcn_dec_message_vp9_t;
 
 typedef enum {
@@ -1026,6 +1031,7 @@ typedef struct rvcn_dec_message_av1_s {
    unsigned int uncompressed_header_size;
    rvcn_dec_warped_motion_params_t global_motion[8];
    rvcn_dec_av1_tile_info_t tile_info[256];
+   unsigned char reserved[3];
 } rvcn_dec_message_av1_t;
 
 typedef struct rvcn_dec_feature_index_s {
@@ -1147,13 +1153,6 @@ typedef struct rvcn_dec_vp9_probs_segment_s {
    };
 } rvcn_dec_vp9_probs_segment_t;
 
-struct rvcn_av1_prob_funcs
-{
-   void (*init_mode_probs)(void * prob);
-   void (*init_mv_probs)(void *prob);
-   void (*default_coef_probs)(void *prob, int index);
-};
-
 typedef struct rvcn_dec_av1_fg_init_buf_s {
    short luma_grain_block[64][96];
    short cb_grain_block[32][48];
@@ -1204,5 +1203,9 @@ struct jpeg_params {
 #define RDECODE_VCN2_5_ENGINE_CNTL      0x9b4
 
 #define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
+
+unsigned ac_vcn_dec_calc_ctx_size_av1(unsigned av1_version);
+void ac_vcn_av1_init_probs(unsigned av1_version, uint8_t *prob);
+void ac_vcn_av1_init_film_grain_buffer(rvcn_dec_film_grain_params_t *fg_params, rvcn_dec_av1_fg_init_buf_t *fg_buf);
 
 #endif

@@ -7,8 +7,8 @@
 
 #include "nvk_private.h"
 
-#include "nouveau_bo.h"
 #include "util/simple_mtx.h"
+#include "nvkmd/nvkmd.h"
 
 struct nvk_device;
 
@@ -21,8 +21,7 @@ struct nvk_descriptor_table {
    uint32_t next_desc; /**< Next unallocated descriptor */
    uint32_t free_count; /**< Size of free_table */
 
-   struct nouveau_ws_bo *bo;
-   void *map;
+   struct nvkmd_mem *mem;
 
    /* Stack for free descriptor elements */
    uint32_t *free_table;
@@ -46,18 +45,18 @@ void nvk_descriptor_table_remove(struct nvk_device *dev,
                                  struct nvk_descriptor_table *table,
                                  uint32_t index);
 
-static inline struct nouveau_ws_bo *
-nvk_descriptor_table_get_bo_ref(struct nvk_descriptor_table *table,
-                                uint32_t *alloc_count_out)
+static inline struct nvkmd_mem *
+nvk_descriptor_table_get_mem_ref(struct nvk_descriptor_table *table,
+                                 uint32_t *alloc_count_out)
 {
    simple_mtx_lock(&table->mutex);
-   struct nouveau_ws_bo *bo = table->bo;
-   if (bo)
-      nouveau_ws_bo_ref(bo);
+   struct nvkmd_mem *mem = table->mem;
+   if (mem)
+      nvkmd_mem_ref(mem);
    *alloc_count_out = table->alloc;
    simple_mtx_unlock(&table->mutex);
 
-   return bo;
+   return mem;
 }
 
 #endif

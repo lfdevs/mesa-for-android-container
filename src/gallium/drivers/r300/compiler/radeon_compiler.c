@@ -369,9 +369,25 @@ void rc_get_stats(struct radeon_compiler *c, struct rc_program_stats *s)
 		if (tmp->Type == RC_INSTRUCTION_NORMAL) {
 			info = rc_get_opcode_info(tmp->U.I.Opcode);
 			if (info->Opcode == RC_OPCODE_BEGIN_TEX) {
-				/* The R5xx docs mention ~30 cycles in section 8.3.1 */
-				s->num_cycles += 30;
-				last_begintex = ip;
+				/* The R5xx docs mention ~30 cycles in section 8.3.1
+				 * The only case when we don't want to add the cycles
+				 * penalty is when the texblock contains only kil.
+				 */
+				const struct rc_opcode_info *next_op
+					= rc_get_opcode_info(tmp->Next->U.I.Opcode);
+				struct rc_instruction *second_next_instr = tmp->Next->Next;
+				const struct rc_opcode_info *second_next_op;
+				if (second_next_instr->Type == RC_INSTRUCTION_NORMAL) {
+					second_next_op = rc_get_opcode_info(second_next_instr->U.I.Opcode);
+				} else {
+					second_next_op = rc_get_opcode_info(second_next_instr->U.P.RGB.Opcode);
+				}
+				if (next_op->Opcode != RC_OPCODE_KIL ||
+					(second_next_instr->Type == RC_INSTRUCTION_NORMAL &&
+					 second_next_op->HasTexture)) {
+					s->num_cycles += 30;
+					last_begintex = ip;
+				}
 				continue;
 			}
 			if (info->Opcode == RC_OPCODE_MAD &&
@@ -438,7 +454,7 @@ static void print_stats(struct radeon_compiler * c)
 	 * have the same set.
 	 */
 	util_debug_message(c->debug, SHADER_INFO,
-	                   "%s shader: %u inst, %u vinst, %u sinst, %u predicate, %u flowcontrol,"
+	                   "%s shader: %u inst, %u vinst, %u sinst, %u predicate, %u flowcontrol, "
 	                   "%u loops, %u tex, %u presub, %u omod, %u temps, %u consts, %u lits, %u cycles",
 	                   c->type == RC_VERTEX_PROGRAM ? "VS" : "FS",
 	                   s.num_insts, s.num_rgb_insts, s.num_alpha_insts, s.num_pred_insts,

@@ -344,11 +344,6 @@ _mesa_clear_shader_program_data(struct gl_context *ctx,
       shProg->UniformRemapTable = NULL;
    }
 
-   if (shProg->UniformHash) {
-      string_to_uint_map_dtor(shProg->UniformHash);
-      shProg->UniformHash = NULL;
-   }
-
    if (shProg->data)
       _mesa_program_resource_hash_destroy(shProg);
 

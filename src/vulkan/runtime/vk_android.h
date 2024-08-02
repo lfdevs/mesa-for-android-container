@@ -23,12 +23,82 @@
 #ifndef VK_ANDROID_H
 #define VK_ANDROID_H
 
+#include <stdbool.h>
+
 #include "vulkan/vulkan_core.h"
 
 #include "util/detect_os.h"
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+struct u_gralloc;
+struct vk_device;
+struct vk_image;
+struct AHardwareBuffer;
+
+#if DETECT_OS_ANDROID
+struct u_gralloc *vk_android_get_ugralloc(void);
+struct u_gralloc *vk_android_init_ugralloc(void);
+void vk_android_destroy_ugralloc(void);
+VkResult vk_android_import_anb(struct vk_device *device,
+                               const VkImageCreateInfo *pCreateInfo,
+                               const VkAllocationCallbacks *alloc,
+                               struct vk_image *image);
+VkResult vk_android_get_anb_layout(
+   const VkImageCreateInfo *pCreateInfo,
+   VkImageDrmFormatModifierExplicitCreateInfoEXT *out,
+   VkSubresourceLayout *out_layouts, int max_planes);
+VkResult vk_android_get_ahb_layout(
+   struct AHardwareBuffer *ahardware_buffer,
+   VkImageDrmFormatModifierExplicitCreateInfoEXT *out,
+   VkSubresourceLayout *out_layouts, int max_planes);
+#else
+static inline struct u_gralloc *
+vk_android_get_ugralloc(void)
+{
+   return NULL;
+}
+
+static inline struct u_gralloc *
+vk_android_init_ugralloc(void)
+{
+   return NULL;
+}
+
+static inline void
+vk_android_destroy_ugralloc(void)
+{
+}
+
+static inline VkResult
+vk_android_import_anb(struct vk_device *device,
+                      const VkImageCreateInfo *pCreateInfo,
+                      const VkAllocationCallbacks *alloc,
+                      struct vk_image *image)
+{
+   return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+static inline VkResult
+vk_android_get_anb_layout(
+   const VkImageCreateInfo *pCreateInfo,
+   VkImageDrmFormatModifierExplicitCreateInfoEXT *out,
+   VkSubresourceLayout *out_layouts, int max_planes)
+{
+   return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+static inline VkResult
+vk_android_get_ahb_layout(
+   struct AHardwareBuffer *ahardware_buffer,
+   VkImageDrmFormatModifierExplicitCreateInfoEXT *out,
+   VkSubresourceLayout *out_layouts, int max_planes)
+{
+   return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
 #endif
 
 #if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
@@ -39,6 +109,10 @@ uint32_t vk_image_format_to_ahb_format(VkFormat vk_format);
 
 uint64_t vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
                                      const VkImageUsageFlags vk_usage);
+
+bool vk_ahb_probe_format(VkFormat vk_format,
+                         VkImageCreateFlags vk_create,
+                         VkImageUsageFlags vk_usage);
 
 struct AHardwareBuffer *
 vk_alloc_ahardware_buffer(const VkMemoryAllocateInfo *pAllocateInfo);
@@ -62,6 +136,14 @@ vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
                             const VkImageUsageFlags vk_usage)
 {
    return 0;
+}
+
+static inline bool
+vk_ahb_probe_format(VkFormat vk_format,
+                    VkImageCreateFlags vk_create,
+                    VkImageUsageFlags vk_usage)
+{
+   return false;
 }
 
 static inline struct AHardwareBuffer *

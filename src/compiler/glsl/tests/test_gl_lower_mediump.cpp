@@ -32,6 +32,7 @@
 #include "builtin_functions.h"
 #include "nir.h"
 #include "gl_nir.h"
+#include "gl_nir_linker.h"
 #include "glsl_to_nir.h"
 #include "nir_builder.h"
 #include "program.h"
@@ -135,6 +136,9 @@ namespace
          }
       }
 
+      ralloc_free(whole_program->_LinkedShaders[MESA_SHADER_VERTEX]->Program->nir);
+      standalone_destroy_shader_program(whole_program);
+
       ralloc_free(nir);
 
       free(fs_ir);
@@ -157,6 +161,10 @@ namespace
    {
       ctx = &local_ctx;
 
+      static const struct nir_shader_compiler_options compiler_options = {
+          .support_16bit_alu = true,
+      };
+
       /* Get better variable names from GLSL IR for debugging. */
       ir_variable::temporaries_allocate_names = true;
 
@@ -165,7 +173,15 @@ namespace
       for (int i = 0; i < MESA_SHADER_STAGES; i++) {
          ctx->Const.ShaderCompilerOptions[i].LowerPrecisionFloat16 = true;
          ctx->Const.ShaderCompilerOptions[i].LowerPrecisionInt16 = true;
+         ctx->Const.ShaderCompilerOptions[i].NirOptions = &compiler_options;
       }
+
+      /* GL_ARB_explicit_uniform_location, GL_MAX_UNIFORM_LOCATIONS */
+      ctx->Const.MaxUserAssignableUniformLocations =
+         4 * MESA_SHADER_STAGES * MAX_UNIFORMS;
+
+      ctx->Const.Program[MESA_SHADER_VERTEX].MaxCombinedUniformComponents = 128 * 4;
+      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxCombinedUniformComponents = 16 * 4;
 
       _mesa_glsl_builtin_functions_init_or_ref();
 
@@ -196,29 +212,19 @@ namespace
       /* Save off the GLSL IR now, since glsl_to_nir() frees it. */
       fs_ir = get_fs_ir();
 
-      static const struct nir_shader_compiler_options compiler_options = {
-          .support_16bit_alu = true,
-      };
+      struct gl_linked_shader *sh = whole_program->_LinkedShaders[MESA_SHADER_VERTEX];
+      sh->Program->nir = glsl_to_nir(&ctx->Const, &sh->ir, &sh->Program->info,
+                                     MESA_SHADER_VERTEX, &compiler_options);
 
-      nir = glsl_to_nir(&ctx->Const, whole_program, MESA_SHADER_FRAGMENT, &compiler_options);
+      sh = whole_program->_LinkedShaders[MESA_SHADER_FRAGMENT];
+      sh->Program->nir = glsl_to_nir(&ctx->Const, &sh->ir, &sh->Program->info,
+                                     MESA_SHADER_FRAGMENT, &compiler_options);
+      nir = sh->Program->nir;
 
-      gl_nir_inline_functions(nir);
-
-      standalone_destroy_shader_program(whole_program);
-
-      /* nir_lower_mediump_vars happens after copy deref lowering. */
-      NIR_PASS(_, nir, nir_split_var_copies);
-      NIR_PASS(_, nir, nir_lower_var_copies);
-
-      /* Make the vars and i/o mediump like we'd expect, so people debugging aren't confused. */
-      NIR_PASS(_, nir, nir_lower_mediump_vars, nir_var_uniform | nir_var_function_temp | nir_var_shader_temp);
-      NIR_PASS(_, nir, nir_lower_mediump_io, nir_var_shader_out, ~0, false);
-
-      /* Clean up f2fmp(f2f32(x)) noise. */
-      NIR_PASS(_, nir, nir_opt_algebraic);
-      NIR_PASS(_, nir, nir_opt_algebraic_late);
-      NIR_PASS(_, nir, nir_copy_prop);
-      NIR_PASS(_, nir, nir_opt_dce);
+      gl_nir_link_glsl(ctx, whole_program);
+      if (whole_program->data->LinkStatus != LINKING_SUCCESS)
+         fprintf(stderr, "Linker error: %s", whole_program->data->InfoLog);
+      EXPECT_EQ(whole_program->data->LinkStatus, LINKING_SUCCESS);
 
       /* Store the source for printing from later assertions. */
       this->source = source;

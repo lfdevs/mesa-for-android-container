@@ -67,4 +67,6 @@
 
 #define V3D_MAX_ARRAY_LAYERS 2048
 
+#define V3D_MAX_VERTEX_ATTRIB_DIVISOR 0xffff
+
 #endif /* V3D_LIMITS_H */

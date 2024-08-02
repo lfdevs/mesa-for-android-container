@@ -1,0 +1,9 @@
+VK_KHR_dynamic_rendering_local_read on RADV
+VK_EXT_legacy_vertex_attributes on lavapipe, ANV, Turnip and RADV
+VK_MESA_image_alignment_control on RADV
+VK_EXT_shader_replicated_composites on ANV, dozen, hasvk, lavapipe, nvk, RADV, and Turnip
+VK_KHR_maintenance5 on v3dv
+VK_KHR_maintenance7 on RADV
+VK_EXT_depth_clamp_zero_one on v3dv
+GL_ARB_depth_clamp on v3d
+Defaulting to a new shader cache implementation, reducing filesystem overhead.

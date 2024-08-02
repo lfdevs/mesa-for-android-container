@@ -40,9 +40,15 @@
 # repository's container registry, so that the image from the main
 # repository's registry will be used there as well.
 
-.debian-container:
+.debian-container-version:
   variables:
     FDO_DISTRIBUTION_VERSION: bookworm-slim
+
+.debian-container:
+  extends:
+    - .fdo.container-build@debian
+    - .container
+    - .debian-container-version
 
 .container:
   stage: container
@@ -63,8 +69,6 @@
 # Debian based x86_64 build image base
 debian/x86_64_build-base:
   extends:
-    - .fdo.container-build@debian
-    - .container
     - .debian-container
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
@@ -76,7 +80,7 @@ debian/x86_64_build-base:
 .use-debian/x86_64_build-base:
   extends:
     - .fdo.container-build@debian
-    - .debian-container
+    - .debian-container-version
     - .use-base-image
   variables:
     MESA_BASE_IMAGE: ${DEBIAN_X86_64_BUILD_BASE_IMAGE}
@@ -178,14 +182,15 @@ debian/android_build:
 
 # Debian based x86_64 test image base
 debian/x86_64_test-base:
-  extends: debian/x86_64_build-base
+  extends:
+    - .debian-container
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_test-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}--${KERNEL_TAG}"
 
 .use-debian/x86_64_test-base:
   extends:
     - .fdo.container-build@debian
-    - .debian-container
+    - .debian-container-version
     - .use-base-image
   variables:
     MESA_BASE_IMAGE: ${DEBIAN_X86_64_TEST_BASE_IMAGE}
@@ -193,11 +198,33 @@ debian/x86_64_test-base:
   needs:
     - debian/x86_64_test-base
 
+# Debian based aarch64 test image base
+debian/arm64_test-base:
+  tags:
+    - aarch64
+  extends:
+    - .debian-container
+  variables:
+    MESA_IMAGE_TAG: &debian-arm64_test-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
+
+.use-debian/arm64_test-base:
+  tags:
+    - aarch64
+  extends:
+    - .fdo.container-build@debian
+    - .debian-container-version
+    - .use-base-image
+  variables:
+    MESA_BASE_IMAGE: ${DEBIAN_ARM64_TEST_BASE_IMAGE}
+    MESA_BASE_TAG: *debian-arm64_test-base
+  needs:
+    - debian/arm64_test-base
+
 # Debian based x86_64 test image for GL
 debian/x86_64_test-gl:
   extends: .use-debian/x86_64_test-base
   variables:
-    MESA_IMAGE_TAG: &debian-x86_64_test-gl ${DEBIAN_X86_64_TEST_GL_TAG}
+    MESA_IMAGE_TAG: &debian-x86_64_test-gl ${DEBIAN_TEST_GL_TAG}
 
 .use-debian/x86_64_test-gl:
   extends:
@@ -213,7 +240,7 @@ debian/x86_64_test-gl:
 debian/x86_64_test-vk:
   extends: .use-debian/x86_64_test-base
   variables:
-    MESA_IMAGE_TAG: &debian-x86_64_test-vk ${DEBIAN_X86_64_TEST_VK_TAG}
+    MESA_IMAGE_TAG: &debian-x86_64_test-vk ${DEBIAN_TEST_VK_TAG}
 
 .use-debian/x86_64_test-vk:
   extends:
@@ -229,7 +256,7 @@ debian/x86_64_test-vk:
 .debian/x86_64_test-android:
   extends: .use-debian/x86_64_test-base
   variables:
-    MESA_IMAGE_TAG: &debian-x86_64_test-android ${DEBIAN_X86_64_TEST_ANDROID_TAG}
+    MESA_IMAGE_TAG: &debian-x86_64_test-android ${DEBIAN_TEST_ANDROID_TAG}
     ANDROID_NDK: android-ndk-r25b
 
 .use-debian/x86_64_test-android:
@@ -242,12 +269,52 @@ debian/x86_64_test-vk:
   needs:
     - debian/x86_64_test-android
 
+# Debian based aarch64 test image for GL
+debian/arm64_test-gl:
+  tags:
+    - aarch64
+  extends: .use-debian/arm64_test-base
+  variables:
+    MESA_IMAGE_TAG: &debian-arm64_test-gl ${DEBIAN_TEST_GL_TAG}
+
+.use-debian/arm64_test-gl:
+  tags:
+    - aarch64
+  extends:
+    - .set-image-base-tag
+  variables:
+    MESA_BASE_TAG: *debian-arm64_test-base
+    MESA_IMAGE_PATH: ${DEBIAN_ARM64_TEST_IMAGE_GL_PATH}
+    MESA_IMAGE_TAG: *debian-arm64_test-gl
+  needs:
+    - debian/arm64_test-gl
+
+# Debian based aarch64 test image for VK
+debian/arm64_test-vk:
+  tags:
+    - aarch64
+  extends: .use-debian/arm64_test-base
+  variables:
+    MESA_IMAGE_TAG: &debian-arm64_test-vk ${DEBIAN_TEST_VK_TAG}
+
+.use-debian/arm64_test-vk:
+  tags:
+    - aarch64
+  extends:
+    - .set-image-base-tag
+  variables:
+    MESA_BASE_TAG: *debian-arm64_test-base
+    MESA_IMAGE_PATH: ${DEBIAN_ARM64_TEST_IMAGE_VK_PATH}
+    MESA_IMAGE_TAG: *debian-arm64_test-vk
+  needs:
+    - debian/arm64_test-vk
+
 # Debian based ARM build image
 debian/arm64_build:
   extends:
     - .fdo.container-build@debian
     - .container
-    - .debian-container
+    - .debian-container-version
   tags:
     - aarch64
   variables:
@@ -279,6 +346,14 @@ alpine/x86_64_build:
     - .alpine/x86_64_build-base
   variables:
     MESA_IMAGE_TAG: &alpine-x86_64_build ${ALPINE_X86_64_BUILD_TAG}
+  rules:
+    # Note: the next three lines must remain in that order, so that the rules
+    # in `linkcheck-docs` catch nightly pipelines before the rules in `pages`
+    # exclude them.
+    - !reference [linkcheck-docs, rules]
+    - !reference [pages, rules]
+    - !reference [test-docs, rules]
+    - !reference [.container, rules]
 
 .use-alpine/x86_64_build:
   extends:
@@ -318,8 +393,9 @@ fedora/x86_64_build:
 .kernel+rootfs:
   extends:
     - .container+build-rules
-    - .debian-container
+    - .debian-container-version
   stage: container
+  timeout: 90m
   variables:
     GIT_STRATEGY: fetch
     MESA_ROOTFS_TAG: &kernel-rootfs ${KERNEL_ROOTFS_TAG}
@@ -363,11 +439,11 @@ kernel+rootfs_arm32:
     MESA_ROOTFS_TAG: *kernel-rootfs
 
 # x86_64 image with ARM64 & ARM32 kernel & rootfs for baremetal testing
-.debian/arm_test:
+.debian/baremetal_arm_test:
   extends:
     - .fdo.container-build@debian
     - .container
-    - .debian-container
+    - .debian-container-version
     # Don't want the .container rules
     - .container+build-rules
   variables:
@@ -377,45 +453,45 @@ kernel+rootfs_arm32:
     MESA_ARTIFACTS_TAG: *debian-arm64_build
     MESA_ROOTFS_TAG: *kernel-rootfs
 
-debian/arm32_test:
+debian/baremetal_arm32_test:
   extends:
-    - .debian/arm_test
+    - .debian/baremetal_arm_test
   needs:
     - kernel+rootfs_arm32
   variables:
     MESA_IMAGE_TAG: &debian-arm32_test "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
-debian/arm64_test:
+debian/baremetal_arm64_test:
   extends:
-    - .debian/arm_test
+    - .debian/baremetal_arm_test
   needs:
     - kernel+rootfs_arm64
   variables:
     MESA_IMAGE_TAG: &debian-arm64_test "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
 
-.use-debian/arm_test:
+.use-debian/baremetal_arm_test:
   variables:
     MESA_ROOTFS_TAG: *kernel-rootfs
 
-.use-debian/arm32_test:
+.use-debian/baremetal_arm32_test:
   image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_TEMPLATES_COMMIT}"
   extends:
-    - .use-debian/arm_test
+    - .use-debian/baremetal_arm_test
   variables:
-    MESA_IMAGE_PATH: "debian/arm32_test"
+    MESA_IMAGE_PATH: "debian/baremetal_arm32_test"
     MESA_IMAGE_TAG: *debian-arm32_test
   needs:
-    - debian/arm_test
+    - debian/baremetal_arm_test
 
-.use-debian/arm64_test:
+.use-debian/baremetal_arm64_test:
   image: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${MESA_IMAGE_TAG}--${MESA_ROOTFS_TAG}--${KERNEL_TAG}--${MESA_TEMPLATES_COMMIT}"
   extends:
-    - .use-debian/arm_test
+    - .use-debian/baremetal_arm_test
   variables:
-    MESA_IMAGE_PATH: "debian/arm64_test"
+    MESA_IMAGE_PATH: "debian/baremetal_arm64_test"
     MESA_IMAGE_TAG: *debian-arm64_test
   needs:
-    - debian/arm_test
+    - debian/baremetal_arm_test
 
 # Native Windows docker builds
 #

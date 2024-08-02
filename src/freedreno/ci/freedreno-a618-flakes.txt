@@ -216,6 +216,9 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-last
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-last
 spec@!opengl 3.2@gl-3.2-adj-prims pv-last
 
+# discovered by nightly run
+spec@arb_timer_query@timestamp-get
+
 # uprev Piglit in Mesa
 KHR-GLES3.copy_tex_image_conversions.required.cubemap_posx_texture2d
 KHR-GLES31.core.shader_bitfield_operation.findMSB.ivec3_1
@@ -232,3 +235,17 @@ dEQP-VK.binding_model.shader_access.primary_cmd_buf.storage_image.tess_eval.mult
 dEQP-VK.binding_model.shader_access.secondary_cmd_buf.storage_buffer_dynamic.tess_ctrl.multiple_descriptor_sets.descriptor_array.offset_view_zero_dynamic_zero
 dEQP-VK.spirv_assembly.instruction.graphics.indexing.input.struct.opinboundsaccesschain_u32_tesse
 
+# Updated by ci-collate
+spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-wrong-type-setter
+spec@ext_external_objects@vk-image-display-overwrite
+dEQP-VK.synchronization2.cross_instance.dedicated.write_ssbo_tess_control_read_ssbo_tess_eval.buffer_16384_binary_semaphore_dma_buf
+dEQP-VK.synchronization2.cross_instance.dedicated.write_image_tess_eval_read_copy_image_to_buffer.image_128x128_r32g32b32a32_sfloat_binary_semaphore_fd
+gmem-dEQP-VK.binding_model.shader_access.secondary_cmd_buf.bind.with_template.storage_image.geometry.multiple_descriptor_sets.descriptor_array.3d_base_mip
+dEQP-VK.tessellation.invariance.primitive_set.isolines_equal_spacing_cw_point_mode
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multi_draw.mosaic.indexed_random.16_draws.stride_extra_4.10_instances.with_tess.single_view.no_offset
+dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.with_template.storage_image.tess_ctrl.single_descriptor.1d_base_slice
+dEQP-VK.renderpass.suballocation.multisample_resolve.layers_6.r32g32b32a32_uint.samples_2_resolve_level_2
+gmem-dEQP-VK.synchronization2.cross_instance.dedicated.write_image_tess_eval_read_image_compute_indirect.image_128x128_r8g8b8a8_unorm_binary_semaphore_fence_fd
+bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_2_2_multiviewport
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multi_draw.mosaic.indexed_mixed.16_draws.stride_extra_4.1_instance.tess_geom.single_view.offset_6_no_draw_id
+dEQP-VK.spirv_assembly.instruction.graphics.image_sampler.imagesample.combined_image_sampler_separate_descriptors.optypeimage_mismatch.rgba16ui.depth_property.unknown.shader_tesse

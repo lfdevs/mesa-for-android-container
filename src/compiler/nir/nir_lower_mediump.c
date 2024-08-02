@@ -145,8 +145,7 @@ nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
    }
 
    if (changed) {
-      nir_metadata_preserve(impl, nir_metadata_dominance |
-                                     nir_metadata_block_index);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -284,8 +283,7 @@ nir_lower_mediump_io(nir_shader *nir, nir_variable_mode modes,
       nir_recompute_io_bases(nir, modes);
 
    if (changed) {
-      nir_metadata_preserve(impl, nir_metadata_dominance |
-                                     nir_metadata_block_index);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -346,8 +344,7 @@ nir_force_mediump_io(nir_shader *nir, nir_variable_mode modes,
    }
 
    if (changed) {
-      nir_metadata_preserve(impl, nir_metadata_dominance |
-                                     nir_metadata_block_index);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -392,8 +389,7 @@ nir_unpack_16bit_varying_slots(nir_shader *nir, nir_variable_mode modes)
       nir_recompute_io_bases(nir, modes);
 
    if (changed) {
-      nir_metadata_preserve(impl, nir_metadata_dominance |
-                                     nir_metadata_block_index);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -559,8 +555,7 @@ nir_lower_mediump_vars_impl(nir_function_impl *impl, nir_variable_mode modes,
    }
 
    if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -614,49 +609,6 @@ nir_lower_mediump_vars(nir_shader *shader, nir_variable_mode modes)
    }
 
    return progress;
-}
-
-static bool
-is_n_to_m_conversion(nir_instr *instr, unsigned n, nir_op m)
-{
-   if (instr->type != nir_instr_type_alu)
-      return false;
-
-   nir_alu_instr *alu = nir_instr_as_alu(instr);
-   return alu->op == m && alu->src[0].src.ssa->bit_size == n;
-}
-
-static bool
-is_f16_to_f32_conversion(nir_instr *instr)
-{
-   return is_n_to_m_conversion(instr, 16, nir_op_f2f32);
-}
-
-static bool
-is_f32_to_f16_conversion(nir_instr *instr)
-{
-   return is_n_to_m_conversion(instr, 32, nir_op_f2f16) ||
-          is_n_to_m_conversion(instr, 32, nir_op_f2fmp);
-}
-
-static bool
-is_i16_to_i32_conversion(nir_instr *instr)
-{
-   return is_n_to_m_conversion(instr, 16, nir_op_i2i32);
-}
-
-static bool
-is_u16_to_u32_conversion(nir_instr *instr)
-{
-   return is_n_to_m_conversion(instr, 16, nir_op_u2u32);
-}
-
-static bool
-is_i32_to_i16_conversion(nir_instr *instr)
-{
-   return is_n_to_m_conversion(instr, 32, nir_op_i2i16) ||
-          is_n_to_m_conversion(instr, 32, nir_op_u2u16) ||
-          is_n_to_m_conversion(instr, 32, nir_op_i2imp);
 }
 
 /**
@@ -738,8 +690,7 @@ nir_legalize_16bit_sampler_srcs(nir_shader *nir,
                                 nir_tex_src_type_constraints constraints)
 {
    return nir_shader_instructions_pass(nir, legalize_16bit_sampler_srcs,
-                                       nir_metadata_dominance |
-                                          nir_metadata_block_index,
+                                       nir_metadata_control_flow,
                                        constraints);
 }
 
@@ -788,16 +739,21 @@ can_opt_16bit_src(nir_def *ssa, nir_alu_type src_type, bool sext_matters)
             can_opt &= const_is_i16(comp);
          else if (opt_i16_u16)
             can_opt &= (const_is_u16(comp) || const_is_i16(comp));
+      } else if (nir_scalar_is_alu(comp)) {
+         nir_alu_instr *alu = nir_instr_as_alu(comp.def->parent_instr);
+         if (alu->src[0].src.ssa->bit_size != 16)
+            return false;
+
+         if (alu->op == nir_op_f2f32)
+            can_opt &= opt_f16;
+         else if (alu->op == nir_op_i2i32)
+            can_opt &= opt_i16 || opt_i16_u16;
+         else if (alu->op == nir_op_u2u32)
+            can_opt &= opt_u16 || opt_i16_u16;
+         else
+            return false;
       } else {
-         if (opt_f16)
-            can_opt &= is_f16_to_f32_conversion(comp.def->parent_instr);
-         else if (opt_u16)
-            can_opt &= is_u16_to_u32_conversion(comp.def->parent_instr);
-         else if (opt_i16)
-            can_opt &= is_i16_to_i32_conversion(comp.def->parent_instr);
-         else if (opt_i16_u16)
-            can_opt &= (is_i16_to_i32_conversion(comp.def->parent_instr) ||
-                        is_u16_to_u32_conversion(comp.def->parent_instr));
+         return false;
       }
    }
 
@@ -852,33 +808,105 @@ opt_16bit_store_data(nir_builder *b, nir_intrinsic_instr *instr)
 }
 
 static bool
-opt_16bit_destination(nir_def *ssa, nir_alu_type dest_type,
-                      unsigned exec_mode, nir_rounding_mode rdm)
+opt_16bit_destination(nir_def *ssa, nir_alu_type dest_type, unsigned exec_mode,
+                      struct nir_opt_16bit_tex_image_options *options)
 {
-   bool is_f32_to_f16 = dest_type == nir_type_float32;
-   bool is_i32_to_i16 = dest_type == nir_type_int32 || dest_type == nir_type_uint32;
+   bool opt_f2f16 = dest_type == nir_type_float32;
+   bool opt_i2i16 = (dest_type == nir_type_int32 || dest_type == nir_type_uint32) &&
+                    !options->integer_dest_saturates;
+   bool opt_i2i16_sat = dest_type == nir_type_int32 && options->integer_dest_saturates;
+   bool opt_u2u16_sat = dest_type == nir_type_uint32 && options->integer_dest_saturates;
 
+   nir_rounding_mode rdm = options->rounding_mode;
    nir_rounding_mode src_rdm =
       nir_get_rounding_mode_from_float_controls(exec_mode, nir_type_float16);
-   bool allow_standard = (src_rdm == rdm || src_rdm == nir_rounding_mode_undef);
-   bool allow_rtz = rdm == nir_rounding_mode_rtz;
-   bool allow_rtne = rdm == nir_rounding_mode_rtne;
 
    nir_foreach_use(use, ssa) {
       nir_instr *instr = nir_src_parent_instr(use);
-      is_f32_to_f16 &= (allow_standard && is_f32_to_f16_conversion(instr)) ||
-                       (allow_rtz && is_n_to_m_conversion(instr, 32, nir_op_f2f16_rtz)) ||
-                       (allow_rtne && is_n_to_m_conversion(instr, 32, nir_op_f2f16_rtne));
-      is_i32_to_i16 &= is_i32_to_i16_conversion(instr);
-   }
+      if (instr->type != nir_instr_type_alu)
+         return false;
 
-   if (!is_f32_to_f16 && !is_i32_to_i16)
-      return false;
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+      switch (alu->op) {
+      case nir_op_pack_half_2x16_split:
+         if (alu->src[0].src.ssa != alu->src[1].src.ssa)
+            return false;
+         FALLTHROUGH;
+      case nir_op_pack_half_2x16:
+         /* pack_half rounding is undefined */
+         if (!opt_f2f16)
+            return false;
+         break;
+      case nir_op_pack_half_2x16_rtz_split:
+         if (alu->src[0].src.ssa != alu->src[1].src.ssa)
+            return false;
+         FALLTHROUGH;
+      case nir_op_f2f16_rtz:
+         if (rdm != nir_rounding_mode_rtz || !opt_f2f16)
+            return false;
+         break;
+      case nir_op_f2f16_rtne:
+         if (rdm != nir_rounding_mode_rtne || !opt_f2f16)
+            return false;
+         break;
+      case nir_op_f2f16:
+      case nir_op_f2fmp:
+         if (src_rdm != rdm && src_rdm != nir_rounding_mode_undef)
+            return false;
+         if (!opt_f2f16)
+            return false;
+         break;
+      case nir_op_i2i16:
+      case nir_op_i2imp:
+      case nir_op_u2u16:
+         if (!opt_i2i16)
+            return false;
+         break;
+      case nir_op_pack_sint_2x16:
+         if (!opt_i2i16_sat)
+            return false;
+         break;
+      case nir_op_pack_uint_2x16:
+         if (!opt_u2u16_sat)
+            return false;
+         break;
+      default:
+         return false;
+      }
+   }
 
    /* All uses are the same conversions. Replace them with mov. */
    nir_foreach_use(use, ssa) {
-      nir_alu_instr *conv = nir_instr_as_alu(nir_src_parent_instr(use));
-      conv->op = nir_op_mov;
+      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use));
+      switch (alu->op) {
+      case nir_op_f2f16_rtne:
+      case nir_op_f2f16_rtz:
+      case nir_op_f2f16:
+      case nir_op_f2fmp:
+      case nir_op_i2i16:
+      case nir_op_i2imp:
+      case nir_op_u2u16:
+         alu->op = nir_op_mov;
+         break;
+      case nir_op_pack_half_2x16_rtz_split:
+      case nir_op_pack_half_2x16_split:
+         alu->op = nir_op_pack_32_2x16_split;
+         break;
+      case nir_op_pack_32_2x16_split:
+         /* Split opcodes have two operands, so the iteration
+          * for the second use will already observe the
+          * updated opcode.
+          */
+         break;
+      case nir_op_pack_half_2x16:
+      case nir_op_pack_sint_2x16:
+      case nir_op_pack_uint_2x16:
+         alu->op = nir_op_pack_32_2x16;
+         break;
+      default:
+         unreachable("unsupported conversion op");
+      };
    }
 
    ssa->bit_size = 16;
@@ -887,14 +915,14 @@ opt_16bit_destination(nir_def *ssa, nir_alu_type dest_type,
 
 static bool
 opt_16bit_image_dest(nir_intrinsic_instr *instr, unsigned exec_mode,
-                     nir_alu_type allowed_types, nir_rounding_mode rdm)
+                     struct nir_opt_16bit_tex_image_options *options)
 {
    nir_alu_type dest_type = nir_intrinsic_dest_type(instr);
 
-   if (!(nir_alu_type_get_base_type(dest_type) & allowed_types))
+   if (!(nir_alu_type_get_base_type(dest_type) & options->opt_image_dest_types))
       return false;
 
-   if (!opt_16bit_destination(&instr->def, dest_type, exec_mode, rdm))
+   if (!opt_16bit_destination(&instr->def, dest_type, exec_mode, options))
       return false;
 
    nir_intrinsic_set_dest_type(instr, (dest_type & ~32) | 16);
@@ -904,7 +932,7 @@ opt_16bit_image_dest(nir_intrinsic_instr *instr, unsigned exec_mode,
 
 static bool
 opt_16bit_tex_dest(nir_tex_instr *tex, unsigned exec_mode,
-                   nir_alu_type allowed_types, nir_rounding_mode rdm)
+                   struct nir_opt_16bit_tex_image_options *options)
 {
    /* Skip sparse residency */
    if (tex->is_sparse)
@@ -921,10 +949,10 @@ opt_16bit_tex_dest(nir_tex_instr *tex, unsigned exec_mode,
        tex->op != nir_texop_fragment_fetch_amd)
       return false;
 
-   if (!(nir_alu_type_get_base_type(tex->dest_type) & allowed_types))
+   if (!(nir_alu_type_get_base_type(tex->dest_type) & options->opt_tex_dest_types))
       return false;
 
-   if (!opt_16bit_destination(&tex->def, tex->dest_type, exec_mode, rdm))
+   if (!opt_16bit_destination(&tex->def, tex->dest_type, exec_mode, options))
       return false;
 
    tex->dest_type = (tex->dest_type & ~32) | 16;
@@ -1030,9 +1058,7 @@ opt_16bit_tex_image(nir_builder *b, nir_instr *instr, void *params)
       case nir_intrinsic_image_deref_load:
       case nir_intrinsic_image_load:
          if (options->opt_image_dest_types)
-            progress |= opt_16bit_image_dest(intrinsic, exec_mode,
-                                             options->opt_image_dest_types,
-                                             options->rounding_mode);
+            progress |= opt_16bit_image_dest(intrinsic, exec_mode, options);
          if (options->opt_image_srcs)
             progress |= opt_16bit_image_srcs(b, intrinsic, 3);
          break;
@@ -1058,8 +1084,7 @@ opt_16bit_tex_image(nir_builder *b, nir_instr *instr, void *params)
       nir_tex_instr *tex = nir_instr_as_tex(instr);
 
       if (options->opt_tex_dest_types)
-         progress |= opt_16bit_tex_dest(tex, exec_mode, options->opt_tex_dest_types,
-                                        options->rounding_mode);
+         progress |= opt_16bit_tex_dest(tex, exec_mode, options);
 
       for (unsigned i = 0; i < options->opt_srcs_options_count; i++) {
          progress |= opt_16bit_tex_srcs(b, tex, &options->opt_srcs_options[i]);
@@ -1075,6 +1100,6 @@ nir_opt_16bit_tex_image(nir_shader *nir,
 {
    return nir_shader_instructions_pass(nir,
                                        opt_16bit_tex_image,
-                                       nir_metadata_block_index | nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        options);
 }

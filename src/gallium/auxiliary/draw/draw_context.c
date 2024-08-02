@@ -77,7 +77,7 @@ draw_create_context(struct pipe_context *pipe, void *context,
 
 #if DRAW_LLVM_AVAILABLE
    if (try_llvm && draw_get_option_use_llvm()) {
-      draw->llvm = draw_llvm_create(draw, (LLVMContextRef)context);
+      draw->llvm = draw_llvm_create(draw, (lp_context_ref *)context);
    }
 #endif
 

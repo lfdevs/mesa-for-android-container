@@ -103,7 +103,7 @@ brw_fs_workaround_memory_fence_before_eot(fs_visitor &s)
       const fs_builder ibld(&s, block, inst);
       const fs_builder ubld = ibld.exec_all().group(1, 0);
 
-      fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      brw_reg dst = ubld.vgrf(BRW_TYPE_UD);
       fs_inst *dummy_fence = ubld.emit(SHADER_OPCODE_MEMORY_FENCE,
                                        dst, brw_vec8_grf(0, 0),
                                        /* commit enable */ brw_imm_ud(1),
@@ -220,7 +220,8 @@ brw_fs_workaround_nomask_control_flow(fs_visitor &s)
              * safely omit the predication for.
              */
             if (depth && inst->force_writemask_all &&
-                is_send(inst) && !inst->predicate) {
+                is_send(inst) && !inst->predicate &&
+                !inst->has_no_mask_send_params) {
                /* We need to load the execution mask into the flag register by
                 * using a builder with channel group matching the whole shader
                 * (rather than the default which is derived from the original
@@ -229,15 +230,15 @@ brw_fs_workaround_nomask_control_flow(fs_visitor &s)
                 */
                const fs_builder ubld = fs_builder(&s, block, inst)
                                        .exec_all().group(s.dispatch_width, 0);
-               const fs_reg flag = retype(brw_flag_reg(0, 0),
-                                          BRW_REGISTER_TYPE_UD);
+               const brw_reg flag = retype(brw_flag_reg(0, 0),
+                                          BRW_TYPE_UD);
 
                /* Due to the lack of flag register allocation we need to save
                 * and restore the flag register if it's live.
                 */
                const bool save_flag = flag_liveout &
                                       brw_fs_flag_mask(flag, s.dispatch_width / 8);
-               const fs_reg tmp = ubld.group(8, 0).vgrf(flag.type);
+               const brw_reg tmp = ubld.group(8, 0).vgrf(flag.type);
 
                if (save_flag) {
                   ubld.group(8, 0).UNDEF(tmp);
@@ -270,4 +271,3 @@ brw_fs_workaround_nomask_control_flow(fs_visitor &s)
 
    return progress;
 }
-

@@ -26,7 +26,7 @@
 #include "nouveau_fence.h"
 #include "util/os_time.h"
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
 #include <sched.h>
 #endif
 

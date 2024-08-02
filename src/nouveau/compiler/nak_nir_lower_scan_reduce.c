@@ -246,8 +246,7 @@ nak_nir_lower_scan_reduce_intrin(nir_builder *b,
       data = nir_if_phi(b, full, partial);
    }
 
-   nir_def_rewrite_uses(&intrin->def, data);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, data);
 
    return true;
 }

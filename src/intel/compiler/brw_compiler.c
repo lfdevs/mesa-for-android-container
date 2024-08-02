@@ -32,6 +32,7 @@
 const struct nir_shader_compiler_options brw_scalar_nir_options = {
    .avoid_ternary_with_two_constants = true,
    .compact_arrays = true,
+   .discard_is_demote = true,
    .divergence_analysis_options =
       (nir_divergence_single_patch_per_tcs_subgroup |
        nir_divergence_single_patch_per_tes_subgroup |
@@ -112,11 +113,13 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_lower_imul_high64 |
       nir_lower_find_lsb64 |
       nir_lower_ufind_msb64 |
-      nir_lower_bit_count64;
+      nir_lower_bit_count64 |
+      nir_lower_iadd3_64;
    nir_lower_doubles_options fp64_options =
       nir_lower_drcp |
       nir_lower_dsqrt |
       nir_lower_drsq |
+      nir_lower_dsign |
       nir_lower_dtrunc |
       nir_lower_dfloor |
       nir_lower_dceil |
@@ -137,6 +140,15 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
     */
    if (devinfo->ver > 9)
       int64_options |= nir_lower_imul_2x32_64;
+
+   if (devinfo->ver >= 20)
+      int64_options |= (nir_lower_icmp64 | nir_lower_minmax64 |
+                        nir_lower_logic64 | nir_lower_ufind_msb64 |
+                        nir_lower_bit_count64 |
+                        nir_lower_bcsel64 | nir_lower_conv64 |
+                        nir_lower_extract64 | nir_lower_scan_reduce_bitwise64 |
+                        nir_lower_scan_reduce_iadd64 | nir_lower_subgroup_shuffle64 |
+                        nir_lower_iadd_sat64 | nir_lower_uadd_sat64);
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_ALL_SHADER_STAGES; i++) {
@@ -317,5 +329,30 @@ brw_write_shader_relocs(const struct brw_isa_info *isa,
             break;
          }
       }
+   }
+}
+
+void
+brw_stage_prog_data_add_printf(struct brw_stage_prog_data *prog_data,
+                               void *mem_ctx,
+                               const u_printf_info *print)
+{
+   prog_data->printf_info_count++;
+   prog_data->printf_info = reralloc(mem_ctx, prog_data->printf_info,
+                                     u_printf_info,
+                                     prog_data->printf_info_count);
+
+   prog_data->printf_info[prog_data->printf_info_count - 1] = *print;
+   if (print->string_size > 0) {
+      prog_data->printf_info[prog_data->printf_info_count - 1].strings =
+         ralloc_size(mem_ctx, print->string_size);
+      memcpy(prog_data->printf_info[prog_data->printf_info_count - 1].strings,
+             print->strings, print->string_size);
+   }
+   if (print->num_args > 0) {
+      prog_data->printf_info[prog_data->printf_info_count - 1].arg_sizes =
+         ralloc_array(mem_ctx, __typeof__(*print->arg_sizes), print->num_args);
+      memcpy(prog_data->printf_info[prog_data->printf_info_count - 1].arg_sizes,
+             print->arg_sizes, sizeof(print->arg_sizes[0]) *print->num_args);
    }
 }

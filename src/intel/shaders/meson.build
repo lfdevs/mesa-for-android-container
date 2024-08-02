@@ -13,7 +13,9 @@ if with_intel_vk
       '--vn', 'float64_spv_source',
       '--glsl-version', '450',
       '-Olib',
-    ]
+      glslang_depfile,
+    ],
+    depfile : 'float64_spv.h.d',
   )
 endif
 

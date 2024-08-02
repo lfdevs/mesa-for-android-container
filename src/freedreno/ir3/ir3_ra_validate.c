@@ -134,14 +134,18 @@ validate_error(struct ra_val_ctx *ctx, const char *condstr)
 static unsigned
 get_file_size(struct ra_val_ctx *ctx, struct ir3_register *reg)
 {
-   if (reg->flags & IR3_REG_SHARED)
-      return RA_SHARED_SIZE;
-   else if (reg->flags & IR3_REG_PREDICATE)
+   if (reg->flags & IR3_REG_SHARED) {
+      if (reg->flags & IR3_REG_HALF)
+         return RA_SHARED_HALF_SIZE;
+      else
+         return RA_SHARED_SIZE;
+   } else if (reg->flags & IR3_REG_PREDICATE) {
       return ctx->predicate_size;
-   else if (ctx->merged_regs || !(reg->flags & IR3_REG_HALF))
+   } else if (ctx->merged_regs || !(reg->flags & IR3_REG_HALF)) {
       return ctx->full_size;
-   else
+   } else {
       return ctx->half_size;
+   }
 }
 
 static struct reg_state *
@@ -189,7 +193,7 @@ validate_simple(struct ra_val_ctx *ctx, struct ir3_instruction *instr)
    foreach_dst_if (dst, instr, validate_reg_is_dst) {
       if (ctx->shared_ra && !(dst->flags & IR3_REG_SHARED))
          continue;
-      validate_assert(ctx, dst->num != INVALID_REG);
+      validate_assert(ctx, ra_reg_get_num(dst) != INVALID_REG);
       unsigned dst_max = ra_reg_get_physreg(dst) + reg_size(dst);
       validate_assert(ctx, dst_max <= get_file_size(ctx, dst));
       if (dst->tied)
@@ -199,7 +203,7 @@ validate_simple(struct ra_val_ctx *ctx, struct ir3_instruction *instr)
    foreach_src_if (src, instr, validate_reg_is_src) {
       if (ctx->shared_ra && !(src->flags & IR3_REG_SHARED))
          continue;
-      validate_assert(ctx, src->num != INVALID_REG);
+      validate_assert(ctx, ra_reg_get_num(src) != INVALID_REG);
       unsigned src_max = ra_reg_get_physreg(src) + reg_size(src);
       validate_assert(ctx, src_max <= get_file_size(ctx, src));
    }

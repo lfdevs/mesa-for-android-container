@@ -381,6 +381,15 @@ struct fd_context {
     */
    struct pipe_fence_handle *last_fence dt;
 
+   /*
+    * Counter to keep track of batch's most recent update.  Ie. the batch with
+    * the higher update count is the one that has been drawn/etc to the most
+    * recently (and therefore shouldn't have any other batch that should be
+    * flushed after it).  This is used to figure out which fence to use at
+    * context flush time.
+    */
+   uint32_t update_count;
+
    /* Fence fd we are told to wait on via ->fence_server_sync() (or -1
     * if none).  The in-fence is transferred over to the batch on the
     * next draw/blit/grid.

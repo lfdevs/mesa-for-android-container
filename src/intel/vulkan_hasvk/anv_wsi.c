@@ -29,6 +29,8 @@
 #include "vk_semaphore.h"
 #include "vk_util.h"
 
+#include "common/intel_debug_identifier.h"
+
 static PFN_vkVoidFunction
 anv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {

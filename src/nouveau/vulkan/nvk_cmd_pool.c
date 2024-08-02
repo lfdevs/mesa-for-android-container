@@ -7,38 +7,41 @@
 #include "nvk_device.h"
 #include "nvk_entrypoints.h"
 #include "nvk_physical_device.h"
+#include "nvkmd/nvkmd.h"
 
 static VkResult
-nvk_cmd_bo_create(struct nvk_cmd_pool *pool, bool force_gart, struct nvk_cmd_bo **bo_out)
+nvk_cmd_mem_create(struct nvk_cmd_pool *pool, bool force_gart, struct nvk_cmd_mem **mem_out)
 {
    struct nvk_device *dev = nvk_cmd_pool_device(pool);
-   struct nvk_cmd_bo *bo;
+   struct nvk_cmd_mem *mem;
+   VkResult result;
 
-   bo = vk_zalloc(&pool->vk.alloc, sizeof(*bo), 8,
+   mem = vk_zalloc(&pool->vk.alloc, sizeof(*mem), 8,
                   VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (bo == NULL)
+   if (mem == NULL)
       return vk_error(pool, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint32_t flags = NOUVEAU_WS_BO_GART | NOUVEAU_WS_BO_MAP | NOUVEAU_WS_BO_NO_SHARE;
+   uint32_t flags = NVKMD_MEM_GART;
    if (force_gart)
-      assert(flags & NOUVEAU_WS_BO_GART);
-   bo->bo = nouveau_ws_bo_new_mapped(dev->ws_dev, NVK_CMD_BO_SIZE, 0,
-                                     flags, NOUVEAU_WS_BO_WR, &bo->map);
-   if (bo->bo == NULL) {
-      vk_free(&pool->vk.alloc, bo);
-      return vk_error(pool, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      assert(flags & NVKMD_MEM_GART);
+   result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &pool->vk.base,
+                                       NVK_CMD_MEM_SIZE, 0,
+                                       flags, NVKMD_MEM_MAP_WR,
+                                       &mem->mem);
+   if (result != VK_SUCCESS) {
+      vk_free(&pool->vk.alloc, mem);
+      return result;
    }
 
-   *bo_out = bo;
+   *mem_out = mem;
    return VK_SUCCESS;
 }
 
 static void
-nvk_cmd_bo_destroy(struct nvk_cmd_pool *pool, struct nvk_cmd_bo *bo)
+nvk_cmd_mem_destroy(struct nvk_cmd_pool *pool, struct nvk_cmd_mem *mem)
 {
-   nouveau_ws_bo_unmap(bo->bo, bo->map);
-   nouveau_ws_bo_destroy(bo->bo);
-   vk_free(&pool->vk.alloc, bo);
+   nvkmd_mem_unref(mem->mem);
+   vk_free(&pool->vk.alloc, mem);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -62,8 +65,8 @@ nvk_CreateCommandPool(VkDevice _device,
       return result;
    }
 
-   list_inithead(&pool->free_bos);
-   list_inithead(&pool->free_gart_bos);
+   list_inithead(&pool->free_mem);
+   list_inithead(&pool->free_gart_mem);
 
    *pCmdPool = nvk_cmd_pool_to_handle(pool);
 
@@ -71,51 +74,54 @@ nvk_CreateCommandPool(VkDevice _device,
 }
 
 static void
-nvk_cmd_pool_destroy_bos(struct nvk_cmd_pool *pool)
+nvk_cmd_pool_destroy_mem(struct nvk_cmd_pool *pool)
 {
-   list_for_each_entry_safe(struct nvk_cmd_bo, bo, &pool->free_bos, link)
-      nvk_cmd_bo_destroy(pool, bo);
+   list_for_each_entry_safe(struct nvk_cmd_mem, mem, &pool->free_mem, link)
+      nvk_cmd_mem_destroy(pool, mem);
 
-   list_inithead(&pool->free_bos);
+   list_inithead(&pool->free_mem);
 
-   list_for_each_entry_safe(struct nvk_cmd_bo, bo, &pool->free_gart_bos, link)
-      nvk_cmd_bo_destroy(pool, bo);
+   list_for_each_entry_safe(struct nvk_cmd_mem, mem, &pool->free_gart_mem, link)
+      nvk_cmd_mem_destroy(pool, mem);
 
-   list_inithead(&pool->free_gart_bos);
+   list_inithead(&pool->free_gart_mem);
 }
 
 VkResult
-nvk_cmd_pool_alloc_bo(struct nvk_cmd_pool *pool, bool force_gart, struct nvk_cmd_bo **bo_out)
+nvk_cmd_pool_alloc_mem(struct nvk_cmd_pool *pool, bool force_gart,
+                       struct nvk_cmd_mem **mem_out)
 {
-   struct nvk_cmd_bo *bo = NULL;
+   struct nvk_cmd_mem *mem = NULL;
    if (force_gart) {
-      if (!list_is_empty(&pool->free_gart_bos))
-         bo = list_first_entry(&pool->free_gart_bos, struct nvk_cmd_bo, link);
+      if (!list_is_empty(&pool->free_gart_mem))
+         mem = list_first_entry(&pool->free_gart_mem, struct nvk_cmd_mem, link);
    } else {
-      if (!list_is_empty(&pool->free_bos))
-         bo = list_first_entry(&pool->free_bos, struct nvk_cmd_bo, link);
+      if (!list_is_empty(&pool->free_mem))
+         mem = list_first_entry(&pool->free_mem, struct nvk_cmd_mem, link);
    }
-   if (bo) {
-      list_del(&bo->link);
-      *bo_out = bo;
+   if (mem) {
+      list_del(&mem->link);
+      *mem_out = mem;
       return VK_SUCCESS;
    }
 
-   return nvk_cmd_bo_create(pool, force_gart, bo_out);
+   return nvk_cmd_mem_create(pool, force_gart, mem_out);
 }
 
 void
-nvk_cmd_pool_free_bo_list(struct nvk_cmd_pool *pool, struct list_head *bos)
+nvk_cmd_pool_free_mem_list(struct nvk_cmd_pool *pool,
+                           struct list_head *mem_list)
 {
-   list_splicetail(bos, &pool->free_bos);
-   list_inithead(bos);
+   list_splicetail(mem_list, &pool->free_mem);
+   list_inithead(mem_list);
 }
 
 void
-nvk_cmd_pool_free_gart_bo_list(struct nvk_cmd_pool *pool, struct list_head *bos)
+nvk_cmd_pool_free_gart_mem_list(struct nvk_cmd_pool *pool,
+                                struct list_head *mem_list)
 {
-   list_splicetail(bos, &pool->free_gart_bos);
-   list_inithead(bos);
+   list_splicetail(mem_list, &pool->free_gart_mem);
+   list_inithead(mem_list);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -130,7 +136,7 @@ nvk_DestroyCommandPool(VkDevice _device,
       return;
 
    vk_command_pool_finish(&pool->vk);
-   nvk_cmd_pool_destroy_bos(pool);
+   nvk_cmd_pool_destroy_mem(pool);
    vk_free2(&device->vk.alloc, pAllocator, pool);
 }
 
@@ -142,5 +148,5 @@ nvk_TrimCommandPool(VkDevice device,
    VK_FROM_HANDLE(nvk_cmd_pool, pool, commandPool);
 
    vk_command_pool_trim(&pool->vk, flags);
-   nvk_cmd_pool_destroy_bos(pool);
+   nvk_cmd_pool_destroy_mem(pool);
 }

@@ -77,7 +77,7 @@ get_num_components(nir_variable *var)
 }
 
 static void
-tcs_add_output_reads(nir_shader *shader, uint64_t *read, uint64_t *patches_read)
+add_output_reads(nir_shader *shader, uint64_t *read, uint64_t *patches_read)
 {
    nir_foreach_function_impl(impl, shader) {
       nir_foreach_block(block, impl) {
@@ -111,6 +111,44 @@ tcs_add_output_reads(nir_shader *shader, uint64_t *read, uint64_t *patches_read)
    }
 }
 
+static bool
+remove_unused_io_access(nir_builder *b, nir_intrinsic_instr *intrin, void *cb_data)
+{
+   nir_variable_mode mode = *(nir_variable_mode *)cb_data;
+
+   unsigned srcn = 0;
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_deref:
+   case nir_intrinsic_store_deref:
+   case nir_intrinsic_interp_deref_at_centroid:
+   case nir_intrinsic_interp_deref_at_sample:
+   case nir_intrinsic_interp_deref_at_offset:
+   case nir_intrinsic_interp_deref_at_vertex:
+      break;
+   case nir_intrinsic_copy_deref:
+      srcn = mode == nir_var_shader_in ? 1 : 0;
+      break;
+   default:
+      return false;
+   }
+
+   nir_variable *var = nir_intrinsic_get_var(intrin, srcn);
+   if (!var || var->data.mode != mode || var->data.location != NUM_TOTAL_VARYING_SLOTS)
+      return false;
+
+   if (intrin->intrinsic != nir_intrinsic_store_deref &&
+       intrin->intrinsic != nir_intrinsic_copy_deref) {
+      b->cursor = nir_before_instr(&intrin->instr);
+      nir_def *undef = nir_undef(b, intrin->num_components, intrin->def.bit_size);
+      nir_def_rewrite_uses(&intrin->def, undef);
+   }
+
+   nir_instr_remove(&intrin->instr);
+   nir_deref_instr_remove_if_unused(nir_src_as_deref(intrin->src[srcn]));
+
+   return true;
+}
+
 /**
  * Helper for removing unused shader I/O variables, by demoting them to global
  * variables (which may then by dead code eliminated).
@@ -132,15 +170,20 @@ nir_remove_unused_io_vars(nir_shader *shader,
 
    assert(mode == nir_var_shader_in || mode == nir_var_shader_out);
 
+   uint64_t read[4] = { 0 };
+   uint64_t patches_read[4] = { 0 };
+   if (mode == nir_var_shader_out)
+      add_output_reads(shader, read, patches_read);
+
    nir_foreach_variable_with_modes_safe(var, shader, mode) {
       if (var->data.patch)
          used = used_by_other_stage_patches;
       else
          used = used_by_other_stage;
 
-      if (var->data.location < VARYING_SLOT_VAR0 && var->data.location >= 0)
-         if (shader->info.stage != MESA_SHADER_MESH || var->data.location != VARYING_SLOT_PRIMITIVE_ID)
-            continue;
+      if (var->data.location < VARYING_SLOT_VAR0 && var->data.location >= 0 &&
+          !(shader->info.stage == MESA_SHADER_MESH && var->data.location == VARYING_SLOT_PRIMITIVE_ID))
+         continue;
 
       if (var->data.always_active_io)
          continue;
@@ -149,29 +192,25 @@ nir_remove_unused_io_vars(nir_shader *shader,
          continue;
 
       uint64_t other_stage = 0;
-      for (unsigned i = 0; i < get_num_components(var); i++)
+      uint64_t this_stage = 0;
+      for (unsigned i = 0; i < get_num_components(var); i++) {
          other_stage |= used[var->data.location_frac + i];
+         this_stage |= (var->data.patch ? patches_read : read)[var->data.location_frac + i];
+      }
 
-      if (!(other_stage & get_variable_io_mask(var, shader->info.stage))) {
-         /* This one is invalid, make it a global variable instead */
-         if (shader->info.stage == MESA_SHADER_MESH &&
-             (shader->info.outputs_read & BITFIELD64_BIT(var->data.location)))
-            var->data.mode = nir_var_mem_shared;
-         else
-            var->data.mode = nir_var_shader_temp;
-         var->data.location = 0;
-
+      uint64_t var_mask = get_variable_io_mask(var, shader->info.stage);
+      if (!((other_stage | this_stage) & var_mask)) {
+         /* Mark the variable as removed by setting the location to an invalid value. */
+         var->data.location = NUM_TOTAL_VARYING_SLOTS;
+         exec_node_remove(&var->node);
          progress = true;
       }
    }
 
-   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_dominance |
-                                     nir_metadata_block_index);
-      nir_fixup_deref_modes(shader);
+      nir_shader_intrinsics_pass(shader, &remove_unused_io_access, nir_metadata_control_flow, &mode);
    } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
+      nir_shader_preserve_all_metadata(shader);
    }
 
    return progress;
@@ -215,13 +254,6 @@ nir_remove_unused_varyings(nir_shader *producer, nir_shader *consumer)
          }
       }
    }
-
-   /* Each TCS invocation can read data written by other TCS invocations,
-    * so even if the outputs are not used by the TES we must also make
-    * sure they are not read by the TCS before demoting them to globals.
-    */
-   if (producer->info.stage == MESA_SHADER_TESS_CTRL)
-      tcs_add_output_reads(producer, read, patches_read);
 
    bool progress = false;
    progress = nir_remove_unused_io_vars(producer, nir_var_shader_out, read,

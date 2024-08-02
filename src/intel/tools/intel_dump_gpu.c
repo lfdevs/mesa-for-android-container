@@ -46,6 +46,7 @@
 #include "c11/threads.h"
 #include "dev/intel_debug.h"
 #include "dev/intel_device_info.h"
+#include "common/intel_debug_identifier.h"
 #include "common/intel_gem.h"
 #include "util/macros.h"
 #include "util/u_math.h"

@@ -1,0 +1,16 @@
+dEQP-VK.api.get_device_proc_addr.non_enabled,Fail
+dEQP-VK.api.version_check.unavailable_entry_points,Fail
+
+dEQP-VK.pipeline.fast_linked_library.pipeline_cache.robustness2.storage,Fail
+dEQP-VK.pipeline.pipeline_library.pipeline_cache.robustness2.storage,Fail
+dEQP-VK.pipeline.shader_object_linked_binary.pipeline_cache.robustness2.storage,Fail
+dEQP-VK.pipeline.shader_object_linked_spirv.pipeline_cache.robustness2.storage,Fail
+dEQP-VK.pipeline.shader_object_unlinked_binary.pipeline_cache.robustness2.storage,Fail
+dEQP-VK.pipeline.shader_object_unlinked_spirv.pipeline_cache.robustness2.storage,Fail
+
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp16.generated_args.signed_zero_sub_var_preserve,Fail
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp16.generated_args.signed_zero_sub_var_preserve_nostorage,Fail
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.generated_args.signed_zero_sub_var_preserve_frag,Fail
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.generated_args.signed_zero_sub_var_preserve_nostorage_frag,Fail
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.generated_args.signed_zero_sub_var_preserve_nostorage_vert,Fail
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.generated_args.signed_zero_sub_var_preserve_vert,Fail

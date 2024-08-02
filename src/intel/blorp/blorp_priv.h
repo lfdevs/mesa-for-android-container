@@ -42,6 +42,9 @@ struct blorp_compiler {
    const struct brw_compiler *brw;
    const struct elk_compiler *elk;
 
+   const nir_shader_compiler_options *(*nir_options)(struct blorp_context *blorp,
+                                                     gl_shader_stage stage);
+
    struct blorp_program (*compile_fs)(struct blorp_context *blorp, void *mem_ctx,
                                       struct nir_shader *nir,
                                       bool multisample_fbo,

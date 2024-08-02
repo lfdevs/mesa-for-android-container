@@ -707,9 +707,28 @@ static int peephole_mul_omod(
 	for (i = 0; i < 2; i++) {
 		unsigned int j;
 		if (inst_mul->U.I.SrcReg[i].File != RC_FILE_CONSTANT
-			&& inst_mul->U.I.SrcReg[i].File != RC_FILE_TEMPORARY) {
+			&& inst_mul->U.I.SrcReg[i].File != RC_FILE_TEMPORARY
+			&& inst_mul->U.I.SrcReg[i].File != RC_FILE_NONE) {
 			return 0;
 		}
+
+		/* The only relevant case with constant swizzles we should check for
+		 * is multiply by one half.
+		 */
+		if (inst_mul->U.I.SrcReg[i].File == RC_FILE_NONE) {
+			for (j = 0; j < 4; j++) {
+				swz = GET_SWZ(inst_mul->U.I.SrcReg[i].Swizzle, j);
+				if (swz == RC_SWIZZLE_UNUSED) {
+					continue;
+				}
+				if (swz != RC_SWIZZLE_HALF) {
+					return 0;
+				} else {
+					omod_op = RC_OMOD_DIV_2;
+				}
+			}
+		}
+
 		if (inst_mul->U.I.SrcReg[i].File == RC_FILE_TEMPORARY) {
 			if (temp_index != -1) {
 				/* The instruction has two temp sources */
@@ -748,30 +767,32 @@ static int peephole_mul_omod(
 		}
 	}
 
-	if (!rc_src_reg_is_immediate(c, inst_mul->U.I.SrcReg[const_index].File,
-				inst_mul->U.I.SrcReg[const_index].Index)) {
-		return 0;
-	}
-	const_value = rc_get_constant_value(c,
-			inst_mul->U.I.SrcReg[const_index].Index,
-			inst_mul->U.I.SrcReg[const_index].Swizzle,
-			inst_mul->U.I.SrcReg[const_index].Negate,
-			chan);
+	if (omod_op == RC_OMOD_DISABLE) {
+		if (!rc_src_reg_is_immediate(c, inst_mul->U.I.SrcReg[const_index].File,
+					inst_mul->U.I.SrcReg[const_index].Index)) {
+			return 0;
+		}
+		const_value = rc_get_constant_value(c,
+				inst_mul->U.I.SrcReg[const_index].Index,
+				inst_mul->U.I.SrcReg[const_index].Swizzle,
+				inst_mul->U.I.SrcReg[const_index].Negate,
+				chan);
 
-	if (const_value == 2.0f) {
-		omod_op = RC_OMOD_MUL_2;
-	} else if (const_value == 4.0f) {
-		omod_op = RC_OMOD_MUL_4;
-	} else if (const_value == 8.0f) {
-		omod_op = RC_OMOD_MUL_8;
-	} else if (const_value == (1.0f / 2.0f)) {
-		omod_op = RC_OMOD_DIV_2;
-	} else if (const_value == (1.0f / 4.0f)) {
-		omod_op = RC_OMOD_DIV_4;
-	} else if (const_value == (1.0f / 8.0f)) {
-		omod_op = RC_OMOD_DIV_8;
-	} else {
-		return 0;
+		if (const_value == 2.0f) {
+			omod_op = RC_OMOD_MUL_2;
+		} else if (const_value == 4.0f) {
+			omod_op = RC_OMOD_MUL_4;
+		} else if (const_value == 8.0f) {
+			omod_op = RC_OMOD_MUL_8;
+		} else if (const_value == (1.0f / 2.0f)) {
+			omod_op = RC_OMOD_DIV_2;
+		} else if (const_value == (1.0f / 4.0f)) {
+			omod_op = RC_OMOD_DIV_4;
+		} else if (const_value == (1.0f / 8.0f)) {
+			omod_op = RC_OMOD_DIV_8;
+		} else {
+			return 0;
+		}
 	}
 
 	writer_list = rc_variable_list_get_writers_one_reader(var_list,
@@ -793,6 +814,15 @@ static int peephole_mul_omod(
 		if (var->Inst->U.I.SaturateMode != RC_SATURATE_NONE) {
 			return 0;
 		}
+
+		/* Empirical testing shows that DDX/DDY directly into output
+		 * with non-identity omod is problematic.
+		 */
+		if ((info->Opcode == RC_OPCODE_DDX || info->Opcode == RC_OPCODE_DDY) &&
+			inst_mul->U.I.DstReg.File == RC_FILE_OUTPUT) {
+			return 0;
+		}
+
 		for (inst = inst_mul->Prev; inst != var->Inst;
 							inst = inst->Prev) {
 			rc_for_all_reads_mask(inst, omod_filter_reader_cb,
@@ -820,9 +850,12 @@ static int peephole_mul_omod(
 	/* Rewrite the instructions */
 	for (var = writer_list->Item; var; var = var->Friend) {
 		struct rc_variable * writer = var;
-		unsigned conversion_swizzle = rc_make_conversion_swizzle(
-					writemask_sum,
-					inst_mul->U.I.DstReg.WriteMask);
+		unsigned conversion_swizzle = RC_SWIZZLE_UUUU;
+		for (chan = 0; chan < 4; chan++) {
+			unsigned swz = GET_SWZ(inst_mul->U.I.SrcReg[temp_index].Swizzle, chan);
+			if (swz <= RC_SWIZZLE_W)
+				SET_SWZ(conversion_swizzle, swz, chan);
+		}
 		writer->Inst->U.I.Omod = omod_op;
 		writer->Inst->U.I.DstReg.File = inst_mul->U.I.DstReg.File;
 		writer->Inst->U.I.DstReg.Index = inst_mul->U.I.DstReg.Index;

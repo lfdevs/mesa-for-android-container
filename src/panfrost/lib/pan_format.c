@@ -599,7 +599,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
 };
 /* clang-format on */
 
-#if PAN_ARCH == 7
+#if PAN_ARCH == 7 || PAN_ARCH >= 10
 /*
  * Decompose a component ordering swizzle into a component ordering (applied
  * first) and a swizzle (applied second). The output ordering "pre" is allowed

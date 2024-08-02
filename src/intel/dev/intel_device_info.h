@@ -64,11 +64,10 @@ extern "C" {
 #define intel_device_info_is_mtl_or_arl(devinfo) \
    (intel_device_info_is_mtl(devinfo) || intel_device_info_is_arl(devinfo))
 
-#define PAT_ENTRY(index_, mmap_, coh_)                      \
+#define PAT_ENTRY(index_, mmap_)                            \
 {                                                           \
    .index = index_,                                         \
-   .mmap = INTEL_DEVICE_INFO_MMAP_MODE_##mmap_,             \
-   .coherency = INTEL_DEVICE_INFO_COHERENCY_MODE_##coh_     \
+   .mmap = INTEL_DEVICE_INFO_MMAP_MODE_##mmap_              \
 }
 
 #ifdef GFX_VER
@@ -184,6 +183,8 @@ intel_vram_all_mappable(const struct intel_device_info *devinfo)
 bool intel_get_device_info_from_fd(int fh, struct intel_device_info *devinfo, int min_ver, int max_ver);
 bool intel_get_device_info_from_pci_id(int pci_id,
                                        struct intel_device_info *devinfo);
+bool intel_get_device_info_for_build(int pci_id,
+                                     struct intel_device_info *devinfo);
 
 /* Only updates intel_device_info::regions::...::free fields. The
  * class/instance/size should remain the same over time.
@@ -195,6 +196,7 @@ void intel_device_info_topology_reset_masks(struct intel_device_info *devinfo);
 void intel_device_info_topology_update_counts(struct intel_device_info *devinfo);
 void intel_device_info_update_pixel_pipes(struct intel_device_info *devinfo, uint8_t *subslice_masks);
 void intel_device_info_update_l3_banks(struct intel_device_info *devinfo);
+uint32_t intel_device_info_get_eu_count_first_subslice(const struct intel_device_info *devinfo);
 void intel_device_info_update_cs_workgroup_threads(struct intel_device_info *devinfo);
 bool intel_device_info_compute_system_memory(struct intel_device_info *devinfo, bool update);
 void intel_device_info_update_after_hwconfig(struct intel_device_info *devinfo);
@@ -209,6 +211,9 @@ void intel_device_info_update_after_hwconfig(struct intel_device_info *devinfo);
 #endif
 
 enum intel_wa_steppings intel_device_info_wa_stepping(struct intel_device_info *devinfo);
+
+uint32_t intel_device_info_get_max_slm_size(const struct intel_device_info *devinfo);
+uint32_t intel_device_info_get_max_preferred_slm_size(const struct intel_device_info *devinfo);
 
 #ifdef __cplusplus
 }

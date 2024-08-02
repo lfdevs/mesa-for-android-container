@@ -44,7 +44,6 @@ r300-rv530-nine:
   variables:
     GTEST: "/NineTests/NineTests"
     HWCI_TEST_SCRIPT: "/install/gtest-runner.sh"
-    B2C_JOB_SUCCESS_REGEX: '^\+ GTEST_EXITCODE=0\r$'
     HWCI_START_WESTON: 1
     GPU_VERSION: r300-rv530-nohiz
     FDO_CI_CONCURRENT: 1

@@ -55,7 +55,6 @@
 #include "util/u_idalloc.h"
 #include "util/simple_mtx.h"
 #include "util/u_dynarray.h"
-#include "util/mesa-sha1.h"
 #include "vbo/vbo.h"
 
 #include "pipe/p_state.h"
@@ -969,6 +968,9 @@ struct gl_texture_object
    GLboolean IsSparse;
    GLint VirtualPageSizeIndex;
    GLint NumSparseLevels;
+
+   /** GL_EXT_texture_storage_compression */
+   GLint CompressionRate; /**< Fixed-rate compression bitrate */
 
    /* The texture must include at levels [0..lastLevel] once validated:
     */

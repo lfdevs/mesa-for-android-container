@@ -54,7 +54,6 @@ isl_tiling_to_i915_tiling(enum isl_tiling tiling)
    case ISL_TILING_4:
    case ISL_TILING_64:
    case ISL_TILING_64_XE2:
-   case ISL_TILING_GFX12_CCS:
       return I915_TILING_NONE;
    }
 

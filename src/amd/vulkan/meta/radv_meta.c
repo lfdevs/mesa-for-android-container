@@ -176,7 +176,7 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
 
       /* Restore all dynamic states. */
       cmd_buffer->state.dynamic = state->dynamic;
-      cmd_buffer->state.dirty |= RADV_DYNAMIC_ALL;
+      cmd_buffer->state.dirty_dynamic |= RADV_DYNAMIC_ALL;
 
       /* Re-emit the guardband state because meta operations changed dynamic states. */
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GUARDBAND;
@@ -465,7 +465,7 @@ radv_device_init_meta(struct radv_device *device)
    if (result != VK_SUCCESS)
       goto fail_blit2d;
 
-   result = radv_device_init_meta_bufimage_state(device);
+   result = radv_device_init_meta_bufimage_state(device, on_demand);
    if (result != VK_SUCCESS)
       goto fail_bufimage;
 
@@ -473,7 +473,7 @@ radv_device_init_meta(struct radv_device *device)
    if (result != VK_SUCCESS)
       goto fail_depth_decomp;
 
-   result = radv_device_init_meta_buffer_state(device);
+   result = radv_device_init_meta_buffer_state(device, on_demand);
    if (result != VK_SUCCESS)
       goto fail_buffer;
 
@@ -715,10 +715,62 @@ radv_break_on_count(nir_builder *b, nir_variable *var, nir_def *count)
 {
    nir_def *counter = nir_load_var(b, var);
 
-   nir_push_if(b, nir_uge(b, counter, count));
-   nir_jump(b, nir_jump_break);
-   nir_pop_if(b, NULL);
+   nir_break_if(b, nir_uge(b, counter, count));
 
    counter = nir_iadd_imm(b, counter, 1);
    nir_store_var(b, var, counter, 0x1);
+}
+
+VkResult
+radv_meta_create_compute_pipeline(struct radv_device *device, nir_shader *nir, VkPipelineLayout pipeline_layout,
+                                  VkPipeline *pipeline)
+{
+   const VkPipelineShaderStageCreateInfo stage_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = vk_shader_module_handle_from_nir(nir),
+      .pName = "main",
+      .pSpecializationInfo = NULL,
+   };
+
+   const VkComputePipelineCreateInfo pipeline_info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = stage_info,
+      .flags = 0,
+      .layout = pipeline_layout,
+   };
+
+   return radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache, &pipeline_info, NULL,
+                                       pipeline);
+}
+
+VkResult
+radv_meta_create_pipeline_layout(struct radv_device *device, VkDescriptorSetLayout *set_layout, uint32_t num_pc_ranges,
+                                 const VkPushConstantRange *pc_ranges, VkPipelineLayout *pipeline_layout)
+{
+   const VkPipelineLayoutCreateInfo pipeline_layout_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = !!set_layout,
+      .pSetLayouts = set_layout,
+      .pushConstantRangeCount = num_pc_ranges,
+      .pPushConstantRanges = pc_ranges,
+   };
+
+   return radv_CreatePipelineLayout(radv_device_to_handle(device), &pipeline_layout_info, &device->meta_state.alloc,
+                                    pipeline_layout);
+}
+
+VkResult
+radv_meta_create_descriptor_set_layout(struct radv_device *device, uint32_t num_bindings,
+                                       const VkDescriptorSetLayoutBinding *bindings, VkDescriptorSetLayout *desc_layout)
+{
+   const VkDescriptorSetLayoutCreateInfo desc_layout_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+      .bindingCount = num_bindings,
+      .pBindings = bindings,
+   };
+
+   return radv_CreateDescriptorSetLayout(radv_device_to_handle(device), &desc_layout_info, &device->meta_state.alloc,
+                                         desc_layout);
 }

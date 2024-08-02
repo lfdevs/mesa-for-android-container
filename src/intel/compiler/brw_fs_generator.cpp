@@ -65,8 +65,7 @@ brw_math_function(enum opcode op)
 }
 
 static struct brw_reg
-brw_reg_from_fs_reg(const struct intel_device_info *devinfo, fs_inst *inst,
-                    fs_reg *reg)
+normalize_brw_reg_for_encoding(brw_reg *reg)
 {
    struct brw_reg brw_reg;
 
@@ -75,7 +74,7 @@ brw_reg_from_fs_reg(const struct intel_device_info *devinfo, fs_inst *inst,
    case FIXED_GRF:
    case IMM:
       assert(reg->offset == 0);
-      brw_reg = reg->as_brw_reg();
+      brw_reg = *reg;
       break;
    case BAD_FILE:
       /* Probably unused. */
@@ -201,7 +200,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
                                     struct brw_reg reg,
                                     struct brw_reg indirect_byte_offset)
 {
-   assert(indirect_byte_offset.type == BRW_REGISTER_TYPE_UD);
+   assert(indirect_byte_offset.type == BRW_TYPE_UD);
    assert(indirect_byte_offset.file == BRW_GENERAL_REGISTER_FILE);
    assert(!reg.abs && !reg.negate);
 
@@ -214,8 +213,8 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
     * unsigned integer type.
     */
    assert(reg.type == dst.type);
-   reg.type = dst.type = brw_reg_type_from_bit_size(type_sz(reg.type) * 8,
-                                                    BRW_REGISTER_TYPE_UD);
+   reg.type = dst.type =
+      brw_type_with_size(BRW_TYPE_UD, brw_type_size_bits(reg.type));
 
    unsigned imm_byte_offset = reg.nr * REG_SIZE + reg.subnr;
 
@@ -224,12 +223,12 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
 
       reg.nr = imm_byte_offset / REG_SIZE;
       reg.subnr = imm_byte_offset % REG_SIZE;
-      if (type_sz(reg.type) > 4 && !devinfo->has_64bit_int) {
-         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
-                    subscript(reg, BRW_REGISTER_TYPE_D, 0));
+      if (brw_type_size_bytes(reg.type) > 4 && !devinfo->has_64bit_int) {
+         brw_MOV(p, subscript(dst, BRW_TYPE_D, 0),
+                    subscript(reg, BRW_TYPE_D, 0));
          brw_set_default_swsb(p, tgl_swsb_null());
-         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 1),
-                    subscript(reg, BRW_REGISTER_TYPE_D, 1));
+         brw_MOV(p, subscript(dst, BRW_TYPE_D, 1),
+                    subscript(reg, BRW_TYPE_D, 1));
       } else {
          brw_MOV(p, dst, reg);
       }
@@ -250,7 +249,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
        * In order to get around this, re retype to UW and use a stride.
        */
       indirect_byte_offset =
-         retype(spread(indirect_byte_offset, 2), BRW_REGISTER_TYPE_UW);
+         retype(spread(indirect_byte_offset, 2), BRW_TYPE_UW);
 
       /* There are a number of reasons why we don't use the base offset here.
        * One reason is that the field is only 9 bits which means we can only
@@ -298,7 +297,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
       else
          brw_inst_set_no_dd_check(devinfo, insn, use_dep_ctrl);
 
-      if (type_sz(reg.type) > 4 &&
+      if (brw_type_size_bytes(reg.type) > 4 &&
           (intel_device_info_is_9lp(devinfo) || !devinfo->has_64bit_int)) {
          /* From the Cherryview PRM Vol 7. "Register Region Restrictions":
           *
@@ -313,11 +312,11 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
           * the indirect here to handle adding 4 bytes to the offset and
           * avoid the extra ADD to the register file.
           */
-         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
-                    retype(brw_VxH_indirect(0, 0), BRW_REGISTER_TYPE_D));
+         brw_MOV(p, subscript(dst, BRW_TYPE_D, 0),
+                    retype(brw_VxH_indirect(0, 0), BRW_TYPE_D));
          brw_set_default_swsb(p, tgl_swsb_null());
-         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 1),
-                    retype(brw_VxH_indirect(0, 4), BRW_REGISTER_TYPE_D));
+         brw_MOV(p, subscript(dst, BRW_TYPE_D, 1),
+                    retype(brw_VxH_indirect(0, 4), BRW_TYPE_D));
       } else {
          struct brw_reg ind_src = brw_VxH_indirect(0, 0);
 
@@ -338,7 +337,7 @@ fs_generator::generate_shuffle(fs_inst *inst,
    /* Ivy bridge has some strange behavior that makes this a real pain to
     * implement for 64-bit values so we just don't bother.
     */
-   assert(devinfo->has_64bit_float || type_sz(src.type) <= 4);
+   assert(devinfo->has_64bit_float || brw_type_size_bytes(src.type) <= 4);
 
    /* Gen12.5 adds the following region restriction:
     *
@@ -349,8 +348,8 @@ fs_generator::generate_shuffle(fs_inst *inst,
     * unsigned integer type.
     */
    assert(src.type == dst.type);
-   src.type = dst.type = brw_reg_type_from_bit_size(type_sz(src.type) * 8,
-                                                    BRW_REGISTER_TYPE_UD);
+   src.type = dst.type =
+      brw_type_with_size(BRW_TYPE_UD, brw_type_size_bits(src.type));
 
    /* Because we're using the address register, we're limited to 16-wide
     * by the address register file and 8-wide for 64-bit types.  We could try
@@ -358,9 +357,10 @@ fs_generator::generate_shuffle(fs_inst *inst,
     * gets weird because it reads all of the channels regardless of execution
     * size.  It's easier just to split it here.
     */
-   const unsigned lower_width =
-      element_sz(src) > 4 || element_sz(dst) > 4 ? 8 :
-      MIN2(16, inst->exec_size);
+   unsigned lower_width = MIN2(16, inst->exec_size);
+   if (devinfo->ver < 20 && (element_sz(src) > 4 || element_sz(dst) > 4)) {
+      lower_width = 8;
+   }
 
    brw_set_default_exec_size(p, cvt(lower_width) - 1);
    for (unsigned group = 0; group < inst->exec_size; group += lower_width) {
@@ -388,15 +388,15 @@ fs_generator::generate_shuffle(fs_inst *inst,
             group_idx.vstride--;
          }
 
-         assert(type_sz(group_idx.type) <= 4);
-         if (type_sz(group_idx.type) == 4) {
+         assert(brw_type_size_bytes(group_idx.type) <= 4);
+         if (brw_type_size_bytes(group_idx.type) == 4) {
             /* The destination stride of an instruction (in bytes) must be
              * greater than or equal to the size of the rest of the
              * instruction.  Since the address register is of type UW, we
              * can't use a D-type instruction.  In order to get around this,
              * re retype to UW and use a stride.
              */
-            group_idx = retype(spread(group_idx, 2), BRW_REGISTER_TYPE_W);
+            group_idx = retype(spread(group_idx, 2), BRW_TYPE_W);
          }
 
          uint32_t src_start_offset = src.nr * REG_SIZE + src.subnr;
@@ -438,7 +438,7 @@ fs_generator::generate_shuffle(fs_inst *inst,
          /* Take into account the component size and horizontal stride. */
          assert(src.vstride == src.hstride + src.width);
          insn = brw_SHL(p, addr, group_idx,
-                        brw_imm_uw(util_logbase2(type_sz(src.type)) +
+                        brw_imm_uw(util_logbase2(brw_type_size_bytes(src.type)) +
                                    src.hstride - 1));
          if (devinfo->ver >= 12)
             brw_set_default_swsb(p, tgl_swsb_regdist(1));
@@ -468,7 +468,7 @@ fs_generator::generate_quad_swizzle(const fs_inst *inst,
       /* The value is uniform across all channels */
       brw_MOV(p, dst, src);
 
-   } else if (devinfo->ver < 11 && type_sz(src.type) == 4) {
+   } else if (devinfo->ver < 11 && brw_type_size_bytes(src.type) == 4) {
       /* This only works on 8-wide 32-bit values */
       assert(inst->exec_size == 8);
       assert(src.hstride == BRW_HORIZONTAL_STRIDE_1);
@@ -581,7 +581,7 @@ fs_generator::generate_ddx(const fs_inst *inst,
       width = BRW_WIDTH_4;
    }
 
-   struct brw_reg src0 = byte_offset(src, type_sz(src.type));;
+   struct brw_reg src0 = byte_offset(src, brw_type_size_bytes(src.type));;
    struct brw_reg src1 = src;
 
    src0.vstride = vstride;
@@ -602,7 +602,7 @@ void
 fs_generator::generate_ddy(const fs_inst *inst,
                            struct brw_reg dst, struct brw_reg src)
 {
-   const uint32_t type_size = type_sz(src.type);
+   const uint32_t type_size = brw_type_size_bytes(src.type);
 
    if (inst->opcode == FS_OPCODE_DDY_FINE) {
       /* produce accurate derivatives.
@@ -706,7 +706,7 @@ fs_generator::generate_scratch_header(fs_inst *inst, struct brw_reg dst)
    assert(inst->exec_size == 8 && inst->force_writemask_all);
    assert(dst.file == BRW_GENERAL_REGISTER_FILE);
 
-   dst.type = BRW_REGISTER_TYPE_UD;
+   dst.type = BRW_TYPE_UD;
 
    brw_inst *insn = brw_MOV(p, dst, brw_imm_ud(0));
    if (devinfo->ver >= 12)
@@ -717,7 +717,7 @@ fs_generator::generate_scratch_header(fs_inst *inst, struct brw_reg dst)
    /* Copy the per-thread scratch space size from g0.3[3:0] */
    brw_set_default_exec_size(p, BRW_EXECUTE_1);
    insn = brw_AND(p, suboffset(dst, 3),
-                     retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD),
+                     retype(brw_vec1_grf(0, 3), BRW_TYPE_UD),
                      brw_imm_ud(INTEL_MASK(3, 0)));
    if (devinfo->ver < 12) {
       brw_inst_set_no_dd_clear(p->devinfo, insn, true);
@@ -726,7 +726,7 @@ fs_generator::generate_scratch_header(fs_inst *inst, struct brw_reg dst)
 
    /* Copy the scratch base address from g0.5[31:10] */
    insn = brw_AND(p, suboffset(dst, 5),
-                     retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
+                     retype(brw_vec1_grf(0, 5), BRW_TYPE_UD),
                      brw_imm_ud(INTEL_MASK(31, 10)));
    if (devinfo->ver < 12)
       brw_inst_set_no_dd_check(p->devinfo, insn, true);
@@ -859,7 +859,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       }
 
       for (unsigned int i = 0; i < inst->sources; i++) {
-         src[i] = brw_reg_from_fs_reg(devinfo, inst, &inst->src[i]);
+         src[i] = normalize_brw_reg_for_encoding(&inst->src[i]);
 	 /* The accumulator result appears to get used for the
 	  * conditional modifier generation.  When negating a UD
 	  * value, there is a 33rd bit generated for the sign in the
@@ -867,10 +867,10 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 	  * equality with a 32-bit value.  See piglit fs-op-neg-uvec4.
 	  */
 	 assert(!inst->conditional_mod ||
-		inst->src[i].type != BRW_REGISTER_TYPE_UD ||
+		inst->src[i].type != BRW_TYPE_UD ||
 		!inst->src[i].negate);
       }
-      dst = brw_reg_from_fs_reg(devinfo, inst, &inst->dst);
+      dst = normalize_brw_reg_for_encoding(&inst->dst);
 
       brw_set_default_access_mode(p, BRW_ALIGN_1);
       brw_set_default_predicate_control(p, inst->predicate);
@@ -901,6 +901,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       assert(inst->mlen <= BRW_MAX_MSG_LENGTH * reg_unit(devinfo));
 
       switch (inst->opcode) {
+      case BRW_OPCODE_NOP:
+         brw_NOP(p);
+         break;
       case BRW_OPCODE_SYNC:
          assert(src[0].file == BRW_IMMEDIATE_VALUE);
          brw_SYNC(p, tgl_sync_function(src[0].ud));
@@ -1017,22 +1020,19 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          brw_CSEL(p, dst, src[0], src[1], src[2]);
          break;
       case BRW_OPCODE_BFREV:
-         brw_BFREV(p, retype(dst, BRW_REGISTER_TYPE_UD),
-                   retype(src[0], BRW_REGISTER_TYPE_UD));
+         brw_BFREV(p, retype(dst, BRW_TYPE_UD), retype(src[0], BRW_TYPE_UD));
          break;
       case BRW_OPCODE_FBH:
          brw_FBH(p, retype(dst, src[0].type), src[0]);
          break;
       case BRW_OPCODE_FBL:
-         brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD),
-                 retype(src[0], BRW_REGISTER_TYPE_UD));
+         brw_FBL(p, retype(dst, BRW_TYPE_UD), retype(src[0], BRW_TYPE_UD));
          break;
       case BRW_OPCODE_LZD:
          brw_LZD(p, dst, src[0]);
          break;
       case BRW_OPCODE_CBIT:
-         brw_CBIT(p, retype(dst, BRW_REGISTER_TYPE_UD),
-                  retype(src[0], BRW_REGISTER_TYPE_UD));
+         brw_CBIT(p, retype(dst, BRW_TYPE_UD), retype(src[0], BRW_TYPE_UD));
          break;
       case BRW_OPCODE_ADDC:
          brw_ADDC(p, dst, src[0], src[1]);
@@ -1096,7 +1096,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(inst->conditional_mod == BRW_CONDITIONAL_NONE);
          assert(inst->mlen == 0);
          gfx6_math(p, dst, brw_math_function(inst->opcode),
-                   src[0], brw_null_reg());
+                   src[0], retype(brw_null_reg(), src[0].type));
 	 break;
       case SHADER_OPCODE_INT_QUOTIENT:
       case SHADER_OPCODE_INT_REMAINDER:
@@ -1119,9 +1119,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          brw_PLN(p, dst, src[0], src[1]);
 	 break;
       case FS_OPCODE_PIXEL_X:
-         assert(src[0].type == BRW_REGISTER_TYPE_UW);
-         assert(src[1].type == BRW_REGISTER_TYPE_UW);
-         src[0].subnr = 0 * type_sz(src[0].type);
+         assert(src[0].type == BRW_TYPE_UW);
+         assert(src[1].type == BRW_TYPE_UW);
+         src[0].subnr = 0 * brw_type_size_bytes(src[0].type);
          if (src[1].file == BRW_IMMEDIATE_VALUE) {
             assert(src[1].ud == 0);
             brw_MOV(p, dst, stride(src[0], 8, 4, 1));
@@ -1131,9 +1131,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          }
          break;
       case FS_OPCODE_PIXEL_Y:
-         assert(src[0].type == BRW_REGISTER_TYPE_UW);
-         assert(src[1].type == BRW_REGISTER_TYPE_UW);
-         src[0].subnr = 4 * type_sz(src[0].type);
+         assert(src[0].type == BRW_TYPE_UW);
+         assert(src[1].type == BRW_TYPE_UW);
+         src[0].subnr = 4 * brw_type_size_bytes(src[0].type);
          if (src[1].file == BRW_IMMEDIATE_VALUE) {
             assert(src[1].ud == 0);
             brw_MOV(p, dst, stride(src[0], 8, 4, 1));
@@ -1168,7 +1168,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
       case SHADER_OPCODE_MOV_RELOC_IMM:
          assert(src[0].file == BRW_IMMEDIATE_VALUE);
-         brw_MOV_reloc_imm(p, dst, dst.type, src[0].ud);
+         assert(src[1].file == BRW_IMMEDIATE_VALUE);
+         brw_MOV_reloc_imm(p, dst, dst.type, src[0].ud, src[1].ud);
          break;
 
       case BRW_OPCODE_HALT:
@@ -1212,8 +1213,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
                /* Emit a MOV to force a stall until the instruction producing the
                 * registers finishes.
                 */
-               brw_MOV(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UW),
-                       retype(src[i], BRW_REGISTER_TYPE_UW));
+               brw_MOV(p, retype(brw_null_reg(), BRW_TYPE_UW),
+                       retype(src[i], BRW_TYPE_UW));
             }
 
             if (inst->sources > 1)
@@ -1232,9 +1233,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(inst->force_writemask_all && inst->group == 0);
          assert(inst->dst.file == BAD_FILE);
          brw_set_default_exec_size(p, BRW_EXECUTE_1);
-         brw_MOV(p, retype(brw_flag_subreg(inst->flag_subreg),
-                           BRW_REGISTER_TYPE_UD),
-                 retype(brw_mask_reg(0), BRW_REGISTER_TYPE_UD));
+         brw_MOV(p, retype(brw_flag_subreg(inst->flag_subreg), BRW_TYPE_UD),
+                 retype(brw_mask_reg(0), BRW_TYPE_UD));
          break;
       }
       case SHADER_OPCODE_BROADCAST:
@@ -1248,7 +1248,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
       case SHADER_OPCODE_SEL_EXEC:
          assert(inst->force_writemask_all);
-         assert(devinfo->has_64bit_float || type_sz(dst.type) <= 4);
+         assert(devinfo->has_64bit_float || brw_type_size_bytes(dst.type) <= 4);
          brw_set_default_mask_control(p, BRW_MASK_DISABLE);
          brw_MOV(p, dst, src[1]);
          brw_set_default_mask_control(p, BRW_MASK_ENABLE);
@@ -1258,18 +1258,18 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
       case SHADER_OPCODE_QUAD_SWIZZLE:
          assert(src[1].file == BRW_IMMEDIATE_VALUE);
-         assert(src[1].type == BRW_REGISTER_TYPE_UD);
+         assert(src[1].type == BRW_TYPE_UD);
          generate_quad_swizzle(inst, dst, src[0], src[1].ud);
          break;
 
       case SHADER_OPCODE_CLUSTER_BROADCAST: {
          assert((!intel_device_info_is_9lp(devinfo) &&
-                 devinfo->has_64bit_float) || type_sz(src[0].type) <= 4);
+                 devinfo->has_64bit_float) || brw_type_size_bytes(src[0].type) <= 4);
          assert(!src[0].negate && !src[0].abs);
          assert(src[1].file == BRW_IMMEDIATE_VALUE);
-         assert(src[1].type == BRW_REGISTER_TYPE_UD);
+         assert(src[1].type == BRW_TYPE_UD);
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         assert(src[2].type == BRW_REGISTER_TYPE_UD);
+         assert(src[2].type == BRW_TYPE_UD);
          const unsigned component = src[1].ud;
          const unsigned cluster_size = src[2].ud;
          assert(inst->src[0].file != ARF);

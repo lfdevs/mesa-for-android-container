@@ -36,26 +36,6 @@ impl From<RWFlags> for pipe_map_flags {
     }
 }
 
-pub enum ResourceMapType {
-    Normal,
-    Async,
-    Coherent,
-}
-
-impl From<ResourceMapType> for pipe_map_flags {
-    fn from(map_type: ResourceMapType) -> Self {
-        match map_type {
-            ResourceMapType::Normal => pipe_map_flags(0),
-            ResourceMapType::Async => pipe_map_flags::PIPE_MAP_UNSYNCHRONIZED,
-            ResourceMapType::Coherent => {
-                pipe_map_flags::PIPE_MAP_COHERENT
-                    | pipe_map_flags::PIPE_MAP_PERSISTENT
-                    | pipe_map_flags::PIPE_MAP_UNSYNCHRONIZED
-            }
-        }
-    }
-}
-
 impl PipeContext {
     pub(super) fn new(context: *mut pipe_context, screen: &Arc<PipeScreen>) -> Option<Self> {
         let s = Self {
@@ -114,7 +94,10 @@ impl PipeContext {
 
     pub fn clear_buffer(&self, res: &PipeResource, pattern: &[u8], offset: u32, size: u32) {
         unsafe {
-            self.pipe.as_ref().clear_buffer.unwrap()(
+            self.pipe
+                .as_ref()
+                .clear_buffer
+                .unwrap_or(u_default_clear_buffer)(
                 self.pipe.as_ptr(),
                 res.pipe(),
                 offset,
@@ -218,16 +201,16 @@ impl PipeContext {
         if ptr.is_null() {
             None
         } else {
-            Some(PipeTransfer::new(is_buffer, out, ptr))
+            Some(PipeTransfer::new(self, is_buffer, out, ptr))
         }
     }
 
-    fn _buffer_map(
+    pub fn buffer_map(
         &self,
         res: &PipeResource,
         offset: i32,
         size: i32,
-        flags: pipe_map_flags,
+        rw: RWFlags,
     ) -> Option<PipeTransfer> {
         let b = pipe_box {
             x: offset,
@@ -237,45 +220,11 @@ impl PipeContext {
             ..Default::default()
         };
 
-        self.resource_map(res, &b, flags, true)
-    }
-
-    pub fn buffer_map(
-        &self,
-        res: &PipeResource,
-        offset: i32,
-        size: i32,
-        rw: RWFlags,
-        map_type: ResourceMapType,
-    ) -> Option<PipeTransfer> {
-        let mut flags: pipe_map_flags = map_type.into();
-        flags |= rw.into();
-        self._buffer_map(res, offset, size, flags)
-    }
-
-    pub fn buffer_map_directly(
-        &self,
-        res: &PipeResource,
-        offset: i32,
-        size: i32,
-        rw: RWFlags,
-    ) -> Option<PipeTransfer> {
-        let flags =
-            pipe_map_flags::PIPE_MAP_DIRECTLY | pipe_map_flags::PIPE_MAP_UNSYNCHRONIZED | rw.into();
-        self._buffer_map(res, offset, size, flags)
+        self.resource_map(res, &b, rw.into(), true)
     }
 
     pub(super) fn buffer_unmap(&self, tx: *mut pipe_transfer) {
         unsafe { self.pipe.as_ref().buffer_unmap.unwrap()(self.pipe.as_ptr(), tx) };
-    }
-
-    pub fn _texture_map(
-        &self,
-        res: &PipeResource,
-        bx: &pipe_box,
-        flags: pipe_map_flags,
-    ) -> Option<PipeTransfer> {
-        self.resource_map(res, bx, flags, false)
     }
 
     pub fn texture_map(
@@ -283,22 +232,8 @@ impl PipeContext {
         res: &PipeResource,
         bx: &pipe_box,
         rw: RWFlags,
-        map_type: ResourceMapType,
     ) -> Option<PipeTransfer> {
-        let mut flags: pipe_map_flags = map_type.into();
-        flags |= rw.into();
-        self._texture_map(res, bx, flags)
-    }
-
-    pub fn texture_map_directly(
-        &self,
-        res: &PipeResource,
-        bx: &pipe_box,
-        rw: RWFlags,
-    ) -> Option<PipeTransfer> {
-        let flags =
-            pipe_map_flags::PIPE_MAP_DIRECTLY | pipe_map_flags::PIPE_MAP_UNSYNCHRONIZED | rw.into();
-        self.resource_map(res, bx, flags, false)
+        self.resource_map(res, bx, rw.into(), false)
     }
 
     pub(super) fn texture_unmap(&self, tx: *mut pipe_transfer) {
@@ -480,8 +415,8 @@ impl PipeContext {
         unsafe { self.pipe.as_ref().launch_grid.unwrap()(self.pipe.as_ptr(), &info) }
     }
 
-    pub fn set_global_binding(&self, res: &[&Arc<PipeResource>], out: &mut [*mut u32]) {
-        let mut res: Vec<_> = res.iter().map(|r| r.pipe()).collect();
+    pub fn set_global_binding(&self, res: &[&PipeResource], out: &mut [*mut u32]) {
+        let mut res: Vec<_> = res.iter().copied().map(PipeResource::pipe).collect();
         unsafe {
             self.pipe.as_ref().set_global_binding.unwrap()(
                 self.pipe.as_ptr(),
@@ -680,7 +615,6 @@ fn has_required_cbs(context: &pipe_context) -> bool {
         & has_required_feature!(context, buffer_map)
         & has_required_feature!(context, buffer_subdata)
         & has_required_feature!(context, buffer_unmap)
-        & has_required_feature!(context, clear_buffer)
         & has_required_feature!(context, create_compute_state)
         & has_required_feature!(context, create_query)
         & has_required_feature!(context, delete_compute_state)

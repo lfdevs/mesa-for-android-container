@@ -81,7 +81,7 @@ impl Context {
 
         if !user_ptr.is_null() {
             res.iter()
-                .filter(|(_, r)| copy || !r.is_user)
+                .filter(|(_, r)| copy || !r.is_user())
                 .map(|(d, r)| {
                     d.helper_ctx()
                         .exec(|ctx| ctx.buffer_subdata(r, 0, user_ptr, size.try_into().unwrap()))
@@ -163,7 +163,7 @@ impl Context {
             let layer_stride = desc.slice_pitch();
 
             res.iter()
-                .filter(|(_, r)| copy || !r.is_user)
+                .filter(|(_, r)| copy || !r.is_user())
                 .map(|(d, r)| {
                     d.helper_ctx()
                         .exec(|ctx| ctx.texture_subdata(r, &bx, user_ptr, stride, layer_stride))

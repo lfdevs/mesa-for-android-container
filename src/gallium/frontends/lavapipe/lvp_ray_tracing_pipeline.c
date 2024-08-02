@@ -128,14 +128,13 @@ lvp_lower_ray_tracing_derefs(nir_shader *shader)
             nir_def *offset = is_shader_call_data ? arg_offset : nir_imm_int(b, 0);
             nir_deref_instr *replacement =
                nir_build_deref_cast(b, offset, nir_var_function_temp, deref->var->type, 0);
-            nir_def_rewrite_uses(&deref->def, &replacement->def);
-            nir_instr_remove(&deref->instr);
+            nir_def_replace(&deref->def, &replacement->def);
          }
       }
    }
 
    if (progress)
-      nir_metadata_preserve(impl, nir_metadata_block_index | nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    else
       nir_metadata_preserve(impl, nir_metadata_all);
 
@@ -189,7 +188,7 @@ lvp_compile_ray_tracing_stages(struct lvp_pipeline *pipeline,
       NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_function_temp, nir_address_format_32bit_offset);
 
       NIR_PASS(_, nir, nir_shader_intrinsics_pass, lvp_move_ray_tracing_intrinsic,
-               nir_metadata_block_index | nir_metadata_dominance, NULL);
+               nir_metadata_control_flow, NULL);
 
       pipeline->rt.stages[i] = lvp_create_pipeline_nir(nir);
       if (!pipeline->rt.stages[i]) {
@@ -542,8 +541,7 @@ lvp_lower_isec_intrinsic(nir_builder *b, nir_intrinsic_instr *instr, void *data)
    }
    nir_pop_if(b, NULL);
 
-   nir_def_rewrite_uses(&instr->def, nir_load_var(b, commit));
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, nir_load_var(b, commit));
 
    return true;
 }
@@ -610,9 +608,7 @@ lvp_handle_aabb_intersection(nir_builder *b, struct lvp_leaf_intersection *inter
       nir_store_var(b, state->sbt_index, sbt_index, 0x1);
       nir_store_var(b, state->traversal.hit, nir_imm_true(b), 0x1);
 
-      nir_push_if(b, nir_load_var(b, state->terminate));
-      nir_jump(b, nir_jump_break);
-      nir_pop_if(b, NULL);
+      nir_break_if(b, nir_load_var(b, state->terminate));
    }
    nir_push_else(b, NULL);
    {
@@ -688,9 +684,7 @@ lvp_handle_triangle_intersection(nir_builder *b,
       nir_store_var(b, state->sbt_index, sbt_index, 0x1);
       nir_store_var(b, state->traversal.hit, nir_imm_true(b), 0x1);
 
-      nir_push_if(b, nir_load_var(b, state->terminate));
-      nir_jump(b, nir_jump_break);
-      nir_pop_if(b, NULL);
+      nir_break_if(b, nir_load_var(b, state->terminate));
    }
    nir_push_else(b, NULL);
    {
@@ -1026,8 +1020,7 @@ lvp_lower_ray_tracing_stack_base(nir_builder *b, nir_intrinsic_instr *instr, voi
 
    b->cursor = nir_after_instr(&instr->instr);
 
-   nir_def_rewrite_uses(&instr->def, nir_imm_int(b, b->shader->scratch_size));
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, nir_imm_int(b, b->shader->scratch_size));
 
    return true;
 }
@@ -1088,7 +1081,9 @@ lvp_compile_ray_tracing_pipeline(struct lvp_pipeline *pipeline,
    nir_shader_instructions_pass(b->shader, lvp_lower_ray_tracing_instr, nir_metadata_none, &compiler);
 
    NIR_PASS(_, b->shader, nir_lower_returns);
-   NIR_PASS(_, b->shader, nir_lower_compute_system_values, NULL);
+
+   const struct nir_lower_compute_system_values_options compute_system_values = {0};
+   NIR_PASS(_, b->shader, nir_lower_compute_system_values, &compute_system_values);
    NIR_PASS(_, b->shader, nir_lower_global_vars_to_local);
    NIR_PASS(_, b->shader, nir_lower_vars_to_ssa);
 
@@ -1100,7 +1095,7 @@ lvp_compile_ray_tracing_pipeline(struct lvp_pipeline *pipeline,
             nir_address_format_32bit_offset);
 
    NIR_PASS(_, b->shader, nir_shader_intrinsics_pass, lvp_lower_ray_tracing_stack_base,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
 
    /* We can not support dynamic stack sizes, assume the worst. */
    b->shader->scratch_size +=

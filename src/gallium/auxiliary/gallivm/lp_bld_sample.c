@@ -127,6 +127,9 @@ lp_sampler_static_texture_state(struct lp_static_texture_state *state,
    state->pot_height = util_is_power_of_two_or_zero(texture->height0);
    state->pot_depth = util_is_power_of_two_or_zero(texture->depth0);
    state->level_zero_only = !view->u.tex.last_level;
+   state->tiled = !!(texture->flags & PIPE_RESOURCE_FLAG_SPARSE);
+   if (state->tiled)
+      state->tiled_samples = texture->nr_samples;
 
    /*
     * the layer / element / level parameters are all either dynamic
@@ -167,6 +170,9 @@ lp_sampler_static_texture_state_image(struct lp_static_texture_state *state,
    state->pot_height = util_is_power_of_two_or_zero(resource->height0);
    state->pot_depth = util_is_power_of_two_or_zero(resource->depth0);
    state->level_zero_only = view->u.tex.level == 0;
+   state->tiled = !!(resource->flags & PIPE_RESOURCE_FLAG_SPARSE);
+   if (state->tiled)
+      state->tiled_samples = resource->nr_samples;
 
    /*
     * the layer / element / level parameters are all either dynamic
@@ -2189,6 +2195,122 @@ lp_build_sample_offset(struct lp_build_context *bld,
                                      1, /* pixel blocks are always 2D */
                                      z, z_stride,
                                      &z_offset, &k);
+      offset = lp_build_add(bld, offset, z_offset);
+   }
+
+   *out_offset = offset;
+}
+
+
+
+void
+lp_build_tiled_sample_offset(struct lp_build_context *bld,
+                             enum pipe_format format,
+                             const struct lp_static_texture_state *static_texture_state,
+                             LLVMValueRef x,
+                             LLVMValueRef y,
+                             LLVMValueRef z,
+                             LLVMValueRef width,
+                             LLVMValueRef height,
+                             LLVMValueRef z_stride,
+                             LLVMValueRef *out_offset,
+                             LLVMValueRef *out_i,
+                             LLVMValueRef *out_j)
+{
+   struct gallivm_state *gallivm = bld->gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+
+   assert(static_texture_state->tiled);
+
+   uint32_t dimensions = 1;
+   switch (static_texture_state->target) {
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_2D_ARRAY:
+      dimensions = 2;
+      break;
+   case PIPE_TEXTURE_3D:
+      dimensions = 3;
+      break;
+   default:
+      break;
+   }
+
+   uint32_t block_size[3] = {
+      util_format_get_blockwidth(format),
+      util_format_get_blockheight(format),
+      util_format_get_blockdepth(format),
+   };
+
+   uint32_t sparse_tile_size[3] = {
+      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 0) * block_size[0],
+      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 1) * block_size[1],
+      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 2) * block_size[2],
+   };
+
+   LLVMValueRef sparse_tile_size_log2[3] = {
+      lp_build_const_vec(gallivm, bld->type, util_logbase2(sparse_tile_size[0])),
+      lp_build_const_vec(gallivm, bld->type, util_logbase2(sparse_tile_size[1])),
+      lp_build_const_vec(gallivm, bld->type, util_logbase2(sparse_tile_size[2])),
+   };
+
+   LLVMValueRef tile_index = LLVMBuildLShr(builder, x, sparse_tile_size_log2[0], "");
+
+   if (y && dimensions > 1) {
+      LLVMValueRef x_tile_count = lp_build_add(bld, width, lp_build_const_vec(gallivm, bld->type, sparse_tile_size[0] - 1));
+      x_tile_count = LLVMBuildLShr(builder, x_tile_count, sparse_tile_size_log2[0], "");
+      LLVMValueRef y_tile = LLVMBuildLShr(builder, y, sparse_tile_size_log2[1], "");
+      tile_index = lp_build_add(bld, tile_index, lp_build_mul(bld, y_tile, x_tile_count));
+
+      if (z && dimensions > 2) {
+         LLVMValueRef y_tile_count = lp_build_add(bld, height, lp_build_const_vec(gallivm, bld->type, sparse_tile_size[1] - 1));
+         y_tile_count = LLVMBuildLShr(builder, y_tile_count, sparse_tile_size_log2[1], "");
+         LLVMValueRef z_tile = LLVMBuildLShr(builder, z, sparse_tile_size_log2[2], "");
+         tile_index = lp_build_add(bld, tile_index, lp_build_mul(bld, z_tile, lp_build_mul(bld, x_tile_count, y_tile_count)));
+      }
+   }
+
+   LLVMValueRef offset = LLVMBuildShl(builder, tile_index, lp_build_const_vec(gallivm, bld->type, 16), "");
+
+   LLVMValueRef sparse_tile_masks[3] = {
+      lp_build_const_vec(gallivm, bld->type, sparse_tile_size[0] - 1),
+      lp_build_const_vec(gallivm, bld->type, sparse_tile_size[1] - 1),
+      lp_build_const_vec(gallivm, bld->type, sparse_tile_size[2] - 1),
+   };
+
+   x = LLVMBuildAnd(builder, x, sparse_tile_masks[0], "");
+   LLVMValueRef x_stride = lp_build_const_vec(gallivm, bld->type, util_format_get_blocksize(format));
+
+   LLVMValueRef x_offset;
+   lp_build_sample_partial_offset(bld, block_size[0],
+                                  x, x_stride, &x_offset, out_i);
+   offset = lp_build_add(bld, offset, x_offset);
+
+   if (y && dimensions > 1) {
+      y = LLVMBuildAnd(builder, y, sparse_tile_masks[1], "");
+      LLVMValueRef y_stride = lp_build_const_vec(gallivm, bld->type, util_format_get_blocksize(format) *
+                                                 sparse_tile_size[0] / block_size[0]);
+
+      LLVMValueRef y_offset;
+      lp_build_sample_partial_offset(bld, block_size[1],
+                                     y, y_stride, &y_offset, out_j);
+      offset = lp_build_add(bld, offset, y_offset);
+   } else {
+      *out_j = bld->zero;
+   }
+
+   if (z && (z_stride || dimensions > 2)) {
+      if (dimensions > 2) {
+         z = LLVMBuildAnd(builder, z, sparse_tile_masks[2], "");
+         z_stride = lp_build_const_vec(gallivm, bld->type, util_format_get_blocksize(format) *
+                                       sparse_tile_size[0] / block_size[0] *
+                                       sparse_tile_size[1] / block_size[1]);
+      }
+
+      LLVMValueRef z_offset;
+      LLVMValueRef k;
+      lp_build_sample_partial_offset(bld, 1, z, z_stride, &z_offset, &k);
       offset = lp_build_add(bld, offset, z_offset);
    }
 

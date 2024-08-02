@@ -970,37 +970,7 @@ _mesa_get_color_read_type(struct gl_context *ctx,
    }
    else {
       const mesa_format format = fb->_ColorReadBuffer->Format;
-      GLenum data_type;
-      GLuint comps;
-
-      _mesa_uncompressed_format_to_type_and_comps(format, &data_type,
-                                                  &comps);
-      if (_mesa_is_gles(ctx)) {
-         /* GLES allows only a limited set of format/type combinations for
-            reading, namely the ones specified in table 8.2 of the GLES 3.2
-            spec. In particular *_REV types are not allowed.  The
-            EXT_read_format_bgra extension does add some *_REV types, but
-            only in conjunction with BGRA formats, and we return BGRA 
-            from _mesa_get_color_read_format for very few cases. Work
-            around that here.
-            Note that EXT_texture_type_2_10_10_10_REV does add support
-            for that texture type and RGBA, so exclude that from our test.
-         */
-         GLenum data_format = _mesa_get_color_read_format(ctx, fb, caller);
-         if (data_format == GL_RGBA) {
-            switch (data_type) {
-            case GL_UNSIGNED_SHORT_4_4_4_4_REV:
-               data_type = GL_UNSIGNED_SHORT_4_4_4_4;
-               break;
-            case GL_UNSIGNED_SHORT_1_5_5_5_REV:
-               data_type = GL_UNSIGNED_SHORT_5_5_5_1;
-               break;
-            default:
-               break;
-            }
-         }
-      }
-      return data_type;
+      return _mesa_uncompressed_format_to_type(format);
    }
 }
 /**

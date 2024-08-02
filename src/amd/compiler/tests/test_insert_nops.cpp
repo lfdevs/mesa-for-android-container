@@ -40,6 +40,26 @@ create_mimg(bool nsa, unsigned addrs, unsigned instr_dwords)
    bld.insert(std::move(mimg));
 }
 
+void
+create_bvh()
+{
+   aco_ptr<Instruction> instr{
+      create_instruction(aco_opcode::image_bvh64_intersect_ray, Format::MIMG, 8, 1)};
+   instr->definitions[0] = Definition(PhysReg(256), v4);
+   instr->operands[0] = Operand(PhysReg(0), s4);
+   instr->operands[1] = Operand(s4);
+   instr->operands[2] = Operand(v1);
+   instr->operands[3] = Operand(PhysReg(256 + 0), v2); /* node */
+   instr->operands[4] = Operand(PhysReg(256 + 2), v1); /* tmax */
+   instr->operands[5] = Operand(PhysReg(256 + 3), v3); /* origin */
+   instr->operands[6] = Operand(PhysReg(256 + 6), v3); /* dir */
+   instr->operands[7] = Operand(PhysReg(256 + 9), v3); /* inv dir */
+   instr->mimg().dmask = 0xf;
+   instr->mimg().unrm = true;
+   instr->mimg().r128 = true;
+   bld.insert(std::move(instr));
+}
+
 BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    if (!setup_cs(NULL, GFX10))
       return;
@@ -299,277 +319,395 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
 END_TEST
 
 BEGIN_TEST(insert_nops.lds_direct_valu)
-   if (!setup_cs(NULL, GFX11))
-      return;
+   for (amd_gfx_level gfx : {GFX11, GFX12}) {
+      if (!setup_cs(NULL, gfx))
+         continue;
 
-   /* WaW */
-   //>> p_unit_test 0
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaW */
+      //>> p_unit_test 0
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* WaR */
-   //! p_unit_test 1
-   //! v1: %0:v[1] = v_mov_b32 %0:v[0]
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaR */
+      //! p_unit_test 1
+      //! v1: %0:v[1] = v_mov_b32 %0:v[0]
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* No hazard. */
-   //! p_unit_test 2
-   //! v1: %0:v[1] = v_mov_b32 0
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand::zero());
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* No hazard. */
+      //! p_unit_test 2
+      //! v1: %0:v[1] = v_mov_b32 0
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand::zero());
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* multiples hazards, nearest should be considered */
-   //! p_unit_test 3
-   //! v1: %0:v[1] = v_mov_b32 %0:v[0]
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* multiples hazards, nearest should be considered */
+      //! p_unit_test 3
+      //! v1: %0:v[1] = v_mov_b32 %0:v[0]
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* independent VALU increase wait_vdst */
-   //! p_unit_test 4
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v_nop
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:1
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
-
-   //! p_unit_test 5
-   //! v1: %0:v[0] = v_mov_b32 0
-   //; for i in range(10): insert_pattern('v_nop')
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:10
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   for (unsigned i = 0; i < 10; i++)
+      /* independent VALU increase wait_vdst */
+      //! p_unit_test 4
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v_nop
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:1
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
       bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 6
-   //! v1: %0:v[0] = v_mov_b32 0
-   //; for i in range(20): insert_pattern('v_nop')
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   for (unsigned i = 0; i < 20; i++)
+      //! p_unit_test 5
+      //! v1: %0:v[0] = v_mov_b32 0
+      //; for i in range(10): insert_pattern('v_nop')
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:10
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      for (unsigned i = 0; i < 10; i++)
+         bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+      //! p_unit_test 6
+      //! v1: %0:v[0] = v_mov_b32 0
+      //; for i in range(20): insert_pattern('v_nop')
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      for (unsigned i = 0; i < 20; i++)
+         bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+      /* transcendental requires wait_vdst=0 */
+      //! p_unit_test 7
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v_nop
+      //! v1: %0:v[1] = v_sqrt_f32 %0:v[1]
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
       bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* transcendental requires wait_vdst=0 */
-   //! p_unit_test 7
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v_nop
-   //! v1: %0:v[1] = v_sqrt_f32 %0:v[1]
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.vop1(aco_opcode::v_nop);
-   bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      //! p_unit_test 8
+      //! v1: %0:v[0] = v_sqrt_f32 %0:v[0]
+      //! v_nop
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+      bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+      bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 8
-   //! v1: %0:v[0] = v_sqrt_f32 %0:v[0]
-   //! v_nop
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
-   bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
-   bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* transcendental is fine if it's before the instruction */
+      //! p_unit_test 9
+      //! v1: %0:v[1] = v_sqrt_f32 %0:v[1]
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v_nop
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:1
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+      bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* transcendental is fine if it's before the instruction */
-   //! p_unit_test 9
-   //! v1: %0:v[1] = v_sqrt_f32 %0:v[1]
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v_nop
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:1
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
-   bld.vop1(aco_opcode::v_sqrt_f32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* non-VALU does not increase wait_vdst */
+      //! p_unit_test 10
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! s1: %0:m0 = s_mov_b32 0
+      //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* non-VALU does not increase wait_vdst */
-   //! p_unit_test 10
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! s1: %0:m0 = s_mov_b32 0
-   //! v1: %0:v[0] = lds_direct_load %0:m0 wait_vdst:0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* consider instructions which wait on vdst */
+      //! p_unit_test 11
+      //! v1: %0:v[0] = v_mov_b32 0
+      //! v_nop
+      //! s_waitcnt_depctr va_vdst(0)
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
+      bld.vop1(aco_opcode::v_nop);
+      bld.sopp(aco_opcode::s_waitcnt_depctr, 0x0fff);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* consider instructions which wait on vdst */
-   //! p_unit_test 11
-   //! v1: %0:v[0] = v_mov_b32 0
-   //! v_nop
-   //! s_waitcnt_depctr va_vdst(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
-   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand::zero());
-   bld.vop1(aco_opcode::v_nop);
-   bld.sopp(aco_opcode::s_waitcnt_depctr, 0x0fff);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
-
-   finish_insert_nops_test();
+      finish_insert_nops_test();
+   }
 END_TEST
 
 BEGIN_TEST(insert_nops.lds_direct_vmem)
-   if (!setup_cs(NULL, GFX11))
-      return;
+   for (amd_gfx_level gfx : {GFX11, GFX12}) {
+      if (!setup_cs(NULL, gfx))
+         continue;
 
-   /* WaR: VMEM */
-   //>> p_unit_test 0
-   //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
-   create_mubuf(0, PhysReg(257));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaR: VMEM */
+      //>> p_unit_test 0
+      //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+      create_mubuf(0, PhysReg(257));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* WaW: VMEM */
-   //! p_unit_test 1
-   //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
-   create_mubuf(0, PhysReg(256), PhysReg(257));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaW: VMEM */
+      //! p_unit_test 1
+      //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+      create_mubuf(0, PhysReg(256), PhysReg(257));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* no hazard: VMEM */
-   //! p_unit_test 2
-   //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
-   create_mubuf(0, PhysReg(257), PhysReg(257));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* no hazard: VMEM */
+      //! p_unit_test 2
+      //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+      create_mubuf(0, PhysReg(257), PhysReg(257));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* no hazard: VMEM with VALU in-between */
-   //! p_unit_test 3
-   //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
-   //! v_nop
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
-   create_mubuf(0, PhysReg(257));
-   bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* no hazard: VMEM with VALU in-between */
+      //! p_unit_test 3
+      //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
+      //! v_nop
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+      create_mubuf(0, PhysReg(257));
+      bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* WaR: LDS */
-   //! p_unit_test 4
-   //! v1: %0:v[1] = ds_read_b32 %0:v[0]
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaR: LDS */
+      //! p_unit_test 4
+      //! v1: %0:v[1] = ds_read_b32 %0:v[0]
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* WaW: LDS */
-   //! p_unit_test 5
-   //! v1: %0:v[0] = ds_read_b32 %0:v[1]
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(257), v1));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* WaW: LDS */
+      //! p_unit_test 5
+      //! v1: %0:v[0] = ds_read_b32 %0:v[1]
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(257), v1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* no hazard: LDS */
-   //! p_unit_test 6
-   //! v1: %0:v[1] = ds_read_b32 %0:v[1]
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* no hazard: LDS */
+      //! p_unit_test 6
+      //! v1: %0:v[1] = ds_read_b32 %0:v[1]
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(257), v1));
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* no hazard: LDS with VALU in-between */
-   //! p_unit_test 7
-   //! v1: %0:v[1] = ds_read_b32 %0:v[0]
-   //! v_nop
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.vop1(aco_opcode::v_nop);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* no hazard: LDS with VALU in-between */
+      //! p_unit_test 7
+      //! v1: %0:v[1] = ds_read_b32 %0:v[0]
+      //! v_nop
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      bld.vop1(aco_opcode::v_nop);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* no hazard: VMEM/LDS with the correct waitcnt in-between */
-   //! p_unit_test 8
-   //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
-   //! s_waitcnt vmcnt(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
-   create_mubuf(0, PhysReg(257));
-   bld.sopp(aco_opcode::s_waitcnt, 0x3ff);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* no hazard: VMEM/LDS with the correct waitcnt in-between */
+      //! p_unit_test 8
+      //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
+      //~gfx11! s_waitcnt vmcnt(0)
+      //~gfx12! s_wait_loadcnt imm:0
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+      create_mubuf(0, PhysReg(257));
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_loadcnt, 0);
+      else
+         bld.sopp(aco_opcode::s_waitcnt, 0x3ff);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 9
-   //! buffer_store_dword %0:s[0-3], %0:v[0], 0, %0:v[0] offen
-   //! s_waitcnt_vscnt %0:null imm:0
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
-   create_mubuf_store();
-   bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      //! p_unit_test 9
+      //! buffer_store_dword %0:s[0-3], %0:v[0], 0, %0:v[0] offen
+      //~gfx11! s_waitcnt_vscnt %0:null imm:0
+      //~gfx12! s_wait_storecnt imm:0
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+      create_mubuf_store();
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_storecnt, 0);
+      else
+         bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 10
-   //! v1: %0:v[1] = ds_read_b32 %0:v[0]
-   //! s_waitcnt lgkmcnt(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.sopp(aco_opcode::s_waitcnt, 0xfc0f);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      //! p_unit_test 10
+      //! v1: %0:v[1] = ds_read_b32 %0:v[0]
+      //~gfx11! s_waitcnt lgkmcnt(0)
+      //~gfx12! s_wait_dscnt imm:0
+      //! v1: %0:v[0] = lds_direct_load %0:m0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_dscnt, 0);
+      else
+         bld.sopp(aco_opcode::s_waitcnt, 0xfc0f);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   /* VMEM/LDS with the wrong waitcnt in-between */
-   //! p_unit_test 11
-   //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
-   //! s_waitcnt_vscnt %0:null imm:0
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
-   create_mubuf(0, PhysReg(257));
-   bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      if (gfx >= GFX12) {
+         //~gfx12! p_unit_test 11
+         //~gfx12! v1: %0:v[1] = image_load %0:s[0-7], s4: undef, v1: undef, %0:v[0-1] 2d
+         //~gfx12! s_wait_loadcnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+         Instruction* instr =
+            bld.mimg(aco_opcode::image_load, Definition(PhysReg(257), v1), Operand(PhysReg(0), s8),
+                     Operand(s4), Operand(v1), Operand(PhysReg(256), v2))
+               .instr;
+         instr->mimg().dmask = 0x1;
+         instr->mimg().dim = ac_image_2d;
+         bld.sopp(aco_opcode::s_wait_loadcnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 12
-   //! buffer_store_dword %0:s[0-3], %0:v[0], 0, %0:v[0] offen
-   //! s_waitcnt lgkmcnt(0)
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
-   create_mubuf_store();
-   bld.sopp(aco_opcode::s_waitcnt, 0xfc0f);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+         //~gfx12! p_unit_test 12
+         //~gfx12! v1: %0:v[1] = image_sample %0:s[0-7], %0:s[0-3], v1: undef, %0:v[0-1] 2d
+         //~gfx12! s_wait_samplecnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
+         instr = bld.mimg(aco_opcode::image_sample, Definition(PhysReg(257), v1),
+                          Operand(PhysReg(0), s8), Operand(PhysReg(0), s4), Operand(v1),
+                          Operand(PhysReg(256), v2))
+                    .instr;
+         instr->mimg().dmask = 0x1;
+         instr->mimg().dim = ac_image_2d;
+         bld.sopp(aco_opcode::s_wait_samplecnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   //! p_unit_test 13
-   //! v1: %0:v[1] = ds_read_b32 %0:v[0]
-   //! s_waitcnt vmcnt(0)
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(13));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
-   bld.sopp(aco_opcode::s_waitcnt, 0x3ff);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+         //~gfx12! p_unit_test 13
+         //~gfx12! v4: %0:v[0-3] = image_bvh64_intersect_ray %0:s[0-3], s4: undef, v1: undef, %0:v[0-1], %0:v[2], %0:v[3-5], %0:v[6-8], %0:v[9-11] 1d unrm r128
+         //~gfx12! s_wait_bvhcnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(13));
+         create_bvh();
+         bld.sopp(aco_opcode::s_wait_bvhcnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      }
 
-   //! p_unit_test 14
-   //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
-   //! s_waitcnt_vscnt %0:null imm:0
-   //! s_waitcnt_depctr vm_vsrc(0)
-   //! v1: %0:v[0] = lds_direct_load %0:m0
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(14));
-   create_mubuf(0, PhysReg(256), PhysReg(257));
-   bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
-   bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      /* VMEM/LDS with the wrong waitcnt in-between */
+      //! p_unit_test 14
+      //! v1: %0:v[1] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offen
+      //~gfx11! s_waitcnt_vscnt %0:null imm:0
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! s_wait_storecnt imm:0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(14));
+      create_mubuf(0, PhysReg(257));
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_storecnt, 0);
+      else
+         bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
 
-   finish_insert_nops_test();
+      //! p_unit_test 15
+      //! buffer_store_dword %0:s[0-3], %0:v[0], 0, %0:v[0] offen
+      //~gfx11! s_waitcnt lgkmcnt(0)
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! s_wait_dscnt imm:0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(15));
+      create_mubuf_store();
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_dscnt, 0);
+      else
+         bld.sopp(aco_opcode::s_waitcnt, 0xfc0f);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+      //! p_unit_test 16
+      //! v1: %0:v[1] = ds_read_b32 %0:v[0]
+      //~gfx11! s_waitcnt vmcnt(0)
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! s_wait_loadcnt imm:0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(16));
+      bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(257), v1), Operand(PhysReg(256), v1));
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_loadcnt, 0);
+      else
+         bld.sopp(aco_opcode::s_waitcnt, 0x3ff);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+      //! p_unit_test 17
+      //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[1], 0 offen
+      //~gfx11! s_waitcnt_vscnt %0:null imm:0
+      //~gfx11! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx11! v1: %0:v[0] = lds_direct_load %0:m0
+      //~gfx12! s_wait_storecnt imm:0
+      //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(17));
+      create_mubuf(0, PhysReg(256), PhysReg(257));
+      if (gfx >= GFX12)
+         bld.sopp(aco_opcode::s_wait_storecnt, 0);
+      else
+         bld.sopk(aco_opcode::s_waitcnt_vscnt, Operand(sgpr_null, s1), 0);
+      bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+      if (gfx >= GFX12) {
+         //~gfx12! p_unit_test 18
+         //~gfx12! v1: %0:v[1] = image_load %0:s[0-7], s4: undef, v1: undef, %0:v[0-1] 2d
+         //~gfx12! s_wait_samplecnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(18));
+         Instruction* instr =
+            bld.mimg(aco_opcode::image_load, Definition(PhysReg(257), v1), Operand(PhysReg(0), s8),
+                     Operand(s4), Operand(v1), Operand(PhysReg(256), v2))
+               .instr;
+         instr->mimg().dmask = 0x1;
+         instr->mimg().dim = ac_image_2d;
+         bld.sopp(aco_opcode::s_wait_samplecnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+         //~gfx12! p_unit_test 19
+         //~gfx12! v1: %0:v[1] = image_sample %0:s[0-7], %0:s[0-3], v1: undef, %0:v[0-1] 2d
+         //~gfx12! s_wait_loadcnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(19));
+         instr = bld.mimg(aco_opcode::image_sample, Definition(PhysReg(257), v1),
+                          Operand(PhysReg(0), s8), Operand(PhysReg(0), s4), Operand(v1),
+                          Operand(PhysReg(256), v2))
+                    .instr;
+         instr->mimg().dmask = 0x1;
+         instr->mimg().dim = ac_image_2d;
+         bld.sopp(aco_opcode::s_wait_loadcnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+
+         //~gfx12! p_unit_test 20
+         //~gfx12! v4: %0:v[0-3] = image_bvh64_intersect_ray %0:s[0-3], s4: undef, v1: undef, %0:v[0-1], %0:v[2], %0:v[3-5], %0:v[6-8], %0:v[9-11] 1d unrm r128
+         //~gfx12! s_wait_loadcnt imm:0
+         //~gfx12! v1: %0:v[0] = lds_direct_load %0:m0 wait_vsrc:0
+         bld.pseudo(aco_opcode::p_unit_test, Operand::c32(20));
+         create_bvh();
+         bld.sopp(aco_opcode::s_wait_loadcnt, 0);
+         bld.ldsdir(aco_opcode::lds_direct_load, Definition(PhysReg(256), v1), Operand(m0, s1));
+      }
+
+      finish_insert_nops_test();
+   }
 END_TEST
 
 BEGIN_TEST(insert_nops.valu_trans_use)
@@ -991,6 +1129,79 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    finish_insert_nops_test();
 END_TEST
 
+BEGIN_TEST(insert_nops.wmma_raw)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   /* Basic case. */
+   //>> p_unit_test 0
+   //! v4: %_:v[20-23] = v_wmma_f16_16x16x16_f16 %_:v[0-7].xx, %_:v[8-15].xx, %_:v[20-23].xx
+   //! v_nop
+   //! v4: %_:v[48-51] = v_wmma_f16_16x16x16_f16 %_:v[24-31].xx, %_:v[16-23].xx, %_:v[48-51].xx
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   Operand A(PhysReg(256 + 0), v8);
+   Operand B(PhysReg(256 + 8), v8);
+   Operand C(PhysReg(256 + 20), v4);
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+   A.setFixed(PhysReg(256 + 24));
+   B.setFixed(PhysReg(256 + 16));
+   C.setFixed(PhysReg(256 + 48));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+
+   /* Mitigation. */
+   //! p_unit_test 1
+   //! v4: %_:v[20-23] = v_wmma_f16_16x16x16_f16 %_:v[0-7].xx, %_:v[8-15].xx, %_:v[20-23].xx
+   //! v1: %_:v[56] = v_rcp_f32 0
+   //! v4: %_:v[48-51] = v_wmma_f16_16x16x16_f16 %_:v[24-31].xx, %_:v[16-23].xx, %_:v[48-51].xx
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   A.setFixed(PhysReg(256 + 0));
+   B.setFixed(PhysReg(256 + 8));
+   C.setFixed(PhysReg(256 + 20));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+   bld.vop1(aco_opcode::v_rcp_f32, Definition(PhysReg(256 + 56), v1), Operand::zero());
+   A.setFixed(PhysReg(256 + 24));
+   B.setFixed(PhysReg(256 + 16));
+   C.setFixed(PhysReg(256 + 48));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+
+   /* No hazard. */
+   //>> p_unit_test 2
+   //! v4: %_:v[20-23] = v_wmma_f16_16x16x16_f16 %_:v[0-7].xx, %_:v[8-15].xx, %_:v[20-23].xx
+   //! v4: %_:v[48-51] = v_wmma_f16_16x16x16_f16 %_:v[24-31].xx, %_:v[32-39].xx, %_:v[48-51].xx
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   A.setFixed(PhysReg(256 + 0));
+   B.setFixed(PhysReg(256 + 8));
+   C.setFixed(PhysReg(256 + 20));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+   A.setFixed(PhysReg(256 + 24));
+   B.setFixed(PhysReg(256 + 32));
+   C.setFixed(PhysReg(256 + 48));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+
+   //>> p_unit_test 3
+   //! v4: %_:v[20-23] = v_wmma_f16_16x16x16_f16 %_:v[0-7].xx, %_:v[8-15].xx, %_:v[20-23].xx
+   //! v4: %_:v[20-23] = v_wmma_f16_16x16x16_f16 %_:v[24-31].xx, %_:v[32-39].xx, %_:v[20-23].xx
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   A.setFixed(PhysReg(256 + 0));
+   B.setFixed(PhysReg(256 + 8));
+   C.setFixed(PhysReg(256 + 20));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+   A.setFixed(PhysReg(256 + 24));
+   B.setFixed(PhysReg(256 + 32));
+   C.setFixed(PhysReg(256 + 20));
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+
+   finish_insert_nops_test();
+END_TEST
+
 BEGIN_TEST(insert_nops.setpc_gfx6)
    if (!setup_cs(NULL, GFX6))
       return;
@@ -1309,5 +1520,59 @@ BEGIN_TEST(insert_nops.setpc_gfx11)
    bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
    bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
 
+   /* WMMA Hazards */
+   //! p_unit_test 7
+   //! v4: %0:v[20-23] = v_wmma_f16_16x16x16_f16 %0:v[0-7].xx, %0:v[8-15].xx, %0:v[20-23].xx
+   //! v_nop
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+   Operand A(PhysReg(256 + 0), v8);
+   Operand B(PhysReg(256 + 8), v8);
+   Operand C(PhysReg(256 + 20), v4);
+   bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
+             0);
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
    finish_insert_nops_test(true);
-}
+END_TEST
+
+BEGIN_TEST(insert_nops.setpc_gfx12)
+   if (!setup_cs(NULL, GFX12))
+      return;
+
+   //>> p_unit_test 0
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* LdsDirectVALUHazard */
+   //! p_unit_test 1
+   //! s2: %0:vcc = v_cmp_eq_u32 %0:v[0], 0
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.vopc_e64(aco_opcode::v_cmp_eq_u32, Definition(vcc, s2), Operand(PhysReg(256), v1),
+                Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VcmpxPermlaneHazard */
+   //! p_unit_test 2
+   //! s2: %0:exec = v_cmpx_eq_u32 0, 0
+   //! v_nop
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.vopc_e64(aco_opcode::v_cmpx_eq_u32, Definition(exec, s2), Operand::zero(), Operand::zero());
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* LdsDirectVMEMHazard */
+   //! p_unit_test 3
+   //! v1: %0:v[0] = ds_read_b32 %0:v[0]
+   //! s_waitcnt_depctr vm_vsrc(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   finish_insert_nops_test(true);
+END_TEST

@@ -240,6 +240,18 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
          }
          surf->PostSubBufferSupportedNV = val;
          break;
+      case EGL_SURFACE_COMPRESSION_EXT:
+         if (type != EGL_WINDOW_BIT) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         if (val < EGL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT ||
+             val > EGL_SURFACE_COMPRESSION_FIXED_RATE_12BPC_EXT) {
+            err = EGL_BAD_PARAMETER;
+            break;
+         }
+         surf->CompressionRate = val;
+         break;
       /* pbuffer surface attributes */
       case EGL_WIDTH:
          if (type != EGL_PBUFFER_BIT) {
@@ -408,6 +420,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
    surf->GLColorspace = EGL_GL_COLORSPACE_LINEAR_KHR;
    surf->ProtectedContent = EGL_FALSE;
    surf->PresentOpaque = EGL_FALSE;
+   surf->CompressionRate = EGL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT;
 
    surf->MipmapLevel = 0;
    surf->MultisampleResolve = EGL_MULTISAMPLE_RESOLVE_DEFAULT;
@@ -624,6 +637,9 @@ _eglQuerySurface(_EGLDisplay *disp, _EGLSurface *surface, EGLint attribute,
       if (!disp->Extensions.EXT_present_opaque)
          return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
       *value = surface->PresentOpaque;
+      break;
+   case EGL_SURFACE_COMPRESSION_EXT:
+      *value = surface->CompressionRate;
       break;
    default:
       return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");

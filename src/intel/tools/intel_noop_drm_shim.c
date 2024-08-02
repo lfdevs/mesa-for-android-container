@@ -262,7 +262,7 @@ i915_ioctl_get_param(int fd, unsigned long request, void *arg)
       *gp->value = true;
       return 0;
    case I915_PARAM_HAS_EXEC_TIMELINE_FENCES:
-      *gp->value = false;
+      *gp->value = true;
       return 0;
    case I915_PARAM_CMD_PARSER_VERSION:
       /* Most recent version in drivers/gpu/drm/i915/i915_cmd_parser.c */

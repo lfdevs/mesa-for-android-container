@@ -223,11 +223,12 @@ link_blocks_jump(struct ir3_block *pred, struct ir3_block *succ)
 
 static void
 link_blocks_branch(struct ir3_block *pred, struct ir3_block *target,
-                   struct ir3_block *fallthrough, unsigned opc,
+                   struct ir3_block *fallthrough, unsigned opc, unsigned flags,
                    struct ir3_instruction *condition)
 {
    unsigned nsrc = condition ? 1 : 0;
    struct ir3_instruction *branch = ir3_instr_create(pred, opc, 0, nsrc);
+   branch->flags |= flags;
 
    if (condition) {
       struct ir3_register *cond_dst = condition->dsts[0];
@@ -242,13 +243,14 @@ link_blocks_branch(struct ir3_block *pred, struct ir3_block *target,
 
 static struct ir3_block *
 create_if(struct ir3 *ir, struct ir3_block *before_block,
-          struct ir3_block *after_block, unsigned opc,
+          struct ir3_block *after_block, unsigned opc, unsigned flags,
           struct ir3_instruction *condition)
 {
    struct ir3_block *then_block = ir3_block_create(ir);
    list_add(&then_block->node, &before_block->node);
 
-   link_blocks_branch(before_block, then_block, after_block, opc, condition);
+   link_blocks_branch(before_block, then_block, after_block, opc, flags,
+                      condition);
    link_blocks_jump(then_block, after_block);
 
    return then_block;
@@ -263,7 +265,6 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
    case OPC_ALL_MACRO:
    case OPC_ELECT_MACRO:
    case OPC_READ_COND_MACRO:
-   case OPC_SWZ_SHARED_MACRO:
    case OPC_SCAN_MACRO:
    case OPC_SCAN_CLUSTERS_MACRO:
       break;
@@ -321,7 +322,8 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
 
       link_blocks_jump(before_block, header);
 
-      link_blocks_branch(header, exit, footer, OPC_GETONE, NULL);
+      link_blocks_branch(header, exit, footer, OPC_GETONE,
+                         IR3_INSTR_NEEDS_HELPERS, NULL);
 
       link_blocks_jump(exit, after_block);
       ir3_block_link_physical(exit, footer);
@@ -370,9 +372,10 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
 
       link_blocks_jump(before_block, body);
 
-      link_blocks_branch(body, store, after_block, OPC_GETLAST, NULL);
+      link_blocks_branch(body, store, after_block, OPC_GETLAST, 0, NULL);
 
-      link_blocks_branch(store, after_block, body, OPC_GETONE, NULL);
+      link_blocks_branch(store, after_block, body, OPC_GETONE,
+                         IR3_INSTR_NEEDS_HELPERS, NULL);
 
       struct ir3_register *reduce = instr->dsts[0];
       struct ir3_register *inclusive = instr->dsts[1];
@@ -411,20 +414,15 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
    } else {
       /* For ballot, the destination must be initialized to 0 before we do
        * the movmsk because the condition may be 0 and then the movmsk will
-       * be skipped. Because it's a shared register we have to wrap the
-       * initialization in a getone block.
+       * be skipped.
        */
       if (instr->opc == OPC_BALLOT_MACRO) {
-         struct ir3_block *then_block =
-            create_if(ir, before_block, after_block, OPC_GETONE, NULL);
-         mov_immed(instr->dsts[0], then_block, 0);
-         after_block->reconvergence_point = true;
-         before_block = after_block;
-         after_block = split_block(ir, before_block, instr);
+         mov_immed(instr->dsts[0], before_block, 0);
       }
 
       struct ir3_instruction *condition = NULL;
       unsigned branch_opc = 0;
+      unsigned branch_flags = 0;
 
       switch (instr->opc) {
       case OPC_BALLOT_MACRO:
@@ -450,16 +448,17 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
          branch_opc = OPC_BALL;
          break;
       case OPC_ELECT_MACRO:
-      case OPC_SWZ_SHARED_MACRO:
          after_block->reconvergence_point = true;
          branch_opc = OPC_GETONE;
+         branch_flags = instr->flags & IR3_INSTR_NEEDS_HELPERS;
          break;
       default:
          unreachable("bad opcode");
       }
 
       struct ir3_block *then_block =
-         create_if(ir, before_block, after_block, branch_opc, condition);
+         create_if(ir, before_block, after_block, branch_opc, branch_flags,
+                   condition);
 
       switch (instr->opc) {
       case OPC_ALL_MACRO:
@@ -487,18 +486,7 @@ lower_instr(struct ir3 *ir, struct ir3_block **block, struct ir3_instruction *in
          mov->cat1.dst_type = TYPE_U32;
          mov->cat1.src_type =
             (new_src->flags & IR3_REG_HALF) ? TYPE_U16 : TYPE_U32;
-         break;
-      }
-
-      case OPC_SWZ_SHARED_MACRO: {
-         struct ir3_instruction *swz =
-            ir3_instr_create(then_block, OPC_SWZ, 2, 2);
-         ir3_dst_create(swz, instr->dsts[0]->num, instr->dsts[0]->flags);
-         ir3_dst_create(swz, instr->dsts[1]->num, instr->dsts[1]->flags);
-         ir3_src_create(swz, instr->srcs[0]->num, instr->srcs[0]->flags);
-         ir3_src_create(swz, instr->srcs[1]->num, instr->srcs[1]->flags);
-         swz->cat1.dst_type = swz->cat1.src_type = TYPE_U32;
-         swz->repeat = 1;
+         mov->flags |= IR3_INSTR_NEEDS_HELPERS;
          break;
       }
 

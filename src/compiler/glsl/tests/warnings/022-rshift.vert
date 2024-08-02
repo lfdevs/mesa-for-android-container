@@ -21,5 +21,7 @@ void main()
   if (defined >> undefined == 0) {
     fooFloat = 10.0;
   }
+
+  gl_Position = vec4(1.0);
 }
 

@@ -29,7 +29,7 @@ struct ac_addrlib;
 struct amdgpu_gpu_info;
 struct radeon_info;
 
-#define RADEON_SURF_MAX_LEVELS 15
+#define RADEON_SURF_MAX_LEVELS 17
 
 enum radeon_surf_mode
 {
@@ -66,6 +66,7 @@ enum radeon_micro_mode
  * If this is not set, optimize for space. */
 #define RADEON_SURF_FORCE_SWIZZLE_MODE    (1ull << 28)
 #define RADEON_SURF_NO_FMASK              (1ull << 29)
+/* This disables HTILE on gfx6-11, and HiZ/HiS on gfx12, */
 #define RADEON_SURF_NO_HTILE              (1ull << 30)
 #define RADEON_SURF_FORCE_MICRO_TILE_MODE (1ull << 31)
 #define RADEON_SURF_PRT                   (1ull << 32)
@@ -75,6 +76,8 @@ enum radeon_micro_mode
  * color surface in gfx9_compute_surface(). */
 #define RADEON_SURF_NO_TEXTURE            (1ull << 34)
 #define RADEON_SURF_NO_STENCIL_ADJUST     (1ull << 35)
+#define RADEON_SURF_PREFER_4K_ALIGNMENT   (1ull << 36)
+#define RADEON_SURF_PREFER_64K_ALIGNMENT  (1ull << 37)
 
 enum radeon_enc_hevc_surface_alignment
 {
@@ -220,28 +223,38 @@ struct gfx9_meta_equation {
    } u;
 };
 
+struct gfx12_hiz_his_layout {
+   uint64_t offset;
+   uint32_t size;
+   uint16_t width_in_tiles;
+   uint16_t height_in_tiles;
+   uint8_t swizzle_mode;
+   uint8_t alignment_log2;
+};
+
 struct gfx9_surf_layout {
    uint16_t epitch;           /* gfx9 only, not on gfx10 */
    uint8_t swizzle_mode;      /* color or depth */
    bool uses_custom_pitch;    /* only used by gfx10.3+ */
+   bool gfx12_enable_dcc;     /* set AMDGPU_GEM_CREATE_GFX12_DCC if the placement is VRAM */
 
    enum gfx9_resource_type resource_type:8; /* 1D, 2D or 3D */
-   uint16_t surf_pitch;                   /* in blocks */
-   uint16_t surf_height;
+   uint32_t surf_pitch;       /* up to 64K (in blocks) */
+   uint32_t surf_height;      /* up to 64K */
 
    uint64_t surf_offset; /* 0 unless imported with an offset */
    /* The size of the 2D plane containing all mipmap levels. */
    uint64_t surf_slice_size;
    /* Mipmap level offset within the slice in bytes. Only valid for LINEAR. */
-   uint64_t offset[RADEON_SURF_MAX_LEVELS];  /* up to 16K * 16K * 16 * ~1.33 */
+   uint64_t offset[RADEON_SURF_MAX_LEVELS];  /* up to 64K * 64K * 16 * ~1.33 */
    /* Mipmap level pitch in elements. Only valid for LINEAR. */
-   uint16_t pitch[RADEON_SURF_MAX_LEVELS];
+   uint32_t pitch[RADEON_SURF_MAX_LEVELS];   /* up to 64K */
 
-   uint16_t base_mip_width;
-   uint16_t base_mip_height;
+   uint32_t base_mip_width;   /* up to 64K */
+   uint32_t base_mip_height;  /* up to 64K */
 
    /* Pitch of level in blocks, only valid for prt images. */
-   uint16_t prt_level_pitch[RADEON_SURF_MAX_LEVELS];
+   uint32_t prt_level_pitch[RADEON_SURF_MAX_LEVELS];  /* up to 64K */
    /* Offset within slice in bytes, only valid for prt images. */
    uint64_t prt_level_offset[RADEON_SURF_MAX_LEVELS]; /* up to 64K * 64K * 16 * ~1.33 */
 
@@ -261,6 +274,12 @@ struct gfx9_surf_layout {
          uint8_t dcc_block_width;
          uint8_t dcc_block_height;
          uint8_t dcc_block_depth;
+
+         /* Gfx12 DCC recompression settings used by kernel memory management.
+          * The driver sets these, not ac_compute_surface.
+          */
+         uint8_t dcc_number_type; /* CB_COLOR0_INFO.NUMBER_TYPE */
+         uint8_t dcc_data_format; /* [0:4]:CB_COLOR0_INFO.FORMAT, [5]:MM */
 
          /* Displayable DCC. This is always rb_aligned=0 and pipe_aligned=0.
           * The 3D engine doesn't support that layout except for chips with 1 RB.
@@ -292,7 +311,9 @@ struct gfx9_surf_layout {
          uint16_t stencil_epitch;   /* gfx9 only, not on gfx10 */
          uint8_t stencil_swizzle_mode;
 
-         /* For HTILE VRS. */
+         struct gfx12_hiz_his_layout hiz, his;
+
+         /* For HTILE VRS. (only Gfx103-Gfx11) */
          struct gfx9_meta_equation htile_equation;
       } zs;
    };
@@ -372,29 +393,29 @@ struct radeon_surf {
    uint16_t cmask_height; /* GFX9+ */
 
    /* All buffers combined. */
-   uint64_t meta_offset; /* DCC or HTILE */
-   uint64_t fmask_offset;
-   uint64_t cmask_offset;
-   uint64_t display_dcc_offset;
+   uint64_t meta_offset;         /* DCC (Gfx8-Gfx11) or HTILE (Gfx6-Gfx11) */
+   uint64_t fmask_offset;        /* Gfx6-Gfx10 */
+   uint64_t cmask_offset;        /* Gfx6-Gfx10 */
+   uint64_t display_dcc_offset;  /* Gfx9-Gfx11 */
    uint64_t total_size;
 
    union {
-      /* Return values for GFX8 and older.
+      /* Gfx3-8 surface info.
        *
        * Some of them can be set by the caller if certain parameters are
        * desirable. The allocator will try to obey them.
        */
       struct legacy_surf_layout legacy;
 
-      /* GFX9+ return values. */
+      /* Gfx9+ surface info. */
       struct gfx9_surf_layout gfx9;
    } u;
 };
 
 struct ac_surf_info {
-   uint32_t width;
-   uint32_t height;
-   uint32_t depth;
+   uint32_t width;      /* up to 64K */
+   uint32_t height;     /* up to 64K */
+   uint32_t depth;      /* up to 16K */
    uint8_t samples;         /* For Z/S: samples; For color: FMASK coverage samples */
    uint8_t storage_samples; /* For color: allocated samples */
    uint8_t levels;
@@ -415,8 +436,8 @@ struct ac_surf_config {
 /* Output parameters for ac_surface_compute_nbc_view */
 struct ac_surf_nbc_view {
    bool valid;
-   uint32_t width;
-   uint32_t height;
+   uint32_t width;      /* up to 64K */
+   uint32_t height;     /* up to 64K */
    uint32_t level;
    uint32_t num_levels; /* Used for max_mip in the resource descriptor */
    uint8_t tile_swizzle;
@@ -495,8 +516,6 @@ void ac_surface_print_info(FILE *out, const struct radeon_info *info,
 
 bool ac_surface_supports_dcc_image_stores(enum amd_gfx_level gfx_level,
                                           const struct radeon_surf *surf);
-unsigned ac_get_cb_number_type(enum pipe_format format);
-unsigned ac_get_cb_format(enum amd_gfx_level gfx_level, enum pipe_format format);
 
 #ifdef AC_SURFACE_INCLUDE_NIR
 nir_def *ac_nir_dcc_addr_from_coord(nir_builder *b, const struct radeon_info *info,

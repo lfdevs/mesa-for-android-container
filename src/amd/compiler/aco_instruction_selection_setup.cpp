@@ -10,6 +10,7 @@
 #include "common/sid.h"
 
 #include "nir_control_flow.h"
+#include "nir_builder.h"
 
 #include <vector>
 
@@ -299,8 +300,6 @@ init_context(isel_context* ctx, nir_shader* shader)
    ctx->program->allocateRange(impl->ssa_alloc);
    RegClass* regclasses = ctx->program->temp_rc.data() + ctx->first_temp_id;
 
-   std::unique_ptr<unsigned[]> nir_to_aco{new unsigned[impl->num_blocks]()};
-
    /* TODO: make this recursive to improve compile times */
    bool done = false;
    while (!done) {
@@ -311,57 +310,39 @@ init_context(isel_context* ctx, nir_shader* shader)
             case nir_instr_type_alu: {
                nir_alu_instr* alu_instr = nir_instr_as_alu(instr);
                RegType type = alu_instr->def.divergent ? RegType::vgpr : RegType::sgpr;
+
+               /* packed 16bit instructions have to be VGPR */
+               if (alu_instr->def.num_components == 2 &&
+                   nir_op_infos[alu_instr->op].output_size == 0)
+                  type = RegType::vgpr;
+
                switch (alu_instr->op) {
-               case nir_op_fmul:
+               case nir_op_f2i16:
+               case nir_op_f2u16:
+               case nir_op_f2i32:
+               case nir_op_f2u32:
+               case nir_op_b2i8:
+               case nir_op_b2i16:
+               case nir_op_b2i32:
+               case nir_op_b2b32:
+               case nir_op_b2f16:
+               case nir_op_b2f32:
+               case nir_op_mov: break;
                case nir_op_fmulz:
-               case nir_op_fadd:
-               case nir_op_fsub:
-               case nir_op_ffma:
                case nir_op_ffmaz:
-               case nir_op_fmax:
-               case nir_op_fmin:
-               case nir_op_fneg:
-               case nir_op_fabs:
-               case nir_op_fsat:
-               case nir_op_fsign:
-               case nir_op_frcp:
-               case nir_op_frsq:
-               case nir_op_fsqrt:
-               case nir_op_fexp2:
-               case nir_op_flog2:
-               case nir_op_ffract:
-               case nir_op_ffloor:
-               case nir_op_fceil:
-               case nir_op_ftrunc:
-               case nir_op_fround_even:
-               case nir_op_fsin_amd:
-               case nir_op_fcos_amd:
-               case nir_op_f2f16:
-               case nir_op_f2f16_rtz:
-               case nir_op_f2f16_rtne:
-               case nir_op_f2f32:
                case nir_op_f2f64:
-               case nir_op_u2f16:
-               case nir_op_u2f32:
                case nir_op_u2f64:
-               case nir_op_i2f16:
-               case nir_op_i2f32:
                case nir_op_i2f64:
-               case nir_op_pack_half_2x16_rtz_split:
-               case nir_op_pack_half_2x16_split:
                case nir_op_pack_unorm_2x16:
                case nir_op_pack_snorm_2x16:
                case nir_op_pack_uint_2x16:
                case nir_op_pack_sint_2x16:
-               case nir_op_unpack_half_2x16_split_x:
-               case nir_op_unpack_half_2x16_split_y:
                case nir_op_fddx:
                case nir_op_fddy:
                case nir_op_fddx_fine:
                case nir_op_fddy_fine:
                case nir_op_fddx_coarse:
                case nir_op_fddy_coarse:
-               case nir_op_fquantize2f16:
                case nir_op_ldexp:
                case nir_op_frexp_sig:
                case nir_op_frexp_exp:
@@ -378,35 +359,48 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_sdot_2x16_iadd:
                case nir_op_udot_2x16_uadd_sat:
                case nir_op_sdot_2x16_iadd_sat: type = RegType::vgpr; break;
-               case nir_op_f2i16:
-               case nir_op_f2u16:
-               case nir_op_f2i32:
-               case nir_op_f2u32:
-               case nir_op_b2i8:
-               case nir_op_b2i16:
-               case nir_op_b2i32:
-               case nir_op_b2b32:
-               case nir_op_b2f16:
-               case nir_op_b2f32:
-               case nir_op_mov: break;
-               case nir_op_iabs:
-               case nir_op_iadd:
-               case nir_op_iadd_sat:
-               case nir_op_uadd_sat:
-               case nir_op_isub:
-               case nir_op_isub_sat:
-               case nir_op_usub_sat:
-               case nir_op_imul:
-               case nir_op_imin:
-               case nir_op_imax:
-               case nir_op_umin:
-               case nir_op_umax:
-               case nir_op_ishl:
-               case nir_op_ishr:
-               case nir_op_ushr:
-                  /* packed 16bit instructions have to be VGPR */
-                  type = alu_instr->def.num_components == 2 ? RegType::vgpr : type;
+               case nir_op_fmul:
+               case nir_op_ffma:
+               case nir_op_fadd:
+               case nir_op_fsub:
+               case nir_op_fmax:
+               case nir_op_fmin:
+               case nir_op_fsat:
+               case nir_op_fneg:
+               case nir_op_fabs:
+               case nir_op_fsign:
+               case nir_op_i2f16:
+               case nir_op_i2f32:
+               case nir_op_u2f16:
+               case nir_op_u2f32:
+               case nir_op_f2f16:
+               case nir_op_f2f16_rtz:
+               case nir_op_f2f16_rtne:
+               case nir_op_f2f32:
+               case nir_op_fquantize2f16:
+               case nir_op_ffract:
+               case nir_op_ffloor:
+               case nir_op_fceil:
+               case nir_op_ftrunc:
+               case nir_op_fround_even:
+               case nir_op_frcp:
+               case nir_op_frsq:
+               case nir_op_fsqrt:
+               case nir_op_fexp2:
+               case nir_op_flog2:
+               case nir_op_fsin_amd:
+               case nir_op_fcos_amd:
+               case nir_op_pack_half_2x16_rtz_split:
+               case nir_op_pack_half_2x16_split:
+               case nir_op_unpack_half_2x16_split_x:
+               case nir_op_unpack_half_2x16_split_y: {
+                  if (ctx->program->gfx_level < GFX11_5 ||
+                      alu_instr->src[0].src.ssa->bit_size > 32) {
+                     type = RegType::vgpr;
+                     break;
+                  }
                   FALLTHROUGH;
+               }
                default:
                   for (unsigned i = 0; i < nir_op_infos[alu_instr->op].num_inputs; i++) {
                      if (regclasses[alu_instr->src[i].src.ssa->index].type() == RegType::vgpr)
@@ -443,7 +437,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_push_constant:
                case nir_intrinsic_load_workgroup_id:
                case nir_intrinsic_load_num_workgroups:
-               case nir_intrinsic_load_ray_launch_size:
                case nir_intrinsic_load_sbt_base_amd:
                case nir_intrinsic_load_subgroup_id:
                case nir_intrinsic_load_num_subgroups:
@@ -482,11 +475,11 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_local_invocation_id:
                case nir_intrinsic_load_local_invocation_index:
                case nir_intrinsic_load_subgroup_invocation:
-               case nir_intrinsic_load_ray_launch_id:
                case nir_intrinsic_load_tess_coord:
                case nir_intrinsic_write_invocation_amd:
                case nir_intrinsic_mbcnt_amd:
                case nir_intrinsic_lane_permute_16_amd:
+               case nir_intrinsic_dpp16_shift_amd:
                case nir_intrinsic_load_instance_id:
                case nir_intrinsic_ssbo_atomic:
                case nir_intrinsic_ssbo_atomic_swap:
@@ -506,7 +499,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_gds_atomic_add_amd:
                case nir_intrinsic_bvh64_intersect_ray_amd:
                case nir_intrinsic_load_vector_arg_amd:
-               case nir_intrinsic_load_rt_dynamic_callable_stack_base_amd:
                case nir_intrinsic_ordered_xfb_counter_add_gfx11_amd:
                case nir_intrinsic_cmat_muladd_amd:
                case nir_intrinsic_unit_test_divergent_amd: type = RegType::vgpr; break;
@@ -602,8 +594,6 @@ init_context(isel_context* ctx, nir_shader* shader)
 
    ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input_ena;
    ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input_addr;
-
-   ctx->cf_info.nir_to_aco = std::move(nir_to_aco);
 
    /* align and copy constant data */
    while (ctx->program->constant_data.size() % 4u)

@@ -207,14 +207,14 @@ brw_fs_lower_mul_dword_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
        */
 
       bool needs_mov = false;
-      fs_reg orig_dst = inst->dst;
+      brw_reg orig_dst = inst->dst;
 
       /* Get a new VGRF for the "low" 32x16-bit multiplication result if
        * reusing the original destination is impossible due to hardware
        * restrictions, source/destination overlap, or it being the null
        * register.
        */
-      fs_reg low = inst->dst;
+      brw_reg low = inst->dst;
       if (orig_dst.is_null() ||
           regions_overlap(inst->dst, inst->size_written,
                           inst->src[0], inst->size_read(0)) ||
@@ -222,12 +222,12 @@ brw_fs_lower_mul_dword_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
                           inst->src[1], inst->size_read(1)) ||
           inst->dst.stride >= 4) {
          needs_mov = true;
-         low = fs_reg(VGRF, s.alloc.allocate(regs_written(inst)),
-                      inst->dst.type);
+         low = brw_vgrf(s.alloc.allocate(regs_written(inst)),
+                        inst->dst.type);
       }
 
       /* Get a new VGRF but keep the same stride as inst->dst */
-      fs_reg high(VGRF, s.alloc.allocate(regs_written(inst)), inst->dst.type);
+      brw_reg high = brw_vgrf(s.alloc.allocate(regs_written(inst)), inst->dst.type);
       high.stride = inst->dst.stride;
       high.offset = inst->dst.offset % REG_SIZE;
 
@@ -283,16 +283,16 @@ brw_fs_lower_mul_dword_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
             }
          } else {
             ibld.MUL(low, inst->src[0],
-                     subscript(inst->src[1], BRW_REGISTER_TYPE_UW, 0));
+                     subscript(inst->src[1], BRW_TYPE_UW, 0));
             ibld.MUL(high, inst->src[0],
-                     subscript(inst->src[1], BRW_REGISTER_TYPE_UW, 1));
+                     subscript(inst->src[1], BRW_TYPE_UW, 1));
          }
       }
 
       if (do_addition) {
-         ibld.ADD(subscript(low, BRW_REGISTER_TYPE_UW, 1),
-                  subscript(low, BRW_REGISTER_TYPE_UW, 1),
-                  subscript(high, BRW_REGISTER_TYPE_UW, 0));
+         ibld.ADD(subscript(low, BRW_TYPE_UW, 1),
+                  subscript(low, BRW_TYPE_UW, 1),
+                  subscript(high, BRW_TYPE_UW, 0));
       }
 
       if (needs_mov || inst->conditional_mod)
@@ -319,53 +319,53 @@ brw_fs_lower_mul_qword_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
    unsigned int q_regs = regs_written(inst);
    unsigned int d_regs = (q_regs + 1) / 2;
 
-   fs_reg bd(VGRF, s.alloc.allocate(q_regs), BRW_REGISTER_TYPE_UQ);
-   fs_reg ad(VGRF, s.alloc.allocate(d_regs), BRW_REGISTER_TYPE_UD);
-   fs_reg bc(VGRF, s.alloc.allocate(d_regs), BRW_REGISTER_TYPE_UD);
+   brw_reg bd = brw_vgrf(s.alloc.allocate(q_regs), BRW_TYPE_UQ);
+   brw_reg ad = brw_vgrf(s.alloc.allocate(d_regs), BRW_TYPE_UD);
+   brw_reg bc = brw_vgrf(s.alloc.allocate(d_regs), BRW_TYPE_UD);
 
    /* Here we need the full 64 bit result for 32b * 32b. */
    if (devinfo->has_integer_dword_mul) {
-      ibld.MUL(bd, subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0),
-               subscript(inst->src[1], BRW_REGISTER_TYPE_UD, 0));
+      ibld.MUL(bd, subscript(inst->src[0], BRW_TYPE_UD, 0),
+               subscript(inst->src[1], BRW_TYPE_UD, 0));
    } else {
-      fs_reg bd_high(VGRF, s.alloc.allocate(d_regs), BRW_REGISTER_TYPE_UD);
-      fs_reg bd_low(VGRF, s.alloc.allocate(d_regs), BRW_REGISTER_TYPE_UD);
+      brw_reg bd_high = brw_vgrf(s.alloc.allocate(d_regs), BRW_TYPE_UD);
+      brw_reg bd_low  = brw_vgrf(s.alloc.allocate(d_regs), BRW_TYPE_UD);
       const unsigned acc_width = reg_unit(devinfo) * 8;
-      fs_reg acc = suboffset(retype(brw_acc_reg(inst->exec_size), BRW_REGISTER_TYPE_UD),
+      brw_reg acc = suboffset(retype(brw_acc_reg(inst->exec_size), BRW_TYPE_UD),
                              inst->group % acc_width);
 
       fs_inst *mul = ibld.MUL(acc,
-                            subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0),
-                            subscript(inst->src[1], BRW_REGISTER_TYPE_UW, 0));
+                            subscript(inst->src[0], BRW_TYPE_UD, 0),
+                            subscript(inst->src[1], BRW_TYPE_UW, 0));
       mul->writes_accumulator = true;
 
-      ibld.MACH(bd_high, subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0),
-                subscript(inst->src[1], BRW_REGISTER_TYPE_UD, 0));
+      ibld.MACH(bd_high, subscript(inst->src[0], BRW_TYPE_UD, 0),
+                subscript(inst->src[1], BRW_TYPE_UD, 0));
       ibld.MOV(bd_low, acc);
 
       ibld.UNDEF(bd);
-      ibld.MOV(subscript(bd, BRW_REGISTER_TYPE_UD, 0), bd_low);
-      ibld.MOV(subscript(bd, BRW_REGISTER_TYPE_UD, 1), bd_high);
+      ibld.MOV(subscript(bd, BRW_TYPE_UD, 0), bd_low);
+      ibld.MOV(subscript(bd, BRW_TYPE_UD, 1), bd_high);
    }
 
-   ibld.MUL(ad, subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 1),
-            subscript(inst->src[1], BRW_REGISTER_TYPE_UD, 0));
-   ibld.MUL(bc, subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0),
-            subscript(inst->src[1], BRW_REGISTER_TYPE_UD, 1));
+   ibld.MUL(ad, subscript(inst->src[0], BRW_TYPE_UD, 1),
+            subscript(inst->src[1], BRW_TYPE_UD, 0));
+   ibld.MUL(bc, subscript(inst->src[0], BRW_TYPE_UD, 0),
+            subscript(inst->src[1], BRW_TYPE_UD, 1));
 
    ibld.ADD(ad, ad, bc);
-   ibld.ADD(subscript(bd, BRW_REGISTER_TYPE_UD, 1),
-            subscript(bd, BRW_REGISTER_TYPE_UD, 1), ad);
+   ibld.ADD(subscript(bd, BRW_TYPE_UD, 1),
+            subscript(bd, BRW_TYPE_UD, 1), ad);
 
    if (devinfo->has_64bit_int) {
       ibld.MOV(inst->dst, bd);
    } else {
       if (!inst->is_partial_write())
          ibld.emit_undef_for_dst(inst);
-      ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 0),
-               subscript(bd, BRW_REGISTER_TYPE_UD, 0));
-      ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 1),
-               subscript(bd, BRW_REGISTER_TYPE_UD, 1));
+      ibld.MOV(subscript(inst->dst, BRW_TYPE_UD, 0),
+               subscript(bd, BRW_TYPE_UD, 0));
+      ibld.MOV(subscript(inst->dst, BRW_TYPE_UD, 1),
+               subscript(bd, BRW_TYPE_UD, 1));
    }
 }
 
@@ -390,7 +390,7 @@ brw_fs_lower_mulh_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
    /* Should have been lowered to 8-wide. */
    assert(inst->exec_size <= brw_fs_get_lowered_simd_width(&s, inst));
    const unsigned acc_width = reg_unit(devinfo) * 8;
-   const fs_reg acc = suboffset(retype(brw_acc_reg(inst->exec_size), inst->dst.type),
+   const brw_reg acc = suboffset(retype(brw_acc_reg(inst->exec_size), inst->dst.type),
                                 inst->group % acc_width);
    fs_inst *mul = ibld.MUL(acc, inst->src[0], inst->src[1]);
    ibld.MACH(inst->dst, inst->src[0], inst->src[1]);
@@ -403,9 +403,9 @@ brw_fs_lower_mulh_inst(fs_visitor &s, fs_inst *inst, bblock_t *block)
     * multiply, but in order to do a 64-bit multiply we can simulate
     * the previous behavior and then use a MACH instruction.
     */
-   assert(mul->src[1].type == BRW_REGISTER_TYPE_D ||
-          mul->src[1].type == BRW_REGISTER_TYPE_UD);
-   mul->src[1].type = BRW_REGISTER_TYPE_UW;
+   assert(mul->src[1].type == BRW_TYPE_D ||
+          mul->src[1].type == BRW_TYPE_UD);
+   mul->src[1].type = BRW_TYPE_UW;
    mul->src[1].stride *= 2;
 
    if (mul->src[1].file == IMM) {
@@ -424,21 +424,21 @@ brw_fs_lower_integer_multiplication(fs_visitor &s)
          /* If the instruction is already in a form that does not need lowering,
           * return early.
           */
-         if (type_sz(inst->src[1].type) < 4 && type_sz(inst->src[0].type) <= 4)
+         if (brw_type_size_bytes(inst->src[1].type) < 4 && brw_type_size_bytes(inst->src[0].type) <= 4)
             continue;
 
-         if ((inst->dst.type == BRW_REGISTER_TYPE_Q ||
-              inst->dst.type == BRW_REGISTER_TYPE_UQ) &&
-             (inst->src[0].type == BRW_REGISTER_TYPE_Q ||
-              inst->src[0].type == BRW_REGISTER_TYPE_UQ) &&
-             (inst->src[1].type == BRW_REGISTER_TYPE_Q ||
-              inst->src[1].type == BRW_REGISTER_TYPE_UQ)) {
+         if ((inst->dst.type == BRW_TYPE_Q ||
+              inst->dst.type == BRW_TYPE_UQ) &&
+             (inst->src[0].type == BRW_TYPE_Q ||
+              inst->src[0].type == BRW_TYPE_UQ) &&
+             (inst->src[1].type == BRW_TYPE_Q ||
+              inst->src[1].type == BRW_TYPE_UQ)) {
             brw_fs_lower_mul_qword_inst(s, inst, block);
             inst->remove(block);
             progress = true;
          } else if (!inst->dst.is_accumulator() &&
-                    (inst->dst.type == BRW_REGISTER_TYPE_D ||
-                     inst->dst.type == BRW_REGISTER_TYPE_UD) &&
+                    (inst->dst.type == BRW_TYPE_D ||
+                     inst->dst.type == BRW_TYPE_UD) &&
                     (!devinfo->has_integer_dword_mul ||
                      devinfo->verx10 >= 125)) {
             brw_fs_lower_mul_dword_inst(s, inst, block);

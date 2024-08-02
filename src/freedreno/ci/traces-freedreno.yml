@@ -233,22 +233,6 @@ traces:
     zink-a630:
       checksum: d25edb433abfcde517b626b3071906ff
 
-  filament/filament-default.trace:
-    freedreno-a306:
-      label: [unsupported]
-    freedreno-a530:
-      label: [unsupported]
-    freedreno-a618:
-      label: [skip, flakes]
-    freedreno-a630:
-      label: [skip, flakes]
-      checksum: c45e17d98a5d598bef50494f1150f5b9
-      text: helmet texture sometimes missing
-    zink-a618:
-      checksum: 59e18960d8b73a93401b793b28e99f42
-    zink-a630:
-      checksum: 59e18960d8b73a93401b793b28e99f42
-
   glxgears/glxgears-2-v2.trace:
     freedreno-a306:
       checksum: 3df913932335f17918c55aa70cfba817

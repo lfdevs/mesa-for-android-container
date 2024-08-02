@@ -250,13 +250,11 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
          switch (load->intrinsic) {
          case nir_intrinsic_load_instance_id:
             if (&load->def != state.instance_id_with_views) {
-               nir_def_rewrite_uses(&load->def, build_instance_id(&state));
-               nir_instr_remove(&load->instr);
+               nir_def_replace(&load->def, build_instance_id(&state));
             }
             break;
          case nir_intrinsic_load_view_index:
-            nir_def_rewrite_uses(&load->def, view_index);
-            nir_instr_remove(&load->instr);
+            nir_def_replace(&load->def, view_index);
             break;
          case nir_intrinsic_emit_vertex_with_counter:
             /* In geometry shaders, outputs become undefined after every
@@ -274,8 +272,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
       }
    }
 
-   nir_metadata_preserve(entrypoint, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+   nir_metadata_preserve(entrypoint, nir_metadata_control_flow);
 
    return true;
 }

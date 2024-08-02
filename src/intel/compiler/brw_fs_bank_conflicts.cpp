@@ -480,7 +480,7 @@ namespace {
     * possibly incur bank conflicts.
     */
    bool
-   is_grf(const fs_reg &r)
+   is_grf(const brw_reg &r)
    {
       return r.file == VGRF || r.file == FIXED_GRF;
    }
@@ -492,7 +492,7 @@ namespace {
     * allocation or whether it was part of a VGRF allocation.
     */
    unsigned
-   reg_of(const fs_reg &r)
+   reg_of(const brw_reg &r)
    {
       assert(is_grf(r));
       if (r.file == VGRF)
@@ -871,8 +871,8 @@ namespace {
     * Apply the GRF atom permutation given by \p map to register \p r and
     * return the result.
     */
-   fs_reg
-   transform(const partitioning &p, const permutation &map, fs_reg r)
+   brw_reg
+   transform(const partitioning &p, const permutation &map, brw_reg r)
    {
       if (r.file == VGRF) {
          const unsigned reg = reg_of(r);

@@ -194,7 +194,9 @@ static uint64_t get_param(struct etna_device *dev, uint32_t core, uint32_t param
 
 	ret = drmCommandWriteRead(dev->fd, DRM_ETNAVIV_GET_PARAM, &req, sizeof(req));
 	if (ret) {
-		ERROR_MSG("get-param (%x) failed! %d (%s)", param, ret, strerror(errno));
+		if (ret != -ENXIO)
+			ERROR_MSG("get-param (%x) failed! %d (%s)", param, ret,
+				  strerror(errno));
 		return 0;
 	}
 
@@ -215,11 +217,11 @@ struct etna_gpu *etna_gpu_new(struct etna_device *dev, unsigned int core)
 	gpu->dev = dev;
 	gpu->core = core;
 
-	gpu->info.model    	= get_param(dev, core, ETNAVIV_PARAM_GPU_MODEL);
-	gpu->info.revision 	= get_param(dev, core, ETNAVIV_PARAM_GPU_REVISION);
-
+	gpu->info.model = get_param(dev, core, ETNAVIV_PARAM_GPU_MODEL);
 	if (!gpu->info.model)
 		goto fail;
+
+	gpu->info.revision = get_param(dev, core, ETNAVIV_PARAM_GPU_REVISION);
 
 	DEBUG_MSG(" GPU model:          0x%x (rev %x)", gpu->info.model, gpu->info.revision);
 

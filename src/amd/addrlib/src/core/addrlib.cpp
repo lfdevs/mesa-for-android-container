@@ -173,6 +173,10 @@ ADDR_E_RETURNCODE Lib::Create(
         }
     }
 
+#if DEBUG
+    ApplyDebugPrinters(pCreateIn->callbacks.debugPrint, pCreateIn->hClient);
+#endif
+
     if ((returnCode == ADDR_OK)                    &&
         (pCreateIn->callbacks.allocSysMem != NULL) &&
         (pCreateIn->callbacks.freeSysMem != NULL))
@@ -219,6 +223,9 @@ ADDR_E_RETURNCODE Lib::Create(
                     case FAMILY_GFX1150:
                     case FAMILY_GFX1103:
                         pLib = Gfx11HwlInit(&client);
+                        break;
+                    case FAMILY_GFX12:
+                        pLib = Gfx12HwlInit(&client);
                         break;
                     default:
                         ADDR_ASSERT_ALWAYS();
@@ -367,7 +374,14 @@ VOID Lib::SetMaxAlignments()
 Lib* Lib::GetLib(
     ADDR_HANDLE hLib)   ///< [in] handle of ADDR_HANDLE
 {
-    return static_cast<Addr::Lib*>(hLib);
+    Lib* pLib = static_cast<Addr::Lib*>(hLib);
+#if DEBUG
+    if (pLib != NULL)
+    {
+        pLib->SetDebugPrinters();
+    }
+#endif
+    return pLib;
 }
 
 /**

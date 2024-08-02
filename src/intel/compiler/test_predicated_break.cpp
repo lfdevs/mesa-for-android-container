@@ -140,9 +140,9 @@ TEST_F(PredicatedBreakTest, TopBreakWithoutContinue)
    fs_builder a = make_builder(shader_a);
    fs_builder b = make_builder(shader_b);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg r3 = brw_vec8_grf(3, 0);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg r3 = brw_vec8_grf(3, 0);
 
    a.DO();
    a.CMP(r1, r2, r3, BRW_CONDITIONAL_NZ);
@@ -174,9 +174,9 @@ TEST_F(PredicatedBreakTest, TopBreakWithContinue)
    fs_builder a = make_builder(shader_a);
    fs_builder b = make_builder(shader_b);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg r3 = brw_vec8_grf(3, 0);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg r3 = brw_vec8_grf(3, 0);
 
    a.DO();
    a.CMP(r1, r2, r3, BRW_CONDITIONAL_NZ);
@@ -218,9 +218,9 @@ TEST_F(PredicatedBreakTest, DISABLED_BottomBreakWithoutContinue)
    fs_builder a = make_builder(shader_a);
    fs_builder b = make_builder(shader_b);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg r3 = brw_vec8_grf(3, 0);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg r3 = brw_vec8_grf(3, 0);
 
    a.DO();
    a.ADD(r1, r2, r3);
@@ -256,9 +256,9 @@ TEST_F(PredicatedBreakTest, BottomBreakWithContinue)
    fs_builder a = make_builder(shader_a);
    fs_builder b = make_builder(shader_b);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg r3 = brw_vec8_grf(3, 0);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg r3 = brw_vec8_grf(3, 0);
 
    a.DO();
    a.ADD(r1, r2, r3);
@@ -300,9 +300,9 @@ TEST_F(PredicatedBreakTest, TwoBreaks)
    fs_builder a = make_builder(shader_a);
    fs_builder b = make_builder(shader_b);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg r3 = brw_vec8_grf(3, 0);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg r3 = brw_vec8_grf(3, 0);
 
    a.DO();
    a.ADD(r1, r2, r3);

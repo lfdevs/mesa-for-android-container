@@ -516,7 +516,7 @@ vn_queue_submission_prepare(struct vn_queue_submission *submit)
          submit->submit_batches[0].pNext, WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA);
       if (info) {
          submit->wsi_mem = vn_device_memory_from_handle(info->memory);
-         assert(!submit->wsi_mem->base_memory && submit->wsi_mem->base_bo);
+         assert(submit->wsi_mem->base_bo);
       }
    }
 

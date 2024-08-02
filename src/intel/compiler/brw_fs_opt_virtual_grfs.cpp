@@ -34,7 +34,7 @@ brw_fs_opt_split_virtual_grfs(fs_visitor &s)
 
    /* Count the total number of registers */
    unsigned reg_count = 0;
-   unsigned vgrf_to_reg[num_vars];
+   unsigned *vgrf_to_reg = new unsigned[num_vars];
    for (unsigned i = 0; i < num_vars; i++) {
       vgrf_to_reg[i] = reg_count;
       reg_count += s.alloc.sizes[i];
@@ -150,7 +150,7 @@ brw_fs_opt_split_virtual_grfs(fs_visitor &s)
                reg = vgrf_to_reg[inst->dst.nr] + reg_offset + size_written / REG_SIZE;
                fs_inst *undef =
                   ibld.UNDEF(
-                     byte_offset(fs_reg(VGRF, new_virtual_grf[reg], inst->dst.type),
+                     byte_offset(brw_vgrf(new_virtual_grf[reg], inst->dst.type),
                                  new_reg_offset[reg] * REG_SIZE));
                undef->size_written =
                   MIN2(inst->size_written - size_written, undef->size_written);
@@ -203,6 +203,7 @@ cleanup:
    delete[] vgrf_has_split;
    delete[] new_virtual_grf;
    delete[] new_reg_offset;
+   delete[] vgrf_to_reg;
 
    return progress;
 }

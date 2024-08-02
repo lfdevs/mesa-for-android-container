@@ -65,7 +65,8 @@ brw_compile_tcs(const struct brw_compiler *compiler,
                             nir->info.outputs_written,
                             nir->info.patch_outputs_written);
 
-   brw_nir_apply_key(nir, compiler, &key->base, 8);
+   brw_nir_apply_key(nir, compiler, &key->base,
+                     brw_geometry_stage_dispatch_width(compiler->devinfo));
    brw_nir_lower_vue_inputs(nir, &input_vue_map);
    brw_nir_lower_tcs_outputs(nir, &vue_prog_data->vue_map,
                              key->_tes_primitive_mode);

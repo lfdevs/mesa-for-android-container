@@ -24,6 +24,7 @@
 
 #include <sys/mman.h>
 
+#include "common/intel_debug_identifier.h"
 #include "common/intel_gem.h"
 #include "common/i915/intel_gem.h"
 #include "dev/intel_debug.h"

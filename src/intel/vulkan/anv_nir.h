@@ -97,7 +97,8 @@ void anv_nir_compute_push_layout(nir_shader *nir,
                                  enum anv_descriptor_set_layout_type desc_type,
                                  void *mem_ctx);
 
-void anv_nir_validate_push_layout(struct brw_stage_prog_data *prog_data,
+void anv_nir_validate_push_layout(const struct anv_physical_device *pdevice,
+                                  struct brw_stage_prog_data *prog_data,
                                   struct anv_pipeline_bind_map *map);
 
 bool anv_nir_update_resource_intel_block(nir_shader *shader);

@@ -118,8 +118,7 @@ radv_nir_lower_rt_vars(nir_shader *shader, nir_variable_mode mode, uint32_t base
       .base_offset = base_offset,
    };
 
-   progress |= nir_shader_instructions_pass(shader, lower_hit_attrib_deref,
-                                            nir_metadata_block_index | nir_metadata_dominance, &args);
+   progress |= nir_shader_instructions_pass(shader, lower_hit_attrib_deref, nir_metadata_control_flow, &args);
 
    if (progress) {
       nir_remove_dead_derefs(shader);

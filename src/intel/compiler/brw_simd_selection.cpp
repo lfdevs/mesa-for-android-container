@@ -41,6 +41,14 @@ brw_required_dispatch_width(const struct shader_info *info)
    }
 }
 
+unsigned
+brw_geometry_stage_dispatch_width(const struct intel_device_info *devinfo)
+{
+   if (devinfo->ver >= 20)
+      return 16;
+   return 8;
+}
+
 static inline bool
 test_bit(unsigned mask, unsigned bit) {
    return mask & (1u << bit);

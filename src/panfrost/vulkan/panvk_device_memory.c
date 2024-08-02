@@ -26,12 +26,6 @@ panvk_AllocateMemory(VkDevice _device,
 
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
 
-   if (pAllocateInfo->allocationSize == 0) {
-      /* Apparently, this is allowed */
-      *pMem = VK_NULL_HANDLE;
-      return VK_SUCCESS;
-   }
-
    const VkExportMemoryAllocateInfo *export_info =
       vk_find_struct_const(pAllocateInfo->pNext, EXPORT_MEMORY_ALLOCATE_INFO);
 
@@ -283,4 +277,13 @@ panvk_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory,
                                 VkDeviceSize *pCommittedMemoryInBytes)
 {
    *pCommittedMemoryInBytes = 0;
+}
+
+VKAPI_ATTR uint64_t VKAPI_CALL
+panvk_GetDeviceMemoryOpaqueCaptureAddress(
+   VkDevice _device, const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
+{
+   VK_FROM_HANDLE(panvk_device_memory, memory, pInfo->memory);
+
+   return memory->addr.dev;
 }

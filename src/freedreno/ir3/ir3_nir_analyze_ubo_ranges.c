@@ -352,95 +352,9 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
       nir_load_uniform(b, instr->num_components, instr->def.bit_size,
                        uniform_offset, .base = const_offset);
 
-   nir_def_rewrite_uses(&instr->def, uniform);
-
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, uniform);
 
    return true;
-}
-
-/* This isn't nearly as comprehensive as what's done in nir_opt_preamble, but we
- * need to hoist the load_global base into the preamble. Currently the only user
- * is turnip with inline uniforms, so we can be simple and only handle a few
- * uncomplicated intrinsics.
- *
- * TODO: Fold what this pass does into opt_preamble, which will give us a better
- * heuristic for what to push and we won't need this.
- */
-static bool
-def_is_rematerializable(nir_def *def)
-{
-   switch (def->parent_instr->type) {
-   case nir_instr_type_load_const:
-      return true;
-   case nir_instr_type_intrinsic: {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(def->parent_instr);
-      switch (intrin->intrinsic) {
-      case nir_intrinsic_load_ubo:
-         return def_is_rematerializable(intrin->src[0].ssa) &&
-            def_is_rematerializable(intrin->src[1].ssa);
-      case nir_intrinsic_bindless_resource_ir3:
-         return def_is_rematerializable(intrin->src[0].ssa);
-      default:
-         return false;
-      }
-   }
-   case nir_instr_type_alu: {
-      nir_alu_instr *alu = nir_instr_as_alu(def->parent_instr);
-      for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-         if (!def_is_rematerializable(alu->src[i].src.ssa))
-            return false;
-      }
-      return true;
-   }
-   default:
-      return false;
-   }
-}
-
-static nir_def *
-_rematerialize_def(nir_builder *b, struct hash_table *remap_ht,
-                   nir_def *def)
-{
-   if (_mesa_hash_table_search(remap_ht, def->parent_instr))
-      return NULL;
-
-   switch (def->parent_instr->type) {
-   case nir_instr_type_load_const:
-      break;
-   case nir_instr_type_intrinsic: {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(def->parent_instr);
-      for (unsigned i = 0; i < nir_intrinsic_infos[intrin->intrinsic].num_srcs;
-           i++)
-         _rematerialize_def(b, remap_ht, intrin->src[i].ssa);
-      break;
-   }
-   case nir_instr_type_alu: {
-      nir_alu_instr *alu = nir_instr_as_alu(def->parent_instr);
-      for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++)
-         _rematerialize_def(b, remap_ht, alu->src[i].src.ssa);
-      break;
-   }
-   default:
-      unreachable("should not get here");
-   }
-
-   nir_instr *instr = nir_instr_clone_deep(b->shader, def->parent_instr,
-                                           remap_ht);
-   nir_builder_instr_insert(b, instr);
-   return nir_instr_def(instr);
-}
-
-static nir_def *
-rematerialize_def(nir_builder *b, nir_def *def)
-{
-   struct hash_table *remap_ht = _mesa_pointer_hash_table_create(NULL);
-
-   nir_def *new_def = _rematerialize_def(b, remap_ht, def);
-
-   _mesa_hash_table_destroy(remap_ht, NULL);
-
-   return new_def;
 }
 
 static bool
@@ -468,7 +382,9 @@ rematerialize_load_global_bases(nir_shader *nir,
       if (!range->ubo.global)
          continue;
 
-      range->ubo.global_base = rematerialize_def(b, range->ubo.global_base);
+      range->ubo.global_base =
+         ir3_rematerialize_def_for_preamble(b, range->ubo.global_base, NULL,
+                                            NULL);
    }
 
    return true;
@@ -488,7 +404,9 @@ copy_global_to_uniform(nir_shader *nir, struct ir3_ubo_analysis_state *state)
       const struct ir3_ubo_range *range = &state->range[i];
       assert(range->ubo.global);
 
-      nir_def *base = rematerialize_def(b, range->ubo.global_base);
+      nir_def *base =
+         ir3_rematerialize_def_for_preamble(b, range->ubo.global_base, NULL,
+                                            NULL);
       unsigned start = range->start;
       if (start > (1 << 10)) {
          /* This is happening pretty late, so we need to add the offset
@@ -671,7 +589,7 @@ ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v)
          nir_foreach_block (block, function->impl) {
             nir_foreach_instr (instr, block) {
                if (instr_is_load_const(instr) &&
-                   def_is_rematerializable(nir_instr_as_intrinsic(instr)->src[0].ssa))
+                   ir3_def_is_rematerializable_for_preamble(nir_instr_as_intrinsic(instr)->src[0].ssa, NULL))
                   gather_ubo_ranges(nir, nir_instr_as_intrinsic(instr), &state,
                                     compiler->const_upload_unit,
                                     &upload_remaining);
@@ -706,7 +624,7 @@ ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v)
             }
 
             nir_metadata_preserve(
-               function->impl, nir_metadata_block_index | nir_metadata_dominance);
+               function->impl, nir_metadata_control_flow);
          }
       }
    }
@@ -798,7 +716,7 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
          }
 
          nir_metadata_preserve(
-            function->impl, nir_metadata_block_index | nir_metadata_dominance);
+            function->impl, nir_metadata_control_flow);
       }
    }
    /* Update the num_ubos field for GL (first_ubo_is_default_ubo).  With

@@ -300,6 +300,13 @@
 #define NVC197_SET_POSITION_W_SCALED_OFFSET_ENABLE_ENABLE_FALSE                                        0x00000000
 #define NVC197_SET_POSITION_W_SCALED_OFFSET_ENABLE_ENABLE_TRUE                                         0x00000001
 
+#define NVC197_SET_MULTI_VIEW                                                                              0x0228
+#define NVC197_SET_MULTI_VIEW_VIEW_COUNT                                                                      3:0
+#define NVC197_SET_MULTI_VIEW_RENDER_TARGET_INDEX_OFFSET                                                     14:4
+#define NVC197_SET_MULTI_VIEW_INDEPENDENT_VIEWPORT_MASK_ENABLE                                              16:16
+#define NVC197_SET_MULTI_VIEW_INDEPENDENT_VIEWPORT_MASK_ENABLE_FALSE                                   0x00000000
+#define NVC197_SET_MULTI_VIEW_INDEPENDENT_VIEWPORT_MASK_ENABLE_TRUE                                    0x00000001
+
 #define NVC197_SET_GO_IDLE_TIMEOUT                                                                         0x022c
 #define NVC197_SET_GO_IDLE_TIMEOUT_V                                                                         31:0
 
@@ -1878,6 +1885,11 @@
 
 #define NVC197_FLUSH_PENDING_WRITES                                                                        0x1144
 #define NVC197_FLUSH_PENDING_WRITES_SM_DOES_GLOBAL_STORE                                                      0:0
+
+#define NVC197_SET_CONSERVATIVE_RASTER                                                                     0x1148
+#define NVC197_SET_CONSERVATIVE_RASTER_ENABLE                                                                 0:0
+#define NVC197_SET_CONSERVATIVE_RASTER_ENABLE_FALSE                                                    0x00000000
+#define NVC197_SET_CONSERVATIVE_RASTER_ENABLE_TRUE                                                     0x00000001
 
 #define NVC197_SET_VERTEX_ATTRIBUTE_A(i)                                                           (0x1160+(i)*4)
 #define NVC197_SET_VERTEX_ATTRIBUTE_A_STREAM                                                                  4:0

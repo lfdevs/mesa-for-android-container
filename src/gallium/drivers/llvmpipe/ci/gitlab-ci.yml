@@ -9,7 +9,6 @@ llvmpipe-piglit-rusticl:
     - debian-testing
     - debian/x86_64_test-gl
   variables:
-    RUSTICL_ENABLE: "llvmpipe"
     DEQP_SUITE: llvmpipe-rusticl
     DEQP_RUNNER_OPTIONS: "--timeout 120.0"
     GPU_VERSION: llvmpipe-rusticl

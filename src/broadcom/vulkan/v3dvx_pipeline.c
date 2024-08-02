@@ -151,22 +151,6 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       ms_info && ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
 
    v3dvx_pack(pipeline->cfg_bits, CFG_BITS, config) {
-      config.enable_forward_facing_primitive =
-         rs_info ? !(rs_info->cullMode & VK_CULL_MODE_FRONT_BIT) : false;
-
-      config.enable_reverse_facing_primitive =
-         rs_info ? !(rs_info->cullMode & VK_CULL_MODE_BACK_BIT) : false;
-
-      /* Seems like the hardware is backwards regarding this setting... */
-      config.clockwise_primitives =
-         rs_info ? rs_info->frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE : false;
-
-      /* Even if rs_info->depthBiasEnabled is true, we can decide to not
-       * enable it, like if there isn't a depth/stencil attachment with the
-       * pipeline.
-       */
-      config.enable_depth_offset = pipeline->depth_bias.enabled;
-
       /* This is required to pass line rasterization tests in CTS while
        * exposing, at least, a minimum of 4-bits of subpixel precision
        * (the minimum requirement).
@@ -209,23 +193,6 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
 
       config.blend_enable = pipeline->blend.enables != 0;
 
-      /* Disable depth/stencil if we don't have a D/S attachment */
-      const struct vk_render_pass_state *ri = &pipeline->rendering_info;
-      bool has_depth = ri->depth_attachment_format != VK_FORMAT_UNDEFINED;
-      bool has_stencil = ri->stencil_attachment_format != VK_FORMAT_UNDEFINED;
-
-      if (ds_info && ds_info->depthTestEnable && has_depth) {
-         config.z_updates_enable = ds_info->depthWriteEnable;
-         config.depth_test_function = ds_info->depthCompareOp;
-      } else {
-         config.depth_test_function = VK_COMPARE_OP_ALWAYS;
-      }
-
-      config.stencil_enable =
-         ds_info ? ds_info->stencilTestEnable && has_stencil: false;
-
-      pipeline->z_updates_enable = config.z_updates_enable;
-
 #if V3D_VERSION >= 71
       /* From the Vulkan spec:
        *
@@ -256,15 +223,12 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       }
 
       config.z_clamp_mode = z_clamp_enable;
-
-      config.depth_bounds_test_enable =
-              ds_info && ds_info->depthBoundsTestEnable && has_depth;
 #endif
    };
 }
 
-static uint32_t
-translate_stencil_op(VkStencilOp op)
+uint32_t
+v3dX(translate_stencil_op)(VkStencilOp op)
 {
    switch (op) {
    case VK_STENCIL_OP_KEEP:
@@ -293,7 +257,8 @@ pack_single_stencil_cfg(struct v3dv_pipeline *pipeline,
                         uint8_t *stencil_cfg,
                         bool is_front,
                         bool is_back,
-                        const VkStencilOpState *stencil_state)
+                        const VkStencilOpState *stencil_state,
+                        const struct vk_graphics_pipeline_state *state)
 {
    /* From the Vulkan spec:
     *
@@ -305,39 +270,27 @@ pack_single_stencil_cfg(struct v3dv_pipeline *pipeline,
     *
     * In our case, 's' is always 8, so we clamp to that to prevent our packing
     * functions to assert in debug mode if they see larger values.
-    *
-    * If we have dynamic state we need to make sure we set the corresponding
-    * state bits to 0, since cl_emit_with_prepacked ORs the new value with
-    * the old.
     */
-   const uint8_t write_mask =
-      pipeline->dynamic_state.mask & V3DV_DYNAMIC_STENCIL_WRITE_MASK ?
-         0 : stencil_state->writeMask & 0xff;
-
-   const uint8_t compare_mask =
-      pipeline->dynamic_state.mask & V3DV_DYNAMIC_STENCIL_COMPARE_MASK ?
-         0 : stencil_state->compareMask & 0xff;
-
-   const uint8_t reference =
-      pipeline->dynamic_state.mask & V3DV_DYNAMIC_STENCIL_COMPARE_MASK ?
-         0 : stencil_state->reference & 0xff;
-
    v3dvx_pack(stencil_cfg, STENCIL_CFG, config) {
       config.front_config = is_front;
       config.back_config = is_back;
-      config.stencil_write_mask = write_mask;
-      config.stencil_test_mask = compare_mask;
+      config.stencil_write_mask = stencil_state->writeMask & 0xff;
+      config.stencil_test_mask = stencil_state->compareMask & 0xff;
       config.stencil_test_function = stencil_state->compareOp;
-      config.stencil_pass_op = translate_stencil_op(stencil_state->passOp);
-      config.depth_test_fail_op = translate_stencil_op(stencil_state->depthFailOp);
-      config.stencil_test_fail_op = translate_stencil_op(stencil_state->failOp);
-      config.stencil_ref_value = reference;
+      config.stencil_pass_op =
+         v3dX(translate_stencil_op)(stencil_state->passOp);
+      config.depth_test_fail_op =
+         v3dX(translate_stencil_op)(stencil_state->depthFailOp);
+      config.stencil_test_fail_op =
+         v3dX(translate_stencil_op)(stencil_state->failOp);
+      config.stencil_ref_value = stencil_state->reference & 0xff;
    }
 }
 
 static void
 pack_stencil_cfg(struct v3dv_pipeline *pipeline,
-                 const VkPipelineDepthStencilStateCreateInfo *ds_info)
+                 const VkPipelineDepthStencilStateCreateInfo *ds_info,
+                 const struct vk_graphics_pipeline_state *state)
 {
    assert(sizeof(pipeline->stencil_cfg) == 2 * cl_packet_length(STENCIL_CFG));
 
@@ -348,18 +301,21 @@ pack_stencil_cfg(struct v3dv_pipeline *pipeline,
    if (ri->stencil_attachment_format == VK_FORMAT_UNDEFINED)
       return;
 
-   const uint32_t dynamic_stencil_states = V3DV_DYNAMIC_STENCIL_COMPARE_MASK |
-                                           V3DV_DYNAMIC_STENCIL_WRITE_MASK |
-                                           V3DV_DYNAMIC_STENCIL_REFERENCE;
-
+   const bool any_dynamic_stencil_states =
+      BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_WRITE_MASK) ||
+      BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK) ||
+      BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_REFERENCE) ||
+      BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE) ||
+      BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_OP);
 
    /* If front != back or we have dynamic stencil state we can't emit a single
     * packet for both faces.
     */
    bool needs_front_and_back = false;
-   if ((pipeline->dynamic_state.mask & dynamic_stencil_states) ||
-       memcmp(&ds_info->front, &ds_info->back, sizeof(ds_info->front)))
+   if ((any_dynamic_stencil_states) ||
+       memcmp(&ds_info->front, &ds_info->back, sizeof(ds_info->front))) {
       needs_front_and_back = true;
+   }
 
    /* If the front and back configurations are the same we can emit both with
     * a single packet.
@@ -367,16 +323,22 @@ pack_stencil_cfg(struct v3dv_pipeline *pipeline,
    pipeline->emit_stencil_cfg[0] = true;
    if (!needs_front_and_back) {
       pack_single_stencil_cfg(pipeline, pipeline->stencil_cfg[0],
-                              true, true, &ds_info->front);
+                              true, true, &ds_info->front, state);
    } else {
       pipeline->emit_stencil_cfg[1] = true;
       pack_single_stencil_cfg(pipeline, pipeline->stencil_cfg[0],
-                              true, false, &ds_info->front);
+                              true, false, &ds_info->front, state);
       pack_single_stencil_cfg(pipeline, pipeline->stencil_cfg[1],
-                              false, true, &ds_info->back);
+                              false, true, &ds_info->back, state);
    }
 }
 
+
+/* FIXME: Now that we are passing the vk_graphics_pipeline_state we could
+ * avoid passing all those parameters. But doing that we would need to change
+ * all the code that uses the VkXXX structures, and use instead the equivalent
+ * vk_xxx
+ */
 void
 v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineColorBlendStateCreateInfo *cb_info,
@@ -384,16 +346,21 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineRasterizationStateCreateInfo *rs_info,
                           const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
                           const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info,
-                          const VkPipelineMultisampleStateCreateInfo *ms_info)
+                          const VkPipelineMultisampleStateCreateInfo *ms_info,
+                          const struct vk_graphics_pipeline_state *state)
 {
    pack_blend(pipeline, cb_info);
    pack_cfg_bits(pipeline, ds_info, rs_info, pv_info, ls_info, ms_info);
-   pack_stencil_cfg(pipeline, ds_info);
+   pack_stencil_cfg(pipeline, ds_info, state);
 }
 
 static void
 pack_shader_state_record(struct v3dv_pipeline *pipeline)
 {
+   /* To siplify the code we ignore here GL_SHADER_STATE_RECORD_DRAW_INDEX
+    * used with 2712D0, since we know that has the same size as the regular
+    * version.
+    */
    assert(sizeof(pipeline->shader_state_record) >=
           cl_packet_length(GL_SHADER_STATE_RECORD));
 
@@ -406,6 +373,16 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
    struct v3d_vs_prog_data *prog_data_vs_bin =
       pipeline->shared_data->variants[BROADCOM_SHADER_VERTEX_BIN]->prog_data.vs;
 
+   bool point_size_in_shaded_vertex_data;
+   if (!pipeline->has_gs) {
+      struct v3d_vs_prog_data *prog_data_vs =
+         pipeline->shared_data->variants[BROADCOM_SHADER_VERTEX]->prog_data.vs;
+         point_size_in_shaded_vertex_data = prog_data_vs->writes_psiz;
+   } else {
+      struct v3d_gs_prog_data *prog_data_gs =
+         pipeline->shared_data->variants[BROADCOM_SHADER_GEOMETRY]->prog_data.gs;
+         point_size_in_shaded_vertex_data = prog_data_gs->writes_psiz;
+   }
 
    /* Note: we are not packing addresses, as we need the job (see
     * cl_pack_emit_reloc). Additionally uniforms can't be filled up at this
@@ -413,17 +390,62 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
     * pipeline (like viewport), . Would need to be filled later, so we are
     * doing a partial prepacking.
     */
+#if V3D_VERSION >= 71
+   /* 2712D0 (V3D 7.1.10) has included draw index and base vertex, shuffling all
+    * the fields in the packet. Since the versioning framework doesn't handle
+    * revision numbers, the XML has a different shader state record packet
+    * including the new fields and we device at run time which packet we need
+    * to emit.
+    */
+   if (v3d_device_has_draw_index(&pipeline->device->devinfo)) {
+      v3dvx_pack(pipeline->shader_state_record, GL_SHADER_STATE_RECORD_DRAW_INDEX, shader) {
+         shader.enable_clipping = true;
+         shader.point_size_in_shaded_vertex_data = point_size_in_shaded_vertex_data;
+         shader.fragment_shader_does_z_writes = prog_data_fs->writes_z;
+         shader.turn_off_early_z_test = prog_data_fs->disable_ez;
+         shader.fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 =
+            prog_data_fs->uses_center_w;
+         shader.enable_sample_rate_shading =
+            pipeline->sample_rate_shading ||
+            (pipeline->msaa && prog_data_fs->force_per_sample_msaa);
+         shader.any_shader_reads_hardware_written_primitive_id = false;
+         shader.do_scoreboard_wait_on_first_thread_switch =
+            prog_data_fs->lock_scoreboard_on_first_thrsw;
+         shader.disable_implicit_point_line_varyings =
+            !prog_data_fs->uses_implicit_point_line_varyings;
+         shader.number_of_varyings_in_fragment_shader = prog_data_fs->num_inputs;
+         shader.coordinate_shader_input_vpm_segment_size = prog_data_vs_bin->vpm_input_size;
+         shader.vertex_shader_input_vpm_segment_size = prog_data_vs->vpm_input_size;
+         shader.coordinate_shader_output_vpm_segment_size = prog_data_vs_bin->vpm_output_size;
+         shader.vertex_shader_output_vpm_segment_size = prog_data_vs->vpm_output_size;
+         shader.min_coord_shader_input_segments_required_in_play =
+            pipeline->vpm_cfg_bin.As;
+         shader.min_vertex_shader_input_segments_required_in_play =
+            pipeline->vpm_cfg.As;
+         shader.min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size =
+            pipeline->vpm_cfg_bin.Ve;
+         shader.min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size =
+            pipeline->vpm_cfg.Ve;
+         shader.coordinate_shader_4_way_threadable = prog_data_vs_bin->base.threads == 4;
+         shader.vertex_shader_4_way_threadable = prog_data_vs->base.threads == 4;
+         shader.fragment_shader_4_way_threadable = prog_data_fs->base.threads == 4;
+         shader.coordinate_shader_start_in_final_thread_section = prog_data_vs_bin->base.single_seg;
+         shader.vertex_shader_start_in_final_thread_section = prog_data_vs->base.single_seg;
+         shader.fragment_shader_start_in_final_thread_section = prog_data_fs->base.single_seg;
+         shader.vertex_id_read_by_coordinate_shader = prog_data_vs_bin->uses_vid;
+         shader.base_instance_id_read_by_coordinate_shader = prog_data_vs_bin->uses_biid;
+         shader.instance_id_read_by_coordinate_shader = prog_data_vs_bin->uses_iid;
+         shader.vertex_id_read_by_vertex_shader = prog_data_vs->uses_vid;
+         shader.base_instance_id_read_by_vertex_shader = prog_data_vs->uses_biid;
+         shader.instance_id_read_by_vertex_shader = prog_data_vs->uses_iid;
+      }
+      return;
+   }
+#endif
+
    v3dvx_pack(pipeline->shader_state_record, GL_SHADER_STATE_RECORD, shader) {
       shader.enable_clipping = true;
-
-      if (!pipeline->has_gs) {
-         shader.point_size_in_shaded_vertex_data =
-            pipeline->topology == MESA_PRIM_POINTS;
-      } else {
-         struct v3d_gs_prog_data *prog_data_gs =
-            pipeline->shared_data->variants[BROADCOM_SHADER_GEOMETRY]->prog_data.gs;
-         shader.point_size_in_shaded_vertex_data = prog_data_gs->writes_psiz;
-      }
+      shader.point_size_in_shaded_vertex_data = point_size_in_shaded_vertex_data;
 
       /* Must be set if the shader modifies Z, discards, or modifies
        * the sample mask.  For any of these cases, the fragment
@@ -645,8 +667,7 @@ pack_shader_state_attribute_record(struct v3dv_pipeline *pipeline,
       attr.read_as_int_uint = desc->channel[0].pure_integer;
 
       attr.instance_divisor = MIN2(pipeline->vb[binding].instance_divisor,
-                                   0xffff);
-      attr.stride = pipeline->vb[binding].stride;
+                                   V3D_MAX_VERTEX_ATTRIB_DIVISOR);
       attr.type = get_attr_type(desc);
    }
 }
@@ -664,7 +685,6 @@ v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
       const VkVertexInputBindingDescription *desc =
          &vi_info->pVertexBindingDescriptions[i];
 
-      pipeline->vb[desc->binding].stride = desc->stride;
       pipeline->vb[desc->binding].instance_divisor = desc->inputRate;
    }
 

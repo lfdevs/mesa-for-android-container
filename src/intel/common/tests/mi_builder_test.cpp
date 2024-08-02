@@ -52,6 +52,7 @@ uint64_t __gen_combine_address(mi_builder_test *test, void *location,
 void * __gen_get_batch_dwords(mi_builder_test *test, unsigned num_dwords);
 struct address __gen_get_batch_address(mi_builder_test *test,
                                        void *location);
+bool *__gen_get_write_fencing_status(mi_builder_test *test);
 
 struct address
 __gen_address_offset(address addr, uint64_t offset)
@@ -68,6 +69,8 @@ __gen_address_offset(address addr, uint64_t offset)
 #define MI_BUILDER_NUM_ALLOC_GPRS 15
 #define INPUT_DATA_OFFSET 0
 #define OUTPUT_DATA_OFFSET 2048
+
+#define MI_BUILDER_CAN_WRITE_BATCH GFX_VER >= 8
 
 #define __genxml_cmd_length(cmd) cmd ## _length
 #define __genxml_cmd_length_bias(cmd) cmd ## _length_bias
@@ -154,6 +157,8 @@ public:
    char *input;
    char *output;
    uint64_t canary;
+
+   bool write_fence_status;
 
    mi_builder b;
 };
@@ -312,6 +317,8 @@ mi_builder_test::SetUp()
    memset(data_map, 139, DATA_BO_SIZE);
    memset(&canary, 139, sizeof(canary));
 
+   write_fence_status = false;
+
    struct isl_device isl_dev;
    isl_device_init(&isl_dev, &devinfo);
    mi_builder_init(&b, &devinfo, this);
@@ -403,6 +410,12 @@ __gen_combine_address(mi_builder_test *test, void *location,
 
    return reloc.delta;
 #endif
+}
+
+bool *
+__gen_get_write_fencing_status(mi_builder_test *test)
+{
+   return &test->write_fence_status;
 }
 
 void *
@@ -741,6 +754,58 @@ TEST_F(mi_builder_test, iand)
    EXPECT_EQ_IMM(*(uint64_t *)output, mi_iand(&b, mi_imm(values[0]),
                                                   mi_imm(values[1])));
 }
+
+#if GFX_VER >= 8
+TEST_F(mi_builder_test, imm_mem_relocated)
+{
+   const uint64_t value = 0x0123456789abcdef;
+
+   struct mi_reloc_imm_token r0 = mi_store_relocated_imm(&b, out_mem64(0));
+   struct mi_reloc_imm_token r1 = mi_store_relocated_imm(&b, out_mem32(8));
+
+   mi_relocate_store_imm(r0, value);
+   mi_relocate_store_imm(r1, value);
+
+   submit_batch();
+
+   // 64 -> 64
+   EXPECT_EQ(*(uint64_t *)(output + 0),  value);
+
+   // 64 -> 32
+   EXPECT_EQ(*(uint32_t *)(output + 8),  (uint32_t)value);
+   EXPECT_EQ(*(uint32_t *)(output + 12), (uint32_t)canary);
+}
+
+TEST_F(mi_builder_test, imm_reg_relocated)
+{
+   const uint64_t value = 0x0123456789abcdef;
+
+   struct mi_reloc_imm_token r0, r1;
+
+   r0 = mi_store_relocated_imm(&b, mi_reg64(RSVD_TEMP_REG));
+   r1 = mi_store_relocated_imm(&b, mi_reg64(RSVD_TEMP_REG));
+   mi_store(&b, out_mem64(0), mi_reg64(RSVD_TEMP_REG));
+
+   mi_relocate_store_imm(r0, canary);
+   mi_relocate_store_imm(r1, value);
+
+   r0 = mi_store_relocated_imm(&b, mi_reg64(RSVD_TEMP_REG));
+   r1 = mi_store_relocated_imm(&b, mi_reg32(RSVD_TEMP_REG));
+   mi_store(&b, out_mem64(8), mi_reg64(RSVD_TEMP_REG));
+
+   mi_relocate_store_imm(r0, canary);
+   mi_relocate_store_imm(r1, value);
+
+   submit_batch();
+
+   // 64 -> 64
+   EXPECT_EQ(*(uint64_t *)(output + 0),  value);
+
+   // 64 -> 32
+   EXPECT_EQ(*(uint32_t *)(output + 8),  (uint32_t)value);
+   EXPECT_EQ(*(uint32_t *)(output + 12), (uint32_t)canary);
+}
+#endif // GFX_VER >= 8
 
 #if GFX_VERx10 >= 125
 TEST_F(mi_builder_test, ishl)

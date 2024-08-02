@@ -278,6 +278,10 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return has_compute(screen);
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
+      if (screen->gen >= 6)
+         return PIPE_TEXTURE_TRANSFER_BLIT;
+      return 0;
+
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:

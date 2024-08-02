@@ -8,11 +8,11 @@
 #include <stdbool.h>
 #include "asahi/compiler/agx_compile.h"
 #include "asahi/layout/layout.h"
-#include "pipe/p_defines.h"
 #include "agx_pack.h"
 #include "agx_ppp.h"
 
-#define AGX_MAX_VIEWPORTS (16)
+#define AGX_MAX_OCCLUSION_QUERIES (65536)
+#define AGX_MAX_VIEWPORTS         (16)
 
 #define agx_push(ptr, T, cfg)                                                  \
    for (unsigned _loop = 0; _loop < 1; ++_loop, ptr += AGX_##T##_LENGTH)       \
@@ -82,6 +82,19 @@ agx_translate_layout(enum ail_tiling tiling)
    unreachable("Invalid tiling");
 }
 
+static enum agx_sample_count
+agx_translate_sample_count(unsigned samples)
+{
+   switch (samples) {
+   case 2:
+      return AGX_SAMPLE_COUNT_2;
+   case 4:
+      return AGX_SAMPLE_COUNT_4;
+   default:
+      unreachable("Invalid sample count");
+   }
+}
+
 static inline enum agx_index_size
 agx_translate_index_size(uint8_t size_B)
 {
@@ -92,6 +105,12 @@ agx_translate_index_size(uint8_t size_B)
 
    assert((size_B == 1) || (size_B == 2) || (size_B == 4));
    return __builtin_ctz(size_B);
+}
+
+static inline uint8_t
+agx_index_size_to_B(enum agx_index_size size)
+{
+   return 1 << size;
 }
 
 static enum agx_conservative_depth
@@ -118,7 +137,9 @@ agx_ppp_fragment_face_2(struct agx_ppp_update *ppp,
 {
    agx_ppp_push(ppp, FRAGMENT_FACE_2, cfg) {
       cfg.object_type = object_type;
-      cfg.conservative_depth = agx_translate_depth_layout(info->depth_layout);
+      cfg.conservative_depth =
+         info ? agx_translate_depth_layout(info->depth_layout)
+              : AGX_CONSERVATIVE_DEPTH_UNCHANGED;
    }
 }
 
@@ -132,19 +153,85 @@ agx_pack_line_width(float line_width)
    return MIN2(line_width_fixed, 0xFF);
 }
 
-static enum agx_shade_model
-agx_translate_shade_model(struct agx_varyings_fs *fs, unsigned binding,
-                          bool first_provoking_vertex)
+/*
+ * Despite having both a layout *and* a flag that I only see Metal use with null
+ * textures, AGX doesn't seem to have "real" null textures. Instead we need to
+ * bind an arbitrary address and throw away the results to read all 0's.
+ * Accordingly, the caller must pass some address that lives at least as long as
+ * the texture descriptor itself.
+ */
+static void
+agx_set_null_texture(struct agx_texture_packed *tex, uint64_t valid_address)
 {
-   if (fs->bindings[binding].smooth) {
-      if (fs->bindings[binding].perspective)
-         return AGX_SHADE_MODEL_PERSPECTIVE;
+   agx_pack(tex, TEXTURE, cfg) {
+      cfg.layout = AGX_LAYOUT_NULL;
+      cfg.channels = AGX_CHANNELS_R8;
+      cfg.type = AGX_TEXTURE_TYPE_UNORM /* don't care */;
+      cfg.swizzle_r = AGX_CHANNEL_0;
+      cfg.swizzle_g = AGX_CHANNEL_0;
+      cfg.swizzle_b = AGX_CHANNEL_0;
+      cfg.swizzle_a = AGX_CHANNEL_0;
+      cfg.address = valid_address;
+      cfg.null = true;
+   }
+}
+
+static void
+agx_set_null_pbe(struct agx_pbe_packed *pbe, uint64_t sink)
+{
+   agx_pack(pbe, PBE, cfg) {
+      cfg.width = 1;
+      cfg.height = 1;
+      cfg.levels = 1;
+      cfg.layout = AGX_LAYOUT_NULL;
+      cfg.channels = AGX_CHANNELS_R8;
+      cfg.type = AGX_TEXTURE_TYPE_UNORM /* don't care */;
+      cfg.swizzle_r = AGX_CHANNEL_R;
+      cfg.swizzle_g = AGX_CHANNEL_R;
+      cfg.swizzle_b = AGX_CHANNEL_R;
+      cfg.swizzle_a = AGX_CHANNEL_R;
+      cfg.buffer = sink;
+   }
+}
+
+/*
+ * Determine the maximum vertex/divided instance index.  For robustness,
+ * the index will be clamped to this before reading (if soft fault is
+ * disabled).
+ *
+ * Index i accesses up to (exclusive) offset:
+ *
+ *    src_offset + (i * stride) + elsize_B
+ *
+ * so we require
+ *
+ *    src_offset + (i * stride) + elsize_B <= size
+ *
+ * <==>
+ *
+ *    i <= floor((size - src_offset - elsize_B) / stride)
+ */
+static inline uint32_t
+agx_calculate_vbo_clamp(uint64_t vbuf, uint64_t sink, enum pipe_format format,
+                        uint32_t size_B, uint32_t stride_B, uint32_t offset_B,
+                        uint64_t *vbuf_out)
+{
+   unsigned elsize_B = util_format_get_blocksize(format);
+   unsigned subtracted_B = offset_B + elsize_B;
+
+   /* If at least one index is valid, determine the max. Otherwise, direct reads
+    * to zero.
+    */
+   if (size_B >= subtracted_B) {
+      *vbuf_out = vbuf + offset_B;
+
+      /* If stride is zero, do not clamp, everything is valid. */
+      if (stride_B)
+         return ((size_B - subtracted_B) / stride_B);
       else
-         return AGX_SHADE_MODEL_LINEAR;
+         return UINT32_MAX;
    } else {
-      if (!first_provoking_vertex)
-         return AGX_SHADE_MODEL_FLAT_VERTEX_2;
-      else
-         return AGX_SHADE_MODEL_FLAT_VERTEX_0;
+      *vbuf_out = sink;
+      return 0;
    }
 }

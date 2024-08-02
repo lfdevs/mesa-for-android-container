@@ -98,6 +98,7 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
                         nir_imm_float(b, 2.0f), inner);
 
    nir_store_output(b, inner, nir_imm_int(b, 0),
+                    .src_type = nir_type_uint32,
                     .component = 2,
                     .write_mask = WRITEMASK_XY);
 

@@ -89,7 +89,10 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
       return result;
    }
 
-   if (INTEL_DEBUG(DEBUG_SYNC)) {
+   /* Add a debug fence to wait on submissions if we're using the synchronized
+    * submission feature or the shader-print feature.
+    */
+   if (INTEL_DEBUG(DEBUG_SYNC | DEBUG_SHADER_PRINT)) {
       result = vk_sync_create(&device->vk,
                               &device->physical->sync_syncobj_type,
                               0, 0, &queue->sync);
@@ -116,6 +119,15 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
 void
 anv_queue_finish(struct anv_queue *queue)
 {
+   if (queue->init_submit) {
+      anv_async_submit_wait(queue->init_submit);
+      anv_async_submit_destroy(queue->init_submit);
+   }
+   if (queue->init_companion_submit) {
+      anv_async_submit_wait(queue->init_companion_submit);
+      anv_async_submit_destroy(queue->init_companion_submit);
+   }
+
    if (queue->sync)
       vk_sync_destroy(&queue->device->vk, queue->sync);
 

@@ -2187,70 +2187,68 @@ fn encode_instr(
     res.inst
 }
 
-impl Shader {
-    pub fn encode_sm50(&self) -> Vec<u32> {
-        assert!(self.functions.len() == 1);
-        let func = &self.functions[0];
+pub fn encode_sm50_shader(sm: &dyn ShaderModel, s: &Shader<'_>) -> Vec<u32> {
+    assert!(s.functions.len() == 1);
+    let func = &s.functions[0];
 
-        let mut num_instrs = 0_usize;
-        let mut labels = HashMap::new();
-        for b in &func.blocks {
-            // We ensure blocks will have groups of 3 instructions with a
-            // schedule instruction before each groups.  As we should never jump
-            // to a schedule instruction, we account for that here.
-            labels.insert(b.label, num_instrs + 8);
+    let mut num_instrs = 0_usize;
+    let mut labels = HashMap::new();
+    for b in &func.blocks {
+        // We ensure blocks will have groups of 3 instructions with a
+        // schedule instruction before each groups.  As we should never jump
+        // to a schedule instruction, we account for that here.
+        labels.insert(b.label, num_instrs + 8);
 
-            let block_num_instrs = align_up(b.instrs.len(), 3);
+        let block_num_instrs = align_up(b.instrs.len(), 3);
 
-            // Every 3 instructions, we have a new schedule instruction so we
-            // need to account for that.
-            num_instrs += (block_num_instrs + (block_num_instrs / 3)) * 8;
-        }
-
-        let mut encoded = Vec::new();
-        for b in &func.blocks {
-            // A block is composed of groups of 3 instructions.
-            let block_num_instrs = align_up(b.instrs.len(), 3);
-
-            let mut instrs_iter = b.instrs.iter();
-
-            for _ in 0..(block_num_instrs / 3) {
-                let mut ip = ((encoded.len() / 2) + 1) * 8;
-
-                let mut sched_instr = [0x0; 2];
-
-                let instr0 = encode_instr(
-                    0,
-                    instrs_iter.next(),
-                    self.info.sm,
-                    &labels,
-                    &mut ip,
-                    &mut sched_instr,
-                );
-                let instr1 = encode_instr(
-                    1,
-                    instrs_iter.next(),
-                    self.info.sm,
-                    &labels,
-                    &mut ip,
-                    &mut sched_instr,
-                );
-                let instr2 = encode_instr(
-                    2,
-                    instrs_iter.next(),
-                    self.info.sm,
-                    &labels,
-                    &mut ip,
-                    &mut sched_instr,
-                );
-
-                encoded.extend_from_slice(&sched_instr[..]);
-                encoded.extend_from_slice(&instr0[..]);
-                encoded.extend_from_slice(&instr1[..]);
-                encoded.extend_from_slice(&instr2[..]);
-            }
-        }
-
-        encoded
+        // Every 3 instructions, we have a new schedule instruction so we
+        // need to account for that.
+        num_instrs += (block_num_instrs + (block_num_instrs / 3)) * 8;
     }
+
+    let mut encoded = Vec::new();
+    for b in &func.blocks {
+        // A block is composed of groups of 3 instructions.
+        let block_num_instrs = align_up(b.instrs.len(), 3);
+
+        let mut instrs_iter = b.instrs.iter();
+
+        for _ in 0..(block_num_instrs / 3) {
+            let mut ip = ((encoded.len() / 2) + 1) * 8;
+
+            let mut sched_instr = [0x0; 2];
+
+            let instr0 = encode_instr(
+                0,
+                instrs_iter.next(),
+                sm.sm(),
+                &labels,
+                &mut ip,
+                &mut sched_instr,
+            );
+            let instr1 = encode_instr(
+                1,
+                instrs_iter.next(),
+                sm.sm(),
+                &labels,
+                &mut ip,
+                &mut sched_instr,
+            );
+            let instr2 = encode_instr(
+                2,
+                instrs_iter.next(),
+                sm.sm(),
+                &labels,
+                &mut ip,
+                &mut sched_instr,
+            );
+
+            encoded.extend_from_slice(&sched_instr[..]);
+            encoded.extend_from_slice(&instr0[..]);
+            encoded.extend_from_slice(&instr1[..]);
+            encoded.extend_from_slice(&instr2[..]);
+        }
+    }
+
+    encoded
 }

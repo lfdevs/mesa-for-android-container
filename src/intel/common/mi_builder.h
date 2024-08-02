@@ -39,6 +39,14 @@
 #define MI_BUILDER_NUM_ALLOC_GPRS 16
 #endif
 
+#ifndef MI_BUILDER_DEFAULT_WRITE_CHECK
+#define MI_BUILDER_DEFAULT_WRITE_CHECK true
+#endif
+
+#ifndef MI_BUILDER_RAW_MEM_FENCING
+#define MI_BUILDER_RAW_MEM_FENCING GFX_VER >= 20
+#endif
+
 /** These must be defined by the user of the builder
  *
  * void *__gen_get_batch_dwords(__gen_user_data *user_data,
@@ -61,6 +69,16 @@
  * a fully valid 64-bit address.
  */
 
+/**
+ * On Gfx20+ this must also be defined by the user of the builder
+ *
+ * bool *
+ * __gen_get_write_fencing_status(__gen_user_data *user_data);
+ *
+ * Returns a pointer to a boolean tracking the status of fencing for MI
+ * commands writing to memory.
+ */
+
 /*
  * Start of the actual MI builder
  */
@@ -75,9 +93,12 @@
         __genxml_cmd_pack(cmd)((b)->user_data, (void *)_dst, &name),    \
         _dst = NULL)
 
+/* Get the instruction pointer inside a mi_builder_pack() block */
+#define mi_builder_get_inst_ptr(b) \
+   ((uint8_t *)_dst)
+
 #define mi_builder_emit(b, cmd, name)                               \
    mi_builder_pack((b), cmd, __gen_get_batch_dwords((b)->user_data, __genxml_cmd_length(cmd)), name)
-
 
 enum mi_value_type {
    MI_VALUE_TYPE_IMM,
@@ -132,6 +153,8 @@ struct mi_builder {
    const struct intel_device_info *devinfo;
    __gen_user_data *user_data;
 
+   bool no_read_write_fencing;
+
 #if GFX_VERx10 >= 75
    uint32_t gprs;
    uint8_t gpr_refs[MI_BUILDER_NUM_ALLOC_GPRS];
@@ -142,6 +165,10 @@ struct mi_builder {
 
 #if GFX_VERx10 >= 125
    uint32_t mocs;
+#endif
+
+#if GFX_VER >= 12
+   bool write_check;
 #endif
 };
 
@@ -154,6 +181,10 @@ mi_builder_init(struct mi_builder *b,
    b->devinfo = devinfo;
    b->user_data = user_data;
 
+#if GFX_VER >= 12
+   b->write_check = MI_BUILDER_DEFAULT_WRITE_CHECK;
+#endif
+   b->no_read_write_fencing = false;
 #if GFX_VERx10 >= 75
    b->gprs = 0;
    b->num_math_dwords = 0;
@@ -193,6 +224,30 @@ mi_builder_set_mocs(UNUSED struct mi_builder *b, UNUSED uint32_t mocs)
    if (b->mocs != 0 && b->mocs != mocs)
       mi_builder_flush_math(b);
    b->mocs = mocs;
+#endif
+}
+
+/**
+ * Set write checks on immediate writes
+ *
+ * This ensures that the next memory write will complete only when all emitted
+ * previously emitted memory write are .
+ */
+static inline void
+mi_builder_set_write_check(UNUSED struct mi_builder *b, UNUSED bool check)
+{
+#if GFX_VER >= 12
+   b->write_check = check;
+#endif
+}
+
+static inline bool
+mi_builder_write_checked(UNUSED struct mi_builder *b)
+{
+#if GFX_VER >= 12
+   return b->write_check;
+#else
+   return false;
 #endif
 }
 
@@ -321,6 +376,31 @@ mi_value_unref(struct mi_builder *b, struct mi_value val)
 #endif /* GFX_VERx10 >= 75 */
 }
 
+/* On Gfx20+ memory read/write can be process unordered, so we need to track
+ * the writes to memory to make sure any memory read will see the effect of a
+ * previous write.
+ */
+static inline void
+mi_builder_set_write(struct mi_builder *b)
+{
+#if MI_BUILDER_RAW_MEM_FENCING
+   *__gen_get_write_fencing_status(b->user_data) = true;
+#endif
+}
+
+static inline void
+mi_ensure_write_fence(struct mi_builder *b)
+{
+#if MI_BUILDER_RAW_MEM_FENCING
+   if (!b->no_read_write_fencing &&
+       *__gen_get_write_fencing_status(b->user_data)) {
+      mi_builder_emit(b, GENX(MI_MEM_FENCE), fence)
+         fence.FenceType = FENCE_TYPE_MI_WRITE;
+      *__gen_get_write_fencing_status(b->user_data) = false;
+   }
+#endif
+}
+
 static inline struct mi_value
 mi_imm(uint64_t imm)
 {
@@ -421,6 +501,10 @@ _mi_copy_no_unref(struct mi_builder *b,
 #endif
    mi_builder_flush_math(b);
 
+   if (src.type == MI_VALUE_TYPE_MEM64 ||
+       src.type == MI_VALUE_TYPE_MEM32)
+      mi_ensure_write_fence(b);
+
    switch (dst.type) {
    case MI_VALUE_TYPE_IMM:
       unreachable("Cannot copy to an immediate");
@@ -449,11 +533,14 @@ _mi_copy_no_unref(struct mi_builder *b,
             assert(dst.type == MI_VALUE_TYPE_MEM64);
             uint32_t *dw = (uint32_t *)__gen_get_batch_dwords(b->user_data,
                                                               GENX(MI_STORE_DATA_IMM_length) + 1);
-            mi_builder_pack(b, GENX(MI_STORE_DATA_IMM), dw, sdm) {
-               sdm.DWordLength = GENX(MI_STORE_DATA_IMM_length) + 1 -
+            mi_builder_pack(b, GENX(MI_STORE_DATA_IMM), dw, sdi) {
+               sdi.DWordLength = GENX(MI_STORE_DATA_IMM_length) + 1 -
                                  GENX(MI_STORE_DATA_IMM_length_bias);
-               sdm.StoreQword = true;
-               sdm.Address = dst.addr;
+               sdi.StoreQword = true;
+               sdi.Address = dst.addr;
+#if GFX_VER >= 12
+               sdi.ForceWriteCompletionCheck = b->write_check;
+#endif
             }
             dw[3] = src.imm;
             dw[4] = src.imm >> 32;
@@ -490,7 +577,7 @@ _mi_copy_no_unref(struct mi_builder *b,
          mi_builder_emit(b, GENX(MI_STORE_DATA_IMM), sdi) {
             sdi.Address = dst.addr;
 #if GFX_VER >= 12
-            sdi.ForceWriteCompletionCheck = true;
+            sdi.ForceWriteCompletionCheck = b->write_check;
 #endif
             sdi.ImmediateData = src.imm;
          }
@@ -591,6 +678,16 @@ _mi_copy_no_unref(struct mi_builder *b,
    default:
       unreachable("Invalid mi_value type");
    }
+
+
+   if (dst.type == MI_VALUE_TYPE_MEM64 ||
+       dst.type == MI_VALUE_TYPE_MEM32) {
+      /* Immediate writes can already wait for writes, so no need to do
+       * additional fencing later.
+       */
+      if (src.type != MI_VALUE_TYPE_IMM || !mi_builder_write_checked(b))
+         mi_builder_set_write(b);
+   }
 }
 
 #if GFX_VERx10 >= 75
@@ -643,10 +740,21 @@ mi_memcpy(struct mi_builder *b, __gen_address_type dst,
    assert(b->num_math_dwords == 0);
 #endif
 
+   /* Flush once only */
+   mi_ensure_write_fence(b);
+   b->no_read_write_fencing = true;
+
+   /* Hold off write checks until the last write. */
+   bool write_check = mi_builder_write_checked(b);
+   mi_builder_set_write_check(b, false);
+
    /* This memcpy operates in units of dwords. */
    assert(size % 4 == 0);
 
    for (uint32_t i = 0; i < size; i += 4) {
+      if (i == size - 4)
+         mi_builder_set_write_check(b, write_check);
+
       struct mi_value dst_val = mi_mem32(__gen_address_offset(dst, i));
       struct mi_value src_val = mi_mem32(__gen_address_offset(src, i));
 #if GFX_VERx10 >= 75
@@ -660,6 +768,8 @@ mi_memcpy(struct mi_builder *b, __gen_address_type dst,
       mi_store(b, dst_val, tmp_reg);
 #endif
    }
+
+   b->no_read_write_fencing = false;
 }
 
 /*
@@ -726,6 +836,8 @@ mi_store_if(struct mi_builder *b, struct mi_value dst, struct mi_value src)
          srm.PredicateEnable = true;
       }
    }
+
+   mi_builder_set_write(b);
 
    mi_value_unref(b, src);
    mi_value_unref(b, dst);
@@ -1183,13 +1295,118 @@ mi_udiv32_imm(struct mi_builder *b, struct mi_value N, uint32_t D)
 /* This assumes addresses of strictly more than 32bits (aka. Gfx8+). */
 #if MI_BUILDER_CAN_WRITE_BATCH
 
+struct mi_reloc_imm_token {
+   enum mi_value_type dst_type;
+   uint32_t *ptr[2];
+};
+
+/* Emits a immediate write to an address/register where the immediate value
+ * can be updated later.
+ */
+static inline struct mi_reloc_imm_token
+mi_store_relocated_imm(struct mi_builder *b, struct mi_value dst)
+{
+   mi_builder_flush_math(b);
+
+   struct mi_reloc_imm_token token = {
+      .dst_type = dst.type,
+   };
+
+   uint32_t *dw;
+   switch (dst.type) {
+   case MI_VALUE_TYPE_MEM32:
+      dw = (uint32_t *)__gen_get_batch_dwords(b->user_data,
+                                              GENX(MI_STORE_DATA_IMM_length));
+      mi_builder_pack(b, GENX(MI_STORE_DATA_IMM), dw, sdm) {
+         sdm.DWordLength = GENX(MI_STORE_DATA_IMM_length) -
+                           GENX(MI_STORE_DATA_IMM_length_bias);
+         sdm.Address = dst.addr;
+      }
+      token.ptr[0] = dw + GENX(MI_STORE_DATA_IMM_ImmediateData_start) / 32;
+      mi_builder_set_write(b);
+      break;
+
+   case MI_VALUE_TYPE_MEM64:
+      dw = (uint32_t *)__gen_get_batch_dwords(b->user_data,
+                                              GENX(MI_STORE_DATA_IMM_length) + 1);
+      mi_builder_pack(b, GENX(MI_STORE_DATA_IMM), dw, sdm) {
+         sdm.DWordLength = GENX(MI_STORE_DATA_IMM_length) + 1 -
+                           GENX(MI_STORE_DATA_IMM_length_bias);
+         sdm.Address = dst.addr;
+      }
+      token.ptr[0] = &dw[GENX(MI_STORE_DATA_IMM_ImmediateData_start) / 32];
+      token.ptr[1] = &dw[GENX(MI_STORE_DATA_IMM_ImmediateData_start) / 32 + 1];
+      mi_builder_set_write(b);
+      break;
+
+   case MI_VALUE_TYPE_REG32:
+      dw = (uint32_t *)__gen_get_batch_dwords(b->user_data,
+                                              GENX(MI_LOAD_REGISTER_IMM_length));
+      mi_builder_pack(b, GENX(MI_LOAD_REGISTER_IMM), dw, lri) {
+         lri.DWordLength = GENX(MI_LOAD_REGISTER_IMM_length) -
+                           GENX(MI_LOAD_REGISTER_IMM_length_bias);
+         struct mi_reg_num reg = mi_adjust_reg_num(dst.reg);
+#if GFX_VER >= 11
+         lri.AddCSMMIOStartOffset = reg.cs;
+#endif
+         lri.RegisterOffset = reg.num;
+      }
+      token.ptr[0] = &dw[2];
+      break;
+
+   case MI_VALUE_TYPE_REG64: {
+      dw = (uint32_t *)__gen_get_batch_dwords(b->user_data,
+                                              GENX(MI_LOAD_REGISTER_IMM_length) + 2);
+      struct mi_reg_num reg = mi_adjust_reg_num(dst.reg);
+      mi_builder_pack(b, GENX(MI_LOAD_REGISTER_IMM), dw, lri) {
+         lri.DWordLength = GENX(MI_LOAD_REGISTER_IMM_length) + 2 -
+                           GENX(MI_LOAD_REGISTER_IMM_length_bias);
+#if GFX_VER >= 11
+         lri.AddCSMMIOStartOffset = reg.cs;
+#endif
+      }
+      dw[1] = reg.num;
+      dw[3] = reg.num + 4;
+      token.ptr[0] = &dw[2];
+      token.ptr[1] = &dw[4];
+      break;
+   }
+
+   default:
+      unreachable("Invalid value type");
+   }
+
+   mi_value_unref(b, dst);
+   return token;
+}
+
+static inline void
+mi_relocate_store_imm(struct mi_reloc_imm_token token, uint64_t value)
+{
+   switch (token.dst_type) {
+   case MI_VALUE_TYPE_MEM64:
+   case MI_VALUE_TYPE_REG64:
+      *token.ptr[1] = value >> 32;
+      FALLTHROUGH;
+   case MI_VALUE_TYPE_MEM32:
+   case MI_VALUE_TYPE_REG32:
+      *token.ptr[0] = value & 0xffffffff;
+      break;
+   default:
+      unreachable("Invalid value type");
+   }
+}
+
 struct mi_address_token {
    /* Pointers to address memory fields in the batch. */
    uint64_t *ptrs[2];
 };
 
+/* Emits a 64bit memory write to a yet unknown address using a value from a
+ * register
+ */
 static inline struct mi_address_token
-mi_store_address(struct mi_builder *b, struct mi_value addr_reg)
+mi_store_relocated_address_reg64(struct mi_builder *b, struct mi_value addr_reg)
 {
    mi_builder_flush_math(b);
 
@@ -1203,10 +1420,11 @@ mi_store_address(struct mi_builder *b, struct mi_value addr_reg)
 
          const unsigned addr_dw =
             GENX(MI_STORE_REGISTER_MEM_MemoryAddress_start) / 8;
-         token.ptrs[i] = (void *)_dst + addr_dw;
+         token.ptrs[i] = (uint64_t *)(mi_builder_get_inst_ptr(_dst) + addr_dw);
       }
    }
 
+   mi_builder_set_write(b);
    mi_value_unref(b, addr_reg);
    return token;
 }
@@ -1230,9 +1448,9 @@ mi_self_mod_barrier(struct mi_builder *b, unsigned cs_prefetch_size)
 }
 
 static inline void
-_mi_resolve_address_token(struct mi_builder *b,
-                          struct mi_address_token token,
-                          void *batch_location)
+mi_resolve_relocated_address_token(struct mi_builder *b,
+                                   struct mi_address_token token,
+                                   void *batch_location)
 {
    __gen_address_type addr = __gen_get_batch_address(b->user_data,
                                                     batch_location);
@@ -1254,6 +1472,8 @@ MUST_CHECK static inline struct mi_value
 mi_load_mem64_offset(struct mi_builder *b,
                      __gen_address_type addr, struct mi_value offset)
 {
+   mi_ensure_write_fence(b);
+
    uint64_t addr_u64 = __gen_combine_address(b->user_data, NULL, addr, 0);
    struct mi_value addr_val = mi_imm(addr_u64);
 
@@ -1299,6 +1519,9 @@ mi_store_mem64_offset(struct mi_builder *b,
     * registers to flush math afterwards so we don't confuse anyone.
     */
    mi_builder_flush_math(b);
+   /* mi_builder_set_write() is not required here because we have a FENCE_WR
+    * in the ALU instruction.
+    */
 }
 
 /*
@@ -1387,7 +1610,8 @@ mi_goto_target(struct mi_builder *b, struct mi_goto_target *t)
 {
    mi_builder_emit(b, GENX(MI_SET_PREDICATE), sp) {
       sp.PredicateEnable = NOOPNever;
-      t->addr = __gen_get_batch_address(b->user_data, _dst);
+      t->addr = __gen_get_batch_address(b->user_data,
+                                        mi_builder_get_inst_ptr(b));
    }
    t->placed = true;
 

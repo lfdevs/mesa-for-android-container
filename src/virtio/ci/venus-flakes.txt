@@ -7,3 +7,6 @@ dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.*
 # uprev Piglit in Mesa
 dEQP-VK.transform_feedback.primitives_generated_query.get.*reset.*
 
+# alternates between crash and timeout
+dEQP-VK.binding_model.mutable_descriptor.multiple_arrays_mixed.constant_size.aliasing.update_write.no_source.no_source.pool_no_types.pre_update.index_constant.comp
+dEQP-VK.binding_model.mutable_descriptor.multiple_arrays_mixed.unbounded.noaliasing.update_write.no_source.no_source.*

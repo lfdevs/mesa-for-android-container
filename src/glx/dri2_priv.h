@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#include "GL/internal/mesa_interface.h"
+#include "mesa_interface.h"
 
 struct dri2_screen {
    struct glx_screen base;
@@ -56,7 +56,6 @@ struct dri2_screen {
    const __DRI2interopExtension *interop;
    const __DRIconfig **driver_configs;
 
-   void *driver;
    char *driverName;
    int fd;
 

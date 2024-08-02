@@ -945,13 +945,13 @@ qpu_raddrs_used(const struct v3d_qpu_instr *a,
 
         uint64_t raddrs_used = 0;
         if (v3d_qpu_uses_mux(a, V3D_QPU_MUX_A))
-                raddrs_used |= (1ll << a->raddr_a);
+                raddrs_used |= (UINT64_C(1) << a->raddr_a);
         if (!a->sig.small_imm_b && v3d_qpu_uses_mux(a, V3D_QPU_MUX_B))
-                raddrs_used |= (1ll << a->raddr_b);
+                raddrs_used |= (UINT64_C(1) << a->raddr_b);
         if (v3d_qpu_uses_mux(b, V3D_QPU_MUX_A))
-                raddrs_used |= (1ll << b->raddr_a);
+                raddrs_used |= (UINT64_C(1) << b->raddr_a);
         if (!b->sig.small_imm_b && v3d_qpu_uses_mux(b, V3D_QPU_MUX_B))
-                raddrs_used |= (1ll << b->raddr_b);
+                raddrs_used |= (UINT64_C(1) << b->raddr_b);
 
         return raddrs_used;
 }
@@ -1014,7 +1014,7 @@ qpu_merge_raddrs(struct v3d_qpu_instr *result,
                 return true;
 
         int raddr_a = ffsll(raddrs_used) - 1;
-        raddrs_used &= ~(1ll << raddr_a);
+        raddrs_used &= ~(UINT64_C(1) << raddr_a);
         result->raddr_a = raddr_a;
 
         if (!result->sig.small_imm_b) {

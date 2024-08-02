@@ -154,3 +154,53 @@ anv_gfx_state_bit_to_str(enum anv_gfx_state_bits state)
    default: unreachable("invalid state");
    }
 }
+
+VkResult
+anv_device_print_init(struct anv_device *device)
+{
+   VkResult result =
+      anv_device_alloc_bo(device, "printf",
+                          debug_get_num_option("ANV_PRINTF_BUFFER_SIZE", 1024 * 1024),
+                          ANV_BO_ALLOC_CAPTURE |
+                          ANV_BO_ALLOC_MAPPED |
+                          ANV_BO_ALLOC_HOST_COHERENT |
+                          ANV_BO_ALLOC_NO_LOCAL_MEM,
+                          0 /* explicit_address */,
+                          &device->printf.bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   util_dynarray_init(&device->printf.prints, ralloc_context(NULL));
+   simple_mtx_init(&device->printf.mutex, mtx_plain);
+
+   *((uint32_t *)device->printf.bo->map) = 4;
+
+   return VK_SUCCESS;
+}
+
+void
+anv_device_print_fini(struct anv_device *device)
+{
+   anv_device_release_bo(device, device->printf.bo);
+   util_dynarray_fini(&device->printf.prints);
+   simple_mtx_destroy(&device->printf.mutex);
+}
+
+void
+anv_device_print_shader_prints(struct anv_device *device)
+{
+   simple_mtx_lock(&device->printf.mutex);
+
+   uint32_t *size = device->printf.bo->map;
+
+   u_printf_ptr(stdout,
+                device->printf.bo->map + sizeof(uint32_t),
+                *size - 4,
+                util_dynarray_begin(&device->printf.prints),
+                util_dynarray_num_elements(&device->printf.prints, u_printf_info*));
+
+   /* Reset */
+   *size = 4;
+
+   simple_mtx_unlock(&device->printf.mutex);
+}

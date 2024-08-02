@@ -60,7 +60,6 @@ bool
 anv_nir_lower_load_patch_vertices_in(nir_shader *shader)
 {
    return nir_shader_intrinsics_pass(shader, lower_patch_vertices_in_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }

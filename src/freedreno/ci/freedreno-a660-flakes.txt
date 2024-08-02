@@ -12,3 +12,11 @@ dEQP-VK.tessellation.invariance.primitive_set.quads_equal_spacing_cw_point_mode
 
 # Updated by ci-collate, found in this job run: https://gitlab.freedesktop.org/mesa/mesa/-/jobs/56260513
 dEQP-VK.tessellation.invariance.outer_edge_index_independence.triangles_equal_spacing_cw_point_mode
+
+# Updated by ci-collate
+dEQP-VK.spirv_assembly.instruction.graphics.float16.logical.opfordlessthanequal_vector_geom
+bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_2_2_multiviewport
+dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert_geom.8
+gmem-dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.after_pipelines.rasterization_stream_none_to_one
+dEQP-VK.tessellation.invariance.outer_edge_index_independence.quads_fractional_odd_spacing_cw_point_mode
+dEQP-VK.tessellation.invariance.outer_edge_index_independence.quads_fractional_even_spacing_cw_point_mode

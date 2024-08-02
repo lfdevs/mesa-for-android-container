@@ -68,7 +68,8 @@ struct fd_batch_cache {
 void fd_bc_init(struct fd_batch_cache *cache);
 void fd_bc_fini(struct fd_batch_cache *cache);
 
-void fd_bc_flush(struct fd_context *ctx, bool deferred) assert_dt;
+struct fd_batch *fd_bc_last_batch(struct fd_context *ctx) assert_dt;
+void fd_bc_add_flush_deps(struct fd_context *ctx, struct fd_batch *last_batch) assert_dt;
 void fd_bc_flush_writer(struct fd_context *ctx, struct fd_resource *rsc) assert_dt;
 void fd_bc_flush_readers(struct fd_context *ctx, struct fd_resource *rsc) assert_dt;
 void fd_bc_dump(struct fd_context *ctx, const char *fmt, ...)

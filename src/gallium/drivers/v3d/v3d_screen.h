@@ -58,6 +58,9 @@ struct v3d_screen {
 
         const char *name;
 
+        /** Stores performance counters names **/
+        char **perfcnt_names;
+
         struct slab_parent_pool transfer_pool;
 
         struct v3d_bo_cache {
@@ -100,6 +103,8 @@ v3d_screen(struct pipe_screen *screen)
 struct pipe_screen *v3d_screen_create(int fd,
                                       const struct pipe_screen_config *config,
                                       struct renderonly *ro);
+
+const char *v3d_screen_get_name(struct pipe_screen *pscreen);
 
 void
 v3d_fence_screen_init(struct v3d_screen *screen);

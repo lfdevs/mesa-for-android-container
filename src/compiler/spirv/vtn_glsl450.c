@@ -38,6 +38,21 @@
 #define M_PI_4f ((float) M_PI_4)
 #endif
 
+/**
+ * Some fp16 instructions (i.e., asin and acos) are lowered as fp32. In these cases the
+ * generated fp32 instructions need the same fp_fast_math settings as fp16.
+ */
+static void
+propagate_fp16_fast_math_to_fp32(struct nir_builder *b)
+{
+   static_assert(FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP32 ==
+                 (FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP16 << 1),
+                 "FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP32 is not "
+                 "FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP16 << 1.");
+
+   b->fp_fast_math |= (b->fp_fast_math & FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP16) << 1;
+}
+
 static nir_def *build_det(nir_builder *b, nir_def **col, unsigned cols);
 
 /* Computes the determinate of the submatrix given by taking src and
@@ -163,7 +178,14 @@ build_asin(nir_builder *b, nir_def *x, float p0, float p1, bool piecewise)
        * approximation in 32-bit math and then we convert the result back to
        * 16-bit.
        */
-      return nir_f2f16(b, build_asin(b, nir_f2f32(b, x), p0, p1, piecewise));
+      const uint32_t save = b->fp_fast_math;
+      propagate_fp16_fast_math_to_fp32(b);
+
+      nir_def *result =
+         nir_f2f16(b, build_asin(b, nir_f2f32(b, x), p0, p1, piecewise));
+
+      b->fp_fast_math = save;
+      return result;
    }
    nir_def *one = nir_imm_floatN_t(b, 1.0f, x->bit_size);
    nir_def *half = nir_imm_floatN_t(b, 0.5f, x->bit_size);
@@ -253,11 +275,7 @@ vtn_nir_alu_op_for_spirv_glsl_opcode(struct vtn_builder *b,
    case GLSLstd450UnpackUnorm4x8:   return nir_op_unpack_unorm_4x8;
    case GLSLstd450UnpackSnorm2x16:  return nir_op_unpack_snorm_2x16;
    case GLSLstd450UnpackUnorm2x16:  return nir_op_unpack_unorm_2x16;
-   case GLSLstd450UnpackHalf2x16:
-      if (execution_mode & FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16)
-         return nir_op_unpack_half_2x16_flush_to_zero;
-      else
-         return nir_op_unpack_half_2x16;
+   case GLSLstd450UnpackHalf2x16:   return nir_op_unpack_half_2x16;
    case GLSLstd450UnpackDouble2x32: return nir_op_unpack_64_2x32;
 
    default:
@@ -343,7 +361,7 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
       nir_def *sign_bit =
          nir_imm_intN_t(&b->nb, (uint64_t)1 << (src[0]->bit_size - 1),
                         src[0]->bit_size);
-      nir_def *sign = nir_fsign(nb, src[0]);
+      nir_def *signed_zero = nir_iand(nb, src[0], sign_bit);
       nir_def *abs = nir_fabs(nb, src[0]);
 
       /* NaN input should produce a NaN results, and ±Inf input should provide
@@ -353,12 +371,12 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
        */
       dest->def = nir_bcsel(nb,
                             nir_ieq(nb, abs, inf),
-                            nir_iand(nb, src[0], sign_bit),
-                            nir_fmul(nb, sign, nir_ffract(nb, abs)));
+                            signed_zero,
+                            nir_ior(nb, signed_zero, nir_ffract(nb, abs)));
 
       struct vtn_pointer *i_ptr = vtn_value(b, w[6], vtn_value_type_pointer)->pointer;
       struct vtn_ssa_value *whole = vtn_create_ssa_value(b, i_ptr->type->type);
-      whole->def = nir_fmul(nb, sign, nir_ffloor(nb, abs));
+      whole->def = nir_ior(nb, signed_zero, nir_ffloor(nb, abs));
       vtn_variable_store(b, whole, i_ptr, 0);
       break;
    }
@@ -368,16 +386,16 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
       nir_def *sign_bit =
          nir_imm_intN_t(&b->nb, (uint64_t)1 << (src[0]->bit_size - 1),
                         src[0]->bit_size);
-      nir_def *sign = nir_fsign(nb, src[0]);
+      nir_def *signed_zero = nir_iand(nb, src[0], sign_bit);
       nir_def *abs = nir_fabs(nb, src[0]);
       vtn_assert(glsl_type_is_struct_or_ifc(dest_type));
 
       /* See GLSLstd450Modf for explanation of the Inf and NaN handling. */
       dest->elems[0]->def = nir_bcsel(nb,
                                       nir_ieq(nb, abs, inf),
-                                      nir_iand(nb, src[0], sign_bit),
-                                      nir_fmul(nb, sign, nir_ffract(nb, abs)));
-      dest->elems[1]->def = nir_fmul(nb, sign, nir_ffloor(nb, abs));
+                                      signed_zero,
+                                      nir_ior(nb, signed_zero, nir_ffract(nb, abs)));
+      dest->elems[1]->def = nir_ior(nb, signed_zero, nir_ffloor(nb, abs));
       break;
    }
 
@@ -697,6 +715,7 @@ bool
 vtn_handle_glsl450_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                const uint32_t *w, unsigned count)
 {
+   vtn_handle_fp_fast_math(b, vtn_untyped_value(b, w[2]));
    switch ((enum GLSLstd450)ext_opcode) {
    case GLSLstd450Determinant: {
       vtn_push_nir_ssa(b, w[2], build_mat_det(b, vtn_ssa_value(b, w[5])));

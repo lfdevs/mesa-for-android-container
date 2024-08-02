@@ -72,7 +72,8 @@ ir3_load_driver_ubo_indirect(nir_builder *b, unsigned components,
                              unsigned base, nir_def *offset,
                              unsigned range)
 {
-   ubo->size = MAX2(ubo->size, base + components + range * 4);
+   assert(range > 0);
+   ubo->size = MAX2(ubo->size, base + components + (range - 1) * 4);
 
    return nir_load_ubo(b, components, 32, ir3_get_driver_ubo(b, ubo),
                        nir_iadd(b, nir_imul24(b, offset, nir_imm_int(b, 16)),
@@ -85,6 +86,32 @@ ir3_load_driver_ubo_indirect(nir_builder *b, unsigned components,
 }
 
 static bool
+ir3_nir_should_scalarize_mem(const nir_instr *instr, const void *data)
+{
+   const struct ir3_compiler *compiler = data;
+   const nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+   /* Scalarize load_ssbo's that we could otherwise lower to isam,
+    * as the tex cache benefit outweighs the benefit of vectorizing
+    * Don't do this if (vectorized) isam.v is supported.
+    */
+   if ((intrin->intrinsic == nir_intrinsic_load_ssbo) &&
+       (nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER) &&
+       compiler->has_isam_ssbo && !compiler->has_isam_v) {
+      return true;
+   }
+
+   if ((intrin->intrinsic == nir_intrinsic_load_ssbo &&
+        intrin->def.bit_size == 8) ||
+       (intrin->intrinsic == nir_intrinsic_store_ssbo &&
+        intrin->src[0].ssa->bit_size == 8)) {
+      return true;
+   }
+
+   return false;
+}
+
+static bool
 ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                              unsigned bit_size, unsigned num_components,
                              nir_intrinsic_instr *low,
@@ -94,11 +121,12 @@ ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
    unsigned byte_size = bit_size / 8;
 
    /* Don't vectorize load_ssbo's that we could otherwise lower to isam,
-    * as the tex cache benefit outweighs the benefit of vectorizing
+    * as the tex cache benefit outweighs the benefit of vectorizing. If we
+    * support isam.v, we can vectorize this though.
     */
    if ((low->intrinsic == nir_intrinsic_load_ssbo) &&
        (nir_intrinsic_access(low) & ACCESS_CAN_REORDER) &&
-       compiler->has_isam_ssbo) {
+       compiler->has_isam_ssbo && !compiler->has_isam_v) {
       return false;
    }
 
@@ -139,12 +167,13 @@ ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
 
 #define OPT_V(nir, pass, ...) NIR_PASS_V(nir, pass, ##__VA_ARGS__)
 
-void
+bool
 ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
 {
    MESA_TRACE_FUNC();
 
    bool progress;
+   bool did_progress = false;
    unsigned lower_flrp = (s->options->lower_flrp16 ? 16 : 0) |
                          (s->options->lower_flrp32 ? 32 : 0) |
                          (s->options->lower_flrp64 ? 64 : 0);
@@ -194,7 +223,7 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
       progress |= OPT(s, nir_lower_pack);
       progress |= OPT(s, nir_opt_constant_folding);
 
-      static const nir_opt_offsets_options offset_options = {
+      const nir_opt_offsets_options offset_options = {
          /* How large an offset we can encode in the instr's immediate field.
           */
          .uniform_max = (1 << 9) - 1,
@@ -204,7 +233,10 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
           */
          .shared_max = (1 << 12) - 1,
 
-         .buffer_max = ~0,
+         .buffer_max = 0,
+         .max_offset_cb = ir3_nir_max_imm_offset,
+         .max_offset_data = compiler,
+         .allow_offset_wrap = true,
       };
       progress |= OPT(s, nir_opt_offsets, &offset_options);
 
@@ -244,9 +276,11 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
       progress |= OPT(s, nir_lower_64bit_phis);
       progress |= OPT(s, nir_opt_remove_phis);
       progress |= OPT(s, nir_opt_undef);
+      did_progress |= progress;
    } while (progress);
 
    OPT(s, nir_lower_var_copies);
+   return did_progress;
 }
 
 static bool
@@ -377,7 +411,7 @@ ir3_nir_lower_array_sampler(nir_shader *shader)
 {
    return nir_shader_instructions_pass(
       shader, ir3_nir_lower_array_sampler_cb,
-      nir_metadata_block_index | nir_metadata_dominance, NULL);
+      nir_metadata_control_flow, NULL);
 }
 
 void
@@ -707,7 +741,8 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 
    bool progress = false;
 
-   NIR_PASS_V(s, nir_lower_io_to_scalar, nir_var_mem_ssbo, NULL, NULL);
+   progress |= OPT(s, nir_lower_io_to_scalar, nir_var_mem_ssbo,
+                   ir3_nir_should_scalarize_mem, so->compiler);
 
    if (so->key.has_gs || so->key.tessellation) {
       switch (so->type) {
@@ -760,7 +795,7 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
     */
    OPT_V(s, nir_opt_large_constants, glsl_get_vec4_size_align_bytes,
          32 /* bytes */);
-   OPT_V(s, ir3_nir_lower_load_constant, so);
+   progress |= OPT(s, ir3_nir_lower_load_constant, so);
 
    /* Lower large temporaries to scratch, which in Qualcomm terms is private
     * memory, to avoid excess register pressure. This should happen after
@@ -793,7 +828,7 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
       progress |= OPT(s, nir_opt_constant_folding);
    }
 
-   OPT(s, ir3_nir_opt_subgroups, so);
+   progress |= OPT(s, ir3_nir_opt_subgroups, so);
 
    if (so->compiler->load_shader_consts_via_preamble)
       progress |= OPT(s, ir3_nir_lower_driver_params_to_ubo, so);
@@ -820,12 +855,16 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 
    progress |= OPT(s, ir3_nir_lower_ubo_loads, so);
 
+   if (so->compiler->gen >= 7 &&
+       !(ir3_shader_debug & (IR3_DBG_NOPREAMBLE | IR3_DBG_NODESCPREFETCH)))
+      progress |= OPT(s, ir3_nir_opt_prefetch_descriptors, so);
+
    if (so->shader_options.push_consts_type == IR3_PUSH_CONSTS_SHARED_PREAMBLE)
       progress |= OPT(s, ir3_nir_lower_push_consts_to_preamble, so);
 
    progress |= OPT(s, ir3_nir_lower_preamble, so);
 
-   OPT_V(s, nir_lower_amul, ir3_glsl_type_size);
+   progress |= OPT(s, nir_lower_amul, ir3_glsl_type_size);
 
    /* UBO offset lowering has to come after we've decided what will
     * be left as load_ubo
@@ -833,10 +872,13 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
    if (so->compiler->gen >= 6)
       progress |= OPT(s, nir_lower_ubo_vec4);
 
-   OPT_V(s, ir3_nir_lower_io_offsets);
+   progress |= OPT(s, ir3_nir_lower_io_offsets);
 
    if (progress)
       ir3_optimize_loop(so->compiler, s);
+
+   /* verify that progress is always set */
+   assert(!ir3_optimize_loop(so->compiler, s));
 
    /* Fixup indirect load_uniform's which end up with a const base offset
     * which is too large to encode.  Do this late(ish) so we actually

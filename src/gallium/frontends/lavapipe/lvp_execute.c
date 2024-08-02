@@ -48,6 +48,7 @@
 
 #include "vk_blend.h"
 #include "vk_cmd_enqueue_entrypoints.h"
+#include "vk_descriptor_update_template.h"
 #include "vk_util.h"
 
 #define VK_PROTOTYPES
@@ -226,7 +227,12 @@ get_buffer_resource(struct pipe_context *ctx, void *mem)
 
    uint64_t size;
    struct pipe_resource *pres = pscreen->resource_create_unbacked(pscreen, &templ, &size);
-   pscreen->resource_bind_backing(pscreen, pres, mem, 0);
+
+   struct llvmpipe_memory_allocation alloc = {
+      .cpu_addr = mem,
+   };
+
+   pscreen->resource_bind_backing(pscreen, pres, (void *)&alloc, 0, 0, 0);
    return pres;
 }
 
@@ -3313,7 +3319,7 @@ static void handle_push_descriptor_set_with_template(struct vk_cmd_queue_entry *
                                                      struct rendering_state *state)
 {
    VkPushDescriptorSetWithTemplateInfoKHR *pds = cmd->u.push_descriptor_set_with_template2_khr.push_descriptor_set_with_template_info;
-   LVP_FROM_HANDLE(lvp_descriptor_update_template, templ, pds->descriptorUpdateTemplate);
+   LVP_FROM_HANDLE(vk_descriptor_update_template, templ, pds->descriptorUpdateTemplate);
    LVP_FROM_HANDLE(lvp_pipeline_layout, layout, pds->layout);
    struct lvp_descriptor_set_layout *set_layout = (struct lvp_descriptor_set_layout *)layout->vk.set_layouts[pds->set];
 
@@ -3328,7 +3334,7 @@ static void handle_push_descriptor_set_with_template(struct vk_cmd_queue_entry *
 
    VkDescriptorSet set_handle = lvp_descriptor_set_to_handle(set);
    lvp_descriptor_set_update_with_template(lvp_device_to_handle(state->device), set_handle,
-                                           pds->descriptorUpdateTemplate, pds->pData, true);
+                                           pds->descriptorUpdateTemplate, pds->pData);
 
    VkBindDescriptorSetsInfoKHR bind_cmd = {
       .stageFlags = vk_shader_stages_from_bind_point(templ->bind_point),
@@ -3881,7 +3887,7 @@ static void handle_draw_mesh_tasks(struct vk_cmd_queue_entry *cmd,
    state->dispatch_info.grid_base[2] = 0;
    state->dispatch_info.draw_count = 1;
    state->dispatch_info.indirect = NULL;
-   state->pctx->draw_mesh_tasks(state->pctx, &state->dispatch_info);
+   state->pctx->draw_mesh_tasks(state->pctx, 0, &state->dispatch_info);
 }
 
 static void handle_draw_mesh_tasks_indirect(struct vk_cmd_queue_entry *cmd,
@@ -3892,7 +3898,7 @@ static void handle_draw_mesh_tasks_indirect(struct vk_cmd_queue_entry *cmd,
    state->dispatch_info.indirect_offset = cmd->u.draw_mesh_tasks_indirect_ext.offset;
    state->dispatch_info.indirect_stride = cmd->u.draw_mesh_tasks_indirect_ext.stride;
    state->dispatch_info.draw_count = cmd->u.draw_mesh_tasks_indirect_ext.draw_count;
-   state->pctx->draw_mesh_tasks(state->pctx, &state->dispatch_info);
+   state->pctx->draw_mesh_tasks(state->pctx, 0, &state->dispatch_info);
 }
 
 static void handle_draw_mesh_tasks_indirect_count(struct vk_cmd_queue_entry *cmd,
@@ -3905,7 +3911,7 @@ static void handle_draw_mesh_tasks_indirect_count(struct vk_cmd_queue_entry *cmd
    state->dispatch_info.draw_count = cmd->u.draw_mesh_tasks_indirect_count_ext.max_draw_count;
    state->dispatch_info.indirect_draw_count_offset = cmd->u.draw_mesh_tasks_indirect_count_ext.count_buffer_offset;
    state->dispatch_info.indirect_draw_count = lvp_buffer_from_handle(cmd->u.draw_mesh_tasks_indirect_count_ext.count_buffer)->bo;
-   state->pctx->draw_mesh_tasks(state->pctx, &state->dispatch_info);
+   state->pctx->draw_mesh_tasks(state->pctx, 0, &state->dispatch_info);
 }
 
 static VkBuffer
@@ -3929,11 +3935,12 @@ get_buffer(struct rendering_state *state, const uint8_t *ptr, size_t *offset)
 
 static size_t
 process_sequence(struct rendering_state *state,
-                 VkPipeline pipeline, struct lvp_indirect_command_layout *dlayout,
+                 VkPipeline pipeline, struct lvp_indirect_command_layout_nv *dlayout,
                  struct list_head *list, uint8_t *pbuf, size_t max_size,
-                 uint8_t **map_streams, const VkIndirectCommandsStreamNV *pstreams, uint32_t seq)
+                 uint8_t **map_streams, const VkIndirectCommandsStreamNV *pstreams, uint32_t seq, bool print_cmds)
 {
    size_t size = 0;
+
    for (uint32_t t = 0; t < dlayout->token_count; t++){
       const VkIndirectCommandsLayoutTokenNV *token = &dlayout->tokens[t];
       uint32_t stride = dlayout->stream_strides[token->stream];
@@ -3945,6 +3952,9 @@ process_sequence(struct rendering_state *state,
       struct vk_cmd_queue_entry *cmd = (struct vk_cmd_queue_entry*)(pbuf + size);
       size_t cmd_size = vk_cmd_queue_type_sizes[lvp_nv_dgc_token_to_cmd_type(token)];
       uint8_t *cmdptr = (void*)(pbuf + size + cmd_size);
+
+      if (print_cmds)
+         fprintf(stderr, "DGC %s\n", vk_IndirectCommandsTokenTypeNV_to_str(token->tokenType));
 
       if (max_size < size + cmd_size)
          abort();
@@ -4070,10 +4080,10 @@ process_sequence(struct rendering_state *state,
 }
 
 static void
-handle_preprocess_generated_commands(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
+handle_preprocess_generated_commands(struct vk_cmd_queue_entry *cmd, struct rendering_state *state, bool print_cmds)
 {
    VkGeneratedCommandsInfoNV *pre = cmd->u.preprocess_generated_commands_nv.generated_commands_info;
-   VK_FROM_HANDLE(lvp_indirect_command_layout, dlayout, pre->indirectCommandsLayout);
+   VK_FROM_HANDLE(lvp_indirect_command_layout_nv, dlayout, pre->indirectCommandsLayout);
    struct pipe_transfer *stream_maps[16];
    uint8_t *streams[16];
    for (unsigned i = 0; i < pre->streamCount; i++) {
@@ -4111,7 +4121,7 @@ handle_preprocess_generated_commands(struct vk_cmd_queue_entry *cmd, struct rend
    size_t offset = size;
    for (unsigned i = 0; i < seq_count; i++) {
       uint32_t s = seq ? seq[i] : i;
-      offset += process_sequence(state, pre->pipeline, dlayout, list, p + offset, max_size, streams, pre->pStreams, s);
+      offset += process_sequence(state, pre->pipeline, dlayout, list, p + offset, max_size, streams, pre->pStreams, s, print_cmds);
    }
 
    /* vk_cmd_queue will copy the binary and break the list, so null the tail pointer */
@@ -4132,7 +4142,7 @@ handle_execute_generated_commands(struct vk_cmd_queue_entry *cmd, struct renderi
    if (!exec->is_preprocessed) {
       struct vk_cmd_queue_entry pre;
       pre.u.preprocess_generated_commands_nv.generated_commands_info = exec->generated_commands_info;
-      handle_preprocess_generated_commands(&pre, state);
+      handle_preprocess_generated_commands(&pre, state, print_cmds);
    }
    LVP_FROM_HANDLE(lvp_buffer, pbuf, gen->preprocessBuffer);
    struct pipe_transfer *pmap;
@@ -4734,6 +4744,9 @@ void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp)
    ENQUEUE_CMD(CmdSetEvent2)
    ENQUEUE_CMD(CmdWaitEvents2)
    ENQUEUE_CMD(CmdWriteTimestamp2)
+   ENQUEUE_CMD(CmdPushConstants2KHR)
+   ENQUEUE_CMD(CmdPushDescriptorSet2KHR)
+   ENQUEUE_CMD(CmdPushDescriptorSetWithTemplate2KHR)
    ENQUEUE_CMD(CmdBindDescriptorBuffersEXT)
    ENQUEUE_CMD(CmdSetDescriptorBufferOffsets2EXT)
    ENQUEUE_CMD(CmdBindDescriptorBufferEmbeddedSamplers2EXT)
@@ -5133,7 +5146,7 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
          handle_graphics_pipeline_group(cmd, state);
          break;
       case VK_CMD_PREPROCESS_GENERATED_COMMANDS_NV:
-         handle_preprocess_generated_commands(cmd, state);
+         handle_preprocess_generated_commands(cmd, state, print_cmds);
          break;
       case VK_CMD_EXECUTE_GENERATED_COMMANDS_NV:
          handle_execute_generated_commands(cmd, state, print_cmds);

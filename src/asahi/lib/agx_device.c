@@ -1,14 +1,17 @@
 /*
  * Copyright 2021 Alyssa Rosenzweig
  * Copyright 2019 Collabora, Ltd.
+ * Copyright 2020 Igalia S.L.
  * SPDX-License-Identifier: MIT
  */
 
 #include "agx_device.h"
 #include <inttypes.h>
+#include "util/ralloc.h"
 #include "util/timespec.h"
 #include "agx_bo.h"
 #include "agx_compile.h"
+#include "agx_device_virtio.h"
 #include "agx_scratch.h"
 #include "decode.h"
 #include "glsl_types.h"
@@ -19,16 +22,52 @@
 #include "drm-uapi/dma-buf.h"
 #include "util/blob.h"
 #include "util/log.h"
+#include "util/mesa-sha1.h"
 #include "util/os_file.h"
 #include "util/os_mman.h"
 #include "util/os_time.h"
 #include "util/simple_mtx.h"
 #include "git_sha1.h"
 #include "nir_serialize.h"
+#include "unstable_asahi_drm.h"
+#include "vdrm.h"
 
-/* TODO: Linux UAPI. Dummy defines to get some things to compile. */
-#define ASAHI_BIND_READ  0
-#define ASAHI_BIND_WRITE 0
+static inline int
+asahi_simple_ioctl(struct agx_device *dev, unsigned cmd, void *req)
+{
+   if (dev->is_virtio) {
+      return agx_virtio_simple_ioctl(dev, cmd, req);
+   } else {
+      return drmIoctl(dev->fd, cmd, req);
+   }
+}
+
+/* clang-format off */
+static const struct debug_named_value agx_debug_options[] = {
+   {"trace",     AGX_DBG_TRACE,    "Trace the command stream"},
+   {"no16",      AGX_DBG_NO16,     "Disable 16-bit support"},
+   {"perf",      AGX_DBG_PERF,     "Print performance warnings"},
+#ifndef NDEBUG
+   {"dirty",     AGX_DBG_DIRTY,    "Disable dirty tracking"},
+#endif
+   {"compblit",  AGX_DBG_COMPBLIT, "Enable compute blitter"},
+   {"precompile",AGX_DBG_PRECOMPILE,"Precompile shaders for shader-db"},
+   {"nocompress",AGX_DBG_NOCOMPRESS,"Disable lossless compression"},
+   {"nocluster", AGX_DBG_NOCLUSTER,"Disable vertex clustering"},
+   {"sync",      AGX_DBG_SYNC,     "Synchronously wait for all submissions"},
+   {"stats",     AGX_DBG_STATS,    "Show command execution statistics"},
+   {"resource",  AGX_DBG_RESOURCE, "Log resource operations"},
+   {"batch",     AGX_DBG_BATCH,    "Log batches"},
+   {"nowc",      AGX_DBG_NOWC,     "Disable write-combining"},
+   {"synctvb",   AGX_DBG_SYNCTVB,  "Synchronous TVB growth"},
+   {"smalltile", AGX_DBG_SMALLTILE,"Force 16x16 tiles"},
+   {"feedback",  AGX_DBG_FEEDBACK, "Debug feedback loops"},
+   {"nomsaa",    AGX_DBG_NOMSAA,   "Force disable MSAA"},
+   {"noshadow",  AGX_DBG_NOSHADOW, "Force disable resource shadowing"},
+   {"scratch",   AGX_DBG_SCRATCH,  "Debug scratch memory usage"},
+   DEBUG_NAMED_VALUE_END
+};
+/* clang-format on */
 
 void
 agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
@@ -73,22 +112,55 @@ static int
 agx_bo_bind(struct agx_device *dev, struct agx_bo *bo, uint64_t addr,
             uint32_t flags)
 {
-   unreachable("Linux UAPI not yet upstream");
+   struct drm_asahi_gem_bind gem_bind = {
+      .op = ASAHI_BIND_OP_BIND,
+      .flags = flags,
+      .handle = bo->handle,
+      .vm_id = dev->vm_id,
+      .offset = 0,
+      .range = bo->size,
+      .addr = addr,
+   };
+
+   int ret = drmIoctl(dev->fd, DRM_IOCTL_ASAHI_GEM_BIND, &gem_bind);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_GEM_BIND failed: %m (handle=%d)\n",
+              bo->handle);
+   }
+
+   return ret;
 }
 
-struct agx_bo *
+static struct agx_bo *
 agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
              enum agx_bo_flags flags)
 {
    struct agx_bo *bo;
    unsigned handle = 0;
 
+   assert(size > 0);
    size = ALIGN_POT(size, dev->params.vm_page_size);
 
    /* executable implies low va */
    assert(!(flags & AGX_BO_EXEC) || (flags & AGX_BO_LOW_VA));
 
-   unreachable("Linux UAPI not yet upstream");
+   struct drm_asahi_gem_create gem_create = {.size = size};
+
+   if (flags & AGX_BO_WRITEBACK)
+      gem_create.flags |= ASAHI_GEM_WRITEBACK;
+
+   if (!(flags & (AGX_BO_SHARED | AGX_BO_SHAREABLE))) {
+      gem_create.flags |= ASAHI_GEM_VM_PRIVATE;
+      gem_create.vm_id = dev->vm_id;
+   }
+
+   int ret = drmIoctl(dev->fd, DRM_IOCTL_ASAHI_GEM_CREATE, &gem_create);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_GEM_CREATE failed: %m\n");
+      return NULL;
+   }
+
+   handle = gem_create.handle;
 
    pthread_mutex_lock(&dev->bo_map_lock);
    bo = agx_lookup_bo(dev, handle);
@@ -99,7 +171,7 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
    assert(!memcmp(bo, &((struct agx_bo){}), sizeof(*bo)));
 
    bo->type = AGX_ALLOC_REGULAR;
-   bo->size = size; /* TODO: gem_create.size */
+   bo->size = gem_create.size;
    bo->align = MAX2(dev->params.vm_page_size, align);
    bo->flags = flags;
    bo->dev = dev;
@@ -123,20 +195,18 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
       return NULL;
    }
 
-   bo->guid = bo->handle; /* TODO: We don't care about guids */
-
    uint32_t bind = ASAHI_BIND_READ;
    if (!(flags & AGX_BO_READONLY)) {
       bind |= ASAHI_BIND_WRITE;
    }
 
-   int ret = agx_bo_bind(dev, bo, bo->ptr.gpu, bind);
+   ret = dev->ops.bo_bind(dev, bo, bo->ptr.gpu, bind);
    if (ret) {
       agx_bo_free(dev, bo);
       return NULL;
    }
 
-   agx_bo_mmap(bo);
+   dev->ops.bo_mmap(bo);
 
    if (flags & AGX_BO_LOW_VA)
       bo->ptr.gpu -= dev->shader_base;
@@ -146,10 +216,31 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
    return bo;
 }
 
-void
+static void
 agx_bo_mmap(struct agx_bo *bo)
 {
-   unreachable("Linux UAPI not yet upstream");
+   struct drm_asahi_gem_mmap_offset gem_mmap_offset = {.handle = bo->handle};
+   int ret;
+
+   if (bo->ptr.cpu)
+      return;
+
+   ret =
+      drmIoctl(bo->dev->fd, DRM_IOCTL_ASAHI_GEM_MMAP_OFFSET, &gem_mmap_offset);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_MMAP_BO failed: %m\n");
+      assert(0);
+   }
+
+   bo->ptr.cpu = os_mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                         bo->dev->fd, gem_mmap_offset.offset);
+   if (bo->ptr.cpu == MAP_FAILED) {
+      bo->ptr.cpu = NULL;
+      fprintf(stderr,
+              "mmap failed: result=%p size=0x%llx fd=%i offset=0x%llx %m\n",
+              bo->ptr.cpu, (long long)bo->size, bo->dev->fd,
+              (long long)gem_mmap_offset.offset);
+   }
 }
 
 struct agx_bo *
@@ -212,8 +303,12 @@ agx_bo_import(struct agx_device *dev, int fd)
          abort();
       }
 
-      ret =
-         agx_bo_bind(dev, bo, bo->ptr.gpu, ASAHI_BIND_READ | ASAHI_BIND_WRITE);
+      if (dev->is_virtio) {
+         bo->vbo_res_id = vdrm_handle_to_res_id(dev->vdrm, bo->handle);
+      }
+
+      ret = dev->ops.bo_bind(dev, bo, bo->ptr.gpu,
+                             ASAHI_BIND_READ | ASAHI_BIND_WRITE);
       if (ret) {
          fprintf(stderr, "import failed: Could not bind BO at 0x%llx\n",
                  (long long)bo->ptr.gpu);
@@ -236,6 +331,9 @@ agx_bo_import(struct agx_device *dev, int fd)
          agx_bo_reference(bo);
    }
    pthread_mutex_unlock(&dev->bo_map_lock);
+
+   if (dev->debug & AGX_DBG_TRACE)
+      agxdecode_track_alloc(dev->agxdecode, bo);
 
    return bo;
 
@@ -263,11 +361,11 @@ agx_bo_export(struct agx_bo *bo)
       /* If there is a pending writer to this BO, import it into the buffer
        * for implicit sync.
        */
-      uint32_t writer_syncobj = p_atomic_read_relaxed(&bo->writer_syncobj);
-      if (writer_syncobj) {
+      uint64_t writer = p_atomic_read_relaxed(&bo->writer);
+      if (writer) {
          int out_sync_fd = -1;
-         int ret =
-            drmSyncobjExportSyncFile(bo->dev->fd, writer_syncobj, &out_sync_fd);
+         int ret = drmSyncobjExportSyncFile(
+            bo->dev->fd, agx_bo_writer_syncobj(writer), &out_sync_fd);
          assert(ret >= 0);
          assert(out_sync_fd >= 0);
 
@@ -301,27 +399,158 @@ agx_get_global_id(struct agx_device *dev)
 static ssize_t
 agx_get_params(struct agx_device *dev, void *buf, size_t size)
 {
-   /* TODO: Linux UAPI */
-   unreachable("Linux UAPI not yet upstream");
+   struct drm_asahi_get_params get_param = {
+      .param_group = 0,
+      .pointer = (uint64_t)(uintptr_t)buf,
+      .size = size,
+   };
+
+   memset(buf, 0, size);
+
+   int ret = drmIoctl(dev->fd, DRM_IOCTL_ASAHI_GET_PARAMS, &get_param);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_GET_PARAMS failed: %m\n");
+      return -EINVAL;
+   }
+
+   return get_param.size;
 }
+
+static int
+agx_submit(struct agx_device *dev, struct drm_asahi_submit *submit,
+           uint32_t vbo_res_id)
+{
+   return drmIoctl(dev->fd, DRM_IOCTL_ASAHI_SUBMIT, submit);
+}
+
+const agx_device_ops_t agx_device_drm_ops = {
+   .bo_alloc = agx_bo_alloc,
+   .bo_bind = agx_bo_bind,
+   .bo_mmap = agx_bo_mmap,
+   .get_params = agx_get_params,
+   .submit = agx_submit,
+};
 
 bool
 agx_open_device(void *memctx, struct agx_device *dev)
 {
+   dev->debug =
+      debug_get_flags_option("ASAHI_MESA_DEBUG", agx_debug_options, 0);
+
+   dev->agxdecode = agxdecode_new_context();
+   dev->ops = agx_device_drm_ops;
+
    ssize_t params_size = -1;
+   drmVersionPtr version;
 
-   /* TODO: Linux UAPI */
-   return false;
+   version = drmGetVersion(dev->fd);
+   if (!version) {
+      fprintf(stderr, "cannot get version: %s", strerror(errno));
+      return NULL;
+   }
 
-   params_size = agx_get_params(dev, &dev->params, sizeof(dev->params));
+   if (!strcmp(version->name, "asahi")) {
+      dev->is_virtio = false;
+      dev->ops = agx_device_drm_ops;
+   } else if (!strcmp(version->name, "virtio_gpu")) {
+      dev->is_virtio = true;
+      if (!agx_virtio_open_device(dev)) {
+         fprintf(stderr,
+                 "Error opening virtio-gpu device for Asahi native context\n");
+         return false;
+      }
+   } else {
+      return false;
+   }
+
+   params_size = dev->ops.get_params(dev, &dev->params, sizeof(dev->params));
    if (params_size <= 0) {
       assert(0);
       return false;
    }
    assert(params_size >= sizeof(dev->params));
 
-   /* TODO: Linux UAPI: Params */
-   unreachable("Linux UAPI not yet upstream");
+   /* Refuse to probe. */
+   if (dev->params.unstable_uabi_version != DRM_ASAHI_UNSTABLE_UABI_VERSION) {
+      fprintf(
+         stderr,
+         "You are attempting to use upstream Mesa with a downstream kernel!\n"
+         "This WILL NOT work.\n"
+         "The Asahi UABI is unstable and NOT SUPPORTED in upstream Mesa.\n"
+         "UABI related code in upstream Mesa is not for use!\n"
+         "\n"
+         "Do NOT attempt to patch out checks, you WILL break your system.\n"
+         "Do NOT report bugs.\n"
+         "Do NOT ask Mesa developers for support.\n"
+         "Do NOT write guides about how to patch out these checks.\n"
+         "Do NOT package patches to Mesa to bypass this.\n"
+         "\n"
+         "~~~\n"
+         "This is not a place of honor.\n"
+         "No highly esteemed deed is commemorated here.\n"
+         "Nothing valued is here.\n"
+         "\n"
+         "What is here was dangerous and repulsive to us.\n"
+         "This message is a warning about danger.\n"
+         "\n"
+         "The danger is still present, in your time, as it was in ours.\n"
+         "The danger is unleashed only if you substantially disturb this place physically.\n"
+         "This place is best shunned and left uninhabited.\n"
+         "~~~\n"
+         "\n"
+         "THIS IS NOT A BUG. THIS IS YOU DOING SOMETHING BROKEN!\n");
+      abort();
+   }
+
+   uint64_t incompat =
+      dev->params.feat_incompat & (~AGX_SUPPORTED_INCOMPAT_FEATURES);
+   if (incompat) {
+      fprintf(stderr, "Missing GPU incompat features: 0x%" PRIx64 "\n",
+              incompat);
+      assert(0);
+      return false;
+   }
+
+   if (dev->params.gpu_generation >= 13 && dev->params.gpu_variant != 'P') {
+      const char *variant = " Unknown";
+      switch (dev->params.gpu_variant) {
+      case 'G':
+         variant = "";
+         break;
+      case 'S':
+         variant = " Pro";
+         break;
+      case 'C':
+         variant = " Max";
+         break;
+      case 'D':
+         variant = " Ultra";
+         break;
+      }
+      snprintf(dev->name, sizeof(dev->name), "Apple M%d%s (G%d%c %02X)",
+               dev->params.gpu_generation - 12, variant,
+               dev->params.gpu_generation, dev->params.gpu_variant,
+               dev->params.gpu_revision + 0xA0);
+   } else {
+      // Note: untested, theoretically this is the logic for at least a few
+      // generations back.
+      const char *variant = " Unknown";
+      switch (dev->params.gpu_variant) {
+      case 'P':
+         variant = "";
+         break;
+      case 'G':
+         variant = "X";
+         break;
+      }
+      snprintf(dev->name, sizeof(dev->name), "Apple A%d%s (G%d%c %02X)",
+               dev->params.gpu_generation + 1, variant,
+               dev->params.gpu_generation, dev->params.gpu_variant,
+               dev->params.gpu_revision + 0xA0);
+   }
+
+   dev->guard_size = dev->params.vm_page_size;
+   dev->shader_base = dev->params.vm_shader_start;
 
    util_sparse_array_init(&dev->bo_map, sizeof(struct agx_bo), 512);
    pthread_mutex_init(&dev->bo_map_lock, NULL);
@@ -332,7 +561,14 @@ agx_open_device(void *memctx, struct agx_device *dev)
    for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i)
       list_inithead(&dev->bo_cache.buckets[i]);
 
-   /* TODO: Linux UAPI: Create VM */
+   struct drm_asahi_vm_create vm_create = {};
+
+   int ret = asahi_simple_ioctl(dev, DRM_IOCTL_ASAHI_VM_CREATE, &vm_create);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_VM_CREATE failed: %m\n");
+      assert(0);
+      return false;
+   }
 
    simple_mtx_init(&dev->vma_lock, mtx_plain);
    util_vma_heap_init(&dev->main_heap, dev->params.vm_user_start,
@@ -340,6 +576,8 @@ agx_open_device(void *memctx, struct agx_device *dev)
    util_vma_heap_init(
       &dev->usc_heap, dev->params.vm_shader_start,
       dev->params.vm_shader_end - dev->params.vm_shader_start + 1);
+
+   dev->vm_id = vm_create.vm_id;
 
    agx_get_global_ids(dev);
 
@@ -357,11 +595,11 @@ agx_open_device(void *memctx, struct agx_device *dev)
 void
 agx_close_device(struct agx_device *dev)
 {
-   if (dev->helper)
-      agx_bo_unreference(dev->helper);
-
+   ralloc_free((void *)dev->libagx);
+   agx_bo_unreference(dev->helper);
    agx_bo_cache_evict_all(dev);
    util_sparse_array_finish(&dev->bo_map);
+   agxdecode_destroy_context(dev->agxdecode);
 
    util_vma_heap_finish(&dev->main_heap);
    util_vma_heap_finish(&dev->usc_heap);
@@ -371,9 +609,34 @@ agx_close_device(struct agx_device *dev)
 }
 
 uint32_t
-agx_create_command_queue(struct agx_device *dev, uint32_t caps)
+agx_create_command_queue(struct agx_device *dev, uint32_t caps,
+                         uint32_t priority)
 {
-   unreachable("Linux UAPI not yet upstream");
+   struct drm_asahi_queue_create queue_create = {
+      .vm_id = dev->vm_id,
+      .queue_caps = caps,
+      .priority = priority,
+      .flags = 0,
+   };
+
+   int ret =
+      asahi_simple_ioctl(dev, DRM_IOCTL_ASAHI_QUEUE_CREATE, &queue_create);
+   if (ret) {
+      fprintf(stderr, "DRM_IOCTL_ASAHI_QUEUE_CREATE failed: %m\n");
+      assert(0);
+   }
+
+   return queue_create.queue_id;
+}
+
+int
+agx_destroy_command_queue(struct agx_device *dev, uint32_t queue_id)
+{
+   struct drm_asahi_queue_destroy queue_destroy = {
+      .queue_id = queue_id,
+   };
+
+   return drmIoctl(dev->fd, DRM_IOCTL_ASAHI_QUEUE_DESTROY, &queue_destroy);
 }
 
 int
@@ -471,4 +734,57 @@ agx_get_gpu_timestamp(struct agx_device *dev)
 #else
 #error "invalid architecture for asahi"
 #endif
+}
+
+/* (Re)define UUID_SIZE to avoid including vulkan.h (or p_defines.h) here. */
+#define UUID_SIZE 16
+
+void
+agx_get_device_uuid(const struct agx_device *dev, void *uuid)
+{
+   struct mesa_sha1 sha1_ctx;
+   _mesa_sha1_init(&sha1_ctx);
+
+   /* The device UUID uniquely identifies the given device within the machine.
+    * Since we never have more than one device, this doesn't need to be a real
+    * UUID, so we use SHA1("agx" + gpu_generation + gpu_variant + gpu_revision).
+    */
+   static const char *device_name = "agx";
+   _mesa_sha1_update(&sha1_ctx, device_name, strlen(device_name));
+
+   _mesa_sha1_update(&sha1_ctx, &dev->params.gpu_generation,
+                     sizeof(dev->params.gpu_generation));
+   _mesa_sha1_update(&sha1_ctx, &dev->params.gpu_variant,
+                     sizeof(dev->params.gpu_variant));
+   _mesa_sha1_update(&sha1_ctx, &dev->params.gpu_revision,
+                     sizeof(dev->params.gpu_revision));
+
+   uint8_t sha1[SHA1_DIGEST_LENGTH];
+   _mesa_sha1_final(&sha1_ctx, sha1);
+
+   assert(SHA1_DIGEST_LENGTH >= UUID_SIZE);
+   memcpy(uuid, sha1, UUID_SIZE);
+}
+
+void
+agx_get_driver_uuid(void *uuid)
+{
+   const char *driver_id = PACKAGE_VERSION MESA_GIT_SHA1;
+
+   /* The driver UUID is used for determining sharability of images and memory
+    * between two Vulkan instances in separate processes, but also to
+    * determining memory objects and sharability between Vulkan and OpenGL
+    * driver. People who want to share memory need to also check the device
+    * UUID.
+    */
+   struct mesa_sha1 sha1_ctx;
+   _mesa_sha1_init(&sha1_ctx);
+
+   _mesa_sha1_update(&sha1_ctx, driver_id, strlen(driver_id));
+
+   uint8_t sha1[SHA1_DIGEST_LENGTH];
+   _mesa_sha1_final(&sha1_ctx, sha1);
+
+   assert(SHA1_DIGEST_LENGTH >= UUID_SIZE);
+   memcpy(uuid, sha1, UUID_SIZE);
 }

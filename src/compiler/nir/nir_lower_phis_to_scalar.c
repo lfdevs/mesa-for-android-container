@@ -234,10 +234,7 @@ lower_phis_to_scalar_block(nir_block *block,
 
       nir_instr_insert_after(&last_phi->instr, &vec->instr);
 
-      nir_def_rewrite_uses(&phi->def,
-                           &vec->def);
-
-      nir_instr_remove(&phi->instr);
+      nir_def_replace(&phi->def, &vec->def);
       exec_list_push_tail(&state->dead_instrs, &phi->instr.node);
 
       progress = true;
@@ -271,8 +268,7 @@ lower_phis_to_scalar_impl(nir_function_impl *impl, bool lower_all)
       progress = lower_phis_to_scalar_block(block, &state) || progress;
    }
 
-   nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+   nir_metadata_preserve(impl, nir_metadata_control_flow);
 
    nir_instr_free_list(&state.dead_instrs);
 

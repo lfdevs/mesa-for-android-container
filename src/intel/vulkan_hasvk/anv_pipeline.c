@@ -29,6 +29,7 @@
 
 #include "util/mesa-sha1.h"
 #include "util/os_time.h"
+#include "common/intel_compute_slm.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_sample_positions.h"
 #include "compiler/elk/elk_disasm.h"
@@ -58,55 +59,6 @@ anv_shader_stage_to_nir(struct anv_device *device,
       compiler->nir_options[stage];
 
    const struct spirv_to_nir_options spirv_options = {
-      .caps = {
-         .demote_to_helper_invocation = true,
-         .derivative_group = true,
-         .descriptor_array_dynamic_indexing = true,
-         .descriptor_array_non_uniform_indexing = true,
-         .descriptor_indexing = true,
-         .device_group = true,
-         .draw_parameters = true,
-         .float16 = pdevice->info.ver >= 8,
-         .float32_atomic_add = pdevice->info.has_lsc,
-         .float32_atomic_min_max = pdevice->info.ver >= 9,
-         .float64 = pdevice->info.ver >= 8,
-         .float64_atomic_min_max = pdevice->info.has_lsc,
-         .fragment_shader_sample_interlock = pdevice->info.ver >= 9,
-         .fragment_shader_pixel_interlock = pdevice->info.ver >= 9,
-         .geometry_streams = true,
-         .image_read_without_format = true,
-         .image_write_without_format = true,
-         .int8 = pdevice->info.ver >= 8,
-         .int16 = pdevice->info.ver >= 8,
-         .int64 = pdevice->info.ver >= 8,
-         .int64_atomics = pdevice->info.ver >= 9 && pdevice->use_softpin,
-         .integer_functions2 = pdevice->info.ver >= 8,
-         .min_lod = true,
-         .multiview = true,
-         .physical_storage_buffer_address = pdevice->has_a64_buffer_access,
-         .post_depth_coverage = pdevice->info.ver >= 9,
-         .runtime_descriptor_array = true,
-         .float_controls = true,
-         .shader_clock = true,
-         .shader_viewport_index_layer = true,
-         .stencil_export = pdevice->info.ver >= 9,
-         .storage_8bit = pdevice->info.ver >= 8,
-         .storage_16bit = pdevice->info.ver >= 8,
-         .subgroup_arithmetic = true,
-         .subgroup_basic = true,
-         .subgroup_ballot = true,
-         .subgroup_dispatch = true,
-         .subgroup_quad = true,
-         .subgroup_uniform_control_flow = true,
-         .subgroup_shuffle = true,
-         .subgroup_vote = true,
-         .tessellation = true,
-         .transform_feedback = true,
-         .variable_pointers = true,
-         .vk_memory_model = true,
-         .vk_memory_model_device_scope = true,
-         .workgroup_memory_explicit_layout = true,
-      },
       .ubo_addr_format = anv_nir_ubo_addr_format(pdevice, robust_flags),
       .ssbo_addr_format = anv_nir_ssbo_addr_format(pdevice, robust_flags),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
@@ -617,7 +569,7 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
          const unsigned chunk_size = 16;
          const unsigned shared_size = ALIGN(nir->info.shared_size, chunk_size);
          assert(shared_size <=
-                elk_calculate_slm_size(compiler->devinfo->ver, nir->info.shared_size));
+                intel_compute_slm_calculate_size(compiler->devinfo->ver, nir->info.shared_size));
 
          NIR_PASS(_, nir, nir_zero_initialize_shared_memory,
                   shared_size, chunk_size);

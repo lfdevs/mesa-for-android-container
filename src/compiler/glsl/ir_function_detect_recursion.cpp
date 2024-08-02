@@ -290,24 +290,6 @@ emit_errors_unlinked(const void *key, void *data, void *closure)
 }
 
 
-static void
-emit_errors_linked(const void *key, void *data, void *closure)
-{
-   struct gl_shader_program *prog =
-      (struct gl_shader_program *) closure;
-   function *f = (function *) data;
-
-   (void) key;
-
-   char *proto = prototype_string(f->sig->return_type,
-				  f->sig->function_name(),
-				  &f->sig->parameters);
-
-   linker_error(prog, "function `%s' has static recursion.\n", proto);
-   ralloc_free(proto);
-}
-
-
 void
 detect_recursion_unlinked(struct _mesa_glsl_parse_state *state,
 			  exec_list *instructions)
@@ -331,30 +313,4 @@ detect_recursion_unlinked(struct _mesa_glsl_parse_state *state,
    /* At this point any functions still in the hash must be part of a cycle.
     */
    hash_table_call_foreach(v.function_hash, emit_errors_unlinked, state);
-}
-
-
-void
-detect_recursion_linked(struct gl_shader_program *prog,
-			exec_list *instructions)
-{
-   has_recursion_visitor v;
-
-   /* Collect all of the information about which functions call which other
-    * functions.
-    */
-   v.run(instructions);
-
-   /* Remove from the set all of the functions that either have no caller or
-    * call no other functions.  Repeat until no functions are removed.
-    */
-   do {
-      v.progress = false;
-      hash_table_call_foreach(v.function_hash, remove_unlinked_functions, & v);
-   } while (v.progress);
-
-
-   /* At this point any functions still in the hash must be part of a cycle.
-    */
-   hash_table_call_foreach(v.function_hash, emit_errors_linked, prog);
 }

@@ -365,6 +365,7 @@ nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr)
    case nir_intrinsic_ssbo_atomic_ir3:
    case nir_intrinsic_ssbo_atomic_swap_ir3:
    case nir_intrinsic_store_global:
+   case nir_intrinsic_store_global_etna:
    case nir_intrinsic_store_global_ir3:
    case nir_intrinsic_store_global_amd:
    case nir_intrinsic_store_ssbo:
@@ -466,10 +467,6 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    switch (instr->intrinsic) {
    case nir_intrinsic_demote:
    case nir_intrinsic_demote_if:
-      shader->info.fs.uses_demote = true;
-      FALLTHROUGH; /* quads with helper lanes only might be discarded entirely */
-   case nir_intrinsic_discard:
-   case nir_intrinsic_discard_if:
    case nir_intrinsic_terminate:
    case nir_intrinsic_terminate_if:
       /* Freedreno uses discard_if() to end GS invocations that don't produce
@@ -514,7 +511,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
          shader->info.writes_memory = true;
       break;
    }
-   case nir_intrinsic_image_deref_load: {
+   case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_sparse_load: {
       nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
       nir_variable *var = nir_deref_instr_get_variable(deref);
       enum glsl_sampler_dim dim = glsl_get_sampler_dim(glsl_without_array(var->type));
@@ -527,7 +525,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
       break;
    }
 
-   case nir_intrinsic_bindless_image_load: {
+   case nir_intrinsic_bindless_image_load:
+   case nir_intrinsic_bindless_image_sparse_load: {
       enum glsl_sampler_dim dim = nir_intrinsic_image_dim(instr);
       if (dim != GLSL_SAMPLER_DIM_SUBPASS &&
           dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
@@ -679,6 +678,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_base_global_invocation_id:
    case nir_intrinsic_load_global_invocation_index:
    case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_base_workgroup_id:
    case nir_intrinsic_load_workgroup_index:
    case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_workgroup_size:
@@ -867,6 +867,11 @@ gather_tex_info(nir_tex_instr *instr, nir_shader *shader)
        nir_tex_instr_src_index(instr, nir_tex_src_sampler_handle) != -1)
       shader->info.uses_bindless = true;
 
+   if (!nir_tex_instr_is_query(instr) &&
+       (instr->sampler_dim == GLSL_SAMPLER_DIM_SUBPASS ||
+        instr->sampler_dim == GLSL_SAMPLER_DIM_SUBPASS_MS))
+      shader->info.fs.uses_fbfetch_output = true;
+
    switch (instr->op) {
    case nir_texop_tg4:
       shader->info.uses_texture_gather = true;
@@ -1002,7 +1007,6 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
    if (shader->info.stage == MESA_SHADER_FRAGMENT) {
       shader->info.fs.uses_sample_qualifier = false;
       shader->info.fs.uses_discard = false;
-      shader->info.fs.uses_demote = false;
       shader->info.fs.color_is_dual_source = false;
       shader->info.fs.uses_fbfetch_output = false;
       shader->info.fs.needs_quad_helper_invocations = false;

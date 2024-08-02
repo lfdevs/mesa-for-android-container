@@ -12,7 +12,7 @@
 
 #include "tu_common.h"
 
-#include "vk_buffer.h"
+#include "vk_device_memory.h"
 
 #include "tu_autotune.h"
 #include "tu_pass.h"
@@ -63,6 +63,13 @@ struct tu_memory_heap {
    alignas(8) VkDeviceSize used;
 };
 
+enum tu_kgsl_dma_type
+{
+   TU_KGSL_DMA_TYPE_ION_LEGACY,
+   TU_KGSL_DMA_TYPE_ION,
+   TU_KGSL_DMA_TYPE_DMAHEAP,
+};
+
 struct tu_physical_device
 {
    struct vk_physical_device vk;
@@ -85,6 +92,9 @@ struct tu_physical_device
    bool has_master;
    int64_t master_major;
    int64_t master_minor;
+
+   int kgsl_dma_fd;
+   enum tu_kgsl_dma_type kgsl_dma_type;
 
    uint32_t gmem_size;
    uint64_t gmem_base;
@@ -251,15 +261,6 @@ struct tu_pvtmem_bo {
       uint32_t per_fiber_size, per_sp_size;
 };
 
-#if DETECT_OS_ANDROID
-enum tu_gralloc_type
-{
-   TU_GRALLOC_UNKNOWN,
-   TU_GRALLOC_CROS,
-   TU_GRALLOC_OTHER,
-};
-#endif
-
 struct tu_virtio_device;
 
 struct tu_device
@@ -394,11 +395,6 @@ struct tu_device
    struct tu_cs *dbg_cmdbuf_stomp_cs;
    struct tu_cs *dbg_renderpass_stomp_cs;
 
-#if DETECT_OS_ANDROID
-   const void *gralloc;
-   enum tu_gralloc_type gralloc_type;
-#endif
-
 #ifdef TU_HAS_VIRTIO
    struct tu_virtio_device *vdev;
 #endif
@@ -423,25 +419,15 @@ VK_DEFINE_HANDLE_CASTS(tu_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
 
 struct tu_device_memory
 {
-   struct vk_object_base base;
+   struct vk_device_memory vk;
 
    struct tu_bo *bo;
 
    /* for dedicated allocations */
    struct tu_image *image;
 };
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_device_memory, base, VkDeviceMemory,
+VK_DEFINE_NONDISP_HANDLE_CASTS(tu_device_memory, vk.base, VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)
-
-struct tu_buffer
-{
-   struct vk_buffer vk;
-
-   struct tu_bo *bo;
-   uint64_t iova;
-};
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_buffer, vk.base, VkBuffer,
-                               VK_OBJECT_TYPE_BUFFER)
 
 struct tu_attachment_info
 {
@@ -488,22 +474,6 @@ struct tu_framebuffer
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_framebuffer, base, VkFramebuffer,
                                VK_OBJECT_TYPE_FRAMEBUFFER)
-
-struct tu_event
-{
-   struct vk_object_base base;
-   struct tu_bo *bo;
-};
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)
-
-struct tu_sampler {
-   struct vk_object_base base;
-
-   uint32_t descriptor[A6XX_TEX_SAMP_DWORDS];
-   struct tu_sampler_ycbcr_conversion *ycbcr_sampler;
-};
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler, base, VkSampler,
-                               VK_OBJECT_TYPE_SAMPLER)
 
 uint64_t
 tu_get_system_heap_size(struct tu_physical_device *physical_device);

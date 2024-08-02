@@ -1344,7 +1344,7 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
              * due to invalid format. This is special case for the extension where
              * CTS tests expect unsupported framebuffer status instead of incomplete.
              */
-            if ((_mesa_is_gles(ctx) && _mesa_has_EXT_color_buffer_half_float(ctx)) &&
+            if (_mesa_has_EXT_color_buffer_half_float(ctx) &&
                 !gles_check_float_renderable(ctx, att)) {
                fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
                return;
@@ -2658,7 +2658,8 @@ _mesa_base_fbo_format(const struct gl_context *ctx, GLenum internalFormat)
          ? GL_RGB : 0;
 
    case GL_BGRA:
-      /* EXT_texture_format_BGRA8888 only adds this as color-renderable for
+   case GL_BGRA8_EXT:
+      /* EXT_texture_format_BGRA8888 only adds these as color-renderable for
        * GLES 2 and later
        */
       if (_mesa_has_EXT_texture_format_BGRA8888(ctx) && _mesa_is_gles2(ctx))
@@ -2933,8 +2934,7 @@ _mesa_EGLImageTargetRenderbufferStorageOES(GLenum target, GLeglImageOES image)
       return;
    }
 
-   if (!image || (ctx->Driver.ValidateEGLImage &&
-                  !ctx->Driver.ValidateEGLImage(ctx, image))) {
+   if (!image || !st_validate_egl_image(ctx, image)) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "EGLImageTargetRenderbufferStorageOES");
       return;

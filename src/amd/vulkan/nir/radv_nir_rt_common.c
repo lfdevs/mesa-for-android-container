@@ -8,7 +8,7 @@
 #include "bvh/bvh.h"
 #include "radv_debug.h"
 
-#if LLVM_AVAILABLE
+#if AMD_LLVM_AVAILABLE
 #include <llvm/Config/llvm-config.h>
 #endif
 

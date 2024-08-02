@@ -254,34 +254,34 @@ fs_live_variables::fs_live_variables(const elk_backend_shader *s)
 
    num_vgrfs = s->alloc.count;
    num_vars = 0;
-   var_from_vgrf = linear_zalloc_array(lin_ctx, int, num_vgrfs);
+   var_from_vgrf = linear_alloc_array(lin_ctx, int, num_vgrfs);
    for (int i = 0; i < num_vgrfs; i++) {
       var_from_vgrf[i] = num_vars;
       num_vars += s->alloc.sizes[i];
    }
 
-   vgrf_from_var = linear_zalloc_array(lin_ctx, int, num_vars);
+   vgrf_from_var = linear_alloc_array(lin_ctx, int, num_vars);
    for (int i = 0; i < num_vgrfs; i++) {
       for (unsigned j = 0; j < s->alloc.sizes[i]; j++) {
          vgrf_from_var[var_from_vgrf[i] + j] = i;
       }
    }
 
-   start = ralloc_array(mem_ctx, int, num_vars);
-   end = linear_zalloc_array(lin_ctx, int, num_vars);
+   start = linear_alloc_array(lin_ctx, int, num_vars);
+   end = linear_alloc_array(lin_ctx, int, num_vars);
    for (int i = 0; i < num_vars; i++) {
       start[i] = MAX_INSTRUCTION;
       end[i] = -1;
    }
 
-   vgrf_start = ralloc_array(mem_ctx, int, num_vgrfs);
-   vgrf_end = ralloc_array(mem_ctx, int, num_vgrfs);
+   vgrf_start = linear_alloc_array(lin_ctx, int, num_vgrfs);
+   vgrf_end = linear_alloc_array(lin_ctx, int, num_vgrfs);
    for (int i = 0; i < num_vgrfs; i++) {
       vgrf_start[i] = MAX_INSTRUCTION;
       vgrf_end[i] = -1;
    }
 
-   block_data = linear_zalloc_array(lin_ctx, struct block_data, cfg->num_blocks);
+   block_data = linear_alloc_array(lin_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {

@@ -104,21 +104,27 @@ interp_fs_input(nir_builder *b, unsigned num_components, uint32_t addr,
 }
 
 static nir_def *
+load_sample_pos_u4_at(nir_builder *b, nir_def *sample_id,
+                      const struct nak_fs_key *fs_key)
+{
+   nir_def *loc = nir_ldc_nv(b, 1, 8,
+                             nir_imm_int(b, fs_key->sample_locations_cb),
+                             nir_iadd_imm(b, sample_id,
+                                          fs_key->sample_locations_offset),
+                             .align_mul = 8, .align_offset = 0);
+
+   /* The rest of these calculations are in 32-bit */
+   loc = nir_u2u32(b, loc);
+   nir_def *loc_x_u4 = nir_iand_imm(b, loc, 0xf);
+   nir_def *loc_y_u4 = nir_iand_imm(b, nir_ushr_imm(b, loc, 4), 0xf);
+   return nir_vec2(b, loc_x_u4, loc_y_u4);
+}
+
+static nir_def *
 load_sample_pos_at(nir_builder *b, nir_def *sample_id,
                    const struct nak_fs_key *fs_key)
 {
-   nir_def *loc = nir_load_ubo(b, 1, 64,
-                               nir_imm_int(b, fs_key->sample_locations_cb),
-                               nir_imm_int(b, fs_key->sample_locations_offset),
-                               .align_mul = 8,
-                               .align_offset = 0,
-                               .range = fs_key->sample_locations_offset + 8);
-
-   /* Yay little endian */
-   loc = nir_ushr(b, loc, nir_imul_imm(b, sample_id, 8));
-   nir_def *loc_x_u4 = nir_iand_imm(b, loc, 0xf);
-   nir_def *loc_y_u4 = nir_iand_imm(b, nir_ushr_imm(b, loc, 4), 0xf);
-   nir_def *loc_u4 = nir_vec2(b, loc_x_u4, loc_y_u4);
+   nir_def *loc_u4 = load_sample_pos_u4_at(b, sample_id, fs_key);
    nir_def *result = nir_fmul_imm(b, nir_i2f32(b, loc_u4), 1.0 / 16.0);
 
    return result;
@@ -128,26 +134,27 @@ static nir_def *
 load_barycentric_offset(nir_builder *b, nir_intrinsic_instr *bary,
                         const struct nak_fs_key *fs_key)
 {
-   nir_def *offset_f;
+   nir_def *offset_s12;
 
    if (bary->intrinsic == nir_intrinsic_load_barycentric_coord_at_sample ||
        bary->intrinsic == nir_intrinsic_load_barycentric_at_sample) {
       nir_def *sample_id = bary->src[0].ssa;
-      nir_def *sample_pos = load_sample_pos_at(b, sample_id, fs_key);
-      offset_f = nir_fadd_imm(b, sample_pos, -0.5);
+      nir_def *offset_u4 = load_sample_pos_u4_at(b, sample_id, fs_key);
+      /* The sample position we loaded is a u4 from the upper-left and the
+       * sample position wanted by ipa.offset is s12
+       */
+      offset_s12 = nir_iadd_imm(b, nir_ishl_imm(b, offset_u4, 8), -2048);
    } else {
-      offset_f = bary->src[0].ssa;
+      nir_def *offset_f = bary->src[0].ssa;
+
+      offset_f = nir_fclamp(b, offset_f, nir_imm_float(b, -0.5),
+                            nir_imm_float(b, 0.437500));
+      offset_s12 = nir_f2i32(b, nir_fmul_imm(b, offset_f, 4096.0));
    }
 
-   offset_f = nir_fclamp(b, offset_f, nir_imm_float(b, -0.5),
-                         nir_imm_float(b, 0.437500));
-   nir_def *offset_fixed =
-      nir_f2i32(b, nir_fmul_imm(b, offset_f, 4096.0));
-   nir_def *offset = nir_ior(b, nir_ishl_imm(b, nir_channel(b, offset_fixed, 1), 16),
-                             nir_iand_imm(b, nir_channel(b, offset_fixed, 0),
-                                          0xffff));
-
-   return offset;
+   return nir_prmt_nv(b, nir_imm_int(b, 0x5410),
+                         nir_channel(b, offset_s12, 0),
+                         nir_channel(b, offset_s12, 1));
 }
 
 struct lower_fs_input_ctx {
@@ -344,8 +351,7 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       return false;
    }
 
-   nir_def_rewrite_uses(&intrin->def, res);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, res);
 
    return true;
 }
@@ -360,7 +366,7 @@ nak_nir_lower_fs_inputs(nir_shader *nir,
       .fs_key = fs_key,
    };
    NIR_PASS_V(nir, nir_shader_intrinsics_pass, lower_fs_input_intrin,
-              nir_metadata_block_index | nir_metadata_dominance,
+              nir_metadata_control_flow,
               (void *)&fs_in_ctx);
 
    return true;

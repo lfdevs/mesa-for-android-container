@@ -145,6 +145,7 @@ trace_context_draw_vbo(struct pipe_context *_pipe,
 
 static void
 trace_context_draw_mesh_tasks(struct pipe_context *_pipe,
+                              unsigned drawid_offset,
                               const struct pipe_grid_info *info)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
@@ -153,11 +154,12 @@ trace_context_draw_mesh_tasks(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "draw_mesh_tasks");
 
    trace_dump_arg(ptr,  pipe);
+   trace_dump_arg(uint,  drawid_offset);
    trace_dump_arg(grid_info, info);
 
    trace_dump_trace_flush();
 
-   pipe->draw_mesh_tasks(pipe, info);
+   pipe->draw_mesh_tasks(pipe, drawid_offset, info);
 
    trace_dump_call_end();
 }

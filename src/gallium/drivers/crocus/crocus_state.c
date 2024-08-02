@@ -82,6 +82,7 @@
 #endif
 
 #include "drm-uapi/i915_drm.h"
+#include "intel/common/intel_compute_slm.h"
 #include "intel/common/intel_l3_config.h"
 #include "intel/common/intel_sample_positions.h"
 #include "intel/compiler/elk/elk_compiler.h"
@@ -8165,8 +8166,8 @@ crocus_upload_compute_state(struct crocus_context *ice,
          idd.NumberofThreadsinGPGPUThreadGroup = dispatch.threads;
          idd.ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs;
          idd.BarrierEnable = cs_prog_data->uses_barrier;
-         idd.SharedLocalMemorySize = elk_encode_slm_size(GFX_VER,
-                                                         prog_data->total_shared);
+         idd.SharedLocalMemorySize = intel_compute_slm_encode_size(GFX_VER,
+                                                                   prog_data->total_shared);
 #if GFX_VERx10 >= 75
          idd.CrossThreadConstantDataReadLength = cs_prog_data->push.cross_thread.regs;
 #endif

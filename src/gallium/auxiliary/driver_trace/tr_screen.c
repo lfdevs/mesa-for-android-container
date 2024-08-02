@@ -678,7 +678,7 @@ trace_screen_free_memory(struct pipe_screen *_screen,
 
 static void
 trace_screen_free_memory_fd(struct pipe_screen *_screen,
-                         struct pipe_memory_allocation *pmem)
+                            struct pipe_memory_allocation *pmem)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
@@ -698,6 +698,8 @@ static bool
 trace_screen_resource_bind_backing(struct pipe_screen *_screen,
                                    struct pipe_resource *resource,
                                    struct pipe_memory_allocation *pmem,
+                                   uint64_t fd_offset,
+                                   uint64_t size,
                                    uint64_t offset)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
@@ -709,9 +711,11 @@ trace_screen_resource_bind_backing(struct pipe_screen *_screen,
    trace_dump_arg(ptr, screen);
    trace_dump_arg(ptr, resource);
    trace_dump_arg(ptr, pmem);
+   trace_dump_arg(uint, fd_offset);
+   trace_dump_arg(uint, size);
    trace_dump_arg(uint, offset);
 
-   result = screen->resource_bind_backing(screen, resource, pmem, offset);
+   result = screen->resource_bind_backing(screen, resource, pmem, fd_offset, size, offset);
 
    trace_dump_ret(bool, result);
 
@@ -1423,6 +1427,86 @@ static void trace_screen_set_fence_timeline_value(struct pipe_screen *_screen,
    screen->set_fence_timeline_value(screen, fence, value);
 }
 
+static void trace_screen_query_compression_rates(struct pipe_screen *_screen,
+                                                 enum pipe_format format,
+                                                 int max, uint32_t *rates,
+                                                 int *count)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+
+   trace_dump_call_begin("pipe_screen", "query_compression_rates");
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(format, format);
+   trace_dump_arg(int, max);
+
+   screen->query_compression_rates(screen, format, max, rates, count);
+
+   if (max)
+      trace_dump_arg_array(uint, rates, *count);
+   else
+      trace_dump_arg_array(uint, rates, max);
+   trace_dump_ret_begin();
+   trace_dump_uint(*count);
+   trace_dump_ret_end();
+
+   trace_dump_call_end();
+}
+
+static void trace_screen_query_compression_modifiers(struct pipe_screen *_screen,
+                                                     enum pipe_format format,
+                                                     uint32_t rate, int max,
+                                                     uint64_t *modifiers,
+                                                     int *count)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+
+   trace_dump_call_begin("pipe_screen", "query_compression_rates");
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(format, format);
+   trace_dump_arg(uint, rate);
+   trace_dump_arg(int, max);
+
+   screen->query_compression_modifiers(screen, format, rate, max, modifiers, count);
+
+   if (max)
+      trace_dump_arg_array(uint, modifiers, *count);
+   else
+      trace_dump_arg_array(uint, modifiers, max);
+   trace_dump_ret_begin();
+   trace_dump_uint(*count);
+   trace_dump_ret_end();
+
+   trace_dump_call_end();
+}
+
+static bool trace_screen_is_compression_modifier(struct pipe_screen *_screen,
+                                                 enum pipe_format format,
+                                                 uint64_t modifier,
+                                                 uint32_t *rate)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+   bool result;
+
+   trace_dump_call_begin("pipe_screen", "query_compression_rates");
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(format, format);
+   trace_dump_arg(uint, modifier);
+
+   result = screen->is_compression_modifier(screen, format, modifier, rate);
+
+   trace_dump_ret_begin();
+   trace_dump_uint(*rate);
+   trace_dump_bool(result);
+   trace_dump_ret_end();
+
+   trace_dump_call_end();
+
+   return result;
+}
+
 bool
 trace_enabled(void)
 {
@@ -1531,6 +1615,9 @@ trace_screen_create(struct pipe_screen *screen)
    SCR_INIT(get_sparse_texture_virtual_page_size);
    SCR_INIT(set_fence_timeline_value);
    SCR_INIT(driver_thread_add_job);
+   SCR_INIT(query_compression_rates);
+   SCR_INIT(query_compression_modifiers);
+   SCR_INIT(is_compression_modifier);
 
    tr_scr->screen = screen;
 

@@ -117,8 +117,7 @@ r300_nir_lower_fcsel_instr(nir_builder *b, nir_instr *instr, void *data)
                         nir_ssa_for_alu_src(b, alu, 1), slt);
       }
 
-      nir_def_rewrite_uses(&alu->def, lrp);
-      nir_instr_remove(&alu->instr);
+      nir_def_replace(&alu->def, lrp);
       return true;
    }
    return false;
@@ -129,8 +128,7 @@ r300_nir_lower_fcsel_r500(nir_shader *shader)
 {
    bool progress = nir_shader_instructions_pass(shader,
                                                 r300_nir_lower_fcsel_instr,
-                                                nir_metadata_block_index |
-                                                   nir_metadata_dominance,
+                                                nir_metadata_control_flow,
                                                 NULL);
    return progress;
 }

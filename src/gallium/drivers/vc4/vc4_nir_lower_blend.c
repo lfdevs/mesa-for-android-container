@@ -57,8 +57,8 @@ blend_depends_on_dst_color(struct vc4_compile *c)
 static nir_def *
 vc4_nir_get_dst_color(nir_builder *b, int sample)
 {
-        return nir_load_input(b, 1, 32, nir_imm_int(b, 0),
-                              .base = VC4_NIR_TLB_COLOR_READ_INPUT + sample);
+        return nir_load_tlb_color_brcm(b, 1, 32, nir_imm_int(b, 0),
+                                       .base = sample);
 }
 
 static nir_def *
@@ -130,7 +130,7 @@ static nir_def *
 vc4_nir_set_packed_chan(nir_builder *b, nir_def *src0, nir_def *src1,
                         int chan)
 {
-        unsigned chan_mask = 0xff << (chan * 8);
+        unsigned chan_mask = 0xffu << (chan * 8);
         return nir_ior(b,
                        nir_iand_imm(b, src0, ~chan_mask),
                        nir_iand_imm(b, src1, chan_mask));
@@ -492,7 +492,7 @@ vc4_nir_blend_pipeline(struct vc4_compile *c, nir_builder *b, nir_def *src,
         for (int i = 0; i < 4; i++) {
                 if (format_swiz[i] < 4 &&
                     !(c->fs_key->blend.colormask & (1 << format_swiz[i]))) {
-                        colormask &= ~(0xff << (i * 8));
+                        colormask &= ~(0xffu << (i * 8));
                 }
         }
 
@@ -512,7 +512,8 @@ vc4_nir_store_sample_mask(struct vc4_compile *c, nir_builder *b,
         sample_mask->data.location = FRAG_RESULT_SAMPLE_MASK;
 
         nir_store_output(b, val, nir_imm_int(b, 0),
-                         .base = sample_mask->data.driver_location);
+                         .base = sample_mask->data.driver_location,
+                         .src_type = nir_type_uint | val->bit_size);
 }
 
 static void
@@ -573,18 +574,10 @@ vc4_nir_lower_blend_block(nir_block *block, struct vc4_compile *c)
                 if (intr->intrinsic != nir_intrinsic_store_output)
                         continue;
 
-                nir_variable *output_var = NULL;
-                nir_foreach_shader_out_variable(var, c->s) {
-                        if (var->data.driver_location ==
-                            nir_intrinsic_base(intr)) {
-                                output_var = var;
-                                break;
-                        }
-                }
-                assert(output_var);
+                unsigned loc = nir_intrinsic_io_semantics(intr).location;
 
-                if (output_var->data.location != FRAG_RESULT_COLOR &&
-                    output_var->data.location != FRAG_RESULT_DATA0) {
+                if (loc != FRAG_RESULT_COLOR &&
+                    loc != FRAG_RESULT_DATA0) {
                         continue;
                 }
 
@@ -603,8 +596,7 @@ vc4_nir_lower_blend(nir_shader *s, struct vc4_compile *c)
                 }
 
                 nir_metadata_preserve(impl,
-                                      nir_metadata_block_index |
-                                      nir_metadata_dominance);
+                                      nir_metadata_control_flow);
         }
 
         /* If we didn't do alpha-to-coverage on the output color, we still

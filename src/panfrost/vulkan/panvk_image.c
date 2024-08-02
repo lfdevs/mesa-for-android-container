@@ -45,7 +45,7 @@
 
 #define PANVK_MAX_PLANES 1
 
-static unsigned
+static uint64_t
 panvk_image_get_total_size(const struct panvk_image *image)
 {
    assert(util_format_get_num_planes(image->pimage.layout.format) == 1);

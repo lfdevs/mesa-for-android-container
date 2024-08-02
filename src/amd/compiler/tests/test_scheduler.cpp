@@ -77,7 +77,7 @@ BEGIN_TEST(vopd_sched.commutative)
    finish_schedule_vopd_test();
 END_TEST
 
-BEGIN_TEST(vopd_sched.mov_to_add)
+BEGIN_TEST(vopd_sched.mov_to_add_bfrev)
    if (!setup_cs(NULL, GFX11, CHIP_UNKNOWN, "", 32))
       return;
 
@@ -144,6 +144,12 @@ BEGIN_TEST(vopd_sched.mov_to_add)
    bld.vop1(aco_opcode::v_mov_b32, Definition(reg_v0, v1), Operand(reg_v2, v1));
    bld.vop2(aco_opcode::v_fmamk_f32, Definition(reg_v1, v1), Operand(reg_v2, v1),
             Operand(reg_v3, v1), Operand::zero());
+
+   //>> p_unit_test 7
+   //! v1: %0:v[1] = v_dual_mov_b32 %0:v[2] :: v1: %0:v[0] = v_dual_mov_b32 0x3c000000
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+   bld.vop1(aco_opcode::v_bfrev_b32, Definition(reg_v0, v1), Operand::c32(60));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(reg_v1, v1), Operand(reg_v2, v1));
 
    finish_schedule_vopd_test();
 END_TEST

@@ -656,7 +656,7 @@ ra_ctx_dump(struct ra_ctx *ctx)
    ra_file_dump(stream, &ctx->full);
    mesa_log_stream_printf(stream, "half:\n");
    ra_file_dump(stream, &ctx->half);
-   mesa_log_stream_printf(stream, "shared:");
+   mesa_log_stream_printf(stream, "shared:\n");
    ra_file_dump(stream, &ctx->shared);
    mesa_log_stream_destroy(stream);
 }
@@ -665,10 +665,14 @@ static unsigned
 reg_file_size(struct ra_file *file, struct ir3_register *reg)
 {
    /* Half-regs can only take up the first half of the combined regfile */
-   if (reg->flags & IR3_REG_HALF)
-      return MIN2(file->size, RA_HALF_SIZE);
-   else
+   if (reg->flags & IR3_REG_HALF) {
+      if (reg->flags & IR3_REG_SHARED)
+         return RA_SHARED_HALF_SIZE;
+      else
+         return MIN2(file->size, RA_HALF_SIZE);
+   } else {
       return file->size;
+   }
 }
 
 /* ra_pop_interval/ra_push_interval provide an API to shuffle around multiple
@@ -1073,8 +1077,7 @@ compress_regs_left(struct ra_ctx *ctx, struct ra_file *file,
 
    unsigned removed_size = 0, removed_half_size = 0;
    unsigned removed_killed_size = 0, removed_killed_half_size = 0;
-   unsigned file_size =
-      reg_align == 1 ? MIN2(file->size, RA_HALF_SIZE) : file->size;
+   unsigned file_size = reg_file_size(file, reg);
    physreg_t start_reg = 0;
 
    foreach_interval_rev_safe (interval, file) {
@@ -2587,6 +2590,7 @@ ir3_ra(struct ir3_shader_variant *v)
    limit_pressure.full = RA_FULL_SIZE;
    limit_pressure.half = RA_HALF_SIZE;
    limit_pressure.shared = RA_SHARED_SIZE;
+   limit_pressure.shared_half = RA_SHARED_HALF_SIZE;
 
    if (gl_shader_stage_is_compute(v->type) && v->has_barrier) {
       calc_limit_pressure_for_cs_with_barrier(v, &limit_pressure);
@@ -2605,7 +2609,20 @@ ir3_ra(struct ir3_shader_variant *v)
    if (ir3_shader_debug & IR3_DBG_SPILLALL)
       calc_min_limit_pressure(v, live, &limit_pressure);
 
-   if (max_pressure.shared > limit_pressure.shared || has_shared_vectors) {
+   d("limit pressure:");
+   d("\tfull: %u", limit_pressure.full);
+   d("\thalf: %u", limit_pressure.half);
+   d("\tshared: %u", limit_pressure.shared);
+
+   /* In the worst case, each half register could block one full register, so
+    * add shared_half in case of fragmentation. In addition, full registers can
+    * block half registers so we have to consider the total pressure against the
+    * half limit to prevent live range splitting when we run out of space for
+    * half registers in the bottom half.
+    */
+   if (max_pressure.shared + max_pressure.shared_half > limit_pressure.shared ||
+       (max_pressure.shared_half > 0 && max_pressure.shared > limit_pressure.shared_half) ||
+       has_shared_vectors) {
       ir3_ra_shared(v, &live);
       ir3_calc_pressure(v, live, &max_pressure);
 
@@ -2622,6 +2639,12 @@ ir3_ra(struct ir3_shader_variant *v)
       d("max pressure exceeded, spilling!");
       IR3_PASS(v->ir, ir3_spill, v, &live, &limit_pressure);
       ir3_calc_pressure(v, live, &max_pressure);
+
+      d("max pressure after spilling:");
+      d("\tfull: %u", max_pressure.full);
+      d("\thalf: %u", max_pressure.half);
+      d("\tshared: %u", max_pressure.shared);
+
       assert(max_pressure.full <= limit_pressure.full &&
              max_pressure.half <= limit_pressure.half);
       spilled = true;

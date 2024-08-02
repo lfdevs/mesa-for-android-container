@@ -52,6 +52,8 @@
 
 #define MAX_MULTIVIEW_VIEW_COUNT 16
 
+#define V3DV_SUPPORTED_SHADER_STAGES 4
+
 /* These are tunable parameters in the HW design, but all the V3D
  * implementations agree.
  */

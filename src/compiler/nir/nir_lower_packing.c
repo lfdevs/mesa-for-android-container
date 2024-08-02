@@ -179,8 +179,7 @@ lower_pack_instr(nir_builder *b, nir_instr *instr, void *data)
    default:
       unreachable("Impossible opcode");
    }
-   nir_def_rewrite_uses(&alu_instr->def, dest);
-   nir_instr_remove(&alu_instr->instr);
+   nir_def_replace(&alu_instr->def, dest);
 
    return true;
 }
@@ -189,5 +188,5 @@ bool
 nir_lower_pack(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_pack_instr,
-                                       nir_metadata_block_index | nir_metadata_dominance, NULL);
+                                       nir_metadata_control_flow, NULL);
 }

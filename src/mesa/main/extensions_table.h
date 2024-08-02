@@ -214,6 +214,7 @@ EXT(ATI_texture_float                       , ARB_texture_float                 
 EXT(ATI_texture_mirror_once                 , ATI_texture_mirror_once                , GLL, GLC,  x ,  x , 2006)
 
 EXT(EXT_EGL_image_storage                   , EXT_EGL_image_storage                  , GLL, GLC , x ,  30, 2018)
+EXT(EXT_EGL_image_storage_compression       , EXT_EGL_image_storage                  , GLL, GLC , x ,  30, 2021)
 EXT(EXT_EGL_sync                            , dummy_true                             , GLL, GLC,  x ,  x , 2019)
 EXT(EXT_abgr                                , dummy_true                             , GLL, GLC,  x ,  x , 1995)
 EXT(EXT_base_instance                       , ARB_base_instance                      ,  x ,  x ,  x ,  30, 2014)
@@ -300,6 +301,7 @@ EXT(EXT_shader_integer_mix                  , EXT_shader_integer_mix            
 EXT(EXT_shader_io_blocks                    , dummy_true                             ,  x ,  x ,  x ,  31, 2014)
 EXT(EXT_shader_samples_identical            , EXT_shader_samples_identical           , GLL, GLC,  x ,  31, 2015)
 EXT(EXT_shadow_funcs                        , ARB_shadow                             , GLL,  x ,  x ,  x , 2002)
+EXT(EXT_shadow_samplers                     , ARB_shadow                             ,  x ,  x ,  x , ES2, 2012)
 EXT(EXT_stencil_two_side                    , EXT_stencil_two_side                   , GLL,  x ,  x ,  x , 2001)
 EXT(EXT_stencil_wrap                        , dummy_true                             , GLL,  x ,  x ,  x , 2002)
 EXT(EXT_subtexture                          , dummy_true                             , GLL,  x ,  x ,  x , 1995)
@@ -343,6 +345,7 @@ EXT(EXT_texture_shadow_lod                  , EXT_texture_shadow_lod            
 EXT(EXT_texture_shared_exponent             , EXT_texture_shared_exponent            , GLL, GLC,  x ,  x , 2004)
 EXT(EXT_texture_snorm                       , EXT_texture_snorm                      , GLL, GLC,  x ,  x , 2009)
 EXT(EXT_texture_storage                     , dummy_true                             , GLL, GLC,  x , ES2, 2009)
+EXT(EXT_texture_storage_compression         , dummy_true                             ,  x ,  x ,  x ,  30, 2021)
 EXT(EXT_texture_swizzle                     , EXT_texture_swizzle                    , GLL, GLC,  x ,  x , 2008)
 EXT(EXT_texture_type_2_10_10_10_REV         , EXT_texture_type_2_10_10_10_REV        ,  x ,  x ,  x , ES2, 2008)
 EXT(EXT_texture_view                        , OES_texture_view                       ,  x ,  x ,  x ,  31, 2014)

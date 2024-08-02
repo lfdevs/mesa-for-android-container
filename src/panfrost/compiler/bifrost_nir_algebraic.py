@@ -27,6 +27,7 @@ import math
 a = 'a'
 b = 'b'
 c = 'c'
+d = 'd'
 
 # In general, bcsel is cheaper than bitwise arithmetic on Mali. On
 # Bifrost, we can implement bcsel as either CSEL or MUX to schedule to either
@@ -43,6 +44,10 @@ opt_bool_bitwise = [
 ]
 
 algebraic_late = [
+    (('pack_32_4x8_split', a, b, c, d),
+     ('pack_32_2x16_split', ('ior', ('u2u16', a), ('ishl', ('u2u16', b), 8)),
+                            ('ior', ('u2u16', c), ('ishl', ('u2u16', d), 8)))),
+
     # Canonical form. The scheduler will convert back if it makes sense.
     (('fmul', a, 2.0), ('fadd', a, a)),
 

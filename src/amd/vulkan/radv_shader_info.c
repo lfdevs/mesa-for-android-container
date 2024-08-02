@@ -301,12 +301,6 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_store_output:
       gather_intrinsic_store_output_info(nir, instr, info, consider_force_vrs);
       break;
-   case nir_intrinsic_load_sbt_base_amd:
-      info->cs.is_rt_shader = true;
-      break;
-   case nir_intrinsic_load_rt_dynamic_callable_stack_base_amd:
-      info->cs.uses_dynamic_rt_callable_stack = true;
-      break;
    case nir_intrinsic_bvh64_intersect_ray_amd:
       info->cs.uses_rt = true;
       break;
@@ -587,9 +581,12 @@ gather_shader_info_tes(struct radv_device *device, const nir_shader *nir, struct
    info->tes.reads_tess_factors =
       !!(nir->info.inputs_read & (VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER));
 
-   if (!info->inputs_linked)
+   if (!info->inputs_linked) {
       info->tes.num_linked_inputs = util_last_bit64(radv_gather_unlinked_io_mask(
          nir->info.inputs_read & ~(VARYING_BIT_TESS_LEVEL_OUTER | VARYING_BIT_TESS_LEVEL_INNER)));
+      info->tes.num_linked_patch_inputs = util_last_bit64(
+         radv_gather_unlinked_patch_io_mask(nir->info.inputs_read, nir->info.patch_inputs_read));
+   }
    if (!info->outputs_linked)
       info->tes.num_linked_outputs = util_last_bit64(radv_gather_unlinked_io_mask(nir->info.outputs_written));
 
@@ -624,11 +621,9 @@ radv_init_legacy_gs_ring_info(const struct radv_device *device, struct radv_shad
    unsigned max_size = ((unsigned)(63.999 * 1024 * 1024) & ~255) * num_se;
 
    /* Calculate the minimum size. */
-   unsigned min_esgs_ring_size =
-      align(gs_ring_info->vgt_esgs_ring_itemsize * 4 * gs_vertex_reuse * wave_size, alignment);
+   unsigned min_esgs_ring_size = align(gs_ring_info->esgs_itemsize * 4 * gs_vertex_reuse * wave_size, alignment);
    /* These are recommended sizes, not minimum sizes. */
-   unsigned esgs_ring_size =
-      max_gs_waves * 2 * wave_size * gs_ring_info->vgt_esgs_ring_itemsize * 4 * gs_info->gs.vertices_in;
+   unsigned esgs_ring_size = max_gs_waves * 2 * wave_size * gs_ring_info->esgs_itemsize * 4 * gs_info->gs.vertices_in;
    unsigned gsvs_ring_size = max_gs_waves * 2 * wave_size * gs_info->gs.max_gsvs_emit_size;
 
    min_esgs_ring_size = align(min_esgs_ring_size, alignment);
@@ -731,12 +726,12 @@ radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_inf
    const uint32_t max_prims_per_subgroup = gs_inst_prims_in_subgroup * gs_info->gs.vertices_out;
    const uint32_t lds_granularity = pdev->info.lds_encode_granularity;
    const uint32_t total_lds_bytes = align(esgs_lds_size * 4, lds_granularity);
+
+   out->gs_inst_prims_in_subgroup = gs_inst_prims_in_subgroup;
+   out->es_verts_per_subgroup = es_verts_per_subgroup;
+   out->gs_prims_per_subgroup = gs_prims_per_subgroup;
+   out->esgs_itemsize = esgs_itemsize;
    out->lds_size = total_lds_bytes / lds_granularity;
-   out->vgt_gs_onchip_cntl = S_028A44_ES_VERTS_PER_SUBGRP(es_verts_per_subgroup) |
-                             S_028A44_GS_PRIMS_PER_SUBGRP(gs_prims_per_subgroup) |
-                             S_028A44_GS_INST_PRIMS_IN_SUBGRP(gs_inst_prims_in_subgroup);
-   out->vgt_gs_max_prims_per_subgroup = S_028A94_MAX_PRIMS_PER_SUBGROUP(max_prims_per_subgroup);
-   out->vgt_esgs_ring_itemsize = esgs_itemsize;
    assert(max_prims_per_subgroup <= max_out_prims);
 
    radv_init_legacy_gs_ring_info(device, gs_info);
@@ -907,13 +902,23 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
    info->ps.pops_is_per_sample =
       info->ps.pops && (nir->info.fs.sample_interlock_ordered || nir->info.fs.sample_interlock_unordered);
 
-   info->ps.spi_ps_input = radv_compute_spi_ps_input(gfx_state, info);
+   info->ps.spi_ps_input_ena = radv_compute_spi_ps_input(pdev, gfx_state, info);
+   info->ps.spi_ps_input_addr = info->ps.spi_ps_input_ena;
+   if (pdev->info.gfx_level >= GFX12) {
+      /* Only SPI_PS_INPUT_ENA has this bit on GFX12. */
+      info->ps.spi_ps_input_addr &= C_02865C_COVERAGE_TO_SHADER_SELECT;
+   }
 
    info->has_epilog = gfx_state->ps.has_epilog && info->ps.colors_written;
 
    if (!info->has_epilog) {
       info->ps.mrt0_is_dual_src = gfx_state->ps.epilog.mrt0_is_dual_src;
       info->ps.spi_shader_col_format = gfx_state->ps.epilog.spi_shader_col_format;
+
+      /* Clear color attachments that aren't exported by the FS to match IO shader arguments. */
+      info->ps.spi_shader_col_format &= info->ps.colors_written;
+
+      info->ps.cb_shader_mask = ac_get_cb_shader_mask(info->ps.spi_shader_col_format);
    }
 
    const bool export_alpha_and_mrtz =
@@ -938,33 +943,6 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
       (pdev->info.gfx_level == GFX10_3 &&
        (nir->info.fs.sample_interlock_ordered || nir->info.fs.sample_interlock_unordered ||
         nir->info.fs.pixel_interlock_ordered || nir->info.fs.pixel_interlock_unordered));
-
-   /* DB_SHADER_CONTROL based on other fragment shader info fields. */
-
-   unsigned conservative_z_export = V_02880C_EXPORT_ANY_Z;
-   if (info->ps.depth_layout == FRAG_DEPTH_LAYOUT_GREATER)
-      conservative_z_export = V_02880C_EXPORT_GREATER_THAN_Z;
-   else if (info->ps.depth_layout == FRAG_DEPTH_LAYOUT_LESS)
-      conservative_z_export = V_02880C_EXPORT_LESS_THAN_Z;
-
-   unsigned z_order =
-      info->ps.early_fragment_test || !info->ps.writes_memory ? V_02880C_EARLY_Z_THEN_LATE_Z : V_02880C_LATE_Z;
-
-   /* It shouldn't be needed to export gl_SampleMask when MSAA is disabled, but this appears to break Project Cars
-    * (DXVK). See https://bugs.freedesktop.org/show_bug.cgi?id=109401
-    */
-   const bool mask_export_enable = info->ps.writes_sample_mask;
-
-   const bool disable_rbplus = pdev->info.has_rbplus && !pdev->info.rbplus_allowed;
-
-   info->ps.db_shader_control =
-      S_02880C_Z_EXPORT_ENABLE(info->ps.writes_z) | S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(info->ps.writes_stencil) |
-      S_02880C_KILL_ENABLE(info->ps.can_discard) | S_02880C_MASK_EXPORT_ENABLE(mask_export_enable) |
-      S_02880C_CONSERVATIVE_Z_EXPORT(conservative_z_export) | S_02880C_Z_ORDER(z_order) |
-      S_02880C_DEPTH_BEFORE_SHADER(info->ps.early_fragment_test) |
-      S_02880C_PRE_SHADER_DEPTH_COVERAGE_ENABLE(info->ps.post_depth_coverage) |
-      S_02880C_EXEC_ON_HIER_FAIL(info->ps.writes_memory) | S_02880C_EXEC_ON_NOOP(info->ps.writes_memory) |
-      S_02880C_DUAL_QUAD_DISABLE(disable_rbplus) | S_02880C_PRIMITIVE_ORDERED_PIXEL_SHADER(info->ps.pops);
 }
 
 static void
@@ -1254,6 +1232,7 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
 
    info->user_data_0 = radv_get_user_data_0(device, info);
    info->merged_shader_compiled_separately = radv_is_merged_shader_compiled_separately(device, info);
+   info->force_indirect_desc_sets = info->merged_shader_compiled_separately || stage_key->indirect_bindable;
 
    switch (nir->info.stage) {
    case MESA_SHADER_COMPUTE:
@@ -1334,8 +1313,8 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
       break;
    case MESA_SHADER_GEOMETRY:
       if (!info->is_ngg) {
-         unsigned es_verts_per_subgroup = G_028A44_ES_VERTS_PER_SUBGRP(info->gs_ring_info.vgt_gs_onchip_cntl);
-         unsigned gs_inst_prims_in_subgroup = G_028A44_GS_INST_PRIMS_IN_SUBGRP(info->gs_ring_info.vgt_gs_onchip_cntl);
+         unsigned es_verts_per_subgroup = info->gs_ring_info.es_verts_per_subgroup;
+         unsigned gs_inst_prims_in_subgroup = info->gs_ring_info.gs_inst_prims_in_subgroup;
 
          info->workgroup_size = ac_compute_esgs_workgroup_size(pdev->info.gfx_level, info->wave_size,
                                                                es_verts_per_subgroup, gs_inst_prims_in_subgroup);

@@ -132,18 +132,18 @@ BEGIN_TEST(isel.sparse.clause)
          };
          void main() {
             //>> v5: (noCSE)%zero0 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero0, (kill)%_, %_, %_ dmask:xyzw 2d tfe
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero0, (kill)%_, %_ dmask:xyzw 2d tfe a16
             //>> v5: (noCSE)%zero1 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero1, (kill)%_, %_, %_ dmask:xyzw 2d tfe
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero1, (kill)%_, %_ dmask:xyzw 2d tfe a16
             //>> v5: (noCSE)%zero2 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero2, (kill)%_, %_, %_ dmask:xyzw 2d tfe
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero2, (kill)%_, %_ dmask:xyzw 2d tfe a16
             //>> v5: (noCSE)%zero3 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o (kill)%_, (kill)%_, (kill)%zero3, (kill)%_, (kill)%_, (kill)%_ dmask:xyzw 2d tfe
+            //>> v5: %_ = image_sample_lz_o (kill)%_, (kill)%_, (kill)%zero3, (kill)%_, (kill)%_ dmask:xyzw 2d tfe a16
             //>> s_clause 0x3
-            //! image_sample_lz_o v[#_:#_], [v#_, v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v[#_:#_], [v#_, v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v[#_:#_], [v#_, v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v[#_:#_], [v#_, v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
+            //! image_sample_lz_o v[#_:#_], v[#_:#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
+            //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
+            //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
+            //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
             code[0] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(1, 0), res[0]);
             code[1] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(2, 0), res[1]);
             code[2] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(3, 0), res[2]);
@@ -171,7 +171,7 @@ BEGIN_TEST(isel.discard_early_exit.mrtz)
    );
 
    /* On GFX11, the discard early exit must use mrtz if the shader exports only depth. */
-   //>> exp mrtz v0, off, off, off done     ; $_ $_
+   //>> exp mrtz v#_, off, off, off done    ; $_ $_
    //! s_nop 0                              ; $_
    //! s_sendmsg sendmsg(MSG_DEALLOC_VGPRS) ; $_
    //! s_endpgm                             ; $_
@@ -200,7 +200,7 @@ BEGIN_TEST(isel.discard_early_exit.mrt0)
    );
 
    /* On GFX11, the discard early exit must use mrt0 if the shader exports color. */
-   //>> exp mrt0 v0, v0, v0, v0 done        ; $_ $_
+   //>> exp mrt0 v#x, v#x, v#x, v#x done    ; $_ $_
    //! s_nop 0                              ; $_
    //! s_sendmsg sendmsg(MSG_DEALLOC_VGPRS) ; $_
    //! s_endpgm                             ; $_
@@ -775,6 +775,365 @@ BEGIN_TEST(isel.cf.uniform_if_branch_use)
       nir_unit_test_amd(nb, val, .base=1);
    }
    nir_pop_loop(nb, NULL);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * b = ...
+ * loop {
+ *    a = linear_phi b, c, d
+ *    if (divergent) {
+ *       c = ...
+ *       continue
+ *    }
+ *    d = c or undef
+ *    break
+ * }
+ */
+BEGIN_TEST(isel.cf.hidden_continue)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   //>> s1: %init = p_unit_test 0
+   nir_def* init = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+   nir_phi_instr* phi;
+
+   nir_loop* loop = nir_push_loop(nb);
+   {
+      //>> BB1
+      //! /* logical preds: BB0, BB2, / linear preds: BB0, BB3, BB11, / kind: loop-header, branch, */
+      //! s1: %2 = p_linear_phi %init, %cont, %phi
+      phi = nir_phi_instr_create(nb->shader);
+      nir_def_init(&phi->instr, &phi->def, 1, 32);
+      nir_phi_instr_add_src(phi, init->parent_instr->block, init);
+
+      nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 4));
+      {
+         //>> BB2
+         //! /* logical preds: BB1, / linear preds: BB1, / kind: continue, */
+         //! p_logical_start
+         //! s1: %cont = p_unit_test 1
+         nir_def* cont = nir_unit_test_uniform_amd(nb, 1, 32, .base = 1);
+         nir_phi_instr_add_src(phi, cont->parent_instr->block, cont);
+         nir_jump(nb, nir_jump_continue);
+      }
+      nir_pop_if(nb, NULL);
+      //>> BB6
+      //! /* logical preds: / linear preds: BB4, BB5, / kind: invert, */
+      //! s1: %phi = p_linear_phi %cont, s1: undef
+
+      //>> BB9
+      //! /* logical preds: BB7, / linear preds: BB7, BB8, / kind: break, merge, */
+      //>> BB11
+      //! /* logical preds: / linear preds: BB9, / kind: uniform, continue, */
+      nir_jump(nb, nir_jump_break);
+   }
+   nir_pop_loop(nb, NULL);
+
+   nb->cursor = nir_after_phis(nir_loop_first_block(loop));
+   nir_builder_instr_insert(nb, &phi->instr);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * a = ...
+ * loop {
+ *    if (uniform) {
+ *       break
+ *    }
+ *    discard_if
+ * }
+ * b = phi a
+ */
+BEGIN_TEST(isel.cf.hidden_break)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   //>> s1: %brk = p_unit_test 0
+   nir_def* brk = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+   nir_block* block;
+   nir_push_loop(nb);
+   {
+      nir_push_if(nb, nir_unit_test_uniform_amd(nb, 1, 1, .base = 4));
+      {
+         block = nir_cursor_current_block(nb->cursor);
+         nir_jump(nb, nir_jump_break);
+      }
+      nir_pop_if(nb, NULL);
+      //>> BB4
+      //! /* logical preds: BB3, / linear preds: BB3, / kind: uniform, continue_or_break, discard, */
+
+      nir_discard_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 5));
+   }
+   nir_pop_loop(nb, NULL);
+
+   //>> BB7
+   //! /* logical preds: BB2, / linear preds: BB2, BB5, / kind: uniform, top-level, loop-exit, */
+   //! s1: %4 = p_linear_phi %1,  s1: undef
+   nir_phi_instr* phi = nir_phi_instr_create(nb->shader);
+   nir_def_init(&phi->instr, &phi->def, 1, 32);
+   nir_phi_instr_add_src(phi, block, brk);
+   nir_builder_instr_insert(nb, &phi->instr);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * loop {
+ *    if (divergent) {
+ *       a = loop_invariant_sgpr
+ *       break
+ *    }
+ *    discard_if
+ * }
+ * use(a)
+ */
+BEGIN_TEST(isel.cf.hidden_break_no_lcssa)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   nir_def* val;
+   nir_push_loop(nb);
+   {
+      //>> BB1
+      //! /* logical preds: BB0, BB9, / linear preds: BB0, BB11, / kind: loop-header, branch, */
+      //! s1: %val_header_phi = p_linear_phi s1: undef, %val_invert_phi
+
+      nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 1));
+      {
+         //>> BB2
+         //! /* logical preds: BB1, / linear preds: BB1, / kind: break, */
+         //! p_logical_start
+         //! s1: %val = p_parallelcopy 0
+         val = nir_imm_zero(nb, 1, 32);
+         nir_jump(nb, nir_jump_break);
+      }
+      nir_pop_if(nb, NULL);
+
+      //>> BB6
+      //! /* logical preds: / linear preds: BB4, BB5, / kind: invert, */
+      //! s1: %val_invert_phi = p_linear_phi %val, %val_header_phi
+      //>> BB9
+      //! /* logical preds: BB7, / linear preds: BB7, BB8, / kind: uniform, continue_or_break, merge, discard, */
+      nir_discard_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 2));
+   }
+   nir_pop_loop(nb, NULL);
+
+   //>> BB12
+   //! /* logical preds: BB2, / linear preds: BB3, BB10, / kind: uniform, top-level, loop-exit, */
+   //! s1: %val_exit_phi = p_linear_phi %val, %val_invert_phi
+   //! p_logical_start
+   //! p_unit_test 0, %val_exit_phi
+   nir_unit_test_amd(nb, val, .base = 0);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * loop {
+ *    use(phi(, a))
+ *    discard_if
+ *    loop {
+ *       if (uniform) {
+ *          a = loop_invariant_sgpr
+ *          break
+ *       }
+ *    }
+ * }
+ */
+BEGIN_TEST(isel.cf.hidden_break_no_lcssa_header_phi)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   //>> p_startpgm
+   //! p_logical_start
+   //! s1: %init = p_unit_test 0
+   nir_def* init = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+
+   nir_def* val;
+   nir_phi_instr* phi;
+   nir_loop *loop = nir_push_loop(nb);
+   {
+      //>> BB1
+      //! /* logical preds: BB0, BB11, / linear preds: BB0, BB13, / kind: uniform, loop-preheader, loop-header, discard, */
+      //! s1: %phi = p_linear_phi %init, %val_lcssa
+      //! p_logical_start
+      //! p_unit_test 1, %phi
+      phi = nir_phi_instr_create(nb->shader);
+      nir_def_init(&phi->instr, &phi->def, 1, 32);
+      nir_phi_instr_add_src(phi, init->parent_instr->block, init);
+      nir_unit_test_amd(nb, &phi->def, .base = 1);
+
+      nir_discard_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 2));
+
+      //>> BB2
+      //! /* logical preds: BB1, BB5, / linear preds: BB1, BB7, / kind: uniform, loop-header, */
+      nir_push_loop(nb);
+      {
+         nir_push_if(nb, nir_unit_test_uniform_amd(nb, 1, 1, .base = 3));
+         {
+            //>> BB3
+            //! /* logical preds: BB2, / linear preds: BB2, / kind: uniform, break, */
+            //! p_logical_start
+            //! s1: %val = p_parallelcopy 0
+            val = nir_imm_zero(nb, 1, 32);
+            nir_jump(nb, nir_jump_break);
+         }
+         nir_pop_if(nb, NULL);
+         //>> BB5
+         //! /* logical preds: BB4, / linear preds: BB4, / kind: uniform, continue_or_break, */
+      }
+      nir_pop_loop(nb, NULL);
+      //>> BB8
+      //! /* logical preds: BB3, / linear preds: BB3, BB6, / kind: uniform, loop-exit, */
+      //! s1: %val_lcssa = p_linear_phi %val, s1: undef
+      //>> BB11
+      //! /* logical preds: BB10, / linear preds: BB10, / kind: uniform, continue_or_break, */
+
+      nir_phi_instr_add_src(phi, nir_cursor_current_block(nb->cursor), val);
+   }
+   nir_pop_loop(nb, NULL);
+
+   nb->cursor = nir_after_phis(nir_loop_first_block(loop));
+   nir_builder_instr_insert(nb, &phi->instr);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * if (divergent) {
+ *   a =
+ * } else {
+ * }
+ * b = phi(a, undef);
+ * }
+ */
+BEGIN_TEST(isel.cf.divergent_if_undef.basic_then)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 2));
+   //>> BB1
+   //! /* logical preds: BB0, / linear preds: BB0, / kind: uniform, */
+   //! p_logical_start
+   //! s1: %val = p_unit_test 0
+   nir_def* val = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+   nir_pop_if(nb, NULL);
+
+   //>> BB3
+   //! /* logical preds: / linear preds: BB1, BB2, / kind: invert, */
+   //! s1: %phi = p_linear_phi %val, s1: undef
+   //>> BB6
+   //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
+   //! s1: %phi2 = p_linear_phi %phi, %phi
+   //! p_logical_start
+   //! p_unit_test 1, %phi2
+   nir_unit_test_amd(nb, nir_if_phi(nb, val, nir_undef(nb, 1, 32)), .base = 1);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * if (divergent) {
+ * } else {
+ *   a =
+ * }
+ * b = phi(undef, a);
+ * }
+ */
+BEGIN_TEST(isel.cf.divergent_if_undef.basic_else)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 2));
+   nir_push_else(nb, NULL);
+   //>> BB3
+   //! /* logical preds: / linear preds: BB1, BB2, / kind: invert, */
+   //>> BB4
+   //! /* logical preds: BB0, / linear preds: BB3, / kind: uniform, */
+   //! p_logical_start
+   //! s1: %val = p_unit_test 0
+   nir_def* val = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+   nir_pop_if(nb, NULL);
+
+   //>> BB6
+   //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
+   //! s1: %phi = p_linear_phi %val, s1: undef
+   //! p_logical_start
+   //! p_unit_test 1, %phi
+   nir_unit_test_amd(nb, nir_if_phi(nb, nir_undef(nb, 1, 32), val), .base = 1);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * loop {
+ *   a =
+ *   if (divergent) {
+ *     break;
+ *   } else {
+ *   }
+ *   b = phi(a);
+ * }
+ */
+BEGIN_TEST(isel.cf.divergent_if_undef.break)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   nir_push_loop(nb);
+   {
+      //>> BB1
+      //! /* logical preds: BB0, BB9, / linear preds: BB0, BB9, / kind: loop-header, branch, */
+      //! p_logical_start
+      //! s1: %val = p_unit_test 0
+      //! s2: %_ = p_unit_test 2
+      nir_def* val = nir_unit_test_uniform_amd(nb, 1, 32, .base = 0);
+      nir_if* nif = nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 2));
+      {
+         //>> BB2
+         //! /* logical preds: BB1, / linear preds: BB1, / kind: break, */
+         nir_jump(nb, nir_jump_break);
+      }
+      nir_push_else(nb, NULL);
+      {}
+      nir_pop_if(nb, NULL);
+
+      //>> BB9
+      //! /* logical preds: BB7, / linear preds: BB7, BB8, / kind: uniform, continue, merge, */
+      //! s1: %phi = p_linear_phi %val, s1: undef
+      nir_phi_instr* phi = nir_phi_instr_create(nb->shader);
+      nir_phi_instr_add_src(phi, nir_if_last_else_block(nif), val);
+      nir_def_init(&phi->instr, &phi->def, 1, 32);
+      nir_builder_instr_insert(nb, &phi->instr);
+
+      //! p_logical_start
+      //! p_unit_test 1, %phi
+      nir_unit_test_amd(nb, &phi->def, .base = 1);
+   }
+   nir_pop_loop(nb, NULL);
+
+   finish_isel_test();
+END_TEST
+
+/**
+ * if (divergent) {
+ * } else {
+ * }
+ * a = phi(undef, undef);
+ * }
+ */
+BEGIN_TEST(isel.cf.divergent_if_undef.both)
+   if (!setup_nir_cs(GFX11))
+      return;
+
+   nir_push_if(nb, nir_unit_test_divergent_amd(nb, 1, 1, .base = 1));
+   nir_pop_if(nb, NULL);
+   //>> BB6
+   //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
+   //! s1: %4 = p_linear_phi  s1: undef, s1: undef
+   nir_unit_test_amd(nb, nir_if_phi(nb, nir_undef(nb, 1, 32), nir_undef(nb, 1, 32)), .base = 0);
 
    finish_isel_test();
 END_TEST

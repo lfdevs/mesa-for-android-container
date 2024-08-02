@@ -1706,6 +1706,8 @@ offsets = {
     "InternalInvalidateFramebufferAncillaryMESA": 1670,
     "DrawElementsPacked": 1671,
     "DrawElementsUserBufPacked": 1672,
+    "TexStorageAttribs2DEXT": 1673,
+    "TexStorageAttribs3DEXT": 1674,
 }
 
 functions = [
@@ -2725,6 +2727,8 @@ functions = [
     "TexStorage2DMultisample",
     "TexStorage3D",
     "TexStorage3DMultisample",
+    "TexStorageAttribs2DEXT",
+    "TexStorageAttribs3DEXT",
     "TexSubImage1D",
     "TexSubImage2D",
     "TexSubImage3D",

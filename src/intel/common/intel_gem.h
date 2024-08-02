@@ -105,6 +105,7 @@ bool intel_gem_can_render_on_fd(int fd, enum intel_kmd_type kmd_type);
 enum intel_gem_create_context_flags {
    INTEL_GEM_CREATE_CONTEXT_EXT_RECOVERABLE_FLAG = BITFIELD_BIT(0),
    INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG   = BITFIELD_BIT(1),
+   INTEL_GEM_CREATE_CONTEXT_EXT_LOW_LATENCY_FLAG = BITFIELD_BIT(2),
 };
 
 bool intel_gem_create_context(int fd, uint32_t *context_id);

@@ -190,8 +190,8 @@ panfrost_create_sampler_state(struct pipe_context *pctx,
    struct panfrost_sampler_state *so = CALLOC_STRUCT(panfrost_sampler_state);
    so->base = *cso;
 
-#if PAN_ARCH == 7
-   /* On v7, pan_texture.c composes the API swizzle with a bijective
+#if PAN_ARCH == 7 || PAN_ARCH >= 10
+   /* On v7 and v10+, pan_texture.c composes the API swizzle with a bijective
     * swizzle derived from the format, to allow more formats than the
     * hardware otherwise supports. When packing border colours, we need to
     * undo this bijection, by swizzling with its inverse.
@@ -984,7 +984,8 @@ panfrost_upload_txs_sysval(struct panfrost_batch *batch,
 
    if (tex->target == PIPE_BUFFER) {
       assert(dim == 1);
-      uniform->i[0] = tex->u.buf.size / util_format_get_blocksize(tex->format);
+      unsigned buf_size = tex->u.buf.size / util_format_get_blocksize(tex->format);
+      uniform->i[0] = MIN2(buf_size, PAN_MAX_TEXEL_BUFFER_ELEMENTS);
       return;
    }
 
@@ -1541,6 +1542,7 @@ panfrost_create_sampler_view_bo(struct panfrost_sampler_view *so,
    unsigned buf_offset = is_buffer ? so->base.u.buf.offset : 0;
    unsigned buf_size =
       (is_buffer ? so->base.u.buf.size : 0) / util_format_get_blocksize(format);
+   buf_size = MIN2(buf_size, PAN_MAX_TEXEL_BUFFER_ELEMENTS);
 
    if (so->base.target == PIPE_TEXTURE_3D) {
       first_layer /= prsrc->image.layout.depth;
@@ -2536,7 +2538,7 @@ emit_fbd(struct panfrost_batch *batch, struct pan_fb_info *fb)
 #endif
 
    batch->framebuffer.gpu |=
-      GENX(pan_emit_fbd)(fb, &tls, &batch->tiler_ctx, batch->framebuffer.cpu);
+      GENX(pan_emit_fbd)(fb, 0, &tls, &batch->tiler_ctx, batch->framebuffer.cpu);
 }
 
 /* Mark a surface as written */
@@ -2759,9 +2761,8 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
 
    /* TODO: XFB with index buffers */
    // assert(info->index_size == 0);
-   u_trim_pipe_prim(info->mode, &count);
 
-   if (count == 0)
+   if (!u_trim_pipe_prim(info->mode, &count))
       return;
 
    perf_debug(batch->ctx, "Emulating transform feedback");
@@ -2985,7 +2986,7 @@ panfrost_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /* Emulate indirect draws on JM */
    if (indirect && indirect->buffer) {
       assert(num_draws == 1);
-      util_draw_indirect(pipe, info, indirect);
+      util_draw_indirect(pipe, info, drawid_offset, indirect);
       perf_debug(ctx, "Emulating indirect draw on the CPU");
       return;
    }
@@ -3048,6 +3049,14 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
                               const struct pipe_grid_info *info)
 {
    struct panfrost_context *ctx = pan_context(pipe);
+
+   util_dynarray_foreach(&ctx->global_buffers, struct pipe_resource *, res) {
+      if (!*res)
+         continue;
+
+      struct panfrost_resource *buffer = pan_resource(*res);
+      panfrost_batch_write_rsrc(batch, buffer, PIPE_SHADER_COMPUTE);
+   }
 
    if (info->indirect && !PAN_GPU_INDIRECTS) {
       struct pipe_transfer *transfer;
@@ -3441,8 +3450,8 @@ panfrost_create_sampler_view(struct pipe_context *pctx,
    struct panfrost_sampler_view *so =
       rzalloc(pctx, struct panfrost_sampler_view);
 
-   pan_legalize_afbc_format(ctx, pan_resource(texture), template->format,
-                            false, false);
+   pan_legalize_format(ctx, pan_resource(texture), template->format, false,
+                       false);
 
    pipe_reference(NULL, &texture->reference);
 

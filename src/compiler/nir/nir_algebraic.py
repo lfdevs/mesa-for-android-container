@@ -205,6 +205,9 @@ class Value(object):
       ${'true' if val.inexact else 'false'},
       ${'true' if val.exact else 'false'},
       ${'true' if val.ignore_exact else 'false'},
+      ${'true' if val.nsz else 'false'},
+      ${'true' if val.nnan else 'false'},
+      ${'true' if val.ninf else 'false'},
       ${val.c_opcode()},
       ${val.comm_expr_idx}, ${val.comm_exprs},
       { ${', '.join(src.array_index for src in val.sources)} },
@@ -255,11 +258,11 @@ class Constant(Value):
          # Explicitly sign-extend negative integers to 64-bit, ensuring correct
          # handling of -INT32_MIN which is not representable in 32-bit.
          if self.value < 0:
-            return hex(struct.unpack('Q', struct.pack('q', self.value))[0])
+            return hex(struct.unpack('Q', struct.pack('q', self.value))[0]) + 'ull'
          else:
-            return hex(self.value)
+            return hex(self.value) + 'ull'
       elif isinstance(self.value, float):
-         return hex(struct.unpack('Q', struct.pack('d', self.value))[0])
+         return hex(struct.unpack('Q', struct.pack('d', self.value))[0]) + 'ull'
       else:
          assert False
 
@@ -382,16 +385,15 @@ class Expression(Value):
       # "many-comm-expr" isn't really a condition.  It's notification to the
       # generator that this pattern is known to have too many commutative
       # expressions, and an error should not be generated for this case.
-      self.many_commutative_expressions = False
-      if self.cond and self.cond.find("many-comm-expr") >= 0:
-         # Split the condition into a comma-separated list.  Remove
-         # "many-comm-expr".  If there is anything left, put it back together.
-         c = self.cond[1:-1].split(",")
-         c.remove("many-comm-expr")
-         assert(len(c) <= 1)
+      # nsz, nnan and ninf are special conditions, so we treat them specially too.
+      cond = {k: True for k in self.cond[1:-1].split(",")} if self.cond else {}
+      self.many_commutative_expressions = cond.pop('many-comm-expr', False)
+      self.nsz = cond.pop('nsz', False)
+      self.nnan = cond.pop('nnan', False)
+      self.ninf = cond.pop('ninf', False)
 
-         self.cond = c[0] if c else None
-         self.many_commutative_expressions = True
+      assert len(cond) <= 1
+      self.cond = cond.popitem()[0] if cond else None
 
       # Deduplicate references to the condition functions for the expressions
       # and save the index for the order they were added.

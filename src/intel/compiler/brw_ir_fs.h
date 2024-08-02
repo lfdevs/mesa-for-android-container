@@ -28,370 +28,27 @@
 #include "brw_ir.h"
 #include "brw_ir_allocator.h"
 
-class fs_reg : private brw_reg {
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(fs_reg)
-
-   void init();
-
-   fs_reg();
-   fs_reg(struct ::brw_reg reg);
-   fs_reg(enum brw_reg_file file, unsigned nr);
-   fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type);
-
-   const brw_reg &as_brw_reg() const
-   {
-      assert(file == ARF || file == FIXED_GRF || file == IMM);
-      assert(offset == 0);
-      return static_cast<const brw_reg &>(*this);
-   }
-
-   brw_reg &as_brw_reg()
-   {
-      assert(file == ARF || file == FIXED_GRF || file == IMM);
-      assert(offset == 0);
-      return static_cast<brw_reg &>(*this);
-   }
-
-   bool equals(const fs_reg &r) const;
-   bool negative_equals(const fs_reg &r) const;
-   bool is_contiguous() const;
-
-   bool is_zero() const;
-   bool is_one() const;
-   bool is_negative_one() const;
-   bool is_null() const;
-   bool is_accumulator() const;
-
-   /**
-    * Return the size in bytes of a single logical component of the
-    * register assuming the given execution width.
-    */
-   unsigned component_size(unsigned width) const;
-
-   using brw_reg::type;
-   using brw_reg::file;
-   using brw_reg::negate;
-   using brw_reg::abs;
-   using brw_reg::address_mode;
-   using brw_reg::subnr;
-   using brw_reg::nr;
-
-   using brw_reg::swizzle;
-   using brw_reg::writemask;
-   using brw_reg::indirect_offset;
-   using brw_reg::vstride;
-   using brw_reg::width;
-   using brw_reg::hstride;
-
-   using brw_reg::df;
-   using brw_reg::f;
-   using brw_reg::d;
-   using brw_reg::ud;
-   using brw_reg::d64;
-   using brw_reg::u64;
-
-   /** Offset from the start of the (virtual) register in bytes. */
-   uint16_t offset;
-
-   /** Register region horizontal stride */
-   uint8_t stride;
-};
-
-static inline fs_reg
-negate(fs_reg reg)
-{
-   assert(reg.file != IMM);
-   reg.negate = !reg.negate;
-   return reg;
-}
-
-static inline fs_reg
-retype(fs_reg reg, enum brw_reg_type type)
-{
-   reg.type = type;
-   return reg;
-}
-
-static inline fs_reg
-byte_offset(fs_reg reg, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-      break;
-   case VGRF:
-   case ATTR:
-   case UNIFORM:
-      reg.offset += delta;
-      break;
-   case ARF:
-   case FIXED_GRF: {
-      const unsigned suboffset = reg.subnr + delta;
-      reg.nr += suboffset / REG_SIZE;
-      reg.subnr = suboffset % REG_SIZE;
-      break;
-   }
-   case IMM:
-   default:
-      assert(delta == 0);
-   }
-   return reg;
-}
-
-static inline fs_reg
-horiz_offset(const fs_reg &reg, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-   case UNIFORM:
-   case IMM:
-      /* These only have a single component that is implicitly splatted.  A
-       * horizontal offset should be a harmless no-op.
-       * XXX - Handle vector immediates correctly.
-       */
-      return reg;
-   case VGRF:
-   case ATTR:
-      return byte_offset(reg, delta * reg.stride * type_sz(reg.type));
-   case ARF:
-   case FIXED_GRF:
-      if (reg.is_null()) {
-         return reg;
-      } else {
-         const unsigned hstride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
-         const unsigned vstride = reg.vstride ? 1 << (reg.vstride - 1) : 0;
-         const unsigned width = 1 << reg.width;
-
-         if (delta % width == 0) {
-            return byte_offset(reg, delta / width * vstride * type_sz(reg.type));
-         } else {
-            assert(vstride == hstride * width);
-            return byte_offset(reg, delta * hstride * type_sz(reg.type));
-         }
-      }
-   }
-   unreachable("Invalid register file");
-}
-
-static inline fs_reg
-offset(fs_reg reg, unsigned width, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-      break;
-   case ARF:
-   case FIXED_GRF:
-   case VGRF:
-   case ATTR:
-   case UNIFORM:
-      return byte_offset(reg, delta * reg.component_size(width));
-   case IMM:
-      assert(delta == 0);
-   }
-   return reg;
-}
-
-/**
- * Get the scalar channel of \p reg given by \p idx and replicate it to all
- * channels of the result.
- */
-static inline fs_reg
-component(fs_reg reg, unsigned idx)
-{
-   reg = horiz_offset(reg, idx);
-   reg.stride = 0;
-   if (reg.file == ARF || reg.file == FIXED_GRF) {
-      reg.vstride = BRW_VERTICAL_STRIDE_0;
-      reg.width = BRW_WIDTH_1;
-      reg.hstride = BRW_HORIZONTAL_STRIDE_0;
-   }
-   return reg;
-}
-
-/**
- * Return an integer identifying the discrete address space a register is
- * contained in.  A register is by definition fully contained in the single
- * reg_space it belongs to, so two registers with different reg_space ids are
- * guaranteed not to overlap.  Most register files are a single reg_space of
- * its own, only the VGRF and ATTR files are composed of multiple discrete
- * address spaces, one for each allocation and input attribute respectively.
- */
-static inline uint32_t
-reg_space(const fs_reg &r)
-{
-   return r.file << 16 | (r.file == VGRF || r.file == ATTR ? r.nr : 0);
-}
-
-/**
- * Return the base offset in bytes of a register relative to the start of its
- * reg_space().
- */
-static inline unsigned
-reg_offset(const fs_reg &r)
-{
-   return (r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
-          (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
-          (r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
-}
-
-/**
- * Return the amount of padding in bytes left unused between individual
- * components of register \p r due to a (horizontal) stride value greater than
- * one, or zero if components are tightly packed in the register file.
- */
-static inline unsigned
-reg_padding(const fs_reg &r)
-{
-   const unsigned stride = ((r.file != ARF && r.file != FIXED_GRF) ? r.stride :
-                            r.hstride == 0 ? 0 :
-                            1 << (r.hstride - 1));
-   return (MAX2(1, stride) - 1) * type_sz(r.type);
-}
-
-/**
- * Return whether the register region starting at \p r and spanning \p dr
- * bytes could potentially overlap the register region starting at \p s and
- * spanning \p ds bytes.
- */
-static inline bool
-regions_overlap(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
-{
-   if (r.file != s.file)
-      return false;
-
-   if (r.file == VGRF) {
-      return r.nr == s.nr &&
-             !(r.offset + dr <= s.offset || s.offset + ds <= r.offset);
-   } else {
-      return !(reg_offset(r) + dr <= reg_offset(s) ||
-               reg_offset(s) + ds <= reg_offset(r));
-   }
-}
-
-/**
- * Check that the register region given by r [r.offset, r.offset + dr[
- * is fully contained inside the register region given by s
- * [s.offset, s.offset + ds[.
- */
-static inline bool
-region_contained_in(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
-{
-   return reg_space(r) == reg_space(s) &&
-          reg_offset(r) >= reg_offset(s) &&
-          reg_offset(r) + dr <= reg_offset(s) + ds;
-}
-
-/**
- * Return whether the given register region is n-periodic, i.e. whether the
- * original region remains invariant after shifting it by \p n scalar
- * channels.
- */
-static inline bool
-is_periodic(const fs_reg &reg, unsigned n)
-{
-   if (reg.file == BAD_FILE || reg.is_null()) {
-      return true;
-
-   } else if (reg.file == IMM) {
-      const unsigned period = (reg.type == BRW_REGISTER_TYPE_UV ||
-                               reg.type == BRW_REGISTER_TYPE_V ? 8 :
-                               reg.type == BRW_REGISTER_TYPE_VF ? 4 :
-                               1);
-      return n % period == 0;
-
-   } else if (reg.file == ARF || reg.file == FIXED_GRF) {
-      const unsigned period = (reg.hstride == 0 && reg.vstride == 0 ? 1 :
-                               reg.vstride == 0 ? 1 << reg.width :
-                               ~0);
-      return n % period == 0;
-
-   } else {
-      return reg.stride == 0;
-   }
-}
-
-static inline bool
-is_uniform(const fs_reg &reg)
-{
-   return is_periodic(reg, 1);
-}
-
-/**
- * Get the specified 8-component quarter of a register.
- */
-static inline fs_reg
-quarter(const fs_reg &reg, unsigned idx)
-{
-   assert(idx < 4);
-   return horiz_offset(reg, 8 * idx);
-}
-
-/**
- * Reinterpret each channel of register \p reg as a vector of values of the
- * given smaller type and take the i-th subcomponent from each.
- */
-static inline fs_reg
-subscript(fs_reg reg, brw_reg_type type, unsigned i)
-{
-   assert((i + 1) * type_sz(type) <= type_sz(reg.type));
-
-   if (reg.file == ARF || reg.file == FIXED_GRF) {
-      /* The stride is encoded inconsistently for fixed GRF and ARF registers
-       * as the log2 of the actual vertical and horizontal strides.
-       */
-      const int delta = util_logbase2(type_sz(reg.type)) -
-                        util_logbase2(type_sz(type));
-      reg.hstride += (reg.hstride ? delta : 0);
-      reg.vstride += (reg.vstride ? delta : 0);
-
-   } else if (reg.file == IMM) {
-      unsigned bit_size = type_sz(type) * 8;
-      reg.u64 >>= i * bit_size;
-      reg.u64 &= BITFIELD64_MASK(bit_size);
-      if (bit_size <= 16)
-         reg.u64 |= reg.u64 << 16;
-      return retype(reg, type);
-   } else {
-      reg.stride *= type_sz(reg.type) / type_sz(type);
-   }
-
-   return byte_offset(retype(reg, type), i * type_sz(type));
-}
-
-static inline fs_reg
-horiz_stride(fs_reg reg, unsigned s)
-{
-   reg.stride *= s;
-   return reg;
-}
-
-bool fs_reg_saturate_immediate(fs_reg *reg);
-bool fs_reg_negate_immediate(fs_reg *reg);
-bool fs_reg_abs_immediate(fs_reg *reg);
-
-static const fs_reg reg_undef;
-
 struct fs_inst : public exec_node {
 private:
    fs_inst &operator=(const fs_inst &);
 
-   void init(enum opcode opcode, uint8_t exec_width, const fs_reg &dst,
-             const fs_reg *src, unsigned sources);
+   void init(enum opcode opcode, uint8_t exec_width, const brw_reg &dst,
+             const brw_reg *src, unsigned sources);
 
 public:
    DECLARE_RALLOC_CXX_OPERATORS(fs_inst)
 
    fs_inst();
    fs_inst(enum opcode opcode, uint8_t exec_size);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0, const fs_reg &src1);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0, const fs_reg &src1, const fs_reg &src2);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg src[], unsigned sources);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const brw_reg &dst);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const brw_reg &dst,
+           const brw_reg &src0);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const brw_reg &dst,
+           const brw_reg &src0, const brw_reg &src1);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const brw_reg &dst,
+           const brw_reg &src0, const brw_reg &src1, const brw_reg &src2);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const brw_reg &dst,
+           const brw_reg src[], unsigned sources);
    fs_inst(const fs_inst &that);
    ~fs_inst();
 
@@ -472,7 +129,7 @@ public:
    const char *annotation;
    /** @} */
 
-   uint8_t sources; /**< Number of fs_reg sources. */
+   uint8_t sources; /**< Number of brw_reg sources. */
 
    /**
     * Execution size of the instruction.  This is used by the generator to
@@ -525,7 +182,7 @@ public:
           */
          unsigned rcount:4;
 
-         unsigned pad:3;
+         unsigned pad:2;
 
          bool predicate_inverse:1;
          bool writes_accumulator:1; /**< instruction implicitly writes accumulator */
@@ -555,18 +212,19 @@ public:
          bool last_rt:1;
          bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
          bool keep_payload_trailing_zeros:1;
-
          /**
-          * Hint that this instruction has combined LOD/LOD bias with array index
+          * Whether the parameters of the SEND instructions are build with
+          * NoMask (for A32 messages this covers only the surface handle, for
+          * A64 messages this covers the load address).
           */
-         bool has_packed_lod_ai_src:1;
+         bool has_no_mask_send_params:1;
       };
       uint32_t bits;
    };
 
-   fs_reg dst;
-   fs_reg *src;
-   fs_reg builtin_src[4];
+   brw_reg dst;
+   brw_reg *src;
+   brw_reg builtin_src[4];
 };
 
 /**
@@ -651,24 +309,24 @@ regs_read(const fs_inst *inst, unsigned i)
 static inline enum brw_reg_type
 get_exec_type(const fs_inst *inst)
 {
-   brw_reg_type exec_type = BRW_REGISTER_TYPE_B;
+   brw_reg_type exec_type = BRW_TYPE_B;
 
    for (int i = 0; i < inst->sources; i++) {
       if (inst->src[i].file != BAD_FILE &&
           !inst->is_control_source(i)) {
          const brw_reg_type t = get_exec_type(inst->src[i].type);
-         if (type_sz(t) > type_sz(exec_type))
+         if (brw_type_size_bytes(t) > brw_type_size_bytes(exec_type))
             exec_type = t;
-         else if (type_sz(t) == type_sz(exec_type) &&
-                  brw_reg_type_is_floating_point(t))
+         else if (brw_type_size_bytes(t) == brw_type_size_bytes(exec_type) &&
+                  brw_type_is_float(t))
             exec_type = t;
       }
    }
 
-   if (exec_type == BRW_REGISTER_TYPE_B)
+   if (exec_type == BRW_TYPE_B)
       exec_type = inst->dst.type;
 
-   assert(exec_type != BRW_REGISTER_TYPE_B);
+   assert(exec_type != BRW_TYPE_B);
 
    /* Promotion of the execution type to 32-bit for conversions from or to
     * half-float seems to be consistent with the following text from the
@@ -683,12 +341,12 @@ get_exec_type(const fs_inst *inst)
     * "Conversion between Integer and HF (Half Float) must be DWord aligned
     *  and strided by a DWord on the destination."
     */
-   if (type_sz(exec_type) == 2 &&
+   if (brw_type_size_bytes(exec_type) == 2 &&
        inst->dst.type != exec_type) {
-      if (exec_type == BRW_REGISTER_TYPE_HF)
-         exec_type = BRW_REGISTER_TYPE_F;
-      else if (inst->dst.type == BRW_REGISTER_TYPE_HF)
-         exec_type = BRW_REGISTER_TYPE_D;
+      if (exec_type == BRW_TYPE_HF)
+         exec_type = BRW_TYPE_F;
+      else if (inst->dst.type == BRW_TYPE_HF)
+         exec_type = BRW_TYPE_D;
    }
 
    return exec_type;
@@ -697,7 +355,7 @@ get_exec_type(const fs_inst *inst)
 static inline unsigned
 get_exec_type_size(const fs_inst *inst)
 {
-   return type_sz(get_exec_type(inst));
+   return brw_type_size_bytes(get_exec_type(inst));
 }
 
 static inline bool
@@ -716,45 +374,8 @@ is_unordered(const intel_device_info *devinfo, const fs_inst *inst)
    return is_send(inst) || (devinfo->ver < 20 && inst->is_math()) ||
           inst->opcode == BRW_OPCODE_DPAS ||
           (devinfo->has_64bit_float_via_math_pipe &&
-           (get_exec_type(inst) == BRW_REGISTER_TYPE_DF ||
-            inst->dst.type == BRW_REGISTER_TYPE_DF));
-}
-
-/*
- * Return the stride between channels of the specified register in
- * byte units, or ~0u if the region cannot be represented with a
- * single one-dimensional stride.
- */
-static inline unsigned
-byte_stride(const fs_reg &reg)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-   case UNIFORM:
-   case IMM:
-   case VGRF:
-   case ATTR:
-      return reg.stride * type_sz(reg.type);
-   case ARF:
-   case FIXED_GRF:
-      if (reg.is_null()) {
-         return 0;
-      } else {
-         const unsigned hstride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
-         const unsigned vstride = reg.vstride ? 1 << (reg.vstride - 1) : 0;
-         const unsigned width = 1 << reg.width;
-
-         if (width == 1) {
-            return vstride * type_sz(reg.type);
-         } else if (hstride * width == vstride) {
-            return hstride * type_sz(reg.type);
-         } else {
-            return ~0u;
-         }
-      }
-   default:
-      unreachable("Invalid register file");
-   }
+           (get_exec_type(inst) == BRW_TYPE_DF ||
+            inst->dst.type == BRW_TYPE_DF));
 }
 
 /**
@@ -781,17 +402,17 @@ has_dst_aligned_region_restriction(const intel_device_info *devinfo,
     * simulator suggest that only 32x32-bit integer multiplication is
     * restricted.
     */
-   const bool is_dword_multiply = !brw_reg_type_is_floating_point(exec_type) &&
+   const bool is_dword_multiply = !brw_type_is_float(exec_type) &&
       ((inst->opcode == BRW_OPCODE_MUL &&
-        MIN2(type_sz(inst->src[0].type), type_sz(inst->src[1].type)) >= 4) ||
+        MIN2(brw_type_size_bytes(inst->src[0].type), brw_type_size_bytes(inst->src[1].type)) >= 4) ||
        (inst->opcode == BRW_OPCODE_MAD &&
-        MIN2(type_sz(inst->src[1].type), type_sz(inst->src[2].type)) >= 4));
+        MIN2(brw_type_size_bytes(inst->src[1].type), brw_type_size_bytes(inst->src[2].type)) >= 4));
 
-   if (type_sz(dst_type) > 4 || type_sz(exec_type) > 4 ||
-       (type_sz(exec_type) == 4 && is_dword_multiply))
+   if (brw_type_size_bytes(dst_type) > 4 || brw_type_size_bytes(exec_type) > 4 ||
+       (brw_type_size_bytes(exec_type) == 4 && is_dword_multiply))
       return intel_device_info_is_9lp(devinfo) || devinfo->verx10 >= 125;
 
-   else if (brw_reg_type_is_floating_point(dst_type))
+   else if (brw_type_is_float(dst_type))
       return devinfo->verx10 >= 125;
 
    else
@@ -814,14 +435,16 @@ has_dst_aligned_region_restriction(const intel_device_info *devinfo,
 static inline bool
 has_subdword_integer_region_restriction(const intel_device_info *devinfo,
                                         const fs_inst *inst,
-                                        const fs_reg *srcs, unsigned num_srcs)
+                                        const brw_reg *srcs, unsigned num_srcs)
 {
    if (devinfo->ver >= 20 &&
-       brw_reg_type_is_integer(inst->dst.type) &&
-       MAX2(byte_stride(inst->dst), type_sz(inst->dst.type)) < 4) {
+       brw_type_is_int(inst->dst.type) &&
+       MAX2(byte_stride(inst->dst),
+            brw_type_size_bytes(inst->dst.type)) < 4) {
       for (unsigned i = 0; i < num_srcs; i++) {
-         if (brw_reg_type_is_integer(srcs[i].type) &&
-             type_sz(srcs[i].type) < 4 && byte_stride(srcs[i]) >= 4)
+         if (brw_type_is_int(srcs[i].type) &&
+             brw_type_size_bytes(srcs[i].type) < 4 &&
+             byte_stride(srcs[i]) >= 4)
             return true;
       }
    }
@@ -878,7 +501,7 @@ is_copy_payload(brw_reg_file file, const fs_inst *inst)
 inline bool
 is_identity_payload(brw_reg_file file, const fs_inst *inst) {
    if (is_copy_payload(file, inst)) {
-      fs_reg reg = inst->src[0];
+      brw_reg reg = inst->src[0];
 
       for (unsigned i = 0; i < inst->sources; i++) {
          reg.type = inst->src[i].type;
@@ -960,7 +583,7 @@ brw_fs_bit_mask(unsigned n)
 }
 
 static inline unsigned
-brw_fs_flag_mask(const fs_reg &r, unsigned sz)
+brw_fs_flag_mask(const brw_reg &r, unsigned sz)
 {
    if (r.file == ARF) {
       const unsigned start = (r.nr - BRW_ARF_FLAG) * 4 + r.subnr;

@@ -108,6 +108,8 @@
     <value name="ASTC 3D HDR" value="21"/>
     <value name="ASTC 2D LDR" value="22"/>
     <value name="ASTC 2D HDR" value="23"/>
+    <value name="AFBC" value="24"/>
+    <value name="AFRC" value="25"/>
     <value name="ASTC 2D NARROW" value="62"/>
     <value name="ASTC 3D NARROW" value="63"/>
 
@@ -366,6 +368,12 @@
     <value name="Linear" value="2"/>
     <value name="AFBC" value="12"/>
     <value name="AFBC Tiled" value="13"/>
+  </enum>
+
+  <enum name="Writeback Mode">
+    <value name="Compat" value="0"/>
+    <value name="AFRC RGB" value="6"/>
+    <value name="AFRC YUV" value="7"/>
   </enum>
 
   <enum name="Mipmap Mode">
@@ -1049,6 +1057,8 @@
     <value name="ASTC 3D" value="5"/>
     <value name="AFBC" value="6"/>
     <value name="Chroma 2p" value="8"/>
+    <value name="AFRC" value="10"/>
+    <value name="AFRC Chroma 2p" value="11"/>
   </enum>
 
   <enum name="Clump Ordering">
@@ -1150,6 +1160,52 @@
     <value name="YUV422 1c10" value="47"/>
   </enum>
 
+  <enum name="AFRC Block Size">
+    <value name="16" value="4"/>
+    <value name="24" value="5"/>
+    <value name="32" value="6"/>
+  </enum>
+
+  <enum name="AFRC Format">
+    <value name="R8 SCAN" value="0"/>
+    <value name="R8G8 SCAN" value="1"/>
+    <value name="R8G8B8 SCAN" value="2"/>
+    <value name="R8G8B8A8 SCAN" value="3"/>
+    <value name="R8 ROT" value="4"/>
+    <value name="R8G8 ROT" value="5"/>
+    <value name="R8G8B8 ROT" value="6"/>
+    <value name="R8G8B8A8 ROT" value="7"/>
+
+    <value name="R10G10B10A10 SCAN" value="11"/>
+    <value name="R10G10B10A10 ROT" value="15"/>
+
+    <value name="R8_444 SCAN" value="64"/>
+    <value name="R8_422 SCAN" value="65"/>
+    <value name="R8_420 SCAN" value="66"/>
+    <value name="R8_444 ROT" value="68"/>
+    <value name="R8_422 ROT" value="69"/>
+    <value name="R8_420 ROT" value="70"/>
+    <value name="R8G8_444 SCAN" value="72"/>
+    <value name="R8G8_422 SCAN" value="73"/>
+    <value name="R8G8_420 SCAN" value="74"/>
+    <value name="R8G8_444 ROT" value="76"/>
+    <value name="R8G8_422 ROT" value="77"/>
+    <value name="R8G8_420 ROT" value="78"/>
+
+    <value name="R10_444 SCAN" value="80"/>
+    <value name="R10_422 SCAN" value="81"/>
+    <value name="R10_420 SCAN" value="82"/>
+    <value name="R10_444 ROT" value="84"/>
+    <value name="R10_422 ROT" value="85"/>
+    <value name="R10_420 ROT" value="86"/>
+    <value name="R10G10_422 SCAN" value="89"/>
+    <value name="R10G10_420 SCAN" value="90"/>
+    <value name="R10G10_422 ROT" value="93"/>
+    <value name="R10G10_420 ROT" value="94"/>
+
+    <value name="INVALID" value="256"/>
+  </enum>
+
   <struct name="Plane AFBC Overlay" size="8">
     <field name="Superblock size" size="3" start="0:8" type="AFBC Superblock Size"/>
 
@@ -1188,15 +1244,23 @@
     <field name="Secondary Pointer" size="64" start="6:0" type="address"/>
   </struct>
 
+  <struct name="Plane AFRC Overlay" size="8">
+    <field name="Codec arguments" size="8" start="0:8" type="uint"/>
+
+    <field name="Block size" size="4" start="0:20" type="AFRC Block Size"/>
+    <field name="Format" size="8" start="0:24" type="AFRC Format"/>
+  </struct>
+
   <struct name="Plane" size="8" align="32">
     <field name="Type" size="4" start="0:0" type="Descriptor Type" default="Plane"/>
     <field name="Plane type" size="4" start="0:4" type="Plane Type"/>
 
     <field name="AFBC" size="32" start="0:0" type="Plane AFBC Overlay"/>
     <field name="ASTC" size="32" start="0:0" type="Plane ASTC Overlay"/>
+    <field name="AFRC" size="32" start="0:0" type="Plane AFRC Overlay"/>
     <field name="Two-Plane YUV Chroma" size="256" start="0:0" type="Two-Plane YUV Chroma Overlay"/>
 
-    <!-- Not AFBC -->
+    <!-- Not AFBC nor AFRC -->
     <field name="Clump ordering" size="4" start="0:8" type="Clump Ordering"/>
 
     <!-- Generic, Chroma 2p -->
@@ -1536,6 +1600,12 @@
     <field name="Body offset" size="32" start="11:0" type="uint"/>
   </struct>
 
+  <struct name="Render Target AFRC Overlay" size="16">
+    <field name="Writeback Format" size="8" start="1:0" type="Color Format"/>
+    <field name="Block Size" size="4" start="2:4" type="AFRC Block Size"/>
+    <field name="Format" size="8" start="2:8" type="AFRC Format"/>
+  </struct>
+
   <struct name="RT Clear">
     <field name="Color 0" size="32" start="0:0" type="uint"/>
     <field name="Color 1" size="32" start="1:0" type="uint"/>
@@ -1546,6 +1616,8 @@
   <struct name="Render Target" align="64">
     <field name="YUV" size="512" start="0:0" type="Render Target YUV Overlay"/>
     <field name="AFBC" size="512" start="0:0" type="Render Target AFBC Overlay"/>
+    <field name="AFRC" size="512" start="0:0" type="Render Target AFRC Overlay"/>
+    <field name="Writeback Mode" size="4" start="0:0" type="Writeback Mode" default="Compat"/>
     <field name="Internal Buffer Offset" size="12" start="0:4" type="uint" modifier="shr(4)"/>
     <field name="YUV Enable" size="1" start="0:24" type="bool"/>
     <field name="Dithered Clear" size="1" start="0:25" type="bool"/>

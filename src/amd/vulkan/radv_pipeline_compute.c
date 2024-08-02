@@ -37,8 +37,8 @@
 #include "sid.h"
 #include "vk_format.h"
 
-static uint32_t
-radv_get_compute_resource_limits(const struct radv_physical_device *pdev, const struct radv_shader *cs)
+uint32_t
+radv_get_compute_resource_limits(const struct radv_physical_device *pdev, const struct radv_shader_info *info)
 {
    unsigned threads_per_threadgroup;
    unsigned threadgroups_per_cu = 1;
@@ -46,8 +46,8 @@ radv_get_compute_resource_limits(const struct radv_physical_device *pdev, const 
    unsigned max_waves_per_sh = 0;
 
    /* Calculate best compute resource limits. */
-   threads_per_threadgroup = cs->info.cs.block_size[0] * cs->info.cs.block_size[1] * cs->info.cs.block_size[2];
-   waves_per_threadgroup = DIV_ROUND_UP(threads_per_threadgroup, cs->info.wave_size);
+   threads_per_threadgroup = info->cs.block_size[0] * info->cs.block_size[1] * info->cs.block_size[2];
+   waves_per_threadgroup = DIV_ROUND_UP(threads_per_threadgroup, info->wave_size);
 
    if (pdev->info.gfx_level >= GFX10 && waves_per_threadgroup == 1)
       threadgroups_per_cu = 2;
@@ -56,11 +56,10 @@ radv_get_compute_resource_limits(const struct radv_physical_device *pdev, const 
 }
 
 void
-radv_get_compute_pipeline_metadata(const struct radv_device *device, const struct radv_compute_pipeline *pipeline,
-                                   struct radv_compute_pipeline_metadata *metadata)
+radv_get_compute_shader_metadata(const struct radv_device *device, const struct radv_shader *cs,
+                                 struct radv_compute_pipeline_metadata *metadata)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_shader *cs = pipeline->base.shaders[MESA_SHADER_COMPUTE];
    uint32_t upload_sgpr = 0, inline_sgpr = 0;
 
    memset(metadata, 0, sizeof(*metadata));
@@ -69,79 +68,31 @@ radv_get_compute_pipeline_metadata(const struct radv_device *device, const struc
    metadata->rsrc1 = cs->config.rsrc1;
    metadata->rsrc2 = cs->config.rsrc2;
    metadata->rsrc3 = cs->config.rsrc3;
-   metadata->compute_resource_limits = radv_get_compute_resource_limits(pdev, cs);
+   metadata->compute_resource_limits = radv_get_compute_resource_limits(pdev, &cs->info);
    metadata->block_size_x = cs->info.cs.block_size[0];
    metadata->block_size_y = cs->info.cs.block_size[1];
    metadata->block_size_z = cs->info.cs.block_size[2];
    metadata->wave32 = cs->info.wave_size == 32;
 
-   const struct radv_userdata_info *grid_size_loc = radv_get_user_sgpr(cs, AC_UD_CS_GRID_SIZE);
-   if (grid_size_loc->sgpr_idx != -1) {
-      metadata->grid_base_sgpr = (cs->info.user_data_0 + 4 * grid_size_loc->sgpr_idx - SI_SH_REG_OFFSET) >> 2;
-   }
+   metadata->grid_base_sgpr = radv_get_user_sgpr(cs, AC_UD_CS_GRID_SIZE);
 
-   const struct radv_userdata_info *push_constant_loc = radv_get_user_sgpr(cs, AC_UD_PUSH_CONSTANTS);
-   if (push_constant_loc->sgpr_idx != -1) {
-      upload_sgpr = (cs->info.user_data_0 + 4 * push_constant_loc->sgpr_idx - SI_SH_REG_OFFSET) >> 2;
-   }
-
-   const struct radv_userdata_info *inline_push_constant_loc = radv_get_user_sgpr(cs, AC_UD_INLINE_PUSH_CONSTANTS);
-   if (inline_push_constant_loc->sgpr_idx != -1) {
-      inline_sgpr = (cs->info.user_data_0 + 4 * inline_push_constant_loc->sgpr_idx - SI_SH_REG_OFFSET) >> 2;
-   }
+   upload_sgpr = radv_get_user_sgpr(cs, AC_UD_PUSH_CONSTANTS);
+   inline_sgpr = radv_get_user_sgpr(cs, AC_UD_INLINE_PUSH_CONSTANTS);
 
    metadata->push_const_sgpr = upload_sgpr | (inline_sgpr << 16);
    metadata->inline_push_const_mask = cs->info.inline_push_constant_mask;
+
+   metadata->indirect_desc_sets_sgpr = radv_get_user_sgpr(cs, AC_UD_INDIRECT_DESCRIPTOR_SETS);
 }
 
 void
-radv_emit_compute_shader(const struct radv_physical_device *pdev, struct radeon_cmdbuf *cs,
-                         const struct radv_shader *shader)
-{
-   uint64_t va = radv_shader_get_va(shader);
-
-   radeon_set_sh_reg(cs, R_00B830_COMPUTE_PGM_LO, va >> 8);
-
-   radeon_set_sh_reg_seq(cs, R_00B848_COMPUTE_PGM_RSRC1, 2);
-   radeon_emit(cs, shader->config.rsrc1);
-   radeon_emit(cs, shader->config.rsrc2);
-   if (pdev->info.gfx_level >= GFX10) {
-      radeon_set_sh_reg(cs, R_00B8A0_COMPUTE_PGM_RSRC3, shader->config.rsrc3);
-   }
-
-   radeon_set_sh_reg(cs, R_00B854_COMPUTE_RESOURCE_LIMITS, radv_get_compute_resource_limits(pdev, shader));
-
-   radeon_set_sh_reg_seq(cs, R_00B81C_COMPUTE_NUM_THREAD_X, 3);
-   radeon_emit(cs, S_00B81C_NUM_THREAD_FULL(shader->info.cs.block_size[0]));
-   radeon_emit(cs, S_00B81C_NUM_THREAD_FULL(shader->info.cs.block_size[1]));
-   radeon_emit(cs, S_00B81C_NUM_THREAD_FULL(shader->info.cs.block_size[2]));
-}
-
-static void
-radv_compute_generate_pm4(const struct radv_device *device, struct radv_compute_pipeline *pipeline,
-                          struct radv_shader *shader)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   struct radeon_cmdbuf *cs = &pipeline->base.cs;
-
-   cs->reserved_dw = cs->max_dw = pdev->info.gfx_level >= GFX10 ? 19 : 16;
-   cs->buf = malloc(cs->max_dw * 4);
-
-   radv_emit_compute_shader(pdev, cs, shader);
-
-   assert(pipeline->base.cs.cdw <= pipeline->base.cs.max_dw);
-}
-
-void
-radv_compute_pipeline_init(const struct radv_device *device, struct radv_compute_pipeline *pipeline,
-                           const struct radv_pipeline_layout *layout, struct radv_shader *shader)
+radv_compute_pipeline_init(struct radv_compute_pipeline *pipeline, const struct radv_pipeline_layout *layout,
+                           struct radv_shader *shader)
 {
    pipeline->base.need_indirect_descriptor_sets |= radv_shader_need_indirect_descriptor_sets(shader);
 
    pipeline->base.push_constant_size = layout->push_constant_size;
    pipeline->base.dynamic_offset_count = layout->dynamic_offset_count;
-
-   radv_compute_generate_pm4(device, pipeline, shader);
 }
 
 struct radv_shader *
@@ -321,7 +272,7 @@ radv_compute_pipeline_create(VkDevice _device, VkPipelineCache _cache, const VkC
       return result;
    }
 
-   radv_compute_pipeline_init(device, pipeline, pipeline_layout, pipeline->base.shaders[MESA_SHADER_COMPUTE]);
+   radv_compute_pipeline_init(pipeline, pipeline_layout, pipeline->base.shaders[MESA_SHADER_COMPUTE]);
 
    if (pipeline->base.create_flags & VK_PIPELINE_CREATE_INDIRECT_BINDABLE_BIT_NV) {
       const VkComputePipelineIndirectBufferInfoNV *indirect_buffer =

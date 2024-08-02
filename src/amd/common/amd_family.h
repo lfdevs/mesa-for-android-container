@@ -124,6 +124,8 @@ enum radeon_family
    CHIP_GFX1150,
    CHIP_GFX1151,
    CHIP_GFX1152,
+   CHIP_GFX1200,
+   CHIP_GFX1201,
    CHIP_LAST,
 };
 
@@ -145,6 +147,7 @@ enum amd_gfx_level
    GFX10_3,
    GFX11,
    GFX11_5,
+   GFX12,
 
    NUM_GFX_VERSIONS,
 };
@@ -206,6 +209,8 @@ enum vcn_version{
    VCN_4_0_4,
    VCN_4_0_5,
    VCN_4_0_6,
+
+   VCN_5_0_0,
 };
 
 #define SDMA_VERSION_VALUE(major, minor) (((major) << 8) | (minor))
@@ -240,6 +245,9 @@ enum sdma_version {
 
    /* GFX11.5 */
    SDMA_6_1 = SDMA_VERSION_VALUE(6, 1),
+
+   /* GFX12 */
+   SDMA_7_0 = SDMA_VERSION_VALUE(7, 0),
 };
 
 const char *ac_get_family_name(enum radeon_family family);

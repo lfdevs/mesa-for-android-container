@@ -5,7 +5,6 @@ glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
-shaders@glsl-bug-110796,Fail
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_instanceid,Fail
@@ -17,7 +16,6 @@ spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
-spec@!opengl 1.1@getteximage-formats,Fail
 spec@!opengl 1.1@point-line-no-cull,Fail
 spec@!opengl 1.1@teximage-colors gl_alpha16@Exact upload-download of GL_ALPHA16,Fail
 spec@!opengl 1.1@texwrap formats bordercolor,Fail
@@ -129,8 +127,6 @@ spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8I_EXT,Fail
 spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8UI_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb),Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32F_ARB,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16F_ARB,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16I_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16UI_EXT,Fail
@@ -180,39 +176,6 @@ spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE32F_ARB- border c
 spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE_ALPHA32F_ARB- border color only,Fail
 spec@arb_texture_float@texwrap formats bordercolor@GL_RGB32F- border color only,Fail
 spec@arb_texture_float@texwrap formats bordercolor@GL_RGBA32F- border color only,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch.*,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16_SNORM,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R32I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R8I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R8_SNORM,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG16F,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG16I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG16_SNORM,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG32F,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG32I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG8I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RG8_SNORM,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB10,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB10_A2,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB10_A2UI,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB16I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB16_SNORM,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB32I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB4,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB8,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB8I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB9_E5,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA16,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA16F,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA16I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA32F,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA32I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA4,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8I,Fail
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_SRGB8_ALPHA8,Fail
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@arb_texture_rg@fbo-blending-formats-float,Fail
 spec@arb_texture_rg@fbo-blending-formats-float@GL_R32F,Fail
@@ -236,7 +199,6 @@ spec@arb_texture_rg@texwrap formats-float,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_R32F- NPOT,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_RG32F- NPOT,Fail
 spec@arb_texture_storage@texture-storage@cube array texture,Fail
-spec@arb_texture_view@rendering-formats,Crash
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
@@ -394,14 +356,6 @@ spec@nv_read_depth@read_depth_gles3,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
-# This crashes only when LLVM is not enabled. This is because Gallium backend
-# uses TGSI to do some task that do not contains a sampler; when LLVM is
-# enabled, it uses LLVM instead, which is complete.
-spec@!opengl 1.0@rasterpos,Crash
-
-# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/899
-spec@!opengl 1.0@depth-clear-precision-check,Fail
-
 # There are two problems here. On one side, hardware do not support
 # different polygon mode for front and back faces. By default we
 # choose the mode set for front face, unless we are culling it; in
@@ -441,6 +395,10 @@ spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,
 # rendering
 spec@!opengl 3.0@required-texture-attachment-formats,Fail
 spec@!opengl 3.1@required-texture-attachment-formats,Fail
+spec@arb_texture_view@rendering-formats,Crash
+
+# V3D does not support blending for GL_R{GBA}32F
+spec@!opengl 1.1@getteximage-formats,Fail
 
 # OpenGL 3.x requires 8 RT (MAX_DRAW_BUFFERS)/ color attachments (MAX_COLOR_ATTACHMENTS)
 spec@!opengl 3.0@bindfragdata-link-error,Fail
@@ -478,9 +436,6 @@ spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_R32I,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RG16F,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RG16I,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RGBA8I,Fail
-
-spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
 
 # This fails the subtest for GL_ALPHA16 because we don't support a 16-bit unorm format for rendering
 # so gallium falls back to using an 8-bit unorm format and we lose some precision in the result.
@@ -591,11 +546,76 @@ spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader 512 42 8 8 4,Fai
 spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader 512 42 8 8 7,Fail
 spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader 512 42 8 8 8,Fail
 
-# New CTS failures in 1.3.8.0
-dEQP-VK.dynamic_state.fast_linked_library.general_state.double_static_bind,Fail
-dEQP-VK.dynamic_state.monolithic.general_state.double_static_bind,Fail
-dEQP-VK.dynamic_state.pipeline_library.general_state.double_static_bind,Fail
 # This seems to be a Vulkan Loader issue. Can be fixed by compiling the loader from the Github repo.
 dEQP-VK.api.get_device_proc_addr.non_enabled,Fail
-# This is a bug in CTS: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/5096
-dEQP-VK.api.command_buffers.many_indirect_draws_on_secondary,Fail
+dEQP-VK.api.version_check.unavailable_entry_points,Fail
+
+# Piglit OpenCL tests
+api@clbuildprogram,Fail
+api@clcompileprogram,Fail
+api@clgetcommandqueueinfo,Fail
+api@clgetdeviceinfo,Fail
+api@clgetextensionfunctionaddressforplatform,Fail
+api@clgetkernelarginfo,Fail
+api@cllinkprogram,Fail
+program@build@include-directories,Fail
+program@build@vector-data-types,Fail
+program@execute@amdgcn-f32-inline-immediates,Fail
+program@execute@amdgcn-f32-inline-immediates@add integer 64,Fail
+program@execute@amdgcn.sign_extend_inreg,Crash
+program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float16,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float2,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float4,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,Fail
+program@execute@builtin@builtin-float-pow-1.0.generated,Fail
+program@execute@builtin@builtin-float-pow-1.0.generated@pow float16,Fail
+program@execute@builtin@builtin-float-pow-1.0.generated@pow float4,Fail
+program@execute@builtin@builtin-float-pow-1.0.generated@pow float8,Fail
+program@execute@builtin@builtin-float-powr-1.0.generated,Fail
+program@execute@builtin@builtin-float-powr-1.0.generated@powr float16,Fail
+program@execute@builtin@builtin-float-powr-1.0.generated@powr float4,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated@sign float1,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated@sign float16,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated@sign float2,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated@sign float4,Fail
+program@execute@builtin@builtin-float-sign-1.0.generated@sign float8,Fail
+program@execute@builtin@builtin-long-abs-1.0.generated,Crash
+program@execute@builtin@builtin-long-clamp-1.1.generated,Crash
+program@execute@builtin@builtin-long-mad_hi-1.0.generated,Crash
+program@execute@builtin@builtin-long-mad_sat-1.0.generated,Crash
+program@execute@builtin@builtin-long-max-1.1.generated,Crash
+program@execute@builtin@builtin-long-min-1.1.generated,Crash
+program@execute@builtin@builtin-long-mul_hi-1.0.generated,Crash
+program@execute@builtin@builtin-long-popcount-1.2.generated,Fail
+program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long1,Fail
+program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long16,Fail
+program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long2,Fail
+program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long4,Fail
+program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long8,Fail
+program@execute@builtin@builtin-ulong-clamp-1.1.generated,Crash
+program@execute@builtin@builtin-ulong-mad_hi-1.0.generated,Crash
+program@execute@builtin@builtin-ulong-mad_sat-1.0.generated,Crash
+program@execute@builtin@builtin-ulong-max-1.1.generated,Crash
+program@execute@builtin@builtin-ulong-min-1.1.generated,Crash
+program@execute@builtin@builtin-ulong-mul_hi-1.0.generated,Crash
+program@execute@builtin@builtin-ulong-popcount-1.2.generated,Fail
+program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong1,Fail
+program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong16,Fail
+program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong2,Fail
+program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong4,Fail
+program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong8,Fail
+program@execute@global-offset,Fail
+program@execute@global-offset@3d- input dependent,Fail
+program@execute@scalar-arithmetic-long,Crash
+program@execute@scalar-arithmetic-ulong,Crash
+program@execute@scalar-comparison-long,Crash
+program@execute@scalar-comparison-ulong,Crash
+program@execute@scalar-load-long,Crash
+program@execute@scalar-load-ulong,Crash
+program@run kernel with max work item sizes,Fail
+
+# Failures from arm32
+arm32-KHR-GL31.texture_size_promotion.functional,Fail

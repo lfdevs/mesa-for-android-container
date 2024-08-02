@@ -39,8 +39,7 @@ bool
 agx_nir_lower_point_size(nir_shader *nir, bool insert_write)
 {
    /* Lower existing point size write */
-   if (nir_shader_intrinsics_pass(
-          nir, pass, nir_metadata_block_index | nir_metadata_dominance, NULL))
+   if (nir_shader_intrinsics_pass(nir, pass, nir_metadata_control_flow, NULL))
       return true;
 
    if (!insert_write)
@@ -53,14 +52,13 @@ agx_nir_lower_point_size(nir_shader *nir, bool insert_write)
    nir_builder b =
       nir_builder_at(nir_after_impl(nir_shader_get_entrypoint(nir)));
 
-   nir_store_output(&b, nir_load_fixed_point_size_agx(&b), nir_imm_int(&b, 0),
-                    .io_semantics.location = VARYING_SLOT_PSIZ,
-                    .io_semantics.num_slots = 1,
-                    .write_mask = nir_component_mask(1));
+   nir_store_output(
+      &b, nir_load_fixed_point_size_agx(&b), nir_imm_int(&b, 0),
+      .io_semantics.location = VARYING_SLOT_PSIZ, .io_semantics.num_slots = 1,
+      .write_mask = nir_component_mask(1), .src_type = nir_type_float32);
 
    nir->info.outputs_written |= VARYING_BIT_PSIZ;
-   nir_metadata_preserve(b.impl,
-                         nir_metadata_dominance | nir_metadata_block_index);
+   nir_metadata_preserve(b.impl, nir_metadata_control_flow);
 
    return true;
 }

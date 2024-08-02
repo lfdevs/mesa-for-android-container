@@ -342,7 +342,7 @@ concepts used in PowerVR GPUs appear in AGX.
 
    USC
    Unified Shader Cores
-      A unified shader core is a small cpu that runs shader code. The core is
+      A unified shader core is a small CPU that runs shader code. The core is
       unified because a single ISA is used for vertex, pixel and compute
       shaders. This differs from older GPUs where the vertex, fragment and
       compute have separate ISAs for shader stages.
@@ -359,7 +359,7 @@ concepts used in PowerVR GPUs appear in AGX.
 
    PBE
    Pixel BackEnd
-      Hardware unit which writes to color attachements and images. Also the
+      Hardware unit which writes to color attachments and images. Also the
       name for a descriptor passed to :term:`PBE` instructions.
 
    UVS

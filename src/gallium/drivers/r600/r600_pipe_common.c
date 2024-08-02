@@ -23,7 +23,7 @@
 #include <sys/utsname.h>
 #include <stdlib.h>
 
-#if LLVM_AVAILABLE
+#if AMD_LLVM_AVAILABLE
 #include <llvm-c/TargetMachine.h>
 #endif
 
@@ -1252,7 +1252,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 
 	snprintf(rscreen->renderer_string, sizeof(rscreen->renderer_string),
 		 "%s (%sDRM %i.%i.%i%s"
-#if LLVM_AVAILABLE
+#if AMD_LLVM_AVAILABLE
 		 ", LLVM " MESA_LLVM_VERSION_STRING
 #endif
 		 ")",

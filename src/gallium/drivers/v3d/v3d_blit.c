@@ -127,7 +127,7 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         }
 
         v3d_blitter_save(v3d, true, info->render_condition_enable);
-        util_blitter_blit(v3d->blitter, info);
+        util_blitter_blit(v3d->blitter, info, NULL);
 
         pipe_resource_reference(&tiled, NULL);
         info->mask = 0;
@@ -203,7 +203,7 @@ v3d_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                                   PIPE_MASK_R,
                                   PIPE_TEX_FILTER_NEAREST,
                                   info->scissor_enable ? &info->scissor : NULL,
-                                  info->alpha_blend, false, 0);
+                                  info->alpha_blend, false, 0, NULL);
 
         pipe_surface_reference(&dst_surf, NULL);
         pipe_sampler_view_reference(&src_view, NULL);

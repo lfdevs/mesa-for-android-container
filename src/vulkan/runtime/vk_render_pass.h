@@ -39,7 +39,7 @@ struct vk_image;
  *
  *    1. VkRenderingAttachmentInfo::loadOp == LOAD_OP_CLEAR
  *
- *    2. VkRenderingInfo::renderArea is tne entire image view LOD
+ *    2. VkRenderingInfo::renderArea is the entire image view LOD
  *
  *    3. For 3D image attachments, VkRenderingInfo::viewMask == 0 AND
  *       VkRenderingInfo::layerCount references the entire bound image view
@@ -182,6 +182,9 @@ struct vk_subpass {
 
    /** VkMultisampledRenderToSingleSampledInfoEXT for this subpass */
    VkMultisampledRenderToSingleSampledInfoEXT mrtss;
+
+   /** True if legacy dithering is enabled for this subpass. */
+   bool legacy_dithering_enabled;
 };
 
 /***/
@@ -337,7 +340,7 @@ vk_get_pipeline_rendering_flags(const VkGraphicsPipelineCreateInfo *info);
 
 /** Returns the VkAttachmentSampleCountInfoAMD for a graphics pipeline
  *
- * For render-pass-free drivers, this can be used in the implementaiton of
+ * For render-pass-free drivers, this can be used in the implementation of
  * vkCreateGraphicsPipelines to get the VkAttachmentSampleCountInfoAMD.  If
  * VkGraphicsPipelineCreateInfo::renderPass is not VK_NULL_HANDLE, it will
  * return the sample counts from the specified subpass as a
@@ -385,7 +388,7 @@ struct vk_gcbiarr_data {
 /**
  * Constructs a VkRenderingInfo for the inheritance rendering info
  *
- * For render-pass-free drivers, this can be used in the implementaiton of
+ * For render-pass-free drivers, this can be used in the implementation of
  * vkCmdExecuteCommands to get a VkRenderingInfo representing the subpass and
  * framebuffer provided via the inheritance info for a command buffer created
  * with VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT.  The mental model

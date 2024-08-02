@@ -115,6 +115,11 @@ iris_apply_brw_wm_prog_data(struct iris_compiled_shader *shader,
    iris->has_side_effects     = brw->has_side_effects;
    iris->pulls_bary           = brw->pulls_bary;
 
+   iris->uses_sample_offsets        = brw->uses_sample_offsets;
+   iris->uses_npc_bary_coefficients = brw->uses_npc_bary_coefficients;
+   iris->uses_pc_bary_coefficients  = brw->uses_pc_bary_coefficients;
+   iris->uses_depth_w_coefficients  = brw->uses_depth_w_coefficients;
+
    iris->uses_nonperspective_interp_modes = brw->uses_nonperspective_interp_modes;
 
    iris->is_per_sample = brw_wm_prog_data_is_persample(brw, 0);
@@ -838,8 +843,7 @@ iris_fix_edge_flags(nir_shader *nir)
    nir_fixup_deref_modes(nir);
 
    nir_foreach_function_impl(impl, nir) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance |
+      nir_metadata_preserve(impl, nir_metadata_control_flow |
                                   nir_metadata_live_defs |
                                   nir_metadata_loop_analysis);
    }
@@ -2076,7 +2080,7 @@ iris_compile_tcs(struct iris_screen *screen,
          assert(screen->elk);
          nir = elk_nir_create_passthrough_tcs(mem_ctx, screen->elk, &elk_key);
       }
-      source_hash = *(uint32_t*)nir->info.source_sha1;
+      source_hash = *(uint32_t*)nir->info.source_blake3;
    }
 
    iris_setup_uniforms(devinfo, mem_ctx, nir, 0, &system_values,
@@ -2803,6 +2807,10 @@ update_last_vue_map(struct iris_context *ice,
          ice->state.stage_dirty_for_nos[IRIS_NOS_LAST_VUE_MAP];
    }
 
+   if (changed_slots & VARYING_BIT_LAYER) {
+      ice->state.dirty |= IRIS_DIRTY_CLIP;
+   }
+
    if (changed_slots || (old_map && old_map->separate != vue_map->separate)) {
       ice->state.dirty |= IRIS_DIRTY_SBE;
    }
@@ -3200,8 +3208,8 @@ iris_create_uncompiled_shader(struct iris_screen *screen,
       update_so_info(&ish->stream_output, nir->info.outputs_written);
    }
 
-   /* Use lowest dword of source shader sha1 for shader hash. */
-   ish->source_hash = *(uint32_t*)nir->info.source_sha1;
+   /* Use lowest dword of source shader blake3 for shader hash. */
+   ish->source_hash = *(uint32_t*)nir->info.source_blake3;
 
    if (screen->disk_cache) {
       /* Serialize the NIR to a binary blob that we can hash for the disk

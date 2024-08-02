@@ -220,7 +220,7 @@ SOFTWARE.
 	<field   low="41" high="48" name="SRC1" type="#cat6-src-const-or-gpr">
 		<param name="SRC1_CONST" as="SRC_CONST"/>
 	</field>
-	<pattern pos="53"          >x</pattern>
+	<pattern pos="53"          >0</pattern>
 	<pattern low="54" high="58">00011</pattern>  <!-- OPC -->
 
 	<derived name="SRC1_CONST" expr="#false" type="bool"/>
@@ -335,7 +335,7 @@ SOFTWARE.
 	<pattern low="40" high="48">xxxxxxxxx</pattern>
 	<pattern low="52" high="53">xx</pattern>
 	<encode>
-		<map name="OFF">extract_reg_uim(src->srcs[1])</map>
+		<map name="OFF">extract_reg_iim(src->srcs[1])</map>
 		<map name="SRC">src->srcs[0]</map>
 		<map name="SIZE">extract_reg_uim(src->srcs[2])</map>
 	</encode>
@@ -380,7 +380,7 @@ SOFTWARE.
 	</display>
 	<pattern pos="0"           >0</pattern>
 	<field   low="1"  high="13" name="OFF" type="uint"/>
-	<pattern low="14" high="21">xxxxxxxx</pattern>  <!-- SRC -->
+	<pattern low="14" high="21">00000000</pattern>  <!-- SRC -->
 	<pattern low="22" high="23">11</pattern>
 	<field   low="24" high="31" name="SIZE" type="uint"/>
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
@@ -482,7 +482,7 @@ SOFTWARE.
 	<pattern pos="0"           >x</pattern>
 	<field   low="1"  high="8" name="SRC" type="#reg-gpr"/>
 	<pattern low="9"  high="13">xxxxx</pattern> <!-- DST_HI -->
-	<pattern low="14" high="22">xxxxxxxxx</pattern>
+	<pattern low="14" high="22">000000000</pattern>
 	<pattern pos="23"          >1</pattern>
 	<field   low="24" high="26" name="SIZE" type="uint"/>
 	<pattern low="27" high="31">xxxxx</pattern>
@@ -544,9 +544,7 @@ SOFTWARE.
 	<field   low="9"  high="10" name="D_MINUS_ONE" type="uint"/>
 	<pattern pos="11"          >x</pattern>         <!-- TYPED -->
 	<pattern low="12" high="13">xx</pattern>        <!-- TYPE_SIZE -->
-	<pattern low="14" high="21">xxxxxxxx</pattern>  <!-- SRC1 -->
-	<pattern pos="22"          >x</pattern>         <!-- SRC1_IM -->
-	<pattern pos="23"          >x</pattern>         <!-- SRC2_IM -->
+	<pattern low="14" high="23">0000000000</pattern>
 	<pattern low="24" high="31">xxxxxxxx</pattern>  <!-- SRC2 -->
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
 	<pattern pos="40"          >0</pattern>
@@ -992,7 +990,7 @@ SOFTWARE.
 	New a6xx+ encodings for potentially bindless image/ssbo:
  -->
 
-<bitset name="#instruction-cat6-a6xx" extends="#instruction-cat6">
+<bitset name="#instruction-cat6-a6xx-base" extends="#instruction-cat6">
 	<doc>
 		Base for new instruction encoding that started being used
 		with a6xx for instructions supporting bindless mode.
@@ -1004,12 +1002,10 @@ SOFTWARE.
 	<field   low="1"  high="3"  name="BASE" type="#cat6-base">
 		<param name="BINDLESS"/>
 	</field>
-	<pattern low="4"  high="5"  >00</pattern>
 	<field   low="6"  high="7"  name="MODE" type="#cat6-src-mode"/>
 	<field   pos="8"            name="BINDLESS" type="bool"/>
 	<field   low="12" high="13" name="TYPE_SIZE_MINUS_ONE" type="uint"/>
 	<pattern pos="40"          >0</pattern>
-	<pattern low="54" high="58">00000</pattern>
 	<encode>
 		<map name="MODE">extract_cat6_DESC_MODE(src)</map>
 		<map name="TYPE_SIZE_MINUS_ONE">src->cat6.iim_val - 1</map>
@@ -1018,9 +1014,13 @@ SOFTWARE.
 	</encode>
 </bitset>
 
+<bitset name="#instruction-cat6-a6xx" extends="#instruction-cat6-a6xx-base">
+	<pattern  low="4"  high="5" >00</pattern>
+	<pattern  low="54" high="58">00000</pattern>
+</bitset>
+
 <bitset name="#cat6-ldc-common" extends="#instruction-cat6-a6xx">
 	<pattern pos="0"           >x</pattern>
-	<pattern pos="11"          >x</pattern>        <!-- TYPED -->
 	<pattern low="14" high="19">011110</pattern>   <!-- OPC -->
 	<pattern low="20" high="22">1xx</pattern>
 	<field   pos="23"           name="SRC1_IM" type="bool"/>
@@ -1057,6 +1057,7 @@ SOFTWARE.
 		{SY}{JP}ldc.{LOAD_SIZE}.k.{MODE}{BASE} c[a1.x], {SRC1}, {SRC2}
 	</display>
 
+	<pattern pos="11">x</pattern>
 	<derived name="LOAD_SIZE" expr="#cat6-load-size" type="uint"/>
 
 	<field   low="32" high="39" name="LOAD_SIZE_MINUS_ONE" type="uint"/>
@@ -1077,13 +1078,15 @@ SOFTWARE.
 	meaning?  Maybe I don't have enough ldc examples from deqp-glesN
 	 -->
 	<display>
-		{SY}{JP}{NAME}.offset{OFFSET}.{TYPE_SIZE}.{MODE}{BASE} {DST}, {SRC1}, {SRC2}
+		{SY}{JP}{NAME}{U}.offset{OFFSET}.{TYPE_SIZE}.{MODE}{BASE} {DST}, {SRC1}, {SRC2}
 	</display>
+	<field   pos="11" name="U" type="bool" display=".u"/>
 	<field   low="9"  high="10" name="OFFSET" type="uint"/>   <!-- D_MINUS_ONE -->
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
 	<pattern low="52" high="53">10</pattern>
 	<encode>
 		<map name="OFFSET">src->cat6.d</map>
+		<map name="U">!!(src->flags &amp; IR3_INSTR_U)</map>
 	</encode>
 </bitset>
 
@@ -1182,20 +1185,21 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="#instruction-cat6-a6xx-ibo" extends="#instruction-cat6-a6xx">
+<bitset name="#instruction-cat6-a6xx-ibo-base" extends="#instruction-cat6-a6xx-base">
 	<doc>
 		IBO (ie. Image/SSBO) instructions
 	</doc>
 	<display>
-		{SY}{JP}{NAME}.{TYPED}.{D}d.{TYPE}.{TYPE_SIZE}.{MODE}{BASE} {TYPE_HALF}{SRC1}, {SRC2}, {SSBO}
+		{SY}{JP}{NAME}.{TYPED}.{D}d.{TYPE}.{TYPE_SIZE}.{MODE}{BASE} {TYPE_HALF}{SRC1}, {SRC2}{OFFSET}, {SSBO}
 	</display>
 
 	<derived name="D" expr="#cat6-d" type="uint"/>
 	<derived name="TRUE" expr="#true" type="bool"/>
+	<derived name="OFFSET" type="uoffset" expr="#zero" display=""/>
 
 	<field   low="9"  high="10" name="D_MINUS_ONE" type="uint"/>
 	<field   pos="11"           name="TYPED" type="#cat6-typed"/>
-	<pattern low="20" high="23">0110</pattern>
+	<pattern low="20" high="22">110</pattern>
 	<field   low="24" high="31" name="SRC2" type="#reg-gpr"/>
 	<field   low="32" high="39" name="SRC1" type="#reg-gpr"/>
 	<field   low="41" high="48" name="SSBO" type="#cat6-src">   <!-- SSBO/image binding point -->
@@ -1212,7 +1216,36 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="stib.b" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="#instruction-cat6-a6xx-ibo" extends="#instruction-cat6-a6xx-ibo-base">
+	<pattern pos="23">0</pattern>
+	<pattern low="4"  high="5" >00</pattern>
+	<pattern low="54" high="58">00000</pattern>
+</bitset>
+
+<bitset name="#instruction-cat6-a6xx-ibo-load-store" extends="#instruction-cat6-a6xx-ibo-base">
+	<field pos="23"           name="HAS_OFFSET" type="bool"/>
+	<field low="4"  high="5"  name="OFFSET_HI"  type="uint"/>
+	<field low="54" high="58" name="OFFSET_LO"  type="uint"/>
+
+	<derived name="OFFSET" type="uoffset">
+		<expr>({OFFSET_HI} &lt;&lt; 5) | {OFFSET_LO}</expr>
+	</derived>
+
+	<override>
+		<expr>!{HAS_OFFSET}</expr>
+		<assert low="4"  high="5" >00</assert>
+		<assert low="54" high="58">00000</assert>
+	</override>
+
+	<encode>
+		<map name="SRC1">src->srcs[3]</map>
+		<map name="HAS_OFFSET">!!(src->flags &amp; IR3_INSTR_IMM_OFFSET)</map>
+		<map name="OFFSET_LO">extract_reg_uim(src->srcs[2]) &amp; 0x1f</map>
+		<map name="OFFSET_HI">extract_reg_uim(src->srcs[2]) &gt;&gt; 5</map>
+	</encode>
+</bitset>
+
+<bitset name="stib.b" extends="#instruction-cat6-a6xx-ibo-load-store">
 	<doc>
 		STore IBo
 	</doc>
@@ -1221,7 +1254,7 @@ SOFTWARE.
 	<pattern low="52" high="53">10</pattern>
 </bitset>
 
-<bitset name="ldib.b" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="ldib.b" extends="#instruction-cat6-a6xx-ibo-load-store">
 	<doc>
 		LoaD IBo
 	</doc>

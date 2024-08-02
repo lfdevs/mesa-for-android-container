@@ -10,78 +10,167 @@
 #error "PAN_ARCH must be defined"
 #endif
 
-#include "util/u_dynarray.h"
-
 #include "util/pan_ir.h"
 
 #include "pan_desc.h"
 
 #include "panvk_descriptor_set.h"
 #include "panvk_macros.h"
-#include "panvk_pipeline_layout.h"
+#include "panvk_mempool.h"
 
-#define PANVK_SYSVAL_UBO_INDEX     0
-#define PANVK_NUM_BUILTIN_UBOS     1
+#include "vk_pipeline_layout.h"
+
+#include "vk_shader.h"
+
+extern const struct vk_device_shader_ops panvk_per_arch(device_shader_ops);
+
+#define MAX_VS_ATTRIBS 16
 
 struct nir_shader;
 struct pan_blend_state;
 struct panvk_device;
 
-union panvk_sysval_vec4 {
-   float f32[4];
-   uint32_t u32[4];
+enum panvk_varying_buf_id {
+   PANVK_VARY_BUF_GENERAL,
+   PANVK_VARY_BUF_POSITION,
+   PANVK_VARY_BUF_PSIZ,
+
+   /* Keep last */
+   PANVK_VARY_BUF_MAX,
 };
 
-struct panvk_sysvals {
-   union {
+struct panvk_graphics_sysvals {
+   struct {
       struct {
-         /* Only for graphics */
-         union panvk_sysval_vec4 viewport_scale;
-         union panvk_sysval_vec4 viewport_offset;
-         union panvk_sysval_vec4 blend_constants;
+         float x, y, z;
+      } scale, offset;
+   } viewport;
 
-         uint32_t first_vertex;
-         uint32_t base_vertex;
-         uint32_t base_instance;
-      };
+   struct {
+      float constants[4];
+   } blend;
 
-      struct {
-         /* Only for compute */
-         union panvk_sysval_vec4 num_work_groups;
-         union panvk_sysval_vec4 local_group_size;
-      };
-   };
+   struct {
+      uint32_t first_vertex;
+      uint32_t base_vertex;
+      uint32_t base_instance;
+   } vs;
 
-   /* The back-end compiler doesn't know about any sysvals after this point */
+#if PAN_ARCH <= 7
+   /* gl_Layer on Bifrost is a bit of hack. We have to issue one draw per
+    * layer, and filter primitives at the VS level.
+    */
+   int32_t layer_id;
 
-   struct panvk_ssbo_addr dyn_ssbos[MAX_DYNAMIC_STORAGE_BUFFERS];
+   struct {
+      uint64_t sets[MAX_SETS];
+      uint64_t vs_dyn_ssbos;
+      uint64_t fs_dyn_ssbos;
+   } desc;
+#endif
 };
+
+struct panvk_compute_sysvals {
+   struct {
+      uint32_t x, y, z;
+   } base;
+   struct {
+      uint32_t x, y, z;
+   } num_work_groups;
+   struct {
+      uint32_t x, y, z;
+   } local_group_size;
+
+#if PAN_ARCH <= 7
+   struct {
+      uint64_t sets[MAX_SETS];
+      uint64_t dyn_ssbos;
+   } desc;
+#endif
+};
+
+enum panvk_bifrost_desc_table_type {
+   PANVK_BIFROST_DESC_TABLE_INVALID = -1,
+
+   /* UBO is encoded on 8 bytes */
+   PANVK_BIFROST_DESC_TABLE_UBO = 0,
+
+   /* Images are using a <3DAttributeBuffer,Attribute> pair, each
+    * of them being stored in a separate table. */
+   PANVK_BIFROST_DESC_TABLE_IMG,
+
+   /* Texture and sampler are encoded on 32 bytes */
+   PANVK_BIFROST_DESC_TABLE_TEXTURE,
+   PANVK_BIFROST_DESC_TABLE_SAMPLER,
+
+   PANVK_BIFROST_DESC_TABLE_COUNT,
+};
+
+#define COPY_DESC_HANDLE(table, idx)           ((table << 28) | (idx))
+#define COPY_DESC_HANDLE_EXTRACT_INDEX(handle) ((handle) & BITFIELD_MASK(28))
+#define COPY_DESC_HANDLE_EXTRACT_TABLE(handle) ((handle) >> 28)
 
 struct panvk_shader {
+   struct vk_shader vk;
    struct pan_shader_info info;
-   struct util_dynarray binary;
-   unsigned sysval_ubo;
    struct pan_compute_dim local_size;
-   bool has_img_access;
+
+   struct {
+      uint32_t used_set_mask;
+
+      struct {
+         uint32_t map[MAX_DYNAMIC_UNIFORM_BUFFERS];
+         uint32_t count;
+      } dyn_ubos;
+      struct {
+         uint32_t map[MAX_DYNAMIC_STORAGE_BUFFERS];
+         uint32_t count;
+      } dyn_ssbos;
+      struct {
+         struct panvk_priv_mem map;
+         uint32_t count[PANVK_BIFROST_DESC_TABLE_COUNT];
+      } others;
+   } desc_info;
+
+   const void *bin_ptr;
+   uint32_t bin_size;
+
+   struct panvk_priv_mem code_mem;
+   struct panvk_priv_mem rsd;
+
+   const char *nir_str;
+   const char *asm_str;
 };
 
-bool panvk_per_arch(blend_needs_lowering)(const struct panvk_device *dev,
-                                          const struct pan_blend_state *state,
-                                          unsigned rt);
+struct panvk_shader_link {
+   struct {
+      struct panvk_priv_mem attribs;
+   } vs, fs;
+   unsigned buf_strides[PANVK_VARY_BUF_MAX];
+};
 
-struct panvk_shader *panvk_per_arch(shader_create)(
-   struct panvk_device *dev, gl_shader_stage stage,
-   const VkPipelineShaderStageCreateInfo *stage_info,
-   const struct panvk_pipeline_layout *layout, unsigned sysval_ubo,
-   struct pan_blend_state *blend_state, bool static_blend_constants,
-   const VkAllocationCallbacks *alloc);
+static inline mali_ptr
+panvk_shader_get_dev_addr(const struct panvk_shader *shader)
+{
+   return shader != NULL ? panvk_priv_mem_dev_addr(shader->code_mem) : 0;
+}
 
-void panvk_per_arch(shader_destroy)(struct panvk_device *dev,
-                                    struct panvk_shader *shader,
-                                    const VkAllocationCallbacks *alloc);
+void panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
+                                  struct panvk_shader *vs,
+                                  struct panvk_shader *fs,
+                                  struct panvk_shader_link *link);
+
+static inline void
+panvk_shader_link_cleanup(struct panvk_pool *desc_pool,
+                          struct panvk_shader_link *link)
+{
+   panvk_pool_free_mem(desc_pool, link->vs.attribs);
+   panvk_pool_free_mem(desc_pool, link->fs.attribs);
+}
 
 bool panvk_per_arch(nir_lower_descriptors)(
-   struct nir_shader *nir, struct panvk_device *dev,
-   const struct panvk_pipeline_layout *layout, bool *has_img_access_out);
+   nir_shader *nir, struct panvk_device *dev, uint32_t set_layout_count,
+   struct vk_descriptor_set_layout *const *set_layouts,
+   struct panvk_shader *shader);
 
 #endif

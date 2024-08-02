@@ -96,10 +96,10 @@ brw_swap_cmod(enum brw_conditional_mod cmod)
 static unsigned
 imm_shift(enum brw_reg_type type, unsigned i)
 {
-   assert(type != BRW_REGISTER_TYPE_UV && type != BRW_REGISTER_TYPE_V &&
+   assert(type != BRW_TYPE_UV && type != BRW_TYPE_V &&
           "Not implemented.");
 
-   if (type == BRW_REGISTER_TYPE_VF)
+   if (type == BRW_TYPE_VF)
       return 8 * (i & 3);
    else
       return 0;
@@ -641,8 +641,6 @@ static const struct opcode_desc opcode_descs[] = {
    { BRW_OPCODE_CBIT,     77,  "cbit",    1,    1,    GFX_ALL },
    { BRW_OPCODE_ADDC,     78,  "addc",    2,    1,    GFX_ALL },
    { BRW_OPCODE_SUBB,     79,  "subb",    2,    1,    GFX_ALL },
-   { BRW_OPCODE_SAD2,     80,  "sad2",    2,    1,    GFX_ALL },
-   { BRW_OPCODE_SADA2,    81,  "sada2",   2,    1,    GFX_ALL },
    { BRW_OPCODE_ADD3,     82,  "add3",    3,    1,    GFX_GE(GFX125) },
    { BRW_OPCODE_DP4,      84,  "dp4",     2,    1,    GFX_LT(GFX11) },
    { BRW_OPCODE_DPH,      85,  "dph",     2,    1,    GFX_LT(GFX11) },

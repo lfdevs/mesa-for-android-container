@@ -1,0 +1,4 @@
+[[deqp]]
+deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp/mustpass/vk-main.txt"]
+tests_per_group = 10000

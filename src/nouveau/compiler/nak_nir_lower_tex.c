@@ -156,9 +156,9 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
             PUSH(src0, nir_channel(b, coord, i));
 
          if (offset != NULL) {
-            nir_def *arr_off = nir_ishl_imm(b, offset, 16);
-            if (arr_idx)
-               arr_off = nir_ior(b, arr_off, arr_idx);
+            nir_def *arr_idx_or_zero = arr_idx ? arr_idx : nir_imm_int(b, 0);
+            nir_def *arr_off = nir_prmt_nv(b, nir_imm_int(b, 0x1054),
+                                           offset, arr_idx_or_zero);
             PUSH(src0, arr_off);
          } else if (arr_idx != NULL) {
             PUSH(src0, arr_idx);
@@ -171,9 +171,9 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
          }
       } else {
          if (min_lod != NULL) {
-            nir_def *arr_ml = nir_ishl_imm(b, min_lod, 16);
-            if (arr_idx)
-               arr_ml = nir_ior(b, arr_ml, arr_idx);
+            nir_def *arr_idx_or_zero = arr_idx ? arr_idx : nir_imm_int(b, 0);
+            nir_def *arr_ml = nir_prmt_nv(b, nir_imm_int(b, 0x1054),
+                                          min_lod, arr_idx_or_zero);
             PUSH(src0, arr_ml);
          } else if (arr_idx != NULL) {
             PUSH(src0, arr_idx);
@@ -583,7 +583,6 @@ bool
 nak_nir_lower_tex(nir_shader *nir, const struct nak_compiler *nak)
 {
    return nir_shader_instructions_pass(nir, lower_tex_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        (void *)nak);
 }

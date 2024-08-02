@@ -52,8 +52,6 @@ anv_device_print_vas(struct anv_physical_device *device)
            #name);
    PRINT_HEAP(general_state_pool);
    PRINT_HEAP(low_heap);
-   PRINT_HEAP(dynamic_state_pool);
-   PRINT_HEAP(sampler_state_pool);
    PRINT_HEAP(binding_table_pool);
    PRINT_HEAP(internal_surface_state_pool);
    PRINT_HEAP(scratch_surface_state_pool);
@@ -61,8 +59,8 @@ anv_device_print_vas(struct anv_physical_device *device)
    PRINT_HEAP(indirect_descriptor_pool);
    PRINT_HEAP(indirect_push_descriptor_pool);
    PRINT_HEAP(instruction_state_pool);
-   PRINT_HEAP(dynamic_state_db_pool);
-   PRINT_HEAP(descriptor_buffer_pool);
+   PRINT_HEAP(dynamic_state_pool);
+   PRINT_HEAP(dynamic_visible_pool);
    PRINT_HEAP(push_descriptor_buffer_pool);
    PRINT_HEAP(high_heap);
    PRINT_HEAP(trtt);
@@ -120,14 +118,6 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
          8 * _1Mb);
    address = va_add(&device->va.bindless_surface_state_pool, address, 2 * _1Gb);
 
-
-   /* PRMs & simulation disagrees on the actual size of this heap. Take the
-    * smallest (simulation) so that it works everywhere.
-    */
-   address = align64(address, _4Gb);
-   address = va_add(&device->va.dynamic_state_pool, address, _1Gb);
-   address = va_add(&device->va.sampler_state_pool, address, 2 * _1Gb);
-
    if (device->indirect_descriptors) {
       /* With indirect descriptors, descriptor buffers can go anywhere, they
        * just need to be in a 4Gb aligned range, so all shader accesses can
@@ -147,14 +137,12 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
    address = va_add(&device->va.instruction_state_pool, address, 2 * _1Gb);
 
    address += 1 * _1Gb;
-   address = va_add(&device->va.dynamic_state_db_pool, address, _1Gb);
-   address = va_add(&device->va.descriptor_buffer_pool, address, 2 *_1Gb);
-   assert(device->va.descriptor_buffer_pool.addr % _4Gb == 0);
+   address = va_add(&device->va.dynamic_state_pool, address, _1Gb);
+   address = va_add(&device->va.dynamic_visible_pool, address,
+                    device->info.verx10 >= 125 ? (2 * _1Gb) : (3 * _1Gb - 4096));
+   assert(device->va.dynamic_visible_pool.addr % _4Gb == 0);
    if (device->info.verx10 >= 125)
       address = va_add(&device->va.push_descriptor_buffer_pool, address, _1Gb - 4096);
-
-   assert(device->va.descriptor_buffer_pool.addr ==
-          align64(device->va.descriptor_buffer_pool.addr, 4 * _1Gb));
 
    address = align64(address, device->info.mem_alignment);
    address = va_add(&device->va.aux_tt_pool, address, 2 * _1Gb);

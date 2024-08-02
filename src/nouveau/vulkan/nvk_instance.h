@@ -7,11 +7,14 @@
 
 #include "nvk_private.h"
 
+#include "nvk_debug.h"
 #include "vk_instance.h"
 #include "util/xmlconfig.h"
 
 struct nvk_instance {
    struct vk_instance vk;
+
+   enum nvk_debug debug_flags;
 
    struct driOptionCache dri_options;
    struct driOptionCache available_dri_options;

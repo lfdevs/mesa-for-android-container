@@ -57,9 +57,6 @@ spec@arb_sample_shading@samplemask 4@sample mask_in_one,Fail
 spec@arb_separate_shader_objects@atomic counter,Fail
 spec@arb_shader_atomic_counters@semantics,Fail
 spec@arb_shader_atomic_counters@semantics@Fragment shader atomic built-in semantics,Fail
-spec@arb_shader_draw_parameters@drawid-indirect-baseinstance,Fail
-spec@arb_shader_draw_parameters@drawid-indirect-basevertex,Fail
-spec@arb_shader_draw_parameters@drawid-indirect,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2drect,Crash
@@ -122,8 +119,8 @@ spec@arb_texture_rg@fbo-blending-formats,Fail
 spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
 spec@arb_texture_rg@fbo-blending-formats@GL_RG8,Fail
 spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
-spec@arb_texture_view@sampling-2d-array-as-cubemap-array,Crash
-spec@arb_texture_view@sampling-2d-array-as-cubemap,Crash
+spec@arb_texture_view@sampling-2d-array-as-cubemap-array,Fail
+spec@arb_texture_view@sampling-2d-array-as-cubemap,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@arb_uniform_buffer_object@rendering-dsa-offset,Fail
 spec@arb_uniform_buffer_object@rendering-offset,Fail
@@ -452,7 +449,7 @@ spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGBA32I/Destinat
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGBA32UI/Destination: GL_RGBA32UI,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGBA8/Destination: GL_RGBA8,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGBA8_SNORM/Destination: GL_RGBA8_SNORM,Fail
-spec@oes_texture_view@sampling-2d-array-as-cubemap,Crash
+spec@oes_texture_view@sampling-2d-array-as-cubemap,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail

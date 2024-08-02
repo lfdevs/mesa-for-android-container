@@ -37,11 +37,6 @@ spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
-spec@!opengl 1.1@gl_select - alpha-test enabled,Fail
-spec@!opengl 1.1@gl_select - depth-test enabled,Fail
-spec@!opengl 1.1@gl_select - no test function,Fail
-spec@!opengl 1.1@gl_select - scissor-test enabled,Fail
-spec@!opengl 1.1@gl_select - stencil-test enabled,Fail
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 3: Expected white pixel on bottom edge,Fail

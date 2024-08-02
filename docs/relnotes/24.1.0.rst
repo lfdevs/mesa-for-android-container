@@ -6170,7 +6170,7 @@ Yonggang Luo (37):
 - util: futex_wait use TIME_MONOTONIC on win32 for consistence with other platform
 - util: Turn futex_wake parameter to int32_t for consistence across platforms
 - broadcom/common: Now "util/box.h" is under src, so remove the FIXME
-- nouveau: Fixes error: unused import: \`crate::nvh_classes_cl906f::*`
+- nouveau: Fixes error: unused import: \`crate::nvh_classes_cl906f::\*`
 
 Yusuf Khan (4):
 

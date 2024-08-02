@@ -16,6 +16,7 @@ nvk_files = files(
   'nvk_cmd_pool.c',
   'nvk_cmd_pool.h',
   'nvk_codegen.c',
+  'nvk_debug.h',
   'nvk_descriptor_set.h',
   'nvk_descriptor_set.c',
   'nvk_descriptor_set_layout.c',
@@ -48,7 +49,6 @@ nvk_files = files(
   'nvk_query_pool.h',
   'nvk_queue.c',
   'nvk_queue.h',
-  'nvk_queue_drm_nouveau.c',
   'nvk_sampler.c',
   'nvk_sampler.h',
   'nvk_shader.c',
@@ -56,7 +56,15 @@ nvk_files = files(
   'nvk_upload_queue.c',
   'nvk_upload_queue.h',
   'nvk_wsi.c',
-  'nvk_wsi.h'
+  'nvk_wsi.h',
+  'nvkmd/nouveau/nvkmd_nouveau.h',
+  'nvkmd/nouveau/nvkmd_nouveau_ctx.c',
+  'nvkmd/nouveau/nvkmd_nouveau_dev.c',
+  'nvkmd/nouveau/nvkmd_nouveau_mem.c',
+  'nvkmd/nouveau/nvkmd_nouveau_pdev.c',
+  'nvkmd/nouveau/nvkmd_nouveau_va.c',
+  'nvkmd/nvkmd.c',
+  'nvkmd/nvkmd.h',
 )
 
 nvk_entrypoints = custom_target(
@@ -76,6 +84,7 @@ nvk_deps = [
   idep_nak,
   idep_nil,
   idep_nir,
+  idep_mesautil,
   idep_nouveau_mme,
   idep_nouveau_ws,
   idep_nvidia_headers,
@@ -91,6 +100,7 @@ libnvk = static_library(
     nvk_entrypoints,
     cl_generated,
     nvk_files,
+    sha1_h,
   ],
   include_directories : [
     inc_gallium,

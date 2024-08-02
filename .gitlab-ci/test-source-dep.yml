@@ -6,6 +6,11 @@
   rules:
     - if: &is-scheduled-pipeline '$CI_PIPELINE_SOURCE == "schedule"'
       when: on_success
+
+# Override of the `default: retry:` settings, which automatically retries jobs
+# if one of the tests result didn't match its expectation; this override
+# disables that, but keeps the auto-retry for infrastructure failures.
+.no-auto-retry:
   retry:
     max: 1
     # Don't retry on script_failure, job_execution_timeout, runner_unsupported,
@@ -35,7 +40,7 @@
 .restricted-rules:
   rules:
     # If the triggerer has access to the restricted traces and if it is pre-merge
-    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias|gallo|kwg|majanes|llanderwelin|zmike|vigneshraman)$/") &&
+    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias|gallo|kwg|llanderwelin|zmike|vigneshraman)$/") &&
            ($GITLAB_USER_LOGIN != "marge-bot" || $CI_COMMIT_BRANCH)'
       when: never
 
@@ -67,7 +72,7 @@
 
 # Same core dependencies for doing manual runs.
 .core-manual-rules:
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     # We only want manual jobs to show up when it's not marge's pre-merge CI
     # run, otherwise she'll wait until her timeout.  The exception is
@@ -125,7 +130,7 @@
   extends:
     - .piglit-performance-base
   needs:
-    - debian/arm64_test
+    - debian/baremetal_arm64_test
     - debian-arm64-release
 
 .piglit-performance:x86_64:
@@ -174,7 +179,7 @@
     - !reference [.gallium-core-rules, rules]
 
 .gl-manual-rules:
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.core-manual-rules, rules]
     - changes:
@@ -193,7 +198,7 @@
       when: on_success
 
 .vulkan-manual-rules:
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.core-manual-rules, rules]
     - changes:

@@ -208,7 +208,7 @@ cl_get_emit_space(struct v3d_cl_out **cl, size_t size)
         return addr;
 }
 
-/* Macro for setting up an emit of a CL struct.  A temporary unpacked struct
+/* Macro for setting up and emit of a CL struct.  A temporary unpacked struct
  * is created, which you get to set fields in of the form:
  *
  * cl_emit(bcl, FLAT_SHADE_FLAGS, flags) {
@@ -237,6 +237,15 @@ cl_get_emit_space(struct v3d_cl_out **cl, size_t size)
                 assert(cl_offset(cl) <= (cl)->size);             \
         }))                                                      \
 
+/* Macro for setting up and emit of a CL struct, where part of the setting up
+ * comes from a prepacked buffer. So the use is similar to cl_emit, where you
+ * set individual values, and the rest of values come from prepacked.
+ *
+ * Note that setting a value with this macro will not override the values
+ * coming from the prepacked buffer, as it does an OR operation. That means
+ * that the prepacked buffer is usually reserved for values that we know that
+ * will not change in advance before the emission.
+ */
 #define cl_emit_with_prepacked(cl, packet, prepacked, name)      \
         for (struct cl_packet_struct(packet) name = {            \
                 cl_packet_header(packet)                         \

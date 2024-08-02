@@ -10,7 +10,7 @@
 #include "egl_dri2.h"
 
 uint32_t
-dri2_format_for_depth(struct dri2_egl_display *dri2_dpy, uint32_t depth);
+dri2_fourcc_for_depth(struct dri2_egl_display *dri2_dpy, uint32_t depth);
 
 EGLBoolean
 dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,

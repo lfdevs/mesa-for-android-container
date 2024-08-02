@@ -6,7 +6,7 @@
 
 #include "mme_fermi_sim.h"
 /* for VOLTA_A */
-#include "nvk_clc397.h"
+#include "nv_push_clc397.h"
 
 class mme_fermi_sim_test : public ::testing::Test, public mme_hw_runner {
 public:

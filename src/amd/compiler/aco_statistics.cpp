@@ -15,16 +15,7 @@
 
 namespace aco {
 
-/* sgpr_presched/vgpr_presched */
-void
-collect_presched_stats(Program* program)
-{
-   RegisterDemand presched_demand;
-   for (Block& block : program->blocks)
-      presched_demand.update(block.register_demand);
-   program->statistics[aco_statistic_sgpr_presched] = presched_demand.sgpr;
-   program->statistics[aco_statistic_vgpr_presched] = presched_demand.vgpr;
-}
+namespace {
 
 class BlockCycleEstimator {
 public:
@@ -48,12 +39,8 @@ public:
    int32_t res_available[(int)BlockCycleEstimator::resource_count] = {0};
    unsigned res_usage[(int)BlockCycleEstimator::resource_count] = {0};
    int32_t reg_available[512] = {0};
-   std::deque<int32_t> lgkm;
-   std::deque<int32_t> exp;
-   std::deque<int32_t> vm;
-   std::deque<int32_t> vs;
+   std::deque<int32_t> mem_ops[wait_type_num];
 
-   unsigned predict_cost(aco_ptr<Instruction>& instr);
    void add(aco_ptr<Instruction>& instr);
    void join(const BlockCycleEstimator& other);
 
@@ -63,17 +50,6 @@ private:
 
    void use_resources(aco_ptr<Instruction>& instr);
    int32_t cycles_until_res_available(aco_ptr<Instruction>& instr);
-};
-
-struct wait_counter_info {
-   wait_counter_info(unsigned vm_, unsigned exp_, unsigned lgkm_, unsigned vs_)
-       : vm(vm_), exp(exp_), lgkm(lgkm_), vs(vs_)
-   {}
-
-   unsigned vm;
-   unsigned exp;
-   unsigned lgkm;
-   unsigned vs;
 };
 
 struct perf_info {
@@ -197,6 +173,9 @@ get_perf_info(const Program& program, const Instruction& instr)
       case instr_class::valu_double_transcendental:
          return {24, WAIT_USE(valu, 16), WAIT_USE(valu_complex, 16)};
       case instr_class::salu: return {2, WAIT_USE(scalar, 1)};
+      case instr_class::sfpu: return {4, WAIT_USE(scalar, 1)};
+      case instr_class::valu_pseudo_scalar_trans:
+         return {7, WAIT_USE(valu, 1), WAIT_USE(valu_complex, 1)};
       case instr_class::smem: return {0, WAIT_USE(scalar, 1)};
       case instr_class::branch:
       case instr_class::sendmsg: return {0, WAIT_USE(branch_sendmsg, 1)};
@@ -280,84 +259,81 @@ BlockCycleEstimator::cycles_until_res_available(aco_ptr<Instruction>& instr)
    return cost;
 }
 
-static wait_counter_info
-get_wait_counter_info(aco_ptr<Instruction>& instr)
+static std::array<unsigned, wait_type_num>
+get_wait_counter_info(amd_gfx_level gfx_level, aco_ptr<Instruction>& instr)
 {
    /* These numbers are all a bit nonsense. LDS/VMEM/SMEM/EXP performance
     * depends a lot on the situation. */
 
-   if (instr->isEXP())
-      return wait_counter_info(0, 16, 0, 0);
+   std::array<unsigned, wait_type_num> info{};
 
-   if (instr->isFlatLike()) {
-      unsigned lgkm = instr->isFlat() ? 20 : 0;
-      if (!instr->definitions.empty())
-         return wait_counter_info(320, 0, lgkm, 0);
+   if (instr->isEXP()) {
+      info[wait_type_exp] = 16;
+   } else if (instr->isLDSDIR()) {
+      info[wait_type_exp] = 13;
+   } else if (instr->isFlatLike()) {
+      info[wait_type_lgkm] = instr->isFlat() ? 20 : 0;
+      if (!instr->definitions.empty() || gfx_level < GFX10)
+         info[wait_type_vm] = 320;
       else
-         return wait_counter_info(0, 0, lgkm, 320);
+         info[wait_type_vs] = 320;
+   } else if (instr->isSMEM()) {
+      wait_type type = gfx_level >= GFX12 ? wait_type_km : wait_type_lgkm;
+      if (instr->definitions.empty()) {
+         info[type] = 200;
+      } else if (instr->operands.empty()) { /* s_memtime and s_memrealtime */
+         info[type] = 1;
+      } else {
+         bool likely_desc_load = instr->operands[0].size() == 2;
+         bool soe = instr->operands.size() >= (!instr->definitions.empty() ? 3 : 4);
+         bool const_offset =
+            instr->operands[1].isConstant() && (!soe || instr->operands.back().isConstant());
+
+         if (likely_desc_load || const_offset)
+            info[type] = 30; /* likely to hit L0 cache */
+         else
+            info[type] = 200;
+      }
+   } else if (instr->isDS()) {
+      info[wait_type_lgkm] = 20;
+   } else if (instr->isVMEM() && instr->definitions.empty() && gfx_level >= GFX10) {
+      info[wait_type_vs] = 320;
+   } else if (instr->isVMEM()) {
+      uint8_t vm_type = get_vmem_type(gfx_level, instr.get());
+      wait_type type = wait_type_vm;
+      if (gfx_level >= GFX12 && vm_type == vmem_bvh)
+         type = wait_type_bvh;
+      else if (gfx_level >= GFX12 && vm_type == vmem_sampler)
+         type = wait_type_sample;
+      info[type] = 320;
    }
 
-   if (instr->isSMEM()) {
-      if (instr->definitions.empty())
-         return wait_counter_info(0, 0, 200, 0);
-      if (instr->operands.empty()) /* s_memtime and s_memrealtime */
-         return wait_counter_info(0, 0, 1, 0);
-
-      bool likely_desc_load = instr->operands[0].size() == 2;
-      bool soe = instr->operands.size() >= (!instr->definitions.empty() ? 3 : 4);
-      bool const_offset =
-         instr->operands[1].isConstant() && (!soe || instr->operands.back().isConstant());
-
-      if (likely_desc_load || const_offset)
-         return wait_counter_info(0, 0, 30, 0); /* likely to hit L0 cache */
-
-      return wait_counter_info(0, 0, 200, 0);
-   }
-
-   if (instr->format == Format::DS)
-      return wait_counter_info(0, 0, 20, 0);
-
-   if (instr->isLDSDIR())
-      return wait_counter_info(0, 13, 0, 0);
-
-   if (instr->isVMEM() && !instr->definitions.empty())
-      return wait_counter_info(320, 0, 0, 0);
-
-   if (instr->isVMEM() && instr->definitions.empty())
-      return wait_counter_info(0, 0, 0, 320);
-
-   return wait_counter_info(0, 0, 0, 0);
+   return info;
 }
 
 static wait_imm
 get_wait_imm(Program* program, aco_ptr<Instruction>& instr)
 {
+   wait_imm imm;
    if (instr->opcode == aco_opcode::s_endpgm) {
-      return wait_imm(0, 0, 0, 0);
-   } else if (instr->opcode == aco_opcode::s_waitcnt) {
-      return wait_imm(GFX10_3, instr->salu().imm);
-   } else if (instr->opcode == aco_opcode::s_waitcnt_vscnt) {
-      return wait_imm(0, 0, 0, instr->salu().imm);
+      for (unsigned i = 0; i < wait_type_num; i++)
+         imm[i] = 0;
+   } else if (imm.unpack(program->gfx_level, instr.get())) {
    } else if (instr->isVINTERP_INREG()) {
-      wait_imm imm;
       imm.exp = instr->vinterp_inreg().wait_exp;
       if (imm.exp == 0x7)
          imm.exp = wait_imm::unset_counter;
-      return imm;
    } else {
-      unsigned max_lgkm_cnt = program->gfx_level >= GFX10 ? 62 : 14;
-      unsigned max_exp_cnt = 6;
-      unsigned max_vm_cnt = program->gfx_level >= GFX9 ? 62 : 14;
-      unsigned max_vs_cnt = 62;
-
-      wait_counter_info wait_info = get_wait_counter_info(instr);
-      wait_imm imm;
-      imm.lgkm = wait_info.lgkm ? max_lgkm_cnt : wait_imm::unset_counter;
-      imm.exp = wait_info.exp ? max_exp_cnt : wait_imm::unset_counter;
-      imm.vm = wait_info.vm ? max_vm_cnt : wait_imm::unset_counter;
-      imm.vs = wait_info.vs ? max_vs_cnt : wait_imm::unset_counter;
-      return imm;
+      /* If an instruction increases a counter, it waits for it to be below maximum first. */
+      std::array<unsigned, wait_type_num> wait_info =
+         get_wait_counter_info(program->gfx_level, instr);
+      wait_imm max = wait_imm::max(program->gfx_level);
+      for (unsigned i = 0; i < wait_type_num; i++) {
+         if (wait_info[i])
+            imm[i] = max[i] - 1;
+      }
    }
+   return imm;
 }
 
 unsigned
@@ -366,21 +342,11 @@ BlockCycleEstimator::get_dependency_cost(aco_ptr<Instruction>& instr)
    int deps_available = cur_cycle;
 
    wait_imm imm = get_wait_imm(program, instr);
-   if (imm.vm != wait_imm::unset_counter) {
-      for (int i = 0; i < (int)vm.size() - imm.vm; i++)
-         deps_available = MAX2(deps_available, vm[i]);
-   }
-   if (imm.exp != wait_imm::unset_counter) {
-      for (int i = 0; i < (int)exp.size() - imm.exp; i++)
-         deps_available = MAX2(deps_available, exp[i]);
-   }
-   if (imm.lgkm != wait_imm::unset_counter) {
-      for (int i = 0; i < (int)lgkm.size() - imm.lgkm; i++)
-         deps_available = MAX2(deps_available, lgkm[i]);
-   }
-   if (imm.vs != wait_imm::unset_counter) {
-      for (int i = 0; i < (int)vs.size() - imm.vs; i++)
-         deps_available = MAX2(deps_available, vs[i]);
+   for (unsigned i = 0; i < wait_type_num; i++) {
+      if (imm[i] == wait_imm::unset_counter)
+         continue;
+      for (int j = 0; j < (int)mem_ops[i].size() - imm[i]; j++)
+         deps_available = MAX2(deps_available, mem_ops[i][j]);
    }
 
    if (instr->opcode == aco_opcode::s_endpgm) {
@@ -399,13 +365,6 @@ BlockCycleEstimator::get_dependency_cost(aco_ptr<Instruction>& instr)
       deps_available = align(deps_available, 4);
 
    return deps_available - cur_cycle;
-}
-
-unsigned
-BlockCycleEstimator::predict_cost(aco_ptr<Instruction>& instr)
-{
-   int32_t dep = get_dependency_cost(instr);
-   return dep + std::max(cycles_until_res_available(instr) - dep, 0);
 }
 
 static bool
@@ -451,45 +410,30 @@ BlockCycleEstimator::add(aco_ptr<Instruction>& instr)
    }
 
    wait_imm imm = get_wait_imm(program, instr);
-   while (lgkm.size() > imm.lgkm)
-      lgkm.pop_front();
-   while (exp.size() > imm.exp)
-      exp.pop_front();
-   while (vm.size() > imm.vm)
-      vm.pop_front();
-   while (vs.size() > imm.vs)
-      vs.pop_front();
+   for (unsigned i = 0; i < wait_type_num; i++) {
+      while (mem_ops[i].size() > imm[i])
+         mem_ops[i].pop_front();
+   }
 
-   wait_counter_info wait_info = get_wait_counter_info(instr);
-   if (wait_info.exp)
-      exp.push_back(cur_cycle + wait_info.exp);
-   if (wait_info.lgkm)
-      lgkm.push_back(cur_cycle + wait_info.lgkm);
-   if (wait_info.vm)
-      vm.push_back(cur_cycle + wait_info.vm);
-   if (wait_info.vs)
-      vs.push_back(cur_cycle + wait_info.vs);
+   std::array<unsigned, wait_type_num> wait_info = get_wait_counter_info(program->gfx_level, instr);
+   for (unsigned i = 0; i < wait_type_num; i++) {
+      if (wait_info[i])
+         mem_ops[i].push_back(cur_cycle + wait_info[i]);
+   }
 
    /* This is inaccurate but shouldn't affect anything after waitcnt insertion.
     * Before waitcnt insertion, this is necessary to consider memory operations.
     */
-   int latency = MAX3(wait_info.exp, wait_info.lgkm, wait_info.vm);
-   int32_t result_available = start + MAX2(perf.latency, latency);
+   unsigned latency = 0;
+   for (unsigned i = 0; i < wait_type_num; i++)
+      latency = MAX2(latency, i == wait_type_vs ? 0 : wait_info[i]);
+   int32_t result_available = start + MAX2(perf.latency, (int32_t)latency);
 
    for (Definition& def : instr->definitions) {
       int32_t* available = &reg_available[def.physReg().reg()];
       for (unsigned i = 0; i < def.size(); i++)
          available[i] = MAX2(available[i], result_available);
    }
-}
-
-static void
-join_queue(std::deque<int32_t>& queue, const std::deque<int32_t>& pred, int cycle_diff)
-{
-   for (unsigned i = 0; i < MIN2(queue.size(), pred.size()); i++)
-      queue.rbegin()[i] = MAX2(queue.rbegin()[i], pred.rbegin()[i] + cycle_diff);
-   for (int i = pred.size() - queue.size() - 1; i >= 0; i--)
-      queue.push_front(pred[i] + cycle_diff);
 }
 
 void
@@ -505,10 +449,27 @@ BlockCycleEstimator::join(const BlockCycleEstimator& pred)
    for (unsigned i = 0; i < 512; i++)
       reg_available[i] = MAX2(reg_available[i], pred.reg_available[i] - pred.cur_cycle + cur_cycle);
 
-   join_queue(lgkm, pred.lgkm, -pred.cur_cycle);
-   join_queue(exp, pred.exp, -pred.cur_cycle);
-   join_queue(vm, pred.vm, -pred.cur_cycle);
-   join_queue(vs, pred.vs, -pred.cur_cycle);
+   for (unsigned i = 0; i < wait_type_num; i++) {
+      std::deque<int32_t>& ops = mem_ops[i];
+      const std::deque<int32_t>& pred_ops = pred.mem_ops[i];
+      for (unsigned j = 0; j < MIN2(ops.size(), pred_ops.size()); j++)
+         ops.rbegin()[j] = MAX2(ops.rbegin()[j], pred_ops.rbegin()[j] - pred.cur_cycle);
+      for (int j = pred_ops.size() - ops.size() - 1; j >= 0; j--)
+         ops.push_front(pred_ops[j] - pred.cur_cycle);
+   }
+}
+
+} /* end namespace */
+
+/* sgpr_presched/vgpr_presched */
+void
+collect_presched_stats(Program* program)
+{
+   RegisterDemand presched_demand;
+   for (Block& block : program->blocks)
+      presched_demand.update(block.register_demand);
+   program->statistics[aco_statistic_sgpr_presched] = presched_demand.sgpr;
+   program->statistics[aco_statistic_vgpr_presched] = presched_demand.vgpr;
 }
 
 /* instructions/branches/vmem_clauses/smem_clauses/cycles */
@@ -568,7 +529,7 @@ collect_preasm_stats(Program* program)
 
    constexpr const unsigned vmem_latency = 320;
    for (const Definition def : program->args_pending_vmem) {
-      blocks[0].vm.push_back(vmem_latency);
+      blocks[0].mem_ops[wait_type_vm].push_back(vmem_latency);
       for (unsigned i = 0; i < def.size(); i++)
          blocks[0].reg_available[def.physReg().reg() + i] = vmem_latency;
    }

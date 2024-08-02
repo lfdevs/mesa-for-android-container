@@ -1230,7 +1230,7 @@ void pvr_GetPhysicalDeviceQueueFamilyProperties2(
       p->queueFamilyProperties = pvr_queue_family_properties;
 
       vk_foreach_struct (ext, p->pNext) {
-         pvr_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
       }
    }
 }
@@ -1259,7 +1259,7 @@ void pvr_GetPhysicalDeviceMemoryProperties2(
          break;
       }
       default:
-         pvr_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
          break;
       }
    }
@@ -2154,7 +2154,7 @@ VkResult pvr_AllocateMemory(VkDevice _device,
       case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
          break;
       default:
-         pvr_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
          break;
       }
    }

@@ -198,7 +198,7 @@ panfrost_nir_lower_sysvals(nir_shader *shader, struct panfrost_sysvals *sysvals)
    memset(sysvals, 0, sizeof(*sysvals));
 
    nir_shader_instructions_pass(
-      shader, lower, nir_metadata_block_index | nir_metadata_dominance, &ctx);
+      shader, lower, nir_metadata_control_flow, &ctx);
 
    _mesa_hash_table_u64_destroy(ctx.sysval_to_id);
    return true;

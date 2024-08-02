@@ -35,8 +35,6 @@
 #include "perf/intel_perf_query.h"
 #include "perf/intel_perf_regs.h"
 
-#include "drm-uapi/i915_drm.h"
-
 #include "util/compiler.h"
 #include "util/u_math.h"
 
@@ -165,9 +163,11 @@ struct oa_sample_buf {
    struct exec_node link;
    int refcount;
    int len;
-   uint8_t buf[I915_PERF_OA_SAMPLE_SIZE * 10];
    uint32_t last_timestamp;
+   uint8_t buf[];
 };
+
+#define oa_sample_buf_buf_length(perf) (perf->oa_sample_size * 10)
 
 /**
  * gen representation of a performance query object.
@@ -308,7 +308,7 @@ static bool
 inc_n_users(struct intel_perf_context *perf_ctx)
 {
    if (perf_ctx->n_oa_users == 0 &&
-       intel_ioctl(perf_ctx->oa_stream_fd, I915_PERF_IOCTL_ENABLE, 0) < 0)
+       intel_perf_stream_set_state(perf_ctx->perf, perf_ctx->oa_stream_fd, true) < 0)
    {
       return false;
    }
@@ -327,7 +327,7 @@ dec_n_users(struct intel_perf_context *perf_ctx)
     */
    --perf_ctx->n_oa_users;
    if (perf_ctx->n_oa_users == 0 &&
-       intel_ioctl(perf_ctx->oa_stream_fd, I915_PERF_IOCTL_DISABLE, 0) < 0)
+       intel_perf_stream_set_state(perf_ctx->perf, perf_ctx->oa_stream_fd, false) < 0)
    {
       DBG("WARNING: Error disabling gen perf stream: %m\n");
    }
@@ -351,59 +351,15 @@ intel_perf_close(struct intel_perf_context *perfquery,
 bool
 intel_perf_open(struct intel_perf_context *perf_ctx,
                 int metrics_set_id,
-                int report_format,
+                uint64_t report_format,
                 int period_exponent,
                 int drm_fd,
                 uint32_t ctx_id,
                 bool enable)
 {
-   uint64_t properties[DRM_I915_PERF_PROP_MAX * 2];
-   uint32_t p = 0;
-
-   /* Single context sampling if valid context id. */
-   if (ctx_id != INTEL_PERF_INVALID_CTX_ID) {
-      properties[p++] = DRM_I915_PERF_PROP_CTX_HANDLE;
-      properties[p++] = ctx_id;
-   }
-
-   /* Include OA reports in samples */
-   properties[p++] = DRM_I915_PERF_PROP_SAMPLE_OA;
-   properties[p++] = true;
-
-   /* OA unit configuration */
-   properties[p++] = DRM_I915_PERF_PROP_OA_METRICS_SET;
-   properties[p++] = metrics_set_id;
-
-   properties[p++] = DRM_I915_PERF_PROP_OA_FORMAT;
-   properties[p++] = report_format;
-
-   properties[p++] = DRM_I915_PERF_PROP_OA_EXPONENT;
-   properties[p++] = period_exponent;
-
-   /* If global SSEU is available, pin it to the default. This will ensure on
-    * Gfx11 for instance we use the full EU array. Initially when perf was
-    * enabled we would use only half on Gfx11 because of functional
-    * requirements.
-    *
-    * Temporary disable this option on Gfx12.5+, kernel doesn't appear to
-    * support it.
-    */
-   if (intel_perf_has_global_sseu(perf_ctx->perf) &&
-       perf_ctx->devinfo->verx10 < 125) {
-      properties[p++] = DRM_I915_PERF_PROP_GLOBAL_SSEU;
-      properties[p++] = to_user_pointer(&perf_ctx->perf->sseu);
-   }
-
-   assert(p <= ARRAY_SIZE(properties));
-
-   struct drm_i915_perf_open_param param = {
-      .flags = I915_PERF_FLAG_FD_CLOEXEC |
-               I915_PERF_FLAG_FD_NONBLOCK |
-               (enable ? 0 : I915_PERF_FLAG_DISABLED),
-      .num_properties = p / 2,
-      .properties_ptr = (uintptr_t) properties,
-   };
-   int fd = intel_ioctl(drm_fd, DRM_IOCTL_I915_PERF_OPEN, &param);
+   int fd = intel_perf_stream_open(perf_ctx->perf, drm_fd, ctx_id,
+                                   metrics_set_id, period_exponent, false,
+                                   enable);
    if (fd == -1) {
       DBG("Error opening gen perf OA stream: %m\n");
       return false;
@@ -464,7 +420,7 @@ get_free_sample_buf(struct intel_perf_context *perf_ctx)
    if (node)
       buf = exec_node_data(struct oa_sample_buf, node, link);
    else {
-      buf = ralloc_size(perf_ctx->perf, sizeof(*buf));
+      buf = ralloc_size(perf_ctx->perf, sizeof(*buf) + oa_sample_buf_buf_length(perf_ctx->perf));
 
       exec_node_init(&buf->link);
       buf->refcount = 0;
@@ -578,6 +534,11 @@ struct intel_perf_config *
 intel_perf_config(struct intel_perf_context *ctx)
 {
    return ctx->perf;
+}
+
+void intel_perf_free_context(struct intel_perf_context *perf_ctx)
+{
+   ralloc_free(perf_ctx);
 }
 
 void
@@ -744,6 +705,7 @@ snapshot_query_layout(struct intel_perf_context *perf_ctx,
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_A:
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_B:
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_C:
+      case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_PEC:
          perf_cfg->vtbl.store_register_mem(perf_ctx->ctx, query->oa.bo,
                                            field->mmio_offset, field->size,
                                            offset + field->location);
@@ -983,7 +945,8 @@ intel_perf_read_oa_stream(struct intel_perf_context *perf_ctx,
                           void* buf,
                           size_t nbytes)
 {
-   return read(perf_ctx->oa_stream_fd, buf, nbytes);
+   return intel_perf_stream_read_samples(perf_ctx->perf, perf_ctx->oa_stream_fd,
+                                         buf, nbytes);
 }
 
 enum OaReadStatus {
@@ -1003,25 +966,33 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
       exec_node_data(struct oa_sample_buf, tail_node, link);
    uint32_t last_timestamp =
       tail_buf->len == 0 ? start_timestamp : tail_buf->last_timestamp;
+   bool sample_read = false;
 
    while (1) {
       struct oa_sample_buf *buf = get_free_sample_buf(perf_ctx);
       uint32_t offset;
       int len;
 
-      while ((len = read(perf_ctx->oa_stream_fd, buf->buf,
-                         sizeof(buf->buf))) < 0 && errno == EINTR)
-         ;
+      len = intel_perf_stream_read_samples(perf_ctx->perf,
+                                           perf_ctx->oa_stream_fd,
+                                           buf->buf,
+                                           oa_sample_buf_buf_length(perf_ctx->perf));
 
       if (len <= 0) {
          exec_list_push_tail(&perf_ctx->free_sample_buffers, &buf->link);
 
          if (len == 0) {
+            if (sample_read)
+               return OA_READ_STATUS_FINISHED;
+
             DBG("Spurious EOF reading i915 perf samples\n");
             return OA_READ_STATUS_ERROR;
          }
 
-         if (errno != EAGAIN) {
+         if (len != -EAGAIN) {
+            if (sample_read)
+               return OA_READ_STATUS_FINISHED;
+
             DBG("Error reading i915 perf samples: %m\n");
             return OA_READ_STATUS_ERROR;
          }
@@ -1042,14 +1013,15 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
       /* Go through the reports and update the last timestamp. */
       offset = 0;
       while (offset < buf->len) {
-         const struct drm_i915_perf_record_header *header =
-            (const struct drm_i915_perf_record_header *) &buf->buf[offset];
+         const struct intel_perf_record_header *header =
+            (const struct intel_perf_record_header *) &buf->buf[offset];
          uint32_t *report = (uint32_t *) (header + 1);
 
-         if (header->type == DRM_I915_PERF_RECORD_SAMPLE)
+         if (header->type == INTEL_PERF_RECORD_TYPE_SAMPLE)
             last_timestamp = report[1];
 
          offset += header->size;
+         sample_read = true;
       }
 
       buf->last_timestamp = last_timestamp;
@@ -1312,8 +1284,8 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
       int offset = 0;
 
       while (offset < buf->len) {
-         const struct drm_i915_perf_record_header *header =
-            (const struct drm_i915_perf_record_header *)(buf->buf + offset);
+         const struct intel_perf_record_header *header =
+            (const struct intel_perf_record_header *)(buf->buf + offset);
 
          assert(header->size != 0);
          assert(header->size <= buf->len);
@@ -1321,7 +1293,7 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
          offset += header->size;
 
          switch (header->type) {
-         case DRM_I915_PERF_RECORD_SAMPLE: {
+         case INTEL_PERF_RECORD_TYPE_SAMPLE: {
             uint32_t *report = (uint32_t *)(header + 1);
             bool report_ctx_match = true;
             bool add = true;
@@ -1396,11 +1368,11 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
             break;
          }
 
-         case DRM_I915_PERF_RECORD_OA_BUFFER_LOST:
-             DBG("i915 perf: OA error: all reports lost\n");
+         case INTEL_PERF_RECORD_TYPE_OA_BUFFER_LOST:
+             DBG("perf: OA error: all reports lost\n");
              goto error;
-         case DRM_I915_PERF_RECORD_OA_REPORT_LOST:
-             DBG("i915 perf: OA report lost\n");
+         case INTEL_PERF_RECORD_TYPE_OA_REPORT_LOST:
+             DBG("perf: OA report lost\n");
              break;
          }
       }

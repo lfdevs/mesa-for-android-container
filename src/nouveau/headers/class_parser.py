@@ -349,7 +349,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-h', required=False, help='Output C header.')
     parser.add_argument('--out-c', required=False, help='Output C file.')
-    parser.add_argument('--out-rs', required=False, help='Output C file.')
+    parser.add_argument('--out-rs', required=False, help='Output Rust file.')
     parser.add_argument('--in-h',
                         help='Input class header file.',
                         required=True)

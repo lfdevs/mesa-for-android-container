@@ -28,9 +28,7 @@
 #include "util/u_math.h"
 #include "vk_util.h"
 #include "vulkan/wsi/wsi_common.h"
-#if DETECT_OS_ANDROID
 #include "vk_android.h"
-#endif
 
 /**
  * Computes the HW's UIFblock padding for a given height/cpp.
@@ -413,13 +411,20 @@ v3dv_image_init(struct v3dv_device *device,
    uint64_t modifier = DRM_FORMAT_MOD_INVALID;
    const VkImageDrmFormatModifierListCreateInfoEXT *mod_info = NULL;
    const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info = NULL;
-#if DETECT_OS_ANDROID
-   if (image->is_native_buffer_memory) {
-      assert(image->android_explicit_layout);
-      explicit_mod_info = image->android_explicit_layout;
-      modifier = explicit_mod_info->drmFormatModifier;
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
+   VkSubresourceLayout a_plane_layouts[V3DV_MAX_PLANE_COUNT];
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      VkResult result = vk_android_get_anb_layout(
+         pCreateInfo, &eci, a_plane_layouts, V3DV_MAX_PLANE_COUNT);
+      if (result != VK_SUCCESS)
+         return result;
+
+      explicit_mod_info = &eci;
+      modifier = eci.drmFormatModifier;
    }
-#endif
+
    if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       mod_info =
          vk_find_struct_const(pCreateInfo->pNext,
@@ -494,13 +499,12 @@ v3dv_image_init(struct v3dv_device *device,
     */
    image->vk.create_flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
-#if DETECT_OS_ANDROID
    /* At this time, an AHB handle is not yet provided.
     * Image layout will be filled up during vkBindImageMemory2
+    * This section is removed by the optimizer for non-ANDROID builds
     */
-   if (image->is_ahb)
+   if (vk_image_is_android_hardware_buffer(&image->vk))
       return VK_SUCCESS;
-#endif
 
    bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
 
@@ -509,11 +513,30 @@ v3dv_image_init(struct v3dv_device *device,
 }
 
 static VkResult
+create_image_from_swapchain(struct v3dv_device *device,
+                            const VkImageCreateInfo *pCreateInfo,
+                            const VkImageSwapchainCreateInfoKHR *swapchain_info,
+                            const VkAllocationCallbacks *pAllocator,
+                            VkImage *pImage);
+
+static VkResult
 create_image(struct v3dv_device *device,
              const VkImageCreateInfo *pCreateInfo,
              const VkAllocationCallbacks *pAllocator,
              VkImage *pImage)
 {
+#if DETECT_OS_ANDROID
+   /* VkImageSwapchainCreateInfoKHR is not useful at all */
+   const VkImageSwapchainCreateInfoKHR *swapchain_info = NULL;
+#else
+   const VkImageSwapchainCreateInfoKHR *swapchain_info =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
+#endif
+
+   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
+      return create_image_from_swapchain(device, pCreateInfo, swapchain_info,
+                                         pAllocator, pImage);
+
    VkResult result;
    struct v3dv_image *image = NULL;
 
@@ -521,83 +544,23 @@ create_image(struct v3dv_device *device,
    if (image == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-#if DETECT_OS_ANDROID
-   const VkExternalMemoryImageCreateInfo *external_info =
-      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
-
-   const VkNativeBufferANDROID *native_buffer =
-      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
-
-   if (native_buffer != NULL)
-      image->is_native_buffer_memory = true;
-
-   image->is_ahb = external_info && (external_info->handleTypes &
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID);
-
-   assert(!(image->is_ahb && image->is_native_buffer_memory));
-
-   if (image->is_ahb || image->is_native_buffer_memory) {
-      image->android_explicit_layout = vk_alloc2(&device->vk.alloc, pAllocator,
-                                                 sizeof(VkImageDrmFormatModifierExplicitCreateInfoEXT),
-                                                 8,
-                                                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!image->android_explicit_layout) {
-         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         goto fail;
-      }
-
-      image->android_plane_layouts = vk_alloc2(&device->vk.alloc, pAllocator,
-         sizeof(VkSubresourceLayout) * V3DV_MAX_PLANE_COUNT,
-         8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!image->android_plane_layouts) {
-         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         goto fail;
-      }
-   }
-
-   if (image->is_native_buffer_memory) {
-      struct u_gralloc_buffer_handle gr_handle = {
-         .handle = native_buffer->handle,
-         .hal_format = native_buffer->format,
-         .pixel_stride = native_buffer->stride,
-      };
-
-      result = v3dv_gralloc_to_drm_explicit_layout(device->gralloc,
-                                                   &gr_handle,
-                                                   image->android_explicit_layout,
-                                                   image->android_plane_layouts,
-                                                   V3DV_MAX_PLANE_COUNT);
-      if (result != VK_SUCCESS)
-         goto fail;
-   }
-#endif
-
    result = v3dv_image_init(device, pCreateInfo, pAllocator, image);
    if (result != VK_SUCCESS)
       goto fail;
 
-#if DETECT_OS_ANDROID
-   if (image->is_native_buffer_memory) {
-      result = v3dv_import_native_buffer_fd(v3dv_device_to_handle(device),
-                                            native_buffer->handle->data[0], pAllocator,
-                                            v3dv_image_to_handle(image));
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result = vk_android_import_anb(&device->vk, pCreateInfo, pAllocator,
+                                     &image->vk);
       if (result != VK_SUCCESS)
          goto fail;
    }
-#endif
 
    *pImage = v3dv_image_to_handle(image);
 
    return VK_SUCCESS;
 
 fail:
-#if DETECT_OS_ANDROID
-   if (image->android_explicit_layout)
-      vk_free2(&device->vk.alloc, pAllocator, image->android_explicit_layout);
-   if (image->android_plane_layouts)
-      vk_free2(&device->vk.alloc, pAllocator, image->android_plane_layouts);
-#endif
-
    vk_image_destroy(&device->vk, pAllocator, &image->vk);
    return result;
 }
@@ -656,29 +619,17 @@ v3dv_CreateImage(VkDevice _device,
                  VkImage *pImage)
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
-
-#if DETECT_OS_ANDROID
-   /* VkImageSwapchainCreateInfoKHR is not useful at all */
-   const VkImageSwapchainCreateInfoKHR *swapchain_info = NULL;
-#else
-   const VkImageSwapchainCreateInfoKHR *swapchain_info =
-      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
-#endif
-
-   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
-      return create_image_from_swapchain(device, pCreateInfo, swapchain_info,
-                                         pAllocator, pImage);
-
    return create_image(device, pCreateInfo, pAllocator, pImage);
 }
 
-VKAPI_ATTR void VKAPI_CALL
-v3dv_GetImageSubresourceLayout(VkDevice device,
-                               VkImage _image,
-                               const VkImageSubresource *subresource,
-                               VkSubresourceLayout *layout)
+static void
+get_image_subresource_layout(struct v3dv_device *device,
+                             struct v3dv_image *image,
+                             const VkImageSubresource2KHR *subresource2,
+                             VkSubresourceLayout2KHR *layout2)
 {
-   V3DV_FROM_HANDLE(v3dv_image, image, _image);
+   const VkImageSubresource *subresource = &subresource2->imageSubresource;
+   VkSubresourceLayout *layout = &layout2->subresourceLayout;
 
    uint8_t plane = v3dv_plane_from_aspect(subresource->aspectMask);
    const struct v3d_resource_slice *slice =
@@ -725,6 +676,37 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+v3dv_GetImageSubresourceLayout2KHR(VkDevice _device,
+                                   VkImage _image,
+                                   const VkImageSubresource2KHR *subresource2,
+                                   VkSubresourceLayout2KHR *layout2)
+{
+   V3DV_FROM_HANDLE(v3dv_device, device, _device);
+   V3DV_FROM_HANDLE(v3dv_image, image, _image);
+   get_image_subresource_layout(device, image, subresource2, layout2);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+v3dv_GetDeviceImageSubresourceLayoutKHR(VkDevice vk_device,
+                                        const VkDeviceImageSubresourceInfoKHR *pInfo,
+                                        VkSubresourceLayout2KHR *pLayout)
+{
+   V3DV_FROM_HANDLE(v3dv_device, device, vk_device);
+
+   memset(&pLayout->subresourceLayout, 0, sizeof(pLayout->subresourceLayout));
+
+   VkImage vk_image = VK_NULL_HANDLE;
+   VkResult result = create_image(device, pInfo->pCreateInfo, NULL, &vk_image);
+   if (result != VK_SUCCESS)
+      return;
+
+   struct v3dv_image *image = v3dv_image_from_handle(vk_image);
+   get_image_subresource_layout(device, image, pInfo->pSubresource, pLayout);
+
+   v3dv_DestroyImage(vk_device, vk_image, NULL);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyImage(VkDevice _device,
                   VkImage _image,
                   const VkAllocationCallbacks* pAllocator)
@@ -751,18 +733,6 @@ v3dv_DestroyImage(VkDevice _device,
                         pAllocator);
       image->shadow = NULL;
    }
-
-#if DETECT_OS_ANDROID
-   if (image->is_native_buffer_memory)
-      v3dv_FreeMemory(_device,
-                      v3dv_device_memory_to_handle(image->planes[0].mem),
-                      pAllocator);
-
-   if (image->android_explicit_layout)
-      vk_free2(&device->vk.alloc, pAllocator, image->android_explicit_layout);
-   if (image->android_plane_layouts)
-      vk_free2(&device->vk.alloc, pAllocator, image->android_plane_layouts);
-#endif
 
    vk_image_destroy(&device->vk, pAllocator, &image->vk);
 }
@@ -961,8 +931,18 @@ v3dv_CreateBufferView(VkDevice _device,
    v3dv_X(device, get_internal_type_bpp_for_output_format)
       (view->format->planes[0].rt_type, &view->internal_type, &view->internal_bpp);
 
-   if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT ||
-       buffer->usage & VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT)
+   const VkBufferUsageFlags2CreateInfoKHR *flags2 =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+
+   VkBufferUsageFlags2KHR usage;
+   if (flags2)
+      usage = flags2->usage;
+   else
+      usage = buffer->usage;
+
+   if (usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT ||
+       usage & VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT)
       v3dv_X(device, pack_texture_shader_state_from_buffer_view)(device, view);
 
    *pView = v3dv_buffer_view_to_handle(view);

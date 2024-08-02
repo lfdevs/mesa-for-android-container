@@ -238,8 +238,7 @@ nir_opt_dce_impl(nir_function_impl *impl)
    nir_instr_free_list(&dead_instrs);
 
    if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }

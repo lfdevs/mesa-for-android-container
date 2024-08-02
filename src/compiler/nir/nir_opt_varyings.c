@@ -510,6 +510,19 @@ enum fs_vec4_type {
    FS_VEC4_TYPE_PER_PRIMITIVE,
 };
 
+#if PRINT_RELOCATE_SLOT
+static const char *fs_vec4_type_strings[] = {
+   "NONE",
+   "FLAT",
+   "INTERP_FP32",
+   "INTERP_FP16",
+   "INTERP_COLOR",
+   "INTERP_EXPLICIT",
+   "INTERP_EXPLICIT_STRICT",
+   "PER_PRIMITIVE",
+};
+#endif // PRINT_RELOCATE_SLOT
+
 static unsigned
 get_scalar_16bit_slot(nir_io_semantics sem, unsigned component)
 {
@@ -1783,8 +1796,7 @@ remove_dead_varyings(struct linkage_info *linkage,
                else
                   replacement = nir_undef(b, 1, loadi->def.bit_size);
 
-               nir_def_rewrite_uses(&loadi->def, replacement);
-               nir_instr_remove(&loadi->instr);
+               nir_def_replace(&loadi->def, replacement);
 
                *progress |= list_index ? nir_progress_producer :
                                          nir_progress_consumer;
@@ -2176,8 +2188,7 @@ propagate_uniform_expressions(struct linkage_info *linkage,
                clone = build_convert_inf_to_nan(b, clone);
 
             /* Replace the original load. */
-            nir_def_rewrite_uses(&loadi->def, clone);
-            nir_instr_remove(&loadi->instr);
+            nir_def_replace(&loadi->def, clone);
             *progress |= list_index ? nir_progress_producer :
                                       nir_progress_consumer;
          }
@@ -3080,7 +3091,7 @@ try_move_postdominator(struct linkage_info *linkage,
     * the original load(s).
     */
    if (linkage->consumer_stage == MESA_SHADER_FRAGMENT &&
-       alu_interp > FLAG_INTERP_FLAT) {
+       alu_interp != FLAG_INTERP_FLAT) {
       nir_def *baryc = NULL;
 
       /* Determine the barycentric coordinates. */
@@ -3097,17 +3108,22 @@ try_move_postdominator(struct linkage_info *linkage,
       case FLAG_INTERP_LINEAR_SAMPLE:
          baryc = nir_load_barycentric_sample(b, 32);
          break;
+      default:
+         baryc = first_load->src[0].ssa;
+         break;
       }
 
-      nir_intrinsic_instr *baryc_i =
-         nir_instr_as_intrinsic(baryc->parent_instr);
+      if (baryc != first_load->src[0].ssa) {
+         nir_intrinsic_instr *baryc_i =
+            nir_instr_as_intrinsic(baryc->parent_instr);
 
-      if (alu_interp == FLAG_INTERP_LINEAR_PIXEL ||
-          alu_interp == FLAG_INTERP_LINEAR_CENTROID ||
-          alu_interp == FLAG_INTERP_LINEAR_SAMPLE)
-         nir_intrinsic_set_interp_mode(baryc_i, INTERP_MODE_NOPERSPECTIVE);
-      else
-         nir_intrinsic_set_interp_mode(baryc_i, INTERP_MODE_SMOOTH);
+         if (alu_interp == FLAG_INTERP_LINEAR_PIXEL ||
+            alu_interp == FLAG_INTERP_LINEAR_CENTROID ||
+            alu_interp == FLAG_INTERP_LINEAR_SAMPLE)
+            nir_intrinsic_set_interp_mode(baryc_i, INTERP_MODE_NOPERSPECTIVE);
+         else
+            nir_intrinsic_set_interp_mode(baryc_i, INTERP_MODE_SMOOTH);
+      }
 
       new_input = nir_load_interpolated_input(
                      b, 1, new_bit_size, baryc, nir_imm_int(b, 0),
@@ -3117,8 +3133,13 @@ try_move_postdominator(struct linkage_info *linkage,
                                   new_bit_size,
                      .io_semantics = nir_intrinsic_io_semantics(first_load));
 
-      mask = new_bit_size == 16 ? linkage->interp_fp16_mask
-                                : linkage->interp_fp32_mask;
+      if (alu_interp == FLAG_INTERP_CONVERGENT) {
+         mask = new_bit_size == 16 ? linkage->convergent16_mask
+                                   : linkage->convergent32_mask;
+      } else {
+         mask = new_bit_size == 16 ? linkage->interp_fp16_mask
+                                   : linkage->interp_fp32_mask;
+      }
    } else if (linkage->consumer_stage == MESA_SHADER_TESS_EVAL &&
               alu_interp > FLAG_INTERP_FLAT) {
       nir_def *zero = nir_imm_int(b, 0);
@@ -3167,6 +3188,8 @@ try_move_postdominator(struct linkage_info *linkage,
       mask = new_bit_size == 16 ? linkage->flat16_mask
                                 : linkage->flat32_mask;
    } else {
+      assert(linkage->consumer_stage != MESA_SHADER_FRAGMENT || alu_interp == FLAG_INTERP_FLAT);
+
       new_input =
          nir_load_input(b, 1, new_bit_size, nir_imm_int(b, 0),
                         .base = nir_intrinsic_base(first_load),
@@ -3175,14 +3198,8 @@ try_move_postdominator(struct linkage_info *linkage,
                                     new_bit_size,
                         .io_semantics = nir_intrinsic_io_semantics(first_load));
 
-      if (linkage->consumer_stage == MESA_SHADER_FRAGMENT &&
-          alu_interp == FLAG_INTERP_CONVERGENT) {
-         mask = new_bit_size == 16 ? linkage->convergent16_mask
-                                   : linkage->convergent32_mask;
-      } else {
-         mask = new_bit_size == 16 ? linkage->flat16_mask
-                                   : linkage->flat32_mask;
-      }
+      mask = new_bit_size == 16 ? linkage->flat16_mask
+                                : linkage->flat32_mask;
    }
 
    assert(!BITSET_TEST(linkage->no_varying32_mask, slot_index));
@@ -3663,7 +3680,7 @@ relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
 
          assert(bit_size == 16 || bit_size == 32);
 
-         fprintf(stderr, "--- relocating: %s.%c%s%s -> %s.%c%s%s\n",
+         fprintf(stderr, "--- relocating: %s.%c%s%s -> %s.%c%s%s FS_VEC4_TYPE_%s\n",
                  gl_varying_slot_name_for_stage(sem.location, linkage->producer_stage) + 13,
                  "xyzw"[nir_intrinsic_component(intr) % 4],
                  (bit_size == 16 && !sem.high_16bits) ? ".lo" : "",
@@ -3671,7 +3688,8 @@ relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
                  gl_varying_slot_name_for_stage(new_semantic, linkage->producer_stage) + 13,
                  "xyzw"[new_component % 4],
                  (bit_size == 16 && !new_high_16bits) ? ".lo" : "",
-                 (bit_size == 16 && new_high_16bits) ? ".hi" : "");
+                 (bit_size == 16 && new_high_16bits) ? ".hi" : "",
+                 fs_vec4_type_strings[fs_vec4_type]);
 #endif /* PRINT_RELOCATE_SLOT */
 
          sem.location = new_semantic;
@@ -4279,13 +4297,11 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
 
    nir_metadata_preserve(linkage->producer_builder.impl,
                          progress & nir_progress_producer ?
-                            (nir_metadata_block_index |
-                             nir_metadata_dominance) :
+                            (nir_metadata_control_flow) :
                             nir_metadata_all);
    nir_metadata_preserve(linkage->consumer_builder.impl,
                          progress & nir_progress_consumer ?
-                            (nir_metadata_block_index |
-                             nir_metadata_dominance) :
+                            (nir_metadata_control_flow) :
                             nir_metadata_all);
    free_linkage(linkage);
    FREE(linkage);

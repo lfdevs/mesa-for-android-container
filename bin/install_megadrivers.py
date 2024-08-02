@@ -42,7 +42,8 @@ def main():
     else:
         to = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], args.libdir)
 
-    master = os.path.join(to, os.path.basename(args.megadriver))
+    basename = os.path.basename(args.megadriver)
+    master = os.path.join(to, basename)
 
     if not os.path.exists(to):
         if os.path.lexists(to):
@@ -54,8 +55,8 @@ def main():
 
         if os.path.lexists(abs_driver):
             os.unlink(abs_driver)
-        print('installing {} to {}'.format(args.megadriver, abs_driver))
-        os.link(master, abs_driver)
+        print(f'Installing symlink pointing to {basename} to {abs_driver}')
+        os.symlink(basename, abs_driver)
 
         try:
             ret = os.getcwd()
@@ -70,8 +71,7 @@ def main():
         finally:
             os.chdir(ret)
 
-    # Remove meson-created master .so and symlinks
-    os.unlink(master)
+    # Remove meson-created .so symlinks
     name, ext = os.path.splitext(master)
     while ext != '.so':
         if os.path.lexists(name):

@@ -105,8 +105,7 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
       }
    }
 
-   nir_def_rewrite_uses(&load->def, val);
-   nir_instr_remove(&load->instr);
+   nir_def_replace(&load->def, val);
 
    return true;
 }

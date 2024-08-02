@@ -111,6 +111,13 @@ brw_fs_opt_dead_control_flow_eliminate(fs_visitor &s)
          else_inst->remove(else_block);
 
          progress = true;
+      } else if (inst->opcode == BRW_OPCODE_NOP &&
+                 prev_block->can_combine_with(block) &&
+                 exec_list_is_singular(&block->parents) &&
+                 exec_list_is_singular(&prev_block->children)) {
+         prev_block->combine_with(block);
+         inst->remove(prev_block);
+         progress = true;
       }
    }
 

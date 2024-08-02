@@ -114,7 +114,6 @@ zink_debug_options[] = {
    { "optimal_keys", ZINK_DEBUG_OPTIMAL_KEYS, "Debug/use optimal_keys" },
    { "noopt", ZINK_DEBUG_NOOPT, "Disable async optimized pipeline compiles" },
    { "nobgc", ZINK_DEBUG_NOBGC, "Disable all async pipeline compiles" },
-   { "dgc", ZINK_DEBUG_DGC, "Use DGC (driver testing only)" },
    { "mem", ZINK_DEBUG_MEM, "Debug memory allocations" },
    { "quiet", ZINK_DEBUG_QUIET, "Suppress warnings" },
    { "ioopt", ZINK_DEBUG_IOOPT, "Optimize IO" },
@@ -159,13 +158,13 @@ static const char *
 zink_get_name(struct pipe_screen *pscreen)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   const char *driver_name = vk_DriverId_to_str(screen->info.driver_props.driverID) + strlen("VK_DRIVER_ID_");
+   const char *driver_name = vk_DriverId_to_str(zink_driverid(screen)) + strlen("VK_DRIVER_ID_");
    static char buf[1000];
    snprintf(buf, sizeof(buf), "zink Vulkan %d.%d(%s (%s))",
             VK_VERSION_MAJOR(screen->info.device_version),
             VK_VERSION_MINOR(screen->info.device_version),
             screen->info.props.deviceName,
-            strstr(vk_DriverId_to_str(screen->info.driver_props.driverID), "VK_DRIVER_ID_") ? driver_name : "Driver Unknown"
+            strstr(vk_DriverId_to_str(zink_driverid(screen)), "VK_DRIVER_ID_") ? driver_name : "Driver Unknown"
             );
    return buf;
 }
@@ -627,6 +626,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT:
+   case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
       return 1;
 
    case PIPE_CAP_DRAW_VERTEX_STATE:
@@ -742,7 +742,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_VERTEX_ATTRIB_ELEMENT_ALIGNED_ONLY:
-      return 1;
+      return !screen->info.have_EXT_legacy_vertex_attributes;
 
    case PIPE_CAP_GL_CLAMP:
       return 0;
@@ -856,8 +856,6 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_TRANSFER_MODES: {
       enum pipe_texture_transfer_mode mode = PIPE_TEXTURE_TRANSFER_BLIT;
       if (!screen->is_cpu &&
-          /* this needs substantial perf tuning */
-          screen->info.driver_props.driverID != VK_DRIVER_ID_MESA_TURNIP &&
           screen->info.have_KHR_8bit_storage &&
           screen->info.have_KHR_16bit_storage &&
           screen->info.have_KHR_shader_float16_int8)
@@ -1159,10 +1157,8 @@ zink_get_shader_param(struct pipe_screen *pscreen,
          /* intel drivers report fewer components, but it's a value that's compatible
           * with what we need for GL, so we can still force a conformant value here
           */
-         if (screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA ||
-             screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS ||
-             (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_VENUS
-              && screen->info.props.vendorID == 0x8086))
+         if (zink_driverid(screen) == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA ||
+             zink_driverid(screen) == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS)
             return 32;
          max = screen->info.props.limits.maxFragmentInputComponents / 4;
          break;
@@ -1560,10 +1556,8 @@ zink_destroy_screen(struct pipe_screen *pscreen)
 {
    struct zink_screen *screen = zink_screen(pscreen);
 
-#ifdef HAVE_RENDERDOC_APP_H
    if (screen->renderdoc_capture_all && p_atomic_dec_zero(&num_screens))
       screen->renderdoc_api->EndFrameCapture(RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE(screen->instance), NULL);
-#endif
 
    hash_table_foreach(&screen->dts, entry)
       zink_kopper_deinit_displaytarget(screen, entry->data);
@@ -1836,14 +1830,14 @@ zink_flush_frontbuffer(struct pipe_screen *pscreen,
       zink_kopper_acquire(ctx, res, UINT64_MAX);
       ctx->needs_present = res;
       /* set batch usage to submit acquire semaphore */
-      zink_batch_resource_usage_set(&ctx->batch, res, true, false);
+      zink_batch_resource_usage_set(ctx->bs, res, true, false);
       /* ensure the resource is set up to present garbage */
       ctx->base.flush_resource(&ctx->base, pres);
    }
 
    /* handle any outstanding acquire submits (not just from above) */
-   if (ctx->batch.swapchain || ctx->needs_present) {
-      ctx->batch.has_work = true;
+   if (ctx->swapchain || ctx->needs_present) {
+      ctx->bs->has_work = true;
       pctx->flush(pctx, NULL, PIPE_FLUSH_END_OF_FRAME);
       if (ctx->last_batch_state && screen->threaded_submit) {
          struct zink_batch_state *bs = ctx->last_batch_state;
@@ -2304,7 +2298,7 @@ retry:
 static void
 setup_renderdoc(struct zink_screen *screen)
 {
-#ifdef HAVE_RENDERDOC_APP_H
+#ifndef _WIN32
    const char *capture_id = debug_get_option("ZINK_RENDERDOC", NULL);
    if (!capture_id)
       return;
@@ -2763,7 +2757,7 @@ check_base_requirements(struct zink_screen *screen)
 {
    if (zink_debug & ZINK_DEBUG_QUIET)
       return;
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_V3DV) {
+   if (zink_driverid(screen) == VK_DRIVER_ID_MESA_V3DV) {
       /* v3dv doesn't support straddling i/o, but zink doesn't do that so this is effectively supported:
        * don't spam errors in this case
        */
@@ -2794,7 +2788,7 @@ check_base_requirements(struct zink_screen *screen)
       CHECK_OR_PRINT(have_EXT_line_rasterization);
       fprintf(stderr, "\n");
    }
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_V3DV) {
+   if (zink_driverid(screen) == VK_DRIVER_ID_MESA_V3DV) {
       screen->info.feats12.scalarBlockLayout = false;
       screen->info.have_EXT_scalar_block_layout = false;
    }
@@ -2815,15 +2809,14 @@ static void
 init_driver_workarounds(struct zink_screen *screen)
 {
    /* enable implicit sync for all non-mesa drivers */
-   screen->driver_workarounds.implicit_sync = true;
-   switch (screen->info.driver_props.driverID) {
+   screen->driver_workarounds.implicit_sync = screen->info.driver_props.driverID != VK_DRIVER_ID_MESA_VENUS;
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_RADV:
    case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_TURNIP:
    case VK_DRIVER_ID_MESA_V3DV:
    case VK_DRIVER_ID_MESA_PANVK:
-   case VK_DRIVER_ID_MESA_VENUS:
       screen->driver_workarounds.implicit_sync = false;
       break;
    default:
@@ -2839,7 +2832,7 @@ init_driver_workarounds(struct zink_screen *screen)
       /* CWE usage needs EDS1 */
       screen->info.have_EXT_color_write_enable = false;
    }
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+   if (zink_driverid(screen) == VK_DRIVER_ID_AMD_PROPRIETARY)
       /* this completely breaks xfb somehow */
       screen->info.have_EXT_extended_dynamic_state2 = false;
    /* EDS3 is only used with EDS2 */
@@ -2881,8 +2874,8 @@ init_driver_workarounds(struct zink_screen *screen)
                                                         (!(zink_debug & ZINK_DEBUG_GPL) ||
                                                          screen->info.gpl_props.graphicsPipelineLibraryFastLinking ||
                                                          screen->is_cpu);
-   screen->driver_workarounds.broken_l4a4 = screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_TURNIP) {
+   screen->driver_workarounds.broken_l4a4 = zink_driverid(screen) == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
+   if (zink_driverid(screen) == VK_DRIVER_ID_MESA_TURNIP) {
       /* performance */
       screen->info.border_color_feats.customBorderColorWithoutFormat = VK_FALSE;
    }
@@ -2900,7 +2893,7 @@ init_driver_workarounds(struct zink_screen *screen)
       screen->driver_workarounds.no_linestipple = true;
    }
 
-   if (screen->info.driver_props.driverID ==
+   if (zink_driverid(screen) ==
        VK_DRIVER_ID_IMAGINATION_PROPRIETARY) {
       assert(screen->info.feats.features.geometryShader);
       screen->driver_workarounds.no_linesmooth = true;
@@ -2910,7 +2903,7 @@ init_driver_workarounds(struct zink_screen *screen)
     * gl_PointSize + glPolygonMode(..., GL_LINE), in the imagination
     * proprietary driver.
     */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
       screen->driver_workarounds.no_hw_gl_point = true;
       break;
@@ -2919,23 +2912,22 @@ init_driver_workarounds(struct zink_screen *screen)
       break;
    }
 
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE || 
-       screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY || 
-       screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY || 
-       screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_RADV)
+   if (zink_driverid(screen) == VK_DRIVER_ID_AMD_OPEN_SOURCE || 
+       zink_driverid(screen) == VK_DRIVER_ID_AMD_PROPRIETARY || 
+       zink_driverid(screen) == VK_DRIVER_ID_NVIDIA_PROPRIETARY || 
+       zink_driverid(screen) == VK_DRIVER_ID_MESA_RADV)
       screen->driver_workarounds.z24_unscaled_bias = 1<<23;
    else
       screen->driver_workarounds.z24_unscaled_bias = 1<<24;
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY)
+   if (zink_driverid(screen) == VK_DRIVER_ID_NVIDIA_PROPRIETARY)
       screen->driver_workarounds.z16_unscaled_bias = 1<<15;
    else
       screen->driver_workarounds.z16_unscaled_bias = 1<<16;
    /* these drivers don't use VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT, so it can always be set */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_RADV:
    case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:
    case VK_DRIVER_ID_MESA_LLVMPIPE:
-   case VK_DRIVER_ID_MESA_VENUS:
    case VK_DRIVER_ID_NVIDIA_PROPRIETARY:
    case VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS:
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
@@ -2945,9 +2937,8 @@ init_driver_workarounds(struct zink_screen *screen)
       break;
    }
    /* these drivers don't use VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT, so it can always be set */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_LLVMPIPE:
-   case VK_DRIVER_ID_MESA_VENUS:
    case VK_DRIVER_ID_NVIDIA_PROPRIETARY:
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
       screen->driver_workarounds.always_feedback_loop_zs = screen->info.have_EXT_attachment_feedback_loop_layout;
@@ -2962,7 +2953,7 @@ init_driver_workarounds(struct zink_screen *screen)
    /* these drivers cannot handle OOB gl_Layer values, and therefore need clamping in shader.
     * TODO: Vulkan extension that details whether vulkan driver can handle OOB layer values
     */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
       screen->driver_workarounds.needs_sanitised_layer = true;
       break;
@@ -2973,7 +2964,7 @@ init_driver_workarounds(struct zink_screen *screen)
    /* these drivers will produce undefined results when using swizzle 1 with combined z/s textures
     * TODO: use a future device property when available
     */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
    case VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA:
       screen->driver_workarounds.needs_zs_shader_swizzle = true;
@@ -2997,7 +2988,7 @@ init_driver_workarounds(struct zink_screen *screen)
    }
 
    /* these drivers benefit from renderpass optimization */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_TURNIP:
    case VK_DRIVER_ID_MESA_PANVK:
@@ -3006,6 +2997,7 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_QUALCOMM_PROPRIETARY:
    case VK_DRIVER_ID_BROADCOM_PROPRIETARY:
    case VK_DRIVER_ID_ARM_PROPRIETARY:
+   case VK_DRIVER_ID_MESA_HONEYKRISP:
       screen->driver_workarounds.track_renderpasses = true; //screen->info.primgen_feats.primitivesGeneratedQueryWithRasterizerDiscard
       break;
    default:
@@ -3016,20 +3008,9 @@ init_driver_workarounds(struct zink_screen *screen)
    else if (zink_debug & ZINK_DEBUG_NORP)
       screen->driver_workarounds.track_renderpasses = false;
 
-   /* these drivers can't optimize non-overlapping copy ops */
-   switch (screen->info.driver_props.driverID) {
-   case VK_DRIVER_ID_MESA_TURNIP:
-   case VK_DRIVER_ID_QUALCOMM_PROPRIETARY:
-      screen->driver_workarounds.broken_cache_semantics = true;
-      break;
-   default:
-      break;
-   }
-
    /* these drivers can successfully do INVALID <-> LINEAR dri3 modifier swap */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_TURNIP:
-   case VK_DRIVER_ID_MESA_VENUS:
    case VK_DRIVER_ID_MESA_NVK:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
@@ -3038,7 +3019,7 @@ init_driver_workarounds(struct zink_screen *screen)
    }
 
    /* these drivers have no difference between unoptimized and optimized shader compilation */
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_LLVMPIPE:
       screen->driver_workarounds.disable_optimized_compile = true;
       break;
@@ -3048,12 +3029,25 @@ init_driver_workarounds(struct zink_screen *screen)
       break;
    }
 
-   switch (screen->info.driver_props.driverID) {
+   switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_RADV:
    case VK_DRIVER_ID_AMD_OPEN_SOURCE:
    case VK_DRIVER_ID_AMD_PROPRIETARY:
       /* this has bad perf on AMD */
       screen->info.have_KHR_push_descriptor = false;
+      /* Interpolation is not consistent between two triangles of a rectangle. */
+      screen->driver_workarounds.inconsistent_interpolation = true;
+      break;
+   default:
+      break;
+   }
+
+   screen->driver_workarounds.can_2d_view_sparse = true;
+   switch (zink_driverid(screen)) {
+   case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:
+   case VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS:
+      /* this does wild things to block shapes */
+      screen->driver_workarounds.can_2d_view_sparse = false;
       break;
    default:
       break;
@@ -3093,7 +3087,7 @@ static void
 init_optimal_keys(struct zink_screen *screen)
 {
    /* assume that anyone who knows enough to enable optimal_keys on turnip doesn't care about missing line stipple */
-   if (zink_debug & ZINK_DEBUG_OPTIMAL_KEYS && screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_TURNIP)
+   if (zink_debug & ZINK_DEBUG_OPTIMAL_KEYS && zink_driverid(screen) == VK_DRIVER_ID_MESA_TURNIP)
       zink_debug |= ZINK_DEBUG_QUIET;
    screen->optimal_keys = !screen->need_decompose_attrs &&
                           screen->info.have_EXT_non_seamless_cube_map &&
@@ -3143,17 +3137,6 @@ init_optimal_keys(struct zink_screen *screen)
       screen->info.have_EXT_shader_object = false;
    if (screen->info.have_EXT_shader_object)
       screen->have_full_ds3 = true;
-   if (zink_debug & ZINK_DEBUG_DGC) {
-      if (!screen->optimal_keys) {
-         mesa_loge("zink: can't DGC without optimal_keys!");
-         zink_debug &= ~ZINK_DEBUG_DGC;
-      } else {
-         screen->info.have_EXT_multi_draw = false;
-         screen->info.have_EXT_shader_object = false;
-         screen->info.have_EXT_graphics_pipeline_library = false;
-         screen->info.have_EXT_vertex_input_dynamic_state = false;
-      }
-   }
 }
 
 static struct disk_cache *
@@ -3416,13 +3399,6 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
          mesa_loge("zink: KHR_timeline_semaphore is required");
       goto fail;
    }
-   if (zink_debug & ZINK_DEBUG_DGC) {
-      if (!screen->info.have_NV_device_generated_commands) {
-         if (!screen->driver_name_is_inferred)
-            mesa_loge("zink: can't use DGC without NV_device_generated_commands");
-         goto fail;
-      }
-   }
 
    if (zink_debug & ZINK_DEBUG_MEM) {
       simple_mtx_init(&screen->debug_mem_lock, mtx_plain);
@@ -3559,7 +3535,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct zink_transfer), 16);
 
-   screen->driconf.inline_uniforms = debug_get_bool_option("ZINK_INLINE_UNIFORMS", screen->is_cpu) && !(zink_debug & ZINK_DEBUG_DGC);
+   screen->driconf.inline_uniforms = debug_get_bool_option("ZINK_INLINE_UNIFORMS", screen->is_cpu);
 
    screen->total_video_mem = get_video_mem(screen);
    screen->clamp_video_mem = screen->total_video_mem * 0.8;
@@ -3767,7 +3743,7 @@ zink_drm_create_screen(int fd, const struct pipe_screen_config *config)
    return &ret->base;
 }
 
-void zink_stub_function_not_loaded()
+void VKAPI_PTR zink_stub_function_not_loaded()
 {
    /* this will be used by the zink_verify_*_extensions() functions on a
     * release build

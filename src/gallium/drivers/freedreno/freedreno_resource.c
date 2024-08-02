@@ -1263,6 +1263,10 @@ get_best_layout(struct fd_screen *screen,
    if (tmpl->target == PIPE_BUFFER)
       return LINEAR;
 
+   if ((tmpl->usage == PIPE_USAGE_STAGING) &&
+       !util_format_is_depth_or_stencil(tmpl->format))
+      return LINEAR;
+
    if (tmpl->bind & PIPE_BIND_LINEAR) {
       if (tmpl->usage != PIPE_USAGE_STAGING)
          perf_debug("%" PRSC_FMT ": forcing linear: bind flags",

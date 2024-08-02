@@ -37,10 +37,10 @@ brw_fs_lower_constant_loads(fs_visitor &s)
 
          const unsigned block_sz = 64; /* Fetch one cacheline at a time. */
          const fs_builder ubld = ibld.exec_all().group(block_sz / 4, 0);
-         const fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+         const brw_reg dst = ubld.vgrf(BRW_TYPE_UD);
          const unsigned base = pull_index * 4;
 
-         fs_reg srcs[PULL_UNIFORM_CONSTANT_SRCS];
+         brw_reg srcs[PULL_UNIFORM_CONSTANT_SRCS];
          srcs[PULL_UNIFORM_CONSTANT_SRC_SURFACE] = brw_imm_ud(index);
          srcs[PULL_UNIFORM_CONSTANT_SRC_OFFSET]  = brw_imm_ud(base & ~(block_sz - 1));
          srcs[PULL_UNIFORM_CONSTANT_SRC_SIZE]    = brw_imm_ud(block_sz);
@@ -66,7 +66,7 @@ brw_fs_lower_constant_loads(fs_visitor &s)
 
          s.VARYING_PULL_CONSTANT_LOAD(ibld, inst->dst,
                                       brw_imm_ud(index),
-                                      fs_reg() /* surface_handle */,
+                                      brw_reg() /* surface_handle */,
                                       inst->src[1],
                                       pull_index * 4, 4, 1);
          inst->remove(block);
@@ -90,7 +90,7 @@ brw_fs_lower_load_payload(fs_visitor &s)
 
       assert(inst->dst.file == VGRF);
       assert(inst->saturate == false);
-      fs_reg dst = inst->dst;
+      brw_reg dst = inst->dst;
 
       const fs_builder ibld(&s, block, inst);
       const fs_builder ubld = ibld.exec_all();
@@ -105,8 +105,8 @@ brw_fs_lower_load_payload(fs_visitor &s)
             2 : 1;
 
          if (inst->src[i].file != BAD_FILE)
-            ubld.group(8 * n, 0).MOV(retype(dst, BRW_REGISTER_TYPE_UD),
-                                     retype(inst->src[i], BRW_REGISTER_TYPE_UD));
+            ubld.group(8 * n, 0).MOV(retype(dst, BRW_TYPE_UD),
+                                     retype(inst->src[i], BRW_TYPE_UD));
 
          dst = byte_offset(dst, n * REG_SIZE);
          i += n;
@@ -122,6 +122,87 @@ brw_fs_lower_load_payload(fs_visitor &s)
 
       inst->remove(block);
       progress = true;
+   }
+
+   if (progress)
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+
+   return progress;
+}
+
+/**
+ * Lower CSEL with unsupported types to CMP+SEL.
+ *
+ * Or, for unsigned ==/!= comparisons, simply change the types.
+ */
+bool
+brw_fs_lower_csel(fs_visitor &s)
+{
+   const intel_device_info *devinfo = s.devinfo;
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
+      if (inst->opcode != BRW_OPCODE_CSEL)
+         continue;
+
+      bool supported = false;
+      enum brw_reg_type orig_type = inst->src[2].type;
+      enum brw_reg_type new_type = orig_type;
+
+      switch (orig_type) {
+      case BRW_TYPE_F:
+         /* Gfx9 CSEL can only do F */
+         supported = true;
+         break;
+      case BRW_TYPE_HF:
+      case BRW_TYPE_W:
+      case BRW_TYPE_D:
+         /* Gfx11+ CSEL can do HF, W, and D.  Note that we can't simply
+          * retype integer ==/!= comparisons as float on earlier hardware
+          * because it breaks for 0x8000000 and 0 (-0.0 == 0.0).
+          */
+         supported = devinfo->ver >= 11;
+         break;
+      case BRW_TYPE_UW:
+      case BRW_TYPE_UD:
+         /* CSEL doesn't support UW/UD but we can simply retype to use the
+          * signed types when comparing with == or !=.
+          */
+         supported = devinfo->ver >= 11 &&
+                     (inst->conditional_mod == BRW_CONDITIONAL_EQ ||
+                      inst->conditional_mod == BRW_CONDITIONAL_NEQ);
+
+         /* Bspec 47408, Gfx125+ CSEL does support the both signed and unsigned
+          * integer types.
+          */
+         if (devinfo->verx10 < 125) {
+            new_type = inst->src[2].type == BRW_TYPE_UD ?
+                       BRW_TYPE_D : BRW_TYPE_W;
+         }
+         break;
+      default:
+         break;
+      }
+
+      if (!supported) {
+         const fs_builder ibld(&s, block, inst);
+
+         /* CSEL: dst = src2 <op> 0 ? src0 : src1 */
+         brw_reg zero = brw_imm_reg(orig_type);
+         ibld.CMP(retype(brw_null_reg(), orig_type),
+                  inst->src[2], zero, inst->conditional_mod);
+
+         inst->opcode = BRW_OPCODE_SEL;
+         inst->predicate = BRW_PREDICATE_NORMAL;
+         inst->conditional_mod = BRW_CONDITIONAL_NONE;
+         inst->resize_sources(2);
+         progress = true;
+      } else if (new_type != orig_type) {
+         inst->src[0].type = new_type;
+         inst->src[1].type = new_type;
+         inst->src[2].type = new_type;
+         progress = true;
+      }
    }
 
    if (progress)
@@ -167,9 +248,9 @@ brw_fs_lower_sub_sat(fs_visitor &s)
           * same situations as #1 above.  It is further limited by only
           * allowing UD sources.
           */
-         if (inst->exec_size == 8 && inst->src[0].type != BRW_REGISTER_TYPE_Q &&
-             inst->src[0].type != BRW_REGISTER_TYPE_UQ) {
-            fs_reg acc = retype(brw_acc_reg(inst->exec_size),
+         if (inst->exec_size == 8 && inst->src[0].type != BRW_TYPE_Q &&
+             inst->src[0].type != BRW_TYPE_UQ) {
+            brw_reg acc = retype(brw_acc_reg(inst->exec_size),
                                 inst->src[1].type);
 
             ibld.MOV(acc, inst->src[1]);
@@ -180,22 +261,16 @@ brw_fs_lower_sub_sat(fs_visitor &s)
             /* tmp = src1 >> 1;
              * dst = add.sat(add.sat(src0, -tmp), -(src1 - tmp));
              */
-            fs_reg tmp1 = ibld.vgrf(inst->src[0].type);
-            fs_reg tmp2 = ibld.vgrf(inst->src[0].type);
-            fs_reg tmp3 = ibld.vgrf(inst->src[0].type);
             fs_inst *add;
 
-            ibld.SHR(tmp1, inst->src[1], brw_imm_d(1));
+            brw_reg tmp = ibld.vgrf(inst->src[0].type);
+            ibld.SHR(tmp, inst->src[1], brw_imm_d(1));
 
-            add = ibld.ADD(tmp2, inst->src[1], tmp1);
-            add->src[1].negate = true;
-
-            add = ibld.ADD(tmp3, inst->src[0], tmp1);
-            add->src[1].negate = true;
+            brw_reg s1_sub_t = ibld.ADD(inst->src[1], negate(tmp));
+            brw_reg sat_s0_sub_t = ibld.ADD(inst->src[0], negate(tmp), &add);
             add->saturate = true;
 
-            add = ibld.ADD(inst->dst, tmp3, tmp2);
-            add->src[1].negate = true;
+            add = ibld.ADD(inst->dst, sat_s0_sub_t, negate(s1_sub_t));
             add->saturate = true;
          } else {
             /* a > b ? a - b : 0 */
@@ -256,8 +331,8 @@ brw_fs_lower_barycentrics(fs_visitor &s)
       switch (inst->opcode) {
       case BRW_OPCODE_PLN: {
          assert(inst->exec_size == 16);
-         const fs_reg tmp = ibld.vgrf(inst->src[1].type, 2);
-         fs_reg srcs[4];
+         const brw_reg tmp = ibld.vgrf(inst->src[1].type, 2);
+         brw_reg srcs[4];
 
          for (unsigned i = 0; i < ARRAY_SIZE(srcs); i++)
             srcs[i] = horiz_offset(offset(inst->src[1], ibld, i % 2),
@@ -273,7 +348,7 @@ brw_fs_lower_barycentrics(fs_visitor &s)
       case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
       case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET: {
          assert(inst->exec_size == 16);
-         const fs_reg tmp = ibld.vgrf(inst->dst.type, 2);
+         const brw_reg tmp = ibld.vgrf(inst->dst.type, 2);
 
          for (unsigned i = 0; i < 2; i++) {
             for (unsigned g = 0; g < inst->exec_size / 8; g++) {
@@ -311,8 +386,8 @@ lower_derivative(fs_visitor &s, bblock_t *block, fs_inst *inst,
                  unsigned swz0, unsigned swz1)
 {
    const fs_builder ubld = fs_builder(&s, block, inst).exec_all();
-   const fs_reg tmp0 = ubld.vgrf(inst->src[0].type);
-   const fs_reg tmp1 = ubld.vgrf(inst->src[0].type);
+   const brw_reg tmp0 = ubld.vgrf(inst->src[0].type);
+   const brw_reg tmp1 = ubld.vgrf(inst->src[0].type);
 
    ubld.emit(SHADER_OPCODE_QUAD_SWIZZLE, tmp0, inst->src[0], brw_imm_ud(swz0));
    ubld.emit(SHADER_OPCODE_QUAD_SWIZZLE, tmp1, inst->src[0], brw_imm_ud(swz1));
@@ -394,11 +469,11 @@ brw_fs_lower_find_live_channel(fs_visitor &s)
 
       const fs_builder ubld = fs_builder(&s, block, inst).exec_all().group(1, 0);
 
-      fs_reg exec_mask = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      brw_reg exec_mask = ubld.vgrf(BRW_TYPE_UD);
       ubld.UNDEF(exec_mask);
       ubld.emit(SHADER_OPCODE_READ_ARCH_REG, exec_mask,
                                              retype(brw_mask_reg(0),
-                                                    BRW_REGISTER_TYPE_UD));
+                                                    BRW_TYPE_UD));
 
       /* ce0 doesn't consider the thread dispatch mask (DMask or VMask),
        * so combine the execution and dispatch masks to obtain the true mask.
@@ -408,11 +483,11 @@ brw_fs_lower_find_live_channel(fs_visitor &s)
        * will appear at the front of the mask.
        */
       if (!(first && packed_dispatch)) {
-         fs_reg mask = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+         brw_reg mask = ubld.vgrf(BRW_TYPE_UD);
          ubld.UNDEF(mask);
          ubld.emit(SHADER_OPCODE_READ_ARCH_REG, mask,
                                                 retype(brw_sr0_reg(vmask ? 3 : 2),
-                                                       BRW_REGISTER_TYPE_UD));
+                                                       BRW_TYPE_UD));
 
          /* Quarter control has the effect of magically shifting the value of
           * ce0 so you'll get the first/last active channel relative to the
@@ -431,7 +506,7 @@ brw_fs_lower_find_live_channel(fs_visitor &s)
          break;
 
       case SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL: {
-         fs_reg tmp = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+         brw_reg tmp = ubld.vgrf(BRW_TYPE_UD);
          ubld.UNDEF(tmp);
          ubld.LZD(tmp, exec_mask);
          ubld.ADD(inst->dst, negate(tmp), brw_imm_uw(31));
@@ -478,14 +553,15 @@ brw_fs_lower_sends_overlapping_payload(fs_visitor &s)
          const unsigned arg = inst->mlen < inst->ex_mlen ? 2 : 3;
          const unsigned len = MIN2(inst->mlen, inst->ex_mlen);
 
-         fs_reg tmp = fs_reg(VGRF, s.alloc.allocate(len),
-                             BRW_REGISTER_TYPE_UD);
+         brw_reg tmp = brw_vgrf(s.alloc.allocate(len),
+                               BRW_TYPE_UD);
+
          /* Sadly, we've lost all notion of channels and bit sizes at this
           * point.  Just WE_all it.
           */
          const fs_builder ibld = fs_builder(&s, block, inst).exec_all().group(16, 0);
-         fs_reg copy_src = retype(inst->src[arg], BRW_REGISTER_TYPE_UD);
-         fs_reg copy_dst = tmp;
+         brw_reg copy_src = retype(inst->src[arg], BRW_TYPE_UD);
+         brw_reg copy_dst = tmp;
          for (unsigned i = 0; i < len; i += 2) {
             if (len == i + 1) {
                /* Only one register left; do SIMD8 */
@@ -518,8 +594,8 @@ brw_fs_lower_3src_null_dest(fs_visitor &s)
 
    foreach_block_and_inst_safe (block, fs_inst, inst, s.cfg) {
       if (inst->is_3src(s.compiler) && inst->dst.is_null()) {
-         inst->dst = fs_reg(VGRF, s.alloc.allocate(s.dispatch_width / 8),
-                            inst->dst.type);
+         inst->dst = brw_vgrf(s.alloc.allocate(s.dispatch_width / 8),
+                              inst->dst.type);
          progress = true;
       }
    }
@@ -535,9 +611,9 @@ static bool
 unsupported_64bit_type(const intel_device_info *devinfo,
                        enum brw_reg_type type)
 {
-   return (!devinfo->has_64bit_float && type == BRW_REGISTER_TYPE_DF) ||
-          (!devinfo->has_64bit_int && (type == BRW_REGISTER_TYPE_UQ ||
-                                       type == BRW_REGISTER_TYPE_Q));
+   return (!devinfo->has_64bit_float && type == BRW_TYPE_DF) ||
+          (!devinfo->has_64bit_int && (type == BRW_TYPE_UQ ||
+                                       type == BRW_TYPE_Q));
 }
 
 /**
@@ -562,8 +638,7 @@ brw_fs_lower_alu_restrictions(fs_visitor &s)
             assert(!inst->src[0].negate);
             const brw::fs_builder ibld(&s, block, inst);
 
-            enum brw_reg_type type =
-               brw_reg_type_from_bit_size(32, inst->dst.type);
+            enum brw_reg_type type = brw_type_with_size(inst->dst.type, 32);
 
             if (!inst->is_partial_write())
                ibld.emit_undef_for_dst(inst);
@@ -587,8 +662,7 @@ brw_fs_lower_alu_restrictions(fs_visitor &s)
             assert(inst->conditional_mod == BRW_CONDITIONAL_NONE);
             const brw::fs_builder ibld(&s, block, inst);
 
-            enum brw_reg_type type =
-               brw_reg_type_from_bit_size(32, inst->dst.type);
+            enum brw_reg_type type = brw_type_with_size(inst->dst.type, 32);
 
             if (!inst->is_partial_write())
                ibld.emit_undef_for_dst(inst);
@@ -622,7 +696,7 @@ brw_fs_lower_alu_restrictions(fs_visitor &s)
 
 static void
 brw_fs_lower_vgrf_to_fixed_grf(const struct intel_device_info *devinfo, fs_inst *inst,
-                               fs_reg *reg, bool compressed)
+                               brw_reg *reg, bool compressed)
 {
    if (reg->file != VGRF)
       return;
@@ -633,7 +707,7 @@ brw_fs_lower_vgrf_to_fixed_grf(const struct intel_device_info *devinfo, fs_inst 
       new_reg = brw_vec1_grf(reg->nr, 0);
    } else if (reg->stride > 4) {
       assert(reg != &inst->dst);
-      assert(reg->stride * type_sz(reg->type) <= REG_SIZE);
+      assert(reg->stride * brw_type_size_bytes(reg->type) <= REG_SIZE);
       new_reg = brw_vecn_grf(1, reg->nr, 0);
       new_reg = stride(new_reg, reg->stride, 1, 0);
    } else {
@@ -645,7 +719,8 @@ brw_fs_lower_vgrf_to_fixed_grf(const struct intel_device_info *devinfo, fs_inst 
        *
        * The maximum width value that could satisfy this restriction is:
        */
-      const unsigned reg_width = REG_SIZE / (reg->stride * type_sz(reg->type));
+      const unsigned reg_width =
+         REG_SIZE / (reg->stride * brw_type_size_bytes(reg->type));
 
       /* Because the hardware can only split source regions at a whole
        * multiple of width during decompression (i.e. vertically), clamp
@@ -709,4 +784,117 @@ brw_fs_lower_vgrfs_to_fixed_grfs(fs_visitor &s)
 
    s.invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
                          DEPENDENCY_VARIABLES);
+}
+
+bool
+brw_fs_lower_load_subgroup_invocation(fs_visitor &s)
+{
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
+      if (inst->opcode != SHADER_OPCODE_LOAD_SUBGROUP_INVOCATION)
+         continue;
+
+      const fs_builder abld =
+         fs_builder(&s, block, inst).annotate("SubgroupInvocation", NULL);
+      const fs_builder ubld8 = abld.group(8, 0).exec_all();
+
+      if (inst->exec_size == 8) {
+         assert(inst->dst.type == BRW_TYPE_UD);
+         brw_reg uw = retype(inst->dst, BRW_TYPE_UW);
+         ubld8.MOV(uw, brw_imm_v(0x76543210));
+         ubld8.MOV(inst->dst, uw);
+      } else {
+         assert(inst->dst.type == BRW_TYPE_UW);
+         abld.UNDEF(inst->dst);
+         ubld8.MOV(inst->dst, brw_imm_v(0x76543210));
+         ubld8.ADD(byte_offset(inst->dst, 16), inst->dst, brw_imm_uw(8u));
+         if (inst->exec_size > 16) {
+            const fs_builder ubld16 = abld.group(16, 0).exec_all();
+            ubld16.ADD(byte_offset(inst->dst, 32), inst->dst, brw_imm_uw(16u));
+         }
+      }
+
+      inst->remove(block);
+      progress = true;
+
+      /* Currently this is only ever emitted once, so there's no point in
+       * continuing to look for more cases.  Drop if we ever re-emit it.
+       */
+      break;
+   }
+
+   if (progress)
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+
+   return progress;
+}
+
+bool
+brw_fs_lower_indirect_mov(fs_visitor &s)
+{
+   bool progress = false;
+
+   if (s.devinfo->ver < 20)
+      return progress;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
+      if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT) {
+         if (brw_type_size_bytes(inst->src[0].type) > 1 &&
+             brw_type_size_bytes(inst->dst.type) > 1) {
+            continue;
+         }
+
+         assert(brw_type_size_bytes(inst->src[0].type) ==
+                brw_type_size_bytes(inst->dst.type));
+
+         const fs_builder ibld(&s, block, inst);
+
+         /* Extract unaligned part */
+         uint16_t extra_offset = inst->src[0].offset & 0x1;
+         brw_reg offset = ibld.ADD(inst->src[1], brw_imm_uw(extra_offset));
+
+         /* Check if offset is odd or even so that we can choose either high or
+          * low byte from the result.
+          */
+         brw_reg is_odd = ibld.AND(offset, brw_imm_ud(1));
+
+         /* Make sure offset is word (2-bytes) aligned */
+         offset = ibld.AND(offset, brw_imm_uw(~1));
+
+         /* Indirect addressing(vx1 and vxh) not supported with UB/B datatype for
+          * Src0, so change data type for src0 and dst to UW.
+          */
+         brw_reg dst = ibld.vgrf(BRW_TYPE_UW);
+
+         /* Substract unaligned offset from src0 offset since we already
+          * accounted unaligned part in the indirect byte offset.
+          */
+         brw_reg start = retype(inst->src[0], BRW_TYPE_UW);
+         start.offset &= ~extra_offset;
+
+         /* Adjust length to account extra offset. */
+         assert(inst->src[2].file == IMM);
+         brw_reg length = brw_imm_ud(inst->src[2].ud + extra_offset);
+
+         ibld.emit(SHADER_OPCODE_MOV_INDIRECT, dst, start, offset, length);
+
+         /* Select high byte if offset is odd otherwise select low byte. */
+         brw_reg lo = ibld.AND(dst, brw_imm_uw(0xff));
+         brw_reg hi = ibld.SHR(dst, brw_imm_uw(8));
+         brw_reg result = ibld.vgrf(BRW_TYPE_UW);
+         ibld.CSEL(result, hi, lo, is_odd, BRW_CONDITIONAL_NZ);
+
+         /* Extra MOV needed here to convert back to the corresponding B type */
+         ibld.MOV(inst->dst, result);
+
+         inst->remove(block);
+         progress = true;
+      }
+   }
+
+   if (progress)
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+
+   return progress;
 }

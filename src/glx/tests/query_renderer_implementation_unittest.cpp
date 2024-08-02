@@ -29,7 +29,7 @@
 #include "glxclient.h"
 #include "glx_error.h"
 #include "dri2.h"
-#include "GL/internal/dri_interface.h"
+#include "mesa_interface.h"
 #include "dri2_priv.h"
 
 namespace {

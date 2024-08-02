@@ -152,9 +152,9 @@ fd_set_constant_buffer(struct pipe_context *pctx, enum pipe_shader_type shader,
    util_copy_constant_buffer(&so->cb[index], cb, take_ownership);
 
    /* Note that gallium frontends can unbind constant buffers by
-    * passing NULL here.
+    * passing a NULL cb, or a cb with no buffer:
     */
-   if (unlikely(!cb)) {
+   if (!cb || !(cb->user_buffer || cb->buffer)) {
       so->enabled_mask &= ~(1 << index);
       return;
    }

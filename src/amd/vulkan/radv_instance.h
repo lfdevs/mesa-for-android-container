@@ -12,7 +12,7 @@
 #define RADV_INSTANCE_H
 
 #include "util/xmlconfig.h"
-
+#include "radv_radeon_winsys.h"
 #include "vk_instance.h"
 
 #ifdef ANDROID_STRICT
@@ -39,6 +39,7 @@ struct radv_instance {
 
    uint64_t debug_flags;
    uint64_t perftest_flags;
+   enum radeon_ctx_pstate profile_pstate;
 
    struct {
       struct driOptionCache options;

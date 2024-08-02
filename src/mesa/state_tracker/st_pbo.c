@@ -539,6 +539,13 @@ create_fs(struct st_context *st, bool download,
          [ST_PBO_CONVERT_SINT] = GLSL_TYPE_INT,
          [ST_PBO_CONVERT_SINT_TO_UINT] = GLSL_TYPE_UINT,
       };
+      static const nir_alu_type nir_types[] = {
+         [ST_PBO_CONVERT_FLOAT] = nir_type_float,
+         [ST_PBO_CONVERT_UINT] = nir_type_uint,
+         [ST_PBO_CONVERT_UINT_TO_SINT] = nir_type_int,
+         [ST_PBO_CONVERT_SINT] = nir_type_int,
+         [ST_PBO_CONVERT_SINT_TO_UINT] = nir_type_uint,
+      };
       nir_variable *img_var =
          nir_variable_create(b.shader, nir_var_image,
                              glsl_image_type(GLSL_SAMPLER_DIM_BUF, false,
@@ -554,6 +561,7 @@ create_fs(struct st_context *st, bool download,
                             zero,
                             result,
                             nir_imm_int(&b, 0),
+                            .src_type = nir_types[conversion],
                             .image_dim = GLSL_SAMPLER_DIM_BUF);
    } else {
       nir_variable *color =

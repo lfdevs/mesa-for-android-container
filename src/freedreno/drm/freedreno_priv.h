@@ -52,6 +52,7 @@
 #include "freedreno_common.h"
 #include "freedreno_dev_info.h"
 #include "freedreno_drmif.h"
+#include "freedreno_rd_output.h"
 #include "freedreno_ringbuffer.h"
 
 extern simple_mtx_t table_lock;
@@ -272,6 +273,8 @@ struct fd_device {
    simple_mtx_t suballoc_lock;
 
    struct util_queue submit_queue;
+
+   struct fd_rd_output rd;
 };
 
 static inline bool
@@ -464,6 +467,7 @@ struct fd_bo_funcs {
 
 void fd_bo_add_fence(struct fd_bo *bo, struct fd_fence *fence);
 void *fd_bo_map_os_mmap(struct fd_bo *bo);
+void *__fd_bo_map(struct fd_bo *bo);
 
 enum fd_bo_state {
    FD_BO_STATE_IDLE,

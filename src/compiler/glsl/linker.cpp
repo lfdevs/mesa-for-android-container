@@ -124,69 +124,6 @@ public:
 };
 
 
-class array_resize_visitor : public deref_type_updater {
-public:
-   using deref_type_updater::visit;
-
-   unsigned num_vertices;
-   gl_shader_program *prog;
-   gl_shader_stage stage;
-
-   array_resize_visitor(unsigned num_vertices,
-                        gl_shader_program *prog,
-                        gl_shader_stage stage)
-   {
-      this->num_vertices = num_vertices;
-      this->prog = prog;
-      this->stage = stage;
-   }
-
-   virtual ~array_resize_visitor()
-   {
-      /* empty */
-   }
-
-   virtual ir_visitor_status visit(ir_variable *var)
-   {
-      if (!glsl_type_is_array(var->type) || var->data.mode != ir_var_shader_in ||
-          var->data.patch)
-         return visit_continue;
-
-      unsigned size = var->type->length;
-
-      if (stage == MESA_SHADER_GEOMETRY) {
-         /* Generate a link error if the shader has declared this array with
-          * an incorrect size.
-          */
-         if (!var->data.implicit_sized_array &&
-             size && size != this->num_vertices) {
-            linker_error(this->prog, "size of array %s declared as %u, "
-                         "but number of input vertices is %u\n",
-                         var->name, size, this->num_vertices);
-            return visit_continue;
-         }
-
-         /* Generate a link error if the shader attempts to access an input
-          * array using an index too large for its actual size assigned at
-          * link time.
-          */
-         if (var->data.max_array_access >= (int)this->num_vertices) {
-            linker_error(this->prog, "%s shader accesses element %i of "
-                         "%s, but only %i input vertices\n",
-                         _mesa_shader_stage_to_string(this->stage),
-                         var->data.max_array_access, var->name, this->num_vertices);
-            return visit_continue;
-         }
-      }
-
-      var->type = glsl_array_type(var->type->fields.array,
-                                  this->num_vertices, 0);
-      var->data.max_array_access = this->num_vertices - 1;
-
-      return visit_continue;
-   }
-};
-
 class array_length_to_const_visitor : public ir_rvalue_visitor {
 public:
    array_length_to_const_visitor()
@@ -1778,33 +1715,22 @@ link_intrastage_shaders(void *mem_ctx,
     */
    validate_ir_tree(linked->ir);
 
-   /* Set the size of geometry shader input arrays */
-   if (linked->Stage == MESA_SHADER_GEOMETRY) {
-      unsigned num_vertices =
-         mesa_vertices_per_prim(gl_prog->info.gs.input_primitive);
-      array_resize_visitor input_resize_visitor(num_vertices, prog,
-                                                MESA_SHADER_GEOMETRY);
-      foreach_in_list(ir_instruction, ir, linked->ir) {
-         ir->accept(&input_resize_visitor);
-      }
-   }
-
-   /* Set the linked source SHA1. */
+   /* Set the linked source BLAKE3. */
    if (num_shaders == 1) {
-      memcpy(linked->linked_source_sha1, shader_list[0]->compiled_source_sha1,
-             SHA1_DIGEST_LENGTH);
+      memcpy(linked->linked_source_blake3, shader_list[0]->compiled_source_blake3,
+             BLAKE3_OUT_LEN);
    } else {
-      struct mesa_sha1 sha1_ctx;
-      _mesa_sha1_init(&sha1_ctx);
+      struct mesa_blake3 blake3_ctx;
+      _mesa_blake3_init(&blake3_ctx);
 
       for (unsigned i = 0; i < num_shaders; i++) {
          if (shader_list[i] == NULL)
             continue;
 
-         _mesa_sha1_update(&sha1_ctx, shader_list[i]->compiled_source_sha1,
-                           SHA1_DIGEST_LENGTH);
+         _mesa_blake3_update(&blake3_ctx, shader_list[i]->compiled_source_blake3,
+                             BLAKE3_OUT_LEN);
       }
-      _mesa_sha1_final(&sha1_ctx, linked->linked_source_sha1);
+      _mesa_blake3_final(&blake3_ctx, linked->linked_source_blake3);
    }
 
    return linked;

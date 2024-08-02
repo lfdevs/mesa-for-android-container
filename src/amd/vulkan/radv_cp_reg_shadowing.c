@@ -123,7 +123,9 @@ radv_init_shadowed_regs_buffer_state(const struct radv_device *device, struct ra
    radeon_check_space(ws, cs, 768);
 
    radv_emit_shadow_regs_preamble(cs, device, &queue->state);
-   ac_emulate_clear_state(gpu_info, cs, radv_set_context_reg_array);
+
+   if (pdev->info.gfx_level < GFX12)
+      ac_emulate_clear_state(gpu_info, cs, radv_set_context_reg_array);
 
    result = ws->cs_finalize(cs);
    if (result == VK_SUCCESS) {

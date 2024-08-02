@@ -183,7 +183,6 @@ zink_bind_vertex_elements_state(struct pipe_context *pctx,
 {
    struct zink_context *ctx = zink_context(pctx);
    struct zink_gfx_pipeline_state *state = &ctx->gfx_pipeline_state;
-   zink_flush_dgc_if_enabled(ctx);
    ctx->element_state = cso;
    if (cso) {
       if (state->element_state != &ctx->element_state->hw_state) {
@@ -414,7 +413,6 @@ zink_bind_blend_state(struct pipe_context *pctx, void *cso)
    struct zink_context *ctx = zink_context(pctx);
    struct zink_screen *screen = zink_screen(pctx->screen);
    struct zink_gfx_pipeline_state* state = &zink_context(pctx)->gfx_pipeline_state;
-   zink_flush_dgc_if_enabled(ctx);
    struct zink_blend_state *blend = cso;
    struct zink_blend_state *old_blend = state->blend_state;
 
@@ -549,7 +547,6 @@ zink_bind_depth_stencil_alpha_state(struct pipe_context *pctx, void *cso)
 {
    struct zink_context *ctx = zink_context(pctx);
 
-   zink_flush_dgc_if_enabled(ctx);
    ctx->dsa_state = cso;
 
    if (cso) {
@@ -689,7 +686,6 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
    bool rasterizer_discard = ctx->rast_state ? ctx->rast_state->base.rasterizer_discard : false;
    bool half_pixel_center = ctx->rast_state ? ctx->rast_state->base.half_pixel_center : true;
    float line_width = ctx->rast_state ? ctx->rast_state->base.line_width : 1.0;
-   zink_flush_dgc_if_enabled(ctx);
    ctx->rast_state = cso;
 
    if (ctx->rast_state) {

@@ -39,7 +39,7 @@
 
 #include "util/u_atomic.h"
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX_LITE
 #  include <unistd.h> /* usleep */
 #  include <time.h> /* timeval */
 #  include <sys/time.h> /* timeval */
@@ -65,13 +65,13 @@ os_time_get_nano(void)
 void
 os_time_sleep(int64_t usecs)
 {
-#if DETECT_OS_LINUX || DETECT_OS_MANAGARM
+#if DETECT_OS_LINUX || DETECT_OS_MANAGARM || DETECT_OS_FUCHSIA
    struct timespec time;
    time.tv_sec = usecs / 1000000;
    time.tv_nsec = (usecs % 1000000) * 1000;
    while (clock_nanosleep(CLOCK_MONOTONIC, 0, &time, &time) == EINTR);
 
-#elif DETECT_OS_UNIX
+#elif DETECT_OS_POSIX
    usleep(usecs);
 
 #elif DETECT_OS_WINDOWS
@@ -118,7 +118,7 @@ os_wait_until_zero(volatile int *var, uint64_t timeout)
 
    if (timeout == OS_TIMEOUT_INFINITE) {
       while (p_atomic_read(var)) {
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX_LITE
          sched_yield();
 #endif
       }
@@ -132,7 +132,7 @@ os_wait_until_zero(volatile int *var, uint64_t timeout)
          if (os_time_timeout(start_time, end_time, os_time_get_nano()))
             return false;
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX_LITE
          sched_yield();
 #endif
       }
@@ -154,7 +154,7 @@ os_wait_until_zero_abs_timeout(volatile int *var, int64_t timeout)
       if (os_time_get_nano() >= timeout)
          return false;
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX_LITE
       sched_yield();
 #endif
    }

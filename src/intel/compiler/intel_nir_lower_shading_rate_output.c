@@ -103,6 +103,5 @@ bool
 intel_nir_lower_shading_rate_output(nir_shader *nir)
 {
    return nir_shader_intrinsics_pass(nir, lower_shading_rate_output_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance, NULL);
+                                       nir_metadata_control_flow, NULL);
 }

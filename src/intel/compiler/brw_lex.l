@@ -2,7 +2,7 @@
 %option nounput
 %{
 #include <string.h>
-#include "brw_asm.h"
+#include "brw_asm_internal.h"
 #undef ALIGN16
 #include "brw_gram.tab.h"
 
@@ -10,7 +10,7 @@
 int yycolumn = 1;
 
 int saved_state = 0;
-extern char *input_filename;
+extern const char *input_filename;
 
 #define YY_NO_INPUT
 #define YY_USER_ACTION                                  	\
@@ -108,8 +108,6 @@ rndu 		{ yylval.integer = BRW_OPCODE_RNDU; return RNDU; }
 rndz 		{ yylval.integer = BRW_OPCODE_RNDZ; return RNDZ; }
 rol 		{ yylval.integer = BRW_OPCODE_ROL; return ROL; }
 ror 		{ yylval.integer = BRW_OPCODE_ROR; return ROR; }
-sad2 		{ yylval.integer = BRW_OPCODE_SAD2; return SAD2; }
-sada2 		{ yylval.integer = BRW_OPCODE_SADA2; return SADA2; }
 sel 		{ yylval.integer = BRW_OPCODE_SEL; return SEL; }
 send 		{
 			yylval.integer = BRW_OPCODE_SEND;
@@ -303,7 +301,6 @@ switch       	{ return SWITCH; }
 :?DF 	{ return TYPE_DF; }
 :?F 	{ return TYPE_F; }
 :?HF 	{ return TYPE_HF; }
-:?NF 	{ return TYPE_NF; }
 :?Q 	{ return TYPE_Q; }
 :?UB 	{ return TYPE_UB; }
 :?UD 	{ return TYPE_UD; }
@@ -383,6 +380,7 @@ sr[0-9]+ 	{ yylval.integer = atoi(yytext + 2); return STATEREG; }
 		        }
 <MSGDESC>"{"    	{ yyless(0); BEGIN(INITIAL); return MSGDESC_END; }
 <MSGDESC>.      	{ }
+<MSGDESC>\n     	{ yycolumn = 1; }
 
 "0x"[0-9a-f][0-9a-f]* 	{
 			   yylval.llint = strtoull(yytext + 2, NULL, 16);

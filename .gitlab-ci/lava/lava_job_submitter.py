@@ -388,6 +388,7 @@ class LAVAJobSubmitter(PathResolver):
     boot_method: str
     ci_project_dir: str
     device_type: str
+    farm: str
     job_timeout_min: int  # The job timeout in minutes
     build_url: str = None
     dtb_filename: str = None
@@ -516,6 +517,7 @@ class StructuredLoggerWrapper:
     def _init_logger(self):
         STRUCTURAL_LOG["fixed_tags"] = self.__submitter.lava_tags
         STRUCTURAL_LOG["dut_job_type"] = self.__submitter.device_type
+        STRUCTURAL_LOG["farm"] = self.__submitter.farm
         STRUCTURAL_LOG["job_combined_fail_reason"] = None
         STRUCTURAL_LOG["job_combined_status"] = "not_submitted"
         STRUCTURAL_LOG["dut_attempt_counter"] = 0

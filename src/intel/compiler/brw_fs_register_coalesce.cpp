@@ -50,14 +50,14 @@ static bool
 is_nop_mov(const fs_inst *inst)
 {
    if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
-      fs_reg dst = inst->dst;
+      brw_reg dst = inst->dst;
       for (int i = 0; i < inst->sources; i++) {
          if (!dst.equals(inst->src[i])) {
             return false;
          }
          dst.offset += (i < inst->header_size ? REG_SIZE :
                         inst->exec_size * dst.stride *
-                        type_sz(inst->src[i].type));
+                        brw_type_size_bytes(inst->src[i].type));
       }
       return true;
    } else if (inst->opcode == BRW_OPCODE_MOV) {

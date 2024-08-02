@@ -70,15 +70,12 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
    if (src->obj->dt)
       *needs_present_readback = zink_kopper_acquire_readback(ctx, src, &use_src);
 
-   struct zink_batch *batch = &ctx->batch;
    zink_resource_setup_transfer_layouts(ctx, use_src, dst);
    VkCommandBuffer cmdbuf = *needs_present_readback ?
-                            ctx->batch.state->cmdbuf :
+                            ctx->bs->cmdbuf :
                             zink_get_cmdbuf(ctx, src, dst);
-   if (cmdbuf == ctx->batch.state->cmdbuf)
-      zink_flush_dgc_if_enabled(ctx);
-   zink_batch_reference_resource_rw(batch, use_src, false);
-   zink_batch_reference_resource_rw(batch, dst, true);
+   zink_batch_reference_resource_rw(ctx, use_src, false);
+   zink_batch_reference_resource_rw(ctx, dst, true);
 
    bool marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "blit_resolve(%s->%s, %dx%d->%dx%d)",
                                              util_format_short_name(info->src.format),
@@ -277,15 +274,12 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
    if (src->obj->dt)
       *needs_present_readback = zink_kopper_acquire_readback(ctx, src, &use_src);
 
-   struct zink_batch *batch = &ctx->batch;
    zink_resource_setup_transfer_layouts(ctx, use_src, dst);
    VkCommandBuffer cmdbuf = *needs_present_readback ?
-                            ctx->batch.state->cmdbuf :
+                            ctx->bs->cmdbuf :
                             zink_get_cmdbuf(ctx, src, dst);
-   if (cmdbuf == ctx->batch.state->cmdbuf)
-      zink_flush_dgc_if_enabled(ctx);
-   zink_batch_reference_resource_rw(batch, use_src, false);
-   zink_batch_reference_resource_rw(batch, dst, true);
+   zink_batch_reference_resource_rw(ctx, use_src, false);
+   zink_batch_reference_resource_rw(ctx, dst, true);
 
    bool marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "blit_native(%s->%s, %dx%d->%dx%d)",
                                              util_format_short_name(info->src.format),
@@ -367,7 +361,7 @@ zink_blit(struct pipe_context *pctx,
             depth_blit.mask = PIPE_MASK_Z;
             if (util_blitter_is_blit_supported(ctx->blitter, &depth_blit)) {
                zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
-               util_blitter_blit(ctx->blitter, &depth_blit);
+               util_blitter_blit(ctx->blitter, &depth_blit, NULL);
             } else {
                mesa_loge("ZINK: depth blit unsupported %s -> %s",
                          util_format_short_name(info->src.resource->format),
@@ -419,14 +413,13 @@ zink_blit(struct pipe_context *pctx,
    if (whole)
       pctx->invalidate_resource(pctx, info->dst.resource);
 
-   zink_flush_dgc_if_enabled(ctx);
    ctx->unordered_blitting = !(info->render_condition_enable && ctx->render_condition_active) &&
                              zink_screen(ctx->base.screen)->info.have_KHR_dynamic_rendering &&
                              !needs_present_readback &&
-                             zink_get_cmdbuf(ctx, src, dst) == ctx->batch.state->reordered_cmdbuf;
-   VkCommandBuffer cmdbuf = ctx->batch.state->cmdbuf;
+                             zink_get_cmdbuf(ctx, src, dst) == ctx->bs->reordered_cmdbuf;
+   VkCommandBuffer cmdbuf = ctx->bs->cmdbuf;
    VkPipeline pipeline = ctx->gfx_pipeline_state.pipeline;
-   bool in_rp = ctx->batch.in_rp;
+   bool in_rp = ctx->in_rp;
    uint64_t tc_data = ctx->dynamic_fb.tc_info.data;
    bool queries_disabled = ctx->queries_disabled;
    bool rp_changed = ctx->rp_changed || (!ctx->fb_state.zsbuf && util_format_is_depth_or_stencil(info->dst.format));
@@ -434,11 +427,10 @@ zink_blit(struct pipe_context *pctx,
    bool rp_tc_info_updated = ctx->rp_tc_info_updated;
    if (ctx->unordered_blitting) {
       /* for unordered blit, swap the unordered cmdbuf for the main one for the whole op to avoid conditional hell */
-      ctx->batch.state->cmdbuf = ctx->batch.state->reordered_cmdbuf;
-      ctx->batch.in_rp = false;
+      ctx->bs->cmdbuf = ctx->bs->reordered_cmdbuf;
+      ctx->in_rp = false;
       ctx->rp_changed = true;
       ctx->queries_disabled = true;
-      ctx->batch.state->has_barriers = true;
       ctx->pipeline_changed[0] = true;
       zink_reset_ds3_states(ctx);
       zink_select_draw_vbo(ctx);
@@ -450,6 +442,8 @@ zink_blit(struct pipe_context *pctx,
       zink_resource_object_init_mutable(ctx, dst);
    zink_blit_barriers(ctx, use_src, dst, whole);
    ctx->blitting = true;
+   ctx->blit_scissor = info->scissor_enable;
+   ctx->blit_nearest = info->filter == PIPE_TEX_FILTER_NEAREST;
 
    if (stencil_blit) {
       struct pipe_surface *dst_view, dst_templ;
@@ -473,20 +467,20 @@ zink_blit(struct pipe_context *pctx,
    } else {
       struct pipe_blit_info new_info = *info;
       new_info.src.resource = &use_src->base.b;
-      util_blitter_blit(ctx->blitter, &new_info);
+      util_blitter_blit(ctx->blitter, &new_info, NULL);
    }
    ctx->blitting = false;
    ctx->rp_clears_enabled = rp_clears_enabled;
    ctx->clears_enabled = clears_enabled;
    if (ctx->unordered_blitting) {
       zink_batch_no_rp(ctx);
-      ctx->batch.in_rp = in_rp;
+      ctx->in_rp = in_rp;
       ctx->gfx_pipeline_state.rp_state = zink_update_rendering_info(ctx);
       ctx->rp_changed = rp_changed;
       ctx->rp_tc_info_updated |= rp_tc_info_updated;
       ctx->queries_disabled = queries_disabled;
       ctx->dynamic_fb.tc_info.data = tc_data;
-      ctx->batch.state->cmdbuf = cmdbuf;
+      ctx->bs->cmdbuf = cmdbuf;
       ctx->gfx_pipeline_state.pipeline = pipeline;
       ctx->pipeline_changed[0] = true;
       ctx->ds3_states = ds3_states;
@@ -643,4 +637,37 @@ zink_blit_region_covers(struct u_rect region, struct u_rect covers)
     u_rect_union(&intersect, &r, &c);
     return intersect.x0 == c.x0 && intersect.y0 == c.y0 &&
            intersect.x1 == c.x1 && intersect.y1 == c.y1;
+}
+
+void
+zink_draw_rectangle(struct blitter_context *blitter, void *vertex_elements_cso,
+                    blitter_get_vs_func get_vs, int x1, int y1, int x2, int y2,
+                    float depth, unsigned num_instances, enum blitter_attrib_type type,
+                    const union blitter_attrib *attrib)
+{
+   struct zink_context *ctx = zink_context(blitter->pipe);
+
+   union blitter_attrib new_attrib = *attrib;
+
+   /* Avoid inconsistencies in rounding between both triangles which can show with
+    * nearest filtering by expanding the rect so only one triangle is effectively drawn.
+    */
+   if (ctx->blit_scissor && ctx->blit_nearest) {
+      int64_t new_x1 = (int64_t)x1 * 2 - x2;
+      int64_t new_y2 = (int64_t)y2 * 2 - y1;
+      if (new_x1 < INT32_MAX && new_x1 > INT32_MIN &&
+          new_y2 < INT32_MAX && new_y2 > INT32_MIN) {
+         x1 = new_x1;
+         y2 = new_y2;
+
+         if (type == UTIL_BLITTER_ATTRIB_TEXCOORD_XY ||
+             type == UTIL_BLITTER_ATTRIB_TEXCOORD_XYZW) {
+            new_attrib.texcoord.x1 += new_attrib.texcoord.x1 - new_attrib.texcoord.x2;
+            new_attrib.texcoord.y2 += new_attrib.texcoord.y2 - new_attrib.texcoord.y1;
+         }
+      }
+   }
+
+   util_blitter_draw_rectangle(blitter, vertex_elements_cso, get_vs, x1, y1, x2, y2,
+                               depth, num_instances, type, &new_attrib);
 }

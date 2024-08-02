@@ -92,7 +92,7 @@ public:
 
    bool vars_interfere(int a, int b) const;
    bool vgrfs_interfere(int a, int b) const;
-   int var_from_reg(const fs_reg &reg) const
+   int var_from_reg(const brw_reg &reg) const
    {
       return var_from_vgrf[reg.nr] + reg.offset / REG_SIZE;
    }
@@ -132,9 +132,9 @@ public:
 
 protected:
    void setup_def_use();
-   void setup_one_read(struct block_data *bd, int ip, const fs_reg &reg);
+   void setup_one_read(struct block_data *bd, int ip, const brw_reg &reg);
    void setup_one_write(struct block_data *bd, fs_inst *inst, int ip,
-                        const fs_reg &reg);
+                        const brw_reg &reg);
    void compute_live_variables();
    void compute_start_end();
 

@@ -88,6 +88,10 @@ fn get_enabled_devs() -> HashMap<String, u32> {
                 last_driver = Some(driver_str);
             }
         }
+
+        if res.contains_key("panfrost") {
+            res.insert("panthor".to_owned(), res["panfrost"]);
+        }
     }
 
     res

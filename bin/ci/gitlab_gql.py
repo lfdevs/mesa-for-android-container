@@ -331,10 +331,8 @@ def filter_dag(dag: Dag, regex: Pattern) -> Dag:
 
 
 def print_dag(dag: Dag) -> None:
-    for job, data in dag.items():
-        print(f"{job}:")
-        print(f"\t{' '.join(data['needs'])}")
-        print()
+    for job, data in sorted(dag.items()):
+        print(f"{job}:\n\t{' '.join(data['needs'])}\n")
 
 
 def fetch_merged_yaml(gl_gql: GitlabGQL, params) -> dict[str, Any]:

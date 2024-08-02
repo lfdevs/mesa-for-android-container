@@ -1487,6 +1487,11 @@ nvc0_screen_create(struct nouveau_device *dev)
    if (!nvc0_blitter_create(screen))
       goto fail;
 
+   nouveau_device_set_classes_for_debug(dev,
+                                        screen->eng3d->oclass,
+                                        screen->compute->oclass,
+                                        screen->m2mf->oclass,
+                                        screen->copy->oclass);
    return &screen->base;
 
 fail:

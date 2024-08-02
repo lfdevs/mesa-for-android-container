@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: MIT
 
 extern crate bitview;
+extern crate nvidia_headers;
 
-use crate::ir::{ShaderInfo, ShaderIoInfo, ShaderStageInfo};
+use crate::ir::{ShaderInfo, ShaderIoInfo, ShaderModel, ShaderStageInfo};
 use bitview::{
     BitMutView, BitMutViewable, BitView, BitViewable, SetBit, SetField,
     SetFieldU64,
 };
 use nak_bindings::*;
+use nvidia_headers::classes::cla097::sph::*;
 use std::ops::Range;
 
-pub const _FERMI_SHADER_HEADER_SIZE: usize = 20;
-pub const TURING_SHADER_HEADER_SIZE: usize = 32;
-pub const CURRENT_MAX_SHADER_HEADER_SIZE: usize = TURING_SHADER_HEADER_SIZE;
+pub const _SPHV3_SHADER_HEADER_SIZE: usize = 20;
+pub const SPHV4_SHADER_HEADER_SIZE: usize = 32;
+pub const CURRENT_MAX_SHADER_HEADER_SIZE: usize = SPHV4_SHADER_HEADER_SIZE;
 
 type SubSPHView<'a> = BitMutView<'a, [u32; CURRENT_MAX_SHADER_HEADER_SIZE]>;
 
@@ -71,7 +73,6 @@ impl From<PixelImap> for u8 {
 pub struct ShaderProgramHeader {
     pub data: [u32; CURRENT_MAX_SHADER_HEADER_SIZE],
     shader_type: ShaderType,
-    sm: u8,
 }
 
 impl BitViewable for ShaderProgramHeader {
@@ -101,45 +102,19 @@ impl ShaderProgramHeader {
         let mut res = Self {
             data: [0; CURRENT_MAX_SHADER_HEADER_SIZE],
             shader_type,
-            sm,
         };
 
         let sph_type = if shader_type == ShaderType::Fragment {
-            2
+            SPHV3_T1_SPH_TYPE_TYPE_02_PS
         } else {
-            1
+            SPHV3_T1_SPH_TYPE_TYPE_01_VTG
         };
 
-        let sph_version = 3;
+        let sph_version = if sm >= 75 { 4 } else { 3 };
         res.set_sph_type(sph_type, sph_version);
         res.set_shader_type(shader_type);
 
         res
-    }
-
-    #[inline]
-    fn common_word0(&mut self) -> SubSPHView<'_> {
-        BitMutView::new_subset(&mut self.data, 0..32)
-    }
-
-    #[inline]
-    fn common_word1(&mut self) -> SubSPHView<'_> {
-        BitMutView::new_subset(&mut self.data, 32..64)
-    }
-
-    #[inline]
-    fn common_word2(&mut self) -> SubSPHView<'_> {
-        BitMutView::new_subset(&mut self.data, 64..96)
-    }
-
-    #[inline]
-    fn common_word3(&mut self) -> SubSPHView<'_> {
-        BitMutView::new_subset(&mut self.data, 96..128)
-    }
-
-    #[inline]
-    fn common_word4(&mut self) -> SubSPHView<'_> {
-        BitMutView::new_subset(&mut self.data, 128..160)
     }
 
     #[inline]
@@ -215,66 +190,66 @@ impl ShaderProgramHeader {
     }
 
     #[inline]
-    fn set_sph_type(&mut self, sph_type: u8, sph_version: u8) {
-        let mut common_word0 = self.common_word0();
-
-        common_word0.set_field(0..5, sph_type);
-        common_word0.set_field(5..10, sph_version);
+    fn set_sph_type(&mut self, sph_type: u32, sph_version: u8) {
+        self.set_field(SPHV3_T1_SPH_TYPE, sph_type);
+        self.set_field(SPHV3_T1_VERSION, sph_version);
     }
 
     #[inline]
     fn set_shader_type(&mut self, shader_type: ShaderType) {
-        self.common_word0().set_field(
-            10..14,
+        self.set_field(
+            SPHV3_T1_SHADER_TYPE,
             match shader_type {
-                ShaderType::Vertex => 1_u8,
-                ShaderType::TessellationInit => 2_u8,
-                ShaderType::Tessellation => 3_u8,
-                ShaderType::Geometry => 4_u8,
-                ShaderType::Fragment => 5_u8,
+                ShaderType::Vertex => SPHV3_T1_SHADER_TYPE_VERTEX,
+                ShaderType::TessellationInit => {
+                    SPHV3_T1_SHADER_TYPE_TESSELLATION_INIT
+                }
+                ShaderType::Tessellation => SPHV3_T1_SHADER_TYPE_TESSELLATION,
+                ShaderType::Geometry => SPHV3_T1_SHADER_TYPE_GEOMETRY,
+                ShaderType::Fragment => SPHV3_T1_SHADER_TYPE_PIXEL,
             },
         );
     }
 
     #[inline]
     pub fn set_multiple_render_target_enable(&mut self, mrt_enable: bool) {
-        self.common_word0().set_bit(14, mrt_enable);
+        self.set_field(SPHV3_T1_MRT_ENABLE, mrt_enable);
     }
 
     #[inline]
     pub fn set_kills_pixels(&mut self, kills_pixels: bool) {
-        self.common_word0().set_bit(15, kills_pixels);
+        self.set_field(SPHV3_T1_KILLS_PIXELS, kills_pixels);
     }
 
     #[inline]
     pub fn set_does_global_store(&mut self, does_global_store: bool) {
-        self.common_word0().set_bit(16, does_global_store);
+        self.set_field(SPHV3_T1_DOES_GLOBAL_STORE, does_global_store);
     }
 
     #[inline]
     pub fn set_sass_version(&mut self, sass_version: u8) {
-        self.common_word0().set_field(17..21, sass_version);
+        self.set_field(SPHV3_T1_SASS_VERSION, sass_version);
     }
 
     #[inline]
     pub fn set_gs_passthrough_enable(&mut self, gs_passthrough_enable: bool) {
         assert!(self.shader_type == ShaderType::Geometry);
-        self.common_word0().set_bit(24, gs_passthrough_enable);
+        self.set_bit(24, gs_passthrough_enable);
     }
 
     #[inline]
     pub fn set_does_load_or_store(&mut self, does_load_or_store: bool) {
-        self.common_word0().set_bit(26, does_load_or_store);
+        self.set_field(SPHV3_T1_DOES_LOAD_OR_STORE, does_load_or_store);
     }
 
     #[inline]
     pub fn set_does_fp64(&mut self, does_fp64: bool) {
-        self.common_word0().set_bit(27, does_fp64);
+        self.set_field(SPHV3_T1_DOES_FP64, does_fp64);
     }
 
     #[inline]
     pub fn set_stream_out_mask(&mut self, stream_out_mask: u8) {
-        self.common_word0().set_field(28..32, stream_out_mask);
+        self.set_field(SPHV3_T1_STREAM_OUT_MASK, stream_out_mask);
     }
 
     #[inline]
@@ -288,8 +263,8 @@ impl ShaderProgramHeader {
         let low = (shader_local_memory_size & 0xffffff) as u32;
         let high = ((shader_local_memory_size >> 32) & 0xffffff) as u32;
 
-        self.common_word1().set_field(0..24, low);
-        self.common_word2().set_field(0..24, high);
+        self.set_field(SPHV3_T1_SHADER_LOCAL_MEMORY_LOW_SIZE, low);
+        self.set_field(SPHV3_T1_SHADER_LOCAL_MEMORY_HIGH_SIZE, high);
     }
 
     #[inline]
@@ -299,16 +274,17 @@ impl ShaderProgramHeader {
     ) {
         assert!(self.shader_type == ShaderType::TessellationInit);
 
-        self.common_word1()
-            .set_field(24..32, per_patch_attribute_count);
+        self.set_field(
+            SPHV3_T1_PER_PATCH_ATTRIBUTE_COUNT,
+            per_patch_attribute_count,
+        );
 
-        // Maxwell changed that encoding.
-        if self.sm > 35 {
-            self.common_word3()
-                .set_field(28..32, per_patch_attribute_count & 0xf);
-            self.common_word4()
-                .set_field(20..24, per_patch_attribute_count >> 4);
-        }
+        // This is Kepler+
+        self.set_field(
+            SPHV3_T1_RESERVED_COMMON_B,
+            per_patch_attribute_count & 0xf,
+        );
+        self.set_field(148..152, per_patch_attribute_count >> 4);
     }
 
     #[inline]
@@ -316,8 +292,10 @@ impl ShaderProgramHeader {
         &mut self,
         threads_per_input_primitive: u8,
     ) {
-        self.common_word2()
-            .set_field(24..32, threads_per_input_primitive);
+        self.set_field(
+            SPHV3_T1_THREADS_PER_INPUT_PRIMITIVE,
+            threads_per_input_primitive,
+        );
     }
 
     #[inline]
@@ -327,18 +305,22 @@ impl ShaderProgramHeader {
         shader_local_memory_crs_size: u32,
     ) {
         assert!(shader_local_memory_crs_size <= 0xffffff);
-        self.common_word3()
-            .set_field(0..24, shader_local_memory_crs_size);
+        self.set_field(
+            SPHV3_T1_SHADER_LOCAL_MEMORY_CRS_SIZE,
+            shader_local_memory_crs_size,
+        );
     }
 
     #[inline]
     pub fn set_output_topology(&mut self, output_topology: OutputTopology) {
-        self.common_word3().set_field(
-            24..28,
+        self.set_field(
+            SPHV3_T1_OUTPUT_TOPOLOGY,
             match output_topology {
-                OutputTopology::PointList => 1_u8,
-                OutputTopology::LineStrip => 6_u8,
-                OutputTopology::TriangleStrip => 7_u8,
+                OutputTopology::PointList => SPHV3_T1_OUTPUT_TOPOLOGY_POINTLIST,
+                OutputTopology::LineStrip => SPHV3_T1_OUTPUT_TOPOLOGY_LINESTRIP,
+                OutputTopology::TriangleStrip => {
+                    SPHV3_T1_OUTPUT_TOPOLOGY_TRIANGLESTRIP
+                }
             },
         );
     }
@@ -349,18 +331,20 @@ impl ShaderProgramHeader {
         max_output_vertex_count: u16,
     ) {
         assert!(max_output_vertex_count <= 0xfff);
-        self.common_word4()
-            .set_field(0..12, max_output_vertex_count);
+        self.set_field(
+            SPHV3_T1_MAX_OUTPUT_VERTEX_COUNT,
+            max_output_vertex_count,
+        );
     }
 
     #[inline]
     pub fn set_store_req_start(&mut self, store_req_start: u8) {
-        self.common_word4().set_field(12..20, store_req_start);
+        self.set_field(SPHV3_T1_STORE_REQ_START, store_req_start);
     }
 
     #[inline]
     pub fn set_store_req_end(&mut self, store_req_end: u8) {
-        self.common_word4().set_field(24..32, store_req_end);
+        self.set_field(SPHV3_T1_STORE_REQ_END, store_req_end);
     }
 
     pub fn set_imap_system_values_ab(&mut self, val: u32) {
@@ -438,13 +422,13 @@ impl ShaderProgramHeader {
     #[inline]
     pub fn set_omap_sample_mask(&mut self, sample_mask: bool) {
         assert!(self.shader_type == ShaderType::Fragment);
-        self.set_bit(608, sample_mask);
+        self.set_field(SPHV3_T2_OMAP_SAMPLE_MASK, sample_mask);
     }
 
     #[inline]
     pub fn set_omap_depth(&mut self, depth: bool) {
         assert!(self.shader_type == ShaderType::Fragment);
-        self.set_bit(609, depth);
+        self.set_field(SPHV3_T2_OMAP_DEPTH, depth);
     }
 
     #[inline]
@@ -453,12 +437,11 @@ impl ShaderProgramHeader {
         self.set_bit(610, does_interlock);
     }
 
-    // TODO: This seems always set on fragment shaders, figure out what this is for.
     #[inline]
     #[allow(dead_code)]
-    pub fn set_unknown_bit611(&mut self, value: bool) {
+    pub fn set_uses_underestimate(&mut self, uses_underestimate: bool) {
         assert!(self.shader_type == ShaderType::Fragment);
-        self.set_bit(611, value);
+        self.set_bit(611, uses_underestimate);
     }
 
     #[inline]
@@ -479,6 +462,7 @@ impl ShaderProgramHeader {
 }
 
 pub fn encode_header(
+    sm: &dyn ShaderModel,
     shader_info: &ShaderInfo,
     fs_key: Option<&nak_fs_key>,
 ) -> [u32; CURRENT_MAX_SHADER_HEADER_SIZE] {
@@ -486,10 +470,8 @@ pub fn encode_header(
         return [0_u32; CURRENT_MAX_SHADER_HEADER_SIZE];
     }
 
-    let mut sph = ShaderProgramHeader::new(
-        ShaderType::from(&shader_info.stage),
-        shader_info.sm,
-    );
+    let mut sph =
+        ShaderProgramHeader::new(ShaderType::from(&shader_info.stage), sm.sm());
 
     sph.set_sass_version(1);
     sph.set_does_load_or_store(shader_info.uses_global_mem);
@@ -533,6 +515,8 @@ pub fn encode_header(
             }
 
             let zs_self_dep = fs_key.map_or(false, |key| key.zs_self_dep);
+            let uses_underestimate =
+                fs_key.map_or(false, |key| key.uses_underestimate);
 
             // This isn't so much a "Do we write multiple render targets?" bit
             // as a "Should color0 be broadcast to all render targets?" bit. In
@@ -547,6 +531,7 @@ pub fn encode_header(
             sph.set_omap_depth(io.writes_depth);
             sph.set_omap_targets(io.writes_color);
             sph.set_does_interlock(io.does_interlock);
+            sph.set_uses_underestimate(uses_underestimate);
 
             for (index, value) in io.barycentric_attr_in.iter().enumerate() {
                 sph.set_pervertex_imap_vector(index, *value);

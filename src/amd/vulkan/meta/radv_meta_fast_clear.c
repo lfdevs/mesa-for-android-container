@@ -57,81 +57,60 @@ static VkResult
 create_dcc_compress_compute(struct radv_device *device)
 {
    VkResult result = VK_SUCCESS;
+
+   const VkDescriptorSetLayoutBinding bindings[] = {
+      {
+         .binding = 0,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      },
+      {
+         .binding = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      },
+   };
+
+   result = radv_meta_create_descriptor_set_layout(
+      device, 2, bindings, &device->meta_state.fast_clear_flush.dcc_decompress_compute_ds_layout);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result =
+      radv_meta_create_pipeline_layout(device, &device->meta_state.fast_clear_flush.dcc_decompress_compute_ds_layout, 0,
+                                       NULL, &device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout);
+   if (result != VK_SUCCESS)
+      return result;
+
    nir_shader *cs = build_dcc_decompress_compute_shader(device);
 
-   VkDescriptorSetLayoutCreateInfo ds_create_info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                                                     .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-                                                     .bindingCount = 2,
-                                                     .pBindings = (VkDescriptorSetLayoutBinding[]){
-                                                        {.binding = 0,
-                                                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                                         .descriptorCount = 1,
-                                                         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                                                         .pImmutableSamplers = NULL},
-                                                        {.binding = 1,
-                                                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                                         .descriptorCount = 1,
-                                                         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                                                         .pImmutableSamplers = NULL},
-                                                     }};
-
-   result = radv_CreateDescriptorSetLayout(radv_device_to_handle(device), &ds_create_info, &device->meta_state.alloc,
-                                           &device->meta_state.fast_clear_flush.dcc_decompress_compute_ds_layout);
-   if (result != VK_SUCCESS)
-      goto cleanup;
-
-   VkPipelineLayoutCreateInfo pl_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &device->meta_state.fast_clear_flush.dcc_decompress_compute_ds_layout,
-      .pushConstantRangeCount = 0,
-      .pPushConstantRanges = NULL,
-   };
-
-   result = radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info, &device->meta_state.alloc,
-                                      &device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout);
-   if (result != VK_SUCCESS)
-      goto cleanup;
-
-   /* compute shader */
-
-   VkPipelineShaderStageCreateInfo pipeline_shader_stage = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-      .module = vk_shader_module_handle_from_nir(cs),
-      .pName = "main",
-      .pSpecializationInfo = NULL,
-   };
-
-   VkComputePipelineCreateInfo vk_pipeline_info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = pipeline_shader_stage,
-      .flags = 0,
-      .layout = device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout,
-   };
-
-   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
-                                         NULL, &device->meta_state.fast_clear_flush.dcc_decompress_compute_pipeline);
-   if (result != VK_SUCCESS)
-      goto cleanup;
-
-cleanup:
+   result =
+      radv_meta_create_compute_pipeline(device, cs, device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout,
+                                        &device->meta_state.fast_clear_flush.dcc_decompress_compute_pipeline);
    ralloc_free(cs);
    return result;
 }
 
 static VkResult
-create_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout)
+get_dcc_decompress_compute_pipeline(struct radv_device *device, VkPipeline *pipeline_out)
 {
-   VkPipelineLayoutCreateInfo pl_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pSetLayouts = NULL,
-      .pushConstantRangeCount = 0,
-      .pPushConstantRanges = NULL,
-   };
+   struct radv_meta_state *state = &device->meta_state;
+   VkResult result = VK_SUCCESS;
 
-   return radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info, &device->meta_state.alloc, layout);
+   mtx_lock(&state->mtx);
+   if (!state->fast_clear_flush.dcc_decompress_compute_pipeline) {
+      result = create_dcc_compress_compute(device);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
+   *pipeline_out = state->fast_clear_flush.dcc_decompress_compute_pipeline;
+
+fail:
+   mtx_unlock(&state->mtx);
+   return result;
 }
 
 static VkResult
@@ -142,12 +121,6 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkPipeli
    VkDevice device_h = radv_device_to_handle(device);
 
    nir_shader *fs_module = radv_meta_build_nir_fs_noop(device);
-
-   if (!fs_module) {
-      /* XXX: Need more accurate error */
-      result = VK_ERROR_OUT_OF_HOST_MEMORY;
-      goto cleanup;
-   }
 
    const VkPipelineShaderStageCreateInfo stages[2] = {
       {
@@ -389,13 +362,8 @@ radv_device_init_meta_fast_clear_flush_state_internal(struct radv_device *device
    }
 
    nir_shader *vs_module = radv_meta_build_nir_vs_generate_vertices(device);
-   if (!vs_module) {
-      /* XXX: Need more accurate error */
-      res = VK_ERROR_OUT_OF_HOST_MEMORY;
-      goto cleanup;
-   }
 
-   res = create_pipeline_layout(device, &device->meta_state.fast_clear_flush.p_layout);
+   res = radv_meta_create_pipeline_layout(device, NULL, 0, NULL, &device->meta_state.fast_clear_flush.p_layout);
    if (res != VK_SUCCESS)
       goto cleanup;
 
@@ -430,10 +398,8 @@ radv_emit_set_predication_state_from_image(struct radv_cmd_buffer *cmd_buffer, s
 {
    uint64_t va = 0;
 
-   if (value) {
-      va = radv_buffer_get_va(image->bindings[0].bo) + image->bindings[0].offset;
-      va += pred_offset;
-   }
+   if (value)
+      va = radv_image_get_va(image, 0) + pred_offset;
 
    radv_emit_set_predication_state(cmd_buffer, true, PREDICATION_OP_BOOL64, va);
 }
@@ -485,12 +451,14 @@ radv_process_color_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_i
    radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
 
    if (flush_cb)
-      cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, image);
+      cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                                            VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT, image);
 
    radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
    if (flush_cb)
-      cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, image);
+      cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                                            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, image);
 
    radv_CmdEndRendering(radv_cmd_buffer_to_handle(cmd_buffer));
 
@@ -671,22 +639,21 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
    struct radv_meta_saved_state saved_state;
    struct radv_image_view load_iview = {0};
    struct radv_image_view store_iview = {0};
+   VkPipeline pipeline;
+   VkResult result;
+
+   result = get_dcc_decompress_compute_pipeline(device, &pipeline);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmd_buffer->vk, result);
+      return;
+   }
 
    cmd_buffer->state.flush_bits |=
-      radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT, image);
-
-   if (!device->meta_state.fast_clear_flush.cmask_eliminate_pipeline) {
-      VkResult ret = radv_device_init_meta_fast_clear_flush_state_internal(device);
-      if (ret != VK_SUCCESS) {
-         vk_command_buffer_set_error(&cmd_buffer->vk, ret);
-         return;
-      }
-   }
+      radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT, image);
 
    radv_meta_save(&saved_state, cmd_buffer, RADV_META_SAVE_DESCRIPTORS | RADV_META_SAVE_COMPUTE_PIPELINE);
 
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE,
-                        device->meta_state.fast_clear_flush.dcc_decompress_compute_pipeline);
+   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
    for (uint32_t l = 0; l < vk_image_subresource_level_count(&image->vk, subresourceRange); l++) {
       uint32_t width, height;
@@ -728,8 +695,7 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
 
          radv_meta_push_descriptor_set(
             cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-            device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout, 0, /* set */
-            2,                                                                      /* descriptorWriteCount */
+            device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout, 0, 2,
             (VkWriteDescriptorSet[]){{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                                       .dstBinding = 0,
                                       .dstArrayElement = 0,
@@ -768,8 +734,9 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
 
    radv_meta_restore(&saved_state, cmd_buffer);
 
-   cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
-                                   radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
+   cmd_buffer->state.flush_bits |=
+      RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
+      radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
    /* Initialize the DCC metadata as "fully expanded". */
    cmd_buffer->state.flush_bits |= radv_init_dcc(cmd_buffer, image, subresourceRange, 0xffffffff);

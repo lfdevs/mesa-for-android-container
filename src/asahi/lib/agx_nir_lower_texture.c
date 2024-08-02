@@ -10,8 +10,13 @@
 #include "compiler/nir/nir_builder.h"
 #include "agx_internal_formats.h"
 #include "agx_nir_passes.h"
+#include "glsl_types.h"
 #include "libagx_shaders.h"
+#include "nir_builder_opcodes.h"
 #include "nir_builtin_builder.h"
+#include "nir_intrinsics.h"
+#include "nir_intrinsics_indices.h"
+#include "shader_enums.h"
 
 static bool
 fence_image(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
@@ -109,8 +114,8 @@ lower_tex_crawl(nir_builder *b, nir_instr *instr, UNUSED void *data)
 static nir_def *
 coords_for_buffer_texture(nir_builder *b, nir_def *coord)
 {
-   return nir_vec2(b, nir_iand_imm(b, coord, BITFIELD_MASK(10)),
-                   nir_ushr_imm(b, coord, 10));
+   return nir_vec2(b, nir_umod_imm(b, coord, AGX_TEXTURE_BUFFER_WIDTH),
+                   nir_udiv_imm(b, coord, AGX_TEXTURE_BUFFER_WIDTH));
 }
 
 /*
@@ -130,23 +135,21 @@ lower_buffer_texture(nir_builder *b, nir_tex_instr *tex)
 {
    nir_def *coord = nir_steal_tex_src(tex, nir_tex_src_coord);
 
-   /* The OpenGL ES 3.2 specification says on page 187:
-    *
-    *    When a buffer texture is accessed in a shader, the results of a texel
-    *    fetch are undefined if the specified texel coordinate is negative, or
-    *    greater than or equal to the clamped number of texels in the texture
-    *    image.
-    *
-    * However, faulting would be undesirable for robustness, so clamp.
+   /* Map out-of-bounds indices to out-of-bounds coordinates for robustness2
+    * semantics from the hardware.
     */
    nir_def *size = nir_get_texture_size(b, tex);
-   coord = nir_umin(b, coord, nir_iadd_imm(b, size, -1));
+   nir_def *oob = nir_uge(b, coord, size);
+   coord = nir_bcsel(b, oob, nir_imm_int(b, -1), coord);
 
    nir_def *desc = texture_descriptor_ptr(b, tex);
    bool is_float = nir_alu_type_get_base_type(tex->dest_type) == nir_type_float;
 
-   /* Lower RGB32 reads if the format requires */
-   nir_if *nif = nir_push_if(b, libagx_texture_is_rgb32(b, desc));
+   /* Lower RGB32 reads if the format requires. If we are out-of-bounds, we use
+    * the hardware path so we get a zero texel.
+    */
+   nir_if *nif = nir_push_if(
+      b, nir_iand(b, libagx_texture_is_rgb32(b, desc), nir_inot(b, oob)));
 
    nir_def *rgb32 = nir_trim_vector(
       b, libagx_texture_load_rgb32(b, desc, coord, nir_imm_bool(b, is_float)),
@@ -207,14 +210,19 @@ lower_regular_texture(nir_builder *b, nir_instr *instr, UNUSED void *data)
    /* Apply txf workaround, see libagx_lower_txf_robustness */
    bool is_txf = ((tex->op == nir_texop_txf) || (tex->op == nir_texop_txf_ms));
 
-   if (is_txf && has_nonzero_lod(tex) &&
+   if (is_txf && (has_nonzero_lod(tex) || tex->is_array) &&
        !(tex->backend_flags & AGX_TEXTURE_FLAG_NO_CLAMP)) {
-
       int lod_idx = nir_tex_instr_src_index(tex, nir_tex_src_lod);
+      nir_def *lod =
+         lod_idx >= 0 ? tex->src[lod_idx].src.ssa : nir_undef(b, 1, 16);
+
+      unsigned lidx = coord->num_components - 1;
+      nir_def *layer = nir_channel(b, coord, lidx);
 
       nir_def *replaced = libagx_lower_txf_robustness(
-         b, texture_descriptor_ptr(b, tex), tex->src[lod_idx].src.ssa,
-         nir_channel(b, coord, 0));
+         b, texture_descriptor_ptr(b, tex),
+         nir_imm_bool(b, has_nonzero_lod(tex)), lod,
+         nir_imm_bool(b, tex->is_array), layer, nir_channel(b, coord, 0));
 
       coord = nir_vector_insert_imm(b, coord, replaced, 0);
    }
@@ -224,7 +232,7 @@ lower_regular_texture(nir_builder *b, nir_instr *instr, UNUSED void *data)
     */
    nir_def *layer = NULL;
 
-   if (tex->is_array) {
+   if (tex->is_array && tex->op != nir_texop_lod) {
       unsigned lidx = coord->num_components - 1;
       nir_def *unclamped_layer = nir_channel(b, coord, lidx);
       coord = nir_trim_vector(b, coord, lidx);
@@ -243,8 +251,11 @@ lower_regular_texture(nir_builder *b, nir_instr *instr, UNUSED void *data)
 
       /* Clamp to max layer = (# of layers - 1) for out-of-bounds handling.
        * Layer must be 16-bits for the hardware, drop top bits after clamping.
+       *
+       * For txf, we drop out-of-bounds components rather than clamp, see the
+       * above txf robustness workaround.
        */
-      if (!(tex->backend_flags & AGX_TEXTURE_FLAG_NO_CLAMP)) {
+      if (!(tex->backend_flags & AGX_TEXTURE_FLAG_NO_CLAMP) && !is_txf) {
          nir_def *txs = nir_get_texture_size(b, tex);
          nir_def *nr_layers = nir_channel(b, txs, lidx);
          nir_def *max_layer = nir_iadd_imm(b, nr_layers, -1);
@@ -314,14 +325,8 @@ lower_regular_texture(nir_builder *b, nir_instr *instr, UNUSED void *data)
 static nir_def *
 bias_for_tex(nir_builder *b, nir_tex_instr *tex)
 {
-   nir_instr *instr = nir_get_texture_size(b, tex)->parent_instr;
-   nir_tex_instr *query = nir_instr_as_tex(instr);
-
-   query->op = nir_texop_lod_bias_agx;
-   query->dest_type = nir_type_float16;
-
-   nir_def_init(instr, &query->def, 1, 16);
-   return &query->def;
+   return nir_build_texture_query(b, tex, nir_texop_lod_bias_agx, 1,
+                                  nir_type_float16, false, false);
 }
 
 static bool
@@ -463,7 +468,14 @@ image_texel_address(nir_builder *b, nir_intrinsic_instr *intr,
       nir_load_from_texture_handle_agx(b, intr->src[0].ssa);
 
    nir_def *coord = intr->src[1].ssa;
+
+   /* For atomics, we always infer the format. We only go down this path with
+    * formatless intrinsics when lowering multisampled image stores, but that
+    * uses the return_index path that ignores the block size.
+    */
    enum pipe_format format = nir_intrinsic_format(intr);
+   assert(return_index || format != PIPE_FORMAT_NONE);
+
    nir_def *blocksize_B = nir_imm_int(b, util_format_get_blocksize(format));
 
    enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
@@ -471,19 +483,14 @@ image_texel_address(nir_builder *b, nir_intrinsic_instr *intr,
                   (dim == GLSL_SAMPLER_DIM_CUBE) ||
                   (dim == GLSL_SAMPLER_DIM_3D);
 
-   /* The last 8 bytes of the 24-byte PBE descriptor points to the
-    * software-defined atomic descriptor.  Grab the address.
-    */
-   nir_def *meta_meta_ptr = nir_iadd_imm(b, desc_address, 16);
-   nir_def *meta_ptr = nir_load_global_constant(b, meta_meta_ptr, 8, 1, 64);
-
    if (dim == GLSL_SAMPLER_DIM_BUF && return_index) {
       return nir_channel(b, coord, 0);
    } else if (dim == GLSL_SAMPLER_DIM_BUF) {
-      return libagx_buffer_texel_address(b, meta_ptr, coord, blocksize_B);
+      return libagx_buffer_texel_address(b, desc_address, coord, blocksize_B);
    } else {
       return libagx_image_texel_address(
-         b, meta_ptr, coord, nir_u2u32(b, intr->src[2].ssa), blocksize_B,
+         b, desc_address, coord, nir_u2u32(b, intr->src[2].ssa), blocksize_B,
+         nir_imm_bool(b, dim == GLSL_SAMPLER_DIM_1D),
          nir_imm_bool(b, dim == GLSL_SAMPLER_DIM_MS), nir_imm_bool(b, layered),
          nir_imm_bool(b, return_index));
    }
@@ -523,6 +530,44 @@ lower_1d_image(nir_builder *b, nir_intrinsic_instr *intr)
    nir_intrinsic_set_image_dim(intr, GLSL_SAMPLER_DIM_2D);
 }
 
+/*
+ * Just like for txf, we need special handling around layers (and LODs, but we
+ * don't support mipmapped images yet) for robust image_loads. See
+ * libagx_lower_txf_robustness for more info.
+ */
+static bool
+lower_image_load_robustness(nir_builder *b, nir_intrinsic_instr *intr)
+{
+   if (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS_AGX)
+      return false;
+
+   /* We only need to worry about array-like loads */
+   enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   if (!nir_intrinsic_image_array(intr) && dim != GLSL_SAMPLER_DIM_CUBE)
+      return false;
+
+   /* Determine the coordinate component of the layer. Cubes and cube arrays
+    * keep their array in their last non-array coordinate component, other
+    * arrays are immediately after.
+    */
+   unsigned lidx = glsl_get_sampler_dim_coordinate_components(dim);
+   if (dim == GLSL_SAMPLER_DIM_CUBE)
+      lidx--;
+
+   nir_def *coord = intr->src[1].ssa;
+   nir_def *lod = nir_undef(b, 1, 16);
+   nir_def *layer = nir_channel(b, coord, lidx);
+
+   /* image_load is effectively the same as txf, reuse the txf lower */
+   nir_def *replaced = libagx_lower_txf_robustness(
+      b, nir_load_from_texture_handle_agx(b, intr->src[0].ssa),
+      nir_imm_bool(b, false /* lower LOD */), lod,
+      nir_imm_bool(b, true /* lower layer */), layer, nir_channel(b, coord, 0));
+
+   nir_src_rewrite(&intr->src[1], nir_vector_insert_imm(b, coord, replaced, 0));
+   return true;
+}
+
 static bool
 lower_images(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 {
@@ -535,6 +580,11 @@ lower_images(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
    case nir_intrinsic_bindless_image_store: {
       /* Legalize MSAA index */
       nir_src_rewrite(&intr->src[2], nir_u2u16(b, intr->src[2].ssa));
+
+      if (intr->intrinsic == nir_intrinsic_image_load ||
+          intr->intrinsic == nir_intrinsic_bindless_image_load) {
+         lower_image_load_robustness(b, intr);
+      }
 
       switch (nir_intrinsic_image_dim(intr)) {
       case GLSL_SAMPLER_DIM_1D:
@@ -573,6 +623,64 @@ lower_images(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 }
 
 /*
+ * Map out-of-bounds storage texel buffer accesses and multisampled image stores
+ * to -1 indices, which will become an out-of-bounds hardware access. This gives
+ * cheap robustness2.
+ */
+static bool
+lower_robustness(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
+{
+   b->cursor = nir_before_instr(&intr->instr);
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_store:
+      break;
+   default:
+      return false;
+   }
+
+   enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   bool array = nir_intrinsic_image_array(intr);
+   unsigned size_components = nir_image_intrinsic_coord_components(intr);
+
+   nir_def *deref = intr->src[0].ssa;
+   nir_def *coord = intr->src[1].ssa;
+
+   if (dim != GLSL_SAMPLER_DIM_BUF &&
+       !(dim == GLSL_SAMPLER_DIM_MS &&
+         intr->intrinsic == nir_intrinsic_image_deref_store))
+      return false;
+
+   /* Bounds check the coordinate */
+   nir_def *size =
+      nir_image_deref_size(b, size_components, 32, deref, nir_imm_int(b, 0),
+                           .image_dim = dim, .image_array = array);
+   nir_def *oob = nir_bany(b, nir_uge(b, coord, size));
+
+   /* Bounds check the sample */
+   if (dim == GLSL_SAMPLER_DIM_MS) {
+      nir_def *samples = nir_image_deref_samples(b, 32, deref, .image_dim = dim,
+                                                 .image_array = array);
+
+      oob = nir_ior(b, oob, nir_uge(b, intr->src[2].ssa, samples));
+   }
+
+   /* Replace the last coordinate component with a large coordinate for
+    * out-of-bounds. We pick 65535 as it fits in 16-bit, and it is not signed as
+    * 32-bit so we won't get in-bounds coordinates for arrays due to two's
+    * complement wraparound. This ensures the resulting hardware coordinate is
+    * definitely out-of-bounds, giving hardware-level robustness2 behaviour.
+    */
+   unsigned c = size_components - 1;
+   nir_def *r =
+      nir_bcsel(b, oob, nir_imm_int(b, 65535), nir_channel(b, coord, c));
+
+   nir_src_rewrite(&intr->src[1], nir_vector_insert_imm(b, coord, r, c));
+   return true;
+}
+
+/*
  * Early texture lowering passes, called by the driver before lowering
  * descriptor bindings. That means these passes operate on texture derefs. The
  * purpose is to make descriptor crawls explicit in the NIR, so that the driver
@@ -583,6 +691,9 @@ bool
 agx_nir_lower_texture_early(nir_shader *s, bool support_lod_bias)
 {
    bool progress = false;
+
+   NIR_PASS(progress, s, nir_shader_intrinsics_pass, lower_robustness,
+            nir_metadata_control_flow, NULL);
 
    nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0,
@@ -606,7 +717,7 @@ agx_nir_lower_texture_early(nir_shader *s, bool support_lod_bias)
     */
    if (support_lod_bias) {
       NIR_PASS(progress, s, nir_shader_instructions_pass, lower_sampler_bias,
-               nir_metadata_block_index | nir_metadata_dominance, NULL);
+               nir_metadata_control_flow, NULL);
    }
 
    return progress;
@@ -629,14 +740,14 @@ agx_nir_lower_texture(nir_shader *s)
     * different fencing than other image operations.
     */
    NIR_PASS(progress, s, nir_shader_intrinsics_pass, fence_image,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
 
    NIR_PASS(progress, s, nir_lower_image_atomics_to_global);
 
    NIR_PASS(progress, s, nir_shader_intrinsics_pass, legalize_image_lod,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
    NIR_PASS(progress, s, nir_shader_intrinsics_pass, lower_images,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
    NIR_PASS(progress, s, nir_legalize_16bit_sampler_srcs, tex_constraints);
 
    /* Fold constants after nir_legalize_16bit_sampler_srcs so we can detect 0 in
@@ -651,7 +762,7 @@ agx_nir_lower_texture(nir_shader *s)
    NIR_PASS(progress, s, nir_shader_instructions_pass, lower_regular_texture,
             nir_metadata_none, NULL);
    NIR_PASS(progress, s, nir_shader_instructions_pass, lower_tex_crawl,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
 
    return progress;
 }
@@ -681,9 +792,8 @@ lower_multisampled_store(nir_builder *b, nir_intrinsic_instr *intr,
 bool
 agx_nir_lower_multisampled_image_store(nir_shader *s)
 {
-   return nir_shader_intrinsics_pass(
-      s, lower_multisampled_store,
-      nir_metadata_block_index | nir_metadata_dominance, NULL);
+   return nir_shader_intrinsics_pass(s, lower_multisampled_store,
+                                     nir_metadata_control_flow, NULL);
 }
 
 /*
@@ -715,7 +825,11 @@ agx_nir_needs_texture_crawl(nir_instr *instr)
       case nir_intrinsic_image_deref_store:
          return nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_MS;
 
-      /* Loads do not need a crawl, even from buffers */
+      /* Array loads need a crawl, other load do not */
+      case nir_intrinsic_image_load:
+         return nir_intrinsic_image_array(intr) ||
+                nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_CUBE;
+
       default:
          return false;
       }
@@ -733,12 +847,12 @@ agx_nir_needs_texture_crawl(nir_instr *instr)
       case nir_texop_query_levels:
          return true;
 
-      /* Buffer textures need their format read and txf needs its LOD clamped.
-       * Buffer textures are only read through txf.
+      /* Buffer textures need their format read and txf needs its LOD/layer
+       * clamped.  Buffer textures are only read through txf.
        */
       case nir_texop_txf:
       case nir_texop_txf_ms:
-         return has_nonzero_lod(tex) ||
+         return has_nonzero_lod(tex) || tex->is_array ||
                 tex->sampler_dim == GLSL_SAMPLER_DIM_BUF;
 
       default:

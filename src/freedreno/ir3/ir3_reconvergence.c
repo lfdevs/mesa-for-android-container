@@ -303,7 +303,6 @@ ir3_calc_reconvergence(struct ir3_shader_variant *so)
          case OPC_READ_COND_MACRO:
          case OPC_ELECT_MACRO:
          case OPC_READ_FIRST_MACRO:
-         case OPC_SWZ_SHARED_MACRO:
             so->branchstack = MAX2(so->branchstack, rc_level + 1);
             break;
          default:

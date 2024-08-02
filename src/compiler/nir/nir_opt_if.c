@@ -304,6 +304,13 @@ is_trivial_bcsel(const nir_instr *instr, bool allow_non_phi_src)
    return true;
 }
 
+static bool
+is_block_empty(nir_block *block)
+{
+   return nir_cf_node_is_last(&block->cf_node) &&
+          exec_list_is_empty(&block->instr_list);
+}
+
 /**
  * Splits ALU instructions that have a source that is a phi node
  *
@@ -386,6 +393,10 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop, nir_opt_if_options options)
 
    nir_block *continue_block = find_continue_block(loop);
    if (continue_block == header_block)
+      return false;
+
+   /* If the continue block is otherwise empty, leave it that way. */
+   if (is_block_empty(continue_block))
       return false;
 
    nir_foreach_instr_safe(instr, header_block) {
@@ -690,13 +701,6 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
    return progress;
 }
 
-static bool
-is_block_empty(nir_block *block)
-{
-   return nir_cf_node_is_last(&block->cf_node) &&
-          exec_list_is_empty(&block->instr_list);
-}
-
 /* Walk all the phis in the block immediately following the if statement and
  * swap the blocks.
  */
@@ -849,6 +853,7 @@ clone_alu_and_replace_src_defs(nir_builder *b, const nir_alu_instr *alu,
 {
    nir_alu_instr *nalu = nir_alu_instr_create(b->shader, alu->op);
    nalu->exact = alu->exact;
+   nalu->fp_fast_math = alu->fp_fast_math;
 
    nir_def_init(&nalu->instr, &nalu->def,
                 alu->def.num_components,
@@ -1319,11 +1324,9 @@ nir_opt_if(nir_shader *shader, nir_opt_if_options options)
    nir_foreach_function_impl(impl, shader) {
       nir_builder b = nir_builder_create(impl);
 
-      nir_metadata_require(impl, nir_metadata_block_index |
-                                    nir_metadata_dominance);
+      nir_metadata_require(impl, nir_metadata_control_flow);
       progress = opt_if_safe_cf_list(&b, &impl->body, options);
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
 
       bool preserve = true;
 

@@ -7,9 +7,9 @@
 
 #include "nvk_private.h"
 
-#include "nouveau_bo.h"
 #include "util/simple_mtx.h"
 #include "util/vma.h"
+#include "nvkmd/nvkmd.h"
 
 struct nvk_device;
 
@@ -20,32 +20,31 @@ struct nvk_device;
 #define NVK_HEAP_MAX_BO_COUNT (NVK_HEAP_MAX_SIZE_LOG2 - \
                                NVK_HEAP_MIN_SIZE_LOG2 + 1)
 
-struct nvk_heap_bo {
-   struct nouveau_ws_bo *bo;
-   void *map;
+struct nvk_heap_mem {
+   struct nvkmd_mem *mem;
    uint64_t addr;
 };
 
 struct nvk_heap {
-   enum nouveau_ws_bo_flags bo_flags;
-   enum nouveau_ws_bo_map_flags map_flags;
+   enum nvkmd_mem_flags mem_flags;
+   enum nvkmd_mem_map_flags map_flags;
    uint32_t overalloc;
 
    simple_mtx_t mutex;
    struct util_vma_heap heap;
 
-   /* Base address for contiguous heaps, 0 otherwise */
-   uint64_t base_addr;
+   /* VA for contiguous heaps, NULL otherwise */
+   struct nvkmd_va *contig_va;
 
    uint64_t total_size;
 
-   uint32_t bo_count;
-   struct nvk_heap_bo bos[NVK_HEAP_MAX_BO_COUNT];
+   uint32_t mem_count;
+   struct nvk_heap_mem mem[NVK_HEAP_MAX_BO_COUNT];
 };
 
 VkResult nvk_heap_init(struct nvk_device *dev, struct nvk_heap *heap,
-                       enum nouveau_ws_bo_flags bo_flags,
-                       enum nouveau_ws_bo_map_flags map_flags,
+                       enum nvkmd_mem_flags mem_flags,
+                       enum nvkmd_mem_map_flags map_flags,
                        uint32_t overalloc, bool contiguous);
 
 void nvk_heap_finish(struct nvk_device *dev, struct nvk_heap *heap);
@@ -64,8 +63,8 @@ void nvk_heap_free(struct nvk_device *dev, struct nvk_heap *heap,
 static inline uint64_t
 nvk_heap_contiguous_base_address(struct nvk_heap *heap)
 {
-   assert(heap->base_addr != 0);
-   return heap->base_addr;
+   assert(heap->contig_va != NULL);
+   return heap->contig_va->addr;
 }
 
 #endif /* define NVK_HEAP_H */

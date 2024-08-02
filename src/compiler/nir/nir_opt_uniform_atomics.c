@@ -72,6 +72,7 @@ atomic_op_to_alu(nir_atomic_op op)
    case nir_atomic_op_fcmpxchg:
    case nir_atomic_op_inc_wrap:
    case nir_atomic_op_dec_wrap:
+   case nir_atomic_op_ordered_add_gfx12_amd:
       return nir_num_opcodes;
    }
 
@@ -173,8 +174,19 @@ match_invocation_comparison(nir_scalar scalar)
          return get_dim(nir_scalar_chase_alu_src(scalar, 0));
    } else if (scalar.def->parent_instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(scalar.def->parent_instr);
-      if (intrin->intrinsic == nir_intrinsic_elect)
+      if (intrin->intrinsic == nir_intrinsic_elect) {
          return 0x8;
+      } else if (intrin->intrinsic == nir_intrinsic_inverse_ballot) {
+         unsigned bitcount = 0;
+         for (unsigned i = 0; i < intrin->src[0].ssa->num_components; i++) {
+            scalar = nir_scalar_resolved(intrin->src[0].ssa, i);
+            if (!nir_scalar_is_const(scalar))
+               return 0;
+            bitcount += util_bitcount64(nir_scalar_as_uint(scalar));
+         }
+         if (bitcount <= 1)
+            return 0x8;
+      }
    }
 
    return 0;

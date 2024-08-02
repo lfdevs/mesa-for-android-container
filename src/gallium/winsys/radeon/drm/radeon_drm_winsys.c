@@ -554,6 +554,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    ws->info.gfx_ib_pad_with_type2 = ws->info.gfx_level <= GFX6 ||
                                     (ws->info.family == CHIP_HAWAII &&
                                      ws->accel_working2 < 3);
+   ws->info.has_cp_dma = true;
    ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
    ws->info.has_bo_metadata = false;
    ws->info.has_eqaa_surface_allocator = false;

@@ -37,6 +37,47 @@ vn_image_get_plane_count(const VkImageCreateInfo *create_info)
    return vk_format_get_plane_count(create_info->format);
 }
 
+static inline uint32_t
+vn_image_get_plane(const VkImageAspectFlagBits plane_aspect)
+{
+   switch (plane_aspect) {
+   case VK_IMAGE_ASPECT_PLANE_1_BIT:
+      return 1;
+   case VK_IMAGE_ASPECT_PLANE_2_BIT:
+      return 2;
+   default:
+      return 0;
+   }
+}
+
+static void
+vn_image_fill_reqs(const struct vn_image_memory_requirements *req,
+                   VkMemoryRequirements2 *out_reqs)
+{
+   union {
+      VkBaseOutStructure *pnext;
+      VkMemoryRequirements2 *two;
+      VkMemoryDedicatedRequirements *dedicated;
+   } u = { .two = out_reqs };
+
+   while (u.pnext) {
+      switch (u.pnext->sType) {
+      case VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2:
+         u.two->memoryRequirements = req->memory.memoryRequirements;
+         break;
+      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS:
+         u.dedicated->prefersDedicatedAllocation =
+            req->dedicated.prefersDedicatedAllocation;
+         u.dedicated->requiresDedicatedAllocation =
+            req->dedicated.requiresDedicatedAllocation;
+         break;
+      default:
+         break;
+      }
+      u.pnext = u.pnext->pNext;
+   }
+}
+
 static void
 vn_image_cache_debug_dump(struct vn_image_reqs_cache *cache)
 {
@@ -205,6 +246,31 @@ vn_image_init_reqs_from_cache(struct vn_device *dev,
    return !!hash_entry;
 }
 
+static struct vn_image_memory_requirements *
+vn_image_get_reqs_from_cache(struct vn_device *dev,
+                             uint8_t *key,
+                             uint32_t plane)
+{
+   struct vn_image_memory_requirements *requirements = NULL;
+   struct vn_image_reqs_cache *cache = &dev->image_reqs_cache;
+
+   assert(cache->ht);
+
+   simple_mtx_lock(&cache->mutex);
+   struct hash_entry *hash_entry = _mesa_hash_table_search(cache->ht, key);
+   if (hash_entry) {
+      struct vn_image_reqs_cache_entry *cache_entry = hash_entry->data;
+      requirements = &cache_entry->requirements[plane];
+      list_move_to(&cache_entry->head, &dev->image_reqs_cache.lru);
+      p_atomic_inc(&cache->debug.cache_hit_count);
+   } else {
+      p_atomic_inc(&cache->debug.cache_miss_count);
+   }
+   simple_mtx_unlock(&cache->mutex);
+
+   return requirements;
+}
+
 static void
 vn_image_store_reqs_in_cache(struct vn_device *dev,
                              uint8_t *key,
@@ -365,6 +431,9 @@ vn_image_deferred_info_init(struct vn_image *img,
             info->from_external_format = true;
          }
       } break;
+      case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
+         img->wsi.is_wsi = true;
+         break;
       default:
          break;
       }
@@ -614,8 +683,12 @@ vn_CreateImage(VkDevice device,
    } else if (ahb_info) {
       result = vn_image_create_deferred(dev, pCreateInfo, alloc, &img);
    } else if (swapchain_info) {
+#if DETECT_OS_ANDROID
+      result = vn_image_create_deferred(dev, pCreateInfo, alloc, &img);
+#else
       result = vn_wsi_create_image_from_swapchain(
          dev, pCreateInfo, swapchain_info, alloc, &img);
+#endif
    } else {
       struct vn_image_create_info local_info;
       if (external_info &&
@@ -667,47 +740,15 @@ vn_GetImageMemoryRequirements2(VkDevice device,
                                VkMemoryRequirements2 *pMemoryRequirements)
 {
    const struct vn_image *img = vn_image_from_handle(pInfo->image);
-   union {
-      VkBaseOutStructure *pnext;
-      VkMemoryRequirements2 *two;
-      VkMemoryDedicatedRequirements *dedicated;
-   } u = { .two = pMemoryRequirements };
 
    uint32_t plane = 0;
    const VkImagePlaneMemoryRequirementsInfo *plane_info =
       vk_find_struct_const(pInfo->pNext,
                            IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO);
-   if (plane_info) {
-      switch (plane_info->planeAspect) {
-      case VK_IMAGE_ASPECT_PLANE_1_BIT:
-         plane = 1;
-         break;
-      case VK_IMAGE_ASPECT_PLANE_2_BIT:
-         plane = 2;
-         break;
-      default:
-         plane = 0;
-         break;
-      }
-   }
+   if (plane_info)
+      plane = vn_image_get_plane(plane_info->planeAspect);
 
-   while (u.pnext) {
-      switch (u.pnext->sType) {
-      case VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2:
-         u.two->memoryRequirements =
-            img->requirements[plane].memory.memoryRequirements;
-         break;
-      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS:
-         u.dedicated->prefersDedicatedAllocation =
-            img->requirements[plane].dedicated.prefersDedicatedAllocation;
-         u.dedicated->requiresDedicatedAllocation =
-            img->requirements[plane].dedicated.requiresDedicatedAllocation;
-         break;
-      default:
-         break;
-      }
-      u.pnext = u.pnext->pNext;
-   }
+   vn_image_fill_reqs(&img->requirements[plane], pMemoryRequirements);
 }
 
 void
@@ -731,33 +772,27 @@ vn_GetImageSparseMemoryRequirements2(
       pSparseMemoryRequirements);
 }
 
-static void
-vn_image_bind_wsi_memory(struct vn_image *img, struct vn_device_memory *mem)
+static VkResult
+vn_image_bind_wsi_memory(struct vn_device *dev,
+                         uint32_t count,
+                         const VkBindImageMemoryInfo *infos)
 {
-   assert(img->wsi.is_wsi && !img->wsi.memory);
-   img->wsi.memory = mem;
-}
+   STACK_ARRAY(VkBindImageMemoryInfo, local_infos, count);
+   typed_memcpy(local_infos, infos, count);
 
-VkResult
-vn_BindImageMemory2(VkDevice device,
-                    uint32_t bindInfoCount,
-                    const VkBindImageMemoryInfo *pBindInfos)
-{
-   STACK_ARRAY(VkBindImageMemoryInfo, bind_infos, bindInfoCount);
-   typed_memcpy(bind_infos, pBindInfos, bindInfoCount);
-
-   for (uint32_t i = 0; i < bindInfoCount; i++) {
-      VkBindImageMemoryInfo *info = &bind_infos[i];
+   for (uint32_t i = 0; i < count; i++) {
+      VkBindImageMemoryInfo *info = &local_infos[i];
       struct vn_image *img = vn_image_from_handle(info->image);
       struct vn_device_memory *mem =
          vn_device_memory_from_handle(info->memory);
 
       if (!mem) {
 #if DETECT_OS_ANDROID
-         /* TODO handle VkNativeBufferANDROID when we bump up
-          * VN_ANDROID_NATIVE_BUFFER_SPEC_VERSION
-          */
-         unreachable("VkBindImageMemoryInfo with no memory");
+         mem = vn_android_get_wsi_memory_from_bind_info(dev, info);
+         if (!mem) {
+            STACK_ARRAY_FINISH(local_infos);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
 #else
          const VkBindImageMemorySwapchainInfoKHR *swapchain_info =
             vk_find_struct_const(info->pNext,
@@ -768,30 +803,42 @@ vn_BindImageMemory2(VkDevice device,
             vn_image_from_handle(wsi_common_get_image(
                swapchain_info->swapchain, swapchain_info->imageIndex));
          mem = swapchain_img->wsi.memory;
-         info->memory = vn_device_memory_to_handle(mem);
 #endif
+         info->memory = vn_device_memory_to_handle(mem);
       }
       assert(mem && info->memory != VK_NULL_HANDLE);
 
-      if (img->wsi.is_wsi)
-         vn_image_bind_wsi_memory(img, mem);
-
-      /* If mem is suballocated, mem->base_memory is non-NULL and we must
-       * patch it in.  If VkBindImageMemorySwapchainInfoKHR is given, we've
-       * looked mem up above and also need to patch it in.
-       */
-      if (mem->base_memory) {
-         info->memory = vn_device_memory_to_handle(mem->base_memory);
-         info->memoryOffset += mem->base_offset;
-      }
+#if DETECT_OS_ANDROID
+      assert(img->wsi.memory);
+#else
+      assert(!img->wsi.memory);
+      img->wsi.memory = mem;
+#endif
    }
 
+   vn_async_vkBindImageMemory2(dev->primary_ring, vn_device_to_handle(dev),
+                               count, local_infos);
+
+   STACK_ARRAY_FINISH(local_infos);
+
+   return VK_SUCCESS;
+}
+
+VkResult
+vn_BindImageMemory2(VkDevice device,
+                    uint32_t bindInfoCount,
+                    const VkBindImageMemoryInfo *pBindInfos)
+{
    struct vn_device *dev = vn_device_from_handle(device);
+
+   for (uint32_t i = 0; i < bindInfoCount; i++) {
+      struct vn_image *img = vn_image_from_handle(pBindInfos[i].image);
+      if (img->wsi.is_wsi)
+         return vn_image_bind_wsi_memory(dev, bindInfoCount, pBindInfos);
+   }
+
    vn_async_vkBindImageMemory2(dev->primary_ring, device, bindInfoCount,
-                               bind_infos);
-
-   STACK_ARRAY_FINISH(bind_infos);
-
+                               pBindInfos);
    return VK_SUCCESS;
 }
 
@@ -1041,9 +1088,53 @@ vn_GetDeviceImageMemoryRequirements(
 {
    struct vn_device *dev = vn_device_from_handle(device);
 
-   /* TODO integrate image memory requirements cache */
-   vn_call_vkGetDeviceImageMemoryRequirements(dev->primary_ring, device,
-                                              pInfo, pMemoryRequirements);
+   uint8_t key[SHA1_DIGEST_LENGTH] = { 0 };
+   const bool cacheable =
+      vn_image_get_image_reqs_key(dev, pInfo->pCreateInfo, key);
+
+   if (cacheable) {
+      uint32_t plane = 0;
+      if (pInfo->pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT)
+         vn_image_get_plane(pInfo->planeAspect);
+
+      const struct vn_image_memory_requirements *cached_reqs =
+         vn_image_get_reqs_from_cache(dev, key, plane);
+      if (cached_reqs) {
+         vn_image_fill_reqs(cached_reqs, pMemoryRequirements);
+         return;
+      }
+
+      const uint32_t plane_count =
+         vn_image_get_plane_count(pInfo->pCreateInfo);
+      STACK_ARRAY(VkDeviceImageMemoryRequirements, req_info, plane_count);
+      STACK_ARRAY(struct vn_image_memory_requirements, reqs, plane_count);
+
+      /* Retrieve reqs for all planes so the cache entry is complete */
+      for (uint32_t i = 0; i < plane_count; i++) {
+         req_info[i].sType =
+            VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
+         req_info[i].pNext = NULL;
+         req_info[i].pCreateInfo = pInfo->pCreateInfo;
+         req_info[i].planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+
+         reqs[i].memory.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+         reqs[i].memory.pNext = &reqs[i].dedicated;
+         reqs[i].dedicated.sType =
+            VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+         reqs[i].dedicated.pNext = NULL;
+
+         vn_call_vkGetDeviceImageMemoryRequirements(
+            dev->primary_ring, device, &req_info[i], &reqs[i].memory);
+      }
+      vn_image_fill_reqs(&reqs[plane], pMemoryRequirements);
+      vn_image_store_reqs_in_cache(dev, key, plane_count, reqs);
+
+      STACK_ARRAY_FINISH(req_info);
+      STACK_ARRAY_FINISH(reqs);
+   } else {
+      vn_call_vkGetDeviceImageMemoryRequirements(dev->primary_ring, device,
+                                                 pInfo, pMemoryRequirements);
+   }
 }
 
 void
@@ -1065,4 +1156,60 @@ vn_GetDeviceImageSparseMemoryRequirements(
    vn_call_vkGetDeviceImageSparseMemoryRequirements(
       dev->primary_ring, device, pInfo, pSparseMemoryRequirementCount,
       pSparseMemoryRequirements);
+}
+
+void
+vn_GetDeviceImageSubresourceLayoutKHR(VkDevice device,
+                                      const VkDeviceImageSubresourceInfoKHR *pInfo,
+                                      VkSubresourceLayout2KHR *pLayout)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+
+   /* TODO per-device cache */
+   vn_call_vkGetDeviceImageSubresourceLayoutKHR(
+      dev->primary_ring, device, pInfo, pLayout);
+}
+
+void
+vn_GetImageSubresourceLayout2KHR(VkDevice device,
+                                 VkImage image,
+                                 const VkImageSubresource2KHR *pSubresource,
+                                 VkSubresourceLayout2KHR *pLayout)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+   struct vn_image *img = vn_image_from_handle(image);
+
+   /* override aspect mask for wsi/ahb images with tiling modifier */
+   VkImageSubresource2KHR local_subresource;
+   if ((img->wsi.is_wsi && img->wsi.tiling_override ==
+                              VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) ||
+       img->deferred_info) {
+      VkImageAspectFlags aspect = pSubresource->imageSubresource.aspectMask;
+      switch (aspect) {
+      case VK_IMAGE_ASPECT_COLOR_BIT:
+      case VK_IMAGE_ASPECT_DEPTH_BIT:
+      case VK_IMAGE_ASPECT_STENCIL_BIT:
+      case VK_IMAGE_ASPECT_PLANE_0_BIT:
+         aspect = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT;
+         break;
+      case VK_IMAGE_ASPECT_PLANE_1_BIT:
+         aspect = VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT;
+         break;
+      case VK_IMAGE_ASPECT_PLANE_2_BIT:
+         aspect = VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT;
+         break;
+      default:
+         break;
+      }
+
+      /* only handle supported aspect override */
+      if (aspect != pSubresource->imageSubresource.aspectMask) {
+         local_subresource = *pSubresource;
+         local_subresource.imageSubresource.aspectMask = aspect;
+         pSubresource = &local_subresource;
+      }
+   }
+
+   vn_call_vkGetImageSubresourceLayout2KHR(
+      dev->primary_ring, device, image, pSubresource, pLayout);
 }

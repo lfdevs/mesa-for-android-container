@@ -12,7 +12,7 @@ struct nouveau_ws_contxt;
 struct nouveau_ws_device;
 
 #include "nv_push.h"
-#include "nvk_cl9097.h"
+#include "nv_push_cl9097.h"
 
 #define DATA_BO_SIZE 4096
 #define DATA_DWORDS 1024

@@ -187,9 +187,7 @@ lower_ps_load_barycentric(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_
    b->cursor = nir_before_instr(&intrin->instr);
 
    nir_def *replacement = nir_load_var(b, var);
-   nir_def_rewrite_uses(&intrin->def, replacement);
-
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, replacement);
    return true;
 }
 
@@ -261,9 +259,7 @@ lower_ps_load_sample_mask_in(nir_builder *b, nir_intrinsic_instr *intrin, lower_
    nir_def *sample_mask = nir_load_sample_mask_in(b);
    nir_def *replacement = nir_iand(b, sample_mask, submask);
 
-   nir_def_rewrite_uses(&intrin->def, replacement);
-
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, replacement);
    return true;
 }
 
@@ -547,7 +543,7 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
       switch (spi_shader_col_format) {
       case V_028714_SPI_SHADER_FP16_ABGR:
          if (type_size == 32)
-            pack_op = nir_op_pack_half_2x16;
+            pack_op = nir_op_pack_half_2x16_rtz_split;
          break;
       case V_028714_SPI_SHADER_UINT16_ABGR:
          if (type_size == 32) {
@@ -606,9 +602,13 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
 
          lo = lo ? lo : nir_undef(b, 1, type_size);
          hi = hi ? hi : nir_undef(b, 1, type_size);
-         nir_def *vec = nir_vec2(b, lo, hi);
 
-         outputs[i] = nir_build_alu1(b, pack_op, vec);
+         if (nir_op_infos[pack_op].num_inputs == 2) {
+            outputs[i] = nir_build_alu2(b, pack_op, lo, hi);
+         } else {
+            nir_def *vec = nir_vec2(b, lo, hi);
+            outputs[i] = nir_build_alu1(b, pack_op, vec);
+         }
 
          if (s->options->gfx_level >= GFX11)
             write_mask |= BITFIELD_BIT(i);
@@ -872,7 +872,7 @@ ac_nir_lower_ps(nir_shader *nir, const ac_nir_lower_ps_options *options)
    create_interp_param(b, &state);
 
    nir_shader_instructions_pass(nir, lower_ps_intrinsic,
-                                nir_metadata_block_index | nir_metadata_dominance,
+                                nir_metadata_control_flow,
                                 &state);
 
    /* Must be after lower_ps_intrinsic() to prevent it lower added intrinsic here. */

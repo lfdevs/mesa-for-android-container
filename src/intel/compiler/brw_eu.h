@@ -1566,7 +1566,7 @@ void
 brw_MOV_reloc_imm(struct brw_codegen *p,
                   struct brw_reg dst,
                   enum brw_reg_type src_type,
-                  uint32_t id);
+                  uint32_t id, uint32_t base);
 
 unsigned
 brw_num_sources_from_inst(const struct brw_isa_info *isa,

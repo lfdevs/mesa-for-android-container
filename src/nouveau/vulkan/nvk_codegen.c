@@ -13,8 +13,9 @@
 #include "nv50_ir_driver.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_shader_tokens.h"
+#include "util/u_memory.h"
 
-#include "nvk_cl9097.h"
+#include "nv_push_cl9097.h"
 
 uint64_t
 nvk_cg_get_prog_debug(void)
@@ -117,7 +118,7 @@ nvk_cg_preprocess_nir(nir_shader *nir)
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_shader_instructions_pass, lower_fragcoord_instr,
-               nir_metadata_block_index | nir_metadata_dominance, NULL);
+               nir_metadata_control_flow, NULL);
    }
 
    nvk_cg_optimize_nir(nir);
@@ -258,7 +259,7 @@ static void
 nak_cg_postprocess_nir(nir_shader *nir)
 {
    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_image_size_to_txs,
-            nir_metadata_block_index | nir_metadata_dominance, NULL);
+            nir_metadata_control_flow, NULL);
 
    uint32_t indirect_mask = nir_var_function_temp;
 

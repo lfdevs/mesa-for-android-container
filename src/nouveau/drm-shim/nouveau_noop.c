@@ -199,6 +199,9 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
          struct nv_device_info_v0 *info = (void *)&mthd->mthd.data;
          info->chipset = device_info.chip_id;
          info->platform = NV_DEVICE_INFO_V0_PCIE;
+
+         /* make something up */
+         info->ram_user = 3ULL << 30;
          break;
       }
       default:

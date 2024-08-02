@@ -31,8 +31,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "compiler/glsl_types.h"
 #include "compiler/glsl/glsl_to_nir.h"
+#include "compiler/glsl_types.h"
 #include "compiler/nir/nir_builder.h"
 #include "util/half_float.h"
 #include "util/list.h"
@@ -271,7 +271,7 @@ midgard_nir_lower_global_load(nir_shader *shader)
 {
    return nir_shader_intrinsics_pass(
       shader, midgard_nir_lower_global_load_instr,
-      nir_metadata_block_index | nir_metadata_dominance, NULL);
+      nir_metadata_control_flow, NULL);
 }
 
 static bool
@@ -1402,7 +1402,6 @@ compute_builtin_arg(nir_intrinsic_op op)
    case nir_intrinsic_load_local_invocation_id:
       return REGISTER_LDST_LOCAL_THREAD_ID;
    case nir_intrinsic_load_global_invocation_id:
-   case nir_intrinsic_load_global_invocation_id_zero_base:
       return REGISTER_LDST_GLOBAL_THREAD_ID;
    default:
       unreachable("Invalid compute paramater loaded");
@@ -1571,9 +1570,9 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_discard_if:
-   case nir_intrinsic_discard: {
-      bool conditional = instr->intrinsic == nir_intrinsic_discard_if;
+   case nir_intrinsic_terminate_if:
+   case nir_intrinsic_terminate: {
+      bool conditional = instr->intrinsic == nir_intrinsic_terminate_if;
       struct midgard_instruction discard = v_branch(conditional, false);
       discard.branch.target_type = TARGET_DISCARD;
 
@@ -1890,7 +1889,6 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_workgroup_id:
    case nir_intrinsic_load_local_invocation_id:
    case nir_intrinsic_load_global_invocation_id:
-   case nir_intrinsic_load_global_invocation_id_zero_base:
       emit_compute_builtin(ctx, instr);
       break;
 

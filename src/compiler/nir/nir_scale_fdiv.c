@@ -73,7 +73,6 @@ bool
 nir_scale_fdiv(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, nir_scale_fdiv_instr,
-                                       nir_metadata_block_index |
-                                          nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }

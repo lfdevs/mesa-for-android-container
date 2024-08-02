@@ -2797,6 +2797,12 @@ get_tex_parameteriv(struct gl_context *ctx,
          *params = obj->NumSparseLevels;
          break;
 
+      case GL_SURFACE_COMPRESSION_EXT:
+         if (!_mesa_has_EXT_texture_storage_compression(ctx))
+            goto invalid_pname;
+         *params = obj->CompressionRate;
+         break;
+
       default:
          goto invalid_pname;
    }

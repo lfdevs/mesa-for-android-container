@@ -74,7 +74,7 @@ def main():
             expected = f.read().splitlines()
 
         proc= subprocess.run(
-            runner + ['--just-log', '--version', '150', file],
+            runner + ['--just-log', '--version', '150', '--link', file],
             stdout=subprocess.PIPE
         )
         if proc.returncode == 255:

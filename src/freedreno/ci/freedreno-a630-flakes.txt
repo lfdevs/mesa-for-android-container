@@ -204,10 +204,6 @@ KHR-GLES31.core.shader_image_load_store.basic-allTargets-atomicFS
 
 KHR-GL46.shader_image_load_store.basic-allTargets-atomic
 
-# intermittently crashing with a sig11, maybe starting around 2023-01-18.
-# One log had the kernel complaining about allocating memory.
-spec@!opengl 1.1@max-texture-size
-
 # First seen 2023-05-05
 gmem-unaligned-dEQP-VK.renderpass.suballocation.load_store_op_none.depthstencil_d32_sfloat_s8_uint_load_op_depth_load_stencil_none_store_op_depth_store_stencil_none_stencil_write_off
 
@@ -215,6 +211,7 @@ KHR-GL46.buffer_storage.map_persistent_dispatch
 KHR-GL46.buffer_storage.map_persistent_flush
 KHR-GL46.compute_shader.atomic-case1
 KHR-GL46.compute_shader.resource-uniform
+KHR-GL46.direct_state_access.framebuffers_texture_layer_attachment
 KHR-GL46.sepshaderobjs.StateInteraction
 KHR-GL46.shader_bitfield_operation.findMSB.ivec4_2
 KHR-GL46.shader_bitfield_operation.imulExtended.ivec2_3
@@ -282,3 +279,25 @@ stale-regs-dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset
 stale-regs-dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.pgq_64bit_xfb_32bit.geom.xfb.rast.triangle_list.pgq_default_xfb_1.single_draw.xfbq_first.none
 stale-regs-dEQP-VK.transform_feedback.simple.query_omit_write_line_strip_with_adjacency_1_61_32bits
 
+# Updated by ci-collate
+KHR-GL46.compute_shader.atomic-case2
+KHR-GL46.shading_language_420pack.qualifier_order
+KHR-GL46.copy_image.integer_tex
+spec@arb_gpu_shader_fp64@execution@built-in-functions@fs-op-div-dmat4-dmat4
+spec@glsl-4.00@execution@built-in-functions@fs-inverse-dmat4
+spec@arb_gpu_shader_fp64@execution@built-in-functions@fs-op-div-dmat3x4-dmat3x4
+spec@arb_gpu_shader_fp64@execution@built-in-functions@fs-op-mult-dmat3x4-dmat4x3
+spec@glsl-4.00@execution@built-in-functions@fs-op-mult-dmat3x4-dmat4x3
+spec@arb_gpu_shader_fp64@execution@vs-isnan-dvec
+spec@glsl-3.30@execution@built-in-functions@fs-floatbitstoint-neg_abs
+spec@glsl-4.00@execution@built-in-functions@fs-op-div-double-dmat3x4
+spec@arb_gpu_shader_fp64@execution@built-in-functions@fs-op-div-double-dmat4
+spec@glsl-4.00@execution@built-in-functions@fs-op-div-dmat3x4-dmat3x4
+dEQP-VK.spirv_assembly.instruction.graphics.opspecconstantop.shiftrightarithmetic_frag
+dEQP-VK.synchronization2.op.single_queue.fence.write_image_compute_read_image_vertex.image_128x128_r8_unorm
+dEQP-VK.synchronization.timeline_semaphore.wait_before_signal.write_blit_image_read_image_vertex.image_128x128_r8g8b8a8_unorm
+dEQP-VK.synchronization.op.single_queue.binary_semaphore.write_clear_attachments_read_image_compute.image_128x128_r16_uint
+dEQP-VK.tessellation.invariance.tess_coord_component_range.quads_fractional_odd_spacing_ccw_point_mode
+dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_1d.r32g32b32a32_uint.bc3_srgb_block.optimal_optimal
+dEQP-VK.synchronization2.signal_order.shared_binary_semaphore.write_ssbo_fragment_read_ssbo_fragment.buffer_16384_opaque_fd
+dEQP-VK.transform_feedback.simple.query_copy_triangle_list_0_249_64bits

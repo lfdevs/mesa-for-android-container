@@ -40,16 +40,6 @@ aco_log(Program* program, enum aco_compiler_debug_level level, const char* prefi
 }
 
 void
-_aco_perfwarn(Program* program, const char* file, unsigned line, const char* fmt, ...)
-{
-   va_list args;
-
-   va_start(args, fmt);
-   aco_log(program, ACO_COMPILER_DEBUG_LEVEL_PERFWARN, "ACO PERFWARN:\n", file, line, fmt, args);
-   va_end(args);
-}
-
-void
 _aco_err(Program* program, const char* file, unsigned line, const char* fmt, ...)
 {
    va_list args;
@@ -418,7 +408,8 @@ validate_ir(Program* program)
 
             /* check num sgprs for VALU */
             if (instr->isVALU()) {
-               bool is_shift64 = instr->opcode == aco_opcode::v_lshlrev_b64 ||
+               bool is_shift64 = instr->opcode == aco_opcode::v_lshlrev_b64_e64 ||
+                                 instr->opcode == aco_opcode::v_lshlrev_b64 ||
                                  instr->opcode == aco_opcode::v_lshrrev_b64 ||
                                  instr->opcode == aco_opcode::v_ashrrev_i64;
                unsigned const_bus_limit = 1;
@@ -731,6 +722,9 @@ validate_ir(Program* program)
                   instr.get());
             check(instr->operands.size() < 4 || instr->operands[3].isOfType(RegType::vgpr),
                   "VMEM write data must be vgpr", instr.get());
+            if (instr->operands.size() >= 3 && instr->operands[2].isConstant())
+               check(program->gfx_level < GFX12 || instr->operands[2].constantValue() == 0,
+                     "VMEM SOFFSET must not be non-zero constant on GFX12+", instr.get());
 
             const bool d16 =
                instr->opcode ==
@@ -809,8 +803,11 @@ validate_ir(Program* program)
                         check(instr->operands[i].regClass() == v1,
                               "GFX10 MIMG VADDR must be v1 if NSA is used", instr.get());
                      } else {
+                        unsigned num_scalar =
+                           program->gfx_level >= GFX12 ? (instr->operands.size() - 4) : 4;
                         if (instr->opcode != aco_opcode::image_bvh_intersect_ray &&
-                            instr->opcode != aco_opcode::image_bvh64_intersect_ray && i < 7) {
+                            instr->opcode != aco_opcode::image_bvh64_intersect_ray &&
+                            i < 3 + num_scalar) {
                            check(instr->operands[i].regClass() == v1,
                                  "first 4 GFX11 MIMG VADDR must be v1 if NSA is used", instr.get());
                         }
@@ -1201,7 +1198,7 @@ validate_ra(Program* program)
       return false;
 
    bool err = false;
-   aco::live live_vars = aco::live_var_analysis(program);
+   aco::live_var_analysis(program);
    std::vector<std::vector<Temp>> phi_sgpr_ops(program->blocks.size());
    uint16_t sgpr_limit = get_addr_sgpr_from_waves(program, program->num_waves);
 
@@ -1290,66 +1287,18 @@ validate_ra(Program* program)
       std::array<unsigned, 2048> regs; /* register file in bytes */
       regs.fill(0);
 
-      IDSet live = live_vars.live_out[block.index];
-      /* remove killed p_phi sgpr operands */
-      for (Temp tmp : phi_sgpr_ops[block.index])
-         live.erase(tmp.id());
-
-      /* check live out */
-      for (unsigned id : live) {
+      /* check live in */
+      for (unsigned id : program->live.live_in[block.index]) {
          Temp tmp(id, program->temp_rc[id]);
          PhysReg reg = assignments[id].reg;
          for (unsigned i = 0; i < tmp.bytes(); i++) {
             if (regs[reg.reg_b + i]) {
                err |= ra_fail(program, loc, Location(),
-                              "Assignment of element %d of %%%d already taken by %%%d in live-out",
+                              "Assignment of element %d of %%%d already taken by %%%d in live-in",
                               i, id, regs[reg.reg_b + i]);
             }
             regs[reg.reg_b + i] = id;
          }
-      }
-      regs.fill(0);
-
-      for (auto it = block.instructions.rbegin(); it != block.instructions.rend(); ++it) {
-         aco_ptr<Instruction>& instr = *it;
-
-         /* check killed p_phi sgpr operands */
-         if (instr->opcode == aco_opcode::p_logical_end) {
-            for (Temp tmp : phi_sgpr_ops[block.index]) {
-               PhysReg reg = assignments[tmp.id()].reg;
-               for (unsigned i = 0; i < tmp.bytes(); i++) {
-                  if (regs[reg.reg_b + i])
-                     err |= ra_fail(
-                        program, loc, Location(),
-                        "Assignment of element %d of %%%d already taken by %%%d in live-out", i,
-                        tmp.id(), regs[reg.reg_b + i]);
-               }
-               live.insert(tmp.id());
-            }
-         }
-
-         for (const Definition& def : instr->definitions) {
-            if (!def.isTemp())
-               continue;
-            live.erase(def.tempId());
-         }
-
-         /* don't count phi operands as live-in, since they are actually
-          * killed when they are copied at the predecessor */
-         if (instr->opcode != aco_opcode::p_phi && instr->opcode != aco_opcode::p_linear_phi) {
-            for (const Operand& op : instr->operands) {
-               if (!op.isTemp())
-                  continue;
-               live.insert(op.tempId());
-            }
-         }
-      }
-
-      for (unsigned id : live) {
-         Temp tmp(id, program->temp_rc[id]);
-         PhysReg reg = assignments[id].reg;
-         for (unsigned i = 0; i < tmp.bytes(); i++)
-            regs[reg.reg_b + i] = id;
       }
 
       for (aco_ptr<Instruction>& instr : block.instructions) {

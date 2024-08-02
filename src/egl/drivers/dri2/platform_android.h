@@ -29,8 +29,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <GL/internal/dri_interface.h>
-
+#include "mesa_interface.h"
 #include "egl_dri2.h"
 
 #if ANDROID_API_LEVEL < 26

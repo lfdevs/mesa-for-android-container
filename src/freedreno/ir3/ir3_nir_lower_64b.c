@@ -389,7 +389,7 @@ ir3_nir_lower_64b_regs(nir_shader *shader)
 
       if (impl_progress) {
          nir_metadata_preserve(
-            impl, nir_metadata_block_index | nir_metadata_dominance);
+            impl, nir_metadata_control_flow);
          progress = true;
       }
    }

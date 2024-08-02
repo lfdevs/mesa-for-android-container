@@ -166,7 +166,7 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
 {
    if (zsbuf) {
       struct fd_resource *rsc = fd_resource(zsbuf->texture);
-      enum a6xx_depth_format fmt = fd6_pipe2depth(zsbuf->format);
+      struct fd_resource *stencil = rsc->stencil;
       uint32_t stride = fd_resource_pitch(rsc, zsbuf->u.tex.level);
       uint32_t array_stride = fd_resource_layer_stride(rsc, zsbuf->u.tex.level);
       uint32_t base = gmem ? gmem->zsbuf_base[0] : 0;
@@ -179,38 +179,56 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
        */
       fd_ringbuffer_attach_bo(ring, rsc->bo);
 
-      OUT_REG(
-         ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
-         A6XX_RB_DEPTH_BUFFER_PITCH(stride),
-         A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(array_stride),
-         A6XX_RB_DEPTH_BUFFER_BASE(.bo = rsc->bo, .bo_offset = offset),
-         A6XX_RB_DEPTH_BUFFER_BASE_GMEM(base));
+      if (zsbuf->format == PIPE_FORMAT_S8_UINT) {
+         /* S8 is implemented as Z32_S8 minus the Z32 plane: */
+         enum a6xx_depth_format fmt = DEPTH6_32;
 
-      OUT_REG(ring, A6XX_GRAS_SU_DEPTH_BUFFER_INFO(.depth_format = fmt));
+         OUT_REG(
+            ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
+            A6XX_RB_DEPTH_BUFFER_PITCH(0),
+            A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(0),
+            A6XX_RB_DEPTH_BUFFER_BASE(.qword = 0),
+            A6XX_RB_DEPTH_BUFFER_BASE_GMEM(base));
 
-      OUT_PKT4(ring, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE, 3);
-      fd6_emit_flag_reference(ring, rsc, zsbuf->u.tex.level,
-                              zsbuf->u.tex.first_layer);
+         OUT_REG(ring, A6XX_GRAS_SU_DEPTH_BUFFER_INFO(.depth_format = fmt));
 
-      /* NOTE: blob emits GRAS_LRZ_CNTL plus GRAZ_LRZ_BUFFER_BASE
-       * plus this CP_EVENT_WRITE at the end in it's own IB..
-       */
-      OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-      OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(LRZ_CLEAR));
+         stencil = rsc;
+      } else {
+         enum a6xx_depth_format fmt = fd6_pipe2depth(zsbuf->format);
 
-      if (rsc->stencil) {
-         stride = fd_resource_pitch(rsc->stencil, zsbuf->u.tex.level);
-         array_stride = fd_resource_layer_stride(rsc->stencil, zsbuf->u.tex.level);
+         OUT_REG(
+            ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
+            A6XX_RB_DEPTH_BUFFER_PITCH(stride),
+            A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(array_stride),
+            A6XX_RB_DEPTH_BUFFER_BASE(.bo = rsc->bo, .bo_offset = offset),
+            A6XX_RB_DEPTH_BUFFER_BASE_GMEM(base));
+
+         OUT_REG(ring, A6XX_GRAS_SU_DEPTH_BUFFER_INFO(.depth_format = fmt));
+
+         OUT_PKT4(ring, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE, 3);
+         fd6_emit_flag_reference(ring, rsc, zsbuf->u.tex.level,
+                                 zsbuf->u.tex.first_layer);
+
+         /* NOTE: blob emits GRAS_LRZ_CNTL plus GRAZ_LRZ_BUFFER_BASE
+          * plus this CP_EVENT_WRITE at the end in it's own IB..
+          */
+         OUT_PKT7(ring, CP_EVENT_WRITE, 1);
+         OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(LRZ_CLEAR));
+      }
+
+      if (stencil) {
+         stride = fd_resource_pitch(stencil, zsbuf->u.tex.level);
+         array_stride = fd_resource_layer_stride(stencil, zsbuf->u.tex.level);
          uint32_t base = gmem ? gmem->zsbuf_base[1] : 0;
          uint32_t offset =
-            fd_resource_offset(rsc->stencil, zsbuf->u.tex.level, zsbuf->u.tex.first_layer);
+            fd_resource_offset(stencil, zsbuf->u.tex.level, zsbuf->u.tex.first_layer);
 
-         fd_ringbuffer_attach_bo(ring, rsc->stencil->bo);
+         fd_ringbuffer_attach_bo(ring, stencil->bo);
 
          OUT_REG(ring, RB_STENCIL_INFO(CHIP, .separate_stencil = true),
                  A6XX_RB_STENCIL_BUFFER_PITCH(stride),
                  A6XX_RB_STENCIL_BUFFER_ARRAY_PITCH(array_stride),
-                 A6XX_RB_STENCIL_BUFFER_BASE(.bo = rsc->stencil->bo, .bo_offset = offset),
+                 A6XX_RB_STENCIL_BUFFER_BASE(.bo = stencil->bo, .bo_offset = offset),
                  A6XX_RB_STENCIL_BUFFER_BASE_GMEM(base));
       } else {
          OUT_REG(ring, RB_STENCIL_INFO(CHIP, 0));
@@ -821,7 +839,7 @@ struct bin_size_params {
    enum a6xx_render_mode render_mode;
    bool force_lrz_write_dis;
    enum a6xx_buffers_location buffers_location;
-   unsigned lrz_feedback_zmode_mask;
+   enum a6xx_lrz_feedback_mask lrz_feedback_zmode_mask;
 };
 
 template <chip CHIP>
@@ -1021,7 +1039,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = BINNING_PASS,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = 0x6,
+            .lrz_feedback_zmode_mask = LRZ_FEEDBACK_NONE,
       });
       update_render_cntl<CHIP>(batch, pfb, true);
       emit_binning_pass(batch);
@@ -1035,12 +1053,13 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
        * the reset of these cmds:
        */
 
-      // NOTE a618 not setting .FORCE_LRZ_WRITE_DIS .. 
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
-            .force_lrz_write_dis = true,
+            .force_lrz_write_dis = !screen->info->a6xx.has_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = 0x6,
+            .lrz_feedback_zmode_mask = screen->info->a6xx.has_lrz_feedback
+                                          ? LRZ_FEEDBACK_EARLY_LRZ_LATE_Z
+                                          : LRZ_FEEDBACK_NONE,
       });
 
       OUT_PKT4(ring, REG_A6XX_VFD_MODE_CNTL, 1);
@@ -1060,8 +1079,12 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
 
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !screen->info->a6xx.has_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = 0x6,
+            .lrz_feedback_zmode_mask =
+               screen->info->a6xx.has_lrz_feedback
+                  ? LRZ_FEEDBACK_EARLY_Z_OR_EARLY_LRZ_LATE_Z
+                  : LRZ_FEEDBACK_NONE,
       });
    }
 
@@ -1138,8 +1161,11 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
       const struct fd_gmem_stateobj *gmem = batch->gmem_state;
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !ctx->screen->info->a6xx.has_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = 0x6,
+            .lrz_feedback_zmode_mask = ctx->screen->info->a6xx.has_lrz_feedback
+                                          ? LRZ_FEEDBACK_EARLY_LRZ_LATE_Z
+                                          : LRZ_FEEDBACK_NONE,
       });
 
       OUT_PKT7(ring, CP_SET_MODE, 1);

@@ -25,274 +25,79 @@
 #include "brw_eu_defines.h"
 #include "dev/intel_device_info.h"
 
-#define INVALID (-1)
-
-enum hw_reg_type {
-   BRW_HW_REG_TYPE_UD  = 0,
-   BRW_HW_REG_TYPE_D   = 1,
-   BRW_HW_REG_TYPE_UW  = 2,
-   BRW_HW_REG_TYPE_W   = 3,
-   BRW_HW_REG_TYPE_F   = 7,
-   GFX8_HW_REG_TYPE_UQ = 8,
-   GFX8_HW_REG_TYPE_Q  = 9,
-
-   BRW_HW_REG_TYPE_UB  = 4,
-   BRW_HW_REG_TYPE_B   = 5,
-   GFX7_HW_REG_TYPE_DF = 6,
-   GFX8_HW_REG_TYPE_HF = 10,
-
-   GFX11_HW_REG_TYPE_UD = 0,
-   GFX11_HW_REG_TYPE_D  = 1,
-   GFX11_HW_REG_TYPE_UW = 2,
-   GFX11_HW_REG_TYPE_W  = 3,
-   GFX11_HW_REG_TYPE_UB = 4,
-   GFX11_HW_REG_TYPE_B  = 5,
-   GFX11_HW_REG_TYPE_UQ = 6,
-   GFX11_HW_REG_TYPE_Q  = 7,
-   GFX11_HW_REG_TYPE_HF = 8,
-   GFX11_HW_REG_TYPE_F  = 9,
-   GFX11_HW_REG_TYPE_DF = 10,
-   GFX11_HW_REG_TYPE_NF = 11,
-};
-
-enum hw_imm_type {
-   BRW_HW_IMM_TYPE_UD  = 0,
-   BRW_HW_IMM_TYPE_D   = 1,
-   BRW_HW_IMM_TYPE_UW  = 2,
-   BRW_HW_IMM_TYPE_W   = 3,
-   BRW_HW_IMM_TYPE_F   = 7,
-   GFX8_HW_IMM_TYPE_UQ = 8,
-   GFX8_HW_IMM_TYPE_Q  = 9,
-
-   BRW_HW_IMM_TYPE_UV  = 4,
-   BRW_HW_IMM_TYPE_VF  = 5,
-   BRW_HW_IMM_TYPE_V   = 6,
-   GFX8_HW_IMM_TYPE_DF = 10,
-   GFX8_HW_IMM_TYPE_HF = 11,
-
-   GFX11_HW_IMM_TYPE_UD = 0,
-   GFX11_HW_IMM_TYPE_D  = 1,
-   GFX11_HW_IMM_TYPE_UW = 2,
-   GFX11_HW_IMM_TYPE_W  = 3,
-   GFX11_HW_IMM_TYPE_UV = 4,
-   GFX11_HW_IMM_TYPE_V  = 5,
-   GFX11_HW_IMM_TYPE_UQ = 6,
-   GFX11_HW_IMM_TYPE_Q  = 7,
-   GFX11_HW_IMM_TYPE_HF = 8,
-   GFX11_HW_IMM_TYPE_F  = 9,
-   GFX11_HW_IMM_TYPE_DF = 10,
-   GFX11_HW_IMM_TYPE_VF = 11,
-};
-
-#define GFX12_HW_REG_TYPE_UINT(n) (n)
-#define GFX12_HW_REG_TYPE_SINT(n) (0x4 | (n))
-#define GFX12_HW_REG_TYPE_FLOAT(n) (0x8 | (n))
-
-static const struct hw_type {
-   enum hw_reg_type reg_type;
-   enum hw_imm_type imm_type;
-} gfx8_hw_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = {     INVALID, INVALID             },
-
-   [BRW_REGISTER_TYPE_DF] = { GFX7_HW_REG_TYPE_DF, GFX8_HW_IMM_TYPE_DF },
-   [BRW_REGISTER_TYPE_F]  = { BRW_HW_REG_TYPE_F,   BRW_HW_IMM_TYPE_F   },
-   [BRW_REGISTER_TYPE_HF] = { GFX8_HW_REG_TYPE_HF, GFX8_HW_IMM_TYPE_HF },
-   [BRW_REGISTER_TYPE_VF] = { INVALID,             BRW_HW_IMM_TYPE_VF  },
-
-   [BRW_REGISTER_TYPE_Q]  = { GFX8_HW_REG_TYPE_Q,  GFX8_HW_IMM_TYPE_Q  },
-   [BRW_REGISTER_TYPE_UQ] = { GFX8_HW_REG_TYPE_UQ, GFX8_HW_IMM_TYPE_UQ },
-   [BRW_REGISTER_TYPE_D]  = { BRW_HW_REG_TYPE_D,   BRW_HW_IMM_TYPE_D   },
-   [BRW_REGISTER_TYPE_UD] = { BRW_HW_REG_TYPE_UD,  BRW_HW_IMM_TYPE_UD  },
-   [BRW_REGISTER_TYPE_W]  = { BRW_HW_REG_TYPE_W,   BRW_HW_IMM_TYPE_W   },
-   [BRW_REGISTER_TYPE_UW] = { BRW_HW_REG_TYPE_UW,  BRW_HW_IMM_TYPE_UW  },
-   [BRW_REGISTER_TYPE_B]  = { BRW_HW_REG_TYPE_B,   INVALID             },
-   [BRW_REGISTER_TYPE_UB] = { BRW_HW_REG_TYPE_UB,  INVALID             },
-   [BRW_REGISTER_TYPE_V]  = { INVALID,             BRW_HW_IMM_TYPE_V   },
-   [BRW_REGISTER_TYPE_UV] = { INVALID,             BRW_HW_IMM_TYPE_UV  },
-}, gfx11_hw_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = {      INVALID, INVALID              },
-
-   [BRW_REGISTER_TYPE_NF] = { GFX11_HW_REG_TYPE_NF, INVALID              },
-   [BRW_REGISTER_TYPE_F]  = { GFX11_HW_REG_TYPE_F,  GFX11_HW_IMM_TYPE_F  },
-   [BRW_REGISTER_TYPE_HF] = { GFX11_HW_REG_TYPE_HF, GFX11_HW_IMM_TYPE_HF },
-   [BRW_REGISTER_TYPE_VF] = { INVALID,              GFX11_HW_IMM_TYPE_VF },
-
-   [BRW_REGISTER_TYPE_D]  = { GFX11_HW_REG_TYPE_D,  GFX11_HW_IMM_TYPE_D  },
-   [BRW_REGISTER_TYPE_UD] = { GFX11_HW_REG_TYPE_UD, GFX11_HW_IMM_TYPE_UD },
-   [BRW_REGISTER_TYPE_W]  = { GFX11_HW_REG_TYPE_W,  GFX11_HW_IMM_TYPE_W  },
-   [BRW_REGISTER_TYPE_UW] = { GFX11_HW_REG_TYPE_UW, GFX11_HW_IMM_TYPE_UW },
-   [BRW_REGISTER_TYPE_B]  = { GFX11_HW_REG_TYPE_B,  INVALID              },
-   [BRW_REGISTER_TYPE_UB] = { GFX11_HW_REG_TYPE_UB, INVALID              },
-   [BRW_REGISTER_TYPE_V]  = { INVALID,              GFX11_HW_IMM_TYPE_V  },
-   [BRW_REGISTER_TYPE_UV] = { INVALID,              GFX11_HW_IMM_TYPE_UV },
-}, gfx12_hw_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = {            INVALID, INVALID                    },
-
-   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_FLOAT(2), GFX12_HW_REG_TYPE_FLOAT(2) },
-   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_FLOAT(1), GFX12_HW_REG_TYPE_FLOAT(1) },
-   [BRW_REGISTER_TYPE_VF] = { INVALID,                    GFX12_HW_REG_TYPE_FLOAT(0) },
-
-   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),  GFX12_HW_REG_TYPE_SINT(2)  },
-   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),  GFX12_HW_REG_TYPE_UINT(2)  },
-   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),  GFX12_HW_REG_TYPE_SINT(1)  },
-   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),  GFX12_HW_REG_TYPE_UINT(1)  },
-   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),  INVALID                    },
-   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),  INVALID                    },
-   [BRW_REGISTER_TYPE_V]  = { INVALID,                    GFX12_HW_REG_TYPE_SINT(0)  },
-   [BRW_REGISTER_TYPE_UV] = { INVALID,                    GFX12_HW_REG_TYPE_UINT(0)  },
-}, gfx125_hw_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = {            INVALID, INVALID                    },
-
-   [BRW_REGISTER_TYPE_DF] = { GFX12_HW_REG_TYPE_FLOAT(3), GFX12_HW_REG_TYPE_FLOAT(3) },
-   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_FLOAT(2), GFX12_HW_REG_TYPE_FLOAT(2) },
-   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_FLOAT(1), GFX12_HW_REG_TYPE_FLOAT(1) },
-   [BRW_REGISTER_TYPE_VF] = { INVALID,                    GFX12_HW_REG_TYPE_FLOAT(0) },
-
-   [BRW_REGISTER_TYPE_Q]  = { GFX12_HW_REG_TYPE_SINT(3),  GFX12_HW_REG_TYPE_SINT(3)  },
-   [BRW_REGISTER_TYPE_UQ] = { GFX12_HW_REG_TYPE_UINT(3),  GFX12_HW_REG_TYPE_UINT(3)  },
-   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),  GFX12_HW_REG_TYPE_SINT(2)  },
-   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),  GFX12_HW_REG_TYPE_UINT(2)  },
-   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),  GFX12_HW_REG_TYPE_SINT(1)  },
-   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),  GFX12_HW_REG_TYPE_UINT(1)  },
-   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),  INVALID                    },
-   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),  INVALID                    },
-   [BRW_REGISTER_TYPE_V]  = { INVALID,                    GFX12_HW_REG_TYPE_SINT(0)  },
-   [BRW_REGISTER_TYPE_UV] = { INVALID,                    GFX12_HW_REG_TYPE_UINT(0)  },
-};
-
-/* SNB adds 3-src instructions (MAD and LRP) that only operate on floats, so
- * the types were implied. IVB adds BFE and BFI2 that operate on doublewords
- * and unsigned doublewords, so a new field is also available in the da3src
- * struct (part of struct brw_instruction.bits1 in brw_structs.h) to select
- * dst and shared-src types.
- *
- * CNL adds support for 3-src instructions in align1 mode, and with it support
- * for most register types.
- */
-enum hw_3src_reg_type {
-   GFX7_3SRC_TYPE_F  = 0,
-   GFX7_3SRC_TYPE_D  = 1,
-   GFX7_3SRC_TYPE_UD = 2,
-   GFX7_3SRC_TYPE_DF = 3,
-   GFX8_3SRC_TYPE_HF = 4,
-
-   /** When ExecutionDatatype is 1: @{ */
-   GFX10_ALIGN1_3SRC_REG_TYPE_HF = 0b000,
-   GFX10_ALIGN1_3SRC_REG_TYPE_F  = 0b001,
-   GFX10_ALIGN1_3SRC_REG_TYPE_DF = 0b010,
-   GFX11_ALIGN1_3SRC_REG_TYPE_NF = 0b011,
-   /** @} */
-
-   /** When ExecutionDatatype is 0: @{ */
-   GFX10_ALIGN1_3SRC_REG_TYPE_UD = 0b000,
-   GFX10_ALIGN1_3SRC_REG_TYPE_D  = 0b001,
-   GFX10_ALIGN1_3SRC_REG_TYPE_UW = 0b010,
-   GFX10_ALIGN1_3SRC_REG_TYPE_W  = 0b011,
-   GFX10_ALIGN1_3SRC_REG_TYPE_UB = 0b100,
-   GFX10_ALIGN1_3SRC_REG_TYPE_B  = 0b101,
-   /** @} */
-};
-
-static const struct hw_3src_type {
-   enum hw_3src_reg_type reg_type;
-   enum gfx10_align1_3src_exec_type exec_type;
-} gfx8_hw_3src_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
-
-   [BRW_REGISTER_TYPE_F]  = { GFX7_3SRC_TYPE_F  },
-   [BRW_REGISTER_TYPE_D]  = { GFX7_3SRC_TYPE_D  },
-   [BRW_REGISTER_TYPE_UD] = { GFX7_3SRC_TYPE_UD },
-   [BRW_REGISTER_TYPE_DF] = { GFX7_3SRC_TYPE_DF },
-   [BRW_REGISTER_TYPE_HF] = { GFX8_3SRC_TYPE_HF },
-}, gfx10_hw_3src_align1_type[] = {
-#define E(x) BRW_ALIGN1_3SRC_EXEC_TYPE_##x
-   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
-
-   [BRW_REGISTER_TYPE_DF] = { GFX10_ALIGN1_3SRC_REG_TYPE_DF, E(FLOAT) },
-   [BRW_REGISTER_TYPE_F]  = { GFX10_ALIGN1_3SRC_REG_TYPE_F,  E(FLOAT) },
-   [BRW_REGISTER_TYPE_HF] = { GFX10_ALIGN1_3SRC_REG_TYPE_HF, E(FLOAT) },
-
-   [BRW_REGISTER_TYPE_D]  = { GFX10_ALIGN1_3SRC_REG_TYPE_D,  E(INT)   },
-   [BRW_REGISTER_TYPE_UD] = { GFX10_ALIGN1_3SRC_REG_TYPE_UD, E(INT)   },
-   [BRW_REGISTER_TYPE_W]  = { GFX10_ALIGN1_3SRC_REG_TYPE_W,  E(INT)   },
-   [BRW_REGISTER_TYPE_UW] = { GFX10_ALIGN1_3SRC_REG_TYPE_UW, E(INT)   },
-   [BRW_REGISTER_TYPE_B]  = { GFX10_ALIGN1_3SRC_REG_TYPE_B,  E(INT)   },
-   [BRW_REGISTER_TYPE_UB] = { GFX10_ALIGN1_3SRC_REG_TYPE_UB, E(INT)   },
-}, gfx11_hw_3src_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
-
-   [BRW_REGISTER_TYPE_NF] = { GFX11_ALIGN1_3SRC_REG_TYPE_NF, E(FLOAT) },
-   [BRW_REGISTER_TYPE_F]  = { GFX10_ALIGN1_3SRC_REG_TYPE_F,  E(FLOAT) },
-   [BRW_REGISTER_TYPE_HF] = { GFX10_ALIGN1_3SRC_REG_TYPE_HF, E(FLOAT) },
-
-   [BRW_REGISTER_TYPE_D]  = { GFX10_ALIGN1_3SRC_REG_TYPE_D,  E(INT)   },
-   [BRW_REGISTER_TYPE_UD] = { GFX10_ALIGN1_3SRC_REG_TYPE_UD, E(INT)   },
-   [BRW_REGISTER_TYPE_W]  = { GFX10_ALIGN1_3SRC_REG_TYPE_W,  E(INT)   },
-   [BRW_REGISTER_TYPE_UW] = { GFX10_ALIGN1_3SRC_REG_TYPE_UW, E(INT)   },
-   [BRW_REGISTER_TYPE_B]  = { GFX10_ALIGN1_3SRC_REG_TYPE_B,  E(INT)   },
-   [BRW_REGISTER_TYPE_UB] = { GFX10_ALIGN1_3SRC_REG_TYPE_UB, E(INT)   },
-}, gfx12_hw_3src_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
-
-   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_UINT(2),     E(FLOAT), },
-   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_UINT(1),     E(FLOAT), },
-
-   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),     E(INT),  },
-   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),     E(INT),  },
-   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),     E(INT),  },
-   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),     E(INT),  },
-   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),     E(INT),  },
-   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),     E(INT),  },
-}, gfx125_hw_3src_type[] = {
-   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
-
-   [BRW_REGISTER_TYPE_DF] = { GFX12_HW_REG_TYPE_UINT(3),     E(FLOAT), },
-   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_UINT(2),     E(FLOAT), },
-   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_UINT(1),     E(FLOAT), },
-
-   [BRW_REGISTER_TYPE_Q]  = { GFX12_HW_REG_TYPE_SINT(3),     E(INT),  },
-   [BRW_REGISTER_TYPE_UQ] = { GFX12_HW_REG_TYPE_UINT(3),     E(INT),  },
-   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),     E(INT),  },
-   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),     E(INT),  },
-   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),     E(INT),  },
-   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),     E(INT),  },
-   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),     E(INT),  },
-   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),     E(INT),  },
-#undef E
-};
-
 /**
  * Convert a brw_reg_type enumeration value into the hardware representation.
  *
  * The hardware encoding may depend on whether the value is an immediate.
  */
 unsigned
-brw_reg_type_to_hw_type(const struct intel_device_info *devinfo,
-                        enum brw_reg_file file,
-                        enum brw_reg_type type)
+brw_type_encode(const struct intel_device_info *devinfo,
+                enum brw_reg_file file, enum brw_reg_type type)
 {
-   const struct hw_type *table;
+   assert(file != IMM ||
+          brw_type_is_vector_imm(type) ||
+          brw_type_size_bits(type) >= 16);
 
-   if (devinfo->verx10 >= 125) {
-      assert(type < ARRAY_SIZE(gfx125_hw_type));
-      table = gfx125_hw_type;
-   } else if (devinfo->ver >= 12) {
-      assert(type < ARRAY_SIZE(gfx12_hw_type));
-      table = gfx12_hw_type;
+   if (type == BRW_TYPE_INVALID)
+      return INVALID_HW_REG_TYPE;
+
+   if (brw_type_size_bits(type) == 64 &&
+       !(brw_type_is_int(type) ? devinfo->has_64bit_int
+                               : devinfo->has_64bit_float))
+      return INVALID_HW_REG_TYPE;
+
+   if (devinfo->ver >= 12) {
+      if (brw_type_is_vector_imm(type))
+         return type & ~(BRW_TYPE_VECTOR | BRW_TYPE_SIZE_MASK);
+
+      return type & (BRW_TYPE_BASE_MASK | BRW_TYPE_SIZE_MASK);
    } else if (devinfo->ver >= 11) {
-      assert(type < ARRAY_SIZE(gfx11_hw_type));
-      table = gfx11_hw_type;
-   } else {
-      assert(type < ARRAY_SIZE(gfx8_hw_type));
-      table = gfx8_hw_type;
-   }
+      if (brw_type_is_vector_imm(type)) {
+         if (type == BRW_TYPE_VF)
+            return 11;
+         /* UV/V is the same encoding as UB/B */
+         type &= ~(BRW_TYPE_VECTOR | BRW_TYPE_SIZE_MASK);
+      }
 
-   if (file == BRW_IMMEDIATE_VALUE) {
-      assert(table[type].imm_type != (enum hw_imm_type)INVALID);
-      return table[type].imm_type;
+      if (brw_type_is_float(type)) {
+         /* HF: 8, F: 9 */
+         return 8 + (type & BRW_TYPE_SIZE_MASK) - 1;
+      }
+
+      /* UB: 4, UW: 2, UD: 0
+       *  B: 5,  W: 3,  D: 1
+       */
+      return 4 - 2 * (type & BRW_TYPE_SIZE_MASK) +
+             (brw_type_is_sint(type) ? 1 : 0);
    } else {
-      assert(table[type].reg_type != (enum hw_reg_type)INVALID);
-      return table[type].reg_type;
+      if (brw_type_is_vector_imm(type)) {
+         return type == BRW_TYPE_UV ? 4 :
+                type == BRW_TYPE_VF ? 5 :
+                     /* BRW_TYPE_V */ 6;
+      } else if (brw_type_is_float(type)) {
+         static const unsigned imm_tbl[] = {
+            [0b00] = 5,  /* VF */
+            [0b01] = 11, /* HF */
+            [0b10] = 7,  /*  F */
+            [0b11] = 10, /* DF */
+         };
+         static const unsigned reg_tbl[] = {
+            [0b01] = 10, /* HF */
+            [0b10] = 7,  /*  F */
+            [0b11] = 6,  /* DF */
+         };
+         const unsigned *tbl = file == IMM ? imm_tbl : reg_tbl;
+         return tbl[type & BRW_TYPE_SIZE_MASK];
+      } else {
+         static const unsigned tbl[] = {
+            [0b00] = 4, /* UB/UV */
+            [0b01] = 2, /* UW */
+            [0b10] = 0, /* UD */
+            [0b11] = 8, /* UQ */
+         };
+         return tbl[type & BRW_TYPE_SIZE_MASK] |
+                (brw_type_is_sint(type) ? 1 : 0);
+      }
    }
 }
 
@@ -302,148 +107,165 @@ brw_reg_type_to_hw_type(const struct intel_device_info *devinfo,
  * The hardware encoding may depend on whether the value is an immediate.
  */
 enum brw_reg_type
-brw_hw_type_to_reg_type(const struct intel_device_info *devinfo,
-                        enum brw_reg_file file, unsigned hw_type)
+brw_type_decode(const struct intel_device_info *devinfo,
+                enum brw_reg_file file, unsigned hw_type)
 {
-   const struct hw_type *table;
+   if (hw_type >= (1 << 4))
+      return BRW_TYPE_INVALID;
 
-   if (devinfo->verx10 >= 125) {
-      table = gfx125_hw_type;
-   } else if (devinfo->ver >= 12) {
-      table = gfx12_hw_type;
+   if (devinfo->ver >= 12) {
+      enum brw_reg_type t = (enum brw_reg_type) hw_type;
+      if (brw_type_size_bits(t) == 8) {
+         if (brw_type_is_float(t))
+            return file == IMM ? BRW_TYPE_VF : BRW_TYPE_INVALID;
+         else if (file == IMM)
+            return (t & BRW_TYPE_BASE_SINT) ? BRW_TYPE_V : BRW_TYPE_UV;
+      }
+      /* signed-integer floats -> no */
+      if ((t & BRW_TYPE_BASE_MASK) == BRW_TYPE_BASE_MASK)
+         return BRW_TYPE_INVALID;
+      return t;
    } else if (devinfo->ver >= 11) {
-      table = gfx11_hw_type;
+      static const enum brw_reg_type tbl[] = {
+         [0] = BRW_TYPE_UD,
+         [1] = BRW_TYPE_D,
+         [2] = BRW_TYPE_UW,
+         [3] = BRW_TYPE_W,
+         [4] = BRW_TYPE_UB, /* or UV */
+         [5] = BRW_TYPE_B,  /* or V */
+         [6] = BRW_TYPE_UQ,
+         [7] = BRW_TYPE_Q,
+         [8] = BRW_TYPE_HF,
+         [9] = BRW_TYPE_F,
+         [10] = BRW_TYPE_INVALID, /* no DF */
+         [11] = BRW_TYPE_VF,
+         [12 ... 15] = BRW_TYPE_INVALID,
+      };
+      enum brw_reg_type t = tbl[hw_type];
+      if (file == IMM && brw_type_size_bits(t) == 8)
+         return (t & BRW_TYPE_BASE_SINT) ? BRW_TYPE_V : BRW_TYPE_UV;
+      if (file != IMM && brw_type_is_vector_imm(t))
+         return BRW_TYPE_INVALID;
+      return t;
    } else {
-      table = gfx8_hw_type;
+      static const enum brw_reg_type imm_tbl[] = {
+         [0] = BRW_TYPE_UD,
+         [1] = BRW_TYPE_D,
+         [2] = BRW_TYPE_UW,
+         [3] = BRW_TYPE_W,
+         [4] = BRW_TYPE_UV,
+         [5] = BRW_TYPE_VF,
+         [6] = BRW_TYPE_V,
+         [7] = BRW_TYPE_F,
+         [8] = BRW_TYPE_UQ,
+         [9] = BRW_TYPE_Q,
+         [10] = BRW_TYPE_DF,
+         [11] = BRW_TYPE_HF,
+         [12 ... 15] = BRW_TYPE_INVALID,
+      };
+      static const enum brw_reg_type reg_tbl[] = {
+         [0] = BRW_TYPE_UD,
+         [1] = BRW_TYPE_D,
+         [2] = BRW_TYPE_UW,
+         [3] = BRW_TYPE_W,
+         [4] = BRW_TYPE_UB,
+         [5] = BRW_TYPE_B,
+         [6] = BRW_TYPE_DF,
+         [7] = BRW_TYPE_F,
+         [8] = BRW_TYPE_UQ,
+         [9] = BRW_TYPE_Q,
+         [10] = BRW_TYPE_HF,
+         [11 ... 15] = BRW_TYPE_INVALID,
+      };
+      const enum brw_reg_type *tbl = file == IMM ? imm_tbl : reg_tbl;
+      return tbl[hw_type];
    }
 
-   if (file == BRW_IMMEDIATE_VALUE) {
-      for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
-         if (table[i].imm_type == (enum hw_imm_type)hw_type) {
-            return i;
-         }
-      }
-   } else {
-      for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
-         if (table[i].reg_type == (enum hw_reg_type)hw_type) {
-            return i;
-         }
-      }
-   }
-   return INVALID_REG_TYPE;
+   return BRW_TYPE_INVALID;
 }
 
 /**
- * Convert a brw_reg_type enumeration value into the hardware representation
- * for a 3-src align16 instruction
+ * Convert a brw_reg_type into the hardware encoding for a 3-src instruction.
  */
 unsigned
-brw_reg_type_to_a16_hw_3src_type(const struct intel_device_info *devinfo,
-                                 enum brw_reg_type type)
+brw_type_encode_for_3src(const struct intel_device_info *devinfo,
+                         enum brw_reg_type type)
 {
-   assert(type < ARRAY_SIZE(gfx8_hw_3src_type));
-
-   const struct hw_3src_type *table = gfx8_hw_3src_type;
-   assert(table[type].reg_type != (enum hw_3src_reg_type)INVALID);
-   return table[type].reg_type;
-}
-
-/**
- * Convert a brw_reg_type enumeration value into the hardware representation
- * for a 3-src align1 instruction
- */
-unsigned
-brw_reg_type_to_a1_hw_3src_type(const struct intel_device_info *devinfo,
-                                enum brw_reg_type type)
-{
-   if (devinfo->verx10 >= 125) {
-      assert(type < ARRAY_SIZE(gfx125_hw_3src_type));
-      return gfx125_hw_3src_type[type].reg_type;
-   } else if (devinfo->ver >= 12) {
-      assert(type < ARRAY_SIZE(gfx12_hw_3src_type));
-      return gfx12_hw_3src_type[type].reg_type;
+   if (devinfo->ver >= 12) {
+      /* size mask and SINT type bit match exactly */
+      return type & 0b111;
    } else if (devinfo->ver >= 11) {
-      assert(type < ARRAY_SIZE(gfx11_hw_3src_type));
-      return gfx11_hw_3src_type[type].reg_type;
+      if (brw_type_is_float(type)) {
+         /* HF: 0b000 | F: 0b001 | DF: 0b010; subtract 1 from our size mask */
+         return (type & BRW_TYPE_SIZE_MASK) - 1;
+      }
+
+      /* Bit 0 is the sign bit, bits 1-2 are our size mask reversed.
+       * UD: 0b000 | D: 0b001
+       * UW: 0b010 | W: 0b011
+       * UB: 0b100 | B: 0b101
+       */
+      return ((2 - (type & BRW_TYPE_SIZE_MASK)) << 1) |
+             (brw_type_is_sint(type) ? 1 : 0);
    } else {
-      assert(type < ARRAY_SIZE(gfx10_hw_3src_align1_type));
-      return gfx10_hw_3src_align1_type[type].reg_type;
+      /* align16 encodings */
+      static const unsigned tbl[] = {
+         [0 ... BRW_TYPE_LAST] = BRW_TYPE_INVALID,
+         [BRW_TYPE_F] = 0,
+         [BRW_TYPE_D] = 1,
+         [BRW_TYPE_UD] = 2,
+         [BRW_TYPE_DF] = 3,
+         [BRW_TYPE_HF] = 4,
+      };
+      assert(type < ARRAY_SIZE(tbl));
+      return tbl[type];
    }
 }
 
 /**
- * Convert the hardware representation for a 3-src align16 instruction into a
- * brw_reg_type enumeration value.
+ * Convert the hardware encoding for a 3-src instruction into a brw_reg_type.
  */
 enum brw_reg_type
-brw_a16_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
-                                 unsigned hw_type)
+brw_type_decode_for_3src(const struct intel_device_info *devinfo,
+                         unsigned hw_type, unsigned exec_type)
 {
-   const struct hw_3src_type *table = gfx8_hw_3src_type;
+   STATIC_ASSERT(BRW_ALIGN1_3SRC_EXEC_TYPE_INT == 0);
+   STATIC_ASSERT(BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT == 1);
+   assert(exec_type == 0 || exec_type == 1);
 
-   for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
-      if (table[i].reg_type == hw_type) {
-         return i;
+   if (devinfo->ver >= 12) {
+      unsigned size_field = hw_type & BRW_TYPE_SIZE_MASK;
+      unsigned base_field = hw_type & BRW_TYPE_BASE_MASK;
+      if (exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT) {
+         base_field |= BRW_TYPE_BASE_FLOAT;
+         if (base_field & BRW_TYPE_BASE_SINT)
+            return BRW_TYPE_INVALID;
       }
-   }
-   return INVALID_REG_TYPE;
-}
-
-/**
- * Convert the hardware representation for a 3-src align1 instruction into a
- * brw_reg_type enumeration value.
- */
-enum brw_reg_type
-brw_a1_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
-                                unsigned hw_type, unsigned exec_type)
-{
-   const struct hw_3src_type *table =
-      (devinfo->verx10 >= 125 ? gfx125_hw_3src_type :
-       devinfo->ver >= 12 ? gfx12_hw_3src_type :
-       devinfo->ver >= 11 ? gfx11_hw_3src_type :
-       gfx10_hw_3src_align1_type);
-
-   for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
-      if (table[i].reg_type == hw_type &&
-          table[i].exec_type == exec_type) {
-         return i;
+      return (enum brw_reg_type) (base_field | size_field);
+   } else if (devinfo->ver >= 11) {
+      if (exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT) {
+         return hw_type > 1 ? BRW_TYPE_INVALID :
+                hw_type ? BRW_TYPE_F : BRW_TYPE_HF;
       }
+
+      unsigned size_field = 2 >> (hw_type >> 1);
+      unsigned base_field = (hw_type & 1) << 2;
+      return (enum brw_reg_type) (base_field | size_field);
+   } else {
+      /* align16 encodings */
+      static const enum brw_reg_type tbl[] = {
+         [0] = BRW_TYPE_F,
+         [1] = BRW_TYPE_D,
+         [2] = BRW_TYPE_UD,
+         [3] = BRW_TYPE_DF,
+         [4] = BRW_TYPE_HF,
+      };
+      return hw_type < ARRAY_SIZE(tbl) ? tbl[hw_type] : BRW_TYPE_INVALID;
    }
-   return INVALID_REG_TYPE;
 }
 
 /**
- * Return the element size given a register type.
- */
-unsigned
-brw_reg_type_to_size(enum brw_reg_type type)
-{
-   static const unsigned type_size[] = {
-      [BRW_REGISTER_TYPE_NF] = 8,
-      [BRW_REGISTER_TYPE_DF] = 8,
-      [BRW_REGISTER_TYPE_F]  = 4,
-      [BRW_REGISTER_TYPE_HF] = 2,
-      [BRW_REGISTER_TYPE_VF] = 4,
-
-      [BRW_REGISTER_TYPE_Q]  = 8,
-      [BRW_REGISTER_TYPE_UQ] = 8,
-      [BRW_REGISTER_TYPE_D]  = 4,
-      [BRW_REGISTER_TYPE_UD] = 4,
-      [BRW_REGISTER_TYPE_W]  = 2,
-      [BRW_REGISTER_TYPE_UW] = 2,
-      [BRW_REGISTER_TYPE_B]  = 1,
-      [BRW_REGISTER_TYPE_UB] = 1,
-      [BRW_REGISTER_TYPE_V]  = 2,
-      [BRW_REGISTER_TYPE_UV] = 2,
-   };
-   if (type >= ARRAY_SIZE(type_size))
-      return -1;
-
-   return type_size[type];
-}
-
-/**
- * Converts a BRW_REGISTER_TYPE_* enum to a short string (F, UD, and so on).
+ * Converts a BRW_TYPE_* enum to a short string (F, UD, and so on).
  *
  * This is different than reg_encoding from brw_disasm.c in that it operates
  * on the abstract enum values, rather than the generation-specific encoding.
@@ -452,26 +274,25 @@ const char *
 brw_reg_type_to_letters(enum brw_reg_type type)
 {
    static const char letters[][3] = {
-      [BRW_REGISTER_TYPE_NF] = "NF",
-      [BRW_REGISTER_TYPE_DF] = "DF",
-      [BRW_REGISTER_TYPE_F]  = "F",
-      [BRW_REGISTER_TYPE_HF] = "HF",
-      [BRW_REGISTER_TYPE_VF] = "VF",
+      [BRW_TYPE_UB] = "UB",
+      [BRW_TYPE_UW] = "UW",
+      [BRW_TYPE_UD] = "UD",
+      [BRW_TYPE_UQ] = "UQ",
 
-      [BRW_REGISTER_TYPE_Q]  = "Q",
-      [BRW_REGISTER_TYPE_UQ] = "UQ",
-      [BRW_REGISTER_TYPE_D]  = "D",
-      [BRW_REGISTER_TYPE_UD] = "UD",
-      [BRW_REGISTER_TYPE_W]  = "W",
-      [BRW_REGISTER_TYPE_UW] = "UW",
-      [BRW_REGISTER_TYPE_B]  = "B",
-      [BRW_REGISTER_TYPE_UB] = "UB",
-      [BRW_REGISTER_TYPE_V]  = "V",
-      [BRW_REGISTER_TYPE_UV] = "UV",
+      [BRW_TYPE_B]  = "B",
+      [BRW_TYPE_W]  = "W",
+      [BRW_TYPE_D]  = "D",
+      [BRW_TYPE_Q]  = "Q",
+
+      [BRW_TYPE_HF] = "HF",
+      [BRW_TYPE_F]  = "F",
+      [BRW_TYPE_DF] = "DF",
+
+      [BRW_TYPE_UV] = "UV",
+      [BRW_TYPE_V]  = "V",
+      [BRW_TYPE_VF] = "VF",
    };
-   if (type >= ARRAY_SIZE(letters))
-      return "INVALID";
 
-   assert(type < ARRAY_SIZE(letters));
-   return letters[type];
+   const char *l = type < ARRAY_SIZE(letters) ? letters[type] : NULL;
+   return l ? l : "INVALID";
 }

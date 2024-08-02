@@ -11,24 +11,23 @@
 #include "nvk_physical_device.h"
 #include "nvk_shader.h"
 
-#include "nouveau_context.h"
-
 #include "cla0b5.h"
 #include "cla1c0.h"
 #include "clc0c0.h"
 #include "clc5c0.h"
-#include "nvk_cl90c0.h"
-#include "nvk_cl9097.h"
-#include "nvk_cla0c0.h"
-#include "nvk_clb0c0.h"
-#include "nvk_clb1c0.h"
-#include "nvk_clc3c0.h"
-#include "nvk_clc597.h"
-#include "nvk_clc6c0.h"
+#include "nv_push_cl90c0.h"
+#include "nv_push_cl9097.h"
+#include "nv_push_cla0c0.h"
+#include "nv_push_clb0c0.h"
+#include "nv_push_clb1c0.h"
+#include "nv_push_clc3c0.h"
+#include "nv_push_clc597.h"
+#include "nv_push_clc6c0.h"
 
 VkResult
-nvk_push_dispatch_state_init(struct nvk_device *dev, struct nv_push *p)
+nvk_push_dispatch_state_init(struct nvk_queue *queue, struct nv_push *p)
 {
+   struct nvk_device *dev = nvk_queue_device(queue);
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    P_MTHD(p, NV90C0, SET_OBJECT);
@@ -103,6 +102,8 @@ nvk_compute_local_size(struct nvk_cmd_buffer *cmd)
 
 static uint64_t
 nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
+                        uint32_t base_workgroup[3],
+                        uint32_t global_size[3],
                         uint64_t *root_desc_addr_out)
 {
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
@@ -113,6 +114,11 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
    VkResult result;
 
    nvk_cmd_buffer_flush_push_descriptors(cmd, desc);
+
+   nvk_descriptor_state_set_root_array(cmd, desc, cs.base_group,
+                                       0, 3, base_workgroup);
+   nvk_descriptor_state_set_root_array(cmd, desc, cs.group_count,
+                                       0, 3, global_size);
 
    /* pre Pascal the constant buffer sizes need to be 0x100 aligned. As we
     * simply allocated a buffer and upload data to it, make sure its size is
@@ -131,7 +137,6 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
       return 0;
    }
 
-   desc->root.root_desc_addr = root_desc_addr;
    memcpy(root_desc_map, &desc->root, sizeof(desc->root));
 
    struct nak_qmd_info qmd_info = {
@@ -139,9 +144,9 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
       .smem_size = shader->info.cs.smem_size,
       .smem_max = NVK_MAX_SHARED_SIZE,
       .global_size = {
-         desc->root.cs.group_count[0],
-         desc->root.cs.group_count[1],
-         desc->root.cs.group_count[2],
+         global_size[0],
+         global_size[1],
+         global_size[2],
       },
    };
 
@@ -157,7 +162,7 @@ nvk_flush_compute_state(struct nvk_cmd_buffer *cmd,
          };
       } else {
          ASSERTED bool direct_descriptor =
-            nvk_cmd_buffer_get_cbuf_descriptor(cmd, desc, shader, cbuf, &ba);
+            nvk_cmd_buffer_get_cbuf_addr(cmd, desc, shader, cbuf, &ba);
          assert(direct_descriptor);
       }
 
@@ -226,16 +231,11 @@ nvk_CmdDispatchBase(VkCommandBuffer commandBuffer,
                     uint32_t groupCountZ)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   struct nvk_descriptor_state *desc = &cmd->state.cs.descriptors;
 
-   desc->root.cs.base_group[0] = baseGroupX;
-   desc->root.cs.base_group[1] = baseGroupY;
-   desc->root.cs.base_group[2] = baseGroupZ;
-   desc->root.cs.group_count[0] = groupCountX;
-   desc->root.cs.group_count[1] = groupCountY;
-   desc->root.cs.group_count[2] = groupCountZ;
-
-   uint64_t qmd_addr = nvk_flush_compute_state(cmd, NULL);
+   uint32_t base_workgroup[3] = { baseGroupX, baseGroupY, baseGroupZ };
+   uint32_t global_size[3] = { groupCountX, groupCountY, groupCountZ };
+   uint64_t qmd_addr = nvk_flush_compute_state(cmd, base_workgroup,
+                                               global_size, NULL);
    if (unlikely(qmd_addr == 0))
       return;
 
@@ -335,19 +335,19 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_buffer, buffer, _buffer);
-   struct nvk_descriptor_state *desc = &cmd->state.cs.descriptors;
 
    /* TODO: Indirect dispatch pre-Turing */
    assert(nvk_cmd_buffer_compute_cls(cmd) >= TURING_COMPUTE_A);
 
-   desc->root.cs.base_group[0] = 0;
-   desc->root.cs.base_group[1] = 0;
-   desc->root.cs.base_group[2] = 0;
-
    uint64_t dispatch_addr = nvk_buffer_address(buffer, offset);
 
+   /* We set these through the MME */
+   uint32_t base_workgroup[3] = { 0, 0, 0 };
+   uint32_t global_size[3] = { 0, 0, 0 };
+
    uint64_t root_desc_addr;
-   uint64_t qmd_addr = nvk_flush_compute_state(cmd, &root_desc_addr);
+   uint64_t qmd_addr = nvk_flush_compute_state(cmd, base_workgroup,
+                                               global_size, &root_desc_addr);
    if (unlikely(qmd_addr == 0))
       return;
 

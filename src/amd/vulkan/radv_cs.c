@@ -162,23 +162,24 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level
    }
    if (flush_bits & RADV_CMD_FLAG_INV_L2) {
       /* Writeback and invalidate everything in L2. */
-      gcr_cntl |= S_586_GL2_INV(1) | S_586_GL2_WB(1) | S_586_GLM_INV(1) | S_586_GLM_WB(1);
+      gcr_cntl |= S_586_GL2_INV(1) | S_586_GL2_WB(1) | (gfx_level < GFX12 ? S_586_GLM_INV(1) | S_586_GLM_WB(1) : 0);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_L2;
    } else if (flush_bits & RADV_CMD_FLAG_WB_L2) {
       /* Writeback but do not invalidate.
        * GLM doesn't support WB alone. If WB is set, INV must be set too.
        */
-      gcr_cntl |= S_586_GL2_WB(1) | S_586_GLM_WB(1) | S_586_GLM_INV(1);
+      gcr_cntl |= S_586_GL2_WB(1) | (gfx_level < GFX12 ? S_586_GLM_WB(1) | S_586_GLM_INV(1) : 0);
 
       *sqtt_flush_bits |= RGP_FLUSH_FLUSH_L2;
    } else if (flush_bits & RADV_CMD_FLAG_INV_L2_METADATA) {
+      assert(gfx_level < GFX12);
       gcr_cntl |= S_586_GLM_INV(1) | S_586_GLM_WB(1);
    }
 
    if (flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
       /* TODO: trigger on RADV_CMD_FLAG_FLUSH_AND_INV_CB_META */
-      if (flush_bits & RADV_CMD_FLAG_FLUSH_AND_INV_CB) {
+      if (gfx_level < GFX12 && flush_bits & RADV_CMD_FLAG_FLUSH_AND_INV_CB) {
          /* Flush CMASK/FMASK/DCC. Will wait for idle later. */
          radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
          radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
@@ -188,7 +189,7 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level
 
       /* GFX11 can't flush DB_META and should use a TS event instead. */
       /* TODO: trigger on RADV_CMD_FLAG_FLUSH_AND_INV_DB_META ? */
-      if (gfx_level != GFX11 && (flush_bits & RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
+      if (gfx_level < GFX12 && gfx_level != GFX11 && (flush_bits & RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
          /* Flush HTILE. Will wait for idle later. */
          radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
          radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));

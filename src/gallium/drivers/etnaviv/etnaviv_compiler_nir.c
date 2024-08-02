@@ -491,7 +491,7 @@ emit_alu(struct etna_compile *c, nir_alu_instr * alu)
       break;
    }
 
-   hw_src srcs[3];
+   hw_src srcs[3] = {0};
 
    for (int i = 0; i < info->num_inputs; i++) {
       nir_alu_src *asrc = &alu->src[i];
@@ -561,10 +561,10 @@ emit_intrinsic(struct etna_compile *c, nir_intrinsic_instr * intr)
    case nir_intrinsic_store_deref:
       etna_emit_output(c, nir_src_as_deref(intr->src[0])->var, get_src(c, &intr->src[1]));
       break;
-   case nir_intrinsic_discard_if:
+   case nir_intrinsic_terminate_if:
       etna_emit_discard(c, get_src(c, &intr->src[0]));
       break;
-   case nir_intrinsic_discard:
+   case nir_intrinsic_terminate:
       etna_emit_discard(c, SRC_DISABLE);
       break;
    case nir_intrinsic_load_uniform: {
@@ -576,12 +576,12 @@ emit_intrinsic(struct etna_compile *c, nir_intrinsic_instr * intr)
          .opcode = ISA_OPC_MOVAR,
          .dst.use = 1,
          .dst.write_mask = ISA_WRMASK_X___,
-         .src[2] = get_src(c, &intr->src[0]),
+         .src[0] = get_src(c, &intr->src[0]),
       });
       emit_inst(c, &(struct etna_inst) {
          .opcode = ISA_OPC_MOV,
          .dst = dst,
-         .src[2] = {
+         .src[0] = {
             .use = 1,
             .rgroup = ISA_REG_GROUP_UNIFORM_0,
             .reg = nir_intrinsic_base(intr),
@@ -880,8 +880,7 @@ lower_alu(struct etna_compile *c, nir_alu_instr *alu)
       nir_def *def = nir_build_imm(&b, num_components, 32, value);
 
       if (num_components == info->num_inputs) {
-         nir_def_rewrite_uses(&alu->def, def);
-         nir_instr_remove(&alu->instr);
+         nir_def_replace(&alu->def, def);
          return;
       }
 
@@ -1246,7 +1245,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    uint32_t *code = MALLOC(c->inst_ptr * 16);
    for (unsigned i = 0; i < c->inst_ptr; i++) {
       struct etna_inst *inst = &c->code[i];
-      if (inst->opcode == ISA_OPC_BRANCH)
+      if (inst->opcode == ISA_OPC_BRANCH || inst->opcode == ISA_OPC_BRANCH_UNARY || inst->opcode == ISA_OPC_BRANCH_BINARY)
          inst->imm = block_ptr[inst->imm];
 
       etna_assemble(&code[i * 4], inst, specs->has_no_oneconst_limit);

@@ -37,15 +37,7 @@
 
 #include "ds/intel_tracepoints.h"
 
-/* We reserve :
- *    - GPR 14 for secondary command buffer returns
- *    - GPR 15 for conditional rendering
- */
-#define MI_BUILDER_NUM_ALLOC_GPRS 14
-#define __gen_get_batch_dwords anv_batch_emit_dwords
-#define __gen_address_offset anv_address_add
-#define __gen_get_batch_address(b, a) anv_batch_address(b, a)
-#include "common/mi_builder.h"
+#include "genX_mi_builder.h"
 
 static void
 cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
@@ -1010,9 +1002,6 @@ void genX(CmdDraw)(
     */
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
-   if (cmd_buffer->state.conditional_render_enabled)
-      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
-
 #if GFX_VER < 11
    cmd_buffer_emit_vertex_constants_and_flush(cmd_buffer,
                                               get_vs_prog_data(pipeline),
@@ -1022,6 +1011,9 @@ void genX(CmdDraw)(
 
    genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
    genX(emit_ds)(cmd_buffer);
+
+   if (cmd_buffer->state.conditional_render_enabled)
+      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, true);
 
@@ -1191,9 +1183,6 @@ void genX(CmdDrawIndexed)(
     */
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
-   if (cmd_buffer->state.conditional_render_enabled)
-      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
-
 #if GFX_VER < 11
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
    cmd_buffer_emit_vertex_constants_and_flush(cmd_buffer, vs_prog_data,
@@ -1202,6 +1191,10 @@ void genX(CmdDrawIndexed)(
 #endif
 
    genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+
+   if (cmd_buffer->state.conditional_render_enabled)
+      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
+
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, true);
 
    anv_batch_emit(&cmd_buffer->batch, _3DPRIMITIVE_DIRECT, prim) {
@@ -1498,9 +1491,6 @@ void genX(CmdDrawIndirectByteCountEXT)(
     */
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
-   if (cmd_buffer->state.conditional_render_enabled)
-      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
-
 #if GFX_VER < 11
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
    if (vs_prog_data->uses_firstvertex ||
@@ -1511,6 +1501,9 @@ void genX(CmdDrawIndirectByteCountEXT)(
 #endif
 
    genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+
+   if (cmd_buffer->state.conditional_render_enabled)
+      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
    struct mi_builder b;
    mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);

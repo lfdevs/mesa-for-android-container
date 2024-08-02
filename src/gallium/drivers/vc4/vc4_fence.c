@@ -65,7 +65,8 @@ vc4_fence_reference(struct pipe_screen *pscreen,
         struct vc4_fence *f = vc4_fence(pf);
         struct vc4_fence *old = *p;
 
-        if (pipe_reference(&(*p)->reference, &f->reference)) {
+        if (pipe_reference(old ? &old->reference : NULL,
+                           f ?  &f->reference : NULL)) {
                 if (old->fd >= 0)
                         close(old->fd);
                 free(old);

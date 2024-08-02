@@ -31,9 +31,8 @@ tcs_instance_id(nir_builder *b)
 static nir_def *
 tcs_unrolled_id(nir_builder *b)
 {
-   nir_def *stride = nir_channel(b, nir_load_num_workgroups(b), 0);
-
-   return nir_iadd(b, nir_imul(b, tcs_instance_id(b), stride), tcs_patch_id(b));
+   return libagx_tcs_unrolled_id(b, nir_load_tess_param_buffer_agx(b),
+                                 nir_load_workgroup_id(b));
 }
 
 uint64_t
@@ -201,8 +200,7 @@ link_libagx(nir_shader *nir, const nir_shader *libagx)
 bool
 agx_nir_lower_tcs(nir_shader *tcs, const struct nir_shader *libagx)
 {
-   nir_shader_intrinsics_pass(
-      tcs, lower_tcs, nir_metadata_block_index | nir_metadata_dominance, NULL);
+   nir_shader_intrinsics_pass(tcs, lower_tcs, nir_metadata_control_flow, NULL);
 
    link_libagx(tcs, libagx);
    return true;
@@ -241,8 +239,7 @@ lower_tes(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *repl = lower_tes_impl(b, intr, data);
 
    if (repl) {
-      nir_def_rewrite_uses(&intr->def, repl);
-      nir_instr_remove(&intr->instr);
+      nir_def_replace(&intr->def, repl);
       return true;
    } else {
       return false;
@@ -261,8 +258,7 @@ agx_nir_lower_tes(nir_shader *tes, const nir_shader *libagx)
    nir_lower_tess_coord_z(
       tes, tes->info.tess._primitive_mode == TESS_PRIMITIVE_TRIANGLES);
 
-   nir_shader_intrinsics_pass(
-      tes, lower_tes, nir_metadata_block_index | nir_metadata_dominance, NULL);
+   nir_shader_intrinsics_pass(tes, lower_tes, nir_metadata_control_flow, NULL);
 
    /* Points mode renders as points, make sure we write point size for the HW */
    if (tes->info.tess.point_mode &&
@@ -273,7 +269,8 @@ agx_nir_lower_tes(nir_shader *tes, const nir_shader *libagx)
 
       nir_store_output(&b, nir_imm_float(&b, 1.0), nir_imm_int(&b, 0),
                        .io_semantics.location = VARYING_SLOT_PSIZ,
-                       .write_mask = nir_component_mask(1), .range = 1);
+                       .write_mask = nir_component_mask(1), .range = 1,
+                       .src_type = nir_type_float32);
 
       tes->info.outputs_written |= VARYING_BIT_PSIZ;
    }

@@ -1,22 +1,5 @@
 # Copyright © 2017 Intel Corporation
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# SPDX-License-Identifier: MIT
 
 # Mesa-local imports in the Python files must be declared here for correct
 # dependency tracking.
@@ -77,7 +60,7 @@ endif
 
 if with_platform_android
   vulkan_lite_runtime_files += files('vk_android.c')
-  vulkan_lite_runtime_deps += dep_android
+  vulkan_lite_runtime_deps += [dep_android, idep_u_gralloc]
 endif
 
 vk_common_entrypoints = custom_target(
@@ -153,6 +136,17 @@ vk_physical_device_properties = custom_target(
   depend_files : vk_physical_device_properties_gen_depend_files,
 )
 
+vk_physical_device_spirv_caps = custom_target(
+  'vk_physical_device_spirv_caps',
+  input : [vk_physical_device_spirv_caps_gen, vk_api_xml],
+  output : 'vk_physical_device_spirv_caps.c',
+  command : [
+    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
+    '--out-c', '@OUTPUT0@', '--beta', with_vulkan_beta.to_string()
+  ],
+  depend_files : vk_physical_device_spirv_caps_gen_depend_files,
+)
+
 vk_synchronization_helpers = custom_target(
   'vk_synchronization_helpers',
   input : [vk_synchronization_helpers_gen, vk_api_xml],
@@ -183,12 +177,14 @@ vulkan_lite_runtime_files += [
   vk_format_info,
   vk_physical_device_features,
   vk_physical_device_properties,
+  vk_physical_device_spirv_caps,
   vk_synchronization_helpers,
 ]
 
 # as a runtime library dep to ensure header gen order
 vulkan_lite_runtime_header_gen_deps = declare_dependency(
   sources : [
+    spirv_info_h,
     vk_cmd_enqueue_entrypoints[0],
     vk_cmd_queue[1],
     vk_common_entrypoints[0],
@@ -230,6 +226,7 @@ libvulkan_lite_instance = static_library(
 # - idep_vulkan_runtime
 idep_vulkan_lite_runtime_headers = declare_dependency(
   sources : [
+    spirv_info_h,
     vk_cmd_enqueue_entrypoints[0],
     vk_cmd_queue[1],
     vk_common_entrypoints[0],
@@ -282,7 +279,11 @@ if prog_glslang.found()
     'astc_spv.h',
     input : astc_decoder_glsl_file,
     output : 'astc_spv.h',
-    command : [prog_glslang, '-V', '-S', 'comp', '-x', '-o', '@OUTPUT@', '@INPUT@'] + glslang_quiet,
+    command : [
+      prog_glslang, '-V', '-S', 'comp', '-x', '-o', '@OUTPUT@', '@INPUT@',
+      glslang_quiet, glslang_depfile,
+    ],
+    depfile : 'astc_spv.h.d',
   )
 endif
 

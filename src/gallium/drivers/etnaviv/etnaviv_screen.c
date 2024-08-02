@@ -103,8 +103,14 @@ etna_screen_destroy(struct pipe_screen *pscreen)
 
    etna_shader_screen_fini(pscreen);
 
+   if (screen->pipe_nn)
+      etna_pipe_del(screen->pipe_nn);
+
    if (screen->pipe)
       etna_pipe_del(screen->pipe);
+
+   if (screen->npu && screen->npu != screen->gpu)
+      etna_gpu_del(screen->npu);
 
    if (screen->gpu)
       etna_gpu_del(screen->gpu);
@@ -852,13 +858,20 @@ etna_get_specs(struct etna_screen *screen)
       screen->specs.pixel_pipes = info->gpu.pixel_pipes;
       screen->specs.num_constants = info->gpu.num_constants;
       screen->specs.max_varyings = MIN2(info->gpu.max_varyings, ETNA_NUM_VARYINGS);
-   } else {
+
+      if (screen->npu)
+         info = etna_gpu_get_core_info(screen->npu);
+   }
+
+   if (info->type == ETNA_CORE_NPU) {
       screen->specs.nn_core_count = info->npu.nn_core_count;
       screen->specs.nn_mad_per_core = info->npu.nn_mad_per_core;
       screen->specs.tp_core_count = info->npu.tp_core_count;
       screen->specs.on_chip_sram_size = info->npu.on_chip_sram_size;
       screen->specs.axi_sram_size = info->npu.axi_sram_size;
       screen->specs.nn_zrl_bits = info->npu.nn_zrl_bits;
+      screen->specs.nn_input_buffer_depth = info->npu.nn_input_buffer_depth;
+      screen->specs.nn_accum_buffer_depth = info->npu.nn_accum_buffer_depth;
 
       if (etna_core_has_feature(info, ETNA_FEATURE_NN_XYDP0))
          screen->specs.nn_core_version = 8;
@@ -1059,7 +1072,7 @@ etna_screen_get_fd(struct pipe_screen *pscreen)
 
 struct pipe_screen *
 etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
-                   struct renderonly *ro)
+                   struct etna_gpu *npu, struct renderonly *ro)
 {
    struct etna_screen *screen = CALLOC_STRUCT(etna_screen);
    struct pipe_screen *pscreen;
@@ -1067,9 +1080,13 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    if (!screen)
       return NULL;
 
+   if (!gpu)
+      gpu = npu;
+
    pscreen = &screen->base;
    screen->dev = dev;
    screen->gpu = gpu;
+   screen->npu = npu;
    screen->ro = ro;
    screen->info = etna_gpu_get_core_info(gpu);
 
@@ -1083,6 +1100,14 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    if (!screen->pipe) {
       DBG("could not create 3d pipe");
       goto fail;
+   }
+
+   if (gpu != npu) {
+      screen->pipe_nn = etna_pipe_new(npu, ETNA_PIPE_3D);
+      if (!screen->pipe_nn) {
+         DBG("could not create nn pipe");
+         goto fail;
+      }
    }
 
    /* apply debug options that disable individual features */

@@ -26,6 +26,7 @@
 
 #include "blorp_priv.h"
 #include "dev/intel_device_info.h"
+#include "common/intel_compute_slm.h"
 #include "common/intel_sample_positions.h"
 #include "common/intel_l3_config.h"
 #include "genxml/gen_macros.h"
@@ -778,12 +779,13 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       switch (params->fast_clear_op) {
       case ISL_AUX_OP_NONE:
          break;
+#if GFX_VER < 20
 #if GFX_VER >= 10
       case ISL_AUX_OP_AMBIGUATE:
          ps.RenderTargetFastClearEnable = true;
          ps.RenderTargetResolveType = FAST_CLEAR_0;
          break;
-#endif
+#endif /* GFX_VER >= 10 */
       case ISL_AUX_OP_PARTIAL_RESOLVE:
          ps.RenderTargetResolveType = RESOLVE_PARTIAL;
          break;
@@ -799,6 +801,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #endif
          ps.RenderTargetResolveType = RESOLVE_FULL;
          break;
+#endif /* GFX_VER < 20 */
       case ISL_AUX_OP_FAST_CLEAR:
          /* WA 1406738321:
           * 3D/Volumetric surfaces do not support Fast Clear operation.
@@ -863,18 +866,43 @@ blorp_emit_ps_config(struct blorp_batch *batch,
    }
 
    blorp_emit(batch, GENX(3DSTATE_PS_EXTRA), psx) {
-      if (prog_data) {
-         psx.PixelShaderValid = true;
-#if GFX_VER < 20
-         psx.AttributeEnable = prog_data->num_varying_inputs > 0;
-#endif
-         psx.PixelShaderIsPerSample = prog_data->persample_dispatch;
-         psx.PixelShaderComputedDepthMode = prog_data->computed_depth_mode;
-         psx.PixelShaderComputesStencil = prog_data->computed_stencil;
-      }
-
       if (params->src.enabled)
          psx.PixelShaderKillsPixel = true;
+
+      if (prog_data) {
+         psx.PixelShaderValid = true;
+         psx.PixelShaderComputedDepthMode = prog_data->computed_depth_mode;
+         psx.PixelShaderComputesStencil = prog_data->computed_stencil;
+         psx.PixelShaderIsPerSample = prog_data->persample_dispatch;
+#if GFX_VER < 20
+         psx.AttributeEnable = prog_data->num_varying_inputs > 0;
+#else
+         /* Bspec 57340 (r59562):
+          *
+          *   For MSAA fast clear, it (clear shader) must be in per-pixel
+          *   dispatch mode.
+          *
+          * Bspec 56424 (r58933):
+          *
+          *   Bit 6 of Bit Group 0: Pixel Shader Is Per Sample
+          *   If this bit is DISABLED, the dispatch rate is determined by the
+          *   value of Pixel Shader Is Per Coarse Pixel.
+          *
+          *   Bit 4 of Bit Group 0: Pixel Shader Is Per Coarse Pixel
+          *   If Pixel Shader Is Per Sample is DISABLED and this bit is
+          *   DISABLED, the pixel shader is dispatched at the per pixel
+          *   shading rate.
+          *
+          * The below assertion ensures the MSAA clear shader is in per-pixel
+          * dispatch mode.
+          */
+         if (params->fast_clear_op == ISL_AUX_OP_FAST_CLEAR &&
+             params->num_samples > 1) {
+            assert(!psx.PixelShaderIsPerSample &&
+                   !psx.PixelShaderIsPerCoarsePixel);
+         }
+#endif
+      }
    }
 }
 
@@ -886,8 +914,7 @@ blorp_emit_blend_state(struct blorp_batch *batch,
    if (!batch->blorp->config.use_cached_dynamic_states) {
       struct GENX(BLEND_STATE) blend = { };
 
-      int size = GENX(BLEND_STATE_length) * 4;
-      size += GENX(BLEND_STATE_ENTRY_length) * 4 * params->num_draw_buffers;
+      const unsigned size = 96;
       uint32_t *state = blorp_alloc_dynamic_state(batch, size, 64, &offset);
       if (state == NULL)
          return;
@@ -1736,8 +1763,12 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
          .BindingTablePointer = surfaces_offset,
          .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
          .SharedLocalMemorySize =
-            encode_slm_size(GFX_VER, prog_data->total_shared),
-         .PreferredSLMAllocationSize = preferred_slm_allocation_size(devinfo),
+            intel_compute_slm_encode_size(GFX_VER, prog_data->total_shared),
+         .PreferredSLMAllocationSize =
+            intel_compute_preferred_slm_calc_encode_size(devinfo,
+                                                         prog_data->total_shared,
+                                                         dispatch.group_size,
+                                                         dispatch.simd_size),
          .NumberOfBarriers = cs_prog_data->uses_barrier,
       };
    }
@@ -1799,8 +1830,8 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       .BindingTablePointer = surfaces_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
-      .SharedLocalMemorySize = encode_slm_size(GFX_VER,
-                                               prog_data->total_shared),
+      .SharedLocalMemorySize = intel_compute_slm_encode_size(GFX_VER,
+                                                             prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
       .CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs,
@@ -1908,6 +1939,7 @@ xy_bcb_surf_depth(const struct isl_surf *surf)
                                        : surf->logical_level0_px.array_len;
 }
 
+#if GFX_VER < 20
 static uint32_t
 xy_aux_mode(const struct blorp_surface_info *info)
 {
@@ -1922,7 +1954,8 @@ xy_aux_mode(const struct blorp_surface_info *info)
       unreachable("Unsupported aux mode");
    }
 }
-#endif
+#endif // GFX_VER < 20
+#endif // GFX_VERx10 >= 125
 
 UNUSED static void
 blorp_xy_block_copy_blt(struct blorp_batch *batch,
@@ -2011,15 +2044,19 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
       blt.DestinationMipTailStartLOD = dst_surf->miptail_start_level;
       blt.DestinationHorizontalAlign = isl_encode_halign(dst_align.width);
       blt.DestinationVerticalAlign = isl_encode_valign(dst_align.height);
+#if GFX_VER < 20
       /* XY_BLOCK_COPY_BLT only supports AUX_CCS. */
       blt.DestinationDepthStencilResource =
          params->dst.aux_usage == ISL_AUX_USAGE_STC_CCS;
+#endif
       blt.DestinationTargetMemory =
          params->dst.addr.local_hint ? XY_MEM_LOCAL : XY_MEM_SYSTEM;
 
       if (params->dst.aux_usage != ISL_AUX_USAGE_NONE) {
+#if GFX_VER < 20
          blt.DestinationAuxiliarySurfaceMode = xy_aux_mode(&params->dst);
          blt.DestinationCompressionEnable = true;
+#endif
          blt.DestinationCompressionFormat =
             isl_get_render_compression_format(dst_surf->format);
          blt.DestinationClearValueEnable = !!params->dst.clear_color_addr.buffer;
@@ -2048,15 +2085,19 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
       blt.SourceMipTailStartLOD = src_surf->miptail_start_level;
       blt.SourceHorizontalAlign = isl_encode_halign(src_align.width);
       blt.SourceVerticalAlign = isl_encode_valign(src_align.height);
+#if GFX_VER < 20
       /* XY_BLOCK_COPY_BLT only supports AUX_CCS. */
       blt.SourceDepthStencilResource =
          params->src.aux_usage == ISL_AUX_USAGE_STC_CCS;
+#endif
       blt.SourceTargetMemory =
          params->src.addr.local_hint ? XY_MEM_LOCAL : XY_MEM_SYSTEM;
 
       if (params->src.aux_usage != ISL_AUX_USAGE_NONE) {
+#if GFX_VER < 20
          blt.SourceAuxiliarySurfaceMode = xy_aux_mode(&params->src);
          blt.SourceCompressionEnable = true;
+#endif
          blt.SourceCompressionFormat =
             isl_get_render_compression_format(src_surf->format);
          blt.SourceClearValueEnable = !!params->src.clear_color_addr.buffer;
@@ -2136,12 +2177,14 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
          params->dst.addr.local_hint ? XY_MEM_LOCAL : XY_MEM_SYSTEM;
 
       if (params->dst.aux_usage != ISL_AUX_USAGE_NONE) {
+#if GFX_VERx10 == 125
          blt.DestinationAuxiliarySurfaceMode = xy_aux_mode(&params->dst);
          blt.DestinationCompressionEnable = true;
-         blt.DestinationCompressionFormat =
-            isl_get_render_compression_format(dst_surf->format);
          blt.DestinationClearValueEnable = !!params->dst.clear_color_addr.buffer;
          blt.DestinationClearAddress = params->dst.clear_color_addr;
+#endif
+         blt.DestinationCompressionFormat =
+            isl_get_render_compression_format(dst_surf->format);
       }
 
       blt.DestinationMOCS = params->dst.addr.mocs;

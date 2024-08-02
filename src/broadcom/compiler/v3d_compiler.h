@@ -311,6 +311,9 @@ enum quniform_contents {
          */
         QUNIFORM_WORK_GROUP_BASE,
 
+        /* Workgroup size for variable workgroup support */
+        QUNIFORM_WORK_GROUP_SIZE,
+
         /**
          * Returns the the offset of the scratch buffer for register spilling.
          */
@@ -324,6 +327,13 @@ enum quniform_contents {
          * L2T cache will effectively be the shared memory area.
          */
         QUNIFORM_SHARED_OFFSET,
+
+        /**
+         * OpenCL variable shared memory
+         *
+         * This will only be used when the shader declares variable_shared_memory.
+         */
+        QUNIFORM_SHARED_SIZE,
 
         /**
          * Returns the number of layers in the framebuffer.
@@ -986,6 +996,8 @@ struct v3d_vs_prog_data {
         /* Value to be programmed in VCM_CACHE_SIZE. */
         uint8_t vcm_cache_size;
 
+        bool writes_psiz;
+
         /* Maps the nir->data.location to its
          * nir->data.driver_location. In general we are using the
          * driver location as index (like vattr_sizes above), so this
@@ -1195,7 +1207,9 @@ bool v3d_nir_lower_logic_ops(nir_shader *s, struct v3d_compile *c);
 bool v3d_nir_lower_scratch(nir_shader *s);
 bool v3d_nir_lower_txf_ms(nir_shader *s);
 bool v3d_nir_lower_image_load_store(nir_shader *s, struct v3d_compile *c);
+bool v3d_nir_lower_global_2x32(nir_shader *s);
 bool v3d_nir_lower_load_store_bitsize(nir_shader *s);
+bool v3d_nir_lower_algebraic(struct nir_shader *shader);
 
 void v3d_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr);
 void v3d_vir_emit_image_load_store(struct v3d_compile *c,

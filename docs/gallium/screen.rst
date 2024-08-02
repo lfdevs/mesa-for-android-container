@@ -111,7 +111,7 @@ The integer capabilities:
   features only present in the OpenGL compatibility profile.
   The only legacy features that Gallium drivers must implement are
   the legacy shader inputs and outputs (colors, texcoords, fog, clipvertex,
-  edgeflag).
+  edge flag).
 * ``PIPE_CAP_ESSL_FEATURE_LEVEL``: An optional cap to allow drivers to
   report a higher GLSL version for GLES contexts.  This is useful when a
   driver does not support all the required features for a higher GL version,
@@ -413,8 +413,6 @@ The integer capabilities:
 * ``PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS``: Whether interleaved stream
   output mode is able to interleave across buffers. This is required for
   :ext:`GL_ARB_transform_feedback3`.
-* ``PIPE_CAP_SHADER_CAN_READ_OUTPUTS``: Whether every TGSI shader stage can read
-  from the output file.
 * ``PIPE_CAP_FBFETCH``: The number of render targets whose value in the
   current framebuffer can be read in the shader.  0 means framebuffer fetch
   is not supported.  1 means that only the first render target can be read,
@@ -650,6 +648,7 @@ The integer capabilities:
 * ``PIPE_CAP_VALIDATE_ALL_DIRTY_STATES`` : Whether state validation must also validate the state changes for resources types used in the previous shader but not in the current shader.
 * ``PIPE_CAP_HAS_CONST_BW``: Whether the driver only supports non-data-dependent layouts (ie. not bandwidth compressed formats like AFBC, UBWC, etc), or supports ``PIPE_BIND_CONST_BW`` to disable data-dependent layouts on requested resources.
 * ``PIPE_CAP_PERFORMANCE_MONITOR``: Whether GL_AMD_performance_monitor should be exposed.
+* ``PIPE_CAP_TEXTURE_SAMPLER_INDEPENDENT``: Whether sampler views and sampler states are independent objects, meaning both can be freely mixed and matched by the frontend. This isn't required for OpenGL where on the shader level those are the same object. However for proper gallium nine and OpenCL support this is required.
 
 
 .. _pipe_capf:

@@ -16,7 +16,7 @@
       when: on_success
 
 .zink-common-manual-rules:
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.gl-manual-rules, rules]
@@ -31,7 +31,7 @@
     - !reference [.lavapipe-rules, rules]
     - !reference [.zink-common-rules, rules]
 
-.zink-lvp-venus-rules:
+.zink-venus-lvp-rules:
   stage: layered-backends
   rules:
     - !reference [.test, rules]
@@ -48,7 +48,7 @@
 
 .zink-anv-manual-rules:
   stage: layered-backends
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.anv-manual-rules, rules]
@@ -62,7 +62,22 @@
     - !reference [.anv-rules, rules]
     - !reference [.zink-common-rules, rules]
 
-.zink-turnip-rules:
+.zink-nvk-rules:
+  stage: layered-backends
+  rules:
+    - !reference [.test, rules]
+    - !reference [.nvk-valve-rules, rules]
+    - !reference [.zink-common-rules, rules]
+
+.zink-nvk-manual-rules:
+  stage: layered-backends
+  extends: .no-auto-retry
+  rules:
+    - !reference [.test, rules]
+    - !reference [.nvk-valve-manual-rules, rules]
+    - !reference [.zink-common-manual-rules, rules]
+
+.zink-turnip-collabora-rules:
   stage: layered-backends
   rules:
     - !reference [.test, rules]
@@ -71,12 +86,19 @@
   variables:
     ZINK_DEBUG: optimal_keys
 
-.zink-turnip-manual-rules:
+.zink-turnip-collabora-manual-rules:
   stage: layered-backends
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-turnip-manual-rules, rules]
+    - !reference [.zink-common-manual-rules, rules]
+
+.zink-turnip-valve-manual-rules:
+  stage: layered-backends
+  extends: .no-auto-retry
+  rules:
+    - !reference [.valve-freedreno-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
 
 .zink-radv-rules:
@@ -88,7 +110,7 @@
 
 .zink-radv-manual-rules:
   stage: layered-backends
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.radv-valve-manual-rules, rules]
@@ -130,7 +152,7 @@
 
 .zink-venus-lvp-test:
   extends:
-    - .zink-lvp-venus-rules
+    - .zink-venus-lvp-rules
     - .zink-test
   variables:
     LIBGL_ALWAYS_SOFTWARE: "true"
@@ -154,6 +176,26 @@
     VK_DRIVER: intel
     GPU_VERSION: zink-anv-tgl
 
+.zink-nvk-test-valve:
+  extends:
+    - .b2c-x86_64-test-gl
+    - .nvk-vkcts
+    - .zink-test
+  variables:
+    DEQP_SUITE: zink-nvk
+    # Disable reporting, since DUTs don't have internet access
+    FLAKES_CHANNEL: ""
+
+.tu-zink-test-valve:
+  extends:
+    - .zink-test
+    - .b2c-arm64-test-gl
+  variables:
+    VK_DRIVER: freedreno
+    HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
+    # Disable reporting, since DUTs don't have internet access
+    FLAKES_CHANNEL: ""
+
 .radv-zink-test-valve:
   timeout: 30m
   extends:
@@ -164,7 +206,6 @@
     DEQP_SUITE: zink-radv
     HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
     B2C_KERNEL_URL: https://fs.mupuf.org/linux-6.6-b2c-radv-ci # 6.6
-    B2C_JOB_SUCCESS_REGEX: 'Execution is over, pipeline status: 0'
     B2C_TIMEOUT_OVERALL_MINUTES: 20
 
     # Disable reporting, since DUTs don't have internet access

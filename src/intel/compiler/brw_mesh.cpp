@@ -216,8 +216,7 @@ brw_nir_adjust_task_payload_offsets(nir_shader *nir)
 {
    return nir_shader_intrinsics_pass(nir,
                                        brw_nir_adjust_task_payload_offsets_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }
 
@@ -256,8 +255,7 @@ brw_nir_align_launch_mesh_workgroups(nir_shader *nir)
 {
    return nir_shader_intrinsics_pass(nir,
                                        brw_nir_align_launch_mesh_workgroups_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }
 
@@ -848,9 +846,9 @@ brw_compute_mue_map(const struct brw_compiler *compiler,
       }
 
       if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_VIEWPORT)) {
-         map->start_dw[VARYING_SLOT_VIEWPORT] =
-               map->per_primitive_start_dw + 2;
-         map->len_dw[VARYING_SLOT_VIEWPORT] = 1;
+          map->start_dw[VARYING_SLOT_VIEWPORT] =
+                map->per_primitive_start_dw + 2;
+          map->len_dw[VARYING_SLOT_VIEWPORT] = 1;
       }
 
       if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_CULL_PRIMITIVE)) {
@@ -1238,8 +1236,7 @@ brw_nir_initialize_mue(nir_shader *nir,
    if (remaining) {
       nir_metadata_preserve(entrypoint, nir_metadata_none);
    } else {
-      nir_metadata_preserve(entrypoint, nir_metadata_block_index |
-                                        nir_metadata_dominance);
+      nir_metadata_preserve(entrypoint, nir_metadata_control_flow);
    }
 }
 
@@ -1298,8 +1295,7 @@ brw_nir_adjust_offset_for_arrayed_indices(nir_shader *nir, const struct brw_mue_
 {
    return nir_shader_intrinsics_pass(nir,
                                        brw_nir_adjust_offset_for_arrayed_indices_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        (void *)map);
 }
 
@@ -1466,9 +1462,72 @@ brw_pack_primitive_indices(nir_shader *nir, void *data)
    state->packed_prim_indices->data.per_primitive = 1;
 
    return nir_shader_intrinsics_pass(nir, brw_pack_primitive_indices_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        data);
+}
+
+static bool
+brw_mesh_autostrip_enable(const struct brw_compiler *compiler, struct nir_shader *nir,
+                          struct brw_mue_map *map)
+{
+   /* Auto-striping can be enabled when shader either doesn't write to
+    * RTA Index and VP Index or writes the same values for all primitives.
+    * Since determining whether shader writes the same value across the whole
+    * workgroup (not just subgroup!) is tricky, we do the simplest possible
+    * thing - say yes only when shader writes const values and they all match.
+    *
+    * TODO: improve this
+    */
+
+   if (compiler->devinfo->ver < 20)
+      return false;
+
+   if (map->start_dw[VARYING_SLOT_VIEWPORT] < 0 &&
+       map->start_dw[VARYING_SLOT_LAYER] < 0)
+      return true;
+
+   nir_def *vp = NULL;
+   nir_def *layer = NULL;
+
+   nir_foreach_function(function, nir) {
+      if (!function->impl)
+         continue;
+
+      nir_foreach_block(block, function->impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic != nir_intrinsic_store_per_primitive_output)
+               continue;
+
+            struct nir_io_semantics io = nir_intrinsic_io_semantics(intrin);
+            bool is_vp = io.location == VARYING_SLOT_VIEWPORT;
+            bool is_layer = io.location == VARYING_SLOT_LAYER;
+            if (!is_vp && !is_layer)
+               continue;
+
+            nir_src *src = &intrin->src[0];
+
+            if (!nir_src_is_const(*src))
+               return false;
+
+            nir_def **cmp;
+            if (is_vp)
+               cmp = &vp;
+            else
+               cmp = &layer;
+
+            if (*cmp == NULL)
+               *cmp = src->ssa;
+            else if (*cmp != src->ssa)
+               return false;
+         }
+      }
+   }
+
+   return true;
 }
 
 const unsigned *
@@ -1511,6 +1570,8 @@ brw_compile_mesh(const struct brw_compiler *compiler,
    brw_compute_mue_map(compiler, nir, &prog_data->map,
                        prog_data->index_format, key->compact_mue);
    brw_nir_lower_mue_outputs(nir, &prog_data->map);
+
+   prog_data->autostrip_enable = brw_mesh_autostrip_enable(compiler, nir, &prog_data->map);
 
    brw_simd_selection_state simd_state{
       .devinfo = compiler->devinfo,

@@ -284,6 +284,7 @@ compute_version(const struct gl_extensions *extensions,
                          extensions->EXT_framebuffer_sRGB &&
                          extensions->EXT_packed_float &&
                          extensions->EXT_texture_array &&
+                         extensions->EXT_texture_integer &&
                          extensions->EXT_texture_shared_exponent &&
                          extensions->EXT_transform_feedback &&
                          extensions->NV_conditional_render);

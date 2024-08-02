@@ -108,7 +108,7 @@ static LLVMEnsureMultithreaded lLVMEnsureMultithreaded;
 
 static once_flag init_native_targets_once_flag = ONCE_FLAG_INIT;
 
-static void init_native_targets()
+void lp_bld_init_native_targets()
 {
    // If we have a native target, initialize it to ensure it is linked in and
    // usable by the JIT.
@@ -150,7 +150,7 @@ lp_set_target_options(void)
     * LLVM targets should be initialized before the driver or gallium frontend tries
     * to access the registry.
     */
-   call_once(&init_native_targets_once_flag, init_native_targets);
+   call_once(&init_native_targets_once_flag, lp_bld_init_native_targets);
 }
 
 extern "C"
@@ -320,69 +320,9 @@ public:
 
 };
 
-/**
- * Same as LLVMCreateJITCompilerForModule, but:
- * - allows using MCJIT and enabling AVX feature where available.
- * - set target options
- *
- * See also:
- * - llvm/lib/ExecutionEngine/ExecutionEngineBindings.cpp
- * - llvm/tools/lli/lli.cpp
- * - http://markmail.org/message/ttkuhvgj4cxxy2on#query:+page:1+mid:aju2dggerju3ivd3+state:results
- */
-extern "C"
-LLVMBool
-lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
-                                        lp_generated_code **OutCode,
-                                        struct lp_cached_code *cache_out,
-                                        LLVMModuleRef M,
-                                        LLVMMCJITMemoryManagerRef CMM,
-                                        unsigned OptLevel,
-                                        char **OutError)
+void
+lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
 {
-   using namespace llvm;
-
-   std::string Error;
-   EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
-
-   /**
-    * LLVM 3.1+ haven't more "extern unsigned llvm::StackAlignmentOverride" and
-    * friends for configuring code generation options, like stack alignment.
-    */
-   TargetOptions options;
-#if DETECT_ARCH_X86 && LLVM_VERSION_MAJOR < 13
-   options.StackAlignmentOverride = 4;
-#endif
-
-   builder.setEngineKind(EngineKind::JIT)
-          .setErrorStr(&Error)
-          .setTargetOptions(options)
-#if LLVM_VERSION_MAJOR >= 18
-          .setOptLevel((CodeGenOptLevel)OptLevel);
-#else
-          .setOptLevel((CodeGenOpt::Level)OptLevel);
-#endif
-
-#if DETECT_OS_WINDOWS
-    /*
-     * MCJIT works on Windows, but currently only through ELF object format.
-     *
-     * XXX: We could use `LLVM_HOST_TRIPLE "-elf"` but LLVM_HOST_TRIPLE has
-     * different strings for MinGW/MSVC, so better play it safe and be
-     * explicit.
-     */
-#  if DETECT_ARCH_X86_64
-    LLVMSetTarget(M, "x86_64-pc-win32-elf");
-#  elif DETECT_ARCH_X86
-    LLVMSetTarget(M, "i686-pc-win32-elf");
-#  elif DETECT_ARCH_AARCH64
-    LLVMSetTarget(M, "aarch64-pc-win32-elf");
-#  else
-#    error Unsupported architecture for MCJIT on Windows.
-#  endif
-#endif
-
-   llvm::SmallVector<std::string, 16> MAttrs;
 
 #if DETECT_ARCH_ARM
    /* llvm-3.3+ implements sys::getHostCPUFeatures for Arm,
@@ -467,8 +407,18 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back("+fp64");
 #endif
 
-   builder.setMAttrs(MAttrs);
+#if DETECT_ARCH_RISCV64 == 1
+   /* Before riscv is more matured and util_get_cpu_caps() is implemented,
+    * assume this for now since most of linux capable riscv machine are
+    * riscv64gc
+    */
+   MAttrs = {"+m","+c","+a","+d","+f"};
+#endif
+}
 
+void
+lp_build_dump_mattrs(std::vector<std::string> &MAttrs)
+{
    if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {
       int n = MAttrs.size();
       if (n > 0) {
@@ -478,6 +428,77 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
          debug_printf("\n");
       }
    }
+}
+
+/**
+ * Same as LLVMCreateJITCompilerForModule, but:
+ * - allows using MCJIT and enabling AVX feature where available.
+ * - set target options
+ *
+ * See also:
+ * - llvm/lib/ExecutionEngine/ExecutionEngineBindings.cpp
+ * - llvm/tools/lli/lli.cpp
+ * - http://markmail.org/message/ttkuhvgj4cxxy2on#query:+page:1+mid:aju2dggerju3ivd3+state:results
+ */
+extern "C"
+LLVMBool
+lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
+                                        lp_generated_code **OutCode,
+                                        struct lp_cached_code *cache_out,
+                                        LLVMModuleRef M,
+                                        LLVMMCJITMemoryManagerRef CMM,
+                                        unsigned OptLevel,
+                                        char **OutError)
+{
+   using namespace llvm;
+
+   std::string Error;
+   EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
+
+   /**
+    * LLVM 3.1+ haven't more "extern unsigned llvm::StackAlignmentOverride" and
+    * friends for configuring code generation options, like stack alignment.
+    */
+   TargetOptions options;
+#if DETECT_ARCH_X86 && LLVM_VERSION_MAJOR < 13
+   options.StackAlignmentOverride = 4;
+#endif
+
+   builder.setEngineKind(EngineKind::JIT)
+          .setErrorStr(&Error)
+          .setTargetOptions(options)
+#if LLVM_VERSION_MAJOR >= 18
+          .setOptLevel((CodeGenOptLevel)OptLevel);
+#else
+          .setOptLevel((CodeGenOpt::Level)OptLevel);
+#endif
+
+#if DETECT_OS_WINDOWS
+    /*
+     * MCJIT works on Windows, but currently only through ELF object format.
+     *
+     * XXX: We could use `LLVM_HOST_TRIPLE "-elf"` but LLVM_HOST_TRIPLE has
+     * different strings for MinGW/MSVC, so better play it safe and be
+     * explicit.
+     */
+#  if DETECT_ARCH_X86_64
+    LLVMSetTarget(M, "x86_64-pc-win32-elf");
+#  elif DETECT_ARCH_X86
+    LLVMSetTarget(M, "i686-pc-win32-elf");
+#  elif DETECT_ARCH_AARCH64
+    LLVMSetTarget(M, "aarch64-pc-win32-elf");
+#  else
+#    error Unsupported architecture for MCJIT on Windows.
+#  endif
+#endif
+
+   std::vector<std::string> MAttrs;
+
+   lp_build_fill_mattrs(MAttrs);
+
+   builder.setMAttrs(MAttrs);
+
+   lp_build_dump_mattrs(MAttrs);
 
    StringRef MCPU = llvm::sys::getHostCPUName();
    /*

@@ -645,12 +645,19 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
                       util_is_power_of_two_nonzero(nir_intrinsic_align_mul(instr)));
       validate_assert(state, nir_intrinsic_align_offset(instr) <
                                 nir_intrinsic_align_mul(instr));
-      FALLTHROUGH;
+      /* All memory store operations must store at least a byte */
+      validate_assert(state, nir_src_bit_size(instr->src[0]) >= 8);
+      break;
 
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_per_vertex_output:
-      /* All memory store operations must store at least a byte */
-      validate_assert(state, nir_src_bit_size(instr->src[0]) >= 8);
+      if (state->shader->info.stage == MESA_SHADER_FRAGMENT)
+         validate_assert(state, nir_src_bit_size(instr->src[0]) >= 8);
+      else
+         validate_assert(state, nir_src_bit_size(instr->src[0]) >= 16);
+      validate_assert(state,
+                      nir_src_bit_size(instr->src[0]) ==
+                      nir_alu_type_get_type_size(nir_intrinsic_src_type(instr)));
       break;
 
    case nir_intrinsic_deref_mode_is:
@@ -845,12 +852,14 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
          switch (instr->op) {
          case nir_texop_descriptor_amd:
          case nir_texop_sampler_descriptor_amd:
+         case nir_texop_custom_border_color_agx:
             break;
          case nir_texop_lod:
          case nir_texop_lod_bias_agx:
             validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_float);
             break;
          case nir_texop_samples_identical:
+         case nir_texop_has_custom_border_color_agx:
             validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_bool);
             break;
          case nir_texop_txs:

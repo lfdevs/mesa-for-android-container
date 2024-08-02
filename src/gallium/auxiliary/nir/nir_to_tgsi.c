@@ -2349,7 +2349,7 @@ ntt_emit_store_output(struct ntt_compile *c, nir_intrinsic_instr *instr)
    }
 
    uint8_t swizzle[4] = { 0, 0, 0, 0 };
-   for (int i = frac; i <= 4; i++) {
+   for (int i = frac; i < 4; i++) {
       if (out.WriteMask & (1 << i))
          swizzle[i] = i - frac;
    }
@@ -2558,11 +2558,11 @@ ntt_emit_intrinsic(struct ntt_compile *c, nir_intrinsic_instr *instr)
       ntt_DEMOTE(c);
       break;
 
-   case nir_intrinsic_discard:
+   case nir_intrinsic_terminate:
       ntt_KILL(c);
       break;
 
-   case nir_intrinsic_discard_if: {
+   case nir_intrinsic_terminate_if: {
       struct ureg_src cond = ureg_scalar(ntt_get_src(c, instr->src[0]), 0);
 
       if (c->native_integers) {
@@ -3547,8 +3547,7 @@ nir_to_tgsi_lower_64bit_load_const(nir_builder *b, nir_load_const_instr *instr)
       num_components == 4 ? nir_channel(b, &second->def, 1) : NULL,
    };
    nir_def *new = nir_vec(b, channels, num_components);
-   nir_def_rewrite_uses(&instr->def, new);
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, new);
 
    return true;
 }
@@ -3573,8 +3572,7 @@ nir_to_tgsi_lower_64bit_to_vec2(nir_shader *s)
 {
    return nir_shader_instructions_pass(s,
                                        nir_to_tgsi_lower_64bit_to_vec2_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }
 
@@ -3663,8 +3661,7 @@ nir_to_tgsi_lower_tex(nir_shader *s)
 {
    return nir_shader_instructions_pass(s,
                                        nir_to_tgsi_lower_tex_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }
 

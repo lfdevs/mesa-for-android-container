@@ -1,22 +1,5 @@
 # Copyright © 2017 Intel Corporation
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# SPDX-License-Identifier: MIT
 
 isl_per_hw_ver_files = files(
   'isl_emit_cpb.c',
@@ -60,11 +43,16 @@ isl_gfx125_files = files(
   'isl_gfx12.h',
 )
 
+isl_gfx20_files = files(
+  'isl_gfx20.c',
+  'isl_gfx20.h',
+)
+
 isl_per_hw_ver_libs = []
 foreach g : [['40', isl_gfx4_files], ['50', []], ['60', isl_gfx6_files],
              ['70', isl_gfx7_files], ['75', []], ['80', isl_gfx8_files],
              ['90', isl_gfx9_files], ['110', []], ['120', isl_gfx12_files],
-             ['125', isl_gfx12_files], ['200', isl_gfx12_files]]
+             ['125', isl_gfx12_files], ['200', isl_gfx20_files]]
   _gfx_ver = g[0]
   isl_per_hw_ver_libs += static_library(
     'isl_per_hw_ver@0@'.format(_gfx_ver),
@@ -191,7 +179,7 @@ if with_tests
     executable(
       'isl_tile_std_y_test',
       'tests/isl_tile_std_y_test.c',
-      dependencies : dep_m,
+      dependencies : [dep_m, idep_mesautil],
       include_directories : [inc_include, inc_src, inc_intel],
       link_with : [libisl, libintel_dev],
     ),

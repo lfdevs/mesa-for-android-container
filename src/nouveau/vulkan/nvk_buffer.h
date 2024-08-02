@@ -8,22 +8,23 @@
 #include "nvk_private.h"
 #include "nvk_device_memory.h"
 
-#include "nouveau_bo.h"
 #include "vk_buffer.h"
 
 struct nvk_device_memory;
 struct nvk_physical_device;
+struct nvk_queue;
+struct nvkmd_va;
 
 struct nvk_buffer {
    struct vk_buffer vk;
    uint64_t addr;
 
-   /** Size of the reserved VMA range for sparse buffers, zero otherwise. */
-   uint64_t vma_size_B;
-   bool is_local;
+   /** Reserved VA for sparse buffers, NULL otherwise. */
+   struct nvkmd_va *va;
 };
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_buffer, vk.base, VkBuffer, VK_OBJECT_TYPE_BUFFER)
+VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_buffer, vk.base, VkBuffer,
+                               VK_OBJECT_TYPE_BUFFER)
 
 static inline uint64_t
 nvk_buffer_address(const struct nvk_buffer *buffer, uint64_t offset)
@@ -43,5 +44,8 @@ nvk_buffer_addr_range(const struct nvk_buffer *buffer,
       .range = vk_buffer_range(&buffer->vk, offset, range),
    };
 }
+
+VkResult nvk_queue_buffer_bind(struct nvk_queue *queue,
+                               const VkSparseBufferMemoryBindInfo *bind_info);
 
 #endif

@@ -1,22 +1,5 @@
 # Copyright © 2018 Rob Clark
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# SPDX-License-Identifier: MIT
 
 ir3_nir_trig_c = custom_target(
   'ir3_nir_trig.c',
@@ -97,6 +80,7 @@ libfreedreno_ir3_files = files(
   'ir3_legalize_relative.c',
   'ir3_liveness.c',
   'ir3_lower_parallelcopy.c',
+  'ir3_lower_shared_phi.c',
   'ir3_lower_spill.c',
   'ir3_lower_subgroups.c',
   'ir3_merge_regs.c',
@@ -127,6 +111,7 @@ libfreedreno_ir3_files = files(
   'ir3_sched.c',
   'ir3_shader.c',
   'ir3_shader.h',
+  'ir3_shared_folding.c',
   'ir3_shared_ra.c',
   'ir3_spill.c',
   'ir3_validate.c',

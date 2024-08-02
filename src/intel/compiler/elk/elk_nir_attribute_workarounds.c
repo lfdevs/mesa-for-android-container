@@ -126,7 +126,6 @@ elk_nir_apply_attribute_workarounds(nir_shader *shader,
                                     const uint8_t *attrib_wa_flags)
 {
    return nir_shader_instructions_pass(shader, apply_attr_wa_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        (void *)attrib_wa_flags);
 }

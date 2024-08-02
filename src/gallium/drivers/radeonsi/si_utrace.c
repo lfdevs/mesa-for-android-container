@@ -12,8 +12,8 @@
 #include "util/hash_table.h"
 
 
-static void si_utrace_record_ts(struct u_trace *trace, void *cs, void *timestamps, 
-                                unsigned idx, bool end_of_pipe)
+static void si_utrace_record_ts(struct u_trace *trace, void *cs, void *timestamps,
+                                unsigned idx, uint32_t flags)
 {
    struct si_context *ctx = container_of(trace, struct si_context, trace);
    struct pipe_resource *buffer = timestamps;
@@ -77,5 +77,5 @@ void si_utrace_flush(struct si_context *sctx, uint64_t submission_id)
 {
    struct si_ds_flush_data *flush_data = malloc(sizeof(*flush_data));
    si_ds_flush_data_init(flush_data, &sctx->ds_queue, submission_id);
-   u_trace_flush(&sctx->trace, flush_data, false);
+   u_trace_flush(&sctx->trace, flush_data, U_TRACE_FRAME_UNKNOWN, false);
 }

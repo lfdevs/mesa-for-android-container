@@ -122,9 +122,9 @@ void GENX(pan_blitter_cache_init)(struct pan_blitter_cache *cache,
 void GENX(pan_blitter_cache_cleanup)(struct pan_blitter_cache *cache);
 
 unsigned GENX(pan_preload_fb)(struct pan_blitter_cache *cache,
-                              struct pan_pool *desc_pool, struct pan_jc *jc,
-                              struct pan_fb_info *fb, mali_ptr tsd,
-                              mali_ptr tiler, struct panfrost_ptr *jobs);
+                              struct pan_pool *desc_pool,
+                              struct pan_fb_info *fb, unsigned layer_idx,
+                              mali_ptr tsd, struct panfrost_ptr *jobs);
 
 void GENX(pan_blit_ctx_init)(struct pan_blitter_cache *cache,
                              const struct pan_blit_info *info,

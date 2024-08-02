@@ -110,6 +110,9 @@ struct fd_batch {
 
    struct fd_context *ctx;
 
+   /* update seqno of most recent draw/etc to the batch. */
+   uint32_t update_seqno;
+
    /* do we need to mem2gmem before rendering.  We don't, if for example,
     * there was a glClear() that invalidated the entire previous buffer
     * contents.  Keep track of which buffer(s) are cleared, or needs
@@ -398,6 +401,7 @@ static inline void
 fd_batch_needs_flush(struct fd_batch *batch)
 {
    batch->needs_flush = true;
+   batch->update_seqno = ++batch->ctx->update_count;
    fd_pipe_fence_ref(&batch->ctx->last_fence, NULL);
 }
 

@@ -462,8 +462,7 @@ GENX(csf_preload_fb)(struct panfrost_batch *batch, struct pan_fb_info *fb)
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
    GENX(pan_preload_fb)
-   (&dev->blitter, &batch->pool.base, NULL, fb, batch->tls.gpu,
-    batch->tiler_ctx.bifrost, NULL);
+   (&dev->blitter, &batch->pool.base, fb, 0, batch->tls.gpu, NULL);
 }
 
 void
@@ -946,7 +945,7 @@ GENX(csf_launch_draw)(struct panfrost_batch *batch,
 
 #define POSITION_FIFO_SIZE (64 * 1024)
 
-void
+int
 GENX(csf_init_context)(struct panfrost_context *ctx)
 {
    struct panfrost_device *dev = pan_device(ctx->base.screen);
@@ -970,27 +969,42 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
    int ret =
       drmIoctl(panfrost_device_fd(dev), DRM_IOCTL_PANTHOR_GROUP_CREATE, &gc);
 
-   assert(!ret);
+   if (ret)
+      goto err_group_create;
 
    ctx->csf.group_handle = gc.group_handle;
+
+   struct drm_panthor_group_destroy gd = {
+      .group_handle = ctx->csf.group_handle,
+   };
 
    /* Get tiler heap */
    struct drm_panthor_tiler_heap_create thc = {
       .vm_id = pan_kmod_vm_handle(dev->kmod.vm),
       .chunk_size = pan_screen(ctx->base.screen)->csf_tiler_heap.chunk_size,
-      .initial_chunk_count = pan_screen(ctx->base.screen)->csf_tiler_heap.initial_chunks,
+      .initial_chunk_count =
+         pan_screen(ctx->base.screen)->csf_tiler_heap.initial_chunks,
       .max_chunks = pan_screen(ctx->base.screen)->csf_tiler_heap.max_chunks,
       .target_in_flight = 65535,
    };
    ret = drmIoctl(panfrost_device_fd(dev), DRM_IOCTL_PANTHOR_TILER_HEAP_CREATE,
                   &thc);
 
-   assert(!ret);
+   if (ret)
+      goto err_tiler_heap;
 
    ctx->csf.heap.handle = thc.handle;
 
+   struct drm_panthor_tiler_heap_destroy thd = {
+      .handle = ctx->csf.heap.handle,
+   };
+
    ctx->csf.heap.desc_bo =
       panfrost_bo_create(dev, pan_size(TILER_HEAP), 0, "Tiler Heap");
+
+   if (ctx->csf.heap.desc_bo == NULL)
+      goto err_tiler_heap_desc_bo;
+
    pan_pack(ctx->csf.heap.desc_bo->ptr.cpu, TILER_HEAP, heap) {
       heap.size = pan_screen(ctx->base.screen)->csf_tiler_heap.chunk_size;
       heap.base = thc.first_heap_chunk_gpu_va;
@@ -1000,12 +1014,16 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
 
    ctx->csf.tmp_geom_bo = panfrost_bo_create(
       dev, POSITION_FIFO_SIZE, PAN_BO_INVISIBLE, "Temporary Geometry buffer");
-   assert(ctx->csf.tmp_geom_bo);
+
+   if (ctx->csf.tmp_geom_bo == NULL)
+      goto err_tiler_heap_tmp_geom_bo;
 
    /* Setup the tiler heap */
    struct panfrost_bo *cs_bo =
       panfrost_bo_create(dev, 4096, 0, "Temporary CS buffer");
-   assert(cs_bo);
+
+   if (cs_bo == NULL)
+      goto err_tiler_heap_cs_bo;
 
    struct cs_buffer init_buffer = {
       .cpu = cs_bo->ptr.cpu,
@@ -1040,17 +1058,40 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
    csf_prepare_qsubmit(ctx, &qsubmit, 0, cs_start, cs_size, &sync, 1);
    csf_prepare_gsubmit(ctx, &gsubmit, &qsubmit, 1);
    ret = csf_submit_gsubmit(ctx, &gsubmit);
-   assert(!ret);
+
+   if (ret)
+      goto err_g_submit;
 
    /* Wait before freeing the buffer. */
-   drmSyncobjWait(panfrost_device_fd(dev), &ctx->syncobj, 1, INT64_MAX, 0,
-                  NULL);
+   ret = drmSyncobjWait(panfrost_device_fd(dev), &ctx->syncobj, 1, INT64_MAX, 0,
+                        NULL);
+   assert(!ret);
+
    panfrost_bo_unreference(cs_bo);
+
+   ctx->csf.is_init = true;
+   return 0;
+err_g_submit:
+   panfrost_bo_unreference(cs_bo);
+err_tiler_heap_cs_bo:
+   panfrost_bo_unreference(ctx->csf.tmp_geom_bo);
+err_tiler_heap_tmp_geom_bo:
+   panfrost_bo_unreference(ctx->csf.heap.desc_bo);
+err_tiler_heap_desc_bo:
+   drmIoctl(panfrost_device_fd(dev), DRM_IOCTL_PANTHOR_TILER_HEAP_DESTROY,
+            &thd);
+err_tiler_heap:
+   drmIoctl(panfrost_device_fd(dev), DRM_IOCTL_PANTHOR_GROUP_DESTROY, &gd);
+err_group_create:
+   return -1;
 }
 
 void
 GENX(csf_cleanup_context)(struct panfrost_context *ctx)
 {
+   if (!ctx->csf.is_init)
+      return;
+
    struct panfrost_device *dev = pan_device(ctx->base.screen);
    struct drm_panthor_tiler_heap_destroy thd = {
       .handle = ctx->csf.heap.handle,
@@ -1075,4 +1116,5 @@ GENX(csf_cleanup_context)(struct panfrost_context *ctx)
    assert(!ret);
 
    panfrost_bo_unreference(ctx->csf.heap.desc_bo);
+   ctx->csf.is_init = false;
 }

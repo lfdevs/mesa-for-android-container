@@ -241,7 +241,7 @@ impl Event {
                     }
 
                     let res = w(queue, ctx).err().map_or(
-                        // if there is an error, negate it
+                        // return the error if there is one
                         CL_SUBMITTED as cl_int,
                         |e| e,
                     );

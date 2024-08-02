@@ -10,10 +10,7 @@ dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
 dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_basic,Fail
-dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_scale,Fail
-dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_stencil_only,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_basic,Fail
-dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_scale,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_stencil_only,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_dst_x,Fail
@@ -29,20 +26,13 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_x,Fa
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_y,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_y,Fail
-dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_color,Fail
 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth,Fail
-dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_color,Fail
 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth,Fail
 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_color,Fail
 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth,Fail
-dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_color,Fail
-dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth,Fail
-dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8,Fail
 dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8,Fail
 dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8,Fail
-dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8,Fail
 dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8,Fail
-dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8,Fail
 dEQP-GLES3.functional.polygon_offset.float32_displacement_with_units,Fail
 dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex,Fail
 dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_2x2x2_2_levels,Fail
@@ -72,8 +62,6 @@ KHR-GLES3.copy_tex_image_conversions.required.texture2d_cubemap_posx,Fail
 KHR-GLES3.copy_tex_image_conversions.required.texture2d_texture2d,Fail
 KHR-GLES3.copy_tex_image_conversions.required.texture3d_cubemap_posx,Fail
 KHR-GLES3.copy_tex_image_conversions.required.texture3d_texture2d,Fail
-
-KHR-GLES3.packed_depth_stencil.blit.depth32f_stencil8,Fail
 
 # "Non-integer comparison: 1, 0, 18, 1e-05: 0.142857 == 0: not equal.
 #  Copy stage: Gradient comparison failed during ReadPixels for input = [GL_RG, GL_FLOAT] output = [GL_RED, GL_FLOAT]"
@@ -146,10 +134,6 @@ spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 
-# MESA: error: unknown vertex shader output name: VARYING_SLOT_EDGE
-spec@!opengl 1.0@gl-1.0-edgeflag-quads,Crash
-spec@!opengl 2.0@gl-2.0-edgeflag,Crash
-
 spec@!opengl 1.0@rasterpos,Crash
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 
@@ -160,22 +144,12 @@ spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-32f_24_8_rev samples=2,Fail
 
-spec@!opengl 1.1@line-smooth-stipple,Fail
-
-spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
-spec@!opengl 1.1@linestipple@Line strip,Fail
-spec@!opengl 1.1@linestipple@Line loop,Fail
-spec@!opengl 1.1@linestipple@Factor 2x,Fail
-spec@!opengl 1.1@linestipple@Factor 3x,Fail
-spec@!opengl 1.1@linestipple,Fail
-
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@ppgtt_memory_alignment,Crash
 
 spec@!opengl 1.4@copy-pixels,Fail
 
 spec@!opengl 2.0@max-samplers border,Fail
-spec@!opengl 2.1@polygon-stipple-fs,Fail
 
 spec@!opengl 3.0@clearbuffer-depth,Fail
 spec@!opengl 3.0@clearbuffer-stencil,Fail
@@ -345,4 +319,5 @@ spec@arb_uniform_buffer_object@execution@std140-array-struct-array-struct,Fail
 
 # uprev Piglit in Mesa
 spec@glsl-1.40@uniform_buffer@two-stages,Fail
-
+spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
+spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail

@@ -44,7 +44,7 @@ struct PACKED fd5_query_sample {
    uint64_t result;
    uint64_t stop;
 };
-DEFINE_CAST(fd_acc_query_sample, fd5_query_sample);
+FD_DEFINE_CAST(fd_acc_query_sample, fd5_query_sample);
 
 /* offset of a single field of an array of fd5_query_sample: */
 #define query_sample_idx(aq, idx, field)                                       \

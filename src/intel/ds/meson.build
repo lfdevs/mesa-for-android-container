@@ -1,6 +1,5 @@
 # Copyright © 2020-2021 Collabora, Ltd.
 # Author: Antonio Caggiano <antonio.caggiano@collabora.com>
-#
 # SPDX-License-Identifier: MIT
 
 intel_tracepoint_files = custom_target(
@@ -30,6 +29,7 @@ endif
 
 idep_intel_driver_ds_headers = declare_dependency(
   sources : intel_tracepoint_files[0],
+  dependencies: [idep_intel_dev_wa, idep_intel_dev_info_gen],
   include_directories : [inc_include, inc_intel],
 )
 

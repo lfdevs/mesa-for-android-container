@@ -170,7 +170,7 @@ wgl_present(struct pipe_screen *screen,
     * other structs such as this stw_winsys as well...
     */
 
-#if defined(GALLIUM_LLVMPIPE) || defined(GALLIUM_SOFTPIPE)
+#if defined(HAVE_SWRAST)
    struct sw_winsys *winsys = NULL;
    struct sw_displaytarget *dt = NULL;
 #endif

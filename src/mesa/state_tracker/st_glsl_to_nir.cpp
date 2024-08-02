@@ -55,6 +55,8 @@
 #include "compiler/glsl/shader_cache.h"
 #include "compiler/glsl/string_to_uint_map.h"
 
+#include "util/log.h"
+
 static int
 type_size(const struct glsl_type *type)
 {
@@ -395,7 +397,7 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
       _mesa_log("NIR IR for linked %s program %d:\n",
              _mesa_shader_stage_to_string(prog->info.stage),
              shader_program->Name);
-      nir_print_shader(nir, _mesa_get_log_file());
+      nir_print_shader(nir, mesa_log_get_file());
       _mesa_log("\n\n");
    }
 
@@ -537,15 +539,27 @@ st_link_glsl_to_nir(struct gl_context *ctx,
             _mesa_log("GLSL IR for linked %s program %d:\n",
                       _mesa_shader_stage_to_string(shader->Stage),
                       shader_program->Name);
-            _mesa_print_ir(_mesa_get_log_file(), shader->ir, NULL);
+            _mesa_print_ir(mesa_log_get_file(), shader->ir, NULL);
             _mesa_log("\n\n");
          }
 
-         prog->nir = glsl_to_nir(&st->ctx->Const, shader_program, shader->Stage, options);
+         prog->nir = glsl_to_nir(&st->ctx->Const, &shader->ir,
+                                 &shader->Program->info, shader->Stage, options);
+
+         prog->nir->info.name =
+            ralloc_asprintf(shader, "GLSL%d", shader_program->Name);
+         if (shader_program->Label)
+            prog->nir->info.label = ralloc_strdup(shader, shader_program->Label);
+
+         if (prog->nir->info.stage == MESA_SHADER_FRAGMENT) {
+            prog->nir->info.fs.pixel_center_integer = prog->info.fs.pixel_center_integer;
+            prog->nir->info.fs.origin_upper_left = prog->info.fs.origin_upper_left;
+            prog->nir->info.fs.advanced_blend_modes = prog->info.fs.advanced_blend_modes;
+         }
       }
 
-      memcpy(prog->nir->info.source_sha1, shader->linked_source_sha1,
-             SHA1_DIGEST_LENGTH);
+      memcpy(prog->nir->info.source_blake3, shader->linked_source_blake3,
+             BLAKE3_OUT_LEN);
 
       nir_shader_gather_info(prog->nir, nir_shader_get_entrypoint(prog->nir));
       if (!st->ctx->SoftFP64 && ((prog->nir->info.bit_sizes_int | prog->nir->info.bit_sizes_float) & 64) &&
@@ -627,8 +641,10 @@ st_link_glsl_to_nir(struct gl_context *ctx,
       NIR_PASS(_, nir, st_nir_lower_wpos_ytransform, shader->Program,
                st->screen);
 
+      /* needed to lower base_workgroup_id and base_global_invocation_id */
+      struct nir_lower_compute_system_values_options cs_options = {};
       NIR_PASS(_, nir, nir_lower_system_values);
-      NIR_PASS(_, nir, nir_lower_compute_system_values, NULL);
+      NIR_PASS(_, nir, nir_lower_compute_system_values, &cs_options);
 
       if (nir->info.io_lowered)
          continue; /* the rest is for non-lowered IO only */

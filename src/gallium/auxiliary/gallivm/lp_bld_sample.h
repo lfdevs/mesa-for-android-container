@@ -98,6 +98,8 @@ enum lp_sampler_op_type {
 #define LP_SAMPLER_GATHER_COMP_SHIFT        8
 #define LP_SAMPLER_GATHER_COMP_MASK   (3 << 8)
 #define LP_SAMPLER_FETCH_MS          (1 << 10)
+#define LP_SAMPLER_RESIDENCY         (1 << 11)
+#define LP_SAMPLE_KEY_COUNT          (1 << 12)
 
 
 /* Parameters used to handle TEX instructions */
@@ -147,10 +149,11 @@ struct lp_sampler_size_query_params
 };
 
 #define LP_IMG_LOAD 0
-#define LP_IMG_STORE 1
-#define LP_IMG_ATOMIC 2
-#define LP_IMG_ATOMIC_CAS 3
-#define LP_IMG_OP_COUNT 4
+#define LP_IMG_LOAD_SPARSE 1
+#define LP_IMG_STORE 2
+#define LP_IMG_ATOMIC 3
+#define LP_IMG_ATOMIC_CAS 4
+#define LP_IMG_OP_COUNT 5
 
 struct lp_img_params
 {
@@ -198,6 +201,8 @@ struct lp_static_texture_state
    unsigned pot_height:1;
    unsigned pot_depth:1;
    unsigned level_zero_only:1;
+   unsigned tiled:1;
+   unsigned tiled_samples:5;
 };
 
 
@@ -371,6 +376,20 @@ struct lp_sampler_dynamic_state
                 LLVMTypeRef thread_data_type,
                 LLVMValueRef thread_data_ptr,
                 unsigned unit);
+
+   /** Obtain pointer to a bitset of resident tiles. */
+   LLVMValueRef
+   (*residency)(struct gallivm_state *gallivm,
+                      LLVMTypeRef resources_type,
+                      LLVMValueRef resources_ptr,
+                      unsigned texture_unit, LLVMValueRef texture_unit_offset);
+
+   /** Obtain the offset of base_ptr into the referenced resource. */
+   LLVMValueRef
+   (*base_offset)(struct gallivm_state *gallivm,
+                  LLVMTypeRef resources_type,
+                  LLVMValueRef resources_ptr,
+                  unsigned texture_unit, LLVMValueRef texture_unit_offset);
 };
 
 
@@ -414,6 +433,7 @@ struct lp_build_sample_context
    bool no_brilinear;
    bool no_rho_approx;
    bool fetch_ms;
+   bool residency;
 
    /** regular scalar float type */
    struct lp_type float_type;
@@ -492,6 +512,8 @@ struct lp_build_sample_context
    LLVMValueRef resources_ptr;
 
    LLVMValueRef aniso_filter_table;
+
+   LLVMValueRef resident;
 };
 
 /*
@@ -739,6 +761,21 @@ lp_build_sample_offset(struct lp_build_context *bld,
 
 
 void
+lp_build_tiled_sample_offset(struct lp_build_context *bld,
+                             enum pipe_format format,
+                             const struct lp_static_texture_state *static_texture_state,
+                             LLVMValueRef x,
+                             LLVMValueRef y,
+                             LLVMValueRef z,
+                             LLVMValueRef width,
+                             LLVMValueRef height,
+                             LLVMValueRef z_stride,
+                             LLVMValueRef *out_offset,
+                             LLVMValueRef *out_i,
+                             LLVMValueRef *out_j);
+
+
+void
 lp_build_sample_soa_code(struct gallivm_state *gallivm,
                          const struct lp_static_texture_state *static_texture_state,
                          const struct lp_static_sampler_state *static_sampler_state,
@@ -757,7 +794,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
                          LLVMValueRef lod, /* optional */
                          LLVMValueRef ms_index, /* optional */
                          LLVMValueRef aniso_filter_table,
-                         LLVMValueRef texel_out[4]);
+                         LLVMValueRef *texel_out);
 
 
 void
@@ -801,7 +838,7 @@ lp_build_img_op_soa(const struct lp_static_texture_state *static_texture_state,
                     struct lp_sampler_dynamic_state *dynamic_state,
                     struct gallivm_state *gallivm,
                     const struct lp_img_params *params,
-                    LLVMValueRef outdata[4]);
+                    LLVMValueRef *outdata);
 
 void
 lp_build_sample_array_init_soa(struct lp_build_sample_array_switch *switch_info,

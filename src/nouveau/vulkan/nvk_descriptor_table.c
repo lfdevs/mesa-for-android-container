@@ -14,32 +14,26 @@ nvk_descriptor_table_grow_locked(struct nvk_device *dev,
                                  struct nvk_descriptor_table *table,
                                  uint32_t new_alloc)
 {
-   struct nouveau_ws_bo *new_bo;
-   void *new_map;
+   struct nvkmd_mem *new_mem;
    uint32_t *new_free_table;
+   VkResult result;
 
    assert(new_alloc > table->alloc && new_alloc <= table->max_alloc);
 
-   const uint32_t new_bo_size = new_alloc * table->desc_size;
-   new_bo = nouveau_ws_bo_new_mapped(dev->ws_dev, new_bo_size, 256,
-                                     NOUVEAU_WS_BO_LOCAL |
-                                     NOUVEAU_WS_BO_NO_SHARE,
-                                     NOUVEAU_WS_BO_WR,
-                                     &new_map);
-   if (new_bo == NULL) {
-      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                       "Failed to allocate the image descriptor table");
-   }
+   const uint32_t new_mem_size = new_alloc * table->desc_size;
+   result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &dev->vk.base,
+                                       new_mem_size, 256,
+                                       NVKMD_MEM_LOCAL, NVKMD_MEM_MAP_WR,
+                                       &new_mem);
+   if (result != VK_SUCCESS)
+      return result;
 
-   if (table->bo) {
-      assert(new_bo_size >= table->bo->size);
-      memcpy(new_map, table->map, table->bo->size);
-
-      nouveau_ws_bo_unmap(table->bo, table->map);
-      nouveau_ws_bo_destroy(table->bo);
+   if (table->mem) {
+      assert(new_mem_size >= table->mem->size_B);
+      memcpy(new_mem->map, table->mem->map, table->mem->size_B);
+      nvkmd_mem_unref(table->mem);
    }
-   table->bo = new_bo;
-   table->map = new_map;
+   table->mem = new_mem;
 
    const size_t new_free_table_size = new_alloc * sizeof(uint32_t);
    new_free_table = vk_realloc(&dev->vk.alloc, table->free_table,
@@ -90,10 +84,8 @@ void
 nvk_descriptor_table_finish(struct nvk_device *dev,
                             struct nvk_descriptor_table *table)
 {
-   if (table->bo != NULL) {
-      nouveau_ws_bo_unmap(table->bo, table->map);
-      nouveau_ws_bo_destroy(table->bo);
-   }
+   if (table->mem != NULL)
+      nvkmd_mem_unref(table->mem);
    vk_free(&dev->vk.alloc, table->free_table);
    simple_mtx_destroy(&table->mutex);
 }
@@ -142,7 +134,7 @@ nvk_descriptor_table_add_locked(struct nvk_device *dev,
    if (result != VK_SUCCESS)
       return result;
 
-   void *map = (char *)table->map + (*index_out * table->desc_size);
+   void *map = (char *)table->mem->map + (*index_out * table->desc_size);
 
    assert(desc_size == table->desc_size);
    memcpy(map, desc_data, table->desc_size);
@@ -172,7 +164,7 @@ nvk_descriptor_table_remove(struct nvk_device *dev,
 {
    simple_mtx_lock(&table->mutex);
 
-   void *map = (char *)table->map + (index * table->desc_size);
+   void *map = (char *)table->mem->map + (index * table->desc_size);
    memset(map, 0, table->desc_size);
 
    /* Sanity check for double-free */

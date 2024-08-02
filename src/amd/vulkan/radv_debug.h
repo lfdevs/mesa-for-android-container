@@ -85,7 +85,7 @@ enum {
 bool radv_init_trace(struct radv_device *device);
 void radv_finish_trace(struct radv_device *device);
 
-void radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_info *submit_info);
+VkResult radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_info *submit_info);
 
 void radv_print_spirv(const char *data, uint32_t size, FILE *fp);
 
@@ -106,5 +106,16 @@ radv_device_fault_detection_enabled(const struct radv_device *device)
 
    return instance->debug_flags & RADV_DEBUG_HANG;
 }
+
+struct radv_trace_data {
+   uint32_t primary_id;
+   uint32_t secondary_id;
+   uint64_t gfx_ring_pipeline;
+   uint64_t comp_ring_pipeline;
+   uint64_t vertex_descriptors;
+   uint64_t vertex_prolog;
+   uint64_t descriptor_sets[MAX_SETS];
+   VkDispatchIndirectCommand indirect_dispatch;
+};
 
 #endif /* RADV_DEBUG_H */

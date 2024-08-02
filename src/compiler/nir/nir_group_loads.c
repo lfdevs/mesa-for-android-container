@@ -306,9 +306,7 @@ is_barrier(nir_instr *instr)
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
       const char *name = nir_intrinsic_infos[intr->intrinsic].name;
 
-      if (intr->intrinsic == nir_intrinsic_discard ||
-          intr->intrinsic == nir_intrinsic_discard_if ||
-          intr->intrinsic == nir_intrinsic_terminate ||
+      if (intr->intrinsic == nir_intrinsic_terminate ||
           intr->intrinsic == nir_intrinsic_terminate_if ||
           /* TODO: nir_intrinsics.py could do this */
           strstr(name, "barrier"))
@@ -477,8 +475,7 @@ nir_group_loads(nir_shader *shader, nir_load_grouping grouping,
          process_block(block, grouping, max_distance);
       }
 
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance |
+      nir_metadata_preserve(impl, nir_metadata_control_flow |
                                      nir_metadata_loop_analysis);
    }
 }

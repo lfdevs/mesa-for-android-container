@@ -1463,9 +1463,9 @@ compact_immediate(const struct intel_device_info *devinfo,
        * field
        */
       switch (type) {
-      case BRW_REGISTER_TYPE_W:
-      case BRW_REGISTER_TYPE_UW:
-      case BRW_REGISTER_TYPE_HF:
+      case BRW_TYPE_W:
+      case BRW_TYPE_UW:
+      case BRW_TYPE_HF:
          if ((imm >> 16) != (imm & 0xffff))
             return -1;
          break;
@@ -1474,45 +1474,45 @@ compact_immediate(const struct intel_device_info *devinfo,
       }
 
       switch (type) {
-      case BRW_REGISTER_TYPE_F:
+      case BRW_TYPE_F:
          /* We get the high 12-bits as-is; rest must be zero */
          if ((imm & 0xfffff) == 0)
             return (imm >> 20) & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_HF:
+      case BRW_TYPE_HF:
          /* We get the high 12-bits as-is; rest must be zero */
          if ((imm & 0xf) == 0)
             return (imm >> 4) & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_UD:
-      case BRW_REGISTER_TYPE_VF:
-      case BRW_REGISTER_TYPE_UV:
-      case BRW_REGISTER_TYPE_V:
+      case BRW_TYPE_UD:
+      case BRW_TYPE_VF:
+      case BRW_TYPE_UV:
+      case BRW_TYPE_V:
          /* We get the low 12-bits as-is; rest must be zero */
          if ((imm & 0xfffff000) == 0)
             return imm & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_UW:
+      case BRW_TYPE_UW:
          /* We get the low 12-bits as-is; rest must be zero */
          if ((imm & 0xf000) == 0)
             return imm & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_D:
+      case BRW_TYPE_D:
          /* We get the low 11-bits as-is; 12th is replicated */
          if (((int)imm >> 11) == 0 || ((int)imm >> 11) == -1)
             return imm & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_W:
+      case BRW_TYPE_W:
          /* We get the low 11-bits as-is; 12th is replicated */
          if (((short)imm >> 11) == 0 || ((short)imm >> 11) == -1)
             return imm & 0xfff;
          break;
-      case BRW_REGISTER_TYPE_NF:
-      case BRW_REGISTER_TYPE_DF:
-      case BRW_REGISTER_TYPE_Q:
-      case BRW_REGISTER_TYPE_UQ:
-      case BRW_REGISTER_TYPE_B:
-      case BRW_REGISTER_TYPE_UB:
+      case BRW_TYPE_DF:
+      case BRW_TYPE_Q:
+      case BRW_TYPE_UQ:
+      case BRW_TYPE_B:
+      case BRW_TYPE_UB:
+      default:
          return -1;
       }
    } else {
@@ -1531,32 +1531,33 @@ uncompact_immediate(const struct intel_device_info *devinfo,
 {
    if (devinfo->ver >= 12) {
       switch (type) {
-      case BRW_REGISTER_TYPE_F:
+      case BRW_TYPE_F:
          return compact_imm << 20;
-      case BRW_REGISTER_TYPE_HF:
+      case BRW_TYPE_HF:
          return (compact_imm << 20) | (compact_imm << 4);
-      case BRW_REGISTER_TYPE_UD:
-      case BRW_REGISTER_TYPE_VF:
-      case BRW_REGISTER_TYPE_UV:
-      case BRW_REGISTER_TYPE_V:
+      case BRW_TYPE_UD:
+      case BRW_TYPE_VF:
+      case BRW_TYPE_UV:
+      case BRW_TYPE_V:
          return compact_imm;
-      case BRW_REGISTER_TYPE_UW:
+      case BRW_TYPE_UW:
          /* Replicate */
          return compact_imm << 16 | compact_imm;
-      case BRW_REGISTER_TYPE_D:
+      case BRW_TYPE_D:
          /* Extend the 12th bit into the high 20 bits */
          return (int)(compact_imm << 20) >> 20;
-      case BRW_REGISTER_TYPE_W:
+      case BRW_TYPE_W:
          /* Extend the 12th bit into the high 4 bits and replicate */
          return ((int)(compact_imm << 20) >> 4) |
                 ((unsigned short)((short)(compact_imm << 4) >> 4));
-      case BRW_REGISTER_TYPE_NF:
-      case BRW_REGISTER_TYPE_DF:
-      case BRW_REGISTER_TYPE_Q:
-      case BRW_REGISTER_TYPE_UQ:
-      case BRW_REGISTER_TYPE_B:
-      case BRW_REGISTER_TYPE_UB:
+      case BRW_TYPE_DF:
+      case BRW_TYPE_Q:
+      case BRW_TYPE_UQ:
+      case BRW_TYPE_B:
+      case BRW_TYPE_UB:
          unreachable("not reached");
+      default:
+         unreachable("invalid type");
       }
    } else {
       /* Replicate the 13th bit into the high 19 bits */
@@ -1572,10 +1573,10 @@ has_immediate(const struct intel_device_info *devinfo, const brw_inst *inst,
 {
    if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src0_type(devinfo, inst);
-      return *type != INVALID_REG_TYPE;
+      return *type != BRW_TYPE_INVALID;
    } else if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src1_type(devinfo, inst);
-      return *type != INVALID_REG_TYPE;
+      return *type != BRW_TYPE_INVALID;
    }
 
    return false;
@@ -1639,9 +1640,9 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
     * overlap with the immediate and setting them would overwrite the
     * immediate we set.
     */
-   if (!(brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_DF ||
-         brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_UQ ||
-         brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_Q)) {
+   if (!(brw_inst_src0_type(devinfo, &inst) == BRW_TYPE_DF ||
+         brw_inst_src0_type(devinfo, &inst) == BRW_TYPE_UQ ||
+         brw_inst_src0_type(devinfo, &inst) == BRW_TYPE_Q)) {
       brw_inst_set_src1_reg_hw_type(devinfo, &inst, 0);
    }
 
@@ -1661,11 +1662,11 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
     */
    if (devinfo->ver < 12 &&
        brw_inst_imm_ud(devinfo, &inst) == 0x0 &&
-       brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_F &&
-       brw_inst_dst_type(devinfo, &inst) == BRW_REGISTER_TYPE_F &&
+       brw_inst_src0_type(devinfo, &inst) == BRW_TYPE_F &&
+       brw_inst_dst_type(devinfo, &inst) == BRW_TYPE_F &&
        brw_inst_dst_hstride(devinfo, &inst) == BRW_HORIZONTAL_STRIDE_1) {
       enum brw_reg_file file = brw_inst_src0_reg_file(devinfo, &inst);
-      brw_inst_set_src0_file_type(devinfo, &inst, file, BRW_REGISTER_TYPE_VF);
+      brw_inst_set_src0_file_type(devinfo, &inst, file, BRW_TYPE_VF);
    }
 
    /* There are no mappings for dst:d | i:d, so if the immediate is suitable
@@ -1674,16 +1675,16 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
     * FINISHME: Use dst:f | imm:f on Gfx12
     */
    if (devinfo->ver < 12 &&
-       compact_immediate(devinfo, BRW_REGISTER_TYPE_D,
+       compact_immediate(devinfo, BRW_TYPE_D,
                          brw_inst_imm_ud(devinfo, &inst)) != -1 &&
        brw_inst_cond_modifier(devinfo, &inst) == BRW_CONDITIONAL_NONE &&
-       brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_D &&
-       brw_inst_dst_type(devinfo, &inst) == BRW_REGISTER_TYPE_D) {
+       brw_inst_src0_type(devinfo, &inst) == BRW_TYPE_D &&
+       brw_inst_dst_type(devinfo, &inst) == BRW_TYPE_D) {
       enum brw_reg_file src_file = brw_inst_src0_reg_file(devinfo, &inst);
       enum brw_reg_file dst_file = brw_inst_dst_reg_file(devinfo, &inst);
 
-      brw_inst_set_src0_file_type(devinfo, &inst, src_file, BRW_REGISTER_TYPE_UD);
-      brw_inst_set_dst_file_type(devinfo, &inst, dst_file, BRW_REGISTER_TYPE_UD);
+      brw_inst_set_src0_file_type(devinfo, &inst, src_file, BRW_TYPE_UD);
+      brw_inst_set_dst_file_type(devinfo, &inst, dst_file, BRW_TYPE_UD);
    }
 
    return inst;

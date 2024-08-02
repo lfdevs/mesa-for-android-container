@@ -20,7 +20,7 @@
       when: on_success
 
 .freedreno-common-manual-rules:
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.core-manual-rules, rules]
@@ -56,7 +56,7 @@
 
 .google-freedreno-manual-rules:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.freedreno-farm-manual-rules, rules]
@@ -68,7 +68,7 @@
 
 .collabora-freedreno-manual-rules:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -102,7 +102,7 @@
 
 .google-turnip-manual-rules:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.freedreno-farm-manual-rules, rules]
@@ -114,7 +114,7 @@
 
 .collabora-turnip-manual-rules:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -126,22 +126,44 @@
 
 # For piglit and skqp test jobs that run both GL and VK tests.
 .google-freedreno-turnip-rules:
+  stage: freedreno
   rules:
     - !reference [.test, rules]
     - !reference [.google-freedreno-rules, rules]
     - !reference [.google-turnip-rules, rules]
 
 .google-freedreno-turnip-manual-rules:
+  stage: freedreno
   rules:
     - !reference [.test, rules]
     - !reference [.google-freedreno-manual-rules, rules]
     - !reference [.google-turnip-manual-rules, rules]
 
 .collabora-freedreno-turnip-rules:
+  stage: freedreno
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-freedreno-rules, rules]
     - !reference [.collabora-turnip-rules, rules]
+
+.collabora-freedreno-turnip-manual-rules:
+  stage: freedreno
+  rules:
+    - !reference [.test, rules]
+    - !reference [.collabora-freedreno-manual-rules, rules]
+    - !reference [.collabora-turnip-manual-rules, rules]
+
+.valve-freedreno-turnip-manual-rules:
+  stage: freedreno
+  extends: .no-auto-retry
+  rules:
+    - !reference [.test, rules]
+    - !reference [.valve-farm-manual-rules, rules]
+    - !reference [.freedreno-common-manual-rules, rules]
+    - !reference [.vulkan-manual-rules, rules]
+    - changes:
+        *freedreno_vulkan_file_list
+      when: manual
 
 .google-freedreno-rules-restricted:
   stage: freedreno
@@ -159,7 +181,7 @@
 
 .google-freedreno-rules-performance:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.performance-rules, rules]
@@ -169,13 +191,13 @@
     # Ensure that we are using the release build artifact
     S3_ARTIFACT_NAME: mesa-arm64-default-release
   needs:
-    - debian/arm64_test
+    - debian/baremetal_arm64_test
     - debian-arm64-release
   dependencies: null
 
 .collabora-freedreno-rules-performance:
   stage: freedreno
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.performance-rules, rules]
@@ -340,3 +362,28 @@
 .a630-full:
   tags:
     - google-freedreno-cheza-long
+
+# CI-tron
+
+.b2c-freedreno-vk-test:
+  stage: freedreno
+  extends:
+    - .b2c-arm64-test-vk
+  variables:
+    VK_DRIVER: freedreno
+
+.a750-mupuf:
+  variables:
+    FDO_CI_CONCURRENT: 8
+    RUNNER_FARM_LOCATION: mupuf
+    B2C_KERNEL_URL: 'https://fs.mupuf.org/hdk8650/linux-6.8-hdk8650.gz'
+    B2C_INITRAMFS_URL: 'https://fs.mupuf.org/hdk8650/initramfs.linux_arm64.cpio.xz'
+    B2C_DTB_URL: 'https://fs.mupuf.org/hdk8650/sm8650-hdk.dtb'
+    B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
+    B2C_SESSION_REBOOT_REGEX: 'Sahara Open\r?$'
+    B2C_TIMEOUT_FIRST_CONSOLE_ACTIVITY_SECONDS: 30
+    B2C_TIMEOUT_FIRST_CONSOLE_ACTIVITY_RETRIES: 3
+    GPU_VERSION: freedreno-a750
+  tags:
+    - farm:$RUNNER_FARM_LOCATION
+    - dt_gpu:codename:a750

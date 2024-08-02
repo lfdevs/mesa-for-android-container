@@ -59,21 +59,11 @@ bool
 dri2_yuv_dma_buf_supported(struct dri_screen *screen,
                            const struct dri2_format_mapping *map);
 
-__DRIimage *
-dri2_lookup_egl_image(struct dri_screen *screen, void *handle);
-
 bool
 dri2_validate_egl_image(struct dri_screen *screen, void *handle);
 
 __DRIimage *
-dri2_lookup_egl_image_validated(struct dri_screen *screen, void *handle);
-
-__DRIimage *
 dri2_create_image_from_renderbuffer(__DRIcontext *context,
-				    int renderbuffer, void *loaderPrivate);
-
-__DRIimage *
-dri2_create_image_from_renderbuffer2(__DRIcontext *context,
 				     int renderbuffer, void *loaderPrivate,
                                      unsigned *error);
 

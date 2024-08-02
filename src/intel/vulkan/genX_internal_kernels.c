@@ -41,7 +41,7 @@ load_fragment_index(nir_builder *b)
 static nir_def *
 load_compute_index(nir_builder *b)
 {
-   return nir_channel(b, nir_load_global_invocation_id_zero_base(b, 32), 0);
+   return nir_channel(b, nir_load_global_invocation_id(b, 32), 0);
 }
 
 nir_shader *

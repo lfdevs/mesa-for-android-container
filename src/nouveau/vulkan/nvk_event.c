@@ -9,8 +9,8 @@
 #include "nvk_entrypoints.h"
 #include "nvk_mme.h"
 
-#include "nvk_cl906f.h"
-#include "nvk_cl9097.h"
+#include "nv_push_cl906f.h"
+#include "nv_push_cl9097.h"
 
 #define NVK_EVENT_MEM_SIZE sizeof(VkResult)
 

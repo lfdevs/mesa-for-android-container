@@ -47,21 +47,13 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 {
    struct fd_context *ctx = fd_context(pctx);
    struct pipe_fence_handle *fence = NULL;
-   struct fd_batch *batch = NULL;
-
-   /* We want to lookup current batch if it exists, but not create a new
-    * one if not (unless we need a fence)
-    */
-   fd_batch_reference(&batch, ctx->batch);
+   struct fd_batch *batch = fd_bc_last_batch(ctx);
 
    DBG("%p: %p: flush: flags=%x, fencep=%p", ctx, batch, flags, fencep);
 
    if (fencep && !batch) {
       batch = fd_context_batch(ctx);
    } else if (!batch) {
-      if (ctx->screen->reorder)
-         fd_bc_flush(ctx, flags & PIPE_FLUSH_DEFERRED);
-      fd_bc_dump(ctx, "%p: NULL batch, remaining:\n", ctx);
       return;
    }
 
@@ -134,7 +126,9 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
    if (!ctx->screen->reorder) {
       fd_batch_flush(batch);
    } else {
-      fd_bc_flush(ctx, flags & PIPE_FLUSH_DEFERRED);
+      fd_bc_add_flush_deps(ctx, batch);
+      if (!(flags & PIPE_FLUSH_DEFERRED))
+         fd_batch_flush(batch);
    }
 
    fd_bc_dump(ctx, "%p: remaining:\n", ctx);
@@ -406,7 +400,12 @@ fd_context_destroy(struct pipe_context *pctx)
    fd_batch_reference(&ctx->batch, NULL); /* unref current batch */
 
    /* Make sure nothing in the batch cache references our context any more. */
-   fd_bc_flush(ctx, false);
+   struct fd_batch *batch = fd_bc_last_batch(ctx);
+   if (batch) {
+      fd_bc_add_flush_deps(ctx, batch);
+      fd_batch_flush(batch);
+      fd_batch_reference(&batch, NULL);
+   }
 
    fd_prog_fini(pctx);
 
@@ -500,7 +499,7 @@ fd_get_device_reset_status(struct pipe_context *pctx)
 
 static void
 fd_trace_record_ts(struct u_trace *ut, void *cs, void *timestamps,
-                   unsigned idx, bool end_of_pipe)
+                   unsigned idx, uint32_t flags)
 {
    struct fd_batch *batch = container_of(ut, struct fd_batch, trace);
    struct fd_ringbuffer *ring = cs;
@@ -755,8 +754,11 @@ fd_context_init_tc(struct pipe_context *pctx, unsigned flags)
       },
       &ctx->tc);
 
-   if (tc && tc != pctx)
+   if (tc && tc != pctx) {
       threaded_context_init_bytes_mapped_limit((struct threaded_context *)tc, 16);
+      ((struct threaded_context *)tc)->bytes_replaced_limit =
+         ((struct threaded_context *)tc)->bytes_mapped_limit / 4;
+   }
 
    return tc;
 }

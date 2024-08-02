@@ -116,7 +116,7 @@ combine_flags(unsigned *dstflags, struct ir3_instruction *src)
    if (srcflags & IR3_REG_BNOT)
       *dstflags ^= IR3_REG_BNOT;
 
-   *dstflags &= ~IR3_REG_SSA;
+   *dstflags &= ~(IR3_REG_SSA | IR3_REG_SHARED);
    *dstflags |= srcflags & IR3_REG_SSA;
    *dstflags |= srcflags & IR3_REG_CONST;
    *dstflags |= srcflags & IR3_REG_IMMED;
@@ -280,7 +280,7 @@ try_swap_mad_two_srcs(struct ir3_instruction *instr, unsigned new_flags)
    /* If the reason we couldn't fold without swapping is something
     * other than const source, then swapping won't help:
     */
-   if (!(new_flags & IR3_REG_CONST))
+   if (!(new_flags & (IR3_REG_CONST | IR3_REG_SHARED)))
       return false;
 
    instr->cat3.swapped = true;
@@ -338,6 +338,8 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
          unuse(src);
          reg->def->instr->use_count++;
 
+         return true;
+      } else if (n == 1 && try_swap_mad_two_srcs(instr, new_flags)) {
          return true;
       }
    } else if ((is_same_type_mov(src) || is_const_mov(src)) &&
@@ -414,7 +416,7 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
                return false;
             if (!is_cat2_float(instr->opc) && !is_cat3_float(instr->opc))
                return false;
-         } else if (src->cat1.dst_type == TYPE_U16) {
+         } else if (src->cat1.dst_type == TYPE_U16 || src->cat1.dst_type == TYPE_S16) {
             /* Since we set CONSTANT_DEMOTION_ENABLE, a float reference of
              * what was a U16 value read from the constbuf would incorrectly
              * do 32f->16f conversion, when we want to read a 16f value.
@@ -442,6 +444,7 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
                       (opc_cat(instr->opc) == 2) ||
                       (opc_cat(instr->opc) == 6) ||
                       is_meta(instr) ||
+                      (instr->opc == OPC_ISAM && (n == 1 || n == 2)) ||
                       (is_mad(instr->opc) && (n == 0)));
 
          if ((opc_cat(instr->opc) == 2) &&

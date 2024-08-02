@@ -11,7 +11,7 @@ Build-Depends:
  glslang-tools [@LLVM_ARCHS@],
  meson (>= 1.4.0),
  quilt (>= 0.63-8.2~),
- pkg-config,
+ pkgconf,
  libdrm-dev (>= 2.4.119),
  libx11-dev,
  libxxf86vm-dev,
@@ -137,6 +137,7 @@ Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
+ mesa-libgallium (= ${binary:Version}),
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: generic buffer management API -- runtime
@@ -168,6 +169,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libgbm1 (= ${binary:Version}) [!hurd-any],
+ mesa-libgallium (= ${binary:Version}),
 Provides: libegl-vendor
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
@@ -226,6 +228,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libgl1-mesa-dri,
+ mesa-libgallium (= ${binary:Version}),
 Provides: libglx-vendor
 Breaks:
  libopengl-perl (<< 0.6704+dfsg-2),
@@ -294,6 +297,19 @@ Description: Developer documentation for Mesa
  This package includes the specifications for the Mesa-specific OpenGL
  extensions, the complete set of release notes and the development header
  files common to all Mesa packages.
+
+Package: mesa-libgallium
+Section: libs
+Architecture: linux-any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: shared infrastructure for Mesa drivers
+ This package contains libgallium, a private library shared between
+ multiple Mesa drivers. This library is an implementation detail of Mesa
+ and should not be used directly by user code.
 
 Package: libosmesa6
 Section: libs
@@ -424,7 +440,7 @@ Depends:
  ${misc:Depends},
 Multi-Arch: same
 Description: DRM shim libraries
- This package provides drm-shim libraries which can be used for testing DRM drivers when
- none exists on the host
+ This package provides drm-shim libraries which can be used for testing DRM
+ drivers when none exists on the host.
 
 # vim: tw=0

@@ -38,7 +38,6 @@
 /* We also use some types/defines from the host drm/msm uabi: */
 #include "drm-uapi/msm_drm.h"
 
-#define VIRGL_RENDERER_UNSTABLE_APIS 1
 #include "virglrenderer_hw.h"
 #include "msm_proto.h"
 

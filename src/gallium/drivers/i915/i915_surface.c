@@ -119,7 +119,8 @@ i915_surface_copy_render(struct pipe_context *pipe, struct pipe_resource *dst,
 
    util_blitter_blit_generic(i915->blitter, dst_view, &dstbox, src_view,
                              src_box, src_width0, src_height0, PIPE_MASK_RGBAZS,
-                             PIPE_TEX_FILTER_NEAREST, NULL, false, false, 0);
+                             PIPE_TEX_FILTER_NEAREST, NULL, false, false, 0,
+                             NULL);
    return;
 
 fallback:
@@ -274,7 +275,7 @@ i915_blit(struct pipe_context *pipe, const struct pipe_blit_info *blit_info)
 
    i915_util_blitter_save_states(i915);
 
-   util_blitter_blit(i915->blitter, &info);
+   util_blitter_blit(i915->blitter, &info, NULL);
 }
 
 static void

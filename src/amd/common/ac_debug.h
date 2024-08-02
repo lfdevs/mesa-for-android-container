@@ -69,7 +69,9 @@ bool ac_register_exists(enum amd_gfx_level gfx_level, enum radeon_family family,
                         unsigned offset);
 bool ac_vm_fault_occurred(enum amd_gfx_level gfx_level, uint64_t *old_dmesg_timestamp,
                          uint64_t *out_addr);
+char *ac_get_umr_waves(const struct radeon_info *info, enum amd_ip_type ring);
 unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info *info,
+                          const char *wave_dump,
                           struct ac_wave_info waves[AC_MAX_WAVES_PER_CHIP]);
 void ac_print_gpuvm_fault_status(FILE *output, enum amd_gfx_level gfx_level,
                                  uint32_t status);

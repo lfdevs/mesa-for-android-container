@@ -21,7 +21,7 @@ use std::ptr;
 use std::slice;
 use std::sync::Arc;
 
-#[cl_info_entrypoint(cl_get_kernel_info)]
+#[cl_info_entrypoint(clGetKernelInfo)]
 impl CLInfo<cl_kernel_info> for cl_kernel {
     fn query(&self, q: cl_kernel_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let kernel = Kernel::ref_from_raw(*self)?;
@@ -44,7 +44,7 @@ impl CLInfo<cl_kernel_info> for cl_kernel {
     }
 }
 
-#[cl_info_entrypoint(cl_get_kernel_arg_info)]
+#[cl_info_entrypoint(clGetKernelArgInfo)]
 impl CLInfoObj<cl_kernel_arg_info, cl_uint> for cl_kernel {
     fn query(&self, idx: cl_uint, q: cl_kernel_arg_info) -> CLResult<Vec<MaybeUninit<u8>>> {
         let kernel = Kernel::ref_from_raw(*self)?;
@@ -72,7 +72,7 @@ impl CLInfoObj<cl_kernel_arg_info, cl_uint> for cl_kernel {
     }
 }
 
-#[cl_info_entrypoint(cl_get_kernel_work_group_info)]
+#[cl_info_entrypoint(clGetKernelWorkGroupInfo)]
 impl CLInfoObj<cl_kernel_work_group_info, cl_device_id> for cl_kernel {
     fn query(
         &self,
@@ -247,7 +247,7 @@ unsafe fn kernel_work_arr_mut<'a>(arr: *mut usize, work_dim: cl_uint) -> Option<
     }
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clCreateKernel)]
 fn create_kernel(
     program: cl_program,
     kernel_name: *const ::std::os::raw::c_char,
@@ -260,37 +260,38 @@ fn create_kernel(
         return Err(CL_INVALID_VALUE);
     }
 
+    let build = p.build_info();
     // CL_INVALID_PROGRAM_EXECUTABLE if there is no successfully built executable for program.
-    if p.kernels().is_empty() {
+    if build.kernels().is_empty() {
         return Err(CL_INVALID_PROGRAM_EXECUTABLE);
     }
 
     // CL_INVALID_KERNEL_NAME if kernel_name is not found in program.
-    if !p.kernels().contains(&name) {
+    if !build.kernels().contains(&name) {
         return Err(CL_INVALID_KERNEL_NAME);
     }
 
     // CL_INVALID_KERNEL_DEFINITION if the function definition for __kernel function given by
     // kernel_name such as the number of arguments, the argument types are not the same for all
     // devices for which the program executable has been built.
-    if p.kernel_signatures(&name).len() != 1 {
+    if !p.has_unique_kernel_signatures(&name) {
         return Err(CL_INVALID_KERNEL_DEFINITION);
     }
 
-    Ok(Kernel::new(name, p).into_cl())
+    Ok(Kernel::new(name, Arc::clone(&p), &build).into_cl())
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clRetainKernel)]
 fn retain_kernel(kernel: cl_kernel) -> CLResult<()> {
     Kernel::retain(kernel)
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clReleaseKernel)]
 fn release_kernel(kernel: cl_kernel) -> CLResult<()> {
     Kernel::release(kernel)
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clCreateKernelsInProgram)]
 fn create_kernels_in_program(
     program: cl_program,
     num_kernels: cl_uint,
@@ -298,25 +299,26 @@ fn create_kernels_in_program(
     num_kernels_ret: *mut cl_uint,
 ) -> CLResult<()> {
     let p = Program::arc_from_raw(program)?;
+    let build = p.build_info();
 
     // CL_INVALID_PROGRAM_EXECUTABLE if there is no successfully built executable for any device in
     // program.
-    if p.kernels().is_empty() {
+    if build.kernels().is_empty() {
         return Err(CL_INVALID_PROGRAM_EXECUTABLE);
     }
 
     // CL_INVALID_VALUE if kernels is not NULL and num_kernels is less than the number of kernels
     // in program.
-    if !kernels.is_null() && p.kernels().len() > num_kernels as usize {
+    if !kernels.is_null() && build.kernels().len() > num_kernels as usize {
         return Err(CL_INVALID_VALUE);
     }
 
     let mut num_kernels = 0;
-    for name in p.kernels() {
+    for name in build.kernels() {
         // Kernel objects are not created for any __kernel functions in program that do not have the
         // same function definition across all devices for which a program executable has been
         // successfully built.
-        if p.kernel_signatures(&name).len() != 1 {
+        if !p.has_unique_kernel_signatures(name) {
             continue;
         }
 
@@ -325,7 +327,7 @@ fn create_kernels_in_program(
             unsafe {
                 kernels
                     .add(num_kernels as usize)
-                    .write(Kernel::new(name, p.clone()).into_cl());
+                    .write(Kernel::new(name.clone(), p.clone(), &build).into_cl());
             }
         }
         num_kernels += 1;
@@ -334,7 +336,7 @@ fn create_kernels_in_program(
     Ok(())
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clSetKernelArg)]
 fn set_kernel_arg(
     kernel: cl_kernel,
     arg_index: cl_uint,
@@ -430,7 +432,7 @@ fn set_kernel_arg(
     //• CL_MAX_SIZE_RESTRICTION_EXCEEDED if the size in bytes of the memory object (if the argument is a memory object) or arg_size (if the argument is declared with local qualifier) exceeds a language- specified maximum size restriction for this argument, such as the MaxByteOffset SPIR-V decoration. This error code is missing before version 2.2.
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clSetKernelArgSVMPointer)]
 fn set_kernel_arg_svm_pointer(
     kernel: cl_kernel,
     arg_index: cl_uint,
@@ -461,7 +463,7 @@ fn set_kernel_arg_svm_pointer(
     // CL_INVALID_ARG_VALUE if arg_value specified is not a valid value.
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clSetKernelExecInfo)]
 fn set_kernel_exec_info(
     kernel: cl_kernel,
     param_name: cl_kernel_exec_info,
@@ -503,7 +505,7 @@ fn set_kernel_exec_info(
     // CL_INVALID_OPERATION if param_name is CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM and param_value is CL_TRUE but no devices in context associated with kernel support fine-grain system SVM allocations.
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clEnqueueNDRangeKernel)]
 fn enqueue_ndrange_kernel(
     command_queue: cl_command_queue,
     kernel: cl_kernel,
@@ -631,7 +633,7 @@ fn enqueue_ndrange_kernel(
     //• CL_INVALID_OPERATION if SVM pointers are passed as arguments to a kernel and the device does not support SVM or if system pointers are passed as arguments to a kernel and/or stored inside SVM allocations passed as kernel arguments and the device does not support fine grain system SVM allocations.
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clEnqueueTask)]
 fn enqueue_task(
     command_queue: cl_command_queue,
     kernel: cl_kernel,
@@ -655,13 +657,13 @@ fn enqueue_task(
     )
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clCloneKernel)]
 fn clone_kernel(source_kernel: cl_kernel) -> CLResult<cl_kernel> {
     let k = Kernel::ref_from_raw(source_kernel)?;
     Ok(Arc::new(k.clone()).into_cl())
 }
 
-#[cl_entrypoint]
+#[cl_entrypoint(clGetKernelSuggestedLocalWorkSizeKHR)]
 fn get_kernel_suggested_local_work_size_khr(
     command_queue: cl_command_queue,
     kernel: cl_kernel,

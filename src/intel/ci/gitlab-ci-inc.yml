@@ -42,7 +42,7 @@
 
 .i915g-manual-rules:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.gl-manual-rules, rules]
@@ -64,7 +64,7 @@
 
 .crocus-manual-rules:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.anholt-farm-manual-rules, rules]
@@ -88,7 +88,7 @@
 
 .iris-manual-rules:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -102,7 +102,7 @@
 # .performance-rules)
 .iris-rules-performance:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -133,7 +133,7 @@
 
 .anv-manual-rules:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -156,7 +156,7 @@
 
 .hasvk-manual-rules:
   stage: intel
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.anholt-farm-manual-rules, rules]
@@ -186,6 +186,7 @@
 .lava-acer-cb317-1h-c3z6-dedede:x86_64:
   variables:
     DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
+    FARM: collabora
     FDO_CI_CONCURRENT: 3
     GPU_VERSION: iris-jsl
     HWCI_KERNEL_MODULES: i915
@@ -195,6 +196,7 @@
 .lava-asus-C523NA-A20057-coral:x86_64:
   variables:
     DEVICE_TYPE: asus-C523NA-A20057-coral
+    FARM: collabora
     FDO_CI_CONCURRENT: 5
     GPU_VERSION: iris-apl
     HWCI_KERNEL_MODULES: i915
@@ -204,6 +206,7 @@
 .lava-hp-x360-12b-ca0010nr-n4020-octopus:x86_64:
   variables:
     DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
+    FARM: collabora
     FDO_CI_CONCURRENT: 3
     GPU_VERSION: iris-glk
     HWCI_KERNEL_MODULES: i915
@@ -214,6 +217,7 @@
   variables:
     BOOT_METHOD: depthcharge
     DEVICE_TYPE: acer-cp514-2h-1130g7-volteer
+    FARM: collabora
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: anv-tgl
     HWCI_KERNEL_MODULES: i915
@@ -224,6 +228,7 @@
   variables:
     BOOT_METHOD: depthcharge
     DEVICE_TYPE: acer-cp514-2h-1160g7-volteer
+    FARM: collabora
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: anv-tgl
     HWCI_KERNEL_MODULES: i915
@@ -233,6 +238,7 @@
 .lava-asus-C433TA-AJ0005-rammus:x86_64:
   variables:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
+    FARM: collabora
     FDO_CI_CONCURRENT: 5
     GPU_VERSION: iris-amly
     HWCI_KERNEL_MODULES: i915
@@ -242,6 +248,7 @@
 .lava-hp-x360-14-G1-sona:x86_64:
   variables:
     DEVICE_TYPE: hp-x360-14-G1-sona
+    FARM: collabora
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-kbl
     HWCI_KERNEL_MODULES: i915
@@ -251,6 +258,7 @@
 .lava-dell-latitude-5400-8665U-sarien:x86_64:
   variables:
     DEVICE_TYPE: dell-latitude-5400-8665U-sarien
+    FARM: collabora
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-whl
     HWCI_KERNEL_MODULES: i915
@@ -260,6 +268,7 @@
 .lava-asus-C436FA-Flip-hatch:x86_64:
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
+    FARM: collabora
     FDO_CI_CONCURRENT: 9
     GPU_VERSION: iris-cml
     HWCI_KERNEL_MODULES: i915

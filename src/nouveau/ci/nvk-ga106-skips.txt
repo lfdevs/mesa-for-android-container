@@ -1,0 +1,4 @@
+# Too slow
+dEQP-VK.draw.*.shader_layer.(vertex|tessellation)_shader_256
+dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
+dEQP-VK.reconvergence.(sub|work)group_uniform_control_flow_(ballot|elect).compute.nesting4.(0.40|7.10)

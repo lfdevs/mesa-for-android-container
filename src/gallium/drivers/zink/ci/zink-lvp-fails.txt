@@ -1,8 +1,3 @@
-# #6115
-spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
-spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec2-index-rd,Crash
-spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec3-index-rd,Crash
-spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec4-index-rd,Crash
 
 # #6322
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
@@ -124,7 +119,6 @@ spec@arb_post_depth_coverage@arb_post_depth_coverage-multisampling,Fail
 spec@arb_shader_image_load_store@early-z,Fail
 spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 
-spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
 
 #literally no driver can pass these
@@ -145,3 +139,6 @@ spec@!opengl 1.0@gl-1.0-dlist-beginend,Crash
 spec@nv_texture_barrier@blending-in-shader,Crash
 
 spec@arb_viewport_array@display-list,Fail
+
+# passes locally
+KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Fail

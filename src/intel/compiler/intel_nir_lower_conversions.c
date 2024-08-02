@@ -32,8 +32,7 @@ split_conversion(nir_builder *b, nir_alu_instr *alu, nir_alu_type src_type,
    nir_def *src = nir_ssa_for_alu_src(b, alu, 0);
    nir_def *tmp = nir_type_convert(b, src, src_type, tmp_type, nir_rounding_mode_undef);
    nir_def *res = nir_type_convert(b, tmp, tmp_type, dst_type, nir_rounding_mode_undef);
-   nir_def_rewrite_uses(&alu->def, res);
-   nir_instr_remove(&alu->instr);
+   nir_def_replace(&alu->def, res);
 }
 
 static bool
@@ -108,7 +107,6 @@ bool
 intel_nir_lower_conversions(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        NULL);
 }

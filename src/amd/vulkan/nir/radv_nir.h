@@ -71,6 +71,23 @@ bool radv_nir_lower_cooperative_matrix(nir_shader *shader, unsigned wave_size);
 
 bool radv_nir_lower_draw_id_to_zero(nir_shader *shader);
 
+bool radv_nir_remap_color_attachment(nir_shader *shader, const struct radv_graphics_state_key *gfx_state);
+
+typedef struct radv_nir_opt_tid_function_options {
+   bool use_masked_swizzle_amd : 1;
+   bool use_dpp16_shift_amd : 1;
+   bool use_shuffle_xor : 1;
+   bool use_clustered_rotate : 1;
+   /* The can be smaller than the api subgroup/ballot size
+    * if some invocations are always inactive.
+    */
+   uint8_t hw_subgroup_size;
+   uint8_t hw_ballot_bit_size;
+   uint8_t hw_ballot_num_comp;
+} radv_nir_opt_tid_function_options;
+
+bool radv_nir_opt_tid_function(nir_shader *shader, const radv_nir_opt_tid_function_options *options);
+
 #ifdef __cplusplus
 }
 #endif

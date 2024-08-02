@@ -1195,7 +1195,7 @@ blorp_build_nir_shader(struct blorp_context *blorp,
       key->base.shader_pipeline == BLORP_SHADER_PIPELINE_COMPUTE;
    gl_shader_stage stage =
       compute ? MESA_SHADER_COMPUTE : MESA_SHADER_FRAGMENT;
-   blorp_nir_init_shader(&b, mem_ctx, stage, NULL);
+   blorp_nir_init_shader(&b, blorp, mem_ctx, stage, NULL);
 
    struct blorp_blit_vars v;
    blorp_blit_vars_init(&b, &v, key);
@@ -2880,7 +2880,8 @@ blorp_copy_get_formats(const struct isl_device *isl_dev,
       *src_view_format =
       *dst_view_format =
          get_copy_format_for_bpb(isl_dev, dst_fmtl->bpb);
-   } else if (isl_format_supports_ccs_e(isl_dev->info, dst_surf->format)) {
+   } else if (ISL_GFX_VER(isl_dev) < 20 &&
+              isl_format_supports_ccs_e(isl_dev->info, dst_surf->format)) {
       *dst_view_format = get_ccs_compatible_copy_format(dst_fmtl);
       if (isl_format_supports_ccs_e(isl_dev->info, src_surf->format)) {
          *src_view_format = get_ccs_compatible_copy_format(src_fmtl);
@@ -2889,7 +2890,8 @@ blorp_copy_get_formats(const struct isl_device *isl_dev,
       } else {
          *src_view_format = get_copy_format_for_bpb(isl_dev, src_fmtl->bpb);
       }
-   } else if (isl_format_supports_ccs_e(isl_dev->info, src_surf->format)) {
+   } else if (ISL_GFX_VER(isl_dev) < 20 &&
+              isl_format_supports_ccs_e(isl_dev->info, src_surf->format)) {
       *src_view_format = get_ccs_compatible_copy_format(src_fmtl);
       if (src_fmtl->bpb == dst_fmtl->bpb) {
          *dst_view_format = *src_view_format;

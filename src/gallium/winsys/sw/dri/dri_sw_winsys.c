@@ -41,7 +41,7 @@
 #include "util/format/u_formats.h"
 #include "util/detect_os.h"
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
 # include <sys/stat.h>
 # include <errno.h>
 # include <sys/mman.h>
@@ -248,7 +248,7 @@ dri_sw_displaytarget_map(struct sw_winsys *ws,
    dri_sw_dt->map_flags = flags;
    if (dri_sw_dt->unbacked)
       return dri_sw_dt->mapped;
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
    if (dri_sw_dt->fd > -1) {
       bool success = false;
       if (!success) {
@@ -297,7 +297,7 @@ dri_sw_displaytarget_unmap(struct sw_winsys *ws,
       dri_sw_dt->map_flags = 0;
       return;
    }
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
    if (dri_sw_dt->fd > -1) {
       munmap(dri_sw_dt->data, dri_sw_dt->size);
       dri_sw_dt->data = NULL;
@@ -317,7 +317,7 @@ dri_sw_displaytarget_from_handle(struct sw_winsys *winsys,
                                  struct winsys_handle *whandle,
                                  unsigned *stride)
 {
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
    int fd = os_dupfd_cloexec(whandle->handle);
    struct sw_displaytarget *sw = dri_sw_displaytarget_create(winsys, templ->usage, templ->format, templ->width0, templ->height0, 64, NULL, stride);
    struct dri_sw_displaytarget *dri_sw_dt = dri_sw_displaytarget(sw);

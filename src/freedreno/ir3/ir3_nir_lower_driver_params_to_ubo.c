@@ -75,7 +75,7 @@ ir3_nir_lower_driver_params_to_ubo(nir_shader *nir,
 {
    bool result = nir_shader_intrinsics_pass(
       nir, lower_driver_param_to_ubo,
-      nir_metadata_block_index | nir_metadata_dominance, ir3_const_state(v));
+      nir_metadata_control_flow, ir3_const_state(v));
 
    return result;
 }

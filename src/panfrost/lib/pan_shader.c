@@ -167,8 +167,7 @@ GENX(pan_shader_compile)(nir_shader *s, struct panfrost_compile_inputs *inputs,
       /* List of reasons we need to execute frag shaders when things
        * are masked off */
 
-      info->fs.sidefx = s->info.writes_memory || s->info.fs.uses_discard ||
-                        s->info.fs.uses_demote;
+      info->fs.sidefx = s->info.writes_memory || s->info.fs.uses_discard;
 
       /* With suitable ZSA/blend, is early-z possible? */
       info->fs.can_early_z = !info->fs.sidefx && !info->fs.writes_depth &&

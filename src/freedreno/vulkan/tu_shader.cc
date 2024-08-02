@@ -38,40 +38,6 @@ tu_spirv_to_nir(struct tu_device *dev,
       /* Use 16-bit math for RelaxedPrecision ALU ops */
       .mediump_16bit_alu = true,
 
-      .caps = {
-         .demote_to_helper_invocation = true,
-         .descriptor_array_dynamic_indexing = true,
-         .descriptor_array_non_uniform_indexing = true,
-         .descriptor_indexing = true,
-         .device_group = true,
-         .draw_parameters = true,
-         .float_controls = true,
-         .float16 = true,
-         .fragment_density = true,
-         .geometry_streams = true,
-         .image_read_without_format = true,
-         .image_write_without_format = true,
-         .int16 = true,
-         .multiview = true,
-         .physical_storage_buffer_address = true,
-         .post_depth_coverage = true,
-         .runtime_descriptor_array = true,
-         .shader_viewport_index_layer = true,
-         .stencil_export = true,
-         .storage_16bit = dev->physical_device->info->a6xx.storage_16bit,
-         .subgroup_arithmetic = true,
-         .subgroup_ballot = true,
-         .subgroup_basic = true,
-         .subgroup_quad = true,
-         .subgroup_shuffle = true,
-         .subgroup_vote = true,
-         .tessellation = true,
-         .transform_feedback = true,
-         .variable_pointers = true,
-         .vk_memory_model_device_scope = true,
-         .vk_memory_model = true,
-      },
-
       .ubo_addr_format = nir_address_format_vec2_index_32bit_offset,
       .ssbo_addr_format = nir_address_format_vec2_index_32bit_offset,
 
@@ -172,9 +138,7 @@ lower_load_push_constant(struct tu_device *dev,
             nir_ushr_imm(b, instr->src[0].ssa, 2),
             .base = base);
 
-   nir_def_rewrite_uses(&instr->def, load);
-
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, load);
 }
 
 static void
@@ -250,8 +214,7 @@ lower_vulkan_resource_index(struct tu_device *dev, nir_builder *b,
                                         nir_ishl(b, vulkan_idx, shift)),
                                shift);
 
-   nir_def_rewrite_uses(&instr->def, def);
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, def);
 }
 
 static void
@@ -267,8 +230,7 @@ lower_vulkan_resource_reindex(nir_builder *b, nir_intrinsic_instr *instr)
                         nir_ishl(b, delta, shift)),
                shift);
 
-   nir_def_rewrite_uses(&instr->def, new_index);
-   nir_instr_remove(&instr->instr);
+   nir_def_replace(&instr->def, new_index);
 }
 
 static void
@@ -282,8 +244,7 @@ lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin)
       nir_vec3(b, nir_channel(b, old_index, 0),
                nir_channel(b, old_index, 1),
                nir_imm_int(b, 0));
-   nir_def_rewrite_uses(&intrin->def, new_index);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, new_index);
 }
 
 static bool
@@ -321,13 +282,20 @@ lower_ssbo_ubo_intrinsic(struct tu_device *dev,
       }
    }
 
-   /* For isam, we need to use the appropriate descriptor if 16-bit storage is
-    * enabled. Descriptor 0 is the 16-bit one, descriptor 1 is the 32-bit one.
+   /* Descriptor index has to be adjusted in the following cases:
+    *  - isam loads, when the 16-bit descriptor cannot also be used for 32-bit
+    *    loads -- next-index descriptor will be able to do that;
+    *  - 8-bit SSBO loads and stores -- next-index descriptor is dedicated to
+    *    storage accesses of that size.
     */
-   if (dev->physical_device->info->a6xx.storage_16bit &&
-       intrin->intrinsic == nir_intrinsic_load_ssbo &&
-       (nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER) &&
-       intrin->def.bit_size > 16) {
+   if ((dev->physical_device->info->a6xx.storage_16bit &&
+        !dev->physical_device->info->a6xx.has_isam_v &&
+        intrin->intrinsic == nir_intrinsic_load_ssbo &&
+        (nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER) &&
+        intrin->def.bit_size > 16) ||
+       (dev->physical_device->info->a7xx.storage_8bit &&
+        ((intrin->intrinsic == nir_intrinsic_load_ssbo && intrin->def.bit_size == 8) ||
+         (intrin->intrinsic == nir_intrinsic_store_ssbo && intrin->src[0].ssa->bit_size == 8)))) {
       descriptor_idx = nir_iadd_imm(b, descriptor_idx, 1);
    }
 
@@ -509,13 +477,14 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
          instr->intrinsic == nir_intrinsic_load_frag_size_ir3 ?
          IR3_DP_FS_FRAG_SIZE : IR3_DP_FS_FRAG_OFFSET;
 
+      unsigned offset = param - IR3_DP_FS_DYNAMIC;
+
       nir_def *view = instr->src[0].ssa;
       nir_def *result =
          ir3_load_driver_ubo_indirect(b, 2, &shader->const_state.fdm_ubo,
-                                      param, view, nir_intrinsic_range(instr));
+                                      offset, view, nir_intrinsic_range(instr));
 
-      nir_def_rewrite_uses(&instr->def, result);
-      nir_instr_remove(&instr->instr);
+      nir_def_replace(&instr->def, result);
       return true;
    }
    case nir_intrinsic_load_frag_invocation_count: {
@@ -524,10 +493,10 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
 
       nir_def *result =
          ir3_load_driver_ubo(b, 1, &shader->const_state.fdm_ubo,
-                             IR3_DP_FS_FRAG_INVOCATION_COUNT);
+                             IR3_DP_FS_FRAG_INVOCATION_COUNT -
+                             IR3_DP_FS_DYNAMIC);
 
-      nir_def_rewrite_uses(&instr->def, result);
-      nir_instr_remove(&instr->instr);
+      nir_def_replace(&instr->def, result);
       return true;
    }
 
@@ -550,7 +519,7 @@ lower_tex_ycbcr(const struct tu_pipeline_layout *layout,
       layout->set[var->data.descriptor_set].layout;
    const struct tu_descriptor_set_binding_layout *binding =
       &set_layout->binding[var->data.binding];
-   const struct tu_sampler_ycbcr_conversion *ycbcr_samplers =
+   const struct vk_ycbcr_conversion_state *ycbcr_samplers =
       tu_immutable_ycbcr_samplers(set_layout, binding);
 
    if (!ycbcr_samplers)
@@ -571,9 +540,15 @@ lower_tex_ycbcr(const struct tu_pipeline_layout *layout,
       array_index = nir_src_as_uint(deref->arr.index);
       array_index = MIN2(array_index, binding->array_size - 1);
    }
-   const struct tu_sampler_ycbcr_conversion *ycbcr_sampler = ycbcr_samplers + array_index;
+   const struct vk_ycbcr_conversion_state *ycbcr_sampler = ycbcr_samplers + array_index;
 
    if (ycbcr_sampler->ycbcr_model == VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY)
+      return;
+
+   /* Skip if not actually a YCbCr format.  CtsGraphics, for example, tries to create
+    * YcbcrConversions for RGB formats.
+    */
+   if (!vk_format_get_ycbcr_info(ycbcr_sampler->format))
       return;
 
    builder->cursor = nir_after_instr(&tex->instr);
@@ -745,8 +720,7 @@ lower_inline_ubo(nir_builder *b, nir_intrinsic_instr *intrin, void *cb_data)
                              nir_ishr_imm(b, offset, 2), .base = base);
    }
 
-   nir_def_rewrite_uses(&intrin->def, val);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, val);
    return true;
 }
 
@@ -886,14 +860,6 @@ tu_lower_io(nir_shader *shader, struct tu_device *dev,
             continue;
          if (!(binding->shader_stages &
                mesa_to_vk_shader_stage(shader->info.stage)))
-            continue;
-
-         /* Workaround a CTS bug by ignoring zero-sized inline uniform
-          * blocks that aren't being properly filtered out when creating the
-          * descriptor set layout, see
-          * https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4115
-          */
-         if (binding->size == 0)
             continue;
 
          /* If we don't know the size at compile time due to a variable
@@ -1204,6 +1170,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .fullregfootprint = xs->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
                .mergedregs = xs->mergedregs,
+               .earlypreamble = xs->early_preamble,
       ));
       break;
    case MESA_SHADER_TESS_CTRL:
@@ -1211,6 +1178,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .halfregfootprint = xs->info.max_half_reg + 1,
                .fullregfootprint = xs->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
+               .earlypreamble = xs->early_preamble,
       ));
       break;
    case MESA_SHADER_TESS_EVAL:
@@ -1218,6 +1186,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .halfregfootprint = xs->info.max_half_reg + 1,
                .fullregfootprint = xs->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
+               .earlypreamble = xs->early_preamble,
       ));
       break;
    case MESA_SHADER_GEOMETRY:
@@ -1225,6 +1194,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .halfregfootprint = xs->info.max_half_reg + 1,
                .fullregfootprint = xs->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
+               .earlypreamble = xs->early_preamble,
       ));
       break;
    case MESA_SHADER_FRAGMENT:
@@ -1238,6 +1208,7 @@ tu6_emit_xs(struct tu_cs *cs,
                /* unknown bit, seems unnecessary */
                .unk24 = true,
                .pixlodenable = xs->need_pixlod,
+               .earlypreamble = xs->early_preamble,
                .mergedregs = xs->mergedregs,
       ));
       break;
@@ -1249,6 +1220,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .fullregfootprint = xs->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
                .threadsize = thrsz,
+               .earlypreamble = xs->early_preamble,
                .mergedregs = xs->mergedregs,
       ));
       break;
@@ -2575,7 +2547,7 @@ tu_shader_create(struct tu_device *dev,
       shader->fs.has_fdm = key->fragment_density_map;
       if (fs->has_kill)
          shader->fs.lrz.status |= TU_LRZ_FORCE_DISABLE_WRITE;
-      if (fs->no_earlyz || fs->writes_pos)
+      if (fs->no_earlyz || (fs->writes_pos && !fs->fs.early_fragment_tests))
          shader->fs.lrz.status = TU_LRZ_FORCE_DISABLE_LRZ;
       /* FDM isn't compatible with LRZ, because the LRZ image uses the original
        * resolution and we would need to use the low resolution.

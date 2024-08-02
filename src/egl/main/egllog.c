@@ -39,6 +39,7 @@
 #include <string.h>
 #include "c11/threads.h"
 #include "util/macros.h"
+#include "util/os_misc.h"
 #include "util/simple_mtx.h"
 #include "util/u_string.h"
 
@@ -106,7 +107,7 @@ _eglInitLogger(void)
    if (logging.initialized)
       return;
 
-   log_env = getenv("EGL_LOG_LEVEL");
+   log_env = os_get_option("EGL_LOG_LEVEL");
    if (log_env) {
       for (i = 0; i < ARRAY_SIZE(level_strings); i++) {
          if (strcasecmp(log_env, level_strings[i]) == 0) {

@@ -108,7 +108,8 @@ tu_cs_current_bo(const struct tu_cs *cs)
 static uint32_t
 tu_cs_get_offset(const struct tu_cs *cs)
 {
-   return cs->start - (uint32_t *) tu_cs_current_bo(cs)->map;
+   const struct tu_bo_array *bos = cs->writeable ? &cs->read_write : &cs->read_only;
+   return (cs->refcount_bo || bos->bo_count != 0) ? cs->start - (uint32_t *) tu_cs_current_bo(cs)->map : 0;
 }
 
 /* Get the iova for the next dword to be emitted. Useful after
@@ -164,7 +165,7 @@ tu_cs_add_bo(struct tu_cs *cs, uint32_t size)
       return result;
    }
 
-   result = tu_bo_map(cs->device, new_bo);
+   result = tu_bo_map(cs->device, new_bo, NULL);
    if (result != VK_SUCCESS) {
       tu_bo_finish(cs->device, new_bo);
       return result;
@@ -316,19 +317,31 @@ tu_cs_set_writeable(struct tu_cs *cs, bool writeable)
  * emission.
  */
 VkResult
-tu_cs_begin_sub_stream(struct tu_cs *cs, uint32_t size, struct tu_cs *sub_cs)
+tu_cs_begin_sub_stream_aligned(struct tu_cs *cs, uint32_t count,
+                               uint32_t size, struct tu_cs *sub_cs)
 {
    assert(cs->mode == TU_CS_MODE_SUB_STREAM);
    assert(size);
 
-   VkResult result = tu_cs_reserve_space(cs, size);
+   VkResult result;
+   if (tu_cs_get_space(cs) < count * size) {
+      /* When we have to allocate a new BO, assume that the alignment of the
+       * BO is sufficient.
+       */
+      result = tu_cs_reserve_space(cs, count * size);
+   } else {
+      result = tu_cs_reserve_space(cs, count * size + (size - tu_cs_get_offset(cs)) % size);
+      cs->start += (size - tu_cs_get_offset(cs)) % size;
+   }
    if (result != VK_SUCCESS)
       return result;
+
+   cs->cur = cs->start;
 
    tu_cs_init_external(sub_cs, cs->device, cs->cur, cs->reserved_end,
                        tu_cs_get_cur_iova(cs), cs->writeable);
    tu_cs_begin(sub_cs);
-   result = tu_cs_reserve_space(sub_cs, size);
+   result = tu_cs_reserve_space(sub_cs, count * size);
    assert(result == VK_SUCCESS);
 
    return VK_SUCCESS;

@@ -43,6 +43,7 @@
 #include <xf86drm.h>
 
 #include "common/intel_gem.h"
+#include "common/i915/intel_gem.h"
 #include "common/intel_hang_dump.h"
 #include "compiler/elk/elk_disasm.h"
 #include "compiler/elk/elk_isa_info.h"
@@ -69,6 +70,83 @@ gem_create(int drm_fd, uint64_t size)
    }
 
    return gem_create.handle;
+}
+
+static uint32_t
+gem_context_create(int drm_fd)
+{
+   /* TODO: add additional information in the intel_hang_dump_block_exec &
+    * intel_hang_dump_block_hw_image structures to specify the engine and use
+    * the correct engine here.
+    */
+   I915_DEFINE_CONTEXT_PARAM_ENGINES(engines_param, 1) = { };
+   struct drm_i915_gem_context_create_ext_setparam set_engines = {
+      .param = {
+         .param = I915_CONTEXT_PARAM_ENGINES,
+         .value = (uintptr_t)&engines_param,
+         .size = sizeof(engines_param),
+      }
+   };
+   struct drm_i915_gem_context_create_ext_setparam recoverable_param = {
+      .param = {
+         .param = I915_CONTEXT_PARAM_RECOVERABLE,
+         .value = 0,
+      },
+   };
+   struct drm_i915_gem_context_create_ext create = {
+      .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
+   };
+
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &set_engines.base);
+   intel_i915_gem_add_ext(&create.extensions,
+                          I915_CONTEXT_CREATE_EXT_SETPARAM,
+                          &recoverable_param.base);
+
+   if (intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create) == -1)
+      return false;
+
+   return create.ctx_id;
+}
+
+static bool
+gem_context_set_hw_image(int drm_fd, uint32_t ctx_id,
+                         const void *hw_img_data, uint32_t img_size)
+{
+   /* TODO: add additional information in the intel_hang_dump_block_exec &
+    * intel_hang_dump_block_hw_image structures to specify the engine and use
+    * the correct engine here.
+    */
+   struct i915_gem_context_param_context_image img_param = {
+      .engine = {
+         .engine_class = 0,
+         .engine_instance = 0,
+      },
+      .flags = I915_CONTEXT_IMAGE_FLAG_ENGINE_INDEX,
+      .size = img_size,
+      .image = (uint64_t)(uintptr_t)hw_img_data,
+   };
+   struct drm_i915_gem_context_param param = {
+      .ctx_id = ctx_id,
+      .param = I915_CONTEXT_PARAM_CONTEXT_IMAGE,
+   };
+   uint64_t val = 0;
+   int ret;
+
+   param.ctx_id = ctx_id;
+   param.param = I915_CONTEXT_PARAM_RECOVERABLE;
+   param.value = (uint64_t)(uintptr_t)&val;
+
+   ret = intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &param);
+   if (ret)
+      return false;
+
+   param.param = I915_CONTEXT_PARAM_CONTEXT_IMAGE;
+   param.size = sizeof(img_param);
+   param.value = (uint64_t)(uintptr_t)&img_param;
+
+   return intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &param) == 0;
 }
 
 static void*
@@ -99,6 +177,20 @@ gem_mmap_offset(int drm_fd,
    void *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
                     drm_fd, gem_mmap.offset);
    return map;
+}
+
+static void
+write_malloc_data(void *out_data,
+                  int file_fd,
+                  size_t size)
+{
+   size_t total_read_len = 0;
+   ssize_t read_len;
+   while (total_read_len < size &&
+          (read_len = read(file_fd, out_data + total_read_len, size - total_read_len)) > 0) {
+      total_read_len += read_len;
+   }
+   assert(total_read_len == size);
 }
 
 static void
@@ -185,7 +277,10 @@ print_help(const char *filename, FILE *f)
 }
 
 static int
-execbuffer(int drm_fd, struct util_dynarray *execbuffer_bos, struct gem_bo *exec_bo, uint64_t exec_offset)
+execbuffer(int drm_fd,
+           uint32_t context_id,
+           struct util_dynarray *execbuffer_bos,
+           struct gem_bo *exec_bo, uint64_t exec_offset)
 {
    struct drm_i915_gem_execbuffer2 execbuf = {
       .buffers_ptr        = (uintptr_t)(void *)util_dynarray_begin(execbuffer_bos),
@@ -193,8 +288,8 @@ execbuffer(int drm_fd, struct util_dynarray *execbuffer_bos, struct gem_bo *exec
                                                        struct drm_i915_gem_exec_object2),
       .batch_start_offset = exec_offset - exec_bo->offset,
       .batch_len          = exec_bo->size,
-      .flags              = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
-      .rsvd1              = 0,
+      .flags              = I915_EXEC_HANDLE_LUT,
+      .rsvd1              = context_id,
    };
 
    int ret = intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_EXECBUFFER2_WR, &execbuf);
@@ -446,16 +541,36 @@ main(int argc, char *argv[])
             sizeof(struct gem_bo),
             compare_bos);
 
+      void *hw_img = NULL;
+      uint32_t hw_img_size = 0;
+
       /* Allocate BOs populate them */
       uint64_t gem_allocated = 0;
       util_dynarray_foreach(&buffers, struct gem_bo, bo) {
-         bo->gem_handle = gem_create(drm_fd, bo->size);
-         if (bo->file_offset != 0) {
-            lseek(file_fd, bo->file_offset, SEEK_SET);
+         lseek(file_fd, bo->file_offset, SEEK_SET);
+         if (bo->hw_img) {
+            hw_img = malloc(bo->size);
+            write_malloc_data(hw_img, file_fd, bo->size);
+            hw_img_size = bo->size;
+         } else {
+            bo->gem_handle = gem_create(drm_fd, bo->size);
             write_gem_bo_data(drm_fd, bo->gem_handle, file_fd, bo->size);
          }
 
          gem_allocated += bo->size;
+      }
+
+      uint32_t ctx_id = gem_context_create(drm_fd);
+      if (ctx_id == 0) {
+         fprintf(stderr, "fail to create context: %s\n", strerror(errno));
+         return EXIT_FAILURE;
+      }
+
+      if (hw_img != NULL) {
+         if (!gem_context_set_hw_image(drm_fd, ctx_id, hw_img, hw_img_size)) {
+            fprintf(stderr, "fail to set context hw img: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+         }
       }
 
       struct util_dynarray execbuffer_bos;
@@ -475,6 +590,9 @@ main(int argc, char *argv[])
                continue;
          }
 
+         if (bo->hw_img)
+            continue;
+
          struct drm_i915_gem_exec_object2 *execbuf_bo =
             util_dynarray_grow(&execbuffer_bos, struct drm_i915_gem_exec_object2, 1);
          *execbuf_bo = (struct drm_i915_gem_exec_object2) {
@@ -482,12 +600,10 @@ main(int argc, char *argv[])
             .relocation_count = 0,
             .relocs_ptr       = 0,
             .flags            = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
-                                EXEC_OBJECT_PINNED,
-            .offset           = bo->offset,
+                                EXEC_OBJECT_PINNED |
+                                EXEC_OBJECT_CAPTURE,
+            .offset           = intel_canonical_address(bo->offset),
          };
-
-         if (bo->hw_img)
-            execbuf_bo->flags |= EXEC_OBJECT_NEEDS_GTT;
       }
 
       assert(batch_bo != NULL);
@@ -505,10 +621,11 @@ main(int argc, char *argv[])
             .relocs_ptr       = 0,
             .flags            = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
                                 EXEC_OBJECT_PINNED |
-                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */,
-            .offset           = init_bo->offset,
+                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */ |
+                                EXEC_OBJECT_CAPTURE,
+            .offset           = intel_canonical_address(init_bo->offset),
          };
-         ret = execbuffer(drm_fd, &execbuffer_bos, init_bo, init.offset);
+         ret = execbuffer(drm_fd, ctx_id, &execbuffer_bos, init_bo, init.offset);
          if (ret != 0) {
             fprintf(stderr, "initialization buffer failed to execute errno=%i\n", errno);
             exit(-1);
@@ -526,10 +643,11 @@ main(int argc, char *argv[])
             .relocs_ptr       = 0,
             .flags            = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
                                 EXEC_OBJECT_PINNED |
-                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */,
-            .offset           = batch_bo->offset,
+                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */ |
+                                EXEC_OBJECT_CAPTURE,
+            .offset           = intel_canonical_address(batch_bo->offset),
          };
-         ret = execbuffer(drm_fd, &execbuffer_bos, batch_bo, exec.offset);
+         ret = execbuffer(drm_fd, ctx_id, &execbuffer_bos, batch_bo, exec.offset);
          if (ret != 0) {
             fprintf(stderr, "replayed buffer failed to execute errno=%i\n", errno);
             exit(-1);

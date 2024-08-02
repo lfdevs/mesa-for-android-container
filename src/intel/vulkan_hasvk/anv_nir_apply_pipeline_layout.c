@@ -705,8 +705,7 @@ lower_load_accel_struct_desc(nir_builder *b,
 
    assert(load_desc->def.bit_size == 64);
    assert(load_desc->def.num_components == 1);
-   nir_def_rewrite_uses(&load_desc->def, desc);
-   nir_instr_remove(&load_desc->instr);
+   nir_def_replace(&load_desc->def, desc);
 
    return true;
 }
@@ -755,8 +754,7 @@ lower_res_index_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
 
    assert(intrin->def.bit_size == index->bit_size);
    assert(intrin->def.num_components == index->num_components);
-   nir_def_rewrite_uses(&intrin->def, index);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, index);
 
    return true;
 }
@@ -777,8 +775,7 @@ lower_res_reindex_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
 
    assert(intrin->def.bit_size == index->bit_size);
    assert(intrin->def.num_components == index->num_components);
-   nir_def_rewrite_uses(&intrin->def, index);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, index);
 
    return true;
 }
@@ -798,8 +795,7 @@ lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin,
 
    assert(intrin->def.bit_size == desc->bit_size);
    assert(intrin->def.num_components == desc->num_components);
-   nir_def_rewrite_uses(&intrin->def, desc);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, desc);
 
    return true;
 }
@@ -824,8 +820,7 @@ lower_get_ssbo_size(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_address_format_64bit_global_32bit_offset:
    case nir_address_format_64bit_bounded_global: {
       nir_def *size = nir_channel(b, desc, 2);
-      nir_def_rewrite_uses(&intrin->def, size);
-      nir_instr_remove(&intrin->instr);
+      nir_def_replace(&intrin->def, size);
       break;
    }
 
@@ -1455,8 +1450,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
     *     intrinsics in that pass.
     */
    nir_shader_instructions_pass(shader, lower_direct_buffer_instr,
-                                nir_metadata_block_index |
-                                nir_metadata_dominance,
+                                nir_metadata_control_flow,
                                 &state);
 
    /* We just got rid of all the direct access.  Delete it so it's not in the
@@ -1465,8 +1459,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
    nir_opt_dce(shader);
 
    nir_shader_instructions_pass(shader, apply_pipeline_layout,
-                                nir_metadata_block_index |
-                                nir_metadata_dominance,
+                                nir_metadata_control_flow,
                                 &state);
 
    ralloc_free(mem_ctx);

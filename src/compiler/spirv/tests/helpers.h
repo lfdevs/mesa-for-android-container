@@ -25,6 +25,7 @@
 
 #include <gtest/gtest.h>
 #include "compiler/spirv/nir_spirv.h"
+#include "compiler/spirv/spirv_info.h"
 #include "compiler/nir/nir.h"
 
 class spirv_test : public ::testing::Test {
@@ -43,11 +44,15 @@ protected:
 
    void get_nir(size_t num_words, const uint32_t *words, gl_shader_stage stage = MESA_SHADER_COMPUTE)
    {
+      spirv_capabilities spirv_caps = {};
+      spirv_caps.Shader = true;
+      spirv_caps.VulkanMemoryModel = true;
+      spirv_caps.VulkanMemoryModelDeviceScope = true;
+
       spirv_to_nir_options spirv_options;
       memset(&spirv_options, 0, sizeof(spirv_options));
       spirv_options.environment = NIR_SPIRV_VULKAN;
-      spirv_options.caps.vk_memory_model = true;
-      spirv_options.caps.vk_memory_model_device_scope = true;
+      spirv_options.capabilities = &spirv_caps;
       spirv_options.ubo_addr_format = nir_address_format_32bit_index_offset;
       spirv_options.ssbo_addr_format = nir_address_format_32bit_index_offset;
       spirv_options.phys_ssbo_addr_format = nir_address_format_64bit_global;

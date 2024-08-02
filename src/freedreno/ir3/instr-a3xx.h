@@ -124,17 +124,11 @@ typedef enum {
    OPC_ELECT_MACRO     = _OPC(1, 53),
    OPC_READ_COND_MACRO = _OPC(1, 54),
    OPC_READ_FIRST_MACRO = _OPC(1, 55),
-   OPC_SWZ_SHARED_MACRO = _OPC(1, 56),
-   OPC_SHPS_MACRO       = _OPC(1, 57),
+   OPC_SHPS_MACRO       = _OPC(1, 56),
 
    /* Macros that expand to a loop */
    OPC_SCAN_MACRO      = _OPC(1, 58),
    OPC_SCAN_CLUSTERS_MACRO = _OPC(1, 60),
-
-   /* Macros that expand to an stsc at the start of the preamble.
-    * It loads into const file and should not be optimized in any way.
-    */
-   OPC_PUSH_CONSTS_LOAD_MACRO = _OPC(1, 59),
 
    /* category 2: */
    OPC_ADD_F           = _OPC(2, 0),
@@ -365,6 +359,11 @@ typedef enum {
    OPC_STSC            = _OPC(6, 82),
    OPC_LDG_K           = _OPC(6, 83),
 
+   /* Macros that expand to an stsc at the start of the preamble.
+    * It loads into const file and should not be optimized in any way.
+    */
+   OPC_PUSH_CONSTS_LOAD_MACRO = _OPC(6, 84),
+
    /* category 7: */
    OPC_BAR             = _OPC(7, 0),
    OPC_FENCE           = _OPC(7, 1),
@@ -429,7 +428,7 @@ typedef enum {
    TYPE_S16 = 4,
    TYPE_S32 = 5,
    TYPE_U8 = 6,
-   TYPE_S8 = 7, // XXX I assume?
+   TYPE_U8_32 = 7,
 } type_t;
 
 static inline uint32_t
@@ -438,6 +437,7 @@ type_size(type_t type)
    switch (type) {
    case TYPE_F32:
    case TYPE_U32:
+   case TYPE_U8_32:
    case TYPE_S32:
       return 32;
    case TYPE_F16:
@@ -445,7 +445,6 @@ type_size(type_t type)
    case TYPE_S16:
       return 16;
    case TYPE_U8:
-   case TYPE_S8:
       return 8;
    default:
       ir3_assert(0); /* invalid type */
@@ -488,13 +487,13 @@ type_float(type_t type)
 static inline int
 type_uint(type_t type)
 {
-   return (type == TYPE_U32) || (type == TYPE_U16) || (type == TYPE_U8);
+   return (type == TYPE_U32) || (type == TYPE_U16) || (type == TYPE_U8) || (type == TYPE_U8_32);
 }
 
 static inline int
 type_sint(type_t type)
 {
-   return (type == TYPE_S32) || (type == TYPE_S16) || (type == TYPE_S8);
+   return (type == TYPE_S32) || (type == TYPE_S16);
 }
 
 typedef enum {
@@ -609,8 +608,9 @@ is_sat_compatible(opc_t opc)
       return false;
 
    switch (opc) {
-   /* On a3xx and a6xx saturation doesn't work on bary.f */
+   /* On a3xx and a6xx saturation doesn't work on bary.f/flat.b */
    case OPC_BARY_F:
+   case OPC_FLAT_B:
    /* On a6xx saturation doesn't work on sel.* */
    case OPC_SEL_B16:
    case OPC_SEL_B32:

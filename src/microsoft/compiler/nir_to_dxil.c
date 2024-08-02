@@ -160,6 +160,7 @@ nir_options = {
    .linker_ignore_precision = true,
    .support_16bit_alu = true,
    .preserve_mediump = true,
+   .discard_is_demote = true,
 };
 
 const nir_shader_compiler_options*
@@ -4786,14 +4787,12 @@ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
 {
    switch (intr->intrinsic) {
    case nir_intrinsic_load_global_invocation_id:
-   case nir_intrinsic_load_global_invocation_id_zero_base:
       return emit_load_global_invocation_id(ctx, intr);
    case nir_intrinsic_load_local_invocation_id:
       return emit_load_local_invocation_id(ctx, intr);
    case nir_intrinsic_load_local_invocation_index:
       return emit_load_local_invocation_index(ctx, intr);
    case nir_intrinsic_load_workgroup_id:
-   case nir_intrinsic_load_workgroup_id_zero_base:
       return emit_load_local_workgroup_id(ctx, intr);
    case nir_intrinsic_load_ssbo:
       return emit_load_ssbo(ctx, intr);
@@ -4834,10 +4833,10 @@ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
       return emit_load_sample_mask_in(ctx, intr);
    case nir_intrinsic_load_tess_coord:
       return emit_load_tess_coord(ctx, intr);
-   case nir_intrinsic_discard_if:
+   case nir_intrinsic_terminate_if:
    case nir_intrinsic_demote_if:
       return emit_discard_if(ctx, intr);
-   case nir_intrinsic_discard:
+   case nir_intrinsic_terminate:
    case nir_intrinsic_demote:
       return emit_discard(ctx);
    case nir_intrinsic_emit_vertex:

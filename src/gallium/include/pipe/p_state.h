@@ -556,32 +556,34 @@ struct pipe_resource
    /* Put the refcount on its own cache line to prevent "False sharing". */
    EXCLUSIVE_CACHELINE(struct pipe_reference reference);
 
-   unsigned width0; /**< Used by both buffers and textures. */
+   uint32_t width0; /**< Used by both buffers and textures. */
    uint16_t height0; /* Textures: The maximum height/depth/array_size is 16k. */
    uint16_t depth0;
    uint16_t array_size;
 
    enum pipe_format format:16;         /**< PIPE_FORMAT_x */
    enum pipe_texture_target target:8; /**< PIPE_TEXTURE_x */
-   unsigned last_level:8;    /**< Index of last mipmap level present/defined */
+   uint8_t last_level;    /**< Index of last mipmap level present/defined */
 
    /** Number of samples determining quality, driving rasterizer, shading,
     *  and framebuffer.
     */
-   unsigned nr_samples:8;
+   uint8_t nr_samples;
 
    /** Multiple samples within a pixel can have the same value.
     *  nr_storage_samples determines how many slots for different values
     *  there are per pixel. Only color buffers can set this lower than
     *  nr_samples.
     */
-   unsigned nr_storage_samples:8;
+   uint8_t nr_storage_samples;
 
-   unsigned nr_sparse_levels:8; /**< Mipmap levels support partial resident */
+   uint8_t nr_sparse_levels; /**< Mipmap levels support partial resident */
 
-   unsigned usage:8;         /**< PIPE_USAGE_x (not a bitmask) */
-   unsigned bind;            /**< bitmask of PIPE_BIND_x */
-   unsigned flags;           /**< bitmask of PIPE_RESOURCE_FLAG_x */
+   unsigned compression_rate:4; /**< Fixed-rate compresion bitrate if any */
+
+   enum pipe_resource_usage usage:4;
+   uint32_t bind;            /**< bitmask of PIPE_BIND_x */
+   uint32_t flags;           /**< bitmask of PIPE_RESOURCE_FLAG_x */
 
    /**
     * For planar images, ie. YUV EGLImage external, etc, pointer to the

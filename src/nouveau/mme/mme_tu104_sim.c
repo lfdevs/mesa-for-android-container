@@ -9,7 +9,7 @@
 #include "mme_tu104.h"
 #include "util/u_math.h"
 
-#include "nvk_clc597.h"
+#include "nv_push_clc597.h"
 
 struct mme_tu104_sim {
    uint32_t param_count;

@@ -633,6 +633,9 @@ struct ir3_shader_variant {
    /* Whether dual-source blending is enabled. */
    bool dual_src_blend;
 
+   /* Whether early preamble is enabled. */
+   bool early_preamble;
+
    /* Size in bytes of required shared memory */
    unsigned shared_size;
 

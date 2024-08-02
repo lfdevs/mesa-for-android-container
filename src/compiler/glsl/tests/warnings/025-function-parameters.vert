@@ -12,5 +12,7 @@ void main()
    float undefinedFloat2;
 
    foo(undefinedFloat, noRaise, undefinedFloat2);
+
+   gl_Position = vec4(1.0);
 }
 

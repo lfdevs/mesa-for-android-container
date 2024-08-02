@@ -1086,14 +1086,9 @@ static struct pb_buffer_lean *radeon_winsys_bo_from_ptr(struct radeon_winsys *rw
    memset(&args, 0, sizeof(args));
    args.addr = (uintptr_t)pointer;
    args.size = align(size, ws->info.gart_page_size);
-
-   if (flags & RADEON_FLAG_READ_ONLY)
-      args.flags = RADEON_GEM_USERPTR_READONLY |
-                   RADEON_GEM_USERPTR_VALIDATE;
-   else
-      args.flags = RADEON_GEM_USERPTR_ANONONLY |
-                   RADEON_GEM_USERPTR_REGISTER |
-                   RADEON_GEM_USERPTR_VALIDATE;
+   args.flags = RADEON_GEM_USERPTR_ANONONLY |
+                RADEON_GEM_USERPTR_REGISTER |
+                RADEON_GEM_USERPTR_VALIDATE;
 
    if (drmCommandWriteRead(ws->fd, DRM_RADEON_GEM_USERPTR,
                            &args, sizeof(args))) {

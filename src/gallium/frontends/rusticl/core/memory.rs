@@ -347,21 +347,36 @@ fn sw_copy(
     dst_slice_pitch: usize,
     pixel_size: u8,
 ) {
+    let pixel_size = pixel_size as usize;
     for z in 0..region[2] {
-        for y in 0..region[1] {
+        if src_row_pitch == dst_row_pitch && region[1] * pixel_size == src_row_pitch {
             unsafe {
                 ptr::copy(
                     src.add(
-                        (*src_origin + [0, y, z])
-                            * [pixel_size as usize, src_row_pitch, src_slice_pitch],
+                        (*src_origin + [0, 0, z]) * [pixel_size, src_row_pitch, src_slice_pitch],
                     ),
                     dst.add(
-                        (*dst_origin + [0, y, z])
-                            * [pixel_size as usize, dst_row_pitch, dst_slice_pitch],
+                        (*dst_origin + [0, 0, z]) * [pixel_size, dst_row_pitch, dst_slice_pitch],
                     ),
-                    region[0] * pixel_size as usize,
+                    region[0] * region[1] * pixel_size,
                 )
-            };
+            }
+        } else {
+            for y in 0..region[1] {
+                unsafe {
+                    ptr::copy(
+                        src.add(
+                            (*src_origin + [0, y, z])
+                                * [pixel_size, src_row_pitch, src_slice_pitch],
+                        ),
+                        dst.add(
+                            (*dst_origin + [0, y, z])
+                                * [pixel_size, dst_row_pitch, dst_slice_pitch],
+                        ),
+                        region[0] * pixel_size,
+                    )
+                };
+            }
         }
     }
 }
@@ -697,7 +712,7 @@ impl MemBase {
 
     fn is_pure_user_memory(&self, d: &Device) -> CLResult<bool> {
         let r = self.get_res_of_dev(d)?;
-        Ok(r.is_user)
+        Ok(r.is_user())
     }
 
     fn map<T>(
@@ -985,20 +1000,17 @@ impl Buffer {
         offset: usize,
         size: usize,
         rw: RWFlags,
-    ) -> CLResult<GuardedPipeTransfer<'a>> {
+    ) -> CLResult<PipeTransfer<'a>> {
         let offset = self.apply_offset(offset)?;
         let r = self.get_res_of_dev(q.device)?;
 
-        Ok(ctx
-            .buffer_map(
-                r,
-                offset.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-                size.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-                rw,
-                ResourceMapType::Normal,
-            )
-            .ok_or(CL_OUT_OF_RESOURCES)?
-            .with_ctx(ctx))
+        ctx.buffer_map(
+            r,
+            offset.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
+            size.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
+            rw,
+        )
+        .ok_or(CL_OUT_OF_RESOURCES)
     }
 
     // TODO: only sync on unmap when the memory is not mapped for writing
@@ -1412,12 +1424,9 @@ impl Image {
         ctx: &'a PipeContext,
         bx: &pipe_box,
         rw: RWFlags,
-    ) -> CLResult<GuardedPipeTransfer<'a>> {
+    ) -> CLResult<PipeTransfer<'a>> {
         let r = self.get_res_of_dev(q.device)?;
-        Ok(ctx
-            .texture_map(r, bx, rw, ResourceMapType::Normal)
-            .ok_or(CL_OUT_OF_RESOURCES)?
-            .with_ctx(ctx))
+        ctx.texture_map(r, bx, rw).ok_or(CL_OUT_OF_RESOURCES)
     }
 
     // TODO: only sync on unmap when the memory is not mapped for writing

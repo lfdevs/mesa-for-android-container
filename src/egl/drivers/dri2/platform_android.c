@@ -58,21 +58,12 @@ droid_create_image_from_buffer_info(
 {
    unsigned error;
 
-   if (dri2_dpy->image->base.version >= 15 &&
-       dri2_dpy->image->createImageFromDmaBufs2 != NULL) {
-      return dri2_dpy->image->createImageFromDmaBufs2(
-         dri2_dpy->dri_screen_render_gpu, width, height, buf_info->drm_fourcc,
-         buf_info->modifier, buf_info->fds, buf_info->num_planes,
-         buf_info->strides, buf_info->offsets, color_info->yuv_color_space,
-         color_info->sample_range, color_info->horizontal_siting,
-         color_info->vertical_siting, &error, priv);
-   }
-
    return dri2_dpy->image->createImageFromDmaBufs(
       dri2_dpy->dri_screen_render_gpu, width, height, buf_info->drm_fourcc,
-      buf_info->fds, buf_info->num_planes, buf_info->strides, buf_info->offsets,
-      color_info->yuv_color_space, color_info->sample_range,
-      color_info->horizontal_siting, color_info->vertical_siting, &error, priv);
+      buf_info->modifier, buf_info->fds, buf_info->num_planes,
+      buf_info->strides, buf_info->offsets, color_info->yuv_color_space,
+      color_info->sample_range, color_info->horizontal_siting,
+      color_info->vertical_siting, 0, &error, priv);
 }
 
 static __DRIimage *
@@ -501,7 +492,7 @@ get_front_bo(struct dri2_egl_surface *dri2_surf, unsigned int format)
    } else if (dri2_surf->base.Type == EGL_PBUFFER_BIT) {
       dri2_surf->dri_image_front = dri2_dpy->image->createImage(
          dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
-         dri2_surf->base.Height, format, 0, NULL);
+         dri2_surf->base.Height, format, NULL, 0, 0, NULL);
       if (!dri2_surf->dri_image_front) {
          _eglLog(_EGL_WARNING, "dri2_image_front allocation failed");
          return -1;
@@ -1021,8 +1012,6 @@ droid_unload_driver(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   dlclose(dri2_dpy->driver);
-   dri2_dpy->driver = NULL;
    free(dri2_dpy->driver_name);
    dri2_dpy->driver_name = NULL;
 }

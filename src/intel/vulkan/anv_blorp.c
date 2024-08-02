@@ -98,14 +98,9 @@ upload_dynamic_state(struct blorp_context *context,
 {
    struct anv_device *device = context->driver_ctx;
 
-   device->blorp.dynamic_states[name].state =
+   device->blorp.dynamic_states[name] =
       anv_state_pool_emit_data(&device->dynamic_state_pool,
                                size, alignment, data);
-   if (device->vk.enabled_extensions.EXT_descriptor_buffer) {
-      device->blorp.dynamic_states[name].db_state =
-         anv_state_pool_emit_data(&device->dynamic_state_db_pool,
-                                  size, alignment, data);
-   }
 }
 
 void
@@ -138,12 +133,7 @@ anv_device_finish_blorp(struct anv_device *device)
     */
    for (uint32_t i = 0; i < ARRAY_SIZE(device->blorp.dynamic_states); i++) {
       anv_state_pool_free(&device->dynamic_state_pool,
-                          device->blorp.dynamic_states[i].state);
-      if (device->vk.enabled_extensions.EXT_descriptor_buffer) {
-         anv_state_pool_free(&device->dynamic_state_db_pool,
-                             device->blorp.dynamic_states[i].db_state);
-      }
-
+                          device->blorp.dynamic_states[i]);
    }
 #endif
    blorp_finish(&device->blorp.context);
@@ -1566,10 +1556,20 @@ exec_ccs_op(struct anv_cmd_buffer *cmd_buffer,
     * that the contents of the previous draw hit the render target before we
     * resolve and then use a second PIPE_CONTROL after the resolve to ensure
     * that it is completed before any additional drawing occurs.
+    *
+    * Bspec 57340 (r59562):
+    *
+    *   Synchronization:
+    *      Due to interaction of scaled clearing rectangle with pixel
+    *      scoreboard, we require one of the following commands to be issued.
+    *      (Rows of PIPE_CONTROL command in the table)
+    *
+    * Requiring tile cache flush bit has been dropped since Xe2.
     */
    anv_add_pending_pipe_bits(cmd_buffer,
                              ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 < 200 ?
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT : 0) |
                              (devinfo->verx10 == 120 ?
                                 ANV_PIPE_DEPTH_STALL_BIT : 0) |
                              (devinfo->verx10 == 125 ?
@@ -1720,10 +1720,20 @@ exec_mcs_op(struct anv_cmd_buffer *cmd_buffer,
     * that the contents of the previous draw hit the render target before we
     * resolve and then use a second PIPE_CONTROL after the resolve to ensure
     * that it is completed before any additional drawing occurs.
+    *
+    * Bspec 57340 (r59562):
+    *
+    *   Synchronization:
+    *      Due to interaction of scaled clearing rectangle with pixel
+    *      scoreboard, we require one of the following commands to be issued.
+    *      (Rows of PIPE_CONTROL command in the table)
+    *
+    * Requiring tile cache flush bit has been dropped since Xe2.
     */
    anv_add_pending_pipe_bits(cmd_buffer,
                              ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 < 200 ?
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT : 0) |
                              (devinfo->verx10 == 120 ?
                                 ANV_PIPE_DEPTH_STALL_BIT : 0) |
                              (devinfo->verx10 == 125 ?
@@ -1854,12 +1864,14 @@ clear_color_attachment(struct anv_cmd_buffer *cmd_buffer,
                      &clear_color);
       }
 
-      anv_cmd_buffer_mark_image_fast_cleared(cmd_buffer, iview->image,
-                                             iview->planes[0].isl.format,
-                                             clear_color);
-      anv_cmd_buffer_load_clear_color_from_image(cmd_buffer,
-                                                 att->surface_state.state,
-                                                 iview->image);
+      if (cmd_buffer->device->info->ver < 20) {
+         anv_cmd_buffer_mark_image_fast_cleared(cmd_buffer, iview->image,
+                                                iview->planes[0].isl.format,
+                                                clear_color);
+         anv_cmd_buffer_load_clear_color_from_image(cmd_buffer,
+                                                    att->surface_state.state,
+                                                    iview->image);
+      }
       return;
    }
 

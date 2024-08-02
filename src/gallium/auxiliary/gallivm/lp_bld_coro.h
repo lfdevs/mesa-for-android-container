@@ -31,6 +31,10 @@
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_intr.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct gallivm_state;
 LLVMValueRef lp_build_coro_id(struct gallivm_state *gallivm);
 
@@ -83,5 +87,9 @@ static inline void lp_build_coro_add_presplit(LLVMValueRef coro)
    LLVMAddTargetDependentFunctionAttr(coro, "coroutine.presplit", "0");
 #endif
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

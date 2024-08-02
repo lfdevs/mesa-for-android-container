@@ -27,6 +27,7 @@
 #include "genxml/genX_pack.h"
 #include "genxml/genX_rt_pack.h"
 
+#include "common/intel_compute_slm.h"
 #include "common/intel_genX_state_elk.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_sample_positions.h"
@@ -1939,8 +1940,7 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
        */
       .BindingTableEntryCount = 1 + MIN2(cs_bin->bind_map.surface_count, 30),
       .BarrierEnable          = cs_prog_data->uses_barrier,
-      .SharedLocalMemorySize  =
-         elk_encode_slm_size(GFX_VER, cs_prog_data->base.total_shared),
+      .SharedLocalMemorySize  = intel_compute_slm_encode_size(GFX_VER, cs_prog_data->base.total_shared),
 
 #if GFX_VERx10 != 75
       .ConstantURBEntryReadOffset = 0,

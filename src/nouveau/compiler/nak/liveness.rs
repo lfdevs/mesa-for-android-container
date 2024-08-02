@@ -115,6 +115,14 @@ impl FromIterator<SSAValue> for LiveSet {
     }
 }
 
+impl Extend<SSAValue> for LiveSet {
+    fn extend<T: IntoIterator<Item = SSAValue>>(&mut self, iter: T) {
+        for ssa in iter {
+            self.insert(ssa);
+        }
+    }
+}
+
 pub trait BlockLiveness {
     /// Returns true if @val is still live after @ip
     fn is_live_after_ip(&self, val: &SSAValue, ip: usize) -> bool;

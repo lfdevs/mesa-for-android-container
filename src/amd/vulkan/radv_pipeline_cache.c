@@ -23,30 +23,6 @@
 #include "vk_util.h"
 
 void
-radv_hash_shaders(const struct radv_device *device, unsigned char *hash, const struct radv_shader_stage *stages,
-                  uint32_t stage_count, const struct radv_pipeline_layout *layout,
-                  const struct radv_graphics_state_key *gfx_state)
-{
-   struct mesa_sha1 ctx;
-
-   _mesa_sha1_init(&ctx);
-
-   radv_pipeline_hash(device, layout, &ctx);
-
-   if (gfx_state)
-      _mesa_sha1_update(&ctx, gfx_state, sizeof(*gfx_state));
-
-   for (unsigned s = 0; s < stage_count; s++) {
-      if (!stages[s].entrypoint)
-         continue;
-
-      _mesa_sha1_update(&ctx, stages[s].shader_sha1, sizeof(stages[s].shader_sha1));
-      _mesa_sha1_update(&ctx, &stages[s].key, sizeof(stages[s].key));
-   }
-   _mesa_sha1_final(&ctx, hash);
-}
-
-void
 radv_hash_graphics_spirv_to_nir(blake3_hash hash, const struct radv_shader_stage *stage,
                                 const struct radv_spirv_to_nir_options *options)
 {
@@ -56,51 +32,6 @@ radv_hash_graphics_spirv_to_nir(blake3_hash hash, const struct radv_shader_stage
    _mesa_blake3_update(&ctx, options, sizeof(*options));
    _mesa_blake3_update(&ctx, stage->shader_sha1, sizeof(stage->shader_sha1));
    _mesa_blake3_final(&ctx, hash);
-}
-
-void
-radv_hash_rt_shaders(const struct radv_device *device, unsigned char *hash, const struct radv_ray_tracing_stage *stages,
-                     const VkRayTracingPipelineCreateInfoKHR *pCreateInfo, const struct radv_ray_tracing_group *groups)
-{
-   VK_FROM_HANDLE(radv_pipeline_layout, layout, pCreateInfo->layout);
-   struct mesa_sha1 ctx;
-
-   _mesa_sha1_init(&ctx);
-   radv_pipeline_hash(device, layout, &ctx);
-
-   for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
-      _mesa_sha1_update(&ctx, stages[i].sha1, sizeof(stages[i].sha1));
-   }
-
-   for (uint32_t i = 0; i < pCreateInfo->groupCount; i++) {
-      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].type, sizeof(pCreateInfo->pGroups[i].type));
-      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].generalShader, sizeof(pCreateInfo->pGroups[i].generalShader));
-      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].anyHitShader, sizeof(pCreateInfo->pGroups[i].anyHitShader));
-      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].closestHitShader,
-                        sizeof(pCreateInfo->pGroups[i].closestHitShader));
-      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].intersectionShader,
-                        sizeof(pCreateInfo->pGroups[i].intersectionShader));
-      _mesa_sha1_update(&ctx, &groups[i].handle, sizeof(struct radv_pipeline_group_handle));
-   }
-
-   if (pCreateInfo->pLibraryInfo) {
-      for (uint32_t i = 0; i < pCreateInfo->pLibraryInfo->libraryCount; ++i) {
-         VK_FROM_HANDLE(radv_pipeline, lib_pipeline, pCreateInfo->pLibraryInfo->pLibraries[i]);
-         struct radv_ray_tracing_pipeline *lib = radv_pipeline_to_ray_tracing(lib_pipeline);
-         _mesa_sha1_update(&ctx, lib->base.base.sha1, SHA1_DIGEST_LENGTH);
-      }
-   }
-
-   const uint64_t pipeline_flags =
-      vk_rt_pipeline_create_flags(pCreateInfo) &
-      (VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR | VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_AABBS_BIT_KHR |
-       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_MISS_SHADERS_BIT_KHR |
-       VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_INTERSECTION_SHADERS_BIT_KHR | VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR);
-   _mesa_sha1_update(&ctx, &pipeline_flags, sizeof(pipeline_flags));
-
-   _mesa_sha1_final(&ctx, hash);
 }
 
 static void

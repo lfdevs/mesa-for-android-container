@@ -49,9 +49,10 @@ struct pipe_draw_info;
 struct pipe_grid_info;
 struct pipe_draw_start_count_bias;
 
-static inline void
+static inline int
 GENX(jm_init_context)(struct panfrost_context *ctx)
 {
+   return 0;
 }
 
 static inline void

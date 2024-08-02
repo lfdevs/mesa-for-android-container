@@ -149,7 +149,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
            intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
-                                     &flush->ds, false);
+                                     &flush->ds, device->vk.current_frame, false);
          } else {
             u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
                                  u_trace_end_iterator(&cmd_buffers[i]->trace),
@@ -160,7 +160,8 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
       }
       anv_genX(device->info, emit_so_memcpy_fini)(&flush->memcpy_state);
 
-      intel_ds_queue_flush_data(&queue->ds, &flush->ds.trace, &flush->ds, true);
+      intel_ds_queue_flush_data(&queue->ds, &flush->ds.trace, &flush->ds,
+                                device->vk.current_frame, true);
 
       if (flush->batch.status != VK_SUCCESS) {
          result = flush->batch.status;
@@ -170,7 +171,8 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          assert(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
          intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
-                                   &flush->ds, i == (cmd_buffer_count - 1));
+                                   &flush->ds, device->vk.current_frame,
+                                   i == (cmd_buffer_count - 1));
       }
    }
 
@@ -222,7 +224,7 @@ anv_utrace_destroy_ts_buffer(struct u_trace_context *utctx, void *timestamps)
 static void
 anv_utrace_record_ts(struct u_trace *ut, void *cs,
                      void *timestamps, unsigned idx,
-                     bool end_of_pipe)
+                     uint32_t flags)
 {
    struct anv_cmd_buffer *cmd_buffer =
       container_of(ut, struct anv_cmd_buffer, trace);
@@ -230,8 +232,9 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
    struct anv_bo *bo = timestamps;
 
    enum anv_timestamp_capture_type capture_type =
-      (end_of_pipe) ? ANV_TIMESTAMP_CAPTURE_END_OF_PIPE
-                    : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+      (flags & INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE) ?
+      ANV_TIMESTAMP_CAPTURE_END_OF_PIPE :
+      ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
    device->physical->cmd_emit_timestamp(&cmd_buffer->batch, device,
                                         (struct anv_address) {
                                            .bo = bo,

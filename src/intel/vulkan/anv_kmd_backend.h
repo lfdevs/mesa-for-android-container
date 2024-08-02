@@ -37,9 +37,9 @@ struct anv_cmd_buffer;
 struct anv_device;
 struct anv_queue;
 struct anv_query_pool;
+struct anv_async_submit;
 struct anv_utrace_submit;
 struct anv_sparse_submission;
-struct anv_trtt_batch_bo;
 
 enum anv_vm_bind_op {
    /* bind vma specified in anv_vm_bind */
@@ -106,12 +106,8 @@ struct anv_kmd_backend {
    VkResult (*vm_bind_bo)(struct anv_device *device, struct anv_bo *bo);
    VkResult (*vm_unbind_bo)(struct anv_device *device, struct anv_bo *bo);
 
-   VkResult (*execute_simple_batch)(struct anv_queue *queue,
-                                    struct anv_bo *batch_bo,
-                                    uint32_t batch_bo_size,
-                                    bool is_companion_rcs_batch);
-   VkResult (*execute_trtt_batch)(struct anv_sparse_submission *submit,
-                                  struct anv_trtt_batch_bo *trtt_bbo);
+   /* The caller is expected to hold device->mutex when calling this vfunc.
+    */
    VkResult (*queue_exec_locked)(struct anv_queue *queue,
                                  uint32_t wait_count,
                                  const struct vk_sync_wait *waits,
@@ -122,8 +118,14 @@ struct anv_kmd_backend {
                                  struct anv_query_pool *perf_query_pool,
                                  uint32_t perf_query_pass,
                                  struct anv_utrace_submit *utrace_submit);
-   VkResult (*queue_exec_trace)(struct anv_queue *queue,
-                                struct anv_utrace_submit *submit);
+   /* The caller is not expected to hold device->mutex when calling this
+    * vfunc.
+    */
+   VkResult (*queue_exec_async)(struct anv_async_submit *submit,
+                                uint32_t wait_count,
+                                const struct vk_sync_wait *waits,
+                                uint32_t signal_count,
+                                const struct vk_sync_signal *signals);
    uint32_t (*bo_alloc_flags_to_bo_flags)(struct anv_device *device,
                                           enum anv_bo_alloc_flags alloc_flags);
 };

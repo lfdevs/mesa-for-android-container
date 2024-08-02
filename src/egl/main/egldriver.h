@@ -224,6 +224,14 @@ struct _egl_driver {
    void (*SetBlobCacheFuncsANDROID)(_EGLDisplay *disp,
                                     EGLSetBlobFuncANDROID set,
                                     EGLGetBlobFuncANDROID get);
+
+   /* for EGL_EXT_surface_compression */
+   EGLBoolean (*QuerySupportedCompressionRatesEXT)(_EGLDisplay *disp,
+                                                   _EGLConfig *config,
+                                                   const EGLAttrib *attr_list,
+                                                   EGLint *rates,
+                                                   EGLint rate_size,
+                                                   EGLint *num_rates);
 };
 
 #ifdef __cplusplus

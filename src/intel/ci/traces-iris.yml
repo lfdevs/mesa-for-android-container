@@ -395,17 +395,17 @@ traces:
       checksum: 757e0c9a37ecfc5a2efb10505f98ad95
   ror/ror-default.trace:
     gl-intel-apl:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
     gl-intel-glk:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
     gl-intel-amly:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
     gl-intel-kbl:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
     gl-intel-whl:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
     gl-intel-cml:
-      checksum: dde3a4118bca61afdb5fcd94c30e61cd
+      checksum: e604a0d1ecea40e53431e0aa5e6c8276
   valve/counterstrike-source-v2.trace:
     gl-intel-apl:
       checksum: 838ed7482efd5e9d7bde2b67e62314c4
@@ -480,17 +480,17 @@ traces:
       checksum: 6a0e17d98eca33e80810b6158e998aa1
   blender/blender-demo-ellie_pose.trace:
     gl-intel-apl:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
     gl-intel-glx:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
     gl-intel-amly:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
     gl-intel-kbl:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
     gl-intel-whl:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
     gl-intel-cml:
-      checksum: f11aa01f5ef3a563567e2a85998c418e
+      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
   unvanquished/unvanquished-lowest.trace:
     gl-intel-apl:
       checksum: 884096b6dd40e2f500d0837501287fac

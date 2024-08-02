@@ -143,6 +143,7 @@ ra_reg_is_predicate(const struct ir3_register *reg)
 #define RA_HALF_SIZE     (4 * 48)
 #define RA_FULL_SIZE     (4 * 48 * 2)
 #define RA_SHARED_SIZE   (2 * 4 * 8)
+#define RA_SHARED_HALF_SIZE (4 * 8)
 #define RA_MAX_FILE_SIZE RA_FULL_SIZE
 
 struct ir3_liveness {
@@ -178,7 +179,7 @@ void ir3_force_merge(struct ir3_register *a, struct ir3_register *b,
 void ir3_index_instrs_for_merge_sets(struct ir3 *ir);
 
 struct ir3_pressure {
-   unsigned full, half, shared;
+   unsigned full, half, shared, shared_half;
 };
 
 void ir3_calc_pressure(struct ir3_shader_variant *v, struct ir3_liveness *live,

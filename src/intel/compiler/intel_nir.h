@@ -40,6 +40,8 @@ bool intel_nir_opt_peephole_imul32x16(nir_shader *shader);
 
 bool intel_nir_pulls_at_sample(nir_shader *shader);
 
+bool intel_nir_lower_printf(nir_shader *nir);
+
 #ifdef __cplusplus
 }
 #endif

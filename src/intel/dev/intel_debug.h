@@ -96,6 +96,9 @@ extern uint64_t intel_debug;
 #define DEBUG_SPARSE              (1ull << 48)
 #define DEBUG_DRAW_BKP            (1ull << 49)
 #define DEBUG_BATCH_STATS         (1ull << 50)
+#define DEBUG_REG_PRESSURE        (1ull << 51)
+#define DEBUG_SHADER_PRINT        (1ull << 52)
+#define DEBUG_CL_QUIET            (1ull << 53)
 
 #define DEBUG_ANY                 (~0ull)
 
@@ -110,6 +113,8 @@ extern uint64_t intel_debug;
 extern uint64_t intel_simd;
 extern uint32_t intel_debug_bkp_before_draw_count;
 extern uint32_t intel_debug_bkp_after_draw_count;
+extern uint64_t intel_debug_batch_frame_start;
+extern uint64_t intel_debug_batch_frame_stop;
 
 #define INTEL_SIMD(type, size)        (!!(intel_simd & (DEBUG_ ## type ## _SIMD ## size)))
 
@@ -162,52 +167,6 @@ extern uint32_t intel_debug_bkp_after_draw_count;
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
 extern void process_intel_debug_variable(void);
-
-/* Below is a list of structure located in the identifier buffer. The driver
- * can fill those in for debug purposes.
- */
-
-enum intel_debug_block_type {
-   /* End of the debug blocks */
-   INTEL_DEBUG_BLOCK_TYPE_END = 1,
-
-   /* Driver identifier (struct intel_debug_block_driver) */
-   INTEL_DEBUG_BLOCK_TYPE_DRIVER,
-
-   /* Frame identifier (struct intel_debug_block_frame) */
-   INTEL_DEBUG_BLOCK_TYPE_FRAME,
-
-   /* Internal, never to be written out */
-   INTEL_DEBUG_BLOCK_TYPE_MAX,
-};
-
-struct intel_debug_block_base {
-   uint32_t type; /* enum intel_debug_block_type */
-   uint32_t length; /* inclusive of this structure size */
-};
-
-struct intel_debug_block_driver {
-   struct intel_debug_block_base base;
-   uint8_t description[];
-};
-
-struct intel_debug_block_frame {
-   struct intel_debug_block_base base;
-   uint64_t frame_id;
-};
-
-extern void *intel_debug_identifier(void);
-extern uint32_t intel_debug_identifier_size(void);
-
-extern uint32_t intel_debug_write_identifiers(void *output,
-                                              uint32_t output_size,
-                                              const char *driver_name);
-
-extern void *intel_debug_get_identifier_block(void *buffer,
-                                              uint32_t buffer_size,
-                                              enum intel_debug_block_type type);
-
-bool intel_debug_batch_in_range(uint64_t frame_id);
 
 #ifdef __cplusplus
 }

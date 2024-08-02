@@ -1699,37 +1699,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          inst->predicate = ELK_PREDICATE_NORMAL;
          dst.type = ELK_REGISTER_TYPE_F;
       } else {
-         /* For doubles we do the same but we need to consider:
-          *
-          * - We use a MOV with conditional_mod instead of a CMP so that we can
-          *   skip loading a 0.0 immediate. We use a source modifier on the
-          *   source of the MOV so that we flush denormalized values to 0.
-          *   Since we want to compare against 0, this won't alter the result.
-          * - We need to extract the high 32-bit of each DF where the sign
-          *   is stored.
-          * - We need to produce a DF result.
-          */
-
-         /* Check for zero */
-         src_reg value = op[0];
-         value.abs = true;
-         inst = emit(MOV(dst_null_df(), value));
-         inst->conditional_mod = ELK_CONDITIONAL_NZ;
-
-         /* AND each high 32-bit channel with 0x80000000u */
-         dst_reg tmp = dst_reg(this, glsl_uvec4_type());
-         emit(ELK_VEC4_OPCODE_PICK_HIGH_32BIT, tmp, op[0]);
-         emit(AND(tmp, src_reg(tmp), elk_imm_ud(0x80000000u)));
-
-         /* Add 1.0 to each channel, predicated to skip the cases where the
-          * channel's value was 0
-          */
-         inst = emit(OR(tmp, src_reg(tmp), elk_imm_ud(0x3f800000u)));
-         inst->predicate = ELK_PREDICATE_NORMAL;
-
-         /* Now convert the result from float to double */
-         emit_conversion_to_double(dst, retype(src_reg(tmp),
-                                               ELK_REGISTER_TYPE_F));
+          unreachable("Should have been lowered by nir_opt_algebraic.");
       }
       break;
 

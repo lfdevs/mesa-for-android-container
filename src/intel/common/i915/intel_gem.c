@@ -135,6 +135,12 @@ i915_gem_create_context_engines(int fd,
          .value = flags & INTEL_GEM_CREATE_CONTEXT_EXT_RECOVERABLE_FLAG,
       },
    };
+   struct drm_i915_gem_context_create_ext_setparam low_latency_param = {
+      .param = {
+         .param = I915_CONTEXT_PARAM_LOW_LATENCY,
+         .value = flags & INTEL_GEM_CREATE_CONTEXT_EXT_LOW_LATENCY_FLAG,
+      }
+   };
    struct drm_i915_gem_context_create_ext create = {
       .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
    };
@@ -162,6 +168,12 @@ i915_gem_create_context_engines(int fd,
       intel_i915_gem_add_ext(&create.extensions,
                              I915_CONTEXT_CREATE_EXT_SETPARAM,
                              &protected_param.base);
+   }
+
+   if (flags & INTEL_GEM_CREATE_CONTEXT_EXT_LOW_LATENCY_FLAG) {
+      intel_i915_gem_add_ext(&create.extensions,
+                             I915_CONTEXT_CREATE_EXT_SETPARAM,
+                             &low_latency_param.base);
    }
 
    if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create) == -1)

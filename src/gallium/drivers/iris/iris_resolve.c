@@ -258,6 +258,10 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
              nir->info.outputs_read != 0)
             draw_aux_buffer_disabled[i] = true;
 
+         /* Xe2 can maintain compression if RT is bound as texture. */
+         if (devinfo->ver >= 20)
+            draw_aux_buffer_disabled[i] = false;
+
          enum isl_aux_usage aux_usage =
             iris_resource_render_aux_usage(ice, res, surf->view.format,
                                            surf->view.base_level,

@@ -11,6 +11,7 @@
 #ifndef RADV_DEVICE_H
 #define RADV_DEVICE_H
 
+#include "ac_descriptors.h"
 #include "ac_spm.h"
 #include "ac_sqtt.h"
 
@@ -256,9 +257,8 @@ struct radv_meta_state {
 
    struct {
       VkPipelineLayout p_layout;
-      VkPipeline decompress_pipeline;
-      VkPipeline resummarize_pipeline;
-   } depth_decomp[MAX_SAMPLES_LOG2];
+      VkPipeline decompress_pipeline[MAX_SAMPLES_LOG2];
+   } depth_decomp;
 
    VkDescriptorSetLayout expand_depth_stencil_compute_ds_layout;
    VkPipelineLayout expand_depth_stencil_compute_p_layout;
@@ -413,7 +413,7 @@ struct radv_device {
    struct radeon_winsys_bo *gfx_init;
 
    struct radeon_winsys_bo *trace_bo;
-   uint32_t *trace_id_ptr;
+   struct radv_trace_data *trace_data;
 
    /* Whether to keep shader debug info, for debugging. */
    bool keep_shader_info;
@@ -598,47 +598,20 @@ VkResult radv_device_init_vrs_state(struct radv_device *device);
 
 unsigned radv_get_default_max_sample_dist(int log_samples);
 
-void radv_emit_default_sample_locations(struct radeon_cmdbuf *cs, int nr_samples);
+void radv_emit_default_sample_locations(const struct radv_physical_device *pdev, struct radeon_cmdbuf *cs,
+                                        int nr_samples);
 
 bool radv_get_memory_fd(struct radv_device *device, struct radv_device_memory *memory, int *pFD);
 
 unsigned radv_get_dcc_max_uncompressed_block_size(const struct radv_device *device, const struct radv_image *image);
 
 struct radv_color_buffer_info {
-   uint64_t cb_color_base;
-   uint64_t cb_color_cmask;
-   uint64_t cb_color_fmask;
-   uint64_t cb_dcc_base;
-   uint32_t cb_color_slice;
-   uint32_t cb_color_view;
-   uint32_t cb_color_info;
-   uint32_t cb_color_attrib;
-   uint32_t cb_color_attrib2; /* GFX9 and later */
-   uint32_t cb_color_attrib3; /* GFX10 and later */
-   uint32_t cb_dcc_control;
-   uint32_t cb_color_cmask_slice;
-   uint32_t cb_color_fmask_slice;
-   union {
-      uint32_t cb_color_pitch; // GFX6-GFX8
-      uint32_t cb_mrt_epitch;  // GFX9+
-   };
+   struct ac_cb_surface ac;
 };
 
 struct radv_ds_buffer_info {
-   uint64_t db_z_read_base;
-   uint64_t db_stencil_read_base;
-   uint64_t db_z_write_base;
-   uint64_t db_stencil_write_base;
-   uint64_t db_htile_data_base;
-   uint32_t db_depth_info;
-   uint32_t db_z_info;
-   uint32_t db_stencil_info;
-   uint32_t db_depth_view;
-   uint32_t db_depth_size;
-   uint32_t db_depth_slice;
-   uint32_t db_htile_surface;
-   uint32_t db_z_info2;       /* GFX9 only */
-   uint32_t db_stencil_info2; /* GFX9 only */
+   struct ac_ds_surface ac;
+
    uint32_t db_render_override2;
    uint32_t db_render_control;
 };

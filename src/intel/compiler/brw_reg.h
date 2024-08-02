@@ -154,15 +154,15 @@ uint32_t brw_swizzle_immediate(enum brw_reg_type type, uint32_t x, unsigned swz)
  * WM programs to implement shaders decomposed into "channel serial"
  * or "structure of array" form:
  */
-struct brw_reg {
+typedef struct brw_reg {
    union {
       struct {
-         enum brw_reg_type type:4;
+         enum brw_reg_type type:5;
          enum brw_reg_file file:3;      /* :2 hardware format */
          unsigned negate:1;             /* source only */
          unsigned abs:1;                /* source only */
          unsigned address_mode:1;       /* relative addressing, hopefully! */
-         unsigned pad0:17;
+         unsigned pad0:16;
          unsigned subnr:5;              /* :1 in align16 */
       };
       uint32_t bits;
@@ -187,7 +187,42 @@ struct brw_reg {
       int   d;
       unsigned ud;
    };
-};
+
+   /** Offset from the start of the virtual register in bytes. */
+   uint16_t offset;
+
+   /** Register region horizontal stride of virtual registers */
+   uint8_t stride;
+
+#ifdef __cplusplus
+   /* TODO: Remove this constructor to make this type a POD.  To achieve this
+    * we need to make sure the zero value (currently ARF_NULL) is a good
+    * replacement for BAD_FILE or make the zero value BAD_FILE.
+    */
+   brw_reg() {
+      memset((void*)this, 0, sizeof(*this));
+      this->type = BRW_TYPE_UD;
+      this->stride = 1;
+      this->file = BAD_FILE;
+   }
+
+   bool equals(const brw_reg &r) const;
+   bool negative_equals(const brw_reg &r) const;
+   bool is_contiguous() const;
+
+   bool is_zero() const;
+   bool is_one() const;
+   bool is_negative_one() const;
+   bool is_null() const;
+   bool is_accumulator() const;
+
+   /**
+    * Return the size in bytes of a single logical component of the
+    * register assuming the given execution width.
+    */
+   unsigned component_size(unsigned width) const;
+#endif /* __cplusplus */
+} brw_reg;
 
 static inline unsigned
 phys_nr(const struct intel_device_info *devinfo, const struct brw_reg reg)
@@ -225,7 +260,10 @@ phys_subnr(const struct intel_device_info *devinfo, const struct brw_reg reg)
 static inline bool
 brw_regs_equal(const struct brw_reg *a, const struct brw_reg *b)
 {
-   return a->bits == b->bits && a->u64 == b->u64;
+   return a->bits   == b->bits &&
+          a->u64    == b->u64 &&
+          a->offset == b->offset &&
+          a->stride == b->stride;
 }
 
 static inline bool
@@ -236,36 +274,35 @@ brw_regs_negative_equal(const struct brw_reg *a, const struct brw_reg *b)
          return false;
 
       switch ((enum brw_reg_type) a->type) {
-      case BRW_REGISTER_TYPE_UQ:
-      case BRW_REGISTER_TYPE_Q:
+      case BRW_TYPE_UQ:
+      case BRW_TYPE_Q:
          return a->d64 == -b->d64;
-      case BRW_REGISTER_TYPE_DF:
+      case BRW_TYPE_DF:
          return a->df == -b->df;
-      case BRW_REGISTER_TYPE_UD:
-      case BRW_REGISTER_TYPE_D:
+      case BRW_TYPE_UD:
+      case BRW_TYPE_D:
          return a->d == -b->d;
-      case BRW_REGISTER_TYPE_F:
+      case BRW_TYPE_F:
          return a->f == -b->f;
-      case BRW_REGISTER_TYPE_VF:
+      case BRW_TYPE_VF:
          /* It is tempting to treat 0 as a negation of 0 (and -0 as a negation
           * of -0).  There are occasions where 0 or -0 is used and the exact
           * bit pattern is desired.  At the very least, changing this to allow
           * 0 as a negation of 0 causes some fp64 tests to fail on IVB.
           */
          return a->ud == (b->ud ^ 0x80808080);
-      case BRW_REGISTER_TYPE_UW:
-      case BRW_REGISTER_TYPE_W:
-      case BRW_REGISTER_TYPE_UV:
-      case BRW_REGISTER_TYPE_V:
-      case BRW_REGISTER_TYPE_HF:
+      case BRW_TYPE_UW:
+      case BRW_TYPE_W:
+      case BRW_TYPE_UV:
+      case BRW_TYPE_V:
+      case BRW_TYPE_HF:
          /* FINISHME: Implement support for these types once there is
           * something in the compiler that can generate them.  Until then,
           * they cannot be tested.
           */
          return false;
-      case BRW_REGISTER_TYPE_UB:
-      case BRW_REGISTER_TYPE_B:
-      case BRW_REGISTER_TYPE_NF:
+      case BRW_TYPE_UB:
+      case BRW_TYPE_B:
       default:
          unreachable("not reached");
       }
@@ -278,54 +315,18 @@ brw_regs_negative_equal(const struct brw_reg *a, const struct brw_reg *b)
    }
 }
 
-struct brw_indirect {
-   unsigned addr_subnr:4;
-   int addr_offset:10;
-   unsigned pad:18;
-};
-
-
-static inline unsigned
-type_sz(unsigned type)
-{
-   switch(type) {
-   case BRW_REGISTER_TYPE_UQ:
-   case BRW_REGISTER_TYPE_Q:
-   case BRW_REGISTER_TYPE_DF:
-   case BRW_REGISTER_TYPE_NF:
-      return 8;
-   case BRW_REGISTER_TYPE_UD:
-   case BRW_REGISTER_TYPE_D:
-   case BRW_REGISTER_TYPE_F:
-   case BRW_REGISTER_TYPE_VF:
-      return 4;
-   case BRW_REGISTER_TYPE_UW:
-   case BRW_REGISTER_TYPE_W:
-   case BRW_REGISTER_TYPE_HF:
-   /* [U]V components are 4-bit, but HW unpacks them to 16-bit (2 bytes) */
-   case BRW_REGISTER_TYPE_UV:
-   case BRW_REGISTER_TYPE_V:
-      return 2;
-   case BRW_REGISTER_TYPE_UB:
-   case BRW_REGISTER_TYPE_B:
-      return 1;
-   default:
-      unreachable("not reached");
-   }
-}
-
 static inline enum brw_reg_type
 get_exec_type(const enum brw_reg_type type)
 {
    switch (type) {
-   case BRW_REGISTER_TYPE_B:
-   case BRW_REGISTER_TYPE_V:
-      return BRW_REGISTER_TYPE_W;
-   case BRW_REGISTER_TYPE_UB:
-   case BRW_REGISTER_TYPE_UV:
-      return BRW_REGISTER_TYPE_UW;
-   case BRW_REGISTER_TYPE_VF:
-      return BRW_REGISTER_TYPE_F;
+   case BRW_TYPE_B:
+   case BRW_TYPE_V:
+      return BRW_TYPE_W;
+   case BRW_TYPE_UB:
+   case BRW_TYPE_UV:
+      return BRW_TYPE_UW;
+   case BRW_TYPE_VF:
+      return BRW_TYPE_F;
    default:
       return type;
    }
@@ -339,13 +340,13 @@ brw_int_type(unsigned sz, bool is_signed)
 {
    switch (sz) {
    case 1:
-      return (is_signed ? BRW_REGISTER_TYPE_B : BRW_REGISTER_TYPE_UB);
+      return (is_signed ? BRW_TYPE_B : BRW_TYPE_UB);
    case 2:
-      return (is_signed ? BRW_REGISTER_TYPE_W : BRW_REGISTER_TYPE_UW);
+      return (is_signed ? BRW_TYPE_W : BRW_TYPE_UW);
    case 4:
-      return (is_signed ? BRW_REGISTER_TYPE_D : BRW_REGISTER_TYPE_UD);
+      return (is_signed ? BRW_TYPE_D : BRW_TYPE_UD);
    case 8:
-      return (is_signed ? BRW_REGISTER_TYPE_Q : BRW_REGISTER_TYPE_UQ);
+      return (is_signed ? BRW_TYPE_Q : BRW_TYPE_UQ);
    default:
       unreachable("Not reached.");
    }
@@ -358,7 +359,7 @@ brw_int_type(unsigned sz, bool is_signed)
  * \param subnr     register sub number
  * \param negate    register negate modifier
  * \param abs       register abs modifier
- * \param type      one of BRW_REGISTER_TYPE_x
+ * \param type      one of BRW_TYPE_x
  * \param vstride   one of BRW_VERTICAL_STRIDE_x
  * \param width     one of BRW_WIDTH_x
  * \param hstride   one of BRW_HORIZONTAL_STRIDE_x
@@ -366,17 +367,17 @@ brw_int_type(unsigned sz, bool is_signed)
  * \param writemask WRITEMASK_X/Y/Z/W bitfield
  */
 static inline struct brw_reg
-brw_reg(enum brw_reg_file file,
-        unsigned nr,
-        unsigned subnr,
-        unsigned negate,
-        unsigned abs,
-        enum brw_reg_type type,
-        unsigned vstride,
-        unsigned width,
-        unsigned hstride,
-        unsigned swizzle,
-        unsigned writemask)
+brw_make_reg(enum brw_reg_file file,
+             unsigned nr,
+             unsigned subnr,
+             unsigned negate,
+             unsigned abs,
+             enum brw_reg_type type,
+             unsigned vstride,
+             unsigned width,
+             unsigned hstride,
+             unsigned swizzle,
+             unsigned writemask)
 {
    struct brw_reg reg;
    if (file == BRW_GENERAL_REGISTER_FILE)
@@ -390,7 +391,7 @@ brw_reg(enum brw_reg_file file,
    reg.abs = abs;
    reg.address_mode = BRW_ADDRESS_DIRECT;
    reg.pad0 = 0;
-   reg.subnr = subnr * type_sz(type);
+   reg.subnr = subnr * brw_type_size_bytes(type);
    reg.nr = nr;
 
    /* Could do better: If the reg is r5.3<0;1,0>, we probably want to
@@ -406,6 +407,16 @@ brw_reg(enum brw_reg_file file,
    reg.width = width;
    reg.hstride = hstride;
    reg.pad1 = 0;
+
+   reg.offset = 0;
+   reg.stride = 1;
+   if (file == IMM &&
+       type != BRW_TYPE_V &&
+       type != BRW_TYPE_UV &&
+       type != BRW_TYPE_VF) {
+      reg.stride = 0;
+   }
+
    return reg;
 }
 
@@ -413,12 +424,12 @@ brw_reg(enum brw_reg_file file,
 static inline struct brw_reg
 brw_vec16_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return brw_reg(file,
+   return brw_make_reg(file,
                   nr,
                   subnr,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_F,
+                  BRW_TYPE_F,
                   BRW_VERTICAL_STRIDE_16,
                   BRW_WIDTH_16,
                   BRW_HORIZONTAL_STRIDE_1,
@@ -430,12 +441,12 @@ brw_vec16_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 static inline struct brw_reg
 brw_vec8_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return brw_reg(file,
+   return brw_make_reg(file,
                   nr,
                   subnr,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_F,
+                  BRW_TYPE_F,
                   BRW_VERTICAL_STRIDE_8,
                   BRW_WIDTH_8,
                   BRW_HORIZONTAL_STRIDE_1,
@@ -447,12 +458,12 @@ brw_vec8_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 static inline struct brw_reg
 brw_vec4_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return brw_reg(file,
+   return brw_make_reg(file,
                   nr,
                   subnr,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_F,
+                  BRW_TYPE_F,
                   BRW_VERTICAL_STRIDE_4,
                   BRW_WIDTH_4,
                   BRW_HORIZONTAL_STRIDE_1,
@@ -464,12 +475,12 @@ brw_vec4_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 static inline struct brw_reg
 brw_vec2_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return brw_reg(file,
+   return brw_make_reg(file,
                   nr,
                   subnr,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_F,
+                  BRW_TYPE_F,
                   BRW_VERTICAL_STRIDE_2,
                   BRW_WIDTH_2,
                   BRW_HORIZONTAL_STRIDE_1,
@@ -481,12 +492,12 @@ brw_vec2_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 static inline struct brw_reg
 brw_vec1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return brw_reg(file,
+   return brw_make_reg(file,
                   nr,
                   subnr,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_F,
+                  BRW_TYPE_F,
                   BRW_VERTICAL_STRIDE_0,
                   BRW_WIDTH_1,
                   BRW_HORIZONTAL_STRIDE_0,
@@ -546,55 +557,71 @@ offset(struct brw_reg reg, unsigned delta)
 static inline struct brw_reg
 byte_offset(struct brw_reg reg, unsigned bytes)
 {
-   unsigned newoffset = reg.nr * REG_SIZE + reg.subnr + bytes;
-   reg.nr = newoffset / REG_SIZE;
-   reg.subnr = newoffset % REG_SIZE;
+   switch (reg.file) {
+   case BAD_FILE:
+      break;
+   case VGRF:
+   case ATTR:
+   case UNIFORM:
+      reg.offset += bytes;
+      break;
+   case ARF:
+   case FIXED_GRF: {
+      const unsigned suboffset = reg.subnr + bytes;
+      reg.nr += suboffset / REG_SIZE;
+      reg.subnr = suboffset % REG_SIZE;
+      break;
+   }
+   case IMM:
+   default:
+      assert(bytes == 0);
+   }
    return reg;
 }
 
 static inline struct brw_reg
 suboffset(struct brw_reg reg, unsigned delta)
 {
-   return byte_offset(reg, delta * type_sz(reg.type));
+   return byte_offset(reg, delta * brw_type_size_bytes(reg.type));
 }
 
 /** Construct unsigned word[16] register */
 static inline struct brw_reg
 brw_uw16_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return suboffset(retype(brw_vec16_reg(file, nr, 0), BRW_REGISTER_TYPE_UW), subnr);
+   return suboffset(retype(brw_vec16_reg(file, nr, 0), BRW_TYPE_UW), subnr);
 }
 
 /** Construct unsigned word[8] register */
 static inline struct brw_reg
 brw_uw8_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return suboffset(retype(brw_vec8_reg(file, nr, 0), BRW_REGISTER_TYPE_UW), subnr);
+   return suboffset(retype(brw_vec8_reg(file, nr, 0), BRW_TYPE_UW), subnr);
 }
 
 /** Construct unsigned word[1] register */
 static inline struct brw_reg
 brw_uw1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return suboffset(retype(brw_vec1_reg(file, nr, 0), BRW_REGISTER_TYPE_UW), subnr);
+   return suboffset(retype(brw_vec1_reg(file, nr, 0), BRW_TYPE_UW), subnr);
 }
 
 static inline struct brw_reg
 brw_ud8_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return retype(brw_vec8_reg(file, nr, subnr), BRW_REGISTER_TYPE_UD);
+   return retype(brw_vec8_reg(file, nr, subnr), BRW_TYPE_UD);
 }
 
 static inline struct brw_reg
 brw_ud1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
-   return retype(brw_vec1_reg(file, nr, subnr), BRW_REGISTER_TYPE_UD);
+   return retype(brw_vec1_reg(file, nr, subnr), BRW_TYPE_UD);
 }
 
 static inline struct brw_reg
 brw_imm_reg(enum brw_reg_type type)
 {
-   return brw_reg(BRW_IMMEDIATE_VALUE,
+   return brw_make_reg(BRW_IMMEDIATE_VALUE,
                   0,
                   0,
                   0,
@@ -611,7 +638,7 @@ brw_imm_reg(enum brw_reg_type type)
 static inline struct brw_reg
 brw_imm_df(double df)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_DF);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_DF);
    imm.df = df;
    return imm;
 }
@@ -619,7 +646,7 @@ brw_imm_df(double df)
 static inline struct brw_reg
 brw_imm_u64(uint64_t u64)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UQ);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_UQ);
    imm.u64 = u64;
    return imm;
 }
@@ -627,7 +654,7 @@ brw_imm_u64(uint64_t u64)
 static inline struct brw_reg
 brw_imm_f(float f)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_F);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_F);
    imm.f = f;
    return imm;
 }
@@ -636,7 +663,7 @@ brw_imm_f(float f)
 static inline struct brw_reg
 brw_imm_q(int64_t q)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_Q);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_Q);
    imm.d64 = q;
    return imm;
 }
@@ -645,7 +672,7 @@ brw_imm_q(int64_t q)
 static inline struct brw_reg
 brw_imm_uq(uint64_t uq)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UQ);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_UQ);
    imm.u64 = uq;
    return imm;
 }
@@ -654,7 +681,7 @@ brw_imm_uq(uint64_t uq)
 static inline struct brw_reg
 brw_imm_d(int d)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_D);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_D);
    imm.d = d;
    return imm;
 }
@@ -663,7 +690,7 @@ brw_imm_d(int d)
 static inline struct brw_reg
 brw_imm_ud(unsigned ud)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UD);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_UD);
    imm.ud = ud;
    return imm;
 }
@@ -672,7 +699,7 @@ brw_imm_ud(unsigned ud)
 static inline struct brw_reg
 brw_imm_uw(uint16_t uw)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UW);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_UW);
    imm.ud = uw | (uw << 16);
    return imm;
 }
@@ -681,7 +708,7 @@ brw_imm_uw(uint16_t uw)
 static inline struct brw_reg
 brw_imm_w(int16_t w)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_W);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_W);
    imm.ud = (uint16_t)w | (uint32_t)(uint16_t)w << 16;
    return imm;
 }
@@ -694,7 +721,7 @@ brw_imm_w(int16_t w)
 static inline struct brw_reg
 brw_imm_v(unsigned v)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_V);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_V);
    imm.ud = v;
    return imm;
 }
@@ -703,7 +730,7 @@ brw_imm_v(unsigned v)
 static inline struct brw_reg
 brw_imm_uv(unsigned uv)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UV);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_UV);
    imm.ud = uv;
    return imm;
 }
@@ -712,7 +739,7 @@ brw_imm_uv(unsigned uv)
 static inline struct brw_reg
 brw_imm_vf(unsigned v)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_VF);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_VF);
    imm.ud = v;
    return imm;
 }
@@ -720,7 +747,7 @@ brw_imm_vf(unsigned v)
 static inline struct brw_reg
 brw_imm_vf4(unsigned v0, unsigned v1, unsigned v2, unsigned v3)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_VF);
+   struct brw_reg imm = brw_imm_reg(BRW_TYPE_VF);
    imm.vstride = BRW_VERTICAL_STRIDE_0;
    imm.width = BRW_WIDTH_4;
    imm.hstride = BRW_HORIZONTAL_STRIDE_1;
@@ -875,12 +902,12 @@ brw_tdr_reg(void)
 static inline struct brw_reg
 brw_ip_reg(void)
 {
-   return brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
+   return brw_make_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                   BRW_ARF_IP,
                   0,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_UD,
+                  BRW_TYPE_UD,
                   BRW_VERTICAL_STRIDE_4, /* ? */
                   BRW_WIDTH_1,
                   BRW_HORIZONTAL_STRIDE_0,
@@ -891,12 +918,12 @@ brw_ip_reg(void)
 static inline struct brw_reg
 brw_notification_reg(void)
 {
-   return brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
+   return brw_make_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                   BRW_ARF_NOTIFICATION_COUNT,
                   0,
                   0,
                   0,
-                  BRW_REGISTER_TYPE_UD,
+                  BRW_TYPE_UD,
                   BRW_VERTICAL_STRIDE_0,
                   BRW_WIDTH_1,
                   BRW_HORIZONTAL_STRIDE_0,
@@ -965,7 +992,7 @@ brw_mask_stack_reg(unsigned subnr)
 {
    return suboffset(retype(brw_vec16_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                                          BRW_ARF_MASK_STACK, 0),
-                           BRW_REGISTER_TYPE_UB), subnr);
+                           BRW_TYPE_UB), subnr);
 }
 
 static inline struct brw_reg
@@ -973,6 +1000,39 @@ brw_mask_stack_depth_reg(unsigned subnr)
 {
    return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                       BRW_ARF_MASK_STACK_DEPTH, subnr);
+}
+
+static inline struct brw_reg
+brw_vgrf(unsigned nr, enum brw_reg_type type)
+{
+   struct brw_reg reg = {};
+   reg.file = VGRF;
+   reg.nr = nr;
+   reg.type = type;
+   reg.stride = 1;
+   return reg;
+}
+
+static inline struct brw_reg
+brw_attr_reg(unsigned nr, enum brw_reg_type type)
+{
+   struct brw_reg reg = {};
+   reg.file = ATTR;
+   reg.nr = nr;
+   reg.type = type;
+   reg.stride = 1;
+   return reg;
+}
+
+static inline struct brw_reg
+brw_uniform_reg(unsigned nr, enum brw_reg_type type)
+{
+   struct brw_reg reg = {};
+   reg.file = UNIFORM;
+   reg.nr = nr;
+   reg.type = type;
+   reg.stride = 0;
+   return reg;
 }
 
 /* This is almost always called with a numeric constant argument, so
@@ -1030,19 +1090,29 @@ spread(struct brw_reg reg, unsigned s)
 static inline struct brw_reg
 subscript(struct brw_reg reg, enum brw_reg_type type, unsigned i)
 {
-   unsigned scale = type_sz(reg.type) / type_sz(type);
-   assert(scale >= 1 && i < scale);
+   assert((i + 1) * brw_type_size_bytes(type) <= brw_type_size_bytes(reg.type));
 
-   if (reg.file == IMM) {
-      unsigned bit_size = type_sz(type) * 8;
+   if (reg.file == ARF || reg.file == FIXED_GRF) {
+      /* The stride is encoded inconsistently for fixed GRF and ARF registers
+       * as the log2 of the actual vertical and horizontal strides.
+       */
+      const int delta = util_logbase2(brw_type_size_bytes(reg.type)) -
+                        util_logbase2(brw_type_size_bytes(type));
+      reg.hstride += (reg.hstride ? delta : 0);
+      reg.vstride += (reg.vstride ? delta : 0);
+
+   } else if (reg.file == IMM) {
+      unsigned bit_size = brw_type_size_bits(type);
       reg.u64 >>= i * bit_size;
       reg.u64 &= BITFIELD64_MASK(bit_size);
       if (bit_size <= 16)
          reg.u64 |= reg.u64 << 16;
       return retype(reg, type);
+   } else {
+      reg.stride *= brw_type_size_bytes(reg.type) / brw_type_size_bytes(type);
    }
 
-   return suboffset(retype(spread(reg, scale), type), i);
+   return byte_offset(retype(reg, type), i * brw_type_size_bytes(type));
 }
 
 static inline struct brw_reg
@@ -1085,13 +1155,13 @@ get_element(struct brw_reg reg, unsigned elt)
 static inline struct brw_reg
 get_element_ud(struct brw_reg reg, unsigned elt)
 {
-   return vec1(suboffset(retype(reg, BRW_REGISTER_TYPE_UD), elt));
+   return vec1(suboffset(retype(reg, BRW_TYPE_UD), elt));
 }
 
 static inline struct brw_reg
 get_element_d(struct brw_reg reg, unsigned elt)
 {
-   return vec1(suboffset(retype(reg, BRW_REGISTER_TYPE_D), elt));
+   return vec1(suboffset(retype(reg, BRW_TYPE_D), elt));
 }
 
 static inline struct brw_reg
@@ -1152,16 +1222,6 @@ brw_abs(struct brw_reg reg)
 /************************************************************************/
 
 static inline struct brw_reg
-brw_vec4_indirect(unsigned subnr, int offset)
-{
-   struct brw_reg reg =  brw_vec4_grf(0, 0);
-   reg.subnr = subnr;
-   reg.address_mode = BRW_ADDRESS_REGISTER_INDIRECT_REGISTER;
-   reg.indirect_offset = offset;
-   return reg;
-}
-
-static inline struct brw_reg
 brw_vec1_indirect(unsigned subnr, int offset)
 {
    struct brw_reg reg =  brw_vec1_grf(0, 0);
@@ -1180,65 +1240,6 @@ brw_VxH_indirect(unsigned subnr, int offset)
    reg.address_mode = BRW_ADDRESS_REGISTER_INDIRECT_REGISTER;
    reg.indirect_offset = offset;
    return reg;
-}
-
-static inline struct brw_reg
-deref_4f(struct brw_indirect ptr, int offset)
-{
-   return brw_vec4_indirect(ptr.addr_subnr, ptr.addr_offset + offset);
-}
-
-static inline struct brw_reg
-deref_1f(struct brw_indirect ptr, int offset)
-{
-   return brw_vec1_indirect(ptr.addr_subnr, ptr.addr_offset + offset);
-}
-
-static inline struct brw_reg
-deref_4b(struct brw_indirect ptr, int offset)
-{
-   return retype(deref_4f(ptr, offset), BRW_REGISTER_TYPE_B);
-}
-
-static inline struct brw_reg
-deref_1uw(struct brw_indirect ptr, int offset)
-{
-   return retype(deref_1f(ptr, offset), BRW_REGISTER_TYPE_UW);
-}
-
-static inline struct brw_reg
-deref_1d(struct brw_indirect ptr, int offset)
-{
-   return retype(deref_1f(ptr, offset), BRW_REGISTER_TYPE_D);
-}
-
-static inline struct brw_reg
-deref_1ud(struct brw_indirect ptr, int offset)
-{
-   return retype(deref_1f(ptr, offset), BRW_REGISTER_TYPE_UD);
-}
-
-static inline struct brw_reg
-get_addr_reg(struct brw_indirect ptr)
-{
-   return brw_address_reg(ptr.addr_subnr);
-}
-
-static inline struct brw_indirect
-brw_indirect_offset(struct brw_indirect ptr, int offset)
-{
-   ptr.addr_offset += offset;
-   return ptr;
-}
-
-static inline struct brw_indirect
-brw_indirect(unsigned addr_subnr, int offset)
-{
-   struct brw_indirect ptr;
-   ptr.addr_subnr = addr_subnr;
-   ptr.addr_offset = offset;
-   ptr.pad = 0;
-   return ptr;
 }
 
 static inline bool
@@ -1262,17 +1263,17 @@ static inline unsigned
 element_sz(struct brw_reg reg)
 {
    if (reg.file == BRW_IMMEDIATE_VALUE || has_scalar_region(reg)) {
-      return type_sz(reg.type);
+      return brw_type_size_bytes(reg.type);
 
    } else if (reg.width == BRW_WIDTH_1 &&
               reg.hstride == BRW_HORIZONTAL_STRIDE_0) {
       assert(reg.vstride != BRW_VERTICAL_STRIDE_0);
-      return type_sz(reg.type) << (reg.vstride - 1);
+      return brw_type_size_bytes(reg.type) << (reg.vstride - 1);
 
    } else {
       assert(reg.hstride != BRW_HORIZONTAL_STRIDE_0);
       assert(reg.vstride == reg.hstride + reg.width);
-      return type_sz(reg.type) << (reg.hstride - 1);
+      return brw_type_size_bytes(reg.type) << (reg.hstride - 1);
    }
 }
 
@@ -1280,8 +1281,250 @@ element_sz(struct brw_reg reg)
 int brw_float_to_vf(float f);
 float brw_vf_to_float(unsigned char vf);
 
+bool brw_reg_saturate_immediate(brw_reg *reg);
+bool brw_reg_negate_immediate(brw_reg *reg);
+bool brw_reg_abs_immediate(brw_reg *reg);
+
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef __cplusplus
+
+static inline brw_reg
+horiz_offset(const brw_reg &reg, unsigned delta)
+{
+   switch (reg.file) {
+   case BAD_FILE:
+   case UNIFORM:
+   case IMM:
+      /* These only have a single component that is implicitly splatted.  A
+       * horizontal offset should be a harmless no-op.
+       * XXX - Handle vector immediates correctly.
+       */
+      return reg;
+   case VGRF:
+   case ATTR:
+      return byte_offset(reg, delta * reg.stride * brw_type_size_bytes(reg.type));
+   case ARF:
+   case FIXED_GRF:
+      if (reg.is_null()) {
+         return reg;
+      } else {
+         const unsigned hstride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
+         const unsigned vstride = reg.vstride ? 1 << (reg.vstride - 1) : 0;
+         const unsigned width = 1 << reg.width;
+
+         if (delta % width == 0) {
+            return byte_offset(reg, delta / width * vstride * brw_type_size_bytes(reg.type));
+         } else {
+            assert(vstride == hstride * width);
+            return byte_offset(reg, delta * hstride * brw_type_size_bytes(reg.type));
+         }
+      }
+   }
+   unreachable("Invalid register file");
+}
+
+static inline brw_reg
+offset(brw_reg reg, unsigned width, unsigned delta)
+{
+   switch (reg.file) {
+   case BAD_FILE:
+      break;
+   case ARF:
+   case FIXED_GRF:
+   case VGRF:
+   case ATTR:
+   case UNIFORM:
+      return byte_offset(reg, delta * reg.component_size(width));
+   case IMM:
+      assert(delta == 0);
+   }
+   return reg;
+}
+
+/**
+ * Get the scalar channel of \p reg given by \p idx and replicate it to all
+ * channels of the result.
+ */
+static inline brw_reg
+component(brw_reg reg, unsigned idx)
+{
+   reg = horiz_offset(reg, idx);
+   reg.stride = 0;
+   if (reg.file == ARF || reg.file == FIXED_GRF) {
+      reg.vstride = BRW_VERTICAL_STRIDE_0;
+      reg.width = BRW_WIDTH_1;
+      reg.hstride = BRW_HORIZONTAL_STRIDE_0;
+   }
+   return reg;
+}
+
+/**
+ * Return an integer identifying the discrete address space a register is
+ * contained in.  A register is by definition fully contained in the single
+ * reg_space it belongs to, so two registers with different reg_space ids are
+ * guaranteed not to overlap.  Most register files are a single reg_space of
+ * its own, only the VGRF and ATTR files are composed of multiple discrete
+ * address spaces, one for each allocation and input attribute respectively.
+ */
+static inline uint32_t
+reg_space(const brw_reg &r)
+{
+   return r.file << 16 | (r.file == VGRF || r.file == ATTR ? r.nr : 0);
+}
+
+/**
+ * Return the base offset in bytes of a register relative to the start of its
+ * reg_space().
+ */
+static inline unsigned
+reg_offset(const brw_reg &r)
+{
+   return (r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
+          (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
+          (r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
+}
+
+/**
+ * Return the amount of padding in bytes left unused between individual
+ * components of register \p r due to a (horizontal) stride value greater than
+ * one, or zero if components are tightly packed in the register file.
+ */
+static inline unsigned
+reg_padding(const brw_reg &r)
+{
+   const unsigned stride = ((r.file != ARF && r.file != FIXED_GRF) ? r.stride :
+                            r.hstride == 0 ? 0 :
+                            1 << (r.hstride - 1));
+   return (MAX2(1, stride) - 1) * brw_type_size_bytes(r.type);
+}
+
+/**
+ * Return whether the register region starting at \p r and spanning \p dr
+ * bytes could potentially overlap the register region starting at \p s and
+ * spanning \p ds bytes.
+ */
+static inline bool
+regions_overlap(const brw_reg &r, unsigned dr, const brw_reg &s, unsigned ds)
+{
+   if (r.file != s.file)
+      return false;
+
+   if (r.file == VGRF) {
+      return r.nr == s.nr &&
+             !(r.offset + dr <= s.offset || s.offset + ds <= r.offset);
+   } else {
+      return !(reg_offset(r) + dr <= reg_offset(s) ||
+               reg_offset(s) + ds <= reg_offset(r));
+   }
+}
+
+/**
+ * Check that the register region given by r [r.offset, r.offset + dr[
+ * is fully contained inside the register region given by s
+ * [s.offset, s.offset + ds[.
+ */
+static inline bool
+region_contained_in(const brw_reg &r, unsigned dr, const brw_reg &s, unsigned ds)
+{
+   return reg_space(r) == reg_space(s) &&
+          reg_offset(r) >= reg_offset(s) &&
+          reg_offset(r) + dr <= reg_offset(s) + ds;
+}
+
+/**
+ * Return whether the given register region is n-periodic, i.e. whether the
+ * original region remains invariant after shifting it by \p n scalar
+ * channels.
+ */
+static inline bool
+is_periodic(const brw_reg &reg, unsigned n)
+{
+   if (reg.file == BAD_FILE || reg.is_null()) {
+      return true;
+
+   } else if (reg.file == IMM) {
+      const unsigned period = (reg.type == BRW_TYPE_UV ||
+                               reg.type == BRW_TYPE_V ? 8 :
+                               reg.type == BRW_TYPE_VF ? 4 :
+                               1);
+      return n % period == 0;
+
+   } else if (reg.file == ARF || reg.file == FIXED_GRF) {
+      const unsigned period = (reg.hstride == 0 && reg.vstride == 0 ? 1 :
+                               reg.vstride == 0 ? 1 << reg.width :
+                               ~0);
+      return n % period == 0;
+
+   } else {
+      return reg.stride == 0;
+   }
+}
+
+static inline bool
+is_uniform(const brw_reg &reg)
+{
+   return is_periodic(reg, 1);
+}
+
+/**
+ * Get the specified 8-component quarter of a register.
+ */
+static inline brw_reg
+quarter(const brw_reg &reg, unsigned idx)
+{
+   assert(idx < 4);
+   return horiz_offset(reg, 8 * idx);
+}
+
+static inline brw_reg
+horiz_stride(brw_reg reg, unsigned s)
+{
+   reg.stride *= s;
+   return reg;
+}
+
+static const brw_reg reg_undef;
+
+/*
+ * Return the stride between channels of the specified register in
+ * byte units, or ~0u if the region cannot be represented with a
+ * single one-dimensional stride.
+ */
+static inline unsigned
+byte_stride(const brw_reg &reg)
+{
+   switch (reg.file) {
+   case BAD_FILE:
+   case UNIFORM:
+   case IMM:
+   case VGRF:
+   case ATTR:
+      return reg.stride * brw_type_size_bytes(reg.type);
+   case ARF:
+   case FIXED_GRF:
+      if (reg.is_null()) {
+         return 0;
+      } else {
+         const unsigned hstride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
+         const unsigned vstride = reg.vstride ? 1 << (reg.vstride - 1) : 0;
+         const unsigned width = 1 << reg.width;
+
+         if (width == 1) {
+            return vstride * brw_type_size_bytes(reg.type);
+         } else if (hstride * width == vstride) {
+            return hstride * brw_type_size_bytes(reg.type);
+         } else {
+            return ~0u;
+         }
+      }
+   default:
+      unreachable("Invalid register file");
+   }
+}
+
+#endif /* __cplusplus */
 
 #endif

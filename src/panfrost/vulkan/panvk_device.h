@@ -10,6 +10,7 @@
 
 #include "vk_device.h"
 
+#include "panvk_blend.h"
 #include "panvk_instance.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
@@ -35,7 +36,18 @@ struct panvk_device {
    struct panvk_priv_bo *tiler_heap;
    struct panvk_priv_bo *sample_positions;
 
+   struct panvk_blend_shader_cache blend_shader_cache;
    struct panvk_meta meta;
+
+   struct {
+      struct panvk_priv_bo *shader_bo;
+      struct panvk_priv_bo *rsd_bo;
+   } desc_copy;
+
+   struct {
+      struct panvk_pool rw;
+      struct panvk_pool exec;
+   } mempools;
 
    struct vk_device_dispatch_table cmd_dispatch;
 

@@ -18,17 +18,15 @@
 #include "vk_render_pass.h"
 #include "vk_standard_sample_locations.h"
 
-#include "nouveau_context.h"
-
-#include "nvk_cl902d.h"
-#include "nvk_cl9097.h"
-#include "nvk_cl90b5.h"
-#include "nvk_cl90c0.h"
-#include "nvk_cla097.h"
-#include "nvk_clb097.h"
-#include "nvk_clb197.h"
-#include "nvk_clc397.h"
-#include "nvk_clc597.h"
+#include "nv_push_cl902d.h"
+#include "nv_push_cl9097.h"
+#include "nv_push_cl90b5.h"
+#include "nv_push_cl90c0.h"
+#include "nv_push_cla097.h"
+#include "nv_push_clb097.h"
+#include "nv_push_clb197.h"
+#include "nv_push_clc397.h"
+#include "nv_push_clc597.h"
 #include "drf.h"
 
 static inline uint16_t
@@ -39,19 +37,22 @@ nvk_cmd_buffer_3d_cls(struct nvk_cmd_buffer *cmd)
    return pdev->info.cls_eng3d;
 }
 
-void
-nvk_mme_set_priv_reg(struct mme_builder *b)
+static void
+mme_set_priv_reg(struct mme_builder *b,
+                 struct mme_value value,
+                 struct mme_value mask,
+                 struct mme_value reg)
 {
    mme_mthd(b, NV9097_WAIT_FOR_IDLE);
    mme_emit(b, mme_zero());
 
    mme_mthd(b, NV9097_SET_MME_SHADOW_SCRATCH(0));
    mme_emit(b, mme_zero());
-   mme_emit(b, mme_load(b));
-   mme_emit(b, mme_load(b));
+   mme_emit(b, value);
+   mme_emit(b, mask);
 
    mme_mthd(b, NV9097_SET_FALCON04);
-   mme_emit(b, mme_load(b));
+   mme_emit(b, reg);
 
    struct mme_value loop_cond = mme_mov(b, mme_zero());
    mme_while(b, ine, loop_cond, mme_imm(1)) {
@@ -61,9 +62,48 @@ nvk_mme_set_priv_reg(struct mme_builder *b)
    };
 }
 
-VkResult
-nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
+void
+nvk_mme_set_priv_reg(struct mme_builder *b)
 {
+   struct mme_value value = mme_load(b);
+   struct mme_value mask = mme_load(b);
+   struct mme_value reg = mme_load(b);
+
+   mme_set_priv_reg(b, value, mask, reg);
+}
+
+void
+nvk_mme_set_conservative_raster_state(struct mme_builder *b)
+{
+   struct mme_value new_state = mme_load(b);
+   struct mme_value old_state =
+      nvk_mme_load_scratch(b, CONSERVATIVE_RASTER_STATE);
+
+   mme_if(b, ine, new_state, old_state) {
+      nvk_mme_store_scratch(b, CONSERVATIVE_RASTER_STATE, new_state);
+      mme_set_priv_reg(b, new_state, mme_imm(BITFIELD_RANGE(23, 2)),
+                       mme_imm(0x418800));
+   }
+}
+
+#define NVK_DRAW_CB0_SIZE sizeof(struct nvk_root_descriptor_table)
+
+void
+nvk_mme_select_cb0(struct mme_builder *b)
+{
+   struct mme_value addr_hi = nvk_mme_load_scratch(b, CB0_ADDR_HI);
+   struct mme_value addr_lo = nvk_mme_load_scratch(b, CB0_ADDR_LO);
+
+   mme_mthd(b, NV9097_SET_CONSTANT_BUFFER_SELECTOR_A);
+   mme_emit(b, mme_imm(NVK_DRAW_CB0_SIZE));
+   mme_emit(b, addr_hi);
+   mme_emit(b, addr_lo);
+}
+
+VkResult
+nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
+{
+   struct nvk_device *dev = nvk_queue_device(queue);
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    /* 3D state */
@@ -105,7 +145,7 @@ nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
     * Starting with GSP we have to do it via the firmware anyway.
     *
     * This clears bit 3 of gr_gpcs_tpcs_sm_disp_ctrl
-    * 
+    *
     * Without it,
     * dEQP-VK.subgroups.vote.frag_helper.subgroupallequal_bvec2_fragment will
     * occasionally fail.
@@ -171,6 +211,12 @@ nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
       P_INLINE_DATA(p, BITFIELD_BIT(14));
       P_INLINE_DATA(p, reg);
    }
+
+   /* Set CONSERVATIVE_RASTER_STATE to an invalid value, to ensure the
+    * hardware reg is always set the first time conservative rasterization
+    * is enabled */
+   P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_CONSERVATIVE_RASTER_STATE),
+                     ~0);
 
    P_IMMD(p, NV9097, SET_RENDER_ENABLE_C, MODE_TRUE);
 
@@ -438,7 +484,7 @@ nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
    P_IMMD(p, NV9097, SET_EDGE_FLAG, V_TRUE);
    P_IMMD(p, NV9097, SET_SAMPLER_BINDING, V_INDEPENDENTLY);
 
-   uint64_t zero_addr = dev->zero_page->offset;
+   uint64_t zero_addr = dev->zero_page->va->addr;
    P_MTHD(p, NV9097, SET_VERTEX_STREAM_SUBSTITUTE_A);
    P_NV9097_SET_VERTEX_STREAM_SUBSTITUTE_A(p, zero_addr >> 32);
    P_NV9097_SET_VERTEX_STREAM_SUBSTITUTE_B(p, zero_addr);
@@ -446,7 +492,7 @@ nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
    if (pdev->info.cls_eng3d >= FERMI_A &&
        pdev->info.cls_eng3d < MAXWELL_A) {
       assert(dev->vab_memory);
-      uint64_t vab_addr = dev->vab_memory->offset;
+      uint64_t vab_addr = dev->vab_memory->va->addr;
       P_MTHD(p, NV9097, SET_VAB_MEMORY_AREA_A);
       P_NV9097_SET_VAB_MEMORY_AREA_A(p, vab_addr >> 32);
       P_NV9097_SET_VAB_MEMORY_AREA_B(p, vab_addr);
@@ -455,6 +501,39 @@ nvk_push_draw_state_init(struct nvk_device *dev, struct nv_push *p)
 
    if (pdev->info.cls_eng3d == MAXWELL_A)
       P_IMMD(p, NVB097, SET_SELECT_MAXWELL_TEXTURE_HEADERS, V_TRUE);
+
+   /* Store the address to CB0 in a pair of state registers */
+   uint64_t cb0_addr = queue->draw_cb0->va->addr;
+   P_MTHD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_CB0_ADDR_HI));
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_ADDR_HI, cb0_addr >> 32);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_ADDR_LO, cb0_addr);
+
+   /* We leave CB0 selected by default */
+   P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SELECT_CB0));
+   P_INLINE_DATA(p, 0);
+
+   /* Bind CB0 to all shader groups */
+   for (uint32_t group = 0; group < 5; group++) {
+      P_IMMD(p, NV9097, BIND_GROUP_CONSTANT_BUFFER(group), {
+         .valid = VALID_TRUE,
+         .shader_slot = 0,
+      });
+   }
+
+   /* Zero out CB0 */
+   P_1INC(p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET);
+   P_NV9097_LOAD_CONSTANT_BUFFER_OFFSET(p, 0);
+   for (uint32_t dw = 0; dw < NVK_DRAW_CB0_SIZE / 4; dw++)
+      P_INLINE_DATA(p, 0);
+
+   /* These are shadowed in cb0 so they need to be zeroed as well for
+    * consistency.
+    */
+   P_IMMD(p, NV9097, SET_GLOBAL_BASE_INSTANCE_INDEX, 0);
+   P_MTHD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_CB0_FIRST_VERTEX));
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_FIRST_VERTEX, 0);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_DRAW_INDEX, 0);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_VIEW_INDEX, 0);
 
    return VK_SUCCESS;
 }
@@ -480,6 +559,23 @@ nvk_cmd_buffer_dirty_render_pass(struct nvk_cmd_buffer *cmd)
    BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES);
 }
 
+static void
+nvk_cmd_flush_gfx_root_desc(struct nvk_cmd_buffer *cmd,
+                            struct nvk_descriptor_state *desc,
+                            size_t offset, size_t size)
+{
+   const uint32_t start_dw = offset / 4;
+   const uint32_t end_dw = DIV_ROUND_UP(offset + size, 4);
+   const uint32_t len_dw = end_dw - start_dw;
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + len_dw);
+   P_1INC(p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET);
+   P_NV9097_LOAD_CONSTANT_BUFFER_OFFSET(p, start_dw * 4);
+
+   const uint32_t *root_dw = (uint32_t *)desc->root;
+   P_INLINE_ARRAY(p, &root_dw[start_dw], len_dw);
+}
+
 void
 nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
                               const VkCommandBufferBeginInfo *pBeginInfo)
@@ -498,6 +594,8 @@ nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
          .constant = CONSTANT_TRUE,
       });
    }
+
+   cmd->state.gfx.descriptors.flush_root = nvk_cmd_flush_gfx_root_desc;
 
    if (cmd->vk.level != VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
        (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) {
@@ -555,6 +653,9 @@ nvk_cmd_invalidate_graphics_state(struct nvk_cmd_buffer *cmd)
    struct nvk_rendering_state render_save = cmd->state.gfx.render;
    memset(&cmd->state.gfx, 0, sizeof(cmd->state.gfx));
    cmd->state.gfx.render = render_save;
+
+   /* We need to keep the flush_root callback */
+   cmd->state.gfx.descriptors.flush_root = nvk_cmd_flush_gfx_root_desc;
 
    cmd->state.gfx.shaders_dirty = ~0;
 }
@@ -689,9 +790,9 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       if (render->color_att[i].iview) {
          const struct nvk_image_view *iview = render->color_att[i].iview;
          const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
-         /* Rendering to multi-planar images is valid for a specific single plane
-          * only, so assert that what we have is a single-plane, obtain its index,
-          * and begin rendering
+         /* Rendering to multi-planar images is valid for a specific single
+          * plane only, so assert that what we have is a single-plane, obtain
+          * its index, and begin rendering
           */
          assert(iview->plane_count == 1);
          const uint8_t ip = iview->planes[0].image_plane;
@@ -1143,10 +1244,22 @@ nvk_flush_shaders(struct nvk_cmd_buffer *cmd)
       /* Only copy non-NULL shaders because mesh/task alias with vertex and
        * tessellation stages.
        */
-      if (cmd->state.gfx.shaders[stage] != NULL) {
+      struct nvk_shader *shader = cmd->state.gfx.shaders[stage];
+      if (shader != NULL) {
          assert(type < ARRAY_SIZE(type_shader));
          assert(type_shader[type] == NULL);
-         type_shader[type] = cmd->state.gfx.shaders[stage];
+         type_shader[type] = shader;
+
+         const struct nvk_cbuf_map *cbuf_map = &shader->cbuf_map;
+         struct nvk_cbuf_group *cbuf_group =
+            &cmd->state.gfx.cbuf_groups[nvk_cbuf_binding_for_stage(stage)];
+         for (uint32_t i = 0; i < cbuf_map->cbuf_count; i++) {
+            if (memcmp(&cbuf_group->cbufs[i], &cbuf_map->cbufs[i],
+                       sizeof(cbuf_group->cbufs[i])) != 0) {
+               cbuf_group->cbufs[i] = cbuf_map->cbufs[i];
+               cbuf_group->dirty |= BITFIELD_BIT(i);
+            }
+         }
       }
    }
 
@@ -1557,7 +1670,7 @@ vk_to_nv9097_provoking_vertex(VkProvokingVertexModeEXT vk_mode)
 static void
 nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
 {
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 40);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 44);
 
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
@@ -1570,7 +1683,10 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
       const bool z_clamp = dyn->rs.depth_clamp_enable;
       const bool z_clip = vk_rasterization_state_depth_clip_enable(&dyn->rs);
       P_IMMD(p, NVC397, SET_VIEWPORT_CLIP_CONTROL, {
-         /* TODO: Fix pre-Volta
+         /* We only set Z clip range if clamp is requested.  Otherwise, we
+          * leave it set to -/+INF and clamp using the guardband below.
+          *
+          * TODO: Fix pre-Volta
           *
           * This probably involves a few macros, one which stases viewport
           * min/maxDepth in scratch states and one which goes here and
@@ -1578,9 +1694,8 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
           */
          .min_z_zero_max_z_one = MIN_Z_ZERO_MAX_Z_ONE_FALSE,
          .z_clip_range = nvk_cmd_buffer_3d_cls(cmd) >= VOLTA_A
-                         ? ((z_clamp || z_clip)
-                            ? Z_CLIP_RANGE_MIN_Z_MAX_Z
-                            : Z_CLIP_RANGE_MINUS_INF_PLUS_INF)
+                         ? (z_clamp ? Z_CLIP_RANGE_MIN_Z_MAX_Z
+                                    : Z_CLIP_RANGE_MINUS_INF_PLUS_INF)
                          : Z_CLIP_RANGE_USE_FIELD_MIN_Z_ZERO_MAX_Z_ONE,
 
          .pixel_min_z = PIXEL_MIN_Z_CLAMP,
@@ -1593,10 +1708,19 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
 
          /* We clip depth with the geometry clipper to ensure that it gets
           * clipped before depth bias is applied.  If we leave it up to the
-          * raserizer clipper (pixel_min/max_z = CLIP), it will clip according
-          * to the post-bias Z value which is wrong.  In order to always get
-          * the geometry clipper, we need to set a tignt guardband
-          * (geometry_guardband_z = SCALE_1).
+          * raserizer clipper (pixel_min/max_z = CLIP), it will clip too late
+          * in the pipeline.  This can be seen in two different ways:
+          *
+          *  - When depth bias is enabled, the bias is applied post-clipping.
+          *    If we clip in the rasterizer, it will clip according to the
+          *    post-bias depth which is wrong.
+          *
+          *  - If the fragment shader overrides the depth by writing to
+          *    gl_FragDepth, it should be clipped according to the original
+          *    geometry, not accoring to gl_FragDepth.
+          *
+          * In order to always get the geometry clipper, we need to set a
+          * tight guardband (geometry_guardband_z = SCALE_1).
           */
          .geometry_guardband_z = z_clip ? GEOMETRY_GUARDBAND_Z_SCALE_1
                                         : GEOMETRY_GUARDBAND_Z_SCALE_256,
@@ -1699,6 +1823,33 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
 
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM))
       P_IMMD(p, NV9097, SET_RASTER_INPUT, dyn->rs.rasterization_stream);
+
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE)) {
+      if (nvk_cmd_buffer_3d_cls(cmd) < MAXWELL_B) {
+         assert(dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT);
+      } else if (dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) {
+         P_IMMD(p, NVB197, SET_CONSERVATIVE_RASTER, ENABLE_FALSE);
+      } else {
+         uint32_t extra_overestimate =
+            MIN2(3, dyn->rs.extra_primitive_overestimation_size * 4);
+
+         if (nvk_cmd_buffer_3d_cls(cmd) >= VOLTA_A) {
+            P_IMMD(p, NVC397, SET_CONSERVATIVE_RASTER_CONTROL, {
+               .extra_prim_bloat = extra_overestimate,
+               .copy_inner_to_outer =
+                  (dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT),
+               .triangle_snap_mode = TRIANGLE_SNAP_MODE_MODE_PRE_SNAP,
+               .line_and_point_snap_mode = LINE_AND_POINT_SNAP_MODE_MODE_PRE_SNAP,
+               .uncertainty_region_size = UNCERTAINTY_REGION_SIZE_SIZE_512,
+            });
+         } else {
+            P_1INC(p, NVB197, CALL_MME_MACRO(NVK_MME_SET_CONSERVATIVE_RASTER_STATE));
+            P_INLINE_DATA(p, extra_overestimate << 23);
+         }
+         P_IMMD(p, NVB197, SET_CONSERVATIVE_RASTER, ENABLE_TRUE);
+      }
+   }
 }
 
 static VkSampleLocationEXT
@@ -1723,7 +1874,6 @@ vk_to_nvk_sample_location(VkSampleLocationEXT loc)
 static void
 nvk_flush_ms_state(struct nvk_cmd_buffer *cmd)
 {
-   struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
    const struct nvk_rendering_state *render = &cmd->state.gfx.render;
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
@@ -1784,10 +1934,13 @@ nvk_flush_ms_state(struct nvk_cmd_buffer *cmd)
          sl = vk_standard_sample_locations_state(samples);
       }
 
-      for (uint32_t i = 0; i < sl->per_pixel; i++) {
-         desc->root.draw.sample_locations[i] =
-            vk_to_nvk_sample_location(sl->locations[i]);
-      }
+      struct nvk_sample_location push_sl[NVK_MAX_SAMPLES];
+      for (uint32_t i = 0; i < sl->per_pixel; i++)
+         push_sl[i] = vk_to_nvk_sample_location(sl->locations[i]);
+
+      nvk_descriptor_state_set_root_array(cmd, &cmd->state.gfx.descriptors,
+                                          draw.sample_locations,
+                                          0, NVK_MAX_SAMPLES, push_sl);
 
       if (nvk_cmd_buffer_3d_cls(cmd) >= MAXWELL_B) {
          struct nvk_sample_location loc[16];
@@ -2186,15 +2339,38 @@ nvk_mme_bind_cbuf_desc(struct mme_builder *b)
    /* First 4 bits are group, later bits are slot */
    struct mme_value group_slot = mme_load(b);
 
-   if (b->devinfo->cls_eng3d >= TURING_A) {
-      struct mme_value64 addr = mme_load_addr64(b);
-      mme_tu104_read_fifoed(b, addr, mme_imm(3));
-   }
+   struct mme_value addr_lo, addr_hi, size;
+   if (nvk_use_bindless_cbuf(b->devinfo)) {
+      if (b->devinfo->cls_eng3d >= TURING_A) {
+         struct mme_value64 addr = mme_load_addr64(b);
+         mme_tu104_read_fifoed(b, addr, mme_imm(2));
+      }
 
-   /* Load the descriptor */
-   struct mme_value addr_lo = mme_load(b);
-   struct mme_value addr_hi = mme_load(b);
-   struct mme_value size = mme_load(b);
+      /* Load the descriptor */
+      struct mme_value desc_lo = mme_load(b);
+      struct mme_value desc_hi = mme_load(b);
+
+      /* The bottom 45 bits are addr >> 4 */
+      addr_lo = mme_merge(b, mme_zero(), desc_lo, 4, 28, 0);
+      addr_hi = mme_merge(b, mme_zero(), desc_lo, 0, 4, 28);
+      mme_merge_to(b, addr_hi, addr_hi, desc_hi, 4, 13, 0);
+
+      /* The top 19 bits are size >> 4 */
+      size = mme_merge(b, mme_zero(), desc_hi, 4, 19, 13);
+
+      mme_free_reg(b, desc_hi);
+      mme_free_reg(b, desc_lo);
+   } else {
+      if (b->devinfo->cls_eng3d >= TURING_A) {
+         struct mme_value64 addr = mme_load_addr64(b);
+         mme_tu104_read_fifoed(b, addr, mme_imm(3));
+      }
+
+      /* Load the descriptor */
+      addr_lo = mme_load(b);
+      addr_hi = mme_load(b);
+      size = mme_load(b);
+   }
 
    struct mme_value cb = mme_alloc_reg(b);
    mme_if(b, ieq, size, mme_zero()) {
@@ -2203,10 +2379,6 @@ nvk_mme_bind_cbuf_desc(struct mme_builder *b)
    }
 
    mme_if(b, ine, size, mme_zero()) {
-      uint32_t alignment = nvk_min_cbuf_alignment(b->devinfo);
-      mme_add_to(b, size, size, mme_imm(alignment - 1));
-      mme_and_to(b, size, size, mme_imm(~(alignment - 1)));
-
       /* size = max(size, NVK_MAX_CBUF_SIZE) */
       assert(util_is_power_of_two_nonzero(NVK_MAX_CBUF_SIZE));
       struct mme_value is_large =
@@ -2220,7 +2392,7 @@ nvk_mme_bind_cbuf_desc(struct mme_builder *b)
       mme_emit(b, addr_hi);
       mme_emit(b, addr_lo);
 
-      /* Bottim bit is the valid bit, 8:4 are shader slot */
+      /* Bottom bit is the valid bit, 8:4 are shader slot */
       mme_merge_to(b, cb, mme_imm(1), group_slot, 4, 5, 4);
    }
 
@@ -2245,29 +2417,8 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
    const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
    struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
-   VkResult result;
 
    nvk_cmd_buffer_flush_push_descriptors(cmd, desc);
-
-   /* pre Pascal the constant buffer sizes need to be 0x100 aligned. As we
-    * simply allocated a buffer and upload data to it, make sure its size is
-    * 0x100 aligned.
-    */
-   STATIC_ASSERT((sizeof(desc->root) & 0xff) == 0);
-   assert(sizeof(desc->root) % min_cbuf_alignment == 0);
-
-   void *root_desc_map;
-   uint64_t root_desc_addr;
-   result = nvk_cmd_buffer_upload_alloc(cmd, sizeof(desc->root),
-                                        min_cbuf_alignment,
-                                        &root_desc_addr, &root_desc_map);
-   if (unlikely(result != VK_SUCCESS)) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return;
-   }
-
-   desc->root.root_desc_addr = root_desc_addr;
-   memcpy(root_desc_map, &desc->root, sizeof(desc->root));
 
    /* Find cbuf maps for the 5 cbuf groups */
    const struct nvk_shader *cbuf_shaders[5] = { NULL, };
@@ -2281,25 +2432,32 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
       cbuf_shaders[group] = shader;
    }
 
-   uint32_t root_cbuf_count = 0;
-   for (uint32_t group = 0; group < ARRAY_SIZE(cbuf_shaders); group++) {
-      if (cbuf_shaders[group] == NULL)
+   bool bound_any_cbuf = false;
+   for (uint32_t g = 0; g < ARRAY_SIZE(cbuf_shaders); g++) {
+      if (cbuf_shaders[g] == NULL)
          continue;
 
-      const struct nvk_shader *shader = cbuf_shaders[group];
+      const struct nvk_shader *shader = cbuf_shaders[g];
       const struct nvk_cbuf_map *cbuf_map = &shader->cbuf_map;
+      struct nvk_cbuf_group *group = &cmd->state.gfx.cbuf_groups[g];
 
-      for (uint32_t c = 0; c < cbuf_map->cbuf_count; c++) {
-         const struct nvk_cbuf *cbuf = &cbuf_map->cbufs[c];
+      /* We only bother to re-bind cbufs that are in use */
+      const uint32_t rebind =
+         group->dirty & BITFIELD_MASK(cbuf_map->cbuf_count);
+      if (!rebind)
+         continue;
+
+      u_foreach_bit(c, rebind) {
+         const struct nvk_cbuf *cbuf = &group->cbufs[c];
 
          /* We bind these at the very end */
-         if (cbuf->type == NVK_CBUF_TYPE_ROOT_DESC) {
-            root_cbuf_count++;
+         if (cbuf->type == NVK_CBUF_TYPE_ROOT_DESC)
             continue;
-         }
+
+         bound_any_cbuf = true;
 
          struct nvk_buffer_address ba;
-         if (nvk_cmd_buffer_get_cbuf_descriptor(cmd, desc, shader, cbuf, &ba)) {
+         if (nvk_cmd_buffer_get_cbuf_addr(cmd, desc, shader, cbuf, &ba)) {
             assert(ba.base_addr % min_cbuf_alignment == 0);
             ba.size = align(ba.size, min_cbuf_alignment);
             ba.size = MIN2(ba.size, NVK_MAX_CBUF_SIZE);
@@ -2313,7 +2471,7 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
                P_NV9097_SET_CONSTANT_BUFFER_SELECTOR_C(p, ba.base_addr);
             }
 
-            P_IMMD(p, NV9097, BIND_GROUP_CONSTANT_BUFFER(group), {
+            P_IMMD(p, NV9097, BIND_GROUP_CONSTANT_BUFFER(g), {
                .valid = ba.size > 0,
                .shader_slot = c,
             });
@@ -2325,20 +2483,22 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
                struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
 
                P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_BIND_CBUF_DESC));
-               P_INLINE_DATA(p, group | (c << 4));
+               P_INLINE_DATA(p, g | (c << 4));
                P_INLINE_DATA(p, desc_addr >> 32);
                P_INLINE_DATA(p, desc_addr);
             } else {
                struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
 
                P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_BIND_CBUF_DESC));
-               P_INLINE_DATA(p, group | (c << 4));
+               P_INLINE_DATA(p, g | (c << 4));
 
                nv_push_update_count(p, 3);
                nvk_cmd_buffer_push_indirect(cmd, desc_addr, 12);
             }
          }
       }
+
+      group->dirty &= ~rebind;
    }
 
    /* We bind all root descriptors last so that CONSTANT_BUFFER_SELECTOR is
@@ -2346,27 +2506,10 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
     * parameters and similar MME root table updates always hit the root
     * descriptor table and not some random UBO.
     */
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4 + 2 * root_cbuf_count);
-   P_MTHD(p, NV9097, SET_CONSTANT_BUFFER_SELECTOR_A);
-   P_NV9097_SET_CONSTANT_BUFFER_SELECTOR_A(p, sizeof(desc->root));
-   P_NV9097_SET_CONSTANT_BUFFER_SELECTOR_B(p, root_desc_addr >> 32);
-   P_NV9097_SET_CONSTANT_BUFFER_SELECTOR_C(p, root_desc_addr);
-
-   for (uint32_t group = 0; group < ARRAY_SIZE(cbuf_shaders); group++) {
-      if (cbuf_shaders[group] == NULL)
-         continue;
-
-      const struct nvk_cbuf_map *cbuf_map = &cbuf_shaders[group]->cbuf_map;
-
-      for (uint32_t c = 0; c < cbuf_map->cbuf_count; c++) {
-         const struct nvk_cbuf *cbuf = &cbuf_map->cbufs[c];
-         if (cbuf->type == NVK_CBUF_TYPE_ROOT_DESC) {
-            P_IMMD(p, NV9097, BIND_GROUP_CONSTANT_BUFFER(group), {
-               .valid = VALID_TRUE,
-               .shader_slot = c,
-            });
-         }
-      }
+   if (bound_any_cbuf) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
+      P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SELECT_CB0));
+      P_INLINE_DATA(p, 0);
    }
 }
 
@@ -2526,43 +2669,85 @@ vk_to_nv9097_primitive_topology(VkPrimitiveTopology prim)
    }
 }
 
+static void
+nvk_mme_set_cb0_mthd(struct mme_builder *b,
+                     uint16_t cb0_offset,
+                     uint16_t mthd,
+                     struct mme_value val)
+{
+   if (b->devinfo->cls_eng3d >= TURING_A) {
+      struct mme_value old = mme_state(b, mthd);
+      mme_if(b, ine, old, val) {
+         mme_mthd(b, mthd);
+         mme_emit(b, val);
+
+         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
+         mme_emit(b, mme_imm(cb0_offset));
+         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
+         mme_emit(b, val);
+      }
+      mme_free_reg(b, old);
+   } else {
+      /* Fermi is really tight on registers. Don't bother with the if and set
+       * both unconditionally for now.
+       */
+      mme_mthd(b, mthd);
+      mme_emit(b, val);
+
+      mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
+      mme_emit(b, mme_imm(cb0_offset));
+      mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
+      mme_emit(b, val);
+   }
+}
+
+static void
+nvk_mme_set_cb0_scratch(struct mme_builder *b,
+                        uint16_t cb0_offset,
+                        enum nvk_mme_scratch scratch,
+                        struct mme_value val)
+{
+   const uint16_t mthd = NV9097_SET_MME_SHADOW_SCRATCH(scratch);
+   nvk_mme_set_cb0_mthd(b, cb0_offset, mthd, val);
+}
+
 struct mme_draw_params {
    struct mme_value base_vertex;
    struct mme_value first_vertex;
    struct mme_value first_instance;
-   struct mme_value draw_idx;
+   struct mme_value draw_index;
 };
 
 static void
 nvk_mme_build_set_draw_params(struct mme_builder *b,
                               const struct mme_draw_params *p)
 {
-   const uint32_t draw_params_offset = nvk_root_descriptor_offset(draw);
-   mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
-   mme_emit(b, mme_imm(draw_params_offset));
-   mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
-   mme_emit(b, p->first_vertex);
-   mme_emit(b, p->first_instance);
-   mme_emit(b, p->draw_idx);
-   mme_emit(b, mme_zero() /* view_index */);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.base_vertex),
+                           NVK_MME_SCRATCH_CB0_FIRST_VERTEX,
+                           p->first_vertex);
+   nvk_mme_set_cb0_mthd(b, nvk_root_descriptor_offset(draw.base_instance),
+                        NV9097_SET_GLOBAL_BASE_INSTANCE_INDEX,
+                        p->first_instance);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.draw_index),
+                           NVK_MME_SCRATCH_CB0_DRAW_INDEX,
+                           p->draw_index);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.view_index),
+                           NVK_MME_SCRATCH_CB0_VIEW_INDEX,
+                           mme_zero());
 
    mme_mthd(b, NV9097_SET_GLOBAL_BASE_VERTEX_INDEX);
    mme_emit(b, p->base_vertex);
    mme_mthd(b, NV9097_SET_VERTEX_ID_BASE);
    mme_emit(b, p->base_vertex);
-
-   mme_mthd(b, NV9097_SET_GLOBAL_BASE_INSTANCE_INDEX);
-   mme_emit(b, p->first_instance);
 }
 
 static void
 nvk_mme_emit_view_index(struct mme_builder *b, struct mme_value view_index)
 {
    /* Set the push constant */
-   mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
-   mme_emit(b, mme_imm(nvk_root_descriptor_offset(draw.view_index)));
-   mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
-   mme_emit(b, view_index);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.view_index),
+                           NVK_MME_SCRATCH_CB0_VIEW_INDEX,
+                           view_index);
 
    /* Set the layer to the view index */
    STATIC_ASSERT(DRF_LO(NV9097_SET_RT_LAYER_V) == 0);
@@ -2598,7 +2783,7 @@ nvk_mme_build_draw_loop(struct mme_builder *b,
 
 static void
 nvk_mme_build_draw(struct mme_builder *b,
-                   struct mme_value draw_idx)
+                   struct mme_value draw_index)
 {
    /* These are in VkDrawIndirectCommand order */
    struct mme_value vertex_count = mme_load(b);
@@ -2609,14 +2794,14 @@ nvk_mme_build_draw(struct mme_builder *b,
    struct mme_draw_params params = {
       .first_vertex = first_vertex,
       .first_instance = first_instance,
-      .draw_idx = draw_idx,
+      .draw_index = draw_index,
    };
    nvk_mme_build_set_draw_params(b, &params);
 
    mme_free_reg(b, first_instance);
 
    if (b->devinfo->cls_eng3d < TURING_A)
-      nvk_mme_spill(b, DRAW_IDX, draw_idx);
+      nvk_mme_spill(b, DRAW_IDX, draw_index);
 
    struct mme_value view_mask = nvk_mme_load_scratch(b, VIEW_MASK);
    mme_if(b, ieq, view_mask, mme_zero()) {
@@ -2652,16 +2837,16 @@ nvk_mme_build_draw(struct mme_builder *b,
    mme_free_reg(b, vertex_count);
 
    if (b->devinfo->cls_eng3d < TURING_A)
-      nvk_mme_unspill(b, DRAW_IDX, draw_idx);
+      nvk_mme_unspill(b, DRAW_IDX, draw_index);
 }
 
 void
 nvk_mme_draw(struct mme_builder *b)
 {
    nvk_mme_load_to_scratch(b, DRAW_BEGIN);
-   struct mme_value draw_idx = mme_load(b);
+   struct mme_value draw_index = mme_load(b);
 
-   nvk_mme_build_draw(b, draw_idx);
+   nvk_mme_build_draw(b, draw_index);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2688,7 +2873,7 @@ nvk_CmdDraw(VkCommandBuffer commandBuffer,
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW));
    P_INLINE_DATA(p, begin);
-   P_INLINE_DATA(p, 0 /* draw_idx */);
+   P_INLINE_DATA(p, 0 /* draw_index */);
    P_INLINE_DATA(p, vertexCount);
    P_INLINE_DATA(p, instanceCount);
    P_INLINE_DATA(p, firstVertex);
@@ -2717,11 +2902,11 @@ nvk_CmdDrawMultiEXT(VkCommandBuffer commandBuffer,
       .split_mode = SPLIT_MODE_NORMAL_BEGIN_NORMAL_END,
    });
 
-   for (uint32_t draw_idx = 0; draw_idx < drawCount; draw_idx++) {
+   for (uint32_t draw_index = 0; draw_index < drawCount; draw_index++) {
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW));
       P_INLINE_DATA(p, begin);
-      P_INLINE_DATA(p, draw_idx);
+      P_INLINE_DATA(p, draw_index);
       P_INLINE_DATA(p, pVertexInfo->vertexCount);
       P_INLINE_DATA(p, instanceCount);
       P_INLINE_DATA(p, pVertexInfo->firstVertex);
@@ -2758,7 +2943,7 @@ nvk_mme_build_draw_indexed_loop(struct mme_builder *b,
 
 static void
 nvk_mme_build_draw_indexed(struct mme_builder *b,
-                           struct mme_value draw_idx)
+                           struct mme_value draw_index)
 {
    /* These are in VkDrawIndexedIndirectCommand order */
    struct mme_value index_count = mme_load(b);
@@ -2771,7 +2956,7 @@ nvk_mme_build_draw_indexed(struct mme_builder *b,
       .base_vertex = vertex_offset,
       .first_vertex = vertex_offset,
       .first_instance = first_instance,
-      .draw_idx = draw_idx,
+      .draw_index = draw_index,
    };
    nvk_mme_build_set_draw_params(b, &params);
 
@@ -2779,7 +2964,7 @@ nvk_mme_build_draw_indexed(struct mme_builder *b,
    mme_free_reg(b, first_instance);
 
    if (b->devinfo->cls_eng3d < TURING_A)
-      nvk_mme_spill(b, DRAW_IDX, draw_idx);
+      nvk_mme_spill(b, DRAW_IDX, draw_index);
 
    struct mme_value view_mask = nvk_mme_load_scratch(b, VIEW_MASK);
    mme_if(b, ieq, view_mask, mme_zero()) {
@@ -2815,16 +3000,16 @@ nvk_mme_build_draw_indexed(struct mme_builder *b,
    mme_free_reg(b, index_count);
 
    if (b->devinfo->cls_eng3d < TURING_A)
-      nvk_mme_unspill(b, DRAW_IDX, draw_idx);
+      nvk_mme_unspill(b, DRAW_IDX, draw_index);
 }
 
 void
 nvk_mme_draw_indexed(struct mme_builder *b)
 {
    nvk_mme_load_to_scratch(b, DRAW_BEGIN);
-   struct mme_value draw_idx = mme_load(b);
+   struct mme_value draw_index = mme_load(b);
 
-   nvk_mme_build_draw_indexed(b, draw_idx);
+   nvk_mme_build_draw_indexed(b, draw_index);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2852,7 +3037,7 @@ nvk_CmdDrawIndexed(VkCommandBuffer commandBuffer,
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED));
    P_INLINE_DATA(p, begin);
-   P_INLINE_DATA(p, 0 /* draw_idx */);
+   P_INLINE_DATA(p, 0 /* draw_index */);
    P_INLINE_DATA(p, indexCount);
    P_INLINE_DATA(p, instanceCount);
    P_INLINE_DATA(p, firstIndex);
@@ -2883,14 +3068,14 @@ nvk_CmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer,
       .split_mode = SPLIT_MODE_NORMAL_BEGIN_NORMAL_END,
    });
 
-   for (uint32_t draw_idx = 0; draw_idx < drawCount; draw_idx++) {
+   for (uint32_t draw_index = 0; draw_index < drawCount; draw_index++) {
       const uint32_t vertex_offset =
          pVertexOffset != NULL ? *pVertexOffset : pIndexInfo->vertexOffset;
 
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED));
       P_INLINE_DATA(p, begin);
-      P_INLINE_DATA(p, draw_idx);
+      P_INLINE_DATA(p, draw_index);
       P_INLINE_DATA(p, pIndexInfo->indexCount);
       P_INLINE_DATA(p, instanceCount);
       P_INLINE_DATA(p, pIndexInfo->firstIndex);

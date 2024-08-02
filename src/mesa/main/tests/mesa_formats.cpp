@@ -58,11 +58,8 @@ TEST_F(MesaFormatsTest, FormatTypeAndComps)
        * not handled.
        */
       if (!_mesa_is_format_compressed(f)) {
-         GLenum datatype = 0;
-         GLuint comps = 0;
-
          /* If the datatype is zero, the format was not handled */
-         _mesa_uncompressed_format_to_type_and_comps(f, &datatype, &comps);
+          GLenum datatype = _mesa_uncompressed_format_to_type(f);
          EXPECT_NE(datatype, (GLenum)0);
       }
 

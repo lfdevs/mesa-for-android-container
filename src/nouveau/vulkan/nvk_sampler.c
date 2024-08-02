@@ -11,8 +11,6 @@
 #include "vk_format.h"
 #include "vk_sampler.h"
 
-#include "nouveau_context.h"
-
 #include "util/bitpack_helpers.h"
 #include "util/format/format_utils.h"
 #include "util/format_srgb.h"

@@ -37,6 +37,20 @@
  * encoding compared to a4xx/a5xx.
  */
 
+static void
+lower_ssbo_offset(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+                  nir_src *offset_src,
+                  struct ir3_instruction **offset, unsigned *imm_offset)
+{
+   if (ctx->compiler->has_ssbo_imm_offsets) {
+      ir3_lower_imm_offset(ctx, intr, offset_src, 7, offset, imm_offset);
+   } else {
+      assert(nir_intrinsic_base(intr) == 0);
+      *offset = ir3_get_src(ctx, offset_src)[0];
+      *imm_offset = 0;
+   }
+}
+
 /* src[] = { buffer_index, offset }. No const_index */
 static void
 emit_intrinsic_load_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
@@ -45,16 +59,42 @@ emit_intrinsic_load_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    struct ir3_block *b = ctx->block;
    struct ir3_instruction *offset;
    struct ir3_instruction *ldib;
+   unsigned imm_offset_val;
 
-   offset = ir3_get_src(ctx, &intr->src[2])[0];
+   lower_ssbo_offset(ctx, intr, &intr->src[2], &offset, &imm_offset_val);
+   struct ir3_instruction *imm_offset = create_immed(b, imm_offset_val);
 
-   ldib = ir3_LDIB(b, ir3_ssbo_to_ibo(ctx, intr->src[0]), 0, offset, 0);
+   ldib = ir3_LDIB(b, ir3_ssbo_to_ibo(ctx, intr->src[0]), 0, offset, 0,
+                   imm_offset, 0);
    ldib->dsts[0]->wrmask = MASK(intr->num_components);
    ldib->cat6.iim_val = intr->num_components;
    ldib->cat6.d = 1;
-   ldib->cat6.type = intr->def.bit_size == 16 ? TYPE_U16 : TYPE_U32;
+   switch (intr->def.bit_size) {
+   case 8:
+      /* This encodes the 8-bit SSBO load and matches blob's encoding of
+       * imageBuffer access using VK_FORMAT_R8 and the dedicated 8-bit
+       * descriptor. No vectorization is possible.
+       */
+      assert(intr->num_components == 1);
+
+      ldib->cat6.type = TYPE_U16;
+      ldib->cat6.typed = true;
+      break;
+   case 16:
+      ldib->cat6.type = TYPE_U16;
+      break;
+   default:
+      ldib->cat6.type = TYPE_U32;
+      break;
+   }
    ldib->barrier_class = IR3_BARRIER_BUFFER_R;
    ldib->barrier_conflict = IR3_BARRIER_BUFFER_W;
+
+   if (imm_offset_val) {
+      assert(ctx->compiler->has_ssbo_imm_offsets);
+      ldib->flags |= IR3_INSTR_IMM_OFFSET;
+   }
+
    ir3_handle_bindless_cat6(ldib, intr->src[0]);
    ir3_handle_nonuniform(ldib, intr);
 
@@ -69,20 +109,58 @@ emit_intrinsic_store_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    struct ir3_instruction *stib, *val, *offset;
    unsigned wrmask = nir_intrinsic_write_mask(intr);
    unsigned ncomp = ffs(~wrmask) - 1;
+   unsigned imm_offset_val;
 
    assert(wrmask == BITFIELD_MASK(intr->num_components));
 
-   /* src0 is offset, src1 is value:
+   /* src0 is offset, src1 is immediate offset, src2 is value:
     */
    val = ir3_create_collect(b, ir3_get_src(ctx, &intr->src[0]), ncomp);
-   offset = ir3_get_src(ctx, &intr->src[3])[0];
 
-   stib = ir3_STIB(b, ir3_ssbo_to_ibo(ctx, intr->src[1]), 0, offset, 0, val, 0);
+   /* Any 8-bit store will be done on a single-component value that additionally
+    * has to be masked to clear up the higher bits or it will malfunction.
+    */
+   if (intr->src[0].ssa->bit_size == 8) {
+      assert(ncomp == 1);
+
+      struct ir3_instruction *mask = create_immed_typed(b, 0xff, TYPE_U8);
+      val = ir3_AND_B(b, val, 0, mask, 0);
+      val->dsts[0]->flags |= IR3_REG_HALF;
+   }
+
+   lower_ssbo_offset(ctx, intr, &intr->src[3], &offset, &imm_offset_val);
+   struct ir3_instruction *imm_offset = create_immed(b, imm_offset_val);
+
+   stib = ir3_STIB(b, ir3_ssbo_to_ibo(ctx, intr->src[1]), 0, offset, 0,
+                   imm_offset, 0, val, 0);
    stib->cat6.iim_val = ncomp;
    stib->cat6.d = 1;
-   stib->cat6.type = intr->src[0].ssa->bit_size == 16 ? TYPE_U16 : TYPE_U32;
+   switch (intr->src[0].ssa->bit_size) {
+   case 8:
+      /* As with ldib, this encodes the 8-bit SSBO store and matches blob's
+       * encoding of imageBuffer access using VK_FORMAT_R8 and the extra 8-bit
+       * descriptor. No vectorization is possible and we have to override the
+       * relevant field anyway.
+       */
+      stib->cat6.type = TYPE_U16;
+      stib->cat6.iim_val = 4;
+      stib->cat6.typed = true;
+      break;
+   case 16:
+      stib->cat6.type = TYPE_U16;
+      break;
+   default:
+      stib->cat6.type = TYPE_U32;
+      break;
+   }
    stib->barrier_class = IR3_BARRIER_BUFFER_W;
    stib->barrier_conflict = IR3_BARRIER_BUFFER_R | IR3_BARRIER_BUFFER_W;
+
+   if (imm_offset_val) {
+      assert(ctx->compiler->has_ssbo_imm_offsets);
+      stib->flags |= IR3_INSTR_IMM_OFFSET;
+   }
+
    ir3_handle_bindless_cat6(stib, intr->src[1]);
    ir3_handle_nonuniform(stib, intr);
 
@@ -206,7 +284,8 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    unsigned ncoords = ir3_get_image_coords(intr, NULL);
 
    ldib = ir3_LDIB(b, ir3_image_to_ibo(ctx, intr->src[0]), 0,
-                   ir3_create_collect(b, coords, ncoords), 0);
+                   ir3_create_collect(b, coords, ncoords), 0,
+                   create_immed(b, 0), 0);
    ldib->dsts[0]->wrmask = MASK(intr->num_components);
    ldib->cat6.iim_val = intr->num_components;
    ldib->cat6.d = ncoords;
@@ -234,9 +313,10 @@ emit_intrinsic_store_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 
    /* src0 is offset, src1 is value:
     */
-   stib = ir3_STIB(b, ir3_image_to_ibo(ctx, intr->src[0]), 0,
-                   ir3_create_collect(b, coords, ncoords), 0,
-                   ir3_create_collect(b, value, ncomp), 0);
+   stib =
+      ir3_STIB(b, ir3_image_to_ibo(ctx, intr->src[0]), 0,
+               ir3_create_collect(b, coords, ncoords), 0, create_immed(b, 0), 0,
+               ir3_create_collect(b, value, ncomp), 0);
    stib->cat6.iim_val = ncomp;
    stib->cat6.d = ncoords;
    stib->cat6.type = ir3_get_type_for_image_intrinsic(intr);

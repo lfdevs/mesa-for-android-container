@@ -37,7 +37,7 @@ fn try_combine_outs(emit: &mut Instr, cut: &Instr) -> bool {
     true
 }
 
-impl Shader {
+impl Shader<'_> {
     pub fn opt_out(&mut self) {
         if !matches!(self.info.stage, ShaderStageInfo::Geometry(_)) {
             return;

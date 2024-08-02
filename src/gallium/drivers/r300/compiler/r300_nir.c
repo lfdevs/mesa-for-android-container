@@ -46,11 +46,68 @@ r300_is_only_used_as_float(const nir_alu_instr *instr)
 static unsigned char
 r300_should_vectorize_instr(const nir_instr *instr, const void *data)
 {
+   bool *too_many_ubos = (bool *) data;
+
    if (instr->type != nir_instr_type_alu)
       return 0;
 
+   /* Vectorization can make the constant layout worse and increase
+    * the constant register usage. The worst scenario is vectorization
+    * of lowered indirect register access, where we access i-th element
+    * and later we access i-1 or i+1 (most notably glamor and gsk shaders).
+    * In this case we already added constants 1..n where n is the array
+    * size, however we can reuse them unless the lowered ladder gets
+    * vectorized later.
+    *
+    * Thus prevent vectorization of the specific patterns from lowered
+    * indirect access.
+    *
+    * This is quite a heavy hammer, we could in theory estimate how many
+    * slots will the current ubos and constants need and only disable
+    * vectorization when we are close to the limit. However, this would
+    * likely need a global shader analysis each time r300_should_vectorize_inst
+    * is called, which we want to avoid.
+    *
+    * So for now just don't vectorize anything that loads constants.
+    */
+   if (*too_many_ubos) {
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+      unsigned num_srcs = nir_op_infos[alu->op].num_inputs;
+      for (unsigned i = 0; i < num_srcs; i++) {
+         if (nir_src_is_const(alu->src[i].src)) {
+            return 0;
+         }
+      }
+   }
+
    return 4;
 }
+
+/* R300 and R400 have just 32 vec4 constant register slots in fs.
+ * Therefore, while its possible we will be able to compact some of
+ * the constants later, we need to be extra careful with adding
+ * new constants anyway.
+ */
+static bool have_too_many_ubos(nir_shader *s, bool is_r500)
+{
+   if (s->info.stage != MESA_SHADER_FRAGMENT)
+      return false;
+
+   if (is_r500)
+      return false;
+
+   nir_foreach_variable_with_modes(var, s, nir_var_mem_ubo) {
+      int ubo = var->data.driver_location;
+      assert (ubo == 0);
+
+      unsigned size = glsl_get_explicit_size(var->interface_type, false);
+      if (DIV_ROUND_UP(size, 16) > 32)
+         return true;
+   }
+
+   return false;
+}
+
 
 static bool
 r300_should_vectorize_io(unsigned align, unsigned bit_size,
@@ -140,8 +197,7 @@ r300_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
       NIR_PASS(progress, s, nir_opt_if, nir_opt_if_optimize_phi_true_false);
       if (is_r500)
          nir_shader_intrinsics_pass(s, set_speculate,
-                                    nir_metadata_block_index |
-                                    nir_metadata_dominance, NULL);
+                                    nir_metadata_control_flow, NULL);
       NIR_PASS(progress, s, nir_opt_peephole_select, is_r500 ? 8 : ~0, true, true);
       if (s->info.stage == MESA_SHADER_FRAGMENT) {
          NIR_PASS(progress, s, r300_nir_lower_bool_to_float_fs);
@@ -157,7 +213,10 @@ r300_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
       NIR_PASS(progress, s, nir_opt_shrink_stores, true);
       NIR_PASS(progress, s, nir_opt_shrink_vectors, false);
       NIR_PASS(progress, s, nir_opt_loop);
-      NIR_PASS(progress, s, nir_opt_vectorize, r300_should_vectorize_instr, NULL);
+
+      bool too_many_ubos = have_too_many_ubos(s, is_r500);
+      NIR_PASS(progress, s, nir_opt_vectorize, r300_should_vectorize_instr,
+               &too_many_ubos);
       NIR_PASS(progress, s, nir_opt_undef);
       if(!progress)
          NIR_PASS(progress, s, nir_lower_undef_to_zero);

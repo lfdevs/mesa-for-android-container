@@ -53,6 +53,12 @@
 extern "C" {
 #endif
 
+/* Always reserve the lower 32MB */
+#define PAN_VA_USER_START 0x2000000ull
+
+/* Max address space size allowed */
+#define PAN_VA_USER_END (1ull << 48ull)
+
 /* Driver limits */
 #define PAN_MAX_CONST_BUFFERS 16
 
@@ -61,6 +67,8 @@ extern "C" {
  * "Cathedral" requires a texture of width 8192 to start.
  */
 #define PAN_MAX_MIP_LEVELS 14
+
+#define PAN_MAX_TEXEL_BUFFER_ELEMENTS 65536
 
 /* How many power-of-two levels in the BO cache do we want? 2^12
  * minimum chosen as it is the page size that all allocations are
@@ -109,6 +117,7 @@ struct panfrost_device {
    struct panfrost_tiler_features tiler_features;
    const struct panfrost_model *model;
    bool has_afbc;
+   bool has_afrc;
 
    /* Table of formats, indexed by a PIPE format */
    const struct panfrost_format *formats;

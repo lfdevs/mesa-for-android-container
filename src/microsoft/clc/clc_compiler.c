@@ -35,6 +35,7 @@
 #include "util/u_debug.h"
 #include <util/u_math.h>
 #include "spirv/nir_spirv.h"
+#include "spirv/spirv_info.h"
 #include "nir_builder.h"
 #include "nir_builtin_builder.h"
 
@@ -236,8 +237,7 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
                }
 
                /* No actual intrinsic needed here, just reference the loaded variable */
-               nir_def_rewrite_uses(&intrinsic->def, *cached_deref);
-               nir_instr_remove(&intrinsic->instr);
+               nir_def_replace(&intrinsic->def, *cached_deref);
                break;
             }
 
@@ -314,11 +314,9 @@ clc_lower_64bit_semantics(nir_shader *nir)
                nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
                switch (intrinsic->intrinsic) {
                case nir_intrinsic_load_global_invocation_id:
-               case nir_intrinsic_load_global_invocation_id_zero_base:
                case nir_intrinsic_load_base_global_invocation_id:
                case nir_intrinsic_load_local_invocation_id:
                case nir_intrinsic_load_workgroup_id:
-               case nir_intrinsic_load_workgroup_id_zero_base:
                case nir_intrinsic_load_base_workgroup_id:
                case nir_intrinsic_load_num_workgroups:
                   break;
@@ -619,6 +617,15 @@ clc_libclc_new(const struct clc_logger *logger, const struct clc_libclc_options 
       return NULL;
    }
 
+   const struct spirv_capabilities libclc_spirv_caps = {
+      .Addresses = true,
+      .Float64 = true,
+      .Int8 = true,
+      .Int16 = true,
+      .Int64 = true,
+      .Kernel = true,
+      .Linkage = true,
+   };
    const struct spirv_to_nir_options libclc_spirv_options = {
       .environment = NIR_SPIRV_OPENCL,
       .create_library = true,
@@ -627,15 +634,7 @@ clc_libclc_new(const struct clc_logger *logger, const struct clc_libclc_options 
       .shared_addr_format = nir_address_format_32bit_offset_as_64bit,
       .temp_addr_format = nir_address_format_32bit_offset_as_64bit,
       .float_controls_execution_mode = FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32,
-      .caps = {
-         .address = true,
-         .float64 = true,
-         .int8 = true,
-         .int16 = true,
-         .int64 = true,
-         .kernel = true,
-         .linkage = true,
-      },
+      .capabilities = &libclc_spirv_caps,
    };
 
    glsl_type_singleton_init_or_ref();
@@ -742,6 +741,22 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
       return false;
    }
 
+   const struct spirv_capabilities libclc_spirv_caps = {
+      .Addresses = true,
+      .Float64 = true,
+      .Int8 = true,
+      .Int16 = true,
+      .Int64 = true,
+      .Kernel = true,
+      .ImageBasic = true,
+      .ImageReadWrite = true,
+      .LiteralSampler = true,
+
+      // These aren't fully supported, but silence warnings about them from
+      // code that doesn't really use them.
+      .Linkage = true,
+      .GenericPointer = true,
+   };
    const struct spirv_to_nir_options spirv_options = {
       .environment = NIR_SPIRV_OPENCL,
       .clc_shader = clc_libclc_get_clc_shader(lib),
@@ -750,23 +765,8 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
       .shared_addr_format = nir_address_format_32bit_offset_as_64bit,
       .temp_addr_format = nir_address_format_32bit_offset_as_64bit,
       .float_controls_execution_mode = FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32,
-      .caps = {
-         .address = true,
-         .float64 = true,
-         .int8 = true,
-         .int16 = true,
-         .int64 = true,
-         .kernel = true,
-         .kernel_image = true,
-         .kernel_image_read_write = true,
-         .literal_sampler = true,
-         .printf = true,
-
-         // These aren't fully supported, but silence warnings about them from
-         // code that doesn't really use them.
-         .linkage = true,
-         .generic_pointers = true,
-      },
+      .printf = true,
+      .capabilities = &libclc_spirv_caps,
    };
    unsigned supported_int_sizes = (16 | 32 | 64);
    unsigned supported_float_sizes = (16 | 32);

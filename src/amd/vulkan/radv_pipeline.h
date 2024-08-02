@@ -51,10 +51,6 @@ struct radv_pipeline {
    struct radv_shader *shaders[MESA_VULKAN_SHADER_STAGES];
    struct radv_shader *gs_copy_shader;
 
-   struct radeon_cmdbuf cs;
-   uint32_t ctx_cs_hash;
-   struct radeon_cmdbuf ctx_cs;
-
    uint32_t user_data_0[MESA_VULKAN_SHADER_STAGES];
 
    /* Unique pipeline hash identifier. */
@@ -94,9 +90,6 @@ void radv_pipeline_stage_init(const VkPipelineShaderStageCreateInfo *sinfo, cons
 
 void radv_shader_layout_init(const struct radv_pipeline_layout *pipeline_layout, gl_shader_stage stage,
                              struct radv_shader_layout *layout);
-
-bool radv_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigned bit_size, unsigned num_components,
-                                 nir_intrinsic_instr *low, nir_intrinsic_instr *high, void *data);
 
 void radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_state_key *gfx_state,
                           struct radv_shader_stage *stage);

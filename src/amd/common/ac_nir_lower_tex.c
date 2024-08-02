@@ -440,12 +440,10 @@ move_coords_from_divergent_cf(struct move_tex_coords_state *state, nir_function_
             } else if (instr->type == nir_instr_type_intrinsic) {
                nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
                switch (intrin->intrinsic) {
-               case nir_intrinsic_discard:
                case nir_intrinsic_terminate:
                   if (divergent_cf)
                      *divergent_discard = true;
                   break;
-               case nir_intrinsic_discard_if:
                case nir_intrinsic_terminate_if:
                   if (divergent_cf || nir_src_is_divergent(intrin->src[0]))
                      *divergent_discard = true;
@@ -501,13 +499,13 @@ ac_nir_lower_tex(nir_shader *nir, const ac_nir_lower_tex_options *options)
 
       bool divergent_discard = false;
       if (move_coords_from_divergent_cf(&state, impl, &impl->body, &divergent_discard, false))
-         nir_metadata_preserve(impl, nir_metadata_block_index | nir_metadata_dominance);
+         nir_metadata_preserve(impl, nir_metadata_control_flow);
       else
          nir_metadata_preserve(impl, nir_metadata_all);
    }
 
    progress |= nir_shader_instructions_pass(
-      nir, lower_tex, nir_metadata_block_index | nir_metadata_dominance, (void *)options);
+      nir, lower_tex, nir_metadata_control_flow, (void *)options);
 
    return progress;
 }

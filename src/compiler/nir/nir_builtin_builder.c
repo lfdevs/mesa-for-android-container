@@ -231,7 +231,7 @@ nir_atan(nir_builder *b, nir_def *y_over_x)
     *    !isnan(y_over_x) ? ... : y_over_x;
     */
    if (b->exact ||
-       nir_is_float_control_signed_zero_inf_nan_preserve(b->shader->info.float_controls_execution_mode, bit_size)) {
+       nir_is_float_control_signed_zero_inf_nan_preserve(b->fp_fast_math, bit_size)) {
       const bool exact = b->exact;
 
       b->exact = true;
@@ -330,15 +330,16 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
 }
 
 nir_def *
-nir_get_texture_size(nir_builder *b, nir_tex_instr *tex)
+nir_build_texture_query(nir_builder *b, nir_tex_instr *tex, nir_texop texop,
+                        unsigned components, nir_alu_type dest_type,
+                        bool include_coord, bool include_lod)
 {
-   b->cursor = nir_before_instr(&tex->instr);
+   nir_tex_instr *query;
 
-   nir_tex_instr *txs;
-
-   unsigned num_srcs = 1; /* One for the LOD */
+   unsigned num_srcs = include_lod ? 1 : 0;
    for (unsigned i = 0; i < tex->num_srcs; i++) {
-      if (tex->src[i].src_type == nir_tex_src_texture_deref ||
+      if ((tex->src[i].src_type == nir_tex_src_coord && include_coord) ||
+          tex->src[i].src_type == nir_tex_src_texture_deref ||
           tex->src[i].src_type == nir_tex_src_sampler_deref ||
           tex->src[i].src_type == nir_tex_src_texture_offset ||
           tex->src[i].src_type == nir_tex_src_sampler_offset ||
@@ -347,36 +348,55 @@ nir_get_texture_size(nir_builder *b, nir_tex_instr *tex)
          num_srcs++;
    }
 
-   txs = nir_tex_instr_create(b->shader, num_srcs);
-   txs->op = nir_texop_txs;
-   txs->sampler_dim = tex->sampler_dim;
-   txs->is_array = tex->is_array;
-   txs->is_shadow = tex->is_shadow;
-   txs->is_new_style_shadow = tex->is_new_style_shadow;
-   txs->texture_index = tex->texture_index;
-   txs->sampler_index = tex->sampler_index;
-   txs->dest_type = nir_type_int32;
+   query = nir_tex_instr_create(b->shader, num_srcs);
+   query->op = texop;
+   query->sampler_dim = tex->sampler_dim;
+   query->is_array = tex->is_array;
+   query->is_shadow = tex->is_shadow;
+   query->is_new_style_shadow = tex->is_new_style_shadow;
+   query->texture_index = tex->texture_index;
+   query->sampler_index = tex->sampler_index;
+   query->dest_type = dest_type;
+
+   if (include_coord) {
+      query->coord_components = tex->coord_components;
+   }
 
    unsigned idx = 0;
    for (unsigned i = 0; i < tex->num_srcs; i++) {
-      if (tex->src[i].src_type == nir_tex_src_texture_deref ||
+      if ((tex->src[i].src_type == nir_tex_src_coord && include_coord) ||
+          tex->src[i].src_type == nir_tex_src_texture_deref ||
           tex->src[i].src_type == nir_tex_src_sampler_deref ||
           tex->src[i].src_type == nir_tex_src_texture_offset ||
           tex->src[i].src_type == nir_tex_src_sampler_offset ||
           tex->src[i].src_type == nir_tex_src_texture_handle ||
           tex->src[i].src_type == nir_tex_src_sampler_handle) {
-         txs->src[idx].src = nir_src_for_ssa(tex->src[i].src.ssa);
-         txs->src[idx].src_type = tex->src[i].src_type;
+         query->src[idx].src = nir_src_for_ssa(tex->src[i].src.ssa);
+         query->src[idx].src_type = tex->src[i].src_type;
          idx++;
       }
    }
+
    /* Add in an LOD because some back-ends require it */
-   txs->src[idx] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
+   if (include_lod) {
+      query->src[idx] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
+   }
 
-   nir_def_init(&txs->instr, &txs->def, nir_tex_instr_dest_size(txs), 32);
-   nir_builder_instr_insert(b, &txs->instr);
+   nir_def_init(&query->instr, &query->def, nir_tex_instr_dest_size(query),
+                nir_alu_type_get_type_size(dest_type));
 
-   return &txs->def;
+   nir_builder_instr_insert(b, &query->instr);
+   return &query->def;
+}
+
+nir_def *
+nir_get_texture_size(nir_builder *b, nir_tex_instr *tex)
+{
+   b->cursor = nir_before_instr(&tex->instr);
+
+   return nir_build_texture_query(b, tex, nir_texop_txs,
+                                  nir_tex_instr_dest_size(tex),
+                                  nir_type_int32, false, true);
 }
 
 nir_def *
@@ -384,49 +404,9 @@ nir_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
 {
    b->cursor = nir_before_instr(&tex->instr);
 
-   nir_tex_instr *tql;
-
-   unsigned num_srcs = 0;
-   for (unsigned i = 0; i < tex->num_srcs; i++) {
-      if (tex->src[i].src_type == nir_tex_src_coord ||
-          tex->src[i].src_type == nir_tex_src_texture_deref ||
-          tex->src[i].src_type == nir_tex_src_sampler_deref ||
-          tex->src[i].src_type == nir_tex_src_texture_offset ||
-          tex->src[i].src_type == nir_tex_src_sampler_offset ||
-          tex->src[i].src_type == nir_tex_src_texture_handle ||
-          tex->src[i].src_type == nir_tex_src_sampler_handle)
-         num_srcs++;
-   }
-
-   tql = nir_tex_instr_create(b->shader, num_srcs);
-   tql->op = nir_texop_lod;
-   tql->coord_components = tex->coord_components;
-   tql->sampler_dim = tex->sampler_dim;
-   tql->is_array = tex->is_array;
-   tql->is_shadow = tex->is_shadow;
-   tql->is_new_style_shadow = tex->is_new_style_shadow;
-   tql->texture_index = tex->texture_index;
-   tql->sampler_index = tex->sampler_index;
-   tql->dest_type = nir_type_float32;
-
-   unsigned idx = 0;
-   for (unsigned i = 0; i < tex->num_srcs; i++) {
-      if (tex->src[i].src_type == nir_tex_src_coord ||
-          tex->src[i].src_type == nir_tex_src_texture_deref ||
-          tex->src[i].src_type == nir_tex_src_sampler_deref ||
-          tex->src[i].src_type == nir_tex_src_texture_offset ||
-          tex->src[i].src_type == nir_tex_src_sampler_offset ||
-          tex->src[i].src_type == nir_tex_src_texture_handle ||
-          tex->src[i].src_type == nir_tex_src_sampler_handle) {
-         tql->src[idx].src = nir_src_for_ssa(tex->src[i].src.ssa);
-         tql->src[idx].src_type = tex->src[i].src_type;
-         idx++;
-      }
-   }
-
-   nir_def_init(&tql->instr, &tql->def, 2, 32);
-   nir_builder_instr_insert(b, &tql->instr);
+   nir_def *tql = nir_build_texture_query(b, tex, nir_texop_lod, 2,
+                                          nir_type_float32, true, false);
 
    /* The LOD is the y component of the result */
-   return nir_channel(b, &tql->def, 1);
+   return nir_channel(b, tql, 1);
 }

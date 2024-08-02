@@ -52,11 +52,27 @@ gcd_pow2_u64(uint64_t a, uint64_t b)
 }
 
 static void
-emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
+emit_common_so_memcpy(struct anv_memcpy_state *state,
                       const struct intel_urb_config *urb_cfg_in,
-                      struct intel_urb_config *urb_cfg_out,
                       const struct intel_l3_config *l3_config)
 {
+   struct anv_batch *batch = state->batch;
+   struct anv_device *device = state->device;
+
+   if (state->cmd_buffer) {
+      /* Wa_14015814527 */
+      genX(apply_task_urb_workaround)(state->cmd_buffer);
+
+      genX(cmd_buffer_apply_pipe_flushes)(state->cmd_buffer);
+
+      genX(flush_pipeline_select_3d)(state->cmd_buffer);
+
+#if GFX_VER == 9
+      genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(
+         state->cmd_buffer, SEQUENTIAL, 1ull << 32);
+#endif
+   }
+
    anv_batch_emit(batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
       vfi.InstancingEnable = false;
       vfi.VertexElementIndex = 0;
@@ -106,10 +122,10 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
     * store the data that VF is going to pass to SOL.
     */
    const unsigned entry_size[4] = { DIV_ROUND_UP(32, 64), 1, 1, 1 };
-   memcpy(urb_cfg_out->size, &entry_size, sizeof(entry_size));
+   memcpy(state->urb_cfg.size, &entry_size, sizeof(entry_size));
 
    genX(emit_urb_setup)(device, batch, l3_config,
-                        VK_SHADER_STAGE_VERTEX_BIT, urb_cfg_in, urb_cfg_out,
+                        VK_SHADER_STAGE_VERTEX_BIT, urb_cfg_in, &state->urb_cfg,
                         NULL);
 
 #if GFX_VER >= 12
@@ -127,10 +143,13 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 }
 
 static void
-emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
+emit_so_memcpy(struct anv_memcpy_state *state,
                struct anv_address dst, struct anv_address src,
                uint32_t size)
 {
+   struct anv_batch *batch = state->batch;
+   struct anv_device *device = state->device;
+
    /* The maximum copy block size is 4 32-bit components at a time. */
    assert(size % 4 == 0);
    unsigned bs = gcd_pow2_u64(16, size);
@@ -253,21 +272,32 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 void
 genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                           struct anv_device *device,
+                          struct anv_cmd_buffer *cmd_buffer,
                           struct anv_batch *batch)
 {
    memset(state, 0, sizeof(*state));
 
+   state->cmd_buffer = cmd_buffer;
    state->batch = batch;
    state->device = device;
 
-   const struct intel_l3_config *cfg = intel_get_default_l3_config(device->info);
-   genX(emit_l3_config)(batch, device, cfg);
-   genX(emit_pipeline_select)(batch, _3D, device);
+   if (state->cmd_buffer) {
+      if (!cmd_buffer->state.current_l3_config) {
+         genX(cmd_buffer_config_l3)(cmd_buffer,
+                                    intel_get_default_l3_config(device->info));
+      }
+      emit_common_so_memcpy(state,
+                            &state->cmd_buffer->state.gfx.urb_cfg,
+                            cmd_buffer->state.current_l3_config);
+   } else {
+      const struct intel_l3_config *cfg = intel_get_default_l3_config(device->info);
+      genX(emit_l3_config)(batch, device, cfg);
+      genX(emit_pipeline_select)(batch, _3D, device);
 
-   struct intel_urb_config urb_cfg_in = { 0 };
-   struct intel_urb_config urb_cfg = { 0 };
-
-   emit_common_so_memcpy(batch, device, &urb_cfg_in, &urb_cfg, cfg);
+      /* Dummy URB config, will trigger URB reemission */
+      struct intel_urb_config urb_cfg_in = { 0 };
+      emit_common_so_memcpy(state, &urb_cfg_in, cfg);
+   }
 }
 
 void
@@ -276,6 +306,51 @@ genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
    genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
                                  ANV_PIPE_END_OF_PIPE_SYNC_BIT,
                                  NULL);
+
+   if (state->cmd_buffer) {
+      /* Flag all the instructions emitted by the memcpy. */
+      struct anv_gfx_dynamic_state *hw_state =
+         &state->cmd_buffer->state.gfx.dyn_state;
+
+#if INTEL_WA_14018283232_GFX_VER
+      genX(cmd_buffer_ensure_wa_14018283232)(state->cmd_buffer, false);
+#endif
+
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_URB);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_TOPOLOGY);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VERTEX_INPUT);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS);
+#if GFX_VER >= 11
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS_2);
+#endif
+#if GFX_VER >= 12
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
+#endif
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SO_DECL_LIST);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SAMPLE_MASK);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SF);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SBE);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VS);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_HS);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_DS);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TE);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_GS);
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PS);
+      if (state->cmd_buffer->device->vk.enabled_extensions.EXT_mesh_shader) {
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MESH_CONTROL);
+         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TASK_CONTROL);
+      }
+
+      state->cmd_buffer->state.gfx.dirty |= ~(ANV_CMD_DIRTY_PIPELINE |
+                                              ANV_CMD_DIRTY_INDEX_BUFFER);
+
+      memcpy(&state->cmd_buffer->state.gfx.urb_cfg, &state->urb_cfg,
+             sizeof(struct intel_urb_config));
+   }
 }
 
 void
@@ -306,7 +381,7 @@ genX(emit_so_memcpy)(struct anv_memcpy_state *state,
       memset(&state->vb_dirty, 0, sizeof(state->vb_dirty));
    }
 
-   emit_so_memcpy(state->batch, state->device, dst, src, size);
+   emit_so_memcpy(state, dst, src, size);
 }
 
 void
@@ -317,73 +392,11 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    if (size == 0)
       return;
 
-   if (!cmd_buffer->state.current_l3_config) {
-      const struct intel_l3_config *cfg =
-         intel_get_default_l3_config(cmd_buffer->device->info);
-      genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
-   }
-
-#if GFX_VER == 9
-   genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, 32, src, size);
-#endif
-
-   /* Wa_14015814527 */
-   genX(apply_task_urb_workaround)(cmd_buffer);
-
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-
-   genX(flush_pipeline_select_3d)(cmd_buffer);
-
-   struct intel_urb_config urb_cfg;
-
-   emit_common_so_memcpy(&cmd_buffer->batch, cmd_buffer->device,
-                         &cmd_buffer->state.gfx.urb_cfg,
-                         &urb_cfg,
-                         cmd_buffer->state.current_l3_config);
-   emit_so_memcpy(&cmd_buffer->batch, cmd_buffer->device, dst, src, size);
-
-#if GFX_VER == 9
-   genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer, SEQUENTIAL,
-                                                       1ull << 32);
-#endif
-
-   /* Update urb config after memcpy. */
-   memcpy(&cmd_buffer->state.gfx.urb_cfg, &urb_cfg,
-          sizeof(struct intel_urb_config));
-
-   /* Flag all the instructions emitted by the memcpy. */
-   struct anv_gfx_dynamic_state *hw_state =
-      &cmd_buffer->state.gfx.dyn_state;
-
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_URB);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_TOPOLOGY);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VERTEX_INPUT);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS);
-#if GFX_VER >= 11
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS_2);
-#endif
-#if GFX_VER >= 12
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
-#endif
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SO_DECL_LIST);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SAMPLE_MASK);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SF);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SBE);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VS);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_HS);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_DS);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TE);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_GS);
-   BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PS);
-   if (cmd_buffer->device->vk.enabled_extensions.EXT_mesh_shader) {
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MESH_CONTROL);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TASK_CONTROL);
-   }
-
-   cmd_buffer->state.gfx.dirty |= ~(ANV_CMD_DIRTY_PIPELINE |
-                                    ANV_CMD_DIRTY_INDEX_BUFFER);
+   struct anv_memcpy_state state;
+   genX(emit_so_memcpy_init)(&state,
+                             cmd_buffer->device,
+                             cmd_buffer,
+                             &cmd_buffer->batch);
+   emit_so_memcpy(&state, dst, src, size);
+   genX(emit_so_memcpy_fini)(&state);
 }

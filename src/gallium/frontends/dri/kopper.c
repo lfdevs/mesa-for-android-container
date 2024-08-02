@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include "GL/internal/mesa_interface.h"
+#include "mesa_interface.h"
 #include "git_sha1.h"
 #include "util/format/u_format.h"
 #include "util/u_memory.h"
@@ -152,7 +152,6 @@ kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 
    assert(pscreen->get_param(pscreen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY));
    screen->has_reset_status_query = true;
-   screen->lookup_egl_image = dri2_lookup_egl_image;
    screen->has_dmabuf = pscreen->get_param(pscreen, PIPE_CAP_DMABUF);
    screen->has_modifiers = pscreen->query_dmabuf_modifiers != NULL;
    screen->is_sw = zink_kopper_is_cpu(pscreen);
@@ -160,15 +159,6 @@ kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
       screen->extensions = drivk_screen_extensions;
    else
       screen->extensions = drivk_sw_screen_extensions;
-
-   const __DRIimageLookupExtension *image = screen->dri2.image;
-   if (image &&
-       image->base.version >= 2 &&
-       image->validateEGLImage &&
-       image->lookupEGLImageValidated) {
-      screen->validate_egl_image = dri2_validate_egl_image;
-      screen->lookup_egl_image_validated = dri2_lookup_egl_image_validated;
-   }
 
    screen->create_drawable = kopper_create_drawable;
 
@@ -242,15 +232,15 @@ dri3_create_image_from_buffers(xcb_connection_t *c,
       offsets[i] = offsets_in[i];
    }
 
-   ret = image->createImageFromDmaBufs2(opaque_dri_screen(screen),
-                                        bp_reply->width,
-                                        bp_reply->height,
-                                        fourcc,
-                                        bp_reply->modifier,
-                                        fds, bp_reply->nfd,
-                                        strides, offsets,
-                                        0, 0, 0, 0, /* UNDEFINED */
-                                        &error, loaderPrivate);
+   ret = image->createImageFromDmaBufs(opaque_dri_screen(screen),
+                                       bp_reply->width,
+                                       bp_reply->height,
+                                       fourcc,
+                                       bp_reply->modifier,
+                                       fds, bp_reply->nfd,
+                                       strides, offsets,
+                                       0, 0, 0, 0, /* UNDEFINED */
+                                       0, &error, loaderPrivate);
 
    for (i = 0; i < bp_reply->nfd; i++)
       close(fds[i]);
@@ -278,17 +268,19 @@ dri3_create_image(xcb_connection_t *c,
    stride = bp_reply->stride;
    offset = 0;
 
-   /* createImageFromFds creates a wrapper __DRIimage structure which
+   /* createImageFromDmaBufs creates a wrapper __DRIimage structure which
     * can deal with multiple planes for things like Yuv images. So, once
     * we've gotten the planar wrapper, pull the single plane out of it and
     * discard the wrapper.
     */
-   image_planar = image->createImageFromFds(opaque_dri_screen(screen),
-                                            bp_reply->width,
-                                            bp_reply->height,
-                                            fourcc,
-                                            fds, 1,
-                                            &stride, &offset, loaderPrivate);
+   image_planar = image->createImageFromDmaBufs(opaque_dri_screen(screen),
+                                                bp_reply->width,
+                                                bp_reply->height,
+                                                fourcc,
+                                                DRM_FORMAT_MOD_INVALID, fds, 1,
+                                                &stride, &offset,
+                                                0, 0, 0, 0, 0,
+                                                NULL, loaderPrivate);
    close(fds[0]);
    if (!image_planar)
       return NULL;
@@ -328,7 +320,7 @@ handle_in_fence(struct dri_context *ctx, __DRIimage *img)
 /** kopper_get_pixmap_buffer
  *
  * Get the DRM object for a pixmap from the X server and
- * wrap that with a __DRIimage structure using createImageFromFds
+ * wrap that with a __DRIimage structure using createImageFromDmaBufs
  */
 static struct pipe_resource *
 kopper_get_pixmap_buffer(struct dri_drawable *drawable,

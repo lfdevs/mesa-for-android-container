@@ -105,7 +105,6 @@ glx@glx_arb_sync_control@waitformsc,Fail
 
 glslparsertest@glsl2@gst-gl-text-download-i420-yv12.frag,Fail
 shaders@glsl-arb-fragment-coord-conventions,Fail
-shaders@glsl-bug-110796,Fail
 shaders@glsl-max-vertex-attrib,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
@@ -1155,10 +1154,6 @@ spec@khr_texture_compression_astc@miptree-gles ldr@LDR Profile,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@oes_compressed_etc1_rgb8_texture@miptree,Fail
-spec@!opengl 1.0@depth-clear-precision-check,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
-
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
 
 spec@ext_framebuffer_multisample@accuracy 2 depth_draw depthstencil,Fail
@@ -1200,3 +1195,22 @@ spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
 
 # Couldn't reproduce locally
 spec@oes_packed_depth_stencil@depth_stencil texture gles2,Fail
+
+# Failures from arm32
+arm32-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
+arm32-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component24,Fail
+arm32-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
+arm32-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
+arm32-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
+arm32-dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked,Fail
+arm32-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_mirror_rgba8888,Fail
+arm32-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888,Fail
+arm32-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_nearest_linear_mirror_rgba8888,Fail
+arm32-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_nearest_linear_repeat_rgba8888,Fail
+arm32-dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_repeat_non_square,Fail
+arm32-dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_clamp_non_square,Fail
+arm32-dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_mirror_non_square,Fail
+arm32-dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_repeat_non_square,Fail
+arm32-dEQP-GLES2.functional.texture.wrap.clamp_clamp_nearest_npot_etc1,Fail
+arm32-dEQP-GLES2.functional.uniform_api.random.3,Fail
+arm32-dEQP-GLES2.functional.uniform_api.random.79,Fail

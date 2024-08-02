@@ -1198,6 +1198,68 @@ disk_cache_db_load_cache_index(void *mem_ctx, struct disk_cache *cache)
 {
    return mesa_cache_db_multipart_open(&cache->cache_db, cache->path);
 }
+
+static void
+delete_dir(const char* path)
+{
+   DIR *dir = opendir(path);
+   if (!dir)
+      return;
+
+   struct dirent *p;
+   char *entry_path = NULL;
+
+   while ((p = readdir(dir)) != NULL) {
+      if (strcmp(p->d_name, ".") == 0 || strcmp(p->d_name, "..") == 0)
+         continue;
+
+      asprintf(&entry_path, "%s/%s", path, p->d_name);
+      if (!entry_path)
+         continue;
+
+      struct stat st;
+      if (stat(entry_path, &st)) {
+         free(entry_path);
+         continue;
+      }
+      if (S_ISDIR(st.st_mode))
+         delete_dir(entry_path);
+      else
+         unlink(entry_path);
+
+      free(entry_path);
+   }
+   closedir(dir);
+   rmdir(path);
+}
+
+/* Deletes old multi-file caches, to avoid having two default caches taking up disk space. */
+void
+disk_cache_delete_old_cache(void)
+{
+   void *ctx = ralloc_context(NULL);
+   char *dirname = disk_cache_generate_cache_dir(ctx, NULL, NULL, DISK_CACHE_MULTI_FILE);
+   if (!dirname)
+      goto finish;
+
+   /* The directory itself doesn't get updated, so use a marker timestamp */
+   char *index_path = ralloc_asprintf(ctx, "%s/marker", dirname);
+
+   struct stat attr;
+   if (stat(index_path, &attr) == -1)
+      goto finish;
+
+   time_t now = time(NULL);
+
+   /* Do not delete anything if the cache has been modified in the past week */
+   if (now - attr.st_mtime < 60 * 60 * 24 * 7)
+      goto finish;
+
+   delete_dir(dirname);
+
+finish:
+   ralloc_free(ctx);
+}
 #endif
 
 #endif /* ENABLE_SHADER_CACHE */

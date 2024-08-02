@@ -12922,7 +12922,7 @@
     </function>
 
     <!-- Internal function for glthread to implement BufferSubData as a GPU copy. -->
-    <function name="InternalBufferSubDataCopyMESA" es2="2.0">
+    <function name="InternalBufferSubDataCopyMESA" es1="1.1" es2="2.0">
         <param name="srcBuffer" type="GLintptr"/> <!-- "struct gl_buffer_object *" really -->
         <param name="srcOffset" type="GLuint"/>
         <param name="dstTargetOrName" type="GLuint"/>

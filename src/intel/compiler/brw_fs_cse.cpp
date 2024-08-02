@@ -21,29 +21,19 @@
  * IN THE SOFTWARE.
  */
 
+#define XXH_INLINE_ALL
+#include "util/xxhash.h"
+
 #include "brw_fs.h"
 #include "brw_fs_builder.h"
 #include "brw_cfg.h"
 
 /** @file brw_fs_cse.cpp
  *
- * Support for local common subexpression elimination.
- *
- * See Muchnick's Advanced Compiler Design and Implementation, section
- * 13.1 (p378).
+ * Support for SSA-based global Common Subexpression Elimination (CSE).
  */
 
 using namespace brw;
-
-namespace {
-struct aeb_entry : public exec_node {
-   /** The instruction that generates the expression value. */
-   fs_inst *generator;
-
-   /** The temporary where the value is stored. */
-   fs_reg tmp;
-};
-}
 
 static bool
 is_expression(const fs_visitor *v, const fs_inst *const inst)
@@ -58,12 +48,25 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case BRW_OPCODE_SHR:
    case BRW_OPCODE_SHL:
    case BRW_OPCODE_ASR:
+   case BRW_OPCODE_ROR:
+   case BRW_OPCODE_ROL:
    case BRW_OPCODE_CMP:
    case BRW_OPCODE_CMPN:
+   case BRW_OPCODE_CSEL:
+   case BRW_OPCODE_BFREV:
+   case BRW_OPCODE_BFE:
+   case BRW_OPCODE_BFI1:
+   case BRW_OPCODE_BFI2:
    case BRW_OPCODE_ADD:
    case BRW_OPCODE_MUL:
    case SHADER_OPCODE_MULH:
+   case BRW_OPCODE_AVG:
    case BRW_OPCODE_FRC:
+   case BRW_OPCODE_LZD:
+   case BRW_OPCODE_FBH:
+   case BRW_OPCODE_FBL:
+   case BRW_OPCODE_CBIT:
+   case BRW_OPCODE_ADD3:
    case BRW_OPCODE_RNDU:
    case BRW_OPCODE_RNDD:
    case BRW_OPCODE_RNDE:
@@ -80,6 +83,9 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case SHADER_OPCODE_LOAD_LIVE_CHANNELS:
    case FS_OPCODE_LOAD_LIVE_CHANNELS:
    case SHADER_OPCODE_BROADCAST:
+   case SHADER_OPCODE_SHUFFLE:
+   case SHADER_OPCODE_QUAD_SWIZZLE:
+   case SHADER_OPCODE_CLUSTER_BROADCAST:
    case SHADER_OPCODE_MOV_INDIRECT:
    case SHADER_OPCODE_TEX_LOGICAL:
    case SHADER_OPCODE_TXD_LOGICAL:
@@ -98,7 +104,11 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
    case SHADER_OPCODE_TG4_OFFSET_LOD_LOGICAL:
    case SHADER_OPCODE_TG4_OFFSET_BIAS_LOGICAL:
+   case SHADER_OPCODE_SAMPLEINFO_LOGICAL:
+   case SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
+   case SHADER_OPCODE_GET_BUFFER_SIZE:
    case FS_OPCODE_PACK:
+   case FS_OPCODE_PACK_HALF_2x16_SPLIT:
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:
    case SHADER_OPCODE_SQRT:
@@ -118,17 +128,48 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    }
 }
 
+/**
+ * True if the instruction should only be CSE'd within their local block.
+ */
+bool
+local_only(const fs_inst *inst)
+{
+   switch (inst->opcode) {
+   case SHADER_OPCODE_FIND_LIVE_CHANNEL:
+   case SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL:
+   case SHADER_OPCODE_LOAD_LIVE_CHANNELS:
+   case FS_OPCODE_LOAD_LIVE_CHANNELS:
+      /* These depend on the current channel enables, so the same opcode
+       * in another block will likely return a different value.
+       */
+      return true;
+   case BRW_OPCODE_MOV:
+      /* Global CSE of MOVs is likely not worthwhile.  It can increase
+       * register pressure by extending the lifetime of simple constants.
+       */
+      return true;
+   case SHADER_OPCODE_LOAD_PAYLOAD:
+      /* This is basically a MOV */
+      return inst->sources == 1;
+   case BRW_OPCODE_CMP:
+      /* Seems to increase spilling a lot without much benefit */
+      return true;
+   default:
+      return false;
+   }
+}
+
 static bool
 operands_match(const fs_inst *a, const fs_inst *b, bool *negate)
 {
-   fs_reg *xs = a->src;
-   fs_reg *ys = b->src;
+   brw_reg *xs = a->src;
+   brw_reg *ys = b->src;
 
    if (a->opcode == BRW_OPCODE_MAD) {
       return xs[0].equals(ys[0]) &&
              ((xs[1].equals(ys[1]) && xs[2].equals(ys[2])) ||
               (xs[2].equals(ys[1]) && xs[1].equals(ys[2])));
-   } else if (a->opcode == BRW_OPCODE_MUL && a->dst.type == BRW_REGISTER_TYPE_F) {
+   } else if (a->opcode == BRW_OPCODE_MUL && a->dst.type == BRW_TYPE_F) {
       bool xs0_negate = xs[0].negate;
       bool xs1_negate = xs[1].file == IMM ? xs[1].f < 0.0f
                                           : xs[1].negate;
@@ -168,6 +209,13 @@ operands_match(const fs_inst *a, const fs_inst *b, bool *negate)
          }
       }
       return match;
+   } else if (a->sources == 3) {
+      return (xs[0].equals(ys[0]) && xs[1].equals(ys[1]) && xs[2].equals(ys[2])) ||
+             (xs[0].equals(ys[0]) && xs[1].equals(ys[2]) && xs[2].equals(ys[1])) ||
+             (xs[0].equals(ys[1]) && xs[1].equals(ys[0]) && xs[2].equals(ys[2])) ||
+             (xs[0].equals(ys[1]) && xs[1].equals(ys[2]) && xs[2].equals(ys[1])) ||
+             (xs[0].equals(ys[2]) && xs[1].equals(ys[0]) && xs[2].equals(ys[1])) ||
+             (xs[0].equals(ys[2]) && xs[1].equals(ys[1]) && xs[2].equals(ys[0]));
    } else {
       return (xs[0].equals(ys[0]) && xs[1].equals(ys[1])) ||
              (xs[1].equals(ys[0]) && xs[0].equals(ys[1]));
@@ -178,222 +226,275 @@ static bool
 instructions_match(fs_inst *a, fs_inst *b, bool *negate)
 {
    return a->opcode == b->opcode &&
-          a->force_writemask_all == b->force_writemask_all &&
           a->exec_size == b->exec_size &&
           a->group == b->group &&
-          a->saturate == b->saturate &&
           a->predicate == b->predicate &&
-          a->predicate_inverse == b->predicate_inverse &&
           a->conditional_mod == b->conditional_mod &&
-          a->flag_subreg == b->flag_subreg &&
           a->dst.type == b->dst.type &&
           a->offset == b->offset &&
           a->mlen == b->mlen &&
           a->ex_mlen == b->ex_mlen &&
           a->sfid == b->sfid &&
           a->desc == b->desc &&
+          a->ex_desc == b->ex_desc &&
           a->size_written == b->size_written &&
           a->check_tdr == b->check_tdr &&
-          a->send_has_side_effects == b->send_has_side_effects &&
-          a->eot == b->eot &&
           a->header_size == b->header_size &&
-          a->shadow_compare == b->shadow_compare &&
-          a->pi_noperspective == b->pi_noperspective &&
           a->target == b->target &&
           a->sources == b->sources &&
+          a->bits == b->bits &&
           operands_match(a, b, negate);
 }
 
-static void
-create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
-{
-   unsigned written = regs_written(inst);
-   unsigned dst_width =
-      DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE);
-   fs_inst *copy;
+/* -------------------------------------------------------------------- */
 
-   if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
-      assert(src.file == VGRF);
-      fs_reg *payload = ralloc_array(bld.shader->mem_ctx, fs_reg,
-                                     inst->sources);
-      for (int i = 0; i < inst->header_size; i++) {
-         payload[i] = src;
-         src.offset += REG_SIZE;
-      }
-      for (int i = inst->header_size; i < inst->sources; i++) {
-         src.type = inst->src[i].type;
-         payload[i] = src;
-         src = offset(src, bld, 1);
-      }
-      copy = bld.LOAD_PAYLOAD(inst->dst, payload, inst->sources,
-                              inst->header_size);
-   } else if (written != dst_width) {
-      assert(src.file == VGRF);
-      assert(written % dst_width == 0);
-      const int sources = written / dst_width;
-      fs_reg *payload = ralloc_array(bld.shader->mem_ctx, fs_reg, sources);
-      for (int i = 0; i < sources; i++) {
-         payload[i] = src;
-         src = offset(src, bld, 1);
-      }
-      copy = bld.LOAD_PAYLOAD(inst->dst, payload, sources, 0);
-   } else {
-      copy = bld.MOV(inst->dst, src);
-      copy->group = inst->group;
-      copy->force_writemask_all = inst->force_writemask_all;
-      copy->src[0].negate = negate;
-   }
-   assert(regs_written(copy) == written);
+#define HASH(hash, data) XXH32(&(data), sizeof(data), hash)
+
+uint32_t
+hash_reg(uint32_t hash, const brw_reg &r)
+{
+   struct {
+      uint64_t u64;
+      uint32_t u32;
+      uint16_t u16a;
+      uint16_t u16b;
+   } data = {
+      .u64 = r.u64, .u32 = r.bits, .u16a = r.offset, .u16b = r.stride
+   };
+   STATIC_ASSERT(sizeof(data) == 16); /* ensure there's no padding */
+   hash = HASH(hash, data);
+   return hash;
 }
 
-static bool
-brw_fs_opt_cse_local(fs_visitor &s, const fs_live_variables &live, bblock_t *block, int &ip)
+static uint32_t
+hash_inst(const void *v)
 {
-   const intel_device_info *devinfo = s.devinfo;
-   bool progress = false;
-   exec_list aeb;
+   const fs_inst *inst = static_cast<const fs_inst *>(v);
+   uint32_t hash = 0;
 
-   void *cse_ctx = ralloc_context(NULL);
+   /* Skip dst - that would make nothing ever match */
 
-   foreach_inst_in_block(fs_inst, inst, block) {
-      /* Skip some cases. */
-      if (is_expression(&s, inst) && !inst->is_partial_write() &&
-          ((inst->dst.file != ARF && inst->dst.file != FIXED_GRF) ||
-           inst->dst.is_null()))
-      {
-         bool found = false;
-         bool negate = false;
+   /* Skip ir and annotation - we don't care for equivalency purposes. */
 
-         foreach_in_list_use_after(aeb_entry, entry, &aeb) {
-            /* Match current instruction's expression against those in AEB. */
-            if (!(entry->generator->dst.is_null() && !inst->dst.is_null()) &&
-                instructions_match(inst, entry->generator, &negate)) {
-               found = true;
-               progress = true;
-               break;
-            }
-         }
+   const uint8_t u8data[] = {
+      inst->sources,
+      inst->exec_size,
+      inst->group,
+      inst->mlen,
+      inst->ex_mlen,
+      inst->sfid,
+      inst->header_size,
+      inst->target,
 
-         if (!found) {
-            if (inst->opcode != BRW_OPCODE_MOV ||
-                (inst->opcode == BRW_OPCODE_MOV &&
-                 inst->src[0].file == IMM &&
-                 inst->src[0].type == BRW_REGISTER_TYPE_VF)) {
-               /* Our first sighting of this expression.  Create an entry. */
-               aeb_entry *entry = ralloc(cse_ctx, aeb_entry);
-               entry->tmp = reg_undef;
-               entry->generator = inst;
-               aeb.push_tail(entry);
-            }
-         } else {
-            /* This is at least our second sighting of this expression.
-             * If we don't have a temporary already, make one.
-             */
-            bool no_existing_temp = entry->tmp.file == BAD_FILE;
-            if (no_existing_temp && !entry->generator->dst.is_null()) {
-               const fs_builder ibld = fs_builder(&s, block, entry->generator)
-                                       .at(block, entry->generator->next);
-               int written = regs_written(entry->generator);
+      inst->conditional_mod,
+      inst->predicate,
+   };
+   const uint32_t u32data[] = {
+      inst->desc,
+      inst->ex_desc,
+      inst->offset,
+      inst->size_written,
+      inst->opcode,
+      inst->bits,
+   };
 
-               entry->tmp = fs_reg(VGRF, s.alloc.allocate(written),
-                                   entry->generator->dst.type);
+   hash = HASH(hash, u8data);
+   hash = HASH(hash, u32data);
 
-               create_copy_instr(ibld, entry->generator, entry->tmp, false);
+   /* Skip hashing sched - we shouldn't be CSE'ing after that SWSB */
 
-               entry->generator->dst = entry->tmp;
-            }
-
-            /* dest <- temp */
-            if (!inst->dst.is_null()) {
-               assert(inst->size_written == entry->generator->size_written);
-               assert(inst->dst.type == entry->tmp.type);
-               const fs_builder ibld(&s, block, inst);
-
-               create_copy_instr(ibld, inst, entry->tmp, negate);
-            }
-
-            /* Set our iterator so that next time through the loop inst->next
-             * will get the instruction in the basic block after the one we've
-             * removed.
-             */
-            fs_inst *prev = (fs_inst *)inst->prev;
-
-            inst->remove(block);
-            inst = prev;
-         }
-      }
-
-      /* Discard jumps aren't represented in the CFG unfortunately, so we need
-       * to make sure that they behave as a CSE barrier, since we lack global
-       * dataflow information.  This is particularly likely to cause problems
-       * with instructions dependent on the current execution mask like
-       * SHADER_OPCODE_FIND_LIVE_CHANNEL.
+   if (inst->opcode == BRW_OPCODE_MAD) {
+      /* Commutatively combine the hashes for the multiplicands */
+      hash = hash_reg(hash, inst->src[0]);
+      uint32_t hash1 = hash_reg(hash, inst->src[1]);
+      uint32_t hash2 = hash_reg(hash, inst->src[2]);
+      hash = hash1 * hash2;
+   } else if (inst->opcode == BRW_OPCODE_MUL &&
+              inst->dst.type == BRW_TYPE_F) {
+      /* Canonicalize negations on either source (or both) and commutatively
+       * combine the hashes for both sources.
        */
-      if (inst->opcode == BRW_OPCODE_HALT ||
-          inst->opcode == SHADER_OPCODE_HALT_TARGET)
-         aeb.make_empty();
+      brw_reg src[2] = { inst->src[0], inst->src[1] };
+      uint32_t src_hash[2];
 
-      foreach_in_list_safe(aeb_entry, entry, &aeb) {
-         /* Kill all AEB entries that write a different value to or read from
-          * the flag register if we just wrote it.
-          */
-         if (inst->flags_written(devinfo)) {
-            bool negate; /* dummy */
-            if (entry->generator->flags_read(devinfo) ||
-                (entry->generator->flags_written(devinfo) &&
-                 !instructions_match(inst, entry->generator, &negate))) {
-               entry->remove();
-               ralloc_free(entry);
-               continue;
-            }
-         }
+      for (int i = 0; i < 2; i++) {
+         src[i].negate = false;
+         if (src[i].file == IMM)
+            src[i].f = fabs(src[i].f);
 
-         for (int i = 0; i < entry->generator->sources; i++) {
-            fs_reg *src_reg = &entry->generator->src[i];
-
-            /* Kill all AEB entries that use the destination we just
-             * overwrote.
-             */
-            if (regions_overlap(inst->dst, inst->size_written,
-                                entry->generator->src[i],
-                                entry->generator->size_read(i))) {
-               entry->remove();
-               ralloc_free(entry);
-               break;
-            }
-
-            /* Kill any AEB entries using registers that don't get reused any
-             * more -- a sure sign they'll fail operands_match().
-             */
-            if (src_reg->file == VGRF && live.vgrf_end[src_reg->nr] < ip) {
-               entry->remove();
-               ralloc_free(entry);
-               break;
-            }
-         }
+         src_hash[i] = hash_reg(hash, src[i]);
       }
 
-      ip++;
+      hash = src_hash[0] * src_hash[1];
+   } else if (inst->is_commutative()) {
+      /* Commutatively combine the sources */
+      uint32_t hash0 = hash_reg(hash, inst->src[0]);
+      uint32_t hash1 = hash_reg(hash, inst->src[1]);
+      uint32_t hash2 = inst->sources > 2 ? hash_reg(hash, inst->src[2]) : 1;
+      hash = hash0 * hash1 * hash2;
+   } else {
+      /* Just hash all the sources */
+      for (int i = 0; i < inst->sources; i++)
+         hash = hash_reg(hash, inst->src[i]);
    }
 
-   ralloc_free(cse_ctx);
+   return hash;
+}
 
-   return progress;
+/* -------------------------------------------------------------------- */
+
+static bool
+cmp_func(const void *data1, const void *data2)
+{
+   bool negate;
+   return instructions_match((fs_inst *) data1, (fs_inst *) data2, &negate);
+}
+
+/* We set bit 31 in remap_table entries if it needs to be negated. */
+#define REMAP_NEGATE (0x80000000u)
+
+static void
+remap_sources(fs_visitor &s, const brw::def_analysis &defs,
+              fs_inst *inst, unsigned *remap_table)
+{
+   for (int i = 0; i < inst->sources; i++) {
+      if (inst->src[i].file == VGRF &&
+          inst->src[i].nr < defs.count() &&
+          remap_table[inst->src[i].nr] != ~0u) {
+         const unsigned old_nr = inst->src[i].nr;
+         unsigned new_nr = remap_table[old_nr];
+         const bool need_negate = new_nr & REMAP_NEGATE;
+         new_nr &= ~REMAP_NEGATE;
+         inst->src[i].nr = new_nr;
+
+         if (need_negate) {
+            if ((inst->src[i].type != BRW_TYPE_F &&
+                 !inst->can_change_types()) ||
+                !inst->can_do_source_mods(s.devinfo)) {
+               /* We can't use the negate directly, resolve it just after the
+                * def and use that for any future uses.
+                */
+               fs_inst *def = defs.get(inst->src[i]);
+               bblock_t *def_block = defs.get_block(inst->src[i]);
+               const fs_builder dbld =
+                  fs_builder(&s, def_block, def).at(def_block, def->next);
+
+               /* Resolve any deferred block IP changes before inserting */
+               if (def_block->end_ip_delta)
+                  s.cfg->adjust_block_ips();
+
+               brw_reg neg = brw_vgrf(new_nr, BRW_TYPE_F);
+               brw_reg tmp = dbld.MOV(negate(neg));
+               inst->src[i].nr = tmp.nr;
+               remap_table[old_nr] = tmp.nr;
+            } else {
+               inst->src[i].negate = !inst->src[i].negate;
+               inst->src[i].type = BRW_TYPE_F;
+            }
+         }
+      }
+   }
 }
 
 bool
-brw_fs_opt_cse(fs_visitor &s)
+brw_fs_opt_cse_defs(fs_visitor &s)
 {
-   const fs_live_variables &live = s.live_analysis.require();
+   const intel_device_info *devinfo = s.devinfo;
+   const idom_tree &idom = s.idom_analysis.require();
+   const brw::def_analysis &defs = s.def_analysis.require();
    bool progress = false;
-   int ip = 0;
+   bool need_remaps = false;
 
-   foreach_block (block, s.cfg) {
-      progress = brw_fs_opt_cse_local(s, live, block, ip) || progress;
+   unsigned *remap_table = new unsigned[defs.count()];
+   memset(remap_table, ~0u, defs.count() * sizeof(int));
+   struct set *set = _mesa_set_create(NULL, NULL, cmp_func);
+
+   foreach_block(block, s.cfg) {
+      fs_inst *last_flag_write = NULL;
+      fs_inst *last = NULL;
+
+      foreach_inst_in_block_safe(fs_inst, inst, block) {
+         if (need_remaps)
+            remap_sources(s, defs, inst, remap_table);
+
+         /* Updating last_flag_written should be at the bottom of the loop,
+          * but doing it this way lets us use "continue" more easily.
+          */
+         if (last && last->flags_written(devinfo))
+            last_flag_write = last;
+         last = inst;
+
+         if (inst->dst.is_null()) {
+            bool ignored;
+            if (last_flag_write && !inst->writes_accumulator &&
+                instructions_match(last_flag_write, inst, &ignored)) {
+               /* This instruction has no destination but has a flag write
+                * which is redundant with the previous flag write in our
+                * basic block.  So we can simply remove it.
+                */
+               inst->remove(block, true);
+               last = NULL;
+               progress = true;
+            }
+         } else if (is_expression(&s, inst) && defs.get(inst->dst)) {
+            assert(!inst->writes_accumulator);
+            assert(!inst->reads_accumulator_implicitly());
+
+            uint32_t hash = hash_inst(inst);
+            if (inst->flags_read(devinfo)) {
+               hash = last_flag_write ? HASH(hash, last_flag_write)
+                                      : HASH(hash, block);
+            }
+
+            struct set_entry *e =
+               _mesa_set_search_or_add_pre_hashed(set, hash, inst, NULL);
+            if (!e) goto out; /* out of memory error */
+            fs_inst *match = (fs_inst *) e->key;
+
+            /* If there was no match, move on */
+            if (match == inst)
+               continue;
+
+            bblock_t *def_block = defs.get_block(match->dst);
+            if (block != def_block && (local_only(inst) ||
+                !idom.dominates(def_block, block))) {
+               /* If `match` doesn't dominate `inst` then remove it from
+                * the set and add `inst` instead so future lookups see that.
+                */
+               e->key = inst;
+               continue;
+            }
+
+            /* We can replace inst with match or negate(match). */
+            bool negate = false;
+            if (inst->opcode == BRW_OPCODE_MUL &&
+                inst->dst.type == BRW_TYPE_F) {
+               /* Determine whether inst is actually negate(match) */
+               bool ops_must_match = operands_match(inst, match, &negate);
+               assert(ops_must_match);
+            }
+
+            progress = true;
+            need_remaps = true;
+            remap_table[inst->dst.nr] =
+               match->dst.nr | (negate ? REMAP_NEGATE : 0);
+
+            inst->remove(block, true);
+         }
+      }
    }
 
-   if (progress)
-      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+out:
+   delete [] remap_table;
+   _mesa_set_destroy(set, NULL);
+
+   if (progress) {
+      s.cfg->adjust_block_ips();
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
+                            DEPENDENCY_INSTRUCTION_DETAIL);
+   }
 
    return progress;
 }
+
+#undef HASH

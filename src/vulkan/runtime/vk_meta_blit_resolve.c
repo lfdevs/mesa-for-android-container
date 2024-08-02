@@ -315,8 +315,8 @@ build_blit_shader(const struct vk_meta_blit_key *key)
       if (key->stencil_as_discard) {
          assert(key->aspects == VK_IMAGE_ASPECT_STENCIL_BIT);
          nir_def *stencil_bit = nir_channel(b, z_xform, 3);
-         nir_discard_if(b, nir_ieq(b, nir_iand(b, val, stencil_bit),
-                                      nir_imm_int(b, 0)));
+         nir_demote_if(b, nir_ieq(b, nir_iand(b, val, stencil_bit),
+                                     nir_imm_int(b, 0)));
       } else {
          const struct glsl_type *out_type =
             glsl_vector_type(base_type, out_comps);

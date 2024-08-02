@@ -1,29 +1,13 @@
-.venus-rules:
-  stage: layered-backends
-  rules:
-    - !reference [.test, rules]
-    - !reference [.lavapipe-rules, rules]
-    - changes: &venus_file_list
-      - src/virtio/**/*
-      when: on_success
+include:
+  - local: 'src/virtio/ci/gitlab-ci-inc.yml'
 
-
-.venus-lavapipe-test:
-  extends:
-    - .test-vk
-    - .venus-rules
-  variables:
-    VK_DRIVER: virtio
-    CROSVM_GALLIUM_DRIVER: "llvmpipe"
-    CROSVM_VK_DRIVER: "lvp"
-    CROSVM_GPU_ARGS: "vulkan=true,gles=false,backend=virglrenderer,egl=true,surfaceless=true,fixed-blob-mapping=false"
-
-venus-lavapipe:
+.venus-lavapipe:
   extends:
     - .deqp-test
     - .venus-lavapipe-test
+  timeout: 25m
   variables:
-    DEQP_FRACTION: 35
+    DEQP_FRACTION: 60
     DEQP_SUITE: venus
     GPU_VERSION: venus
     LP_NUM_THREADS: 2
@@ -32,3 +16,11 @@ venus-lavapipe:
     FLAKES_CHANNEL: "#virgl-ci"
   script:
     - ./install/crosvm-runner.sh ./install/deqp-runner.sh
+
+venus-lavapipe-full:
+  extends:
+    - .venus-lavapipe
+    - .venus-manual-rules
+  timeout: 3h
+  variables:
+    DEQP_FRACTION: 6  # 1 would take 12h so this is as close as we can get

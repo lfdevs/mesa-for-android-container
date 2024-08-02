@@ -437,8 +437,7 @@ lower_ycbcr_tex_instr(nir_builder *b, nir_instr *instr, void *_state)
                                            swizzled_bpcs);
    }
 
-   nir_def_rewrite_uses(&tex->def, result);
-   nir_instr_remove(&tex->instr);
+   nir_def_replace(&tex->def, result);
 
    return true;
 }
@@ -453,7 +452,6 @@ bool nir_vk_lower_ycbcr_tex(nir_shader *nir,
    };
 
    return nir_shader_instructions_pass(nir, lower_ycbcr_tex_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        &state);
 }

@@ -175,8 +175,8 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
 
    switch (nir_alu_type_get_base_type(use_type)) {
    case nir_type_float: {
-      double min_value = DBL_MAX;
-      double max_value = -DBL_MAX;
+      double min_value = NAN;
+      double max_value = NAN;
       bool any_zero = false;
       bool all_zero = true;
 
@@ -199,8 +199,8 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
 
          any_zero = any_zero || (v == 0.0);
          all_zero = all_zero && (v == 0.0);
-         min_value = MIN2(min_value, v);
-         max_value = MAX2(max_value, v);
+         min_value = fmin(min_value, v);
+         max_value = fmax(max_value, v);
       }
 
       assert(any_zero >= all_zero);

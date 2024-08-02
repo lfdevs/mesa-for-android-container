@@ -885,6 +885,16 @@ isl_format_supports_ccs_e(const struct intel_device_info *devinfo,
    if (!format_info_exists(format))
       return false;
 
+   /* On Xe2+ platforms, it doesn't matter that if a format can be
+    * compressed or not. Formats are given CMF encodings as a hint
+    * to hardware to reach the best compression ratio. When the CMF
+    * value is not the one for a format in the spec or a format's CMF
+    * encoding is unknown, the compressed ratio can be less optimistic,
+    * but no corruption should happen per hardware design.
+    */
+   if (devinfo->ver >= 20)
+      return true;
+
    /* For simplicity, only report that a format supports CCS_E if blorp can
     * perform bit-for-bit copies with an image of that format while compressed.
     * Unfortunately, R11G11B10_FLOAT is in a compression class of its own, and

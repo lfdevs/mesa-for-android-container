@@ -196,7 +196,8 @@ precompile_all_outputs(nir_shader *s,
                        uint8_t *num_outputs)
 {
         nir_foreach_shader_out_variable(var, s) {
-                const int array_len = MAX2(glsl_get_length(var->type), 1);
+                const int array_len = glsl_type_is_vector_or_scalar(var->type) ?
+                        1 : MAX2(glsl_get_length(var->type), 1);
                 for (int j = 0; j < array_len; j++) {
                         const int slot = var->data.location + j;
                         const int num_components =
@@ -323,16 +324,14 @@ static bool
 v3d_nir_lower_uniform_offset_to_bytes(nir_shader *s)
 {
         return nir_shader_intrinsics_pass(s, lower_uniform_offset_to_bytes_cb,
-                                            nir_metadata_block_index |
-                                            nir_metadata_dominance, NULL);
+                                            nir_metadata_control_flow, NULL);
 }
 
 static bool
 v3d_nir_lower_textures(nir_shader *s)
 {
         return nir_shader_instructions_pass(s, lower_textures_cb,
-                                            nir_metadata_block_index |
-                                            nir_metadata_dominance, NULL);
+                                            nir_metadata_control_flow, NULL);
 }
 
 static void *
@@ -365,6 +364,9 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
                 s = tgsi_to_nir(ir, pctx->screen, false);
         }
 
+        if (s->info.stage == MESA_SHADER_KERNEL)
+                s->info.stage = MESA_SHADER_COMPUTE;
+
         if (s->info.stage != MESA_SHADER_VERTEX &&
             s->info.stage != MESA_SHADER_GEOMETRY) {
                 NIR_PASS(_, s, nir_lower_io,
@@ -379,6 +381,15 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
         v3d_optimize_nir(NULL, s);
 
         NIR_PASS(_, s, nir_lower_var_copies);
+
+        /* Get rid of base CS sys vals */
+        if (s->info.stage == MESA_SHADER_COMPUTE) {
+                struct nir_lower_compute_system_values_options cs_options = {
+                        .has_base_global_invocation_id = false,
+                        .has_base_workgroup_id = false,
+                };
+                NIR_PASS(_, s, nir_lower_compute_system_values, &cs_options);
+        }
 
         /* Get rid of split copies */
         v3d_optimize_nir(NULL, s);
@@ -592,12 +603,25 @@ v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
 {
         nir_shader *s = uncompiled->base.ir.nir;
 
+        /* The shader may have gaps in the texture bindings, so figure out
+         * the largest binding in use and setup the number of textures and
+         * samplers from there instead of just the texture count from shader
+         * info.
+         */
+        key->num_tex_used = 0;
+        key->num_samplers_used = 0;
+        for (int i = V3D_MAX_TEXTURE_SAMPLERS - 1; i >= 0; i--) {
+                if (s->info.textures_used[0] & (1 << i)) {
+                        key->num_tex_used = i + 1;
+                        key->num_samplers_used = i + 1;
+                        break;
+                }
+        }
+
         /* Note that below we access they key's texture and sampler fields
          * using the same index. On OpenGL they are the same (they are
          * combined)
          */
-        key->num_tex_used = s->info.num_textures;
-        key->num_samplers_used = s->info.num_textures;
         for (int i = 0; i < s->info.num_textures; i++) {
                 key->sampler[i].return_size = 16;
                 key->sampler[i].return_channels = 2;
@@ -776,8 +800,10 @@ v3d_update_compiled_gs(struct v3d_context *v3d, uint8_t prim_mode)
         /* The last bin-mode shader in the geometry pipeline only outputs
          * varyings used by transform feedback.
          */
-        memcpy(key->used_outputs, uncompiled->tf_outputs,
-               sizeof(*key->used_outputs) * uncompiled->num_tf_outputs);
+        if (uncompiled->num_tf_outputs > 0) {
+                memcpy(key->used_outputs, uncompiled->tf_outputs,
+                       sizeof(*key->used_outputs) * uncompiled->num_tf_outputs);
+        }
         if (uncompiled->num_tf_outputs < key->num_used_outputs) {
                 uint32_t size = sizeof(*key->used_outputs) *
                                 (key->num_used_outputs -
@@ -883,9 +909,11 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
          * gl_Position or TF outputs.
          */
         if (!v3d->prog.bind_gs) {
-                memcpy(key->used_outputs, shader_state->tf_outputs,
-                       sizeof(*key->used_outputs) *
-                       shader_state->num_tf_outputs);
+                if (shader_state->num_tf_outputs > 0) {
+                        memcpy(key->used_outputs, shader_state->tf_outputs,
+                               sizeof(*key->used_outputs) *
+                               shader_state->num_tf_outputs);
+                }
                 if (shader_state->num_tf_outputs < key->num_used_outputs) {
                         uint32_t tail_bytes =
                                 sizeof(*key->used_outputs) *
@@ -1089,6 +1117,22 @@ v3d_create_compute_state(struct pipe_context *pctx,
                                             (void *)cso->prog);
 }
 
+static void
+v3d_get_compute_state_info(struct pipe_context *pctx,
+                           void *cso,
+                           struct pipe_compute_state_object_info *info)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+
+        /* this API requires compiled shaders */
+        v3d_compute_state_bind(pctx, cso);
+        v3d_update_compiled_cs(v3d);
+
+        info->max_threads = V3D_CHANNELS * v3d->prog.compute->prog_data.base->threads;
+        info->preferred_simd_size = V3D_CHANNELS;
+        info->private_memory = 0;
+}
+
 void
 v3d_program_init(struct pipe_context *pctx)
 {
@@ -1111,6 +1155,7 @@ v3d_program_init(struct pipe_context *pctx)
                 pctx->create_compute_state = v3d_create_compute_state;
                 pctx->delete_compute_state = v3d_shader_state_delete;
                 pctx->bind_compute_state = v3d_compute_state_bind;
+                pctx->get_compute_state_info = v3d_get_compute_state_info;
         }
 
         v3d->prog.cache[MESA_SHADER_VERTEX] =

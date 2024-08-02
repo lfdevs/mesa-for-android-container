@@ -461,8 +461,6 @@ dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_divisible,Fail
 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_not_divisible,Fail
 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_divisible,Fail
 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_not_divisible,Fail
-dEQP-GLES3.functional.vertex_arrays.single_attribute.normalize.int2_10_10_10.components4_quads1,Fail
-dEQP-GLES3.functional.vertex_arrays.single_attribute.normalize.int2_10_10_10.components4_quads256,Fail
 dEQP-GLES31.functional.debug.error_filters.case_29,Fail
 dEQP-GLES31.functional.debug.negative_coverage.callbacks.buffer.read_pixels_fbo_format_mismatch,Fail
 dEQP-GLES31.functional.debug.negative_coverage.get_error.buffer.blit_framebuffer_multisample,Fail
@@ -901,7 +899,6 @@ hiz@hiz-stencil-read-window-depth0,Fail
 hiz@hiz-stencil-read-window-depth1,Fail
 hiz@hiz-stencil-test-window-depth0,Fail
 hiz@hiz-stencil-test-window-depth1,Fail
-shaders@glsl-bug-110796,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@rasterpos,Fail
@@ -1116,9 +1113,6 @@ spec@arb_texture_rg@texwrap formats@GL_R16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_R8- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG8- NPOT,Fail
-
-spec@arb_texture_view@rendering-formats,Fail
-spec@arb_texture_view@rendering-formats@clear GL_RGBA8_SNORM as GL_R32F,Fail
 
 spec@arb_transform_feedback2@change objects while paused,Crash
 spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_gs,Crash

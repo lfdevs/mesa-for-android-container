@@ -87,7 +87,7 @@ get_signed_inf(nir_builder *b, nir_def *zero)
 static nir_def *
 get_signed_zero(nir_builder *b, nir_def *src)
 {
-   uint32_t exec_mode = b->shader->info.float_controls_execution_mode;
+   uint32_t exec_mode = b->fp_fast_math;
 
    nir_def *zero;
    if (nir_is_float_control_signed_zero_preserve(exec_mode, 64)) {
@@ -104,7 +104,7 @@ get_signed_zero(nir_builder *b, nir_def *src)
 static nir_def *
 preserve_nan(nir_builder *b, nir_def *src, nir_def *res)
 {
-   uint32_t exec_mode = b->shader->info.float_controls_execution_mode;
+   uint32_t exec_mode = b->fp_fast_math;
 
    if (nir_is_float_control_nan_preserve(exec_mode, 64)) {
       nir_def *is_nan = nir_fneu(b, src, src);
@@ -316,15 +316,20 @@ lower_sqrt_rsq(nir_builder *b, nir_def *src, bool sqrt)
       res = nir_ffma(b, y_1, r_1, y_1);
    }
 
-   uint32_t exec_mode = b->shader->info.float_controls_execution_mode;
+   uint32_t exec_mode = b->fp_fast_math;
    if (sqrt) {
       /* Here, the special cases we need to handle are
-       * 0 -> 0 and
+       * 0 -> 0 (sign preserving)
        * +inf -> +inf
+       * -inf -> NaN
        * NaN -> NaN
        */
+      /* Denorm flushing/preserving isn't part of the per-instruction bits, so
+       * check the execution mode for it.
+       */
+      uint32_t shader_exec_mode = b->shader->info.float_controls_execution_mode;
       nir_def *src_flushed = src;
-      if (!nir_is_denorm_preserve(exec_mode, 64)) {
+      if (!nir_is_denorm_preserve(shader_exec_mode, 64)) {
          src_flushed = nir_bcsel(b,
                                  nir_flt_imm(b, nir_fabs(b, src), DBL_MIN),
                                  get_signed_zero(b, src),
@@ -494,6 +499,23 @@ lower_minmax(nir_builder *b, nir_op cmp, nir_def *src0, nir_def *src1)
    nir_def *cmp_res = nir_build_alu2(b, cmp, src0, src1);
    b->exact = false;
    nir_def *take_src0 = nir_ior(b, src1_is_nan, cmp_res);
+
+   /* IEEE-754-2019 requires that fmin/fmax compare -0 < 0, but -0 and 0 are
+    * indistinguishable for flt/fge. So, we fix up signed zeroes.
+    */
+   if (nir_is_float_control_signed_zero_preserve(b->fp_fast_math, 64)) {
+      nir_def *src0_is_negzero = nir_ieq_imm(b, src0, 1ull << 63);
+      nir_def *src1_is_poszero = nir_ieq_imm(b, src1, 0x0);
+      nir_def *neg_pos_zero = nir_iand(b, src0_is_negzero, src1_is_poszero);
+
+      if (cmp == nir_op_flt) {
+         take_src0 = nir_ior(b, take_src0, neg_pos_zero);
+      } else {
+         assert(cmp == nir_op_fge);
+         take_src0 = nir_iand(b, take_src0, nir_inot(b, neg_pos_zero));
+      }
+   }
+
    return nir_bcsel(b, take_src0, src0, src1);
 }
 
@@ -778,6 +800,9 @@ lower_doubles_instr(nir_builder *b, nir_instr *instr, void *_data)
    const nir_lower_doubles_options options = data->options;
    nir_alu_instr *alu = nir_instr_as_alu(instr);
 
+   /* Easier to set it here than pass it around all over ther place. */
+   b->fp_fast_math = alu->fp_fast_math;
+
    nir_def *soft_def =
       lower_doubles_instr_to_soft(b, alu, data->softfp64, options);
    if (soft_def)
@@ -863,8 +888,7 @@ nir_lower_doubles_impl(nir_function_impl *impl,
        */
       nir_opt_deref_impl(impl);
    } else if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                     nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }

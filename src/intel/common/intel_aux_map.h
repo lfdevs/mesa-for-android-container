@@ -45,6 +45,42 @@ struct intel_device_info;
 
 #define INTEL_AUX_MAP_ENTRY_VALID_BIT    0x1ull
 
+/**
+ * The ratio between the granularity of main surface pitch and AUX data pitch
+ * (when viewed as a surface).
+ *
+ * In agreement with Bspec 44930, the kernel expects that every 512B of the
+ * main surface pitch maps to 64B of the AUX data pitch. This is not
+ * documented in drm_fourcc.h.
+ */
+#define INTEL_AUX_MAP_MAIN_PITCH_SCALEDOWN (512 / 64)
+
+/**
+ * The ratio between the granularity of main surface and AUX data.
+ *
+ * The value is from Bspec 47709, MCS/CCS Buffers for Render Target(s):
+ *
+ *    "CCS is a linear buffer created for storing meta-data (AUX data) for
+ *    lossless compression. This buffer related information is mentioned in
+ *    Render Surface State. CCS buffer's size is based on the padded main
+ *    surface (after following Halign and Valign requirements mentioned in the
+ *    Render Surface State). CCS_Buffer_Size = Padded_Main_Surface_Size/256"
+ *
+ * The aux-map only exists on Xe, so this is equivalent to
+ * ISL_MAIN_TO_CCS_SIZE_RATIO_XE.
+ */
+#define INTEL_AUX_MAP_MAIN_SIZE_SCALEDOWN 256
+
+/**
+ * The alignment at which the AUX data virtual addresses should start.
+ *
+ * The diagram in Bspec 44930 shows that the CCS is indexed in 256B chunks for
+ * TGL, 4K chunks for MTL. However, when modifiers are in use, the 4K
+ * alignment requirement of the PLANE_AUX_DIST::Auxiliary Surface Distance
+ * field must be considered (Bspec 50379). Keep things simple and just use 4K.
+ */
+#define INTEL_AUX_MAP_META_ALIGNMENT_B 4096
+
 struct intel_aux_map_context *
 intel_aux_map_init(void *driver_ctx,
                    struct intel_mapped_pinned_buffer_alloc *buffer_alloc,
@@ -77,12 +113,6 @@ intel_aux_map_get_num_buffers(struct intel_aux_map_context *ctx);
  */
 uint64_t
 intel_aux_get_meta_address_mask(struct intel_aux_map_context *ctx);
-
-/**
- * Returns the ratio between the granularity of main surface and AUX data
- */
-uint64_t
-intel_aux_get_main_to_aux_ratio(struct intel_aux_map_context *ctx);
 
 /**
  * Takes a relative offset in the main surface and returns a relative offset

@@ -178,7 +178,6 @@ struct tu_query_pool;
 struct tu_queue;
 struct tu_render_pass;
 struct tu_sampler;
-struct tu_sampler_ycbcr_conversion;
 
 struct breadcrumbs_context;
 struct tu_bo;

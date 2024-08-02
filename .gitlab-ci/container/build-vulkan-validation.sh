@@ -2,12 +2,12 @@
 
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
-# DEBIAN_X86_64_TEST_GL_TAG
-# KERNEL_ROOTFS_TAG:
+# DEBIAN_TEST_GL_TAG
+# KERNEL_ROOTFS_TAG
 
 set -ex
 
-VALIDATION_TAG="v1.3.281"
+VALIDATION_TAG="v1.3.289"
 
 git clone -b "$VALIDATION_TAG" --single-branch --depth 1 https://github.com/KhronosGroup/Vulkan-ValidationLayers.git
 pushd Vulkan-ValidationLayers

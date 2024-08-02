@@ -40,7 +40,7 @@ brw_fs_lower_pack(fs_visitor &s)
 
       assert(inst->dst.file == VGRF);
       assert(inst->saturate == false);
-      fs_reg dst = inst->dst;
+      brw_reg dst = inst->dst;
 
       const fs_builder ibld(&s, block, inst);
       /* The lowering generates 2 instructions for what was previously 1. This
@@ -57,15 +57,15 @@ brw_fs_lower_pack(fs_visitor &s)
             ibld.MOV(subscript(dst, inst->src[i].type, i), inst->src[i]);
          break;
       case FS_OPCODE_PACK_HALF_2x16_SPLIT:
-         assert(dst.type == BRW_REGISTER_TYPE_UD);
+         assert(dst.type == BRW_TYPE_UD);
 
          for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->src[i].file == IMM) {
                const uint32_t half = _mesa_float_to_half(inst->src[i].f);
-               ibld.MOV(subscript(dst, BRW_REGISTER_TYPE_UW, i),
+               ibld.MOV(subscript(dst, BRW_TYPE_UW, i),
                         brw_imm_uw(half));
             } else {
-               ibld.MOV(subscript(dst, BRW_REGISTER_TYPE_HF, i),
+               ibld.MOV(subscript(dst, BRW_TYPE_HF, i),
                         inst->src[i]);
             }
          }

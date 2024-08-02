@@ -22,6 +22,7 @@
 #define VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_RESOURCE_INFO_MESA ((VkStructureType)1000384004)
 #define VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA ((VkStructureType)1000384005)
 #define VK_STRUCTURE_TYPE_RING_MONITOR_INFO_MESA ((VkStructureType)1000384006)
+#define VK_STRUCTURE_TYPE_RING_PRIORITY_INFO_MESA ((VkStructureType)1000384007)
 
 typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkCreateInstance_EXT = 0,
@@ -367,6 +368,11 @@ typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkCmdSetLineRasterizationModeEXT_EXT = 274,
     VK_COMMAND_TYPE_vkCmdSetLineStippleEnableEXT_EXT = 275,
     VK_COMMAND_TYPE_vkCmdSetDepthClipNegativeOneToOneEXT_EXT = 276,
+    VK_COMMAND_TYPE_vkCmdBindIndexBuffer2KHR_EXT = 279,
+    VK_COMMAND_TYPE_vkGetRenderingAreaGranularityKHR_EXT = 280,
+    VK_COMMAND_TYPE_vkGetDeviceImageSubresourceLayoutKHR_EXT = 281,
+    VK_COMMAND_TYPE_vkGetImageSubresourceLayout2KHR_EXT = 282,
+    VK_COMMAND_TYPE_vkGetImageSubresourceLayout2EXT_EXT = 282,
     VK_COMMAND_TYPE_vkSetReplyCommandStreamMESA_EXT = 178,
     VK_COMMAND_TYPE_vkSeekReplyCommandStreamMESA_EXT = 179,
     VK_COMMAND_TYPE_vkExecuteCommandStreamsMESA_EXT = 180,
@@ -437,6 +443,12 @@ typedef struct VkRingMonitorInfoMESA {
     const void* pNext;
     uint32_t maxReportingPeriodMicroseconds;
 } VkRingMonitorInfoMESA;
+
+typedef struct VkRingPriorityInfoMESA {
+    VkStructureType sType;
+    const void* pNext;
+    int32_t priority;
+} VkRingPriorityInfoMESA;
 
 typedef struct VkMemoryResourcePropertiesMESA {
     VkStructureType sType;

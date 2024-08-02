@@ -1,0 +1,62 @@
+.nvk-valve-rules:
+  stage: nouveau
+  rules:
+    - !reference [.test, rules]
+    - !reference [.valve-farm-rules, rules]
+    - !reference [.vulkan-rules, rules]
+    - changes: &nvk_file_list
+        - src/nouveau/*
+        - src/nouveau/codegen**/*
+        - src/nouveau/compiler/**/*
+        - src/nouveau/drm/**/*
+        - src/nouveau/nme/**/*
+        - src/nouveau/nil/**/*
+        - src/nouveau/nvidia-headers/**/*
+        - src/nouveau/vulkan/**/*
+        - src/nouveau/winsys/**/*
+        - src/nouveau/ci/gitlab-ci.yml
+        - src/nouveau/ci/gitlab-ci-inc.yml
+        - src/nouveau/ci/deqp-$DEQP_SUITE.toml
+        - src/nouveau/ci/$GPU_VERSION-fails.txt
+        - src/nouveau/ci/$GPU_VERSION-flakes.txt
+        - src/nouveau/ci/$GPU_VERSION-skips.txt
+      when: on_success
+
+.nvk-valve-manual-rules:
+  stage: nouveau
+  extends: .no-auto-retry
+  rules:
+    - !reference [.test, rules]
+    - !reference [.valve-farm-manual-rules, rules]
+    - !reference [.vulkan-manual-rules, rules]
+    - changes:
+        *nvk_file_list
+      when: manual
+
+
+.nvk-vkcts:
+  variables:
+    VK_DRIVER: nouveau
+    DEQP_SUITE: nvk
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+    NVK_I_WANT_A_BROKEN_VULKAN_DRIVER: 1
+    HWCI_TEST_SCRIPT: install/deqp-runner.sh
+
+.nvk-ga106-valve:
+  variables:
+    GPU_VERSION: nvk-ga106
+    FDO_CI_CONCURRENT: 16
+    RUNNER_FARM_LOCATION: mupuf
+    B2C_JOB_WARN_REGEX: 'nouveau .+ job timeout|NMI backtrace for cpu \d+'
+    # Default kernel is missing the GA106 GSP
+    # 1 - clone b2c
+    # 2 - apply all patches in patches/linux/* to your kernel
+    # 3 - download https://tmp.engestrom.ch/nouveau to config/linux/
+    # 4 - make linux LINUX_SRC=~/linux-nvk GOARCH=amd64 FEATURES=common,network,sensors,serial_adapters,ucode,nouveau
+    # This is https://gitlab.freedesktop.org/gfxstrand/linux/-/commits/nvk
+    # at d6820f36f375ece63226b26568be3a893985dc60 nouveau: set placement to original placement on uvmm validate.
+    B2C_KERNEL_URL: 'https://static.engestrom.ch/linux-6.8-nvk-ga106'
+    # GSP is not loaded by default
+    B2C_KERNEL_CMDLINE_EXTRAS: 'nouveau.config=NvGspRm=1'
+  tags:
+    - nvidia:codename:GA106

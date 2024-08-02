@@ -86,6 +86,7 @@ create_buffer(struct wl_client *client, struct wl_resource *resource,
    if (buffer->driver_buffer == NULL) {
       wl_resource_post_error(resource, WL_DRM_ERROR_INVALID_NAME,
                              "invalid name");
+      free(buffer);
       return;
    }
 

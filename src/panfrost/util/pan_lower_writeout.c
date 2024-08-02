@@ -182,7 +182,7 @@ pan_nir_lower_zs_store(nir_shader *nir)
       }
 
       nir_metadata_preserve(impl,
-                            nir_metadata_block_index | nir_metadata_dominance);
+                            nir_metadata_control_flow);
       progress = true;
    }
 

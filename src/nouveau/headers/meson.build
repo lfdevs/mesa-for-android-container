@@ -1,12 +1,14 @@
-nvk_classes = [
+nv_classes = [
   'cl902d',
   'cl9039',
   'cl906f',
   'cl9097',
   'cl90b5',
   'cl90c0',
+  'cla040',
   'cla0b5',
   'cla097',
+  'cla140',
   'cla297',
   'clb097',
   'clb0c0',
@@ -22,6 +24,7 @@ nvk_classes = [
   'clc5c0',
   'clc697',
   'clc6c0',
+  'clc797',
   'clc7c0',
 ]
 
@@ -32,19 +35,14 @@ hwref_gens = [
   'turing/tu102',
 ]
 
-nvk_cl_header_depend_files = [
-  files('class_parser.py')
-]
-
 cl_generated = []
-foreach cl : nvk_classes
+foreach cl : nv_classes
   cl_generated += custom_target(
     cl + '.h',
     input : ['class_parser.py', 'nvidia/classes/'+cl+'.h'],
-    output : ['nvk_'+cl+'.h', 'nvk_'+cl+'.c'],
+    output : ['nv_push_'+cl+'.h', 'nv_push_'+cl+'.c'],
     command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
                '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@'],
-    depend_files: nvk_cl_header_depend_files,
   )
 endforeach
 
@@ -76,14 +74,13 @@ if with_nouveau_vk
   rust = import('rust')
 
   cl_rs_generated = []
-  foreach cl : nvk_classes
+  foreach cl : nv_classes
     cl_rs_generated += custom_target(
       'nvh_classes_' + cl + '.rs',
       input : ['class_parser.py', 'nvidia/classes/'+cl+'.h'],
       output : ['nvh_classes_'+cl+'.rs'],
       command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
                  '--out-rs', '@OUTPUT0@'],
-      depend_files: nvk_cl_header_depend_files,
     )
 
     fs = import('fs')
@@ -102,6 +99,15 @@ if with_nouveau_vk
         'nvh_classes_' + cl + '_tex.rs',
         input : ['struct_parser.py', 'nvidia/classes/'+cl+'tex.h'],
         output : ['nvh_classes_'+cl+'_tex.rs'],
+        command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
+                   '--out-rs', '@OUTPUT0@']
+      )
+    endif
+
+    if fs.is_file(f'nvidia/classes/@cl@sph.h')
+      cl_rs_generated += custom_target(
+        input : ['struct_parser.py', f'nvidia/classes/@cl@sph.h'],
+        output : [f'nvh_classes_@cl@_sph.rs'],
         command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
                    '--out-rs', '@OUTPUT0@']
       )

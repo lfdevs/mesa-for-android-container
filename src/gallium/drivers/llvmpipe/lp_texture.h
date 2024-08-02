@@ -32,6 +32,7 @@
 #include "pipe/p_state.h"
 #include "util/u_debug.h"
 #include "lp_limits.h"
+#include "util/bitset.h"
 #if MESA_DEBUG
 #include "util/list.h"
 #endif
@@ -57,14 +58,6 @@ struct llvmpipe_context;
 struct llvmpipe_screen;
 
 struct sw_displaytarget;
-
-struct llvmpipe_memory_fd_alloc {
-   void *data;
-   enum llvmpipe_memory_fd_type type;
-   int mem_fd;
-   int dmabuf_fd;
-   size_t size;
-};
 
 /**
  * llvmpipe subclass of pipe_resource.  A texture, drawing surface,
@@ -101,6 +94,8 @@ struct llvmpipe_resource
     */
    void *tex_data;
 
+   BITSET_WORD *residency;
+
    /**
     * Data for non-texture resources.
     */
@@ -116,7 +111,7 @@ struct llvmpipe_resource
    uint64_t size_required;
    uint64_t backing_offset;
 #ifdef HAVE_LIBDRM
-   struct llvmpipe_memory_fd_alloc *dmabuf_alloc;
+   struct llvmpipe_memory_allocation *dmabuf_alloc;
 #endif
    bool backable;
    bool imported_memory;
@@ -130,8 +125,20 @@ struct llvmpipe_resource
 struct llvmpipe_transfer
 {
    struct pipe_transfer base;
+   void *map;
+   struct pipe_box block_box;
 };
 
+struct llvmpipe_memory_allocation
+{
+   int fd;
+   uint64_t offset;
+   void *cpu_addr;
+   uint64_t size;
+   enum llvmpipe_memory_fd_type type;
+   int mem_fd;
+   int dmabuf_fd;
+};
 
 struct llvmpipe_memory_object
 {
@@ -297,5 +304,10 @@ llvmpipe_transfer_map_ms(struct pipe_context *pipe,
                          unsigned sample,
                          const struct pipe_box *box,
                          struct pipe_transfer **transfer);
+
+uint32_t
+llvmpipe_get_texel_offset(struct pipe_resource *resource,
+                          uint32_t level, uint32_t x,
+                          uint32_t y, uint32_t z);
 
 #endif /* LP_TEXTURE_H */

@@ -141,15 +141,15 @@ radv_probe_video_encode(struct radv_physical_device *pdev)
 void
 radv_init_physical_device_encoder(struct radv_physical_device *pdev)
 {
-   if (pdev->info.family >= CHIP_NAVI31) {
+   if (pdev->info.vcn_ip_version >= VCN_4_0_0) {
       pdev->enc_hw_ver = RADV_VIDEO_ENC_HW_4;
       pdev->encoder_interface_version = ((RENCODE_V4_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |
                                          (RENCODE_V4_FW_INTERFACE_MINOR_VERSION << RENCODE_IF_MINOR_VERSION_SHIFT));
-   } else if (pdev->info.family >= CHIP_NAVI21) {
+   } else if (pdev->info.vcn_ip_version >= VCN_3_0_0) {
       pdev->enc_hw_ver = RADV_VIDEO_ENC_HW_3;
       pdev->encoder_interface_version = ((RENCODE_V3_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |
                                          (RENCODE_V3_FW_INTERFACE_MINOR_VERSION << RENCODE_IF_MINOR_VERSION_SHIFT));
-   } else if (pdev->info.family >= CHIP_RENOIR) {
+   } else if (pdev->info.vcn_ip_version >= VCN_2_0_0) {
       pdev->enc_hw_ver = RADV_VIDEO_ENC_HW_2;
       pdev->encoder_interface_version = ((RENCODE_V2_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |
                                          (RENCODE_V2_FW_INTERFACE_MINOR_VERSION << RENCODE_IF_MINOR_VERSION_SHIFT));
@@ -159,7 +159,7 @@ radv_init_physical_device_encoder(struct radv_physical_device *pdev)
                                          (RENCODE_FW_INTERFACE_MINOR_VERSION << RENCODE_IF_MINOR_VERSION_SHIFT));
    }
 
-   if (pdev->info.family >= CHIP_RENOIR) {
+   if (pdev->info.vcn_ip_version >= VCN_2_0_0) {
       pdev->vcn_enc_cmds.session_info = RENCODE_V2_IB_PARAM_SESSION_INFO;
       pdev->vcn_enc_cmds.task_info = RENCODE_V2_IB_PARAM_TASK_INFO;
       pdev->vcn_enc_cmds.session_init = RENCODE_V2_IB_PARAM_SESSION_INIT;
@@ -769,7 +769,9 @@ radv_enc_slice_header(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInf
       break;
    }
    radv_enc_code_ue(cmd_buffer, 0x0);
-   radv_enc_code_fixed_bits(cmd_buffer, pic->frame_num % 32, sps->log2_max_frame_num_minus4 + 4);
+
+   unsigned int max_frame_num_bits = sps->log2_max_frame_num_minus4 + 4;
+   radv_enc_code_fixed_bits(cmd_buffer, pic->frame_num % (1 << max_frame_num_bits), max_frame_num_bits);
 #if 0
    if (enc->enc_pic.h264_enc_params.input_picture_structure !=
        RENCODE_H264_PICTURE_STRUCTURE_FRAME) {
@@ -786,8 +788,10 @@ radv_enc_slice_header(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInf
    if (pic->flags.IdrPicFlag)
       radv_enc_code_ue(cmd_buffer, pic->idr_pic_id);
 
-   if (sps->pic_order_cnt_type == STD_VIDEO_H264_POC_TYPE_0)
-      radv_enc_code_fixed_bits(cmd_buffer, pic->PicOrderCnt % 32, sps->log2_max_pic_order_cnt_lsb_minus4 + 4);
+   if (sps->pic_order_cnt_type == STD_VIDEO_H264_POC_TYPE_0) {
+      unsigned int max_poc_bits = sps->log2_max_pic_order_cnt_lsb_minus4 + 4;
+      radv_enc_code_fixed_bits(cmd_buffer, pic->PicOrderCnt % (1 << max_poc_bits), max_poc_bits);
+   }
 
    if (pps->flags.redundant_pic_cnt_present_flag)
       radv_enc_code_ue(cmd_buffer, 0);
@@ -982,7 +986,8 @@ radv_enc_slice_header_hevc(struct radv_cmd_buffer *cmd_buffer, const VkVideoEnco
 
    if ((nal_unit_type != 19) && nal_unit_type != 20) {
       /* slice_pic_order_cnt_lsb */
-      radv_enc_code_fixed_bits(cmd_buffer, pic->PicOrderCntVal, sps->log2_max_pic_order_cnt_lsb_minus4 + 4);
+      unsigned int max_poc_bits = sps->log2_max_pic_order_cnt_lsb_minus4 + 4;
+      radv_enc_code_fixed_bits(cmd_buffer, pic->PicOrderCntVal % (1 << max_poc_bits), max_poc_bits);
       radv_enc_code_fixed_bits(cmd_buffer, pic->flags.short_term_ref_pic_set_sps_flag, 0x1);
       if (!pic->flags.short_term_ref_pic_set_sps_flag) {
          int st_rps_idx = sps->num_short_term_ref_pic_sets;

@@ -34,7 +34,7 @@ class Tracepoint(object):
     """
     def __init__(self, name, args=[], toggle_name=None,
                  tp_struct=None, tp_print=None, tp_perfetto=None,
-                 tp_markers=None, end_of_pipe=False, need_cs_param=True):
+                 tp_markers=None, tp_flags=[], need_cs_param=True):
         """Parameters:
 
         - name: the tracepoint name, a tracepoint function with the given
@@ -60,16 +60,19 @@ class Tracepoint(object):
         self.args = args
         if tp_struct is None:
            tp_struct = args
+        else:
+           tp_struct += [x for x in args if isinstance(x, TracepointArg)]
+
         self.tp_struct = tp_struct
         self.has_variable_arg = False
         for arg in self.tp_struct:
-            if arg.length_arg != None:
+            if arg.length_arg != None and not arg.length_arg.isdigit():
                 self.has_variable_arg = True
                 break
         self.tp_print = tp_print
         self.tp_perfetto = tp_perfetto
         self.tp_markers = tp_markers
-        self.end_of_pipe = end_of_pipe
+        self.tp_flags = tp_flags
         self.toggle_name = toggle_name
         self.need_cs_param = need_cs_param
 
@@ -103,6 +106,8 @@ class TracepointArgStruct():
         self.type = type
         self.var = var
 
+        self.func_param = f"{self.type} {self.var}"
+
 class TracepointArg(object):
     """Class that represents either an argument being passed or a field in a struct
     """
@@ -131,6 +136,18 @@ class TracepointArg(object):
         self.to_prim_type = to_prim_type
         self.length_arg = length_arg
         self.copy_func = copy_func
+
+        if self.type == "str":
+            self.struct_member = f"char {self.name}[{length_arg} + 1]"
+        elif self.length_arg:
+            self.struct_member = f"{self.type} {self.name}[0]"
+        else:
+            self.struct_member = f"{self.type} {self.name}"
+
+        if self.type == "str":
+            self.func_param = f"const char *{self.var}"
+        else:
+            self.func_param = f"{self.type} {self.var}"
 
 
 HEADERS = []
@@ -227,7 +244,7 @@ void ${trace_toggle_name}_config_variable(void);
  */
 struct trace_${trace_name} {
 %    for arg in trace.tp_struct:
-   ${arg.type} ${arg.name}${"[0]" if arg.length_arg else ""};
+   ${arg.struct_member};
 %    endfor
 %    if len(trace.args) == 0:
 #ifdef __cplusplus
@@ -258,7 +275,7 @@ void __trace_${trace_name}(
      , void *cs
 %    endif
 %    for arg in trace.args:
-     , ${arg.type} ${arg.var}
+     , ${arg.func_param}
 %    endfor
 );
 static ALWAYS_INLINE void trace_${trace_name}(
@@ -267,7 +284,7 @@ static ALWAYS_INLINE void trace_${trace_name}(
    , void *cs
 %    endif
 %    for arg in trace.args:
-   , ${arg.type} ${arg.var}
+   , ${arg.func_param}
 %    endfor
 ) {
    enum u_trace_type enabled_traces = p_atomic_read_relaxed(&ut->utctx->enabled_traces);
@@ -446,7 +463,7 @@ static void __emit_label_${trace_name}(struct u_trace_context *utctx, void *cs, 
 static const struct u_tracepoint __tp_${trace_name} = {
     ALIGN_POT(sizeof(struct trace_${trace_name}), 8),   /* keep size 64b aligned */
     "${trace_name}",
-    ${"true" if trace.end_of_pipe else "false"},
+    ${0 if len(trace.tp_flags) == 0 else " | ".join(trace.tp_flags)},
     ${index},
     __print_${trace_name},
     __print_json_${trace_name},
@@ -463,7 +480,7 @@ void __trace_${trace_name}(
    , void *cs
  % endif
  % for arg in trace.args:
-   , ${arg.type} ${arg.var}
+   , ${arg.func_param}
  % endfor
 ) {
    struct trace_${trace_name} entry;
@@ -473,7 +490,7 @@ void __trace_${trace_name}(
       (struct trace_${trace_name} *)u_trace_appendv(ut, ${"cs," if trace.need_cs_param else "NULL,"} &__tp_${trace_name},
                                                     0
   % for arg in trace.tp_struct:
-   % if arg.length_arg is not None:
+   % if arg.length_arg is not None and not arg.length_arg.isdigit():
                                                     + ${arg.length_arg}
    % endif
   % endfor
@@ -483,7 +500,7 @@ void __trace_${trace_name}(
  % endif
       &entry;
  % for arg in trace.tp_struct:
-  % if arg.length_arg is None:
+  % if arg.copy_func is None:
    __entry->${arg.name} = ${arg.var};
   % else:
    ${arg.copy_func}(__entry->${arg.name}, ${arg.var}, ${arg.length_arg});

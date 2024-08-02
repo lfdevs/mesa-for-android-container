@@ -77,9 +77,9 @@ TEST_F(FSCombineConstantsTest, Simple)
 {
    fs_builder bld = make_builder(shader);
 
-   fs_reg r = brw_vec8_grf(1, 0);
-   fs_reg imm_a = brw_imm_ud(1);
-   fs_reg imm_b = brw_imm_ud(2);
+   brw_reg r = brw_vec8_grf(1, 0);
+   brw_reg imm_a = brw_imm_ud(1);
+   brw_reg imm_b = brw_imm_ud(2);
 
    bld.SEL(r, imm_a, imm_b);
    shader->calculate_cfg();
@@ -102,10 +102,10 @@ TEST_F(FSCombineConstantsTest, DoContainingDo)
 {
    fs_builder bld = make_builder(shader);
 
-   fs_reg r1 = brw_vec8_grf(1, 0);
-   fs_reg r2 = brw_vec8_grf(2, 0);
-   fs_reg imm_a = brw_imm_ud(1);
-   fs_reg imm_b = brw_imm_ud(2);
+   brw_reg r1 = brw_vec8_grf(1, 0);
+   brw_reg r2 = brw_vec8_grf(2, 0);
+   brw_reg imm_a = brw_imm_ud(1);
+   brw_reg imm_b = brw_imm_ud(2);
 
    bld.DO();
    bld.DO();

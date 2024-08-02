@@ -11,7 +11,7 @@
 #include "mme_fermi_sim.h"
 #include "mme_tu104_sim.h"
 
-#include "nvk_clc597.h"
+#include "nv_push_clc597.h"
 
 #include "nouveau_bo.h"
 #include "nouveau_context.h"
@@ -48,6 +48,8 @@ mme_hw_runner::~mme_hw_runner()
 {
    if (syncobj)
       drmSyncobjDestroy(dev->fd, syncobj);
+   if (data_bo)
+      nouveau_ws_bo_destroy(data_bo);
    if (push_bo) {
       nouveau_ws_bo_unmap(push_bo, push_map);
       nouveau_ws_bo_destroy(push_bo);
@@ -59,6 +61,9 @@ mme_hw_runner::~mme_hw_runner()
 }
 
 #define PUSH_SIZE 64 * 4096
+
+#define DATA_BO_ADDR 0x100000
+#define PUSH_BO_ADDR 0x200000
 
 bool
 mme_hw_runner::set_up_hw(uint16_t min_cls, uint16_t max_cls)
@@ -103,7 +108,10 @@ mme_hw_runner::set_up_hw(uint16_t min_cls, uint16_t max_cls)
       return false;
 
    memset(data, 139, DATA_BO_SIZE);
-   data_addr = data_bo->offset;
+
+   assert(DATA_BO_ADDR + DATA_BO_SIZE < PUSH_BO_ADDR);
+   nouveau_ws_bo_bind_vma(dev, data_bo, DATA_BO_ADDR, DATA_BO_SIZE, 0, 0);
+   data_addr = DATA_BO_ADDR;
 
    uint32_t push_bo_flags = NOUVEAU_WS_BO_GART | NOUVEAU_WS_BO_MAP;
    push_bo = nouveau_ws_bo_new_mapped(dev, PUSH_SIZE, 0,
@@ -111,6 +119,8 @@ mme_hw_runner::set_up_hw(uint16_t min_cls, uint16_t max_cls)
                                       NOUVEAU_WS_BO_WR, &push_map);
    if (push_bo == NULL)
       return false;
+
+   nouveau_ws_bo_bind_vma(dev, push_bo, PUSH_BO_ADDR, PUSH_SIZE, 0, 0);
 
    ret = drmSyncobjCreate(dev->fd, 0, &syncobj);
    if (ret < 0)
@@ -138,7 +148,7 @@ void
 mme_hw_runner::submit_push()
 {
    struct drm_nouveau_exec_push push = {
-      .va = push_bo->offset,
+      .va = PUSH_BO_ADDR,
       .va_len = (uint32_t)nv_push_dw_count(&this->push) * 4,
    };
 

@@ -57,7 +57,6 @@ x11-dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_srgb,Fail
 x11-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb,Fail
 
 shaders@glsl-arb-fragment-coord-conventions,Fail
-shaders@glsl-bug-110796,Fail
 shaders@glsl-fs-flat-color,Fail
 shaders@glsl-predication-on-large-array,Fail
 shaders@glsl-routing,Fail

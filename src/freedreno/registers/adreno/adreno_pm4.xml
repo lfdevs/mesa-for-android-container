@@ -21,9 +21,9 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<value name="HLSQ_FLUSH" value="7" variants="A3XX-A4XX"/>
 	<value name="VIZQUERY_END" value="8" variants="A2XX"/>
 	<value name="SC_WAIT_WC" value="9" variants="A2XX"/>
-	<value name="WRITE_PRIMITIVE_COUNTS" value="9" variants="A6XX"/>
-	<value name="START_PRIMITIVE_CTRS" value="11" variants="A6XX"/>
-	<value name="STOP_PRIMITIVE_CTRS" value="12" variants="A6XX"/>
+	<value name="WRITE_PRIMITIVE_COUNTS" value="9" variants="A6XX-"/>
+	<value name="START_PRIMITIVE_CTRS" value="11" variants="A6XX-"/>
+	<value name="STOP_PRIMITIVE_CTRS" value="12" variants="A6XX-"/>
 	<!-- Not sure that these 4 events don't have the same meaning as on A5XX+ -->
 	<value name="RST_PIX_CNT" value="13" variants="A2XX-A4XX"/>
 	<value name="RST_VTX_CNT" value="14" variants="A2XX-A4XX"/>
@@ -96,6 +96,13 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 		more general blitting.
 	</doc>
 	<value name="BLIT" value="30" variants="A5XX-"/>
+
+	<doc>
+	Flip between the primary and secondary LRZ buffers. This is used
+	for concurrent binning, so that BV can write to one buffer while
+	BR reads from the other.
+	</doc>
+	<value name="LRZ_FLIP_BUFFER" value="36" variants="A7XX"/>
 
 	<doc>
 		Clears based on GRAS_LRZ_CNTL configuration, could clear

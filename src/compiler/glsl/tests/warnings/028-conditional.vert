@@ -13,5 +13,7 @@ void main()
 
   fooInt = undefined ? definedInt : undefinedInt;
   fooInt = undefined ? undefinedInt : definedInt;
+
+  gl_Position = vec4(1.0);
 }
 

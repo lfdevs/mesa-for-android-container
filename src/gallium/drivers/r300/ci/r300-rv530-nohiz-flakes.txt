@@ -23,4 +23,7 @@ spec@ati_fragment_shader@ati_fragment_shader-render-textargets
 
 # Nightly run expectations update
 spec@ati_fragment_shader@ati_fragment_shader-render-notexture
+spec@ext_texture_compression_s3tc@s3tc-errors_gles2
 
+# could be related to https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/899
+spec@!opengl 1.0@depth-clear-precision-check@depth16

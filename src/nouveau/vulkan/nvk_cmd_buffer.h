@@ -11,6 +11,7 @@
 #include "nvk_cmd_pool.h"
 #include "nvk_descriptor_set.h"
 #include "nvk_image.h"
+#include "nvk_shader.h"
 
 #include "util/u_dynarray.h"
 
@@ -20,7 +21,8 @@
 
 struct nvk_buffer;
 struct nvk_cbuf;
-struct nvk_cmd_bo;
+struct nvk_cmd_mem;
+struct nvk_cmd_buffer;
 struct nvk_cmd_pool;
 struct nvk_image_view;
 struct nvk_push_descriptor_set;
@@ -31,18 +33,18 @@ struct nvk_sample_location {
    uint8_t x_u4:4;
    uint8_t y_u4:4;
 };
+static_assert(sizeof(struct nvk_sample_location) == 1,
+              "This struct has no holes");
 
 /** Root descriptor table.  This gets pushed to the GPU directly */
 struct nvk_root_descriptor_table {
-   uint64_t root_desc_addr;
-
    union {
       struct {
          uint32_t base_vertex;
          uint32_t base_instance;
-         uint32_t draw_id;
+         uint32_t draw_index;
          uint32_t view_index;
-         struct nvk_sample_location sample_locations[8];
+         struct nvk_sample_location sample_locations[NVK_MAX_SAMPLES];
       } draw;
       struct {
          uint32_t base_group[3];
@@ -53,17 +55,20 @@ struct nvk_root_descriptor_table {
    /* Client push constants */
    uint8_t push[NVK_MAX_PUSH_SIZE];
 
-   /* Descriptor set base addresses */
-   uint64_t sets[NVK_MAX_SETS];
+   /* Descriptor set addresses */
+   struct nvk_buffer_address sets[NVK_MAX_SETS];
 
-   /* Dynamic buffer bindings */
-   struct nvk_buffer_address dynamic_buffers[NVK_MAX_DYNAMIC_BUFFERS];
-
-   /* Start index in dynamic_buffers where each set starts */
+   /* For each descriptor set, the index in dynamic_buffers where that set's
+    * the dynamic buffers start. This is maintained for every set, regardless
+    * of whether or not anything is bound there.
+    */
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
 
+   /* Dynamic buffer bindings */
+   union nvk_buffer_descriptor dynamic_buffers[NVK_MAX_DYNAMIC_BUFFERS];
+
    /* enfore alignment to 0x100 as needed pre pascal */
-   uint8_t __padding[0x18];
+   uint8_t __padding[0x48];
 };
 
 /* helper macro for computing root descriptor byte offsets */
@@ -71,14 +76,58 @@ struct nvk_root_descriptor_table {
    offsetof(struct nvk_root_descriptor_table, member)
 
 struct nvk_descriptor_state {
-   struct nvk_root_descriptor_table root;
-   uint32_t set_sizes[NVK_MAX_SETS];
-   struct nvk_descriptor_set *sets[NVK_MAX_SETS];
-   uint32_t sets_dirty;
+   alignas(16) char root[sizeof(struct nvk_root_descriptor_table)];
+   void (*flush_root)(struct nvk_cmd_buffer *cmd,
+                      struct nvk_descriptor_state *desc,
+                      size_t offset, size_t size);
 
+   struct nvk_descriptor_set *sets[NVK_MAX_SETS];
    struct nvk_push_descriptor_set *push[NVK_MAX_SETS];
    uint32_t push_dirty;
 };
+
+#define nvk_descriptor_state_get_root(desc, member, dst) do { \
+   const struct nvk_root_descriptor_table *root = \
+      (const struct nvk_root_descriptor_table *)(desc)->root; \
+   *dst = root->member; \
+} while (0)
+
+#define nvk_descriptor_state_get_root_array(desc, member, \
+                                            start, count, dst) do { \
+   const struct nvk_root_descriptor_table *root = \
+      (const struct nvk_root_descriptor_table *)(desc)->root; \
+   unsigned _start = start; \
+   assert(_start + count <= ARRAY_SIZE(root->member)); \
+   for (unsigned i = 0; i < count; i++) \
+      (dst)[i] = root->member[i + _start]; \
+} while (0)
+
+#define nvk_descriptor_state_set_root(cmd, desc, member, src) do { \
+   struct nvk_descriptor_state *_desc = (desc); \
+   struct nvk_root_descriptor_table *root = \
+      (struct nvk_root_descriptor_table *)_desc->root; \
+   root->member = (src); \
+   if (_desc->flush_root != NULL) { \
+      size_t offset = (char *)&root->member - (char *)root; \
+      _desc->flush_root((cmd), _desc, offset, sizeof(root->member)); \
+   } \
+} while (0)
+
+#define nvk_descriptor_state_set_root_array(cmd, desc, member, \
+                                            start, count, src) do { \
+   struct nvk_descriptor_state *_desc = (desc); \
+   struct nvk_root_descriptor_table *root = \
+      (struct nvk_root_descriptor_table *)_desc->root; \
+   unsigned _start = start; \
+   assert(_start + count <= ARRAY_SIZE(root->member)); \
+   for (unsigned i = 0; i < count; i++) \
+      root->member[i + _start] = (src)[i]; \
+   if (_desc->flush_root != NULL) { \
+      size_t offset = (char *)&root->member[_start] - (char *)root; \
+      _desc->flush_root((cmd), _desc, offset, \
+                        count * sizeof(root->member[0])); \
+   } \
+} while (0)
 
 struct nvk_attachment {
    VkFormat vk_format;
@@ -113,6 +162,11 @@ struct nvk_graphics_state {
    uint32_t shaders_dirty;
    struct nvk_shader *shaders[MESA_SHADER_MESH + 1];
 
+   struct nvk_cbuf_group {
+      uint16_t dirty;
+      struct nvk_cbuf cbufs[16];
+   } cbuf_groups[5];
+
    /* Used for meta save/restore */
    struct nvk_addr_range vb0;
 
@@ -141,23 +195,23 @@ struct nvk_cmd_buffer {
       struct nvk_compute_state cs;
    } state;
 
-   /** List of nvk_cmd_bo
+   /** List of nvk_cmd_mem
     *
     * This list exists entirely for ownership tracking.  Everything in here
     * must also be in pushes or bo_refs if it is to be referenced by this
     * command buffer.
     */
-   struct list_head bos;
-   struct list_head gart_bos;
+   struct list_head owned_mem;
+   struct list_head owned_gart_mem;
 
-   struct nvk_cmd_bo *upload_bo;
+   struct nvk_cmd_mem *upload_mem;
    uint32_t upload_offset;
 
-   struct nvk_cmd_bo *cond_render_gart_bo;
+   struct nvk_cmd_mem *cond_render_gart_mem;
    uint32_t cond_render_gart_offset;
 
-   struct nvk_cmd_bo *push_bo;
-   uint32_t *push_bo_limit;
+   struct nvk_cmd_mem *push_mem;
+   uint32_t *push_mem_limit;
    struct nv_push push;
 
    /** Array of struct nvk_cmd_push
@@ -197,7 +251,7 @@ nvk_cmd_buffer_push(struct nvk_cmd_buffer *cmd, uint32_t dw_count)
    assert(dw_count <= NVK_CMD_BUFFER_MAX_PUSH);
 
    /* Compare to the actual limit on our push bo */
-   if (unlikely(cmd->push.end + dw_count > cmd->push_bo_limit))
+   if (unlikely(cmd->push.end + dw_count > cmd->push_mem_limit))
       nvk_cmd_buffer_new_push(cmd);
 
    cmd->push.limit = cmd->push.end + dw_count;
@@ -229,6 +283,10 @@ void nvk_cmd_bind_graphics_shader(struct nvk_cmd_buffer *cmd,
 void nvk_cmd_bind_compute_shader(struct nvk_cmd_buffer *cmd,
                                  struct nvk_shader *shader);
 
+void nvk_cmd_dirty_cbufs_for_descriptors(struct nvk_cmd_buffer *cmd,
+                                         VkShaderStageFlags stages,
+                                         uint32_t sets_start, uint32_t sets_end,
+                                         uint32_t dyn_start, uint32_t dyn_end);
 void nvk_cmd_bind_vertex_buffer(struct nvk_cmd_buffer *cmd, uint32_t vb_idx,
                                 struct nvk_addr_range addr_range);
 
@@ -270,11 +328,11 @@ nvk_cmd_buffer_flush_push_descriptors(struct nvk_cmd_buffer *cmd,
                                       struct nvk_descriptor_state *desc);
 
 bool
-nvk_cmd_buffer_get_cbuf_descriptor(struct nvk_cmd_buffer *cmd,
-                                   const struct nvk_descriptor_state *desc,
-                                   const struct nvk_shader *shader,
-                                   const struct nvk_cbuf *cbuf,
-                                   struct nvk_buffer_address *desc_out);
+nvk_cmd_buffer_get_cbuf_addr(struct nvk_cmd_buffer *cmd,
+                             const struct nvk_descriptor_state *desc,
+                             const struct nvk_shader *shader,
+                             const struct nvk_cbuf *cbuf,
+                             struct nvk_buffer_address *addr_out);
 uint64_t
 nvk_cmd_buffer_get_cbuf_descriptor_addr(struct nvk_cmd_buffer *cmd,
                                         const struct nvk_descriptor_state *desc,

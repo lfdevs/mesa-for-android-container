@@ -27,9 +27,12 @@
 #ifndef MSM_PRIV_H_
 #define MSM_PRIV_H_
 
+#include "freedreno_drmif.h"
 #include "freedreno_priv.h"
+#include "freedreno_rd_output.h"
 
 #include "util/timespec.h"
+#include "util/u_process.h"
 
 #ifndef __user
 #define __user
@@ -97,6 +100,90 @@ msm_dump_submit(struct drm_msm_gem_submit *req)
             (uint64_t)r->reloc_offset);
       }
    }
+}
+
+static inline bool
+__should_dump(struct fd_bo *bo)
+{
+   return (bo->reloc_flags & FD_RELOC_DUMP) || FD_RD_DUMP(FULL);
+}
+
+static inline void
+__snapshot_buf(struct fd_rd_output *rd, struct fd_bo *bo, uint64_t iova,
+               uint32_t size, bool full)
+{
+   uint64_t offset = 0;
+
+   if (iova) {
+      offset = iova - fd_bo_get_iova(bo);
+   } else {
+      iova = fd_bo_get_iova(bo);
+      size = bo->size;
+   }
+
+   fd_rd_output_write_section(rd, RD_GPUADDR, (uint32_t[]){
+      iova, size, iova >> 32
+   }, 12);
+
+   if (!full)
+      return;
+
+   const char *buf = __fd_bo_map(bo);
+   buf += offset;
+   fd_rd_output_write_section(rd, RD_BUFFER_CONTENTS, buf, size);
+}
+
+static inline void
+msm_dump_rd(struct fd_pipe *pipe, struct drm_msm_gem_submit *req)
+{
+   struct fd_rd_output *rd = &pipe->dev->rd;
+
+   if (!fd_rd_dump_env.flags || !req->nr_cmds ||
+       !fd_rd_output_begin(rd, req->fence))
+      return;
+
+   if (FD_RD_DUMP(FULL)) {
+      fd_pipe_wait(pipe, &(struct fd_fence) {
+         /* this is cheating a bit, but msm_pipe_wait only needs kfence */
+         .kfence = req->fence,
+      });
+   }
+
+   const char *procname = util_get_process_name();
+   fd_rd_output_write_section(rd, RD_CHIP_ID, &to_msm_pipe(pipe)->chip_id, 8);
+   fd_rd_output_write_section(rd, RD_CMD, procname, strlen(procname));
+
+   struct drm_msm_gem_submit_bo *bos = U642VOID(req->bos);
+   struct drm_msm_gem_submit_cmd *cmds = U642VOID(req->cmds);
+
+   for (unsigned i = 0; i < req->nr_bos; i++) {
+      /* This size param to fd_bo_from_handle() only matters if the bo isn't already in
+       * the handle table.  Which it should be.
+       */
+      struct fd_bo *bo = fd_bo_from_handle(pipe->dev, bos[i].handle, 0);
+
+      __snapshot_buf(rd, bo, 0, 0, __should_dump(bo));
+
+      fd_bo_del(bo);
+   }
+
+   for (unsigned i = 0; i < req->nr_cmds; i++) {
+      struct drm_msm_gem_submit_cmd *cmd = &cmds[i];
+      struct fd_bo *bo = fd_bo_from_handle(pipe->dev, bos[cmd->submit_idx].handle, 0);
+      uint64_t iova = fd_bo_get_iova(bo) + cmd->submit_offset;
+
+      /* snapshot cmdstream bo's (if we haven't already): */
+      if (!__should_dump(bo))
+         __snapshot_buf(rd, bo, iova, cmd->size, true);
+
+      fd_rd_output_write_section(rd, RD_CMDSTREAM_ADDR, (uint32_t[]){
+         iova, cmd->size >> 2, iova >> 32
+      }, 12);
+
+      fd_bo_del(bo);
+   }
+
+   fd_rd_output_end(rd);
 }
 
 static inline void

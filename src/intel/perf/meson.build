@@ -9,6 +9,7 @@ intel_hw_metrics = [
   'tglgt1', 'tglgt2', 'rkl', 'dg1', 'adl',
   'acmgt1', 'acmgt2', 'acmgt3',
   'mtlgt2', 'mtlgt3',
+  'lnl',
 ]
 
 intel_hw_metrics_xml_files = []
@@ -17,6 +18,12 @@ foreach hw : intel_hw_metrics
 endforeach
 
 intel_perf_sources = [
+  'i915/intel_perf.c',
+  'i915/intel_perf.h',
+  'xe/intel_perf.c',
+  'xe/intel_perf.h',
+  'intel_perf_common.c',
+  'intel_perf_common.h',
   'intel_perf.c',
   'intel_perf_query.c',
   'intel_perf_mdapi.c',

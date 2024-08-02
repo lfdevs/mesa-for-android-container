@@ -50,8 +50,7 @@ decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivie
    vk_texcompress_astc_fill_write_descriptor_sets(state->astc_decode, &write_desc_set,
                                                   radv_image_view_to_handle(src_iview), layout,
                                                   radv_image_view_to_handle(dst_iview), format);
-   radv_meta_push_descriptor_set(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->astc_decode->p_layout,
-                                 0, /* set number */
+   radv_meta_push_descriptor_set(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->astc_decode->p_layout, 0,
                                  VK_TEXCOMPRESS_ASTC_WRITE_DESC_SET_COUNT, write_desc_set.descriptor_set);
 
    VkPipeline pipeline =

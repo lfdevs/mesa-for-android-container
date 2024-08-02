@@ -28,6 +28,7 @@ DEPS=(
     "clang-${LLVM_VERSION}"
     "clang-format-${LLVM_VERSION}"
     dpkg-cross
+    dpkg-dev
     findutils
     flex
     flatbuffers-compiler
@@ -73,6 +74,7 @@ DEPS=(
     python3-pycparser
     python3-requests
     python3-setuptools
+    python3-yaml
     qemu-user
     valgrind
     x11proto-dri2-dev
@@ -95,8 +97,7 @@ apt-get install -y --no-remove "${DEPS[@]}" "${EPHEMERAL[@]}" \
 # Needed for ci-fairy, this revision is able to upload files to S3
 pip3 install --break-system-packages git+http://gitlab.freedesktop.org/freedesktop/ci-templates@ffe4d1b10aab7534489f0c4bbc4c5899df17d3f2
 
-# We need at least 1.3.1 for rusticl
-pip3 install --break-system-packages 'meson==1.3.1'
+. .gitlab-ci/container/install-meson.sh
 
 . .gitlab-ci/container/build-rust.sh
 

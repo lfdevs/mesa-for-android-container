@@ -85,8 +85,8 @@ namespace {
             if (inst->src[i].file != BAD_FILE &&
                 !inst->is_control_source(i)) {
                const brw_reg_type t = inst->src[i].type;
-               has_int_src |= !brw_reg_type_is_floating_point(t);
-               has_long_src |= type_sz(t) >= 8;
+               has_int_src |= !brw_type_is_float(t);
+               has_long_src |= brw_type_size_bytes(t) >= 8;
             }
          }
 
@@ -118,11 +118,13 @@ namespace {
    inferred_exec_pipe(const struct intel_device_info *devinfo, const fs_inst *inst)
    {
       const brw_reg_type t = get_exec_type(inst);
-      const bool is_dword_multiply = !brw_reg_type_is_floating_point(t) &&
+      const bool is_dword_multiply = !brw_type_is_float(t) &&
          ((inst->opcode == BRW_OPCODE_MUL &&
-           MIN2(type_sz(inst->src[0].type), type_sz(inst->src[1].type)) >= 4) ||
+           MIN2(brw_type_size_bytes(inst->src[0].type),
+                brw_type_size_bytes(inst->src[1].type)) >= 4) ||
           (inst->opcode == BRW_OPCODE_MAD &&
-           MIN2(type_sz(inst->src[1].type), type_sz(inst->src[2].type)) >= 4));
+           MIN2(brw_type_size_bytes(inst->src[1].type),
+                brw_type_size_bytes(inst->src[2].type)) >= 4));
 
       if (is_unordered(devinfo, inst))
          return TGL_PIPE_NONE;
@@ -136,17 +138,18 @@ namespace {
          return TGL_PIPE_INT;
       else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
          return TGL_PIPE_FLOAT;
-      else if (devinfo->ver >= 20 && type_sz(inst->dst.type) >= 8 &&
-               brw_reg_type_is_floating_point(inst->dst.type)) {
+      else if (devinfo->ver >= 20 &&
+               brw_type_size_bytes(inst->dst.type) >= 8 &&
+               brw_type_is_float(inst->dst.type)) {
          assert(devinfo->has_64bit_float);
          return TGL_PIPE_LONG;
       } else if (devinfo->ver < 20 &&
-                 (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
-                  is_dword_multiply)) {
+                 (brw_type_size_bytes(inst->dst.type) >= 8 ||
+                  brw_type_size_bytes(t) >= 8 || is_dword_multiply)) {
          assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
                 devinfo->has_integer_dword_mul);
          return TGL_PIPE_LONG;
-      } else if (brw_reg_type_is_floating_point(inst->dst.type))
+      } else if (brw_type_is_float(inst->dst.type))
          return TGL_PIPE_FLOAT;
       else
          return TGL_PIPE_INT;
@@ -656,7 +659,7 @@ namespace {
        * Look up the most current data dependency for register \p r.
        */
       dependency
-      get(const fs_reg &r) const
+      get(const brw_reg &r) const
       {
          if (const dependency *p = const_cast<scoreboard *>(this)->dep(r))
             return *p;
@@ -668,7 +671,7 @@ namespace {
        * Specify the most current data dependency for register \p r.
        */
       void
-      set(const fs_reg &r, const dependency &d)
+      set(const brw_reg &r, const dependency &d)
       {
          if (dependency *p = dep(r))
             *p = d;
@@ -758,7 +761,7 @@ namespace {
       dependency accum_dep;
 
       dependency *
-      dep(const fs_reg &r)
+      dep(const brw_reg &r)
       {
          const unsigned reg = (r.file == VGRF ? r.nr + r.offset / REG_SIZE :
                                reg_offset(r) / REG_SIZE);
@@ -1019,8 +1022,8 @@ namespace {
       const bool is_unordered_math =
          (inst->is_math() && devinfo->ver < 20) ||
          (devinfo->has_64bit_float_via_math_pipe &&
-          (get_exec_type(inst) == BRW_REGISTER_TYPE_DF ||
-           inst->dst.type == BRW_REGISTER_TYPE_DF));
+          (get_exec_type(inst) == BRW_TYPE_DF ||
+           inst->dst.type == BRW_TYPE_DF));
 
       /* Track any source registers that may be fetched asynchronously by this
        * instruction, otherwise clear the dependency in order to avoid
@@ -1035,7 +1038,7 @@ namespace {
             dependency::done;
 
          for (unsigned j = 0; j < regs_read(inst, i); j++) {
-            const fs_reg r = byte_offset(inst->src[i], REG_SIZE * j);
+            const brw_reg r = byte_offset(inst->src[i], REG_SIZE * j);
             sb.set(r, shadow(sb.get(r), rd_dep));
          }
       }

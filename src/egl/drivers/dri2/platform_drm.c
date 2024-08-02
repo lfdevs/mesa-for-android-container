@@ -239,7 +239,12 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back == NULL)
       return -1;
    if (dri2_surf->back->bo == NULL) {
-      if (surf->base.v0.modifiers)
+      if (surf->base.v0.modifiers && surf->base.v0.flags)
+         dri2_surf->back->bo = gbm_bo_create_with_modifiers2(
+            &dri2_dpy->gbm_dri->base, surf->base.v0.width, surf->base.v0.height,
+            surf->base.v0.format, surf->base.v0.modifiers, surf->base.v0.count,
+            surf->base.v0.flags);
+      else if (surf->base.v0.modifiers)
          dri2_surf->back->bo = gbm_bo_create_with_modifiers(
             &dri2_dpy->gbm_dri->base, surf->base.v0.width, surf->base.v0.height,
             surf->base.v0.format, surf->base.v0.modifiers, surf->base.v0.count);
@@ -646,7 +651,6 @@ dri2_initialize_drm(_EGLDisplay *disp)
    dri2_dpy->kopper = dri2_dpy->gbm_dri->kopper;
    dri2_dpy->driver_configs = dri2_dpy->gbm_dri->driver_configs;
 
-   dri2_dpy->gbm_dri->lookup_image = dri2_lookup_egl_image;
    dri2_dpy->gbm_dri->validate_image = dri2_validate_egl_image;
    dri2_dpy->gbm_dri->lookup_image_validated = dri2_lookup_egl_image_validated;
    dri2_dpy->gbm_dri->lookup_user_data = disp;

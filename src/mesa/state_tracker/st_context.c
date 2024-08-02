@@ -806,8 +806,6 @@ st_init_driver_functions(struct pipe_screen *screen,
 {
    st_init_draw_functions(screen, functions);
 
-   st_init_eglimage_functions(functions, has_egl_image_validate);
-
    functions->NewProgram = _mesa_new_program;
    st_init_flush_functions(screen, functions);
 

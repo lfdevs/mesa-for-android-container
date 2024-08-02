@@ -40,7 +40,7 @@ struct vk_device;
 
 /** Enumeration of all Vulkan dynamic graphics states
  *
- * Enumerants are named with both the abreviation of the state group to which
+ * Enumerants are named with both the abbreviation of the state group to which
  * the state belongs as well as the name of the state itself.  These are
  * intended to pretty closely match the VkDynamicState enum but may not match
  * perfectly all the time.
@@ -981,7 +981,7 @@ struct vk_graphics_pipeline_state {
    /** Fragment shading rate state */
    const struct vk_fragment_shading_rate_state *fsr;
 
-   /** Multiesample state */
+   /** Multisample state */
    const struct vk_multisample_state *ms;
 
    /** Depth stencil state */
@@ -1136,21 +1136,21 @@ vk_graphics_pipeline_get_state(const struct vk_graphics_pipeline_state *state,
 
 /** Initialize a vk_dynamic_graphics_state with defaults
  *
- * :param dyn:          |out| Dynamic graphics state to initizlie
+ * :param dyn:          |out| Dynamic graphics state to initialize
  */
 void
 vk_dynamic_graphics_state_init(struct vk_dynamic_graphics_state *dyn);
 
 /** Clear a vk_dynamic_graphics_state to defaults
  *
- * :param dyn:          |out| Dynamic graphics state to initizlie
+ * :param dyn:          |out| Dynamic graphics state to initialize
  */
 void
 vk_dynamic_graphics_state_clear(struct vk_dynamic_graphics_state *dyn);
 
 /** Initialize a vk_dynamic_graphics_state for a pipeline
  *
- * :param dyn:          |out| Dynamic graphics state to initizlie
+ * :param dyn:          |out| Dynamic graphics state to initialize
  * :param supported:    |in|  Bitset of all dynamic state supported by the driver.
  * :param p:            |in|  The pipeline state from which to initialize the
  *                            dynamic state.
@@ -1187,8 +1187,7 @@ vk_dynamic_graphics_state_clear_dirty(struct vk_dynamic_graphics_state *d)
 static inline bool
 vk_dynamic_graphics_state_any_dirty(const struct vk_dynamic_graphics_state *d)
 {
-   return BITSET_TEST_RANGE(d->dirty,
-      0, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX - 1);
+   return !BITSET_IS_EMPTY(d->dirty);
 }
 
 /** Copies all set state from src to dst

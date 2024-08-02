@@ -28,11 +28,13 @@
 void
 isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
                                    const struct isl_surf_init_info *restrict info,
-                                   enum isl_tiling tiling,
+                                   const struct isl_tile_info *tile_info,
                                    enum isl_dim_layout dim_layout,
                                    enum isl_msaa_layout msaa_layout,
                                    struct isl_extent3d *image_align_el)
 {
+   enum isl_tiling tiling = tile_info->tiling;
+
    /* Handled by isl_choose_image_alignment_el */
    assert(info->format != ISL_FORMAT_HIZ);
 
@@ -96,13 +98,10 @@ isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
 
    if (isl_tiling_is_std_y(tiling)) {
       /* Ys and Yf tiled images are aligned to the tile size */
-      struct isl_tile_info tile_info;
-      isl_tiling_get_info(tiling, info->dim, msaa_layout,
-                          fmtl->bpb, info->samples, &tile_info);
       *image_align_el = (struct isl_extent3d) {
-         .w = tile_info.logical_extent_el.w,
-         .h = tile_info.logical_extent_el.h,
-         .d = tile_info.logical_extent_el.d,
+         .w = tile_info->logical_extent_el.w,
+         .h = tile_info->logical_extent_el.h,
+         .d = tile_info->logical_extent_el.d,
       };
       return;
    }

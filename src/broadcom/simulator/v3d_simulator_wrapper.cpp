@@ -42,7 +42,10 @@ struct v3d_hw *v3d_hw_auto_new(void *in_params)
 uint64_t v3d_hw_get_mem(const struct v3d_hw *hw, uint64_t *size)
 {
         uint64_t addr;
-        assert(hw->get_mem(&addr, size));
+        bool ret;
+        ret = hw->get_mem(&addr, size);
+        assert(ret);
+        (void)ret;
         return addr;
 }
 

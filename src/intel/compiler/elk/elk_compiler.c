@@ -68,6 +68,7 @@ elk_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_lower_drcp |
       nir_lower_dsqrt |
       nir_lower_drsq |
+      nir_lower_dsign |
       nir_lower_dtrunc |
       nir_lower_dfloor |
       nir_lower_dceil |

@@ -65,7 +65,7 @@ panfrost_batch_add_surface(struct panfrost_batch *batch,
 {
    if (surf) {
       struct panfrost_resource *rsrc = pan_resource(surf->texture);
-      pan_legalize_afbc_format(batch->ctx, rsrc, surf->format, true, false);
+      pan_legalize_format(batch->ctx, rsrc, surf->format, true, false);
       panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_FRAGMENT);
    }
 }
@@ -399,6 +399,7 @@ panfrost_batch_create_bo(struct panfrost_batch *batch, size_t size,
 
    bo = panfrost_bo_create(pan_device(batch->ctx->base.screen), size,
                            create_flags, label);
+   assert(bo);
    panfrost_batch_add_bo(batch, bo, stage);
 
    /* panfrost_batch_add_bo() has retained a reference and

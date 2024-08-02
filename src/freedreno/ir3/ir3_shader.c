@@ -824,11 +824,12 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
    for (i = 0; i < so->num_sampler_prefetch; i++) {
       const struct ir3_sampler_prefetch *fetch = &so->sampler_prefetch[i];
       fprintf(out,
-              "@tex(%sr%d.%c)\tsrc=%u, samp=%u, tex=%u, wrmask=0x%x, opc=%s\n",
+              "@tex(%sr%d.%c)\tsrc=%u, bindless=%u, samp=%u, tex=%u, wrmask=0x%x, opc=%s\n",
               fetch->half_precision ? "h" : "", fetch->dst >> 2,
-              "xyzw"[fetch->dst & 0x3], fetch -> src, fetch -> samp_id,
-              fetch -> tex_id, fetch -> wrmask,
-              disasm_a3xx_instr_name(fetch->tex_opc));
+              "xyzw"[fetch->dst & 0x3], fetch->src, fetch->bindless,
+              fetch->bindless ? fetch->samp_bindless_id : fetch->samp_id,
+              fetch->bindless ? fetch->tex_bindless_id : fetch->tex_id,
+              fetch->wrmask, disasm_a3xx_instr_name(fetch->tex_opc));
    }
 
    const struct ir3_const_state *const_state = ir3_const_state(so);

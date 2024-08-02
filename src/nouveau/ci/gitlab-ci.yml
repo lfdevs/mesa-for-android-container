@@ -1,0 +1,13 @@
+include:
+  - local: 'src/nouveau/ci/gitlab-ci-inc.yml'
+
+nvk-ga106-vkcts-valve:
+  extends:
+    - .b2c-x86_64-test-vk
+    - .nvk-vkcts
+    - .nvk-ga106-valve
+    - .nvk-valve-manual-rules
+  timeout: 70m  # job runtime 52min, test runtime 50min
+  variables:
+    B2C_TIMEOUT_BOOT_MINUTES: 60
+    B2C_TIMEOUT_OVERALL_MINUTES: 65

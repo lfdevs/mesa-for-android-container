@@ -72,7 +72,7 @@
 #include <elf.h>
 #endif
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
 #include <unistd.h>
 #endif
 
@@ -736,7 +736,7 @@ _util_cpu_detect_once(void)
       GetSystemInfo(&system_info);
       available_cpus = MAX2(1, system_info.dwNumberOfProcessors);
    }
-#elif DETECT_OS_UNIX
+#elif DETECT_OS_POSIX
 #  if defined(HAS_SCHED_GETAFFINITY)
    {
       /* sched_setaffinity() can be used to further restrict the number of
@@ -804,7 +804,7 @@ _util_cpu_detect_once(void)
       total_cpus = ncpu;
    }
 #  endif /* DETECT_OS_BSD */
-#endif /* DETECT_OS_UNIX */
+#endif /* DETECT_OS_POSIX */
 
    util_cpu_caps.nr_cpus = MAX2(1, available_cpus);
    total_cpus = MAX2(total_cpus, util_cpu_caps.nr_cpus);

@@ -71,7 +71,8 @@ count_movs_from_if(const intel_device_info *devinfo,
    int then_movs = 0;
    foreach_inst_in_block(fs_inst, inst, then_block) {
       if (then_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
-          inst->flags_written(devinfo))
+          inst->flags_written(devinfo) ||
+          (devinfo->ver >= 20 && get_exec_type_size(inst) > 4))
          break;
 
       then_mov[then_movs] = inst;
@@ -81,7 +82,8 @@ count_movs_from_if(const intel_device_info *devinfo,
    int else_movs = 0;
    foreach_inst_in_block(fs_inst, inst, else_block) {
       if (else_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
-          inst->flags_written(devinfo))
+          inst->flags_written(devinfo) ||
+          (devinfo->ver >= 20 && get_exec_type_size(inst) > 4))
          break;
 
       else_mov[else_movs] = inst;
@@ -198,15 +200,15 @@ brw_fs_opt_peephole_sel(fs_visitor &s)
              * in the "then" clause uses a constant, we need to put it in a
              * temporary.
              */
-            fs_reg src0(then_mov[i]->src[0]);
+            brw_reg src0(then_mov[i]->src[0]);
             if (src0.file == IMM) {
                src0 = ibld.vgrf(then_mov[i]->src[0].type);
                ibld.MOV(src0, then_mov[i]->src[0]);
             }
 
             /* 64-bit immediates can't be placed in src1. */
-            fs_reg src1(else_mov[i]->src[0]);
-            if (src1.file == IMM && type_sz(src1.type) == 8) {
+            brw_reg src1(else_mov[i]->src[0]);
+            if (src1.file == IMM && brw_type_size_bytes(src1.type) == 8) {
                src1 = ibld.vgrf(else_mov[i]->src[0].type);
                ibld.MOV(src1, else_mov[i]->src[0]);
             }

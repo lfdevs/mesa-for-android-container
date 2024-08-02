@@ -80,17 +80,8 @@ struct agx_bo {
    /* DMA-BUF fd clone for adding fences to imports/exports */
    int prime_fd;
 
-   /* Syncobj handle of the current writer, if any */
-   uint32_t writer_syncobj;
-
-   /* Globally unique value (system wide) for tracing. Exists for resources,
-    * command buffers, GPU submissions, segments, segmentent lists, encoders,
-    * accelerators, and channels. Corresponds to Instruments' magic table
-    * metal-gpu-submission-to-command-buffer-id */
-   uint64_t guid;
-
-   /* Human-readable label, or NULL if none */
-   char *name;
+   /* Current writer, if any (queue in upper 32 bits, syncobj in lower 32 bits) */
+   uint64_t writer;
 
    /* Owner */
    struct agx_device *dev;
@@ -106,7 +97,29 @@ struct agx_bo {
 
    /* For debugging */
    const char *label;
+
+   /* virtio blob_id */
+   uint32_t blob_id;
+   uint32_t vbo_res_id;
 };
+
+static inline uint32_t
+agx_bo_writer_syncobj(uint64_t writer)
+{
+   return writer;
+}
+
+static inline uint32_t
+agx_bo_writer_queue(uint64_t writer)
+{
+   return writer >> 32;
+}
+
+static inline uint64_t
+agx_bo_writer(uint32_t queue, uint32_t syncobj)
+{
+   return (((uint64_t)queue) << 32) | syncobj;
+}
 
 struct agx_bo *agx_bo_create_aligned(struct agx_device *dev, unsigned size,
                                      unsigned align, enum agx_bo_flags flags,
@@ -124,8 +137,6 @@ struct agx_bo *agx_bo_import(struct agx_device *dev, int fd);
 int agx_bo_export(struct agx_bo *bo);
 
 void agx_bo_free(struct agx_device *dev, struct agx_bo *bo);
-struct agx_bo *agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
-                            enum agx_bo_flags flags);
 struct agx_bo *agx_bo_cache_fetch(struct agx_device *dev, size_t size,
                                   size_t align, uint32_t flags,
                                   const bool dontwait);

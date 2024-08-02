@@ -48,47 +48,16 @@ agx_upload_vbos(struct agx_batch *batch)
       }
    }
 
+   uint32_t zeroes[4] = {0};
+   uint64_t sink = agx_pool_upload_aligned(&batch->pool, &zeroes, 16, 16);
+
    for (unsigned i = 0; i < PIPE_MAX_ATTRIBS; ++i) {
-      unsigned buffer_size = buf_sizes[attribs->buffers[i]];
+      unsigned buf = attribs->buffers[i];
 
-      /* Determine the maximum vertex/divided instance index.  For robustness,
-       * the index will be clamped to this before reading (if soft fault is
-       * disabled).
-       *
-       * Index i accesses up to (exclusive) offset:
-       *
-       *    src_offset + (i * stride) + elsize_B
-       *
-       * so we require
-       *
-       *    src_offset + (i * stride) + elsize_B <= size
-       *
-       * <==>
-       *
-       *    i <= floor((size - src_offset - elsize_B) / stride)
-       */
-      unsigned elsize_B = util_format_get_blocksize(attribs->key[i].format);
-      unsigned subtracted = attribs->src_offsets[i] + elsize_B;
-
-      if (buffer_size >= subtracted) {
-         /* At least one index is valid, determine the max. If this is zero,
-          * only 1 index is valid.
-          */
-         unsigned max_index =
-            (buffer_size - subtracted) / attribs->key[i].stride;
-
-         batch->uniforms.attrib_base[i] =
-            buffers[attribs->buffers[i]] + attribs->src_offsets[i];
-
-         batch->uniforms.attrib_clamp[i] = max_index;
-      } else {
-         /* No indices are valid. Direct reads to a single zero. */
-         uint32_t zeroes[4] = {0};
-         uint64_t sink = agx_pool_upload_aligned(&batch->pool, &zeroes, 16, 16);
-
-         batch->uniforms.attrib_base[i] = sink;
-         batch->uniforms.attrib_clamp[i] = 0;
-      }
+      batch->uniforms.attrib_clamp[i] = agx_calculate_vbo_clamp(
+         buffers[buf], sink, attribs->key[i].format, buf_sizes[buf],
+         attribs->key[i].stride, attribs->src_offsets[i],
+         &batch->uniforms.attrib_base[i]);
    }
 }
 

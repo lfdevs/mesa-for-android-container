@@ -108,6 +108,7 @@ struct radeon_enc_pic {
    bool pcm_enabled_flag;
    bool sps_temporal_mvp_enabled_flag;
    bool use_rc_per_pic_ex;
+   bool av1_tile_spliting_legacy_flag;
 
    struct {
       struct {
@@ -171,6 +172,9 @@ struct radeon_enc_pic {
    rvcn_enc_h264_encode_params_t h264_enc_params;
    rvcn_enc_h264_deblocking_filter_t h264_deblock;
    rvcn_enc_hevc_deblocking_filter_t hevc_deblock;
+   rvcn_enc_hevc_encode_params_t hevc_enc_params;
+   rvcn_enc_av1_encode_params_t av1_enc_params;
+   rvcn_enc_av1_tile_config_t av1_tile_config;
    rvcn_enc_rate_ctl_per_picture_t rc_per_pic;
    rvcn_enc_quality_params_t quality_params;
    rvcn_enc_encode_context_buffer_t ctx_buf;
@@ -182,6 +186,8 @@ struct radeon_enc_pic {
    rvcn_enc_input_format_t enc_input_format;
    rvcn_enc_output_format_t enc_output_format;
    rvcn_enc_qp_map_t enc_qp_map;
+   rvcn_enc_metadata_buffer_t metadata;
+   rvcn_enc_latency_t enc_latency;
 };
 
 struct radeon_encoder {
@@ -229,6 +235,10 @@ struct radeon_encoder {
    void (*encode_statistics)(struct radeon_encoder *enc);
    void (*obu_instructions)(struct radeon_encoder *enc);
    void (*cdf_default_table)(struct radeon_encoder *enc);
+   void (*ctx_override)(struct radeon_encoder *enc);
+   void (*metadata)(struct radeon_encoder *enc);
+   void (*tile_config)(struct radeon_encoder *enc);
+   void (*encode_latency)(struct radeon_encoder *enc);
    /* mq is used for preversing multiple queue ibs */
    void (*mq_begin)(struct radeon_encoder *enc);
    void (*mq_encode)(struct radeon_encoder *enc);
@@ -254,6 +264,7 @@ struct radeon_encoder {
    struct rvid_buffer *dpb;
    struct rvid_buffer *cdf;
    struct rvid_buffer *roi;
+   struct rvid_buffer *meta;
    struct radeon_enc_pic enc_pic;
    struct pb_buffer_lean *stats;
    rvcn_enc_cmd_t cmd;
@@ -275,10 +286,28 @@ struct radeon_encoder {
    bool need_rc_per_pic;
    unsigned dpb_size;
    unsigned roi_size;
+   unsigned metadata_size;
    rvcn_enc_picture_info_t dpb_info[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
    unsigned max_ltr_idx;
 
    struct pipe_context *ectx;
+};
+
+
+/* structure for determining av1 tile division scheme.
+ * In one direction, it is trying to split width/height into two parts,
+ * main and  border, each of which has a length (number of sbs),
+ * Therefore, it has two possible tile sizes, even with multiple
+ * tiles, and in non-uniformed case, it is trying to make tile sizes
+ * as similar as possible.
+ */
+
+struct tile_1d_layout {
+   bool     uniform_tile_flag;
+   uint32_t nb_main_sb;     /* if non-uniform, it means the first part */
+   uint32_t nb_border_sb;   /* if non-uniform, it means the second part */
+   uint32_t nb_main_tile;
+   uint32_t nb_border_tile;
 };
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer_lean *buf,
@@ -310,6 +339,9 @@ void radeon_enc_code_uvlc(struct radeon_encoder *enc, unsigned int value);
 void radeon_enc_code_leb128(unsigned char *buf, unsigned int value,
                             unsigned int num_bytes);
 
+void radeon_enc_code_ns(struct radeon_encoder *enc, unsigned int value,
+                        unsigned int max);
+
 void radeon_enc_1_2_init(struct radeon_encoder *enc);
 
 void radeon_enc_2_0_init(struct radeon_encoder *enc);
@@ -318,11 +350,26 @@ void radeon_enc_3_0_init(struct radeon_encoder *enc);
 
 void radeon_enc_4_0_init(struct radeon_encoder *enc);
 
+void radeon_enc_5_0_init(struct radeon_encoder *enc);
+
 void radeon_enc_av1_bs_instruction_type(struct radeon_encoder *enc,
                                         unsigned int inst, unsigned int obu_type);
+
+void radeon_enc_av1_temporal_delimiter(struct radeon_encoder *enc);
+
+void radeon_enc_av1_sequence_header(struct radeon_encoder *enc, bool separate_delta_q);
+
+void radeon_enc_av1_tile_group(struct radeon_encoder *enc);
 
 unsigned char *radeon_enc_av1_header_size_offset(struct radeon_encoder *enc);
 
 unsigned int radeon_enc_value_bits(unsigned int value);
 
+unsigned int radeon_enc_av1_tile_log2(unsigned int blk_size, unsigned int max);
+
+bool radeon_enc_is_av1_uniform_tile (uint32_t nb_sb, uint32_t nb_tiles,
+                                     uint32_t min_nb_sb, struct tile_1d_layout *p);
+
+void radeon_enc_av1_tile_layout (uint32_t nb_sb, uint32_t nb_tiles, uint32_t min_nb_sb,
+                                 struct tile_1d_layout *p);
 #endif // _RADEON_VCN_ENC_H

@@ -21,6 +21,13 @@ panvk_GetBufferDeviceAddress(VkDevice _device,
    return buffer->dev_addr;
 }
 
+VKAPI_ATTR uint64_t VKAPI_CALL
+panvk_GetBufferOpaqueCaptureAddress(VkDevice _device,
+                                    const VkBufferDeviceAddressInfo *pInfo)
+{
+   return panvk_GetBufferDeviceAddress(_device, pInfo);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_GetBufferMemoryRequirements2(VkDevice device,
                                    const VkBufferMemoryRequirementsInfo2 *pInfo,

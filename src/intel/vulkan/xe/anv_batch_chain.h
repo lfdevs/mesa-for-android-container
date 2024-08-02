@@ -34,16 +34,8 @@ struct anv_queue;
 struct anv_bo;
 struct anv_cmd_buffer;
 struct anv_query_pool;
+struct anv_async_submit;
 struct anv_utrace_submit;
-struct anv_sparse_submission;
-struct anv_trtt_batch_bo;
-
-VkResult
-xe_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
-                        uint32_t batch_bo_size, bool is_companion_rcs_batch);
-VkResult
-xe_execute_trtt_batch(struct anv_sparse_submission *submit,
-                      struct anv_trtt_batch_bo *trtt_bbo);
 
 VkResult
 xe_queue_exec_locked(struct anv_queue *queue,
@@ -58,8 +50,11 @@ xe_queue_exec_locked(struct anv_queue *queue,
                      struct anv_utrace_submit *utrace_submit);
 
 VkResult
-xe_queue_exec_utrace_locked(struct anv_queue *queue,
-                            struct anv_utrace_submit *utrace_submit);
+xe_queue_exec_async(struct anv_async_submit *submit,
+                    uint32_t wait_count,
+                    const struct vk_sync_wait *waits,
+                    uint32_t signal_count,
+                    const struct vk_sync_signal *signals);
 
 struct drm_xe_sync
 vk_sync_to_drm_xe_sync(struct vk_sync *vk_sync, uint64_t value, bool signal);

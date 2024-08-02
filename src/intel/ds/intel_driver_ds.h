@@ -61,6 +61,19 @@ enum intel_ds_stall_flag {
    INTEL_DS_CCS_CACHE_FLUSH_BIT              = BITFIELD_BIT(16),
 };
 
+enum intel_ds_tracepoint_flags {
+   /**
+    * Whether the tracepoint's timestamp must be recorded with as an
+    * end-of-pipe timestamp.
+    */
+   INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE    = BITFIELD_BIT(0),
+   /**
+    * Whether this tracepoint's timestamp is recorded on the compute pipeline.
+    */
+   INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS = BITFIELD_BIT(1),
+
+};
+
 /* Convert internal driver PIPE_CONTROL stall bits to intel_ds_stall_flag. */
 typedef enum intel_ds_stall_flag (*intel_ds_stall_cb_t)(uint32_t flags);
 
@@ -194,6 +207,7 @@ void intel_ds_flush_data_fini(struct intel_ds_flush_data *data);
 void intel_ds_queue_flush_data(struct intel_ds_queue *queue,
                                struct u_trace *ut,
                                struct intel_ds_flush_data *data,
+                               uint32_t frame_nr,
                                bool free_data);
 
 void intel_ds_device_process(struct intel_ds_device *device, bool eof);

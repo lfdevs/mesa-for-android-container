@@ -625,7 +625,7 @@ pan_lower_framebuffer(nir_shader *shader, const enum pipe_format *rt_fmts,
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
    return nir_shader_instructions_pass(
-      shader, lower, nir_metadata_block_index | nir_metadata_dominance,
+      shader, lower, nir_metadata_control_flow,
       &(struct inputs){
          .rt_fmts = rt_fmts,
          .raw_fmt_mask = raw_fmt_mask,

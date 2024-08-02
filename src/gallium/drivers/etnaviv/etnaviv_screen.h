@@ -49,7 +49,9 @@ struct etna_screen {
 
    struct etna_device *dev;
    struct etna_gpu *gpu;
+   struct etna_gpu *npu;
    struct etna_pipe *pipe;
+   struct etna_pipe *pipe_nn;
    struct etna_perfmon *perfmon;
    struct renderonly *ro;
 
@@ -90,7 +92,7 @@ etna_screen_bo_from_handle(struct pipe_screen *pscreen,
 
 struct pipe_screen *
 etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
-                   struct renderonly *ro);
+                   struct etna_gpu *npu, struct renderonly *ro);
 
 static inline size_t
 etna_screen_get_tile_size(struct etna_screen *screen, uint8_t ts_mode,

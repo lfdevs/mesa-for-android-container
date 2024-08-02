@@ -237,8 +237,8 @@ TEST_P(Instructions, ADD_GRF_GRF_IMM)
 
 TEST_P(Instructions, ADD_GRF_GRF_IMM_d)
 {
-   struct brw_reg g0 = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_D);
-   struct brw_reg g2 = retype(brw_vec8_grf(2, 0), BRW_REGISTER_TYPE_D);
+   struct brw_reg g0 = retype(brw_vec8_grf(0, 0), BRW_TYPE_D);
+   struct brw_reg g2 = retype(brw_vec8_grf(2, 0), BRW_TYPE_D);
 
    brw_ADD(p, g0, g2, brw_imm_d(1));
 }

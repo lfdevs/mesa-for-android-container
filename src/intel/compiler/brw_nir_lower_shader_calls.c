@@ -117,8 +117,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
       }
    }
 
-   nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+   nir_metadata_preserve(impl, nir_metadata_control_flow);
 }
 
 static void
@@ -280,8 +279,7 @@ brw_nir_lower_shader_calls(nir_shader *shader, struct brw_bs_prog_key *key)
                                          nir_metadata_none,
                                          key);
    bool b = nir_shader_intrinsics_pass(shader, lower_shader_call_instr,
-                                         nir_metadata_block_index |
-                                         nir_metadata_dominance,
+                                         nir_metadata_control_flow,
                                          NULL);
    return a || b;
 }

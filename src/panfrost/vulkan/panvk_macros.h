@@ -53,6 +53,10 @@
 #define panvk_per_arch(name) panvk_arch_name(name, v6)
 #elif PAN_ARCH == 7
 #define panvk_per_arch(name) panvk_arch_name(name, v7)
+#elif PAN_ARCH == 9
+#define panvk_per_arch(name) panvk_arch_name(name, v9)
+#elif PAN_ARCH == 10
+#define panvk_per_arch(name) panvk_arch_name(name, v10)
 #else
 #error "Unsupported arch"
 #endif

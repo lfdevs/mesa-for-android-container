@@ -282,7 +282,7 @@ v3d_rcl_emit_stores(struct v3d_job *job, struct v3d_cl *cl, int layer)
          * clear packet's Z/S bit is broken, but the RTs bit ends up
          * clearing Z/S.
          */
-        if (job->clear) {
+        if (job->clear_tlb) {
 #if V3D_VERSION == 42
                 cl_emit(cl, CLEAR_TILE_BUFFERS, clear) {
                         clear.clear_z_stencil_buffer = !job->early_zs_clear;
@@ -641,7 +641,7 @@ v3dX(emit_rcl)(struct v3d_job *job)
 
                 assert(job->zsbuf || config.early_z_disable);
 
-                job->early_zs_clear = (job->clear & PIPE_CLEAR_DEPTHSTENCIL) &&
+                job->early_zs_clear = (job->clear_tlb & PIPE_CLEAR_DEPTHSTENCIL) &&
                         !(job->load & PIPE_CLEAR_DEPTHSTENCIL) &&
                         !(job->store & PIPE_CLEAR_DEPTHSTENCIL);
 

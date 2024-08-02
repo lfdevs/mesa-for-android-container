@@ -36,6 +36,6 @@ extern const __DRIimageLoaderExtension dri3_image_loader_extension;
 extern struct dri2_egl_display_vtbl dri3_x11_display_vtbl;
 
 enum dri2_egl_driver_fail
-dri3_x11_connect(struct dri2_egl_display *dri2_dpy);
+dri3_x11_connect(struct dri2_egl_display *dri2_dpy, bool swrast);
 
 #endif

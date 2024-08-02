@@ -13,7 +13,7 @@
 
 .virgl-iris-manual-rules:
   stage: layered-backends
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
@@ -25,7 +25,7 @@
 
 .virgl-iris-rules-performance:
   stage: layered-backends
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]

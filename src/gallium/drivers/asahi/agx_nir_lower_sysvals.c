@@ -127,6 +127,13 @@ load_texture_handle(nir_builder *b, nir_intrinsic_instr *intr, void *base)
 }
 
 static nir_def *
+load_provoking_vtx(nir_builder *b)
+{
+   struct agx_draw_uniforms *u = NULL;
+   return load_sysval_root(b, 1, 16, &u->provoking_vertex);
+}
+
+static nir_def *
 lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
                 bool lower_draw_params)
 {
@@ -178,8 +185,6 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    case nir_intrinsic_load_vs_output_buffer_agx:
       return nir_load_global_constant(
          b, load_sysval_root(b, 1, 64, &u->vertex_output_buffer_ptr), 8, 1, 64);
-   case nir_intrinsic_load_vs_output_buffer_ptr_agx:
-      return load_sysval_root(b, 1, 64, &u->vertex_output_buffer_ptr);
    case nir_intrinsic_load_vs_outputs_agx:
       return load_sysval_root(b, 1, 64, &u->vertex_outputs);
    case nir_intrinsic_load_tess_param_buffer_agx:
@@ -192,9 +197,16 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
       return load_sysval_root(b, 1, 16, &u->no_epilog_discard);
    case nir_intrinsic_load_clip_z_coeff_agx:
       return nir_f2f32(b, load_sysval_root(b, 1, 16, &u->clip_z_coeff));
+   case nir_intrinsic_load_depth_never_agx:
+      /* TODO: Do we need this workaround for anything in GL? */
+      return nir_imm_intN_t(b, 0, 16);
    case nir_intrinsic_load_uvs_index_agx:
       return load_sysval_root(
          b, 1, 16, &u->uvs_index[nir_intrinsic_io_semantics(intr).location]);
+   case nir_intrinsic_load_is_first_fan_agx:
+      return nir_ieq_imm(b, load_provoking_vtx(b), 1);
+   case nir_intrinsic_load_provoking_last:
+      return nir_b2b32(b, nir_ieq_imm(b, load_provoking_vtx(b), 2));
    default:
       break;
    }
@@ -372,45 +384,41 @@ lay_out_uniforms(struct agx_compiled_shader *shader, struct state *state)
          DIV_ROUND_UP(BITSET_LAST_BIT(shader->attrib_components_read), 4);
 
       struct agx_draw_uniforms *u = NULL;
-      shader->push[shader->push_range_count++] = (struct agx_push_range){
-         .uniform = 0,
-         .table = AGX_SYSVAL_TABLE_ROOT,
-         .offset = (uintptr_t)&u->attrib_base,
-         .length = 4 * count,
-      };
 
-      shader->push[shader->push_range_count++] = (struct agx_push_range){
-         .uniform = 4 * count,
-         .table = AGX_SYSVAL_TABLE_ROOT,
-         .offset = (uintptr_t)&u->attrib_clamp,
-         .length = 2 * count,
-      };
+      if (count) {
+         shader->push[shader->push_range_count++] = (struct agx_push_range){
+            .uniform = 0,
+            .table = AGX_SYSVAL_TABLE_ROOT,
+            .offset = (uintptr_t)&u->attrib_base,
+            .length = 4 * count,
+         };
+
+         shader->push[shader->push_range_count++] = (struct agx_push_range){
+            .uniform = 4 * count,
+            .table = AGX_SYSVAL_TABLE_ROOT,
+            .offset = (uintptr_t)&u->attrib_clamp,
+            .length = 2 * count,
+         };
+      }
 
       shader->push[shader->push_range_count++] = (struct agx_push_range){
          .uniform = 6 * count,
          .table = AGX_SYSVAL_TABLE_PARAMS,
-         .offset = 4,
-         .length = 2,
+         .offset = 0,
+         .length = 4,
       };
 
-      uniform = (6 * count) + 2;
+      uniform = (6 * count) + 4;
 
       if (state->hw_stage == PIPE_SHADER_COMPUTE) {
          shader->push[shader->push_range_count++] = (struct agx_push_range){
-            .uniform = (6 * count) + 2,
-            .table = AGX_SYSVAL_TABLE_PARAMS,
-            .offset = 0,
-            .length = 2,
-         };
-
-         shader->push[shader->push_range_count++] = (struct agx_push_range){
-            .uniform = (6 * count) + 4,
+            .uniform = (6 * count) + 8,
             .table = AGX_SYSVAL_TABLE_ROOT,
             .offset = (uintptr_t)&u->input_assembly,
             .length = 4,
          };
 
-         uniform = (6 * count) + 8;
+         uniform = (6 * count) + 12;
       }
    } else if (state->stage == PIPE_SHADER_FRAGMENT) {
       struct agx_draw_uniforms *u = NULL;
@@ -483,8 +491,7 @@ agx_nir_lower_sysvals(nir_shader *shader, enum pipe_shader_type desc_stage,
    shader->info.stage = desc_stage;
 
    bool progress = nir_shader_instructions_pass(
-      shader, lower_sysvals, nir_metadata_block_index | nir_metadata_dominance,
-      &lower_draw_params);
+      shader, lower_sysvals, nir_metadata_control_flow, &lower_draw_params);
 
    shader->info.stage = phys_stage;
    return progress;
@@ -500,8 +507,7 @@ agx_nir_layout_uniforms(nir_shader *shader,
       .hw_stage = shader->info.stage,
    };
 
-   nir_shader_intrinsics_pass(shader, record_loads,
-                              nir_metadata_block_index | nir_metadata_dominance,
+   nir_shader_intrinsics_pass(shader, record_loads, nir_metadata_control_flow,
                               &state);
 
    *push_size = lay_out_uniforms(compiled, &state);

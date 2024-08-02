@@ -282,7 +282,7 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_opt)
                            Operand::c32(0x40018u));
       auto ovrw = bld.sop2(aco_opcode::s_add_u32, bld.def(s1, reg_s3), bld.def(s1, scc), op_in_0,
                            Operand::c32(1u));
-      auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u32, bld.def(s1, scc), Operand(salu, reg_s8),
+      auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u64, bld.def(s1, scc), Operand(salu, reg_s8),
                            Operand::zero());
       auto br = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2, vcc), bld.scc(scmp));
       writeout(5, Operand(br, vcc), Operand(ovrw, reg_s3));
@@ -435,7 +435,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! p_unit_test 9, %res9:v[2]
    Temp tmp9 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    Temp res9 =
-      bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1, reg_v2), Operand(tmp9, reg_v2), b, d);
+      bld.vop2_e64(aco_opcode::v_cndmask_b32, bld.def(v1, reg_v2), Operand(tmp9, reg_v2), b, d);
    writeout(9, Operand(res9, reg_v2));
 
    /* control flow */
@@ -518,8 +518,8 @@ BEGIN_TEST(optimizer_postRA.dpp_vcmpx)
 END_TEST
 
 BEGIN_TEST(optimizer_postRA.dpp_across_cf)
-   //>> v1: %a:v[0], v1: %b:v[1], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1] = p_startpgm
-   if (!setup_cs("v1 v1 v1 v1 s2", GFX10_3))
+   //>> v1: %a:v[0], v1: %b:v[1], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1], s4: %f:s[4-7] = p_startpgm
+   if (!setup_cs("v1 v1 v1 v1 s2 s4", GFX10_3))
       return;
 
    aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
@@ -528,12 +528,14 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
    startpgm->definitions[2].setFixed(PhysReg(258));
    startpgm->definitions[3].setFixed(PhysReg(259));
    startpgm->definitions[4].setFixed(PhysReg(0));
+   startpgm->definitions[5].setFixed(PhysReg(4));
 
    Operand a(inputs[0], PhysReg(256)); /* source for DPP */
    Operand b(inputs[1], PhysReg(257)); /* source for fadd */
    Operand c(inputs[2], PhysReg(258)); /* buffer store address */
    Operand d(inputs[3], PhysReg(259)); /* buffer store value */
    Operand e(inputs[4], PhysReg(0));   /* condition */
+   Operand f(inputs[5], PhysReg(4));   /* buffer descriptor */
    PhysReg reg_v12(268);               /* temporary register */
 
    Temp dpp_tmp = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v12), a, dpp_row_mirror);
@@ -550,8 +552,8 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
          //! /* logical preds: BB0, / linear preds: BB0, / kind: */
          //! p_logical_start
 
-         //! buffer_store_dword %c:v[2], 0, %d:v[3], 0 offen
-         bld.mubuf(aco_opcode::buffer_store_dword, c, Operand::zero(), d, Operand::zero(), 0, true);
+         //! buffer_store_dword %f:s[4-7], %c:v[2], 0, %d:v[3] offen
+         bld.mubuf(aco_opcode::buffer_store_dword, f, c, Operand::zero(), d, 0, true);
 
          //! v1: %res10:v[12] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1 fi
          //! p_unit_test 10, %res10:v[12]
@@ -597,21 +599,21 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
 END_TEST
 
 BEGIN_TEST(optimizer_postRA.dpp_across_cf_overwritten)
-   //>> v1: %a:v[0], v1: %b:v[1], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1], s1: %f:s[2] = p_startpgm
-   if (!setup_cs("v1 v1 v1 v1 s2 s1", GFX10_3))
+   //>> v1: %a:v[0], v1: %b:v[1], s4: %c:s[4-7], v1: %d:v[3], s2: %e:s[0-1], s1: %f:s[2] = p_startpgm
+   if (!setup_cs("v1 v1 s4 v1 s2 s1", GFX10_3))
       return;
 
    aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
    startpgm->definitions[0].setFixed(PhysReg(256));
    startpgm->definitions[1].setFixed(PhysReg(257));
-   startpgm->definitions[2].setFixed(PhysReg(258));
+   startpgm->definitions[2].setFixed(PhysReg(4));
    startpgm->definitions[3].setFixed(PhysReg(259));
    startpgm->definitions[4].setFixed(PhysReg(0));
    startpgm->definitions[5].setFixed(PhysReg(2));
 
    Operand a(inputs[0], PhysReg(256)); /* source for DPP */
    Operand b(inputs[1], PhysReg(257)); /* source for fadd */
-   Operand c(inputs[2], PhysReg(258)); /* buffer store address */
+   Operand c(inputs[2], PhysReg(4));   /* buffer descriptor */
    Operand d(inputs[3], PhysReg(259)); /* buffer store value */
    Operand e(inputs[4], PhysReg(0));   /* condition */
    Operand f(inputs[5], PhysReg(2));   /* buffer store address (scalar) */
@@ -635,9 +637,9 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf_overwritten)
          //! v1: %addr:v[0] = p_parallelcopy %f:s[2]
          Temp addr = bld.pseudo(aco_opcode::p_parallelcopy, bld.def(v1, a.physReg()), f);
 
-         //! buffer_store_dword %addr:v[0], 0, %d:v[3], 0 offen
-         bld.mubuf(aco_opcode::buffer_store_dword, Operand(addr, a.physReg()), Operand::zero(), d,
-                   Operand::zero(), 0, true);
+         //! buffer_store_dword %c:s[4-7], %addr:v[0], 0, %d:v[3] offen
+         bld.mubuf(aco_opcode::buffer_store_dword, c, Operand(addr, a.physReg()), Operand::zero(),
+                   d, 0, true);
 
          //! p_logical_end
          //! s2: %0:vcc = p_branch BB3
@@ -764,8 +766,8 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf_linear_clobber)
 END_TEST
 
 BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
-   //>> s2: %a:s[2-3], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1] = p_startpgm
-   if (!setup_cs("s2 v1 v1 s2", GFX10_3))
+   //>> s2: %a:s[2-3], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1], s4: %f:s[4-7] = p_startpgm
+   if (!setup_cs("s2 v1 v1 s2 s4", GFX10_3))
       return;
 
    aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
@@ -773,11 +775,13 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
    startpgm->definitions[1].setFixed(PhysReg(258));
    startpgm->definitions[2].setFixed(PhysReg(259));
    startpgm->definitions[3].setFixed(PhysReg(0));
+   startpgm->definitions[4].setFixed(PhysReg(4));
 
    Operand a(inputs[0], PhysReg(2));   /* source for s_and */
    Operand c(inputs[1], PhysReg(258)); /* buffer store address */
    Operand d(inputs[2], PhysReg(259)); /* buffer store value */
    Operand e(inputs[3], PhysReg(0));   /* condition */
+   Operand f(inputs[4], PhysReg(4));   /* buffer descriptor */
    PhysReg reg_s8(8);                  /* temporary register */
 
    auto tmp_salu = bld.sop2(aco_opcode::s_and_b64, bld.def(s2, reg_s8), bld.def(s1, scc), a,
@@ -795,8 +799,8 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
          //! /* logical preds: BB0, / linear preds: BB0, / kind: */
          //! p_logical_start
 
-         //! buffer_store_dword %c:v[2], 0, %d:v[3], 0 offen
-         bld.mubuf(aco_opcode::buffer_store_dword, c, Operand::zero(), d, Operand::zero(), 0, true);
+         //! buffer_store_dword %f:s[4-7], %c:v[2], 0, %d:v[3] offen
+         bld.mubuf(aco_opcode::buffer_store_dword, f, c, Operand::zero(), d, 0, true);
 
          //! p_logical_end
          //! s2: %0:vcc = p_branch BB3
@@ -835,7 +839,7 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
    //! s2: %tmp_salu:s[8-9], s1: %br_scc:scc = s_and_b64 %a:s[2-3], 0x40018
    //! s2: %br_vcc:vcc = p_cbranch_z %br_scc:scc
    //! p_unit_test 5, %br_vcc:vcc
-   auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u32, bld.def(s1, scc), Operand(tmp_salu, reg_s8),
+   auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u64, bld.def(s1, scc), Operand(tmp_salu, reg_s8),
                         Operand::zero());
    auto br = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2, vcc), bld.scc(scmp));
    writeout(5, Operand(br, vcc));
@@ -844,8 +848,8 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf)
 END_TEST
 
 BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf_partially_overwritten)
-   //>> s2: %a:s[2-3], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1], s1: %f:s[4] = p_startpgm
-   if (!setup_cs("s2 v1 v1 s2 s1", GFX10_3))
+   //>> s2: %a:s[2-3], v1: %c:v[2], v1: %d:v[3], s2: %e:s[0-1], s1: %f:s[4], s4: %g:s[8-11] = p_startpgm
+   if (!setup_cs("s2 v1 v1 s2 s1 s4", GFX10_3))
       return;
 
    aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
@@ -854,12 +858,14 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf_partially_overwritten)
    startpgm->definitions[2].setFixed(PhysReg(259));
    startpgm->definitions[3].setFixed(PhysReg(0));
    startpgm->definitions[4].setFixed(PhysReg(4));
+   startpgm->definitions[5].setFixed(PhysReg(8));
 
    Operand a(inputs[0], PhysReg(2));   /* source for s_and */
    Operand c(inputs[1], PhysReg(258)); /* buffer store address */
    Operand d(inputs[2], PhysReg(259)); /* buffer store value */
    Operand e(inputs[3], PhysReg(0));   /* condition */
    Operand f(inputs[4], PhysReg(4));   /* overwrite value */
+   Operand g(inputs[5], PhysReg(8));   /* buffer descriptor */
    PhysReg reg_s3(3);                  /* temporary register */
    PhysReg reg_s8(8);                  /* temporary register */
 
@@ -882,9 +888,8 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf_partially_overwritten)
          //! s1: %ovrwr:s[3] = p_parallelcopy %f:s[4]
          Temp s_addr = bld.pseudo(aco_opcode::p_parallelcopy, bld.def(s1, reg_s3), f);
 
-         //! buffer_store_dword %c:v[2], %ovrwr:s[3], %d:v[3], 0 offen
-         bld.mubuf(aco_opcode::buffer_store_dword, c, Operand(s_addr, reg_s3), d, Operand::zero(),
-                   0, true);
+         //! buffer_store_dword %g:s[8-11], %c:v[2], %ovrwr:s[3], %d:v[3] offen
+         bld.mubuf(aco_opcode::buffer_store_dword, g, c, Operand(s_addr, reg_s3), d, 0, true);
 
          //! p_logical_end
          //! s2: %0:vcc = p_branch BB3
@@ -920,10 +925,10 @@ BEGIN_TEST(optimizer_postRA.scc_nocmp_across_cf_partially_overwritten)
    //! /* logical preds: BB1, BB4, / linear preds: BB4, BB5, / kind: uniform, top-level, merge, */
    //! s2: %0:exec = p_parallelcopy %saved_exec:s[84-85]
 
-   //! s1: %br_scc:scc = s_cmp_lg_u32 %tmp_salu:s[8-9], 0
+   //! s1: %br_scc:scc = s_cmp_lg_u64 %tmp_salu:s[8-9], 0
    //! s2: %br_vcc:vcc = p_cbranch_z %br_scc:scc
    //! p_unit_test 5, %br_vcc:vcc
-   auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u32, bld.def(s1, scc), Operand(tmp_salu, reg_s8),
+   auto scmp = bld.sopc(aco_opcode::s_cmp_lg_u64, bld.def(s1, scc), Operand(tmp_salu, reg_s8),
                         Operand::zero());
    auto br = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2, vcc), bld.scc(scmp));
    writeout(5, Operand(br, vcc));

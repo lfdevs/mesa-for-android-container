@@ -81,21 +81,9 @@ rm -rf $XORGMACROS_VERSION
 
 . .gitlab-ci/container/build-directx-headers.sh
 
+. .gitlab-ci/container/build-bindgen.sh
+
 python3 -m pip install --break-system-packages -r .gitlab-ci/lava/requirements.txt
-
-# install bindgen
-RUSTFLAGS='-L native=/usr/local/lib' cargo install \
-  bindgen-cli --version 0.65.1 \
-  --locked \
-  -j ${FDO_CI_CONCURRENT:-4} \
-  --root /usr/local
-
-# install cbindgen
-RUSTFLAGS='-L native=/usr/local/lib' cargo install \
-  cbindgen --version 0.26.0 \
-  --locked \
-  -j ${FDO_CI_CONCURRENT:-4} \
-  --root /usr/local
 
 ############### Uninstall the build software
 

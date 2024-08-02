@@ -511,6 +511,21 @@ namespace brw {
       bblock_t *
       intersect(bblock_t *b1, bblock_t *b2) const;
 
+      /**
+       * Returns true if block `a` dominates block `b`.
+       */
+      bool
+      dominates(const bblock_t *a, const bblock_t *b) const
+      {
+         while (a != b) {
+            if (b->num == 0)
+               return false;
+
+            b = parent(b);
+         }
+         return true;
+      }
+
       void
       dump() const;
 

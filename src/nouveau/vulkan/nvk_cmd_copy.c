@@ -15,13 +15,10 @@
 
 #include "vk_format.h"
 
-#include "nouveau_bo.h"
-#include "nouveau_context.h"
-
 #include "nvtypes.h"
-#include "nvk_cl902d.h"
-#include "nvk_cl90b5.h"
-#include "nvk_clc1b5.h"
+#include "nv_push_cl902d.h"
+#include "nv_push_cl90b5.h"
+#include "nv_push_clc1b5.h"
 
 static inline uint16_t
 nvk_cmd_buffer_copy_cls(struct nvk_cmd_buffer *cmd)
@@ -472,7 +469,7 @@ nvk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
       vk_foreach_struct_const(ext, region->pNext) {
          switch (ext->sType) {
          default:
-            nvk_debug_ignored_stype(ext->sType);
+            vk_debug_ignored_stype(ext->sType);
             break;
          }
       }
@@ -481,7 +478,7 @@ nvk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
    vk_foreach_struct_const(ext, pCopyBufferToImageInfo->pNext) {
       switch (ext->sType) {
       default:
-         nvk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
          break;
       }
    }
@@ -579,7 +576,7 @@ nvk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
       vk_foreach_struct_const(ext, region->pNext) {
          switch (ext->sType) {
          default:
-            nvk_debug_ignored_stype(ext->sType);
+            vk_debug_ignored_stype(ext->sType);
             break;
          }
       }
@@ -588,7 +585,7 @@ nvk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
    vk_foreach_struct_const(ext, pCopyImageToBufferInfo->pNext) {
       switch (ext->sType) {
       default:
-         nvk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
          break;
       }
    }

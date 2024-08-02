@@ -32,7 +32,7 @@
 #include <xcb/present.h>
 
 #include <GL/gl.h>
-#include <GL/internal/dri_interface.h>
+#include "mesa_interface.h"
 #include <c11/threads.h>
 
 enum loader_dri3_buffer_type {
@@ -266,7 +266,7 @@ int loader_dri3_open(xcb_connection_t *conn,
 __DRIimage *
 loader_dri3_create_image(xcb_connection_t *c,
                          xcb_dri3_buffer_from_pixmap_reply_t *bp_reply,
-                         unsigned int format,
+                         unsigned int fourcc,
                          __DRIscreen *dri_screen,
                          const __DRIimageExtension *image,
                          void *loaderPrivate);
@@ -275,7 +275,7 @@ loader_dri3_create_image(xcb_connection_t *c,
 __DRIimage *
 loader_dri3_create_image_from_buffers(xcb_connection_t *c,
                                       xcb_dri3_buffers_from_pixmap_reply_t *bp_reply,
-                                      unsigned int format,
+                                      unsigned int fourcc,
                                       __DRIscreen *dri_screen,
                                       const __DRIimageExtension *image,
                                       void *loaderPrivate);
@@ -297,4 +297,6 @@ loader_dri3_swapbuffer_barrier(struct loader_dri3_drawable *draw);
 void
 loader_dri3_close_screen(__DRIscreen *dri_screen);
 
+bool
+loader_dri3_check_multibuffer(xcb_connection_t *c, bool *err);
 #endif

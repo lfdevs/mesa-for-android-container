@@ -234,8 +234,7 @@ lower_load_barycentric_coord(nir_builder *b, lower_fs_barycentric_state *state, 
       }
    }
 
-   nir_def_rewrite_uses(&intrin->def, new_dest);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, new_dest);
 
    return true;
 }

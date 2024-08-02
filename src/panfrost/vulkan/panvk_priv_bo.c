@@ -16,12 +16,11 @@
 
 struct panvk_priv_bo *
 panvk_priv_bo_create(struct panvk_device *dev, size_t size, uint32_t flags,
-                     const struct VkAllocationCallbacks *alloc,
                      VkSystemAllocationScope scope)
 {
    int ret;
    struct panvk_priv_bo *priv_bo =
-      vk_zalloc2(&dev->vk.alloc, alloc, sizeof(*priv_bo), 8, scope);
+      vk_zalloc(&dev->vk.alloc, sizeof(*priv_bo), 8, scope);
 
    if (!priv_bo)
       return NULL;
@@ -65,6 +64,8 @@ panvk_priv_bo_create(struct panvk_device *dev, size_t size, uint32_t flags,
                             NULL);
    }
 
+   p_atomic_set(&priv_bo->refcnt, 1);
+
    return priv_bo;
 
 err_munmap_bo:
@@ -77,17 +78,13 @@ err_put_bo:
    pan_kmod_bo_put(bo);
 
 err_free_priv_bo:
-   vk_free2(&dev->vk.alloc, alloc, priv_bo);
+   vk_free(&dev->vk.alloc, priv_bo);
    return NULL;
 }
 
-void
-panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo,
-                      const VkAllocationCallbacks *alloc)
+static void
+panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo)
 {
-   if (!priv_bo)
-      return;
-
    struct panvk_device *dev = priv_bo->dev;
 
    if (dev->debug.decode_ctx) {
@@ -112,5 +109,14 @@ panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo,
    }
 
    pan_kmod_bo_put(priv_bo->bo);
-   vk_free2(&dev->vk.alloc, alloc, priv_bo);
+   vk_free(&dev->vk.alloc, priv_bo);
+}
+
+void
+panvk_priv_bo_unref(struct panvk_priv_bo *priv_bo)
+{
+   if (!priv_bo || p_atomic_dec_return(&priv_bo->refcnt))
+      return;
+
+   panvk_priv_bo_destroy(priv_bo);
 }

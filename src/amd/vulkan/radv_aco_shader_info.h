@@ -39,8 +39,8 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv
    ASSIGN_FIELD(tcs.num_lds_blocks);
    ASSIGN_FIELD(ps.num_interp);
    ASSIGN_FIELD(cs.uses_full_subgroups);
-   aco_info->ps.spi_ps_input_ena = radv->ps.spi_ps_input;
-   aco_info->ps.spi_ps_input_addr = radv->ps.spi_ps_input;
+   aco_info->ps.spi_ps_input_ena = radv->ps.spi_ps_input_ena;
+   aco_info->ps.spi_ps_input_addr = radv->ps.spi_ps_input_addr;
    aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
    aco_info->is_trap_handler_shader = radv->type == RADV_SHADER_TYPE_TRAP_HANDLER;
    aco_info->image_2d_view_of_3d = radv_key->image_2d_view_of_3d;
@@ -64,6 +64,7 @@ radv_aco_convert_vs_prolog_key(struct aco_vs_prolog_info *aco_info, const struct
    ASSIGN_FIELD_CP(formats);
    ASSIGN_FIELD(num_attributes);
    ASSIGN_FIELD(misaligned_mask);
+   ASSIGN_FIELD(unaligned_mask);
    ASSIGN_FIELD(is_ngg);
    ASSIGN_FIELD(next_stage);
 
@@ -82,6 +83,7 @@ radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco_info, const struct
    ASSIGN_FIELD(alpha_to_one);
 
    memcpy(aco_info->colors, radv_args->colors, sizeof(aco_info->colors));
+   memcpy(aco_info->color_map, radv->color_map, sizeof(aco_info->color_map));
    aco_info->depth = radv_args->depth;
    aco_info->stencil = radv_args->stencil;
    aco_info->samplemask = radv_args->sample_mask;

@@ -100,13 +100,15 @@ brw_fs_opt_dead_code_eliminate(fs_visitor &s)
 
             if (!result_live &&
                 (can_omit_write(inst) || can_eliminate(devinfo, inst, flag_live))) {
-               inst->dst = fs_reg(spread(retype(brw_null_reg(), inst->dst.type),
-                                         inst->dst.stride));
+               inst->dst = brw_reg(spread(retype(brw_null_reg(), inst->dst.type),
+                                          inst->dst.stride));
                progress = true;
             }
          }
 
-         if (inst->dst.is_null() && can_eliminate(devinfo, inst, flag_live)) {
+         if (inst->dst.is_null() && can_eliminate(devinfo, inst, flag_live) &&
+             !(inst->opcode == BRW_OPCODE_NOP &&
+               exec_list_is_singular(&block->instructions))) {
             inst->opcode = BRW_OPCODE_NOP;
             progress = true;
          }

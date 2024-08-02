@@ -30,6 +30,7 @@
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
+#include "common/intel_compute_slm.h"
 #include "common/intel_genX_state_brw.h"
 
 static void
@@ -306,6 +307,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
    state->cmd_buffer->state.descriptors_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
 #endif
 
+#if INTEL_WA_14018283232_GFX_VER
+   genX(cmd_buffer_ensure_wa_14018283232)(state->cmd_buffer, false);
+#endif
+
    /* Flag all the instructions emitted by the memcpy. */
    struct anv_gfx_dynamic_state *hw_state =
       &state->cmd_buffer->state.gfx.dyn_state;
@@ -580,8 +585,8 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
             .BindingTablePointer               = 0,
             .BindingTableEntryCount            = 0,
             .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
-            .SharedLocalMemorySize             = encode_slm_size(GFX_VER,
-                                                                 prog_data->base.total_shared),
+            .SharedLocalMemorySize             = intel_compute_slm_encode_size(GFX_VER,
+                                                                               prog_data->base.total_shared),
             .NumberOfBarriers                  = prog_data->uses_barrier,
          };
       }
@@ -649,8 +654,8 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
          .SamplerCount                          = 0,
          .BindingTableEntryCount                = 0,
          .BarrierEnable                         = prog_data->uses_barrier,
-         .SharedLocalMemorySize                 = encode_slm_size(GFX_VER,
-                                                                  prog_data->base.total_shared),
+         .SharedLocalMemorySize                 = intel_compute_slm_encode_size(GFX_VER,
+                                                                                prog_data->base.total_shared),
 
          .ConstantURBEntryReadOffset            = 0,
          .ConstantURBEntryReadLength            = prog_data->push.per_thread.regs,

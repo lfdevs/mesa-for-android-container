@@ -308,8 +308,7 @@ intel_nir_opt_peephole_imul32x16(nir_shader *shader)
 
    bool progress = nir_shader_instructions_pass(shader,
                                                 intel_nir_opt_peephole_imul32x16_instr,
-                                                nir_metadata_block_index |
-                                                nir_metadata_dominance,
+                                                nir_metadata_control_flow,
                                                 &cb_data);
 
    _mesa_hash_table_destroy(cb_data.range_ht, NULL);

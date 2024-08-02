@@ -164,8 +164,7 @@ struct InstrPred {
       case Format::SMEM: {
          SMEM_instruction& aS = a->smem();
          SMEM_instruction& bS = b->smem();
-         return aS.sync == bS.sync && aS.glc == bS.glc && aS.dlc == bS.dlc && aS.nv == bS.nv &&
-                aS.disable_wqm == bS.disable_wqm;
+         return aS.sync == bS.sync && aS.cache.value == bS.cache.value;
       }
       case Format::VINTRP: {
          VINTRP_instruction& aI = a->vintrp();
@@ -203,21 +202,21 @@ struct InstrPred {
          MTBUF_instruction& bM = b->mtbuf();
          return aM.sync == bM.sync && aM.dfmt == bM.dfmt && aM.nfmt == bM.nfmt &&
                 aM.offset == bM.offset && aM.offen == bM.offen && aM.idxen == bM.idxen &&
-                aM.glc == bM.glc && aM.dlc == bM.dlc && aM.slc == bM.slc && aM.tfe == bM.tfe &&
+                aM.cache.value == bM.cache.value && aM.tfe == bM.tfe &&
                 aM.disable_wqm == bM.disable_wqm;
       }
       case Format::MUBUF: {
          MUBUF_instruction& aM = a->mubuf();
          MUBUF_instruction& bM = b->mubuf();
          return aM.sync == bM.sync && aM.offset == bM.offset && aM.offen == bM.offen &&
-                aM.idxen == bM.idxen && aM.glc == bM.glc && aM.dlc == bM.dlc && aM.slc == bM.slc &&
-                aM.tfe == bM.tfe && aM.lds == bM.lds && aM.disable_wqm == bM.disable_wqm;
+                aM.idxen == bM.idxen && aM.cache.value == bM.cache.value && aM.tfe == bM.tfe &&
+                aM.lds == bM.lds && aM.disable_wqm == bM.disable_wqm;
       }
       case Format::MIMG: {
          MIMG_instruction& aM = a->mimg();
          MIMG_instruction& bM = b->mimg();
          return aM.sync == bM.sync && aM.dmask == bM.dmask && aM.unrm == bM.unrm &&
-                aM.glc == bM.glc && aM.slc == bM.slc && aM.tfe == bM.tfe && aM.da == bM.da &&
+                aM.cache.value == bM.cache.value && aM.tfe == bM.tfe && aM.da == bM.da &&
                 aM.lwe == bM.lwe && aM.r128 == bM.r128 && aM.a16 == bM.a16 && aM.d16 == bM.d16 &&
                 aM.disable_wqm == bM.disable_wqm;
       }
@@ -313,6 +312,21 @@ can_eliminate(aco_ptr<Instruction>& instr)
    return true;
 }
 
+bool
+is_trivial_phi(Block& block, Instruction* instr)
+{
+   if (!is_phi(instr))
+      return false;
+
+   /* Logical LCSSA phis must be kept in order to prevent the optimizer
+    * from doing invalid transformations. */
+   if (instr->opcode == aco_opcode::p_phi && (block.kind & block_kind_loop_exit))
+      return false;
+
+   return std::all_of(instr->operands.begin(), instr->operands.end(),
+                      [&](Operand& op) { return op == instr->operands[0]; });
+}
+
 void
 process_block(vn_ctx& ctx, Block& block)
 {
@@ -333,18 +347,18 @@ process_block(vn_ctx& ctx, Block& block)
           instr->opcode == aco_opcode::p_demote_to_helper || instr->opcode == aco_opcode::p_end_wqm)
          ctx.exec_id++;
 
-      if (!can_eliminate(instr)) {
-         new_instructions.emplace_back(std::move(instr));
-         continue;
-      }
-
       /* simple copy-propagation through renaming */
       bool copy_instr =
-         instr->opcode == aco_opcode::p_parallelcopy ||
+         is_trivial_phi(block, instr.get()) || instr->opcode == aco_opcode::p_parallelcopy ||
          (instr->opcode == aco_opcode::p_create_vector && instr->operands.size() == 1);
       if (copy_instr && !instr->definitions[0].isFixed() && instr->operands[0].isTemp() &&
           instr->operands[0].regClass() == instr->definitions[0].regClass()) {
          ctx.renames[instr->definitions[0].tempId()] = instr->operands[0].getTemp();
+         continue;
+      }
+
+      if (!can_eliminate(instr)) {
+         new_instructions.emplace_back(std::move(instr));
          continue;
       }
 
@@ -388,7 +402,7 @@ void
 rename_phi_operands(Block& block, aco::unordered_map<uint32_t, Temp>& renames)
 {
    for (aco_ptr<Instruction>& phi : block.instructions) {
-      if (phi->opcode != aco_opcode::p_phi && phi->opcode != aco_opcode::p_linear_phi)
+      if (!is_phi(phi))
          break;
 
       for (Operand& op : phi->operands) {

@@ -34,18 +34,15 @@
 #include <errno.h>
 #include <limits.h>
 #include <assert.h>
-
 #include <sys/types.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <xf86drm.h>
 #include "drm-uapi/drm_fourcc.h"
+#include <GL/gl.h> /* mesa_interface needs GL types */
 
-#include <GL/gl.h> /* dri_interface needs GL types */
-#include <GL/internal/dri_interface.h>
-
+#include "mesa_interface.h"
 #include "gbm_driint.h"
-
 #include "gbmint.h"
 #include "loader_dri_helper.h"
 #include "kopper_interface.h"
@@ -57,17 +54,6 @@
 #if HAVE_WAYLAND_PLATFORM
 #include "wayland-drm.h"
 #endif
-
-static __DRIimage *
-dri_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
-{
-   struct gbm_dri_device *dri = data;
-
-   if (dri->lookup_image == NULL)
-      return NULL;
-
-   return dri->lookup_image(screen, image, dri->lookup_user_data);
-}
 
 static GLboolean
 dri_validate_egl_image(void *image, void *data)
@@ -107,6 +93,8 @@ dri_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
    /* Note: loaderPrivate is _EGLDisplay* */
    switch (cap) {
    case DRI_LOADER_CAP_FP16:
+      return 1;
+   case DRI_LOADER_CAP_RGBA_ORDERING:
       return 1;
    default:
       return 0;
@@ -206,7 +194,6 @@ static const __DRIuseInvalidateExtension use_invalidate = {
 static const __DRIimageLookupExtension image_lookup_extension = {
    .base = { __DRI_IMAGE_LOOKUP, 2 },
 
-   .lookupEGLImage          = dri_lookup_egl_image,
    .validateEGLImage        = dri_validate_egl_image,
    .lookupEGLImageValidated = dri_lookup_egl_image_validated,
 };
@@ -261,6 +248,9 @@ static struct dri_extension_match gbm_swrast_device_extensions[] = {
    { __DRI_KOPPER, 1, offsetof(struct gbm_dri_device, kopper), true },
 };
 
+const __DRIextension **
+dri_loader_get_extensions(const char *driver_name);
+
 static const __DRIextension **
 dri_open_driver(struct gbm_dri_device *dri)
 {
@@ -272,18 +262,7 @@ dri_open_driver(struct gbm_dri_device *dri)
     */
    dlopen("libglapi.so.0", RTLD_LAZY | RTLD_GLOBAL);
 
-   static const char *search_path_vars[] = {
-      /* Read GBM_DRIVERS_PATH first for compatibility, but LIBGL_DRIVERS_PATH
-       * is recommended over GBM_DRIVERS_PATH.
-       */
-      "GBM_DRIVERS_PATH",
-      /* Read LIBGL_DRIVERS_PATH if GBM_DRIVERS_PATH was not set.
-       * LIBGL_DRIVERS_PATH is recommended over GBM_DRIVERS_PATH.
-       */
-      "LIBGL_DRIVERS_PATH",
-      NULL
-   };
-   return loader_open_driver(dri->driver_name, &dri->driver, search_path_vars);
+   return dri_loader_get_extensions(dri->driver_name);
 }
 
 static int
@@ -294,8 +273,11 @@ dri_screen_create_for_driver(struct gbm_dri_device *dri, char *driver_name, bool
    dri->driver_name = swrast ? strdup("swrast") : driver_name;
 
    const __DRIextension **extensions = dri_open_driver(dri);
-   if (!extensions)
+   if (!extensions) {
+      if (driver_name_is_inferred)
+         fprintf(stderr, "MESA-LOADER: gbm: failed to open %s: driver not built!\n", dri->driver_name);
       goto fail;
+   }
 
    bool bind_ok;
    if (!swrast) {
@@ -310,7 +292,7 @@ dri_screen_create_for_driver(struct gbm_dri_device *dri, char *driver_name, bool
 
    if (!bind_ok) {
       fprintf(stderr, "failed to bind extensions\n");
-      goto close_driver;
+      goto fail;
    }
 
    dri->driver_extensions = extensions;
@@ -320,7 +302,7 @@ dri_screen_create_for_driver(struct gbm_dri_device *dri, char *driver_name, bool
                                              dri->driver_extensions,
                                              &dri->driver_configs, driver_name_is_inferred, dri);
    if (dri->screen == NULL)
-      goto close_driver;
+      goto fail;
 
    if (!swrast) {
       extensions = dri->core->getExtensions(dri->screen);
@@ -331,16 +313,12 @@ dri_screen_create_for_driver(struct gbm_dri_device *dri, char *driver_name, bool
       }
    }
 
-   dri->lookup_image = NULL;
    dri->lookup_user_data = NULL;
 
    return 0;
 
 free_screen:
    dri->core->destroyScreen(dri->screen);
-
-close_driver:
-   dlclose(dri->driver);
 
 fail:
    free(dri->driver_name);
@@ -755,12 +733,16 @@ gbm_dri_bo_import(struct gbm_device *gbm,
 
    case GBM_BO_IMPORT_EGL_IMAGE:
    {
-      if (dri->lookup_image == NULL) {
+      if (dri->lookup_image_validated == NULL) {
          errno = EINVAL;
          return NULL;
       }
 
-      image = dri->lookup_image(dri->screen, buffer, dri->lookup_user_data);
+      if (!dri->validate_image(buffer, dri->lookup_user_data)) {
+         errno = EINVAL;
+         return NULL;
+      }
+      image = dri->lookup_image_validated(buffer, dri->lookup_user_data);
       image = dri->image->dupImage(image, NULL);
       dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_FOURCC, &gbm_format);
       if (gbm_format == DRM_FORMAT_INVALID) {
@@ -778,17 +760,19 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       int fourcc;
 
       /* GBM's GBM_FORMAT_* tokens are a strict superset of the DRI FourCC
-       * tokens accepted by createImageFromFds, except for not supporting
+       * tokens accepted by createImageFromDmaBufs, except for not supporting
        * the sARGB format. */
       fourcc = gbm_core.v0.format_canonicalize(fd_data->format);
 
-      image = dri->image->createImageFromFds(dri->screen,
-                                             fd_data->width,
-                                             fd_data->height,
-                                             fourcc,
-                                             &fd_data->fd, 1,
-                                             &stride, &offset,
-                                             NULL);
+      image = dri->image->createImageFromDmaBufs(dri->screen,
+                                                 fd_data->width,
+                                                 fd_data->height,
+                                                 fourcc,
+                                                 DRM_FORMAT_MOD_INVALID,
+                                                 &fd_data->fd, 1,
+                                                 &stride, &offset,
+                                                 0, 0, 0, 0, 0,
+                                                 NULL, NULL);
       if (image == NULL) {
          errno = EINVAL;
          return NULL;
@@ -803,26 +787,26 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       unsigned int error;
       int fourcc;
 
-      /* Import with modifier requires createImageFromDmaBufs2 */
-      if (dri->image->createImageFromDmaBufs2 == NULL) {
+      /* Import with modifier requires createImageFromDmaBufs */
+      if (dri->image->createImageFromDmaBufs == NULL) {
          errno = ENOSYS;
          return NULL;
       }
 
       /* GBM's GBM_FORMAT_* tokens are a strict superset of the DRI FourCC
-       * tokens accepted by createImageFromDmaBufs2, except for not supporting
+       * tokens accepted by createImageFromDmaBufs, except for not supporting
        * the sARGB format. */
       fourcc = gbm_core.v0.format_canonicalize(fd_data->format);
 
-      image = dri->image->createImageFromDmaBufs2(dri->screen, fd_data->width,
-                                                  fd_data->height, fourcc,
-                                                  fd_data->modifier,
-                                                  fd_data->fds,
-                                                  fd_data->num_fds,
-                                                  fd_data->strides,
-                                                  fd_data->offsets,
-                                                  0, 0, 0, 0,
-                                                  &error, NULL);
+      image = dri->image->createImageFromDmaBufs(dri->screen, fd_data->width,
+                                                 fd_data->height, fourcc,
+                                                 fd_data->modifier,
+                                                 fd_data->fds,
+                                                 fd_data->num_fds,
+                                                 fd_data->strides,
+                                                 fd_data->offsets,
+                                                 0, 0, 0, 0,
+                                                 0, &error, NULL);
       if (image == NULL) {
          errno = ENOSYS;
          return NULL;
@@ -941,6 +925,9 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    struct gbm_dri_bo *bo;
    int dri_format;
    unsigned dri_use = 0;
+   uint64_t *mods_comp = NULL;
+   uint64_t *mods_filtered = NULL;
+   unsigned int count_filtered = 0;
 
    format = gbm_core.v0.format_canonicalize(format);
 
@@ -976,16 +963,97 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    /* Gallium drivers requires shared in order to get the handle/stride */
    dri_use |= __DRI_IMAGE_USE_SHARE;
 
-   if (modifiers && !dri->image->createImageWithModifiers) {
-      errno = ENOSYS;
-      goto failed;
+   /* If the driver supports fixed-rate compression, filter the acceptable
+    * modifiers by the compression rate. */
+   if (modifiers && dri->image->queryCompressionModifiers) {
+      enum __DRIFixedRateCompression comp = __DRI_FIXED_RATE_COMPRESSION_NONE;
+
+      switch (usage & GBM_BO_FIXED_COMPRESSION_MASK) {
+#define CASE(x) case GBM_BO_FIXED_COMPRESSION_ ## x: comp = __DRI_FIXED_RATE_COMPRESSION_ ## x; break;
+      CASE(DEFAULT);
+      CASE(1BPC);
+      CASE(2BPC);
+      CASE(3BPC);
+      CASE(4BPC);
+      CASE(5BPC);
+      CASE(6BPC);
+      CASE(7BPC);
+      CASE(8BPC);
+      CASE(9BPC);
+      CASE(10BPC);
+      CASE(11BPC);
+      CASE(12BPC);
+#undef CASE
+      default:
+         break;
+      }
+
+      int count_comp = 0;
+
+      /* Find how many acceptable modifiers there are for our rate. If there
+       * are none, fall back to no compression, as it is not mandatory to use
+       * the specified compression rate. */
+      if (!dri->image->queryCompressionModifiers(dri->screen, format, comp,
+                                                 0, NULL, &count_comp) ||
+         count_comp == 0) {
+         if (comp == __DRI_FIXED_RATE_COMPRESSION_NONE) {
+            errno = EINVAL;
+            goto failed;
+         }
+
+         comp = __DRI_FIXED_RATE_COMPRESSION_NONE;
+         if (!dri->image->queryCompressionModifiers(dri->screen, format, comp,
+                                                    0, NULL, &count_comp)) {
+            errno = EINVAL;
+            goto failed;
+         }
+      }
+
+      if (count_comp == 0) {
+         errno = EINVAL;
+         goto failed;
+      }
+
+      mods_comp = malloc(count_comp * sizeof(uint64_t));
+      mods_filtered = malloc(count_comp * sizeof(uint64_t));
+      if (!mods_comp || !mods_filtered) {
+         errno = ENOMEM;
+         goto failed;
+      }
+
+      if (!dri->image->queryCompressionModifiers(dri->screen, format, comp,
+                                                 count_comp, mods_comp,
+                                                 &count_comp)) {
+         errno = ENOMEM;
+         goto failed;
+      }
+
+
+      /* Intersect the list of user-supplied acceptable modifiers with the set
+       * of modifiers acceptable for this compression rate. */
+      for (unsigned int i = 0; i < count_comp; i++) {
+         for (unsigned int j = 0; j < count; j++) {
+            if (mods_comp[i] == modifiers[j]) {
+               mods_filtered[count_filtered++] = mods_comp[i];
+               break;
+            }
+         }
+      }
+
+      free(mods_comp);
+      mods_comp = NULL;
    }
 
    bo->image = loader_dri_create_image(dri->screen, dri->image, width, height,
-                                       dri_format, dri_use, modifiers, count,
+                                       dri_format, dri_use,
+                                       mods_filtered ? mods_filtered : modifiers,
+                                       mods_filtered ? count_filtered : count,
                                        bo);
    if (bo->image == NULL)
       goto failed;
+
+   free(mods_filtered);
+   mods_filtered = NULL;
 
    if (modifiers)
       assert(gbm_dri_bo_get_modifier(&bo->base) != DRM_FORMAT_MOD_INVALID);
@@ -998,6 +1066,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    return &bo->base;
 
 failed:
+   free(mods_comp);
+   free(mods_filtered);
    free(bo);
    return NULL;
 }
@@ -1070,13 +1140,7 @@ gbm_dri_surface_create(struct gbm_device *gbm,
 		       uint32_t format, uint32_t flags,
                        const uint64_t *modifiers, const unsigned count)
 {
-   struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_surface *surf;
-
-   if (modifiers && !dri->image->createImageWithModifiers) {
-      errno = ENOSYS;
-      return NULL;
-   }
 
    if (count)
       assert(modifiers);
@@ -1147,7 +1211,6 @@ dri_destroy(struct gbm_device *gbm)
    for (i = 0; dri->driver_configs[i]; i++)
       free((__DRIconfig *) dri->driver_configs[i]);
    free(dri->driver_configs);
-   dlclose(dri->driver);
    free(dri->driver_name);
 
    free(dri);

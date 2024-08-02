@@ -9,8 +9,8 @@
 #include "nvk_image.h"
 #include "nvk_physical_device.h"
 
-#include "nvk_cl9097.h"
-#include "nvk_clb197.h"
+#include "nv_push_cl9097.h"
+#include "nv_push_clb197.h"
 
 static VkResult
 nvk_cmd_bind_map_buffer(struct vk_command_buffer *vk_cmd,
@@ -66,13 +66,15 @@ struct nvk_meta_save {
    bool has_push_desc0;
    struct nvk_push_descriptor_set push_desc0;
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
-   uint8_t push[128];
+   uint8_t push[NVK_MAX_PUSH_SIZE];
 };
 
 static void
 nvk_meta_begin(struct nvk_cmd_buffer *cmd,
                struct nvk_meta_save *save)
 {
+   const struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
+
    save->dynamic = cmd->vk.dynamic_graphics_state;
    save->_dynamic_vi = cmd->state.gfx._dynamic_vi;
    save->_dynamic_sl = cmd->state.gfx._dynamic_sl;
@@ -82,20 +84,16 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
 
    save->vb0 = cmd->state.gfx.vb0;
 
-   save->desc0 = cmd->state.gfx.descriptors.sets[0];
-   save->has_push_desc0 = cmd->state.gfx.descriptors.push[0];
+   save->desc0 = desc->sets[0];
+   save->has_push_desc0 = desc->push[0];
    if (save->has_push_desc0)
-      save->push_desc0 = *cmd->state.gfx.descriptors.push[0];
+      save->push_desc0 = *desc->push[0];
 
-   STATIC_ASSERT(sizeof(save->set_dynamic_buffer_start) ==
-                sizeof(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start));
-   memcpy(save->set_dynamic_buffer_start,
-          cmd->state.gfx.descriptors.root.set_dynamic_buffer_start,
-          sizeof(save->set_dynamic_buffer_start));
-
-   STATIC_ASSERT(sizeof(save->push) ==
-                 sizeof(cmd->state.gfx.descriptors.root.push));
-   memcpy(save->push, cmd->state.gfx.descriptors.root.push, sizeof(save->push));
+   nvk_descriptor_state_get_root_array(desc, set_dynamic_buffer_start,
+                                       0, NVK_MAX_SETS,
+                                       save->set_dynamic_buffer_start);
+   nvk_descriptor_state_get_root_array(desc, push, 0, NVK_MAX_PUSH_SIZE,
+                                       save->push);
 
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
    P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
@@ -137,25 +135,24 @@ static void
 nvk_meta_end(struct nvk_cmd_buffer *cmd,
              struct nvk_meta_save *save)
 {
+   struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
+
    if (save->desc0) {
-      cmd->state.gfx.descriptors.sets[0] = save->desc0;
-      cmd->state.gfx.descriptors.set_sizes[0] = save->desc0->size;
-      cmd->state.gfx.descriptors.root.sets[0] = nvk_descriptor_set_addr(save->desc0);
-      cmd->state.gfx.descriptors.sets_dirty |= BITFIELD_BIT(0);
-      cmd->state.gfx.descriptors.push_dirty &= ~BITFIELD_BIT(0);
+      desc->sets[0] = save->desc0;
+      struct nvk_buffer_address addr = nvk_descriptor_set_addr(save->desc0);
+      nvk_descriptor_state_set_root(cmd, desc, sets[0], addr);
    } else if (save->has_push_desc0) {
-      *cmd->state.gfx.descriptors.push[0] = save->push_desc0;
-      cmd->state.gfx.descriptors.push_dirty |= BITFIELD_BIT(0);
+      *desc->push[0] = save->push_desc0;
+      desc->push_dirty |= BITFIELD_BIT(0);
    }
+   nvk_cmd_dirty_cbufs_for_descriptors(cmd, ~0, 0, 1, 0, 0);
 
    /* Restore set_dynaic_buffer_start because meta binding set 0 can disturb
     * all dynamic buffers starts for all sets.
     */
-   STATIC_ASSERT(sizeof(save->set_dynamic_buffer_start) ==
-                sizeof(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start));
-   memcpy(cmd->state.gfx.descriptors.root.set_dynamic_buffer_start,
-          save->set_dynamic_buffer_start,
-          sizeof(save->set_dynamic_buffer_start));
+   nvk_descriptor_state_set_root_array(cmd, desc, set_dynamic_buffer_start,
+                                       0, NVK_MAX_SETS,
+                                       save->set_dynamic_buffer_start);
 
    /* Restore the dynamic state */
    assert(save->dynamic.vi == &cmd->state.gfx._dynamic_vi);
@@ -176,7 +173,8 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
 
    nvk_cmd_bind_vertex_buffer(cmd, 0, save->vb0);
 
-   memcpy(cmd->state.gfx.descriptors.root.push, save->push, sizeof(save->push));
+   nvk_descriptor_state_set_root_array(cmd, desc, push, 0, sizeof(save->push),
+                                       save->push);
 
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
    P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {

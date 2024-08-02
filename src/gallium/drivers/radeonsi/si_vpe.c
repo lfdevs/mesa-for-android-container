@@ -997,7 +997,7 @@ si_vpe_processor_end_frame(struct pipe_video_codec *codec,
    struct pipe_fence_handle *process_fence = NULL;
    assert(codec);
 
-   vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, &process_fence);
+   vpeproc->ws->cs_flush(&vpeproc->cs, picture->flush_flags, &process_fence);
    next_buffer(vpeproc);
 
    if (picture->fence && process_fence) {

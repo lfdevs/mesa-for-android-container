@@ -313,7 +313,10 @@ get_reg_specified(struct ra_ctx *ctx, struct ir3_register *reg, physreg_t physre
 static unsigned
 reg_file_size(struct ir3_register *reg)
 {
-   return RA_SHARED_SIZE;
+   if (reg->flags & IR3_REG_HALF)
+      return RA_SHARED_HALF_SIZE;
+   else
+      return RA_SHARED_SIZE;
 }
 
 static physreg_t
@@ -758,10 +761,14 @@ can_demote_src(struct ir3_instruction *instr)
    case OPC_META_COLLECT:
       return false;
    case OPC_MOV:
-      /* non-shared -> shared floating-point conversions don't work */
+      /* non-shared -> shared floating-point conversions and
+       * 8-bit sign extension don't work.
+       */
       return (!(instr->dsts[0]->flags & IR3_REG_SHARED) ||
-          (full_type(instr->cat1.src_type) != TYPE_F32 &&
-           full_type(instr->cat1.dst_type) != TYPE_F32));
+              !((full_type(instr->cat1.src_type) == TYPE_F32 ||
+                 full_type(instr->cat1.dst_type) == TYPE_F32) ||
+                (instr->cat1.src_type == TYPE_U8 &&
+                 full_type(instr->cat1.dst_type) == TYPE_S32)));
    default:
       return (!is_alu(instr) && !is_sfu(instr)) ||
          !(instr->dsts[0]->flags & IR3_REG_SHARED);
@@ -953,11 +960,14 @@ handle_split(struct ra_ctx *ctx, struct ir3_instruction *split)
       struct ir3_instruction *spill_split =
          ir3_instr_create(split->block, OPC_META_SPLIT, 1, 1);
       struct ir3_register *dst = __ssa_dst(spill_split);
-      ir3_src_create(spill_split, INVALID_REG, IR3_REG_SSA)->def =
-         src_interval->spill_def;
+      struct ir3_register *src =
+         ir3_src_create(spill_split, INVALID_REG, IR3_REG_SSA);
+      src->def = src_interval->spill_def;
+      src->wrmask = src_interval->spill_def->wrmask;
       spill_split->split.off = split->split.off;
       ir3_instr_move_after(spill_split, split);
       dst_interval->spill_def = dst;
+      list_del(&split->node);
       return;
    }
 
@@ -1189,7 +1199,7 @@ handle_block(struct ra_ctx *ctx, struct ir3_block *block)
    if (block->predecessors_count > 1)
       record_pred_live_outs(ctx, block);
 
-   foreach_instr (instr, &block->instr_list) {
+   foreach_instr_safe (instr, &block->instr_list) {
       di(instr, "processing");
 
       handle_instr(ctx, instr);

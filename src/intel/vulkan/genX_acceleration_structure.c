@@ -35,7 +35,7 @@
 
 #include "ds/intel_tracepoints.h"
 
-#if GFX_VERx10 == 125
+#if GFX_VERx10 >= 125
 #include "grl/grl_structs.h"
 
 /* Wait for the previous dispatches to finish and flush their data port

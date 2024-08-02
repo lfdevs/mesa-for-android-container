@@ -12,6 +12,9 @@
 #include "nvif/cl0080.h"
 #include "nvif/ioctl.h"
 
+#include "nv_push.h"
+#include "nv_device_info.h"
+
 #include "util/bitscan.h"
 #include "util/list.h"
 #include "util/os_mman.h"
@@ -440,6 +443,19 @@ done:
    if (ret)
       nouveau_device_del(pdev);
    return ret;
+}
+
+void
+nouveau_device_set_classes_for_debug(struct nouveau_device *dev,
+                                     uint32_t cls_eng3d,
+                                     uint32_t cls_compute,
+                                     uint32_t cls_m2mf,
+                                     uint32_t cls_copy)
+{
+   dev->cls_eng3d = cls_eng3d;
+   dev->cls_compute = cls_compute;
+   dev->cls_m2mf = cls_m2mf;
+   dev->cls_copy = cls_copy;
 }
 
 void
@@ -1033,7 +1049,8 @@ nouveau_pushbuf(struct nouveau_pushbuf *push)
 }
 
 static void
-pushbuf_dump(struct nouveau_pushbuf_krec *krec, int krec_id, int chid)
+pushbuf_dump(struct nouveau_device *dev,
+             struct nouveau_pushbuf_krec *krec, int krec_id, int chid)
 {
    struct drm_nouveau_gem_pushbuf_reloc *krel;
    struct drm_nouveau_gem_pushbuf_push *kpsh;
@@ -1074,8 +1091,23 @@ pushbuf_dump(struct nouveau_pushbuf_krec *krec, int krec_id, int chid)
           (unsigned long long)(kpsh->offset + kpsh->length));
       if (!bo->map)
          continue;
-      while (bgn < end)
-         err("\t0x%08x\n", *bgn++);
+
+      if (dev->cls_eng3d) {
+         struct nv_device_info info = {
+            .cls_eng3d = dev->cls_eng3d,
+            .cls_compute = dev->cls_compute,
+            .cls_m2mf = dev->cls_m2mf,
+            .cls_copy = dev->cls_copy,
+         };
+         struct nv_push push = {
+            .start = bgn,
+            .end = end
+         };
+         vk_push_print(nouveau_out, &push, &info);
+      } else {
+         while (bgn < end)
+            err("\t0x%08x\n", *bgn++);
+      }
    }
 }
 
@@ -1118,7 +1150,7 @@ pushbuf_submit(struct nouveau_pushbuf *push, struct nouveau_object *chan)
       req.gart_available = 0;
 
       if (dbg_on(0))
-         pushbuf_dump(krec, krec_id++, channel);
+         pushbuf_dump(dev, krec, krec_id++, channel);
 
       ret = drmCommandWriteRead(drm->fd, DRM_NOUVEAU_GEM_PUSHBUF, &req, sizeof(req));
       nvpb->suffix0 = req.suffix0;
@@ -1128,7 +1160,7 @@ pushbuf_submit(struct nouveau_pushbuf *push, struct nouveau_object *chan)
 
       if (ret) {
          err("kernel rejected pushbuf: %s\n", strerror(-ret));
-         pushbuf_dump(krec, krec_id++, channel);
+         pushbuf_dump(dev, krec, krec_id++, channel);
          break;
       }
 

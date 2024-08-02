@@ -119,11 +119,11 @@ compile_shader(struct anv_device *device,
       nir_lower_compute_system_values_options options = {
          .has_base_workgroup_id = true,
          .lower_cs_local_id_to_index = true,
-         .lower_workgroup_id_to_index = true,
+         .lower_workgroup_id_to_index = gl_shader_stage_is_mesh(stage),
       };
       NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
       NIR_PASS_V(nir, nir_shader_intrinsics_pass, lower_base_workgroup_id,
-                 nir_metadata_block_index | nir_metadata_dominance, NULL);
+                 nir_metadata_control_flow, NULL);
    }
 
    /* Reset sizes before gathering information */
@@ -197,7 +197,9 @@ compile_shader(struct anv_device *device,
       if (prog_data.wm.dispatch_32) {
          assert(stats[stat_idx].spills == 0);
          assert(stats[stat_idx].fills == 0);
-         assert(stats[stat_idx].sends == sends_count_expectation * 2);
+         assert(stats[stat_idx].sends ==
+                sends_count_expectation *
+                (device->info->ver < 20 ? 2 : 1));
          stat_idx++;
       }
    } else {

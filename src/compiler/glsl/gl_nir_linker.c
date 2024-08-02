@@ -79,7 +79,10 @@ gl_nir_opts(nir_shader *nir)
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
-      if (nir_opt_loop(nir)) {
+
+      bool opt_loop_progress = false;
+      NIR_PASS(opt_loop_progress, nir, nir_opt_loop);
+      if (opt_loop_progress) {
          progress = true;
          NIR_PASS(progress, nir, nir_copy_prop);
          NIR_PASS(progress, nir, nir_opt_dce);
@@ -889,10 +892,6 @@ init_program_resource_list(struct gl_shader_program *prog)
    }
 }
 
-/* TODO: as we keep adding features, this method is becoming more and more
- * similar to its GLSL counterpart at linker.cpp. Eventually it would be good
- * to check if they could be refactored, and reduce code duplication somehow
- */
 void
 nir_build_program_resource_list(const struct gl_constants *consts,
                                 struct gl_shader_program *prog,
@@ -1135,7 +1134,7 @@ gl_nir_add_point_size(nir_shader *nir)
    nir->info.outputs_written |= VARYING_BIT_PSIZ;
 
    /* We always modify the entrypoint */
-   nir_metadata_preserve(impl, nir_metadata_block_index | nir_metadata_dominance);
+   nir_metadata_preserve(impl, nir_metadata_control_flow);
    return true;
 }
 
@@ -1171,8 +1170,7 @@ gl_nir_zero_initialize_clip_distance(nir_shader *nir)
    if (clip_dist1)
       zero_array_members(&b, clip_dist1);
 
-   nir_metadata_preserve(impl, nir_metadata_dominance |
-                               nir_metadata_block_index);
+   nir_metadata_preserve(impl, nir_metadata_control_flow);
    return true;
 }
 
@@ -1251,8 +1249,8 @@ preprocess_shader(const struct gl_constants *consts,
       NIR_PASS(_, nir, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(nir),
                  true, true);
-   } else if (nir->info.stage == MESA_SHADER_FRAGMENT ||
-              !consts->SupportsReadingOutputs) {
+   } else if (nir->info.stage == MESA_SHADER_TESS_EVAL ||
+              nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(nir),
                  true, false);
@@ -1353,6 +1351,7 @@ prelink_lowering(const struct gl_constants *consts,
 
       if (!nir->options->compact_arrays) {
          NIR_PASS(_, nir, nir_lower_clip_cull_distance_to_vec4s);
+         NIR_PASS(_, nir, nir_vectorize_tess_levels);
       }
 
       /* Combine clip and cull outputs into one array and set:
@@ -1364,6 +1363,13 @@ prelink_lowering(const struct gl_constants *consts,
    }
 
    return true;
+}
+
+static unsigned
+get_varying_nir_var_mask(nir_shader *nir)
+{
+   return (nir->info.stage != MESA_SHADER_VERTEX ? nir_var_shader_in : 0) |
+          (nir->info.stage != MESA_SHADER_FRAGMENT ? nir_var_shader_out : 0);
 }
 
 /**
@@ -1410,16 +1416,27 @@ gl_nir_lower_optimize_varyings(const struct gl_constants *consts,
    }
 
    /* There is nothing to optimize for only 1 shader. */
-   if (num_shaders == 1)
+   if (num_shaders == 1) {
+      nir_shader *nir = shaders[0];
+
+      /* Even with a separate shader, it's still worth to re-vectorize IO from
+       * scratch because the original shader might not be vectorized optimally.
+       */
+      NIR_PASS(_, nir, nir_lower_io_to_scalar, get_varying_nir_var_mask(nir),
+               NULL, NULL);
+      NIR_PASS(_, nir, nir_opt_vectorize_io, get_varying_nir_var_mask(nir));
       return;
+   }
 
    for (unsigned i = 0; i < num_shaders; i++) {
       nir_shader *nir = shaders[i];
 
-      /* nir_opt_varyings requires scalar IO. */
-      NIR_PASS_V(nir, nir_lower_io_to_scalar,
-                 (i != 0 ? nir_var_shader_in : 0) |
-                 (i != num_shaders - 1 ? nir_var_shader_out : 0), NULL, NULL);
+      /* nir_opt_varyings requires scalar IO. Scalarize all varyings (not just
+       * the ones we optimize) because we want to re-vectorize everything to
+       * get better vectorization and other goodies from nir_opt_vectorize_io.
+       */
+      NIR_PASS(_, nir, nir_lower_io_to_scalar, get_varying_nir_var_mask(nir),
+               NULL, NULL);
 
       /* nir_opt_varyings requires shaders to be optimized. */
       gl_nir_opts(nir);
@@ -1475,6 +1492,9 @@ gl_nir_lower_optimize_varyings(const struct gl_constants *consts,
    /* Final cleanups. */
    for (unsigned i = 0; i < num_shaders; i++) {
       nir_shader *nir = shaders[i];
+
+      /* Re-vectorize IO. */
+      NIR_PASS(_, nir, nir_opt_vectorize_io, get_varying_nir_var_mask(nir));
 
       /* Recompute intrinsic bases, which are totally random after
        * optimizations and compaction. Do that for all inputs and outputs,
@@ -1658,11 +1678,11 @@ cross_validate_globals(void *mem_ctx, const struct gl_constants *consts,
       if (glsl_without_array(var->type) == var->interface_type)
          continue;
 
-      /* Don't cross validate temporaries that are at global scope.  These
-       * will eventually get pulled into the shaders 'main'.
+      /* Don't cross validate compiler temporaries that are at global scope.
+       *  These will eventually get pulled into the shaders 'main'.
        */
-      if (var->data.mode == nir_var_function_temp ||
-          var->data.mode == nir_var_shader_temp)
+      if (var->data.mode == nir_var_shader_temp &&
+          var->data.how_declared == nir_var_hidden)
          continue;
 
       /* If a global with this name has already been seen, verify that the
@@ -2781,6 +2801,7 @@ gl_nir_link_glsl(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
    resize_tes_inputs(consts, prog);
+   set_geom_shader_input_array_size(prog);
 
    /* Validate the inputs of each stage with the output of the preceding
     * stage.

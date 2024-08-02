@@ -37,21 +37,25 @@ def pretty_duration(seconds):
     hours, rem = divmod(seconds, 3600)
     minutes, seconds = divmod(rem, 60)
     if hours:
-        return f"{hours:0.0f}h{minutes:0.0f}m{seconds:0.0f}s"
+        return f"{hours:0.0f}h{minutes:02.0f}m{seconds:02.0f}s"
     if minutes:
-        return f"{minutes:0.0f}m{seconds:0.0f}s"
+        return f"{minutes:0.0f}m{seconds:02.0f}s"
     return f"{seconds:0.0f}s"
 
 
-def get_gitlab_pipeline_from_url(gl, pipeline_url):
-    assert pipeline_url.startswith(GITLAB_URL)
-    url_path = pipeline_url[len(GITLAB_URL) :]
-    url_path_components = url_path.split("/")
-    project_name = "/".join(url_path_components[1:3])
-    assert url_path_components[3] == "-"
-    assert url_path_components[4] == "pipelines"
-    pipeline_id = int(url_path_components[5])
-    cur_project = gl.projects.get(project_name)
+def get_gitlab_pipeline_from_url(gl, pipeline_url) -> tuple:
+    """
+    Extract the project and pipeline object from the url string
+    :param gl: Gitlab object
+    :param pipeline_url: string with a url to a pipeline
+    :return: ProjectPipeline, Project objects
+    """
+    pattern = rf"^{re.escape(GITLAB_URL)}/(.*)/-/pipelines/([0-9]+)$"
+    match = re.match(pattern, pipeline_url)
+    if not match:
+        raise AssertionError(f"url {pipeline_url} doesn't follow the pattern {pattern}")
+    namespace_with_project, pipeline_id = match.groups()
+    cur_project = gl.projects.get(namespace_with_project)
     pipe = cur_project.pipelines.get(pipeline_id)
     return pipe, cur_project
 

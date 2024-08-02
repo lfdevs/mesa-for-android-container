@@ -48,6 +48,11 @@ nir_def *nir_atan(nir_builder *b, nir_def *y_over_x);
 nir_def *nir_atan2(nir_builder *b, nir_def *y, nir_def *x);
 
 nir_def *
+nir_build_texture_query(nir_builder *b, nir_tex_instr *tex, nir_texop texop,
+                        unsigned components, nir_alu_type dest_type,
+                        bool include_coord, bool include_lod);
+
+nir_def *
 nir_get_texture_lod(nir_builder *b, nir_tex_instr *tex);
 
 nir_def *

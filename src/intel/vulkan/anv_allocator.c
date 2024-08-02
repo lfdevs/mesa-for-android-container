@@ -1596,7 +1596,7 @@ anv_device_alloc_bo(struct anv_device *device,
    const uint64_t ccs_offset = size;
    if (alloc_flags & ANV_BO_ALLOC_AUX_CCS) {
       assert(device->info->has_aux_map);
-      size += DIV_ROUND_UP(size, intel_aux_get_main_to_aux_ratio(device->aux_map_ctx));
+      size += size / INTEL_AUX_MAP_MAIN_SIZE_SCALEDOWN;
       size = align64(size, 4096);
    }
 

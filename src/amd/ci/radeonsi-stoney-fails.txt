@@ -150,9 +150,6 @@ glx@glx_arb_sync_control@waitformsc,Fail
 # remove these after updating piglit:
 spec@arb_fragment_layer_viewport@layer-gs-writes-out-of-range,Fail
 
-# uprev Piglit in Mesa
-spec@arb_tessellation_shader@execution@tesslevels-indirect,Crash
-
 # These are dEQP bugs. See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10361
 dEQP-GLES31.functional.program_interface_query.uniform.referenced_by_shader.vertex_geo_fragment.block_array.float_struct,Fail
 dEQP-GLES31.functional.program_interface_query.uniform.referenced_by_shader.vertex_geo_fragment_only_vertex.default_block.float,Fail

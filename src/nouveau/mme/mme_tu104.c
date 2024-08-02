@@ -8,7 +8,7 @@
 
 #include <stdlib.h>
 
-#include "nvk_clc597.h"
+#include "nv_push_clc597.h"
 
 #define PRED_TO_STR(OP) [MME_TU104_PRED_##OP] = #OP
 const char *pred_to_str[] = {

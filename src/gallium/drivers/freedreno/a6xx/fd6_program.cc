@@ -132,6 +132,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                .fullregfootprint = so->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(so),
                .mergedregs = so->mergedregs,
+               .earlypreamble = so->early_preamble,
       ));
       break;
    case MESA_SHADER_TESS_CTRL:
@@ -139,6 +140,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                .halfregfootprint = so->info.max_half_reg + 1,
                .fullregfootprint = so->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(so),
+               .earlypreamble = so->early_preamble,
       ));
       break;
    case MESA_SHADER_TESS_EVAL:
@@ -146,6 +148,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                .halfregfootprint = so->info.max_half_reg + 1,
                .fullregfootprint = so->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(so),
+               .earlypreamble = so->early_preamble,
       ));
       break;
    case MESA_SHADER_GEOMETRY:
@@ -153,6 +156,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                .halfregfootprint = so->info.max_half_reg + 1,
                .fullregfootprint = so->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(so),
+               .earlypreamble = so->early_preamble,
       ));
       break;
    case MESA_SHADER_FRAGMENT:
@@ -166,6 +170,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                /* unknown bit, seems unnecessary */
                .unk24 = true,
                .pixlodenable = so->need_pixlod,
+               .earlypreamble = so->early_preamble,
                .mergedregs = so->mergedregs,
       ));
       break;
@@ -176,6 +181,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                .fullregfootprint = so->info.max_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(so),
                .threadsize = thrsz,
+               .earlypreamble = so->early_preamble,
                .mergedregs = so->mergedregs,
       ));
       break;

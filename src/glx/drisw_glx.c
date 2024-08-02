@@ -800,8 +800,6 @@ driswDestroyScreen(struct glx_screen *base)
    psc->core->destroyScreen(psc->driScreen);
    driDestroyConfigs(psc->driver_configs);
    psc->driScreen = NULL;
-   if (psc->driver)
-      dlclose(psc->driver);
    free(psc);
 }
 
@@ -955,7 +953,7 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
       return NULL;
    }
 
-   extensions = driOpenDriver(driver, &psc->driver);
+   extensions = driOpenDriver(driver, driver_name_is_inferred);
    if (extensions == NULL)
       goto handle_error;
    psc->name = driver;
@@ -1001,7 +999,7 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
 #if defined(HAVE_DRI3)
    if (pdpyp->zink) {
       bool err;
-      psc->has_multibuffer = dri3_check_multibuffer(priv->dpy, &err);
+      psc->has_multibuffer = loader_dri3_check_multibuffer(XGetXCBConnection(priv->dpy), &err);
       if (!psc->has_multibuffer &&
           !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) &&
           !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
@@ -1051,8 +1049,6 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
        psc->core->destroyScreen(psc->driScreen);
    psc->driScreen = NULL;
 
-   if (psc->driver)
-      dlclose(psc->driver);
    glx_screen_cleanup(&psc->base);
    free(psc);
 

@@ -37,8 +37,6 @@ struct panvk_physical_device {
    } formats;
 
    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
-   uint8_t driver_uuid[VK_UUID_SIZE];
-   uint8_t device_uuid[VK_UUID_SIZE];
    uint8_t cache_uuid[VK_UUID_SIZE];
 
    struct vk_sync_type drm_syncobj_type;
@@ -66,6 +64,17 @@ panvk_get_vk_version()
       return version_override;
 
    return VK_MAKE_API_VERSION(0, 1, 0, VK_HEADER_VERSION);
+}
+
+static inline VkResult
+panvk_errno_to_vk_error(void)
+{
+   switch (errno) {
+   case -ENOMEM:
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   default:
+      return VK_ERROR_UNKNOWN;
+   }
 }
 
 VkResult panvk_physical_device_init(struct panvk_physical_device *device,

@@ -222,7 +222,7 @@ for line in p.stdout.decode().split("\n"):
     if "GL_RENDER" in line:
         line = line.split("=")[1]
         gpu_name_full = "(".join(line.split("(")[:-1]).strip()
-        gpu_name = line.replace("(TM)", "").split("(")[1].split(",")[0].lower()
+        gpu_name = line.replace("(TM)", "").split("(")[1].split(",")[1].lower().strip()
         break
     elif "gfx_level" in line:
         gfx_level = int(line.split("=")[1])
@@ -257,7 +257,7 @@ if not args.slow:
 
 
 def gfx_level_to_str(cl):
-    supported = ["gfx6", "gfx7", "gfx8", "gfx9", "gfx10", "gfx10_3", "gfx11"]
+    supported = ["gfx6", "gfx7", "gfx8", "gfx9", "gfx10", "gfx10_3", "gfx11", "gfx12"]
     if 8 <= cl and cl < 8 + len(supported):
         return supported[cl - 8]
     return supported[-1]
@@ -304,15 +304,29 @@ def run_cmd(args, verbosity):
 
 def verify_results(results):
     with open(results) as file:
-        if len(file.readlines()) == 0:
+        lines = file.readlines()
+        if len(lines) == 0:
             return True
-    print_red("New results (fails or pass). Check {}".format(results))
+        print("{} new result{}:".format(len(lines), 's' if len(lines) > 1 else ''))
+        for i in range(min(10, len(lines))):
+            print("  * ", end='')
+            if "Pass" in lines[i]:
+                print_green(lines[i][:-1])
+            else:
+                print_red(lines[i][:-1])
+        if len(lines) > 10:
+            print_yellow("...")
+        print("Full results: {}".format(results))
+
     return False
 
 
-def parse_test_filters(include_tests):
+def parse_test_filters(include_tests, baseline):
     cmd = []
     for t in include_tests:
+        if t == 'baseline':
+            t = baseline
+
         if os.path.exists(t):
             with open(t, "r") as file:
                 for row in csv.reader(file, delimiter=","):
@@ -334,6 +348,7 @@ def select_baseline(basepath, gfx_level, gpu_name):
         return exact
     # 2. any baseline with the same gfx_level
     while gfx_level >= 8:
+        gfx_level_str += '-'
         for subdir, dirs, files in os.walk(basepath):
             for file in files:
                 if file.find(gfx_level_str) == 0 and file.endswith("-fail.csv"):
@@ -346,8 +361,8 @@ def select_baseline(basepath, gfx_level, gpu_name):
 
 
 success = True
-filters_args = parse_test_filters(args.include_tests)
 baseline = select_baseline(base, gfx_level, gpu_name)
+filters_args = parse_test_filters(args.include_tests, baseline)
 flakes = [
     f
     for f in (
@@ -418,15 +433,15 @@ if args.glcts:
         "--deqp",
         "{}/build/external/openglcts/modules/glcts".format(glcts_path),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-main.txt".format(
             glcts_path
         ),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(
             glcts_path
         ),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-gtf-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-gtf-main.txt".format(
             glcts_path
         ),
         "--output",
@@ -462,19 +477,19 @@ if args.escts:
         "--deqp",
         "{}/build_es/external/openglcts/modules/glcts".format(glcts_path),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles2-khr-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles2-khr-main.txt".format(
             glcts_path
         ),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles3-khr-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles3-khr-main.txt".format(
             glcts_path
         ),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles31-khr-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles31-khr-main.txt".format(
             glcts_path
         ),
         "--caselist",
-        "{}/external/openglcts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles32-khr-main.txt".format(
+        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles32-khr-main.txt".format(
             glcts_path
         ),
         "--output",
@@ -524,7 +539,7 @@ if args.deqp:
         )
         suite.write(
             'caselists = ["{}"]\n'.format(
-                "{}/external/openglcts/data/mustpass/{}/aosp_mustpass/3.2.6.x/{}-main.txt".format(glcts_path, "egl" if k == "egl" else "gles", k)
+                "{}/external/openglcts/data/gl_cts/data/mustpass/{}/aosp_mustpass/3.2.6.x/{}-main.txt".format(glcts_path, "egl" if k == "egl" else "gles", k)
             )
         )
         if os.path.exists(baseline):

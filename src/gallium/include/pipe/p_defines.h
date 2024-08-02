@@ -509,6 +509,12 @@ enum pipe_flush_flags
 #define PIPE_RESOURCE_FLAG_FRONTEND_PRIV         (1 << 24) /* gallium frontend private */
 
 /**
+ * Fixed-rate compression
+ */
+#define PIPE_COMPRESSION_FIXED_RATE_NONE    0x0
+#define PIPE_COMPRESSION_FIXED_RATE_DEFAULT 0xF
+
+/**
  * Hint about the expected lifecycle of a resource.
  * Sorted according to GPU vs CPU access.
  */
@@ -813,7 +819,6 @@ enum pipe_cap
    PIPE_CAP_MIXED_COLOR_DEPTH_BITS,
    PIPE_CAP_SHADER_ARRAY_COMPONENTS,
    PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS,
-   PIPE_CAP_SHADER_CAN_READ_OUTPUTS,
    PIPE_CAP_NATIVE_FENCE_FD,
    PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS,
    PIPE_CAP_FBFETCH,
@@ -947,6 +952,7 @@ enum pipe_cap
    PIPE_CAP_VALIDATE_ALL_DIRTY_STATES,
    PIPE_CAP_HAS_CONST_BW,
    PIPE_CAP_PERFORMANCE_MONITOR,
+   PIPE_CAP_TEXTURE_SAMPLER_INDEPENDENT,
    PIPE_CAP_LAST,
    /* XXX do not add caps after PIPE_CAP_LAST! */
 };
@@ -1325,7 +1331,7 @@ enum pipe_perf_counter_data_type
 #define PIPE_UUID_SIZE 16
 #define PIPE_LUID_SIZE 8
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
 #define PIPE_MEMORY_FD
 #endif
 

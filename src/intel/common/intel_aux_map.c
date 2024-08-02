@@ -145,10 +145,6 @@ struct aux_format_info {
     */
    uint64_t main_page_size;
    /**
-    * The ratio of main surface to an AUX entry.
-    */
-   uint64_t main_to_aux_ratio;
-   /**
     * Page size of level 1 page table. It must be power of 2.
     */
    uint64_t l1_page_size;
@@ -165,14 +161,12 @@ struct aux_format_info {
 static const struct aux_format_info aux_formats[] = {
    [INTEL_AUX_MAP_GFX12_64KB] = {
       .main_page_size = 64 * 1024,
-      .main_to_aux_ratio = 256,
       .l1_page_size = 8 * 1024,
       .l1_index_mask = 0xff,
       .l1_index_offset = 16,
    },
    [INTEL_AUX_MAP_GFX125_1MB] = {
       .main_page_size = 1024 * 1024,
-      .main_to_aux_ratio = 256,
       .l1_page_size = 2 * 1024,
       .l1_index_mask = 0xf,
       .l1_index_offset = 20,
@@ -225,7 +219,7 @@ get_page_mask(const uint64_t page_size)
 static inline uint64_t
 get_meta_page_size(const struct aux_format_info *info)
 {
-   return info->main_page_size / info->main_to_aux_ratio;
+   return info->main_page_size / INTEL_AUX_MAP_MAIN_SIZE_SCALEDOWN;
 }
 
 static inline uint64_t
@@ -242,16 +236,10 @@ intel_aux_get_meta_address_mask(struct intel_aux_map_context *ctx)
 }
 
 uint64_t
-intel_aux_get_main_to_aux_ratio(struct intel_aux_map_context *ctx)
-{
-   return ctx->format->main_to_aux_ratio;
-}
-
-uint64_t
 intel_aux_main_to_aux_offset(struct intel_aux_map_context *ctx,
                              uint64_t main_offset)
 {
-   return main_offset / ctx->format->main_to_aux_ratio;
+   return main_offset / INTEL_AUX_MAP_MAIN_SIZE_SCALEDOWN;
 }
 
 static const struct aux_format_info *

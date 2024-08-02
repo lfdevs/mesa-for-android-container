@@ -1,3 +1,20 @@
+mesa (24.2.0~rc3-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+  * control: Migrate to pkgconf.
+  * Add some lintian-overrides.
+  * control: Fix drm-shim description.
+  * control, rules: Bump llvm to 18. (Closes: #1072901)
+
+  [ Simon McVittie ]
+  * d/rules: Replace deprecated swrast with softpipe and llvmpipe
+  * d/rules: Replace deprecated glvnd=true with glvnd=enabled
+  * libglx-mesa0.symbols: Update for new symbols
+  * Add a new private shared library package for libgallium.so
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 02 Aug 2024 11:53:58 +0300
+
 mesa (24.1.5-2) unstable; urgency=medium
 
   [ Adrian Bunk ]

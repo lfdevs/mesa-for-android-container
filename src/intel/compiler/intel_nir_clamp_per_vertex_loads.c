@@ -73,8 +73,7 @@ intel_nir_clamp_per_vertex_loads(nir_shader *shader)
    void *mem_ctx = ralloc_context(NULL);
 
    bool ret = nir_shader_intrinsics_pass(shader, clamp_per_vertex_loads_instr,
-                                           nir_metadata_block_index |
-                                           nir_metadata_dominance,
+                                           nir_metadata_control_flow,
                                            mem_ctx);
 
    ralloc_free(mem_ctx);
@@ -102,7 +101,6 @@ bool
 intel_nir_lower_patch_vertices_in(nir_shader *shader, unsigned input_vertices)
 {
    return nir_shader_intrinsics_pass(shader, lower_patch_vertices_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        &input_vertices);
 }

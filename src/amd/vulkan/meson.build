@@ -1,5 +1,4 @@
 # Copyright © 2017 Intel Corporation
-#
 # SPDX-License-Identifier: MIT
 
 radv_entrypoints_gen_command = [
@@ -79,6 +78,8 @@ libradv_files = files(
   'nir/radv_nir_lower_view_index.c',
   'nir/radv_nir_lower_viewport_to_zero.c',
   'nir/radv_nir_lower_vs_inputs.c',
+  'nir/radv_nir_opt_tid_function.c',
+  'nir/radv_nir_remap_color_attachment.c',
   'nir/radv_nir_rt_common.c',
   'nir/radv_nir_rt_shader.c',
   'winsys/null/radv_null_bo.c',
@@ -181,7 +182,7 @@ if not with_platform_windows
   )
 endif
 
-if with_llvm
+if amd_with_llvm
   libradv_files += files(
     'radv_llvm_helper.cpp',
     'radv_llvm_helper.h',

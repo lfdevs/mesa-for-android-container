@@ -35,7 +35,7 @@
 #include "loader.h"
 #include "glxextensions.h"
 
-#if defined(USE_LIBGLVND)
+#if USE_LIBGLVND
 #define _GLX_PUBLIC _X_HIDDEN
 #else
 #define _GLX_PUBLIC _X_EXPORT

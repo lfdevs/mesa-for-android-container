@@ -41,12 +41,14 @@ struct aco_vs_prolog_info {
 
    unsigned num_attributes;
    uint32_t misaligned_mask;
+   uint32_t unaligned_mask;
    bool is_ngg;
    gl_shader_stage next_stage;
 };
 
 struct aco_ps_epilog_info {
    struct ac_arg colors[MAX_DRAW_BUFFERS];
+   uint8_t color_map[MAX_DRAW_BUFFERS];
 
    uint32_t spi_shader_col_format;
 
@@ -139,7 +141,6 @@ struct aco_shader_info {
 };
 
 enum aco_compiler_debug_level {
-   ACO_COMPILER_DEBUG_LEVEL_PERFWARN,
    ACO_COMPILER_DEBUG_LEVEL_ERROR,
 };
 

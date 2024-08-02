@@ -61,7 +61,7 @@
 
 #include "spirv.h"
 
-#if DETECT_OS_UNIX
+#if DETECT_OS_POSIX
 #include <dlfcn.h>
 #endif
 

@@ -27,6 +27,7 @@
 #include "genxml/genX_pack.h"
 #include "genxml/genX_rt_pack.h"
 
+#include "common/intel_compute_slm.h"
 #include "common/intel_genX_state_brw.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_sample_positions.h"
@@ -879,9 +880,7 @@ static void
 emit_ms_state(struct anv_graphics_pipeline *pipeline,
               const struct vk_multisample_state *ms)
 {
-   anv_pipeline_emit(pipeline, final.ms, GENX(3DSTATE_MULTISAMPLE), ms) {
-      ms.NumberofMultisamples       = __builtin_ffs(pipeline->rasterization_samples) - 1;
-
+   anv_pipeline_emit(pipeline, partial.ms, GENX(3DSTATE_MULTISAMPLE), ms) {
       ms.PixelLocation              = CENTER;
 
       /* The PRM says that this bit is valid only for DX9:
@@ -1225,7 +1224,7 @@ get_scratch_surf(struct anv_pipeline *pipeline,
                              stage, bin->prog_data->total_scratch);
    anv_reloc_list_add_bo(pipeline->batch.relocs, bo);
    return anv_scratch_pool_get_surf(pipeline->device, pool,
-                                    bin->prog_data->total_scratch) >> 4;
+                                    bin->prog_data->total_scratch) >> ANV_SCRATCH_SPACE_SHIFT(GFX_VER);
 }
 
 static void
@@ -1532,6 +1531,10 @@ emit_3dstate_te(struct anv_graphics_pipeline *pipeline)
          /* 1K_TRIANGLES */
          te.LocalBOPAccumulatorThreshold = 1;
 #endif
+
+#if GFX_VER >= 20
+         te.NumberOfRegionsPerPatch = 2;
+#endif
       }
    }
 }
@@ -1659,10 +1662,6 @@ emit_3dstate_wm(struct anv_graphics_pipeline *pipeline,
          pipeline->force_fragment_thread_dispatch =
             wm_prog_data->has_side_effects ||
             wm_prog_data->uses_kill;
-
-         wm.BarycentricInterpolationMode =
-            wm_prog_data_barycentric_modes(wm_prog_data,
-                                           pipeline->fs_msaa_flags);
       }
    }
 }
@@ -1678,8 +1677,8 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
       pipeline->base.shaders[MESA_SHADER_FRAGMENT];
 
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT)) {
-      anv_pipeline_emit(pipeline, final.ps, GENX(3DSTATE_PS), ps);
-      anv_pipeline_emit(pipeline, final.ps_protected, GENX(3DSTATE_PS), ps);
+      anv_pipeline_emit(pipeline, partial.ps, GENX(3DSTATE_PS), ps);
+      anv_pipeline_emit(pipeline, partial.ps_protected, GENX(3DSTATE_PS), ps);
       return;
    }
 
@@ -1687,13 +1686,6 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
 
    uint32_t ps_dwords[GENX(3DSTATE_PS_length)];
    anv_pipeline_emit_tmp(pipeline, ps_dwords, GENX(3DSTATE_PS), ps) {
-      intel_set_ps_dispatch_state(&ps, devinfo, wm_prog_data,
-                                  ms != NULL ? ms->rasterization_samples : 1,
-                                  pipeline->fs_msaa_flags);
-
-      const bool persample =
-         brw_wm_prog_data_is_persample(wm_prog_data, pipeline->fs_msaa_flags);
-
 #if GFX_VER == 12
       assert(wm_prog_data->dispatch_multi == 0 ||
              (wm_prog_data->dispatch_multi == 16 && wm_prog_data->max_polygons == 2));
@@ -1704,15 +1696,6 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
        *       BSpec page for 3DSTATE_PS_BODY are met.
        */
       ps.OverlappingSubspansEnable = false;
-#endif
-
-      ps.KernelStartPointer0 = fs_bin->kernel.offset +
-                               brw_wm_prog_data_prog_offset(wm_prog_data, ps, 0);
-      ps.KernelStartPointer1 = fs_bin->kernel.offset +
-                               brw_wm_prog_data_prog_offset(wm_prog_data, ps, 1);
-#if GFX_VER < 20
-      ps.KernelStartPointer2 = fs_bin->kernel.offset +
-                               brw_wm_prog_data_prog_offset(wm_prog_data, ps, 2);
 #endif
 
       ps.SingleProgramFlow          = false;
@@ -1726,20 +1709,8 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
          wm_prog_data->base.nr_params > 0 ||
          wm_prog_data->base.ubo_ranges[0].length;
 #endif
-      ps.PositionXYOffsetSelect     =
-           !wm_prog_data->uses_pos_offset ? POSOFFSET_NONE :
-           persample ? POSOFFSET_SAMPLE : POSOFFSET_CENTROID;
 
       ps.MaximumNumberofThreadsPerPSD = devinfo->max_threads_per_psd - 1;
-
-      ps.DispatchGRFStartRegisterForConstantSetupData0 =
-         brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 0);
-      ps.DispatchGRFStartRegisterForConstantSetupData1 =
-         brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 1);
-#if GFX_VER < 20
-      ps.DispatchGRFStartRegisterForConstantSetupData2 =
-         brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 2);
-#endif
 
 #if GFX_VERx10 < 125
       ps.PerThreadScratchSpace   = get_scratch_space(fs_bin);
@@ -1747,14 +1718,14 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
          get_scratch_address(&pipeline->base.base, MESA_SHADER_FRAGMENT, fs_bin);
 #endif
    }
-   anv_pipeline_emit_merge(pipeline, final.ps, ps_dwords, GENX(3DSTATE_PS), ps) {
+   anv_pipeline_emit_merge(pipeline, partial.ps, ps_dwords, GENX(3DSTATE_PS), ps) {
 #if GFX_VERx10 >= 125
       ps.ScratchSpaceBuffer =
          get_scratch_surf(&pipeline->base.base, MESA_SHADER_FRAGMENT, fs_bin, false);
 #endif
    }
    if (pipeline_needs_protected(&pipeline->base.base)) {
-      anv_pipeline_emit_merge(pipeline, final.ps_protected,
+      anv_pipeline_emit_merge(pipeline, partial.ps_protected,
                               ps_dwords, GENX(3DSTATE_PS), ps) {
 #if GFX_VERx10 >= 125
          ps.ScratchSpaceBuffer =
@@ -1782,8 +1753,6 @@ emit_3dstate_ps_extra(struct anv_graphics_pipeline *pipeline,
       ps.AttributeEnable               = wm_prog_data->num_varying_inputs > 0;
 #endif
       ps.oMaskPresenttoRenderTarget    = wm_prog_data->uses_omask;
-      ps.PixelShaderIsPerSample        =
-         brw_wm_prog_data_is_persample(wm_prog_data, pipeline->fs_msaa_flags);
       ps.PixelShaderComputedDepthMode  = wm_prog_data->computed_depth_mode;
       ps.PixelShaderUsesSourceDepth    = wm_prog_data->uses_src_depth;
       ps.PixelShaderUsesSourceW        = wm_prog_data->uses_src_w;
@@ -1807,17 +1776,14 @@ emit_3dstate_ps_extra(struct anv_graphics_pipeline *pipeline,
          ps.InputCoverageMaskState = ICMS_NORMAL;
 
 #if GFX_VER >= 11
+      ps.PixelShaderRequiresSubpixelSampleOffsets =
+         wm_prog_data->uses_sample_offsets;
+      ps.PixelShaderRequiresNonPerspectiveBaryPlaneCoefficients =
+         wm_prog_data->uses_npc_bary_coefficients;
+      ps.PixelShaderRequiresPerspectiveBaryPlaneCoefficients =
+         wm_prog_data->uses_pc_bary_coefficients;
       ps.PixelShaderRequiresSourceDepthandorWPlaneCoefficients =
          wm_prog_data->uses_depth_w_coefficients;
-      ps.PixelShaderIsPerCoarsePixel =
-         brw_wm_prog_data_is_coarse(wm_prog_data, pipeline->fs_msaa_flags);
-#endif
-#if GFX_VERx10 >= 125
-      /* TODO: We should only require this when the last geometry shader uses
-       *       a fragment shading rate that is not constant.
-       */
-      ps.EnablePSDependencyOnCPsizeChange =
-         brw_wm_prog_data_is_coarse(wm_prog_data, pipeline->fs_msaa_flags);
 #endif
    }
 }
@@ -1929,6 +1895,7 @@ emit_task_state(struct anv_graphics_pipeline *pipeline)
    uint32_t task_control_dwords[GENX(3DSTATE_TASK_CONTROL_length)];
    anv_pipeline_emit_tmp(pipeline, task_control_dwords, GENX(3DSTATE_TASK_CONTROL), tc) {
       tc.TaskShaderEnable = true;
+      tc.StatisticsEnable = true;
       tc.MaximumNumberofThreadGroups = 511;
    }
 
@@ -1962,9 +1929,12 @@ emit_task_state(struct anv_graphics_pipeline *pipeline)
 
       task.NumberofBarriers                  = task_prog_data->base.uses_barrier;
       task.SharedLocalMemorySize             =
-         encode_slm_size(GFX_VER, task_prog_data->base.base.total_shared);
+         intel_compute_slm_encode_size(GFX_VER, task_prog_data->base.base.total_shared);
       task.PreferredSLMAllocationSize        =
-         preferred_slm_allocation_size(devinfo);
+         intel_compute_preferred_slm_calc_encode_size(devinfo,
+                                                      task_prog_data->base.base.total_shared,
+                                                      task_dispatch.group_size,
+                                                      task_dispatch.simd_size);
 
       /*
        * 3DSTATE_TASK_SHADER_DATA.InlineData[0:1] will be used for an address
@@ -1993,11 +1963,16 @@ emit_mesh_state(struct anv_graphics_pipeline *pipeline)
    assert(anv_pipeline_is_mesh(pipeline));
 
    const struct anv_shader_bin *mesh_bin = pipeline->base.shaders[MESA_SHADER_MESH];
+   const struct brw_mesh_prog_data *mesh_prog_data = get_mesh_prog_data(pipeline);
 
    uint32_t mesh_control_dwords[GENX(3DSTATE_MESH_CONTROL_length)];
    anv_pipeline_emit_tmp(pipeline, mesh_control_dwords, GENX(3DSTATE_MESH_CONTROL), mc) {
       mc.MeshShaderEnable = true;
+      mc.StatisticsEnable = true;
       mc.MaximumNumberofThreadGroups = 511;
+#if GFX_VER >= 20
+      mc.VPandRTAIndexAutostripEnable = mesh_prog_data->autostrip_enable;
+#endif
    }
 
    anv_pipeline_emit_merge(pipeline, final.mesh_control,
@@ -2014,7 +1989,6 @@ emit_mesh_state(struct anv_graphics_pipeline *pipeline)
    }
 
    const struct intel_device_info *devinfo = pipeline->base.base.device->info;
-   const struct brw_mesh_prog_data *mesh_prog_data = get_mesh_prog_data(pipeline);
    const struct intel_cs_dispatch_info mesh_dispatch =
       brw_cs_get_dispatch_info(devinfo, &mesh_prog_data->base, NULL);
 
@@ -2054,9 +2028,12 @@ emit_mesh_state(struct anv_graphics_pipeline *pipeline)
 
       mesh.NumberofBarriers                  = mesh_prog_data->base.uses_barrier;
       mesh.SharedLocalMemorySize             =
-         encode_slm_size(GFX_VER, mesh_prog_data->base.base.total_shared);
+         intel_compute_slm_encode_size(GFX_VER, mesh_prog_data->base.base.total_shared);
       mesh.PreferredSLMAllocationSize        =
-         preferred_slm_allocation_size(devinfo);
+         intel_compute_preferred_slm_calc_encode_size(devinfo,
+                                                      mesh_prog_data->base.base.total_shared,
+                                                      mesh_dispatch.group_size,
+                                                      mesh_dispatch.simd_size);
 
       /*
        * 3DSTATE_MESH_SHADER_DATA.InlineData[0:1] will be used for an address
@@ -2270,7 +2247,7 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
          0 : 1 + MIN2(pipeline->cs->bind_map.surface_count, 30),
       .BarrierEnable          = cs_prog_data->uses_barrier,
       .SharedLocalMemorySize  =
-         encode_slm_size(GFX_VER, cs_prog_data->base.total_shared),
+         intel_compute_slm_encode_size(GFX_VER, cs_prog_data->base.total_shared),
 
       .ConstantURBEntryReadOffset = 0,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,

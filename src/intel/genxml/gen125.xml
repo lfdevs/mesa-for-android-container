@@ -2175,6 +2175,12 @@
     <field name="Coherent Partial Write Merge Enable" start="22" end="22" type="uint" />
     <field name="Cross-Tile Partial Write Merge Enable" start="23" end="23" type="uint" />
   </register>
+  <register name="MESH_INVOCATION_COUNT" length="2" num="0x26E0">
+    <field name="MESH Invocation Counter" start="0" end="63" type="uint" />
+  </register>
+  <register name="MESH_PRIMITIVE_COUNT" length="2" num="0x26D8">
+    <field name="MESH Primitive Counter" start="0" end="63" type="uint" />
+  </register>
   <register name="ROW_INSTDONE" length="1" num="0xe164">
     <field name="BC Done" start="0" end="0" type="bool" />
     <field name="PSD Done" start="1" end="1" type="bool" />
@@ -2288,5 +2294,8 @@
     <field name="RCPFE2 Done" start="11" end="11" type="bool" />
     <field name="DAPB2 Done" start="12" end="12" type="bool" />
     <field name="DAPRBE2 Done" start="13" end="13" type="bool" />
+  </register>
+  <register name="TASK_INVOCATION_COUNT" length="2" num="0x26E8">
+    <field name="TASK Invocation Counter" start="0" end="63" type="uint" />
   </register>
 </genxml>

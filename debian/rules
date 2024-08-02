@@ -13,7 +13,7 @@ DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
-LLVM_VERSION = 17
+LLVM_VERSION = 18
 export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
@@ -35,7 +35,7 @@ else
 endif
 
 EGL_PLATFORMS = x11
-GALLIUM_DRIVERS = swrast
+GALLIUM_DRIVERS = softpipe llvmpipe
 VULKAN_DRIVERS =
 VULKAN_LAYERS =
 
@@ -179,7 +179,7 @@ confflags += \
 	-Dplatforms="[$(EGL_PLATFORMS_LIST)]" \
 	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \
 	-Dvulkan-layers="[$(VULKAN_LAYERS_LIST)]" \
-	-Dglvnd=true \
+	-Dglvnd=enabled \
 	-Dshared-glapi=enabled \
 	-Dgallium-omx=disabled \
 	-Db_ndebug=true \

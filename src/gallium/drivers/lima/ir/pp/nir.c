@@ -437,12 +437,12 @@ static bool ppir_emit_intrinsic(ppir_block *block, nir_instr *ni)
       return true;
    }
 
-   case nir_intrinsic_discard:
+   case nir_intrinsic_terminate:
       node = ppir_emit_discard(block, ni);
       list_addtail(&node->list, &block->node_list);
       return true;
 
-   case nir_intrinsic_discard_if:
+   case nir_intrinsic_terminate_if:
       node = ppir_emit_discard_if(block, ni);
       list_addtail(&node->list, &block->node_list);
       return true;

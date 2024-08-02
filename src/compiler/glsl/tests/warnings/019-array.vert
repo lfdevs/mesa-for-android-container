@@ -19,5 +19,7 @@ void main()
   fooPos = array[definedIndex];
 
   array[undefinedIndex2] = array[undefinedIndex];
+
+  gl_Position = vec4(1.0);
 }
 

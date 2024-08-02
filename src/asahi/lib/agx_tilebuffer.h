@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "util/format/u_formats.h"
+#include "agx_pack.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +24,6 @@ extern "C" {
 struct nir_shader;
 struct nir_def;
 struct nir_builder;
-struct agx_usc_builder;
 
 struct agx_tile_size {
    uint8_t width;
@@ -57,6 +57,9 @@ struct agx_tilebuffer_layout {
 
    /* Selected tile size */
    struct agx_tile_size tile_size;
+
+   /* USC word corresponding to this configuration of the tilebuffer */
+   struct agx_usc_shared_packed usc;
 };
 
 /*
@@ -90,22 +93,20 @@ agx_build_tilebuffer_layout(const enum pipe_format *formats, uint8_t nr_cbufs,
 bool agx_nir_lower_tilebuffer(struct nir_shader *shader,
                               struct agx_tilebuffer_layout *tib,
                               uint8_t *colormasks, unsigned *bindless_base,
-                              bool *translucent);
+                              struct nir_def *write_samples, bool *translucent);
 
 bool agx_nir_lower_to_per_sample(struct nir_shader *shader);
 
 bool agx_nir_lower_monolithic_msaa(struct nir_shader *shader,
                                    uint8_t nr_samples);
 
-bool agx_nir_lower_sample_intrinsics(struct nir_shader *shader);
+bool agx_nir_lower_sample_intrinsics(struct nir_shader *shader,
+                                     bool ignore_sample_mask_without_msaa);
 
 bool agx_nir_lower_alpha_to_coverage(struct nir_shader *shader,
                                      uint8_t nr_samples);
 
 bool agx_nir_lower_alpha_to_one(struct nir_shader *shader);
-
-void agx_usc_tilebuffer(struct agx_usc_builder *b,
-                        struct agx_tilebuffer_layout *tib);
 
 uint32_t agx_tilebuffer_total_size(struct agx_tilebuffer_layout *tib);
 
@@ -114,6 +115,8 @@ agx_tilebuffer_physical_format(struct agx_tilebuffer_layout *tib, unsigned rt);
 
 bool agx_tilebuffer_supports_mask(struct agx_tilebuffer_layout *tib,
                                   unsigned rt);
+
+void agx_tilebuffer_pack_usc(struct agx_tilebuffer_layout *tib);
 
 #ifdef __cplusplus
 } /* extern C */

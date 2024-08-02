@@ -29,6 +29,7 @@ _nil_format_table = custom_target(
   'nil_format_table',
   input : files('nil_format_table_gen.py', 'nil_formats.csv'),
   output : ['nil_format_table.h', 'nil_format_table.c'],
+  depends: u_format_gen_h,
   command : [
     prog_python, '@INPUT0@', '--csv', '@INPUT1@',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@',
@@ -39,7 +40,7 @@ _libnil_format_table = static_library(
   'libnil_format_table',
   _nil_format_table,
   include_directories : [inc_include, inc_src],
-  dependencies : idep_nvidia_headers,
+  dependencies : [idep_nvidia_headers, idep_mesautil],
   gnu_symbol_visibility: 'hidden',
 )
 

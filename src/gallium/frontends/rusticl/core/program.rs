@@ -107,7 +107,7 @@ unsafe impl Sync for NirKernelBuild {}
 
 pub struct ProgramBuild {
     pub builds: HashMap<&'static Device, ProgramDevBuild>,
-    pub kernel_info: HashMap<String, KernelInfo>,
+    pub kernel_info: HashMap<String, Arc<KernelInfo>>,
     spec_constants: HashMap<u32, nir_const_value>,
     kernels: Vec<String>,
 }
@@ -212,7 +212,8 @@ impl ProgramBuild {
                 kernel_info.attributes_string = String::new();
             }
 
-            self.kernel_info.insert(kernel_name.clone(), kernel_info);
+            self.kernel_info
+                .insert(kernel_name.clone(), Arc::new(kernel_info));
         }
     }
 
@@ -253,6 +254,10 @@ impl ProgramBuild {
         } else {
             None
         }
+    }
+
+    pub fn kernels(&self) -> &[String] {
+        &self.kernels
     }
 
     pub fn to_nir(&self, kernel: &str, d: &Device) -> NirShader {
@@ -355,12 +360,8 @@ impl Program {
                 (
                     d,
                     ProgramDevBuild {
-                        spirv: None,
                         status: CL_BUILD_NONE,
-                        log: String::from(""),
-                        options: String::from(""),
-                        bin_type: CL_PROGRAM_BINARY_TYPE_NONE,
-                        kernels: HashMap::new(),
+                        ..Default::default()
                     },
                 )
             })
@@ -607,19 +608,10 @@ impl Program {
         Ok(ptrs.to_vec())
     }
 
-    pub fn kernel_signatures(&self, kernel_name: &str) -> HashSet<Vec<spirv::SPIRVKernelArg>> {
-        let build = self.build_info();
-        let devs = build.devs_with_build();
-
-        if devs.is_empty() {
-            return HashSet::new();
-        }
-
-        devs.iter().map(|d| build.args(d, kernel_name)).collect()
-    }
-
-    pub fn kernels(&self) -> Vec<String> {
-        self.build_info().kernels.clone()
+    // TODO: at the moment we do not support compiling programs with different signatures across
+    // devices. If we do in the future, this needs to be properly implemented.
+    pub fn has_unique_kernel_signatures(&self, _kernel_name: &str) -> bool {
+        true
     }
 
     pub fn active_kernels(&self) -> bool {
@@ -799,9 +791,8 @@ impl Program {
                     spirv: spirv,
                     status: status,
                     log: log,
-                    options: String::from(""),
                     bin_type: bin_type,
-                    kernels: HashMap::new(),
+                    ..Default::default()
                 },
             );
         }

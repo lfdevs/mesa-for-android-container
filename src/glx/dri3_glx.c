@@ -842,7 +842,7 @@ dri3_create_screen(int screen, struct glx_display * priv, bool driver_name_is_in
       goto handle_error;
    }
 
-   extensions = driOpenDriver(driverName, &psc->driver);
+   extensions = driOpenDriver(driverName, driver_name_is_inferred);
    if (extensions == NULL)
       goto handle_error;
 
@@ -891,8 +891,8 @@ dri3_create_screen(int screen, struct glx_display * priv, bool driver_name_is_in
 
    dri3_bind_extensions(psc, priv, driverName);
 
-   if (!psc->image || psc->image->base.version < 7 || !psc->image->createImageFromFds) {
-      ErrorMessageF("Version 7 or imageFromFds image extension not found\n");
+   if (!psc->image || !psc->image->createImageFromDmaBufs) {
+      ErrorMessageF("Version 7 or imageFromDmaBufs image extension not found\n");
       goto handle_error;
    }
 
@@ -1033,8 +1033,6 @@ handle_error:
       close(psc->fd_display_gpu);
    if (psc->fd_render_gpu >= 0)
       close(psc->fd_render_gpu);
-   if (psc->driver)
-      dlclose(psc->driver);
 
    free(driverName);
    glx_screen_cleanup(&psc->base);
@@ -1053,78 +1051,6 @@ dri3_destroy_display(__GLXDRIdisplay * dpy)
    free(dpy);
 }
 
-/* Only request versions of these protocols which we actually support. */
-#define DRI3_SUPPORTED_MAJOR 1
-#define PRESENT_SUPPORTED_MAJOR 1
-
-#ifdef HAVE_DRI3_MODIFIERS
-#define DRI3_SUPPORTED_MINOR 2
-#define PRESENT_SUPPORTED_MINOR 2
-#else
-#define PRESENT_SUPPORTED_MINOR 0
-#define DRI3_SUPPORTED_MINOR 0
-#endif
-
-
-bool
-dri3_check_multibuffer(Display * dpy, bool *err)
-{
-   xcb_connection_t                     *c = XGetXCBConnection(dpy);
-   xcb_dri3_query_version_cookie_t      dri3_cookie;
-   xcb_dri3_query_version_reply_t       *dri3_reply;
-   xcb_present_query_version_cookie_t   present_cookie;
-   xcb_present_query_version_reply_t    *present_reply;
-   xcb_generic_error_t                  *error;
-   const xcb_query_extension_reply_t    *extension;
-
-   xcb_prefetch_extension_data(c, &xcb_dri3_id);
-   xcb_prefetch_extension_data(c, &xcb_present_id);
-
-   extension = xcb_get_extension_data(c, &xcb_dri3_id);
-   if (!(extension && extension->present))
-      goto error;
-
-   extension = xcb_get_extension_data(c, &xcb_present_id);
-   if (!(extension && extension->present))
-      goto error;
-
-   dri3_cookie = xcb_dri3_query_version(c,
-                                        DRI3_SUPPORTED_MAJOR,
-                                        DRI3_SUPPORTED_MINOR);
-   present_cookie = xcb_present_query_version(c,
-                                              PRESENT_SUPPORTED_MAJOR,
-                                              PRESENT_SUPPORTED_MINOR);
-
-   dri3_reply = xcb_dri3_query_version_reply(c, dri3_cookie, &error);
-   if (!dri3_reply) {
-      free(error);
-      goto error;
-   }
-
-   int dri3Major = dri3_reply->major_version;
-   int dri3Minor = dri3_reply->minor_version;
-   free(dri3_reply);
-
-   present_reply = xcb_present_query_version_reply(c, present_cookie, &error);
-   if (!present_reply) {
-      free(error);
-      goto error;
-   }
-   int presentMajor = present_reply->major_version;
-   int presentMinor = present_reply->minor_version;
-   free(present_reply);
-
-#ifdef HAVE_DRI3_MODIFIERS
-   if ((dri3Major > 1 || (dri3Major == 1 && dri3Minor >= 2)) &&
-       (presentMajor > 1 || (presentMajor == 1 && presentMinor >= 2)))
-      return true;
-#endif
-   return false;
-error:
-   *err = true;
-   return false;
-}
-
 /** dri3_create_display
  *
  * Allocate, initialize and return a __DRIdisplayPrivate object.
@@ -1137,7 +1063,7 @@ dri3_create_display(Display * dpy)
 {
    struct dri3_display                  *pdp;
    bool err = false;
-   bool has_multibuffer = dri3_check_multibuffer(dpy, &err);
+   bool has_multibuffer = loader_dri3_check_multibuffer(XGetXCBConnection(dpy), &err);
    if (err)
       return NULL;
 

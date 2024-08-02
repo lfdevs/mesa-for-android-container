@@ -144,7 +144,6 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
    context->desc.av1enc.allow_high_precision_mv = av1->picture_flags.bits.allow_high_precision_mv;
    context->desc.av1enc.palette_mode_enable = av1->picture_flags.bits.palette_mode_enable;
    context->desc.av1enc.long_term_reference = av1->picture_flags.bits.long_term_reference;
-   context->desc.av1enc.num_tiles_in_pic = av1->tile_cols * av1->tile_rows;
    context->desc.av1enc.tile_rows = av1->tile_rows;
    context->desc.av1enc.tile_cols = av1->tile_cols;
    context->desc.av1enc.context_update_tile_id = av1->context_update_tile_id;
@@ -734,12 +733,21 @@ static void av1_frame_header(vlVaContext *context, struct vl_vlc *vlc)
          av1->use_ref_frame_mvs = 0;
       else
          av1->use_ref_frame_mvs = av1_f(vlc, 1);
-
-      if (av1->disable_cdf_update)
-         av1->disable_frame_end_update_cdf = 1;
-      else
-         av1->disable_frame_end_update_cdf = av1_f(vlc, 1);
    }
+
+   if (av1->disable_cdf_update)
+      av1->disable_frame_end_update_cdf = 1;
+   else
+      av1->disable_frame_end_update_cdf = av1_f(vlc, 1);
+
+   /* tile_info()
+    * trying to keep uniform_tile_spacing_flag
+    * if the tile rows and columns are not within the range
+    * of HW capability, it will need to redo the tiling
+    * according to the limixation.
+    */
+
+   av1->uniform_tile_spacing = av1_f(vlc, 1);
 }
 
 VAStatus
@@ -791,15 +799,24 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeAV1(vlVaContext *context, vlVaBuffer *b
 VAStatus
 vlVaHandleVAEncMiscParameterTypeFrameRateAV1(vlVaContext *context, VAEncMiscParameterBuffer *misc)
 {
+   unsigned temporal_id;
    VAEncMiscParameterFrameRate *fr = (VAEncMiscParameterFrameRate *)misc->data;
-   for (int i = 0; i < ARRAY_SIZE(context->desc.av1enc.rc); i++) {
-      if (fr->framerate & 0xffff0000) {
-         context->desc.av1enc.rc[i].frame_rate_num = fr->framerate       & 0xffff;
-         context->desc.av1enc.rc[i].frame_rate_den = fr->framerate >> 16 & 0xffff;
-      } else {
-         context->desc.av1enc.rc[i].frame_rate_num = fr->framerate;
-         context->desc.av1enc.rc[i].frame_rate_den = 1;
-      }
+
+   temporal_id = context->desc.av1enc.rc[0].rate_ctrl_method !=
+                 PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE ?
+                 fr->framerate_flags.bits.temporal_id :
+                 0;
+
+   if (context->desc.av1enc.seq.num_temporal_layers > 0 &&
+       temporal_id >= context->desc.av1enc.seq.num_temporal_layers)
+      return VA_STATUS_ERROR_INVALID_PARAMETER;
+
+   if (fr->framerate & 0xffff0000) {
+      context->desc.av1enc.rc[temporal_id].frame_rate_num = fr->framerate       & 0xffff;
+      context->desc.av1enc.rc[temporal_id].frame_rate_den = fr->framerate >> 16 & 0xffff;
+   } else {
+      context->desc.av1enc.rc[temporal_id].frame_rate_num = fr->framerate;
+      context->desc.av1enc.rc[temporal_id].frame_rate_den = 1;
    }
 
    return VA_STATUS_SUCCESS;

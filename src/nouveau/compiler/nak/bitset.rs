@@ -50,26 +50,12 @@ impl BitSet {
         true
     }
 
-    pub fn get_word(&self, word: usize) -> u32 {
-        self.words.get(word).cloned().unwrap_or(0)
+    pub fn iter(&self) -> BitSetIter<'_> {
+        BitSetIter::new(self, 0)
     }
 
-    pub fn next_set(&self, start: usize) -> Option<usize> {
-        if start >= self.words.len() * 32 {
-            return None;
-        }
-
-        let mut w = start / 32;
-        let mut mask = u32::MAX << (start % 32);
-        while w < self.words.len() {
-            let b = (self.words[w] & mask).trailing_zeros();
-            if b < 32 {
-                return Some(w * 32 + usize::try_from(b).unwrap());
-            }
-            mask = u32::MAX;
-            w += 1;
-        }
-        None
+    pub fn get_word(&self, word: usize) -> u32 {
+        self.words.get(word).cloned().unwrap_or(0)
     }
 
     pub fn next_unset(&self, start: usize) -> usize {
@@ -231,5 +217,37 @@ impl Not for BitSet {
             res.words[w] = !res.words[w];
         }
         res
+    }
+}
+
+pub struct BitSetIter<'a> {
+    set: &'a BitSet,
+    w: usize,
+    mask: u32,
+}
+
+impl<'a> BitSetIter<'a> {
+    fn new(set: &'a BitSet, start: usize) -> Self {
+        Self {
+            set,
+            w: start / 32,
+            mask: u32::MAX << (start % 32),
+        }
+    }
+}
+
+impl<'a> Iterator for BitSetIter<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        while self.w < self.set.words.len() {
+            let b = (self.set.words[self.w] & self.mask).trailing_zeros();
+            if b < 32 {
+                return Some(self.w * 32 + usize::try_from(b).unwrap());
+            }
+            self.mask = u32::MAX;
+            self.w += 1;
+        }
+        None
     }
 }

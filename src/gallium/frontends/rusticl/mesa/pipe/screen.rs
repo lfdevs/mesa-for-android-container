@@ -74,20 +74,15 @@ impl ComputeParam<Vec<u64>> for PipeScreen {
 pub enum ResourceType {
     Normal,
     Staging,
-    Cb0,
 }
 
 impl ResourceType {
-    fn apply(&self, tmpl: &mut pipe_resource, screen: &PipeScreen) {
+    fn apply(&self, tmpl: &mut pipe_resource) {
         match self {
             Self::Staging => {
-                tmpl.set_usage(pipe_resource_usage::PIPE_USAGE_STAGING.0);
+                tmpl.set_usage(pipe_resource_usage::PIPE_USAGE_STAGING);
                 tmpl.flags |= PIPE_RESOURCE_FLAG_MAP_PERSISTENT | PIPE_RESOURCE_FLAG_MAP_COHERENT;
                 tmpl.bind |= PIPE_BIND_LINEAR;
-            }
-            Self::Cb0 => {
-                tmpl.flags |= screen.param(pipe_cap::PIPE_CAP_CONSTBUF0_FLAGS) as u32;
-                tmpl.bind |= PIPE_BIND_CONSTANT_BUFFER;
             }
             Self::Normal => {}
         }
@@ -159,7 +154,7 @@ impl PipeScreen {
         tmpl.array_size = 1;
         tmpl.bind = pipe_bind;
 
-        res_type.apply(&mut tmpl, self);
+        res_type.apply(&mut tmpl);
 
         self.resource_create(&tmpl)
     }
@@ -207,7 +202,7 @@ impl PipeScreen {
             tmpl.bind |= PIPE_BIND_SHADER_IMAGE;
         }
 
-        res_type.apply(&mut tmpl, self);
+        res_type.apply(&mut tmpl);
 
         self.resource_create(&tmpl)
     }
@@ -389,11 +384,10 @@ impl PipeScreen {
     }
 
     pub fn get_timestamp(&self) -> u64 {
-        // We have get_timestamp in has_required_cbs, so it will exist
         unsafe {
             self.screen()
                 .get_timestamp
-                .expect("get_timestamp should be required")(self.screen.as_ptr())
+                .unwrap_or(u_default_get_timestamp)(self.screen.as_ptr())
         }
     }
 
@@ -478,7 +472,6 @@ fn has_required_cbs(screen: *mut pipe_screen) -> bool {
         & has_required_feature!(screen, get_name)
         & has_required_feature!(screen, get_param)
         & has_required_feature!(screen, get_shader_param)
-        & has_required_feature!(screen, get_timestamp)
         & has_required_feature!(screen, is_format_supported)
         & has_required_feature!(screen, resource_create)
 }

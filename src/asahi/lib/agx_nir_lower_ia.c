@@ -15,43 +15,10 @@
 #include "shader_enums.h"
 
 /*
- * This file implements input assembly in software for geometry/tessellation
- * shaders. load_vertex_id is lowered based on the topology. Most of the logic
- * lives in CL library routines.
+ * This file implements basic input assembly in software. It runs on software
+ * vertex shaders, as part of geometry/tessellation lowering. It does not apply
+ * the topology, which happens in the geometry shader.
  */
-
-nir_def *
-agx_vertex_id_for_topology_class(nir_builder *b, nir_def *vert,
-                                 enum mesa_prim cls)
-{
-   nir_def *prim = nir_load_primitive_id(b);
-   nir_def *flatshade_first = nir_ieq_imm(b, nir_load_provoking_last(b), 0);
-   nir_def *nr = nir_load_num_vertices(b);
-   nir_def *topology = nir_load_input_topology_agx(b);
-
-   switch (cls) {
-   case MESA_PRIM_POINTS:
-      return prim;
-
-   case MESA_PRIM_LINES:
-      return libagx_vertex_id_for_line_class(b, topology, prim, vert, nr);
-
-   case MESA_PRIM_TRIANGLES:
-      return libagx_vertex_id_for_tri_class(b, topology, prim, vert,
-                                            flatshade_first);
-
-   case MESA_PRIM_LINES_ADJACENCY:
-      return libagx_vertex_id_for_line_adj_class(b, topology, prim, vert);
-
-   case MESA_PRIM_TRIANGLES_ADJACENCY:
-      return libagx_vertex_id_for_tri_adj_class(b, topology, prim, vert, nr,
-                                                flatshade_first);
-
-   default:
-      unreachable("invalid topology class");
-   }
-}
-
 struct state {
    unsigned index_size;
    bool patches;
@@ -73,11 +40,8 @@ load_vertex_id(nir_builder *b, struct state *state)
    if (state->index_size) {
       nir_def *ia = nir_load_input_assembly_buffer_agx(b);
 
-      nir_def *address =
-         libagx_index_buffer(b, ia, id, nir_imm_int(b, state->index_size));
-
-      nir_def *index = nir_load_global_constant(b, address, state->index_size,
-                                                1, state->index_size * 8);
+      nir_def *index =
+         libagx_load_index_buffer(b, ia, id, nir_imm_int(b, state->index_size));
 
       id = nir_u2uN(b, index, id->bit_size);
    }
@@ -103,7 +67,7 @@ lower_vertex_id(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 bool
 agx_nir_lower_index_buffer(nir_shader *s, unsigned index_size_B, bool patches)
 {
-   return nir_shader_intrinsics_pass(
-      s, lower_vertex_id, nir_metadata_block_index | nir_metadata_dominance,
-      &(struct state){index_size_B, patches});
+   return nir_shader_intrinsics_pass(s, lower_vertex_id,
+                                     nir_metadata_control_flow,
+                                     &(struct state){index_size_B, patches});
 }

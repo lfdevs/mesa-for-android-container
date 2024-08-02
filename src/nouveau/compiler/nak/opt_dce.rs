@@ -30,10 +30,8 @@ impl DeadCodePass {
     }
 
     fn mark_src_live(&mut self, src: &Src) {
-        if let SrcRef::SSA(ssa) = &src.src_ref {
-            for val in ssa.iter() {
-                self.mark_ssa_live(val);
-            }
+        for ssa in src.iter_ssa() {
+            self.mark_ssa_live(ssa);
         }
     }
 
@@ -184,7 +182,7 @@ impl Function {
     }
 }
 
-impl Shader {
+impl Shader<'_> {
     pub fn opt_dce(&mut self) {
         for f in &mut self.functions {
             f.opt_dce();

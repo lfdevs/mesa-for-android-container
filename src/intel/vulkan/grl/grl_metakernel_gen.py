@@ -876,15 +876,7 @@ C_PROLOGUE = COPYRIGHT + '''
 #include "genxml/genX_pack.h"
 #include "genxml/genX_rt_pack.h"
 
-/* We reserve :
- *    - GPR 14 for secondary command buffer returns
- *    - GPR 15 for conditional rendering
- */
-#define MI_BUILDER_NUM_ALLOC_GPRS 14
-#define __gen_get_batch_dwords anv_batch_emit_dwords
-#define __gen_address_offset anv_address_add
-#define __gen_get_batch_address(b, a) anv_batch_address(b, a)
-#include "common/mi_builder.h"
+#include "genX_mi_builder.h"
 
 #define MI_PREDICATE_RESULT mi_reg32(0x2418)
 #define DISPATCHDIM_X mi_reg32(0x2500)

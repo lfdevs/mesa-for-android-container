@@ -6,13 +6,22 @@
       when: never
     - !reference [.gl-rules, rules]
     - changes: &llvmpipe_file_list
-      - src/gallium/drivers/llvmpipe/**/*
-      - src/gallium/winsys/sw/**/*
+        - src/gallium/drivers/llvmpipe/*
+        - src/gallium/drivers/llvmpipe/ci/gitlab-ci.yml
+        - src/gallium/drivers/llvmpipe/ci/gitlab-ci-inc.yml
+        - src/gallium/drivers/llvmpipe/ci/deqp-$DEQP_SUITE.toml
+        - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-fails.txt
+        - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-flakes.txt
+        - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-skips.txt
+        - src/gallium/drivers/llvmpipe/ci/$PIGLIT_TRACES_FILE
+        - src/gallium/winsys/sw/**/*
+        - src/gallium/auxiliary/draw/**/*
+        - src/gallium/auxiliary/gallivm/**/*
       when: on_success
 
 .llvmpipe-manual-rules:
   stage: software-renderer
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.gl-manual-rules, rules]
@@ -24,14 +33,26 @@
   rules:
     - !reference [.test, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
+    # Old copy of .core-rules, missing:
+    #   - meson_options.txt
+    #   - build-support/**/*
+    #   - subprojects/**/*
+    #   - src/*
+    #   - src/drm-shim/**/*
+    #   - src/gbm/**/*
+    #   - src/gtest/**/*
+    #   - src/mesa/**/*.h
+    #   - src/tool/**/*
+    # FIXME: figure out if this really needs to not be `!reference [.core-rules, rules]`
+    # and if some of the missing items really need to not be there, consider splitting the .core-rules list in two.
     - changes: &llvmpipe_cl_files
-      - .gitlab-ci.yml
-      - .gitlab-ci/**/*
-      - meson.build
-      - .gitattributes
-      - include/**/*
-      - src/compiler/**/*
-      - src/util/**/*
+        - .gitlab-ci.yml
+        - .gitlab-ci/**/*
+        - meson.build
+        - .gitattributes
+        - include/**/*
+        - src/compiler/**/*
+        - src/util/**/*
       when: on_success
     - !reference [.gallium-core-rules, rules]
     - changes:
@@ -42,9 +63,7 @@
   rules:
     - !reference [.test, rules]
     - !reference [.llvmpipe-cl-rules, rules]
-    - changes:
-      - src/gallium/frontends/rusticl/**/*
-      when: on_success
+    - !reference [.rusticl-rules, rules]
 
 
 .llvmpipe-test:

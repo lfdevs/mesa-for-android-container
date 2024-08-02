@@ -39,7 +39,7 @@ struct gl_constants;
 struct gl_shader_program;
 
 nir_shader *glsl_to_nir(const struct gl_constants *consts,
-                        const struct gl_shader_program *shader_prog,
+                        struct exec_list **ir, shader_info *si,
                         gl_shader_stage stage,
                         const nir_shader_compiler_options *options);
 

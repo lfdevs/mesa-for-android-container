@@ -445,6 +445,9 @@ lp_jit_texture_from_pipe(struct lp_jit_texture *jit, const struct pipe_sampler_v
                else
                   assert(view->u.tex.last_layer < res->array_size);
             }
+
+            if (res->flags & PIPE_RESOURCE_FLAG_SPARSE)
+               jit->residency = lp_tex->residency;
          } else {
             /*
              * For tex2d_from_buf, adjust width and height with application
@@ -609,6 +612,11 @@ lp_jit_image_from_pipe(struct lp_jit_image *jit, const struct pipe_image_view *v
             jit->base = (uint8_t *)jit->base +
                view->u.tex2d_from_buf.offset * image_blocksize;
          }
+      }
+
+      if (res->flags & PIPE_RESOURCE_FLAG_SPARSE) {
+         jit->residency = lp_res->residency;
+         jit->base_offset = (uint32_t)((uintptr_t)jit->base - (uintptr_t)lp_res->tex_data);
       }
    }
 }

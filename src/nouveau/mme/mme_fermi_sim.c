@@ -9,8 +9,8 @@
 #include "mme_fermi.h"
 #include "util/u_math.h"
 
-#include "nvk_cl9097.h"
-#include "nvk_cl902d.h"
+#include "nv_push_cl9097.h"
+#include "nv_push_cl902d.h"
 
 struct mme_fermi_sim {
    uint32_t param_count;

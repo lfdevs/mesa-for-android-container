@@ -39,7 +39,7 @@ struct intel_perf_query_object;
 bool
 intel_perf_open(struct intel_perf_context *perf_ctx,
                 int metrics_set_id,
-                int report_format,
+                uint64_t report_format,
                 int period_exponent,
                 int drm_fd,
                 uint32_t ctx_id,
@@ -57,6 +57,8 @@ intel_perf_read_oa_stream(struct intel_perf_context *perf_ctx,
                           size_t nbytes);
 
 struct intel_perf_context *intel_perf_new_context(void *parent);
+
+void intel_perf_free_context(struct intel_perf_context *perf_ctx);
 
 void intel_perf_init_context(struct intel_perf_context *perf_ctx,
                              struct intel_perf_config *perf_cfg,

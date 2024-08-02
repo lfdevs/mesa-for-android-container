@@ -19,8 +19,10 @@ radv_perfcounter_emit_shaders(struct radv_device *device, struct radeon_cmdbuf *
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (pdev->info.gfx_level >= GFX11) {
-      radeon_set_uconfig_reg(cs, R_036760_SQG_PERFCOUNTER_CTRL, shaders & 0x7f);
+   if (pdev->info.gfx_level >= GFX10) {
+      radeon_set_uconfig_reg(cs, R_036780_SQ_PERFCOUNTER_CTRL, shaders & 0x7f);
+      if (pdev->info.gfx_level >= GFX11)
+         radeon_set_uconfig_reg(cs, R_036760_SQG_PERFCOUNTER_CTRL, shaders & 0x7f);
    } else {
       radeon_set_uconfig_reg_seq(cs, R_036780_SQ_PERFCOUNTER_CTRL, 2);
       radeon_emit(cs, shaders & 0x7f);
@@ -470,7 +472,8 @@ radv_emit_select(struct radv_cmd_buffer *cmd_buffer, struct ac_pc_block *block, 
       return;
 
    for (idx = 0; idx < count; ++idx) {
-      radeon_set_perfctr_reg(gfx_level, qf, cs, regs->select0[idx], G_REG_SEL(selectors[idx]) | regs->select_or);
+      radeon_set_uconfig_perfctr_reg(gfx_level, qf, cs, regs->select0[idx],
+                                     G_REG_SEL(selectors[idx]) | regs->select_or);
    }
 
    for (idx = 0; idx < regs->num_spm_counters; idx++) {

@@ -8,5 +8,7 @@ void main()
   fooLength = array.length();
   array[0] = 2.0;
   fooLength = array.length();
+
+  gl_Position = vec4(1.0);
 }
 

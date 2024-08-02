@@ -65,7 +65,6 @@ struct isel_context {
        * and parent_if.is_divergent==false. Called _break but it's also used for
        * loop continues. */
       bool exec_potentially_empty_break = false;
-      std::unique_ptr<unsigned[]> nir_to_aco; /* NIR block index to ACO block index */
    } cf_info;
 
    /* NIR range analysis. */
@@ -73,6 +72,8 @@ struct isel_context {
    nir_unsigned_upper_bound_config ub_config;
 
    Temp arg_temps[AC_MAX_ARGS];
+   Operand workgroup_id[3];
+   Temp ttmp8;
 
    /* tessellation information */
    uint64_t tcs_temp_only_inputs;

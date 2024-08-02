@@ -142,12 +142,12 @@ radv_nir_lower_io_to_mem(struct radv_device *device, struct radv_shader_stage *s
       }
    } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
       NIR_PASS_V(nir, ac_nir_lower_hs_inputs_to_mem, map_input, info->vs.tcs_in_out_eq);
-      NIR_PASS_V(nir, ac_nir_lower_hs_outputs_to_mem, radv_map_io_driver_location, pdev->info.gfx_level,
+      NIR_PASS_V(nir, ac_nir_lower_hs_outputs_to_mem, map_output, pdev->info.gfx_level,
                  info->tcs.tes_inputs_read, info->tcs.tes_patch_inputs_read, info->wave_size, false, false);
 
       return true;
    } else if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      NIR_PASS_V(nir, ac_nir_lower_tes_inputs_to_mem, radv_map_io_driver_location);
+      NIR_PASS_V(nir, ac_nir_lower_tes_inputs_to_mem, map_input);
 
       if (info->tes.as_es) {
          NIR_PASS_V(nir, ac_nir_lower_es_outputs_to_mem, map_output, pdev->info.gfx_level, info->esgs_itemsize);
@@ -176,8 +176,7 @@ radv_nir_lower_draw_id_to_zero_callback(struct nir_builder *b, nir_intrinsic_ins
       return false;
 
    nir_def *replacement = nir_imm_zero(b, intrin->def.num_components, intrin->def.bit_size);
-   nir_def_rewrite_uses(&intrin->def, replacement);
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, replacement);
    nir_instr_free(&intrin->instr);
 
    return true;
@@ -186,6 +185,5 @@ radv_nir_lower_draw_id_to_zero_callback(struct nir_builder *b, nir_intrinsic_ins
 bool
 radv_nir_lower_draw_id_to_zero(nir_shader *shader)
 {
-   return nir_shader_intrinsics_pass(shader, radv_nir_lower_draw_id_to_zero_callback,
-                                     nir_metadata_block_index | nir_metadata_dominance, NULL);
+   return nir_shader_intrinsics_pass(shader, radv_nir_lower_draw_id_to_zero_callback, nir_metadata_control_flow, NULL);
 }

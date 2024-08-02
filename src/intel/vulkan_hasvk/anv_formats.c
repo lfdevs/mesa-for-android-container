@@ -940,7 +940,7 @@ void anv_GetPhysicalDeviceFormatProperties2(
          break;
       }
       default:
-         anv_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(ext->sType);
          break;
       }
    }
@@ -1357,7 +1357,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          from_wsi = true;
          break;
       default:
-         anv_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(s->sType);
          break;
       }
    }
@@ -1375,7 +1375,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          android_usage = (void *) s;
          break;
       default:
-         anv_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(s->sType);
          break;
       }
    }

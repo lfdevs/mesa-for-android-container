@@ -24,6 +24,7 @@
 #include "anv_private.h"
 #include "anv_internal_kernels.h"
 
+#include "common/intel_debug_identifier.h"
 #include "ds/intel_tracepoints.h"
 #include "genxml/gen9_pack.h"
 #include "perf/intel_perf.h"
@@ -78,7 +79,8 @@ anv_utrace_delete_submit(struct u_trace_context *utctx, void *submit_data)
 {
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
-   struct anv_utrace_submit *submit = submit_data;
+   struct anv_utrace_submit *submit =
+      container_of(submit_data, struct anv_utrace_submit, ds);
 
    intel_ds_flush_data_fini(&submit->ds);
 
@@ -88,11 +90,7 @@ anv_utrace_delete_submit(struct u_trace_context *utctx, void *submit_data)
    if (submit->trace_bo)
       anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
 
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
-      anv_bo_pool_free(&device->utrace_bo_pool, *bo);
-   util_dynarray_fini(&submit->batch_bos);
-
-   vk_sync_destroy(&device->vk, submit->sync);
+   anv_async_submit_fini(&submit->base);
 
    vk_free(&device->vk.alloc, submit);
 }
@@ -148,44 +146,6 @@ anv_device_utrace_emit_cs_copy_ts_buffer(struct u_trace_context *utctx,
       push_data_state);
 }
 
-static VkResult
-anv_utrace_submit_extend_batch(struct anv_batch *batch, uint32_t size,
-                               void *user_data)
-{
-   struct anv_utrace_submit *submit = user_data;
-
-   uint32_t alloc_size = 0;
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
-      alloc_size += (*bo)->size;
-   alloc_size = MAX2(alloc_size * 2, 8192);
-
-   struct anv_bo *bo;
-   VkResult result = anv_bo_pool_alloc(&submit->queue->device->utrace_bo_pool,
-                                       align(alloc_size, 4096),
-                                       &bo);
-   if (result != VK_SUCCESS)
-      return result;
-
-   util_dynarray_append(&submit->batch_bos, struct anv_bo *, bo);
-
-   batch->end += 4 * GFX9_MI_BATCH_BUFFER_START_length;
-
-   anv_batch_emit(batch, GFX9_MI_BATCH_BUFFER_START, bbs) {
-      bbs.DWordLength               = GFX9_MI_BATCH_BUFFER_START_length -
-                                      GFX9_MI_BATCH_BUFFER_START_length_bias;
-      bbs.SecondLevelBatchBuffer    = Firstlevelbatch;
-      bbs.AddressSpaceIndicator     = ASI_PPGTT;
-      bbs.BatchBufferStartAddress   = (struct anv_address) { bo, 0 };
-   }
-
-   anv_batch_set_storage(batch,
-                         (struct anv_address) { .bo = bo, },
-                         bo->map,
-                         bo->size - 4 * GFX9_MI_BATCH_BUFFER_START_length);
-
-   return VK_SUCCESS;
-}
-
 VkResult
 anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
                                     uint32_t cmd_buffer_count,
@@ -210,40 +170,26 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
    if (!submit)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   submit->queue = queue;
+   result = anv_async_submit_init(&submit->base, queue,
+                                  &device->utrace_bo_pool,
+                                  false, true);
+   if (result != VK_SUCCESS)
+      goto error_async;
 
    intel_ds_flush_data_init(&submit->ds, &queue->ds, queue->ds.submission_id);
 
-   result = vk_sync_create(&device->vk, &device->physical->sync_syncobj_type,
-                           0, 0, &submit->sync);
-   if (result != VK_SUCCESS)
-      goto error_sync;
-
-   util_dynarray_init(&submit->batch_bos, NULL);
-
+   struct anv_batch *batch = &submit->base.batch;
    if (utrace_copies > 0) {
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
                                  utrace_copies * 4096,
                                  &submit->trace_bo);
       if (result != VK_SUCCESS)
-         goto error_trace_buf;
-
-      const bool uses_relocs = device->physical->uses_relocs;
-      result = anv_reloc_list_init(&submit->relocs, &device->vk.alloc, uses_relocs);
-      if (result != VK_SUCCESS)
-         goto error_reloc_list;
+         goto error_sync;
 
       anv_state_stream_init(&submit->dynamic_state_stream,
                             &device->dynamic_state_pool, 16384);
       anv_state_stream_init(&submit->general_state_stream,
                             &device->general_state_pool, 16384);
-
-      submit->batch = (struct anv_batch) {
-         .alloc = &device->vk.alloc,
-         .relocs = &submit->relocs,
-         .user_data = submit,
-         .extend_cb = anv_utrace_submit_extend_batch,
-      };
 
       /* Only engine class where we support timestamp copies
        *
@@ -253,16 +199,15 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
              queue->family->engine_class == INTEL_ENGINE_CLASS_COMPUTE);
       if (queue->family->engine_class == INTEL_ENGINE_CLASS_RENDER) {
 
-         trace_intel_begin_trace_copy_cb(&submit->ds.trace, &submit->batch);
+         trace_intel_begin_trace_copy_cb(&submit->ds.trace, batch);
 
          anv_genX(device->info, emit_so_memcpy_init)(&submit->memcpy_state,
-                                                     device,
-                                                     &submit->batch);
+                                                     device, NULL, batch);
          uint32_t num_traces = 0;
          for (uint32_t i = 0; i < cmd_buffer_count; i++) {
             if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
                intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
-                                         &submit->ds, false);
+                                         &submit->ds, device->vk.current_frame, false);
             } else {
                num_traces += cmd_buffers[i]->trace.num_traces;
                u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
@@ -274,8 +219,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
          }
          anv_genX(device->info, emit_so_memcpy_fini)(&submit->memcpy_state);
 
-         trace_intel_end_trace_copy_cb(&submit->ds.trace, &submit->batch,
-                                       num_traces);
+         trace_intel_end_trace_copy_cb(&submit->ds.trace, batch, num_traces);
 
          anv_genX(device->info, emit_so_memcpy_end)(&submit->memcpy_state);
       } else {
@@ -287,13 +231,13 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
          if (ret != VK_SUCCESS)
             goto error_batch;
 
-         trace_intel_begin_trace_copy_cb(&submit->ds.trace, &submit->batch);
+         trace_intel_begin_trace_copy_cb(&submit->ds.trace, batch);
 
          submit->simple_state = (struct anv_simple_shader) {
             .device               = device,
             .dynamic_state_stream = &submit->dynamic_state_stream,
             .general_state_stream = &submit->general_state_stream,
-            .batch                = &submit->batch,
+            .batch                = batch,
             .kernel               = copy_kernel,
             .l3_config            = device->internal_kernels_l3_config,
          };
@@ -304,7 +248,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
             num_traces += cmd_buffers[i]->trace.num_traces;
             if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
                intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
-                                         &submit->ds, false);
+                                         &submit->ds, device->vk.current_frame, false);
             } else {
                num_traces += cmd_buffers[i]->trace.num_traces;
                u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
@@ -315,23 +259,25 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
             }
          }
 
-         trace_intel_end_trace_copy_cb(&submit->ds.trace, &submit->batch,
-                                       num_traces);
+         trace_intel_end_trace_copy_cb(&submit->ds.trace, batch, num_traces);
 
          anv_genX(device->info, emit_simple_shader_end)(&submit->simple_state);
       }
 
-      intel_ds_queue_flush_data(&queue->ds, &submit->ds.trace, &submit->ds, true);
 
-      if (submit->batch.status != VK_SUCCESS) {
-         result = submit->batch.status;
+      if (batch->status != VK_SUCCESS) {
+         result = batch->status;
          goto error_batch;
       }
+
+      intel_ds_queue_flush_data(&queue->ds, &submit->ds.trace, &submit->ds,
+                                device->vk.current_frame, true);
    } else {
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          assert(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
          intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
-                                   &submit->ds, i == (cmd_buffer_count - 1));
+                                   &submit->ds, device->vk.current_frame,
+                                   i == (cmd_buffer_count - 1));
       }
    }
 
@@ -340,15 +286,11 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
    return VK_SUCCESS;
 
  error_batch:
-   anv_reloc_list_finish(&submit->relocs);
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
-      anv_bo_pool_free(&device->utrace_bo_pool, *bo);
- error_reloc_list:
    anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
- error_trace_buf:
-   vk_sync_destroy(&device->vk, submit->sync);
  error_sync:
    intel_ds_flush_data_fini(&submit->ds);
+   anv_async_submit_fini(&submit->base);
+ error_async:
    vk_free(&device->vk.alloc, submit);
    return result;
 }
@@ -392,7 +334,7 @@ anv_utrace_destroy_ts_buffer(struct u_trace_context *utctx, void *timestamps)
 static void
 anv_utrace_record_ts(struct u_trace *ut, void *cs,
                      void *timestamps, unsigned idx,
-                     bool end_of_pipe)
+                     uint32_t flags)
 {
    struct anv_device *device =
       container_of(ut->utctx, struct anv_device, ds.trace_context);
@@ -410,27 +352,33 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
    /* Is this a end of compute trace point? */
    const bool is_end_compute =
       cs == NULL &&
-      (cmd_buffer->last_compute_walker != NULL ||
-       cmd_buffer->last_indirect_dispatch != NULL) &&
-      end_of_pipe;
+      (flags & INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS);
 
-   enum anv_timestamp_capture_type capture_type = end_of_pipe ?
-      (is_end_compute ?
-       (cmd_buffer->last_indirect_dispatch != NULL ?
-        ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH : ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER) :
-       ANV_TIMESTAMP_CAPTURE_END_OF_PIPE) : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+   assert(device->info->verx10 < 125 ||
+          !is_end_compute ||
+          cmd_buffer->state.last_indirect_dispatch != NULL ||
+          cmd_buffer->state.last_compute_walker != NULL);
+
+   enum anv_timestamp_capture_type capture_type =
+      (device->info->verx10 >= 125 && is_end_compute) ?
+      (cmd_buffer->state.last_indirect_dispatch != NULL ?
+       ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH : ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER) :
+      (flags & (INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE |
+                INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS)) ?
+      ANV_TIMESTAMP_CAPTURE_END_OF_PIPE : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+
 
    void *addr = capture_type ==  ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH ?
-                cmd_buffer->last_indirect_dispatch :
+                cmd_buffer->state.last_indirect_dispatch :
                 capture_type ==  ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER ?
-                cmd_buffer->last_compute_walker : NULL;
+                cmd_buffer->state.last_compute_walker : NULL;
 
    device->physical->cmd_emit_timestamp(batch, device, ts_address,
                                         capture_type,
                                         addr);
    if (is_end_compute) {
-      cmd_buffer->last_compute_walker = NULL;
-      cmd_buffer->last_indirect_dispatch = NULL;
+      cmd_buffer->state.last_compute_walker = NULL;
+      cmd_buffer->state.last_indirect_dispatch = NULL;
    }
 }
 
@@ -441,15 +389,16 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
    struct anv_bo *bo = timestamps;
-   struct anv_utrace_submit *submit = flush_data;
+   struct anv_utrace_submit *submit =
+      container_of(flush_data, struct anv_utrace_submit, ds);
 
    /* Only need to stall on results for the first entry: */
    if (idx == 0) {
       MESA_TRACE_SCOPE("anv utrace wait timestamps");
       UNUSED VkResult result =
          vk_sync_wait(&device->vk,
-                      submit->sync,
-                      0,
+                      submit->base.signal.sync,
+                      submit->base.signal.signal_value,
                       VK_SYNC_WAIT_COMPLETE,
                       os_time_get_absolute_timeout(OS_TIMEOUT_INFINITE));
       assert(result == VK_SUCCESS);
@@ -590,68 +539,53 @@ anv_queue_trace(struct anv_queue *queue, const char *label, bool frame, bool beg
    if (!submit)
       return;
 
-   submit->queue = queue;
+   result = anv_async_submit_init(&submit->base, queue,
+                                  &device->utrace_bo_pool,
+                                  false, true);
+   if (result != VK_SUCCESS)
+      goto error_async;
 
    intel_ds_flush_data_init(&submit->ds, &queue->ds, queue->ds.submission_id);
 
-   result = vk_sync_create(&device->vk, &device->physical->sync_syncobj_type,
-                           0, 0, &submit->sync);
-   if (result != VK_SUCCESS)
-      goto error_trace;
-
-   const bool uses_relocs = device->physical->uses_relocs;
-   result = anv_reloc_list_init(&submit->relocs, &device->vk.alloc, uses_relocs);
-   if (result != VK_SUCCESS)
-      goto error_sync;
-
-   submit->batch = (struct anv_batch) {
-      .alloc = &device->vk.alloc,
-      .relocs = &submit->relocs,
-      .user_data = submit,
-      .extend_cb = anv_utrace_submit_extend_batch,
-   };
-
+   struct anv_batch *batch = &submit->base.batch;
    if (frame) {
       if (begin)
-         trace_intel_begin_frame(&submit->ds.trace, &submit->batch);
+         trace_intel_begin_frame(&submit->ds.trace, batch);
       else
-         trace_intel_end_frame(&submit->ds.trace, &submit->batch,
+         trace_intel_end_frame(&submit->ds.trace, batch,
                                device->debug_frame_desc->frame_id);
    } else {
       if (begin) {
-         trace_intel_begin_queue_annotation(&submit->ds.trace, &submit->batch);
+         trace_intel_begin_queue_annotation(&submit->ds.trace, batch);
       } else {
-         trace_intel_end_queue_annotation(&submit->ds.trace,
-                                          &submit->batch,
-                                          strlen(label),
-                                          label);
+         trace_intel_end_queue_annotation(&submit->ds.trace, batch,
+                                          strlen(label), label);
       }
    }
 
-   anv_batch_emit(&submit->batch, GFX9_MI_BATCH_BUFFER_END, bbs);
-   anv_batch_emit(&submit->batch, GFX9_MI_NOOP, noop);
+   anv_batch_emit(batch, GFX9_MI_BATCH_BUFFER_END, bbs);
+   anv_batch_emit(batch, GFX9_MI_NOOP, noop);
 
-   if (submit->batch.status != VK_SUCCESS) {
-      result = submit->batch.status;
-      goto error_reloc_list;
+   if (batch->status != VK_SUCCESS) {
+      result = batch->status;
+      goto error_batch;
    }
 
-   intel_ds_queue_flush_data(&queue->ds, &submit->ds.trace, &submit->ds, true);
+   intel_ds_queue_flush_data(&queue->ds, &submit->ds.trace, &submit->ds,
+                             device->vk.current_frame, true);
 
-   pthread_mutex_lock(&device->mutex);
-   device->kmd_backend->queue_exec_trace(queue, submit);
-   pthread_mutex_unlock(&device->mutex);
+   result =
+      device->kmd_backend->queue_exec_async(&submit->base,
+                                            0, NULL, 0, NULL);
+   if (result != VK_SUCCESS)
+      goto error_batch;
 
    return;
 
- error_reloc_list:
-   anv_reloc_list_finish(&submit->relocs);
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
-      anv_bo_pool_free(&device->utrace_bo_pool, *bo);
- error_sync:
-   vk_sync_destroy(&device->vk, submit->sync);
- error_trace:
+ error_batch:
    intel_ds_flush_data_fini(&submit->ds);
+   anv_async_submit_fini(&submit->base);
+ error_async:
    vk_free(&device->vk.alloc, submit);
 }
 

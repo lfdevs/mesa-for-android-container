@@ -38,8 +38,10 @@
 
 struct intel_sample_positions;
 struct intel_urb_config;
+struct anv_async_submit;
 struct anv_embedded_sampler;
 struct anv_pipeline_embedded_sampler_binding;
+struct anv_trtt_bind;
 
 typedef struct nir_builder nir_builder;
 typedef struct nir_shader nir_shader;
@@ -129,9 +131,27 @@ genX(invalidate_aux_map)(struct anv_batch *batch,
                          enum intel_engine_class engine_class,
                          enum anv_pipe_bits bits);
 
+#if INTEL_WA_14018283232_GFX_VER
+void genX(batch_emit_wa_14018283232)(struct anv_batch *batch);
+
+static inline void
+genX(cmd_buffer_ensure_wa_14018283232)(struct anv_cmd_buffer *cmd_buffer,
+                                       bool toggle)
+{
+   struct anv_gfx_dynamic_state *hw_state =
+      &cmd_buffer->state.gfx.dyn_state;
+   if (intel_needs_workaround(cmd_buffer->device->info, 14018283232) &&
+       hw_state->wa_14018283232_toggle != toggle) {
+      hw_state->wa_14018283232_toggle = toggle;
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_WA_14018283232);
+      genX(batch_emit_wa_14018283232)(&cmd_buffer->batch);
+   }
+}
+#endif
 
 void genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                                struct anv_device *device,
+                               struct anv_cmd_buffer *cmd_buffer,
                                struct anv_batch *batch);
 
 void genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state);
@@ -210,6 +230,7 @@ void genX(blorp_exec)(struct blorp_batch *batch,
                       const struct blorp_params *params);
 
 void genX(batch_emit_secondary_call)(struct anv_batch *batch,
+                                     struct anv_device *device,
                                      struct anv_address secondary_addr,
                                      struct anv_address secondary_return_addr);
 
@@ -333,9 +354,16 @@ genX(simple_shader_push_state_address)(struct anv_simple_shader *state,
 void
 genX(emit_simple_shader_end)(struct anv_simple_shader *state);
 
-VkResult genX(init_trtt_context_state)(struct anv_queue *queue);
+VkResult genX(init_trtt_context_state)(struct anv_device *device,
+                                       struct anv_async_submit *submit);
 
-VkResult genX(write_trtt_entries)(struct anv_trtt_submission *submit);
+void genX(write_trtt_entries)(struct anv_async_submit *submit,
+                              struct anv_trtt_bind *l3l2_binds,
+                              uint32_t n_l3l2_binds,
+                              struct anv_trtt_bind *l1_binds,
+                              uint32_t n_l1_binds);
+
+void genX(async_submit_end)(struct anv_async_submit *submit);
 
 void
 genX(cmd_buffer_emit_push_descriptor_buffer_surface)(struct anv_cmd_buffer *cmd_buffer,

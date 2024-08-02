@@ -441,8 +441,7 @@ crocus_resource_configure_aux(struct crocus_screen *screen,
 
    const bool has_ccs =
       devinfo->ver >= 7 && !res->mod_info &&
-      isl_surf_get_ccs_surf(&screen->isl_dev, &res->surf, NULL,
-                            &res->aux.surf, 0);
+      isl_surf_get_ccs_surf(&screen->isl_dev, &res->surf, &res->aux.surf, 0);
 
    /* Having more than one type of compression is impossible */
    assert(has_ccs + has_mcs + has_hiz <= 1);

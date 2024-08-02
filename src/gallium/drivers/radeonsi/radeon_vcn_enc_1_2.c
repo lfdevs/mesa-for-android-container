@@ -36,6 +36,7 @@
 #define RENCODE_IB_PARAM_RATE_CONTROL_PER_PIC_EX   0x0000001d
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU        0x00000020
 #define RENCODE_IB_PARAM_QP_MAP                    0x00000021
+#define RENCODE_IB_PARAM_ENCODE_LATENCY            0x00000022
 #define RENCODE_IB_PARAM_ENCODE_STATISTICS         0x00000024
 
 #define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL        0x00100001
@@ -1310,12 +1311,18 @@ static void radeon_enc_qp_map(struct radeon_encoder *enc)
 {
    if (enc->enc_pic.enc_qp_map.qp_map_type == RENCODE_QP_MAP_TYPE_NONE)
       return;
-   enc->enc_pic.enc_qp_map.qp_map_pitch = 0;
 
    RADEON_ENC_BEGIN(enc->cmd.enc_qp_map);
    RADEON_ENC_CS(enc->enc_pic.enc_qp_map.qp_map_type);
    RADEON_ENC_READWRITE(enc->roi->res->buf, enc->roi->res->domains, 0);
-   RADEON_ENC_CS(enc->enc_pic.enc_qp_map.qp_map_pitch);
+   RADEON_ENC_CS(0); /* qp_map pitch set to 0 for the ib */
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_encode_latency(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.enc_latency);
+   RADEON_ENC_CS(enc->enc_pic.enc_latency.encode_latency);
    RADEON_ENC_END();
 }
 
@@ -1381,6 +1388,7 @@ static void begin(struct radeon_encoder *enc)
    enc->layer_control(enc);
    enc->rc_session_init(enc);
    enc->quality_params(enc);
+   enc->encode_latency(enc);
 
    i = 0;
    do {
@@ -1422,6 +1430,7 @@ static void radeon_enc_headers_hevc(struct radeon_encoder *enc)
    }
    enc->slice_header(enc);
    enc->encode_params(enc);
+   enc->encode_params_codec_spec(enc);
 }
 
 static void encode(struct radeon_encoder *enc)
@@ -1617,6 +1626,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->encode_statistics = radeon_enc_encode_statistics;
    enc->nalu_aud = radeon_enc_nalu_aud;
    enc->qp_map = radeon_enc_qp_map;
+   enc->encode_latency = radeon_enc_encode_latency;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
       enc->slice_control = radeon_enc_slice_control;
@@ -1638,6 +1648,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
       enc->nalu_vps = radeon_enc_nalu_vps;
       enc->slice_header = radeon_enc_slice_header_hevc;
       enc->encode_headers = radeon_enc_headers_hevc;
+      enc->encode_params_codec_spec = radeon_enc_dummy;
    }
 
    enc->cmd.session_info = RENCODE_IB_PARAM_SESSION_INFO;
@@ -1668,6 +1679,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->cmd.deblocking_filter_h264 = RENCODE_H264_IB_PARAM_DEBLOCKING_FILTER;
    enc->cmd.enc_statistics = RENCODE_IB_PARAM_ENCODE_STATISTICS;
    enc->cmd.enc_qp_map = RENCODE_IB_PARAM_QP_MAP;
+   enc->cmd.enc_latency = RENCODE_IB_PARAM_ENCODE_LATENCY;
 
    enc->enc_pic.session_info.interface_version =
       ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |

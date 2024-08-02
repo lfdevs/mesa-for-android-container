@@ -18,7 +18,7 @@
 
 .r300-manual-rules:
   stage: amd
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.ondracka-farm-manual-rules, rules]
@@ -38,7 +38,7 @@
 
 .r300-nine-manual-rules:
   stage: amd
-  retry: !reference [.scheduled_pipeline-rules, retry]
+  extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
     - !reference [.r300-manual-rules, rules]

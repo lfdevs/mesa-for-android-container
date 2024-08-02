@@ -1,433 +1,358 @@
 /*
- * Copyright 2018 Advanced Micro Devices, Inc.
+ * Copyright 2024 Advanced Micro Devices, Inc.
  *
  * SPDX-License-Identifier: MIT
  */
 
-/* This file implements tests on the si_clearbuffer function. */
-
 #include "si_pipe.h"
 #include "si_query.h"
+#include "util/streaming-load-memcpy.h"
 
 #define MIN_SIZE   512
 #define MAX_SIZE   (128 * 1024 * 1024)
 #define SIZE_SHIFT 1
-#define NUM_RUNS   128
+#define WARMUP_RUNS 16
+#define NUM_RUNS   32
 
-static double get_MBps_rate(unsigned num_bytes, unsigned ns)
-{
-   return (num_bytes / (1024.0 * 1024.0)) / (ns / 1000000000.0);
-}
+enum {
+   TEST_FILL_VRAM,
+   TEST_FILL_VRAM_12B,
+   TEST_FILL_GTT,
+   TEST_FILL_GTT_12B,
+   TEST_COPY_VRAM_VRAM,
+   TEST_COPY_VRAM_GTT,
+   TEST_COPY_GTT_VRAM,
+   NUM_TESTS,
+};
+
+static const char *test_strings[] = {
+   [TEST_FILL_VRAM] = "fill->VRAM",
+   [TEST_FILL_VRAM_12B] = "fill->VRAM 12B",
+   [TEST_FILL_GTT] = "fill->GTT",
+   [TEST_FILL_GTT_12B] = "fill->GTT 12B",
+   [TEST_COPY_VRAM_VRAM] = "VRAM->VRAM",
+   [TEST_COPY_VRAM_GTT] = "VRAM->GTT",
+   [TEST_COPY_GTT_VRAM] = "GTT->VRAM",
+};
+
+enum {
+   METHOD_DEFAULT,
+   METHOD_CP_DMA,
+   METHOD_COMPUTE_2DW,
+   METHOD_COMPUTE_3DW,
+   METHOD_COMPUTE_4DW,
+   NUM_METHODS,
+};
+
+static const char *method_strings[] = {
+   [METHOD_DEFAULT] = "Default",
+   [METHOD_CP_DMA] = "CP DMA",
+   [METHOD_COMPUTE_2DW] = "CS 2dw",
+   [METHOD_COMPUTE_3DW] = "CS 3dw",
+   [METHOD_COMPUTE_4DW] = "CS 4dw",
+};
+
+enum {
+   ALIGN_MAX,
+   ALIGN_256,
+   ALIGN_128,
+   ALIGN_64,
+   ALIGN_4,
+   ALIGN_2,
+   ALIGN_1,
+   ALIGN_SRC4_DST2,
+   ALIGN_SRC4_DST1,
+   ALIGN_SRC2_DST4,
+   ALIGN_SRC2_DST1,
+   ALIGN_SRC1_DST4,
+   ALIGN_SRC1_DST2,
+   NUM_ALIGNMENTS,
+};
+
+struct align_info_t {
+   const char *string;
+   unsigned src_offset;
+   unsigned dst_offset;
+};
+
+static const struct align_info_t align_info[] = {
+   [ALIGN_MAX] = {"both=max", 0, 0},
+   [ALIGN_256] = {"both=256", 256, 256},
+   [ALIGN_128] = {"both=128", 128, 128},
+   [ALIGN_64] = {"both=64", 64, 64},
+   [ALIGN_4] = {"both=4", 4, 4},
+   [ALIGN_2] = {"both=2", 2, 2},
+   [ALIGN_1] = {"both=1", 1, 1},
+   [ALIGN_SRC4_DST2] = {"src=4 dst=2", 4, 2},
+   [ALIGN_SRC4_DST1] = {"src=4 dst=1", 4, 1},
+   [ALIGN_SRC2_DST4] = {"src=2 dst=4", 2, 4},
+   [ALIGN_SRC2_DST1] = {"src=2 dst=1", 2, 1},
+   [ALIGN_SRC1_DST4] = {"src=1 dst=4", 1, 4},
+   [ALIGN_SRC1_DST2] = {"src=1 dst=2", 1, 2},
+};
 
 void si_test_dma_perf(struct si_screen *sscreen)
 {
    struct pipe_screen *screen = &sscreen->b;
    struct pipe_context *ctx = screen->context_create(screen, NULL, 0);
    struct si_context *sctx = (struct si_context *)ctx;
-   const uint32_t clear_value = 0x12345678;
-   static const unsigned cs_dwords_per_thread_list[] = {64, 32, 16, 8, 4, 2, 1};
-   /* The list of per-SA wave limits to test. */
-   static const unsigned cs_waves_per_sh_list[] = {0, 8};
 
-#define NUM_SHADERS ARRAY_SIZE(cs_dwords_per_thread_list)
-#define NUM_METHODS (3 + 3 * NUM_SHADERS * ARRAY_SIZE(cs_waves_per_sh_list))
+   sscreen->ws->cs_set_pstate(&sctx->gfx_cs, RADEON_CTX_PSTATE_PEAK);
 
-   static const char *method_str[] = {
-      "CP MC   ",
-      "CP L2   ",
-      "CP L2   ",
-   };
-   static const char *placement_str[] = {
-      /* Clear */
-      "fill->VRAM",
-      "fill->GTT ",
-      /* Copy */
-      "VRAM->VRAM",
-      "VRAM->GTT ",
-      "GTT ->VRAM",
-   };
-
-   printf("DMA rate is in MB/s for each size. Slow cases are skipped and print 0.\n");
-   printf("Heap       ,Method  ,L2p,Wa,");
+   printf("Test          , Method , Alignment  ,");
    for (unsigned size = MIN_SIZE; size <= MAX_SIZE; size <<= SIZE_SHIFT) {
-      if (size >= 1024)
+      if (size >= 1024 * 1024)
+         printf("%6uMB,", size / (1024 * 1024));
+      else if (size >= 1024)
          printf("%6uKB,", size / 1024);
       else
          printf(" %6uB,", size);
    }
    printf("\n");
 
-   /* results[log2(size)][placement][method][] */
-   struct si_result {
-      bool is_valid;
-      bool is_cp;
-      bool is_cs;
-      unsigned cache_policy;
-      unsigned dwords_per_thread;
-      unsigned waves_per_sh;
-      unsigned score;
-      unsigned index; /* index in results[x][y][index] */
-   } results[32][ARRAY_SIZE(placement_str)][NUM_METHODS] = {};
-
    /* Run benchmarks. */
-   for (unsigned placement = 0; placement < ARRAY_SIZE(placement_str); placement++) {
-      bool is_copy = placement >= 2;
+   for (unsigned test_flavor = 0; test_flavor < NUM_TESTS; test_flavor++) {
+      bool is_copy = test_flavor >= TEST_COPY_VRAM_VRAM;
 
-      printf("-----------,--------,---,--,");
-      for (unsigned size = MIN_SIZE; size <= MAX_SIZE; size <<= SIZE_SHIFT)
-         printf("--------,");
-      printf("\n");
+      if (test_flavor)
+         puts("");
 
       for (unsigned method = 0; method < NUM_METHODS; method++) {
-         bool test_cp = method <= 2;
-         bool test_cs = method >= 3;
-         unsigned cs_method = method - 3;
-         unsigned cs_waves_per_sh =
-            test_cs ? cs_waves_per_sh_list[cs_method / (3 * NUM_SHADERS)] : 0;
-         cs_method %= 3 * NUM_SHADERS;
-         unsigned cache_policy =
-            test_cp ? method % 3 : test_cs ? (cs_method / NUM_SHADERS) : 0;
-         unsigned cs_dwords_per_thread =
-            test_cs ? cs_dwords_per_thread_list[cs_method % NUM_SHADERS] : 0;
+         for (unsigned align = 0; align < NUM_ALIGNMENTS; align++) {
+            unsigned dwords_per_thread, clear_value_size;
+            unsigned src_offset = align_info[align].src_offset;
+            unsigned dst_offset = align_info[align].dst_offset;
 
-         if (sctx->gfx_level == GFX6) {
-            /* GFX6 doesn't support CP DMA operations through L2. */
-            if (test_cp && cache_policy != L2_BYPASS)
+            /* offset > 0 && offset < 4 is the only case when the compute shader performs the same
+             * as offset=0 without any alignment optimizations, so shift the offset by 4 to get
+             * unaligned performance.
+             */
+            if (src_offset && src_offset < 4)
+               src_offset += 4;
+            if (dst_offset && dst_offset < 4)
+               dst_offset += 4;
+
+            if (!is_copy && dst_offset != src_offset)
                continue;
-            /* WAVES_PER_SH is in multiples of 16 on GFX6. */
-            if (test_cs && cs_waves_per_sh % 16 != 0)
-               continue;
-         }
 
-         /* SI_RESOURCE_FLAG_GL2_BYPASS setting RADEON_FLAG_GL2_BYPASS doesn't affect
-          * chips before gfx9.
-          */
-         if (test_cs && cache_policy && sctx->gfx_level < GFX9)
-            continue;
+            if (test_flavor == TEST_FILL_VRAM_12B || test_flavor == TEST_FILL_GTT_12B) {
+               if ((method != METHOD_DEFAULT && method != METHOD_COMPUTE_3DW &&
+                    method != METHOD_COMPUTE_4DW) || dst_offset % 4)
+                  continue;
 
-         printf("%s ,", placement_str[placement]);
-         if (test_cs) {
-            printf("CS x%-4u,%3s,", cs_dwords_per_thread,
-                   cache_policy == L2_LRU ? "LRU" : cache_policy == L2_STREAM ? "Str" : "");
-         } else {
-            printf("%s,%3s,", method_str[method],
-                   method == L2_LRU ? "LRU" : method == L2_STREAM ? "Str" : "");
-         }
-         if (test_cs && cs_waves_per_sh)
-            printf("%2u,", cs_waves_per_sh);
-         else
-            printf("  ,");
+               dwords_per_thread = method == METHOD_COMPUTE_3DW ? 3 : 4;
+               clear_value_size = 12;
+            } else {
+               if (method == METHOD_COMPUTE_3DW)
+                  continue;
 
-         void *compute_shader = NULL;
-         if (test_cs) {
-            compute_shader = si_create_dma_compute_shader(sctx, cs_dwords_per_thread,
-                                              cache_policy == L2_STREAM, is_copy);
-         }
-
-         double score = 0;
-         for (unsigned size = MIN_SIZE; size <= MAX_SIZE; size <<= SIZE_SHIFT) {
-            /* Don't test bigger sizes if it's too slow. Print 0. */
-            if (size >= 512 * 1024 && score < 400 * (size / (4 * 1024 * 1024))) {
-               printf("%7.0f ,", 0.0);
-               continue;
+               dwords_per_thread = method == METHOD_COMPUTE_2DW ? 2 : 4;
+               clear_value_size = dst_offset % 4 ? 1 : 4;
             }
 
-            enum pipe_resource_usage dst_usage, src_usage;
-            struct pipe_resource *dst, *src;
-            unsigned query_type = PIPE_QUERY_TIME_ELAPSED;
-            unsigned flags = cache_policy == L2_BYPASS ? SI_RESOURCE_FLAG_GL2_BYPASS : 0;
+            printf("%-14s, %-7s, %-11s,", test_strings[test_flavor], method_strings[method],
+                   align_info[align].string);
 
-            if (placement == 0 || placement == 2 || placement == 4)
-               dst_usage = PIPE_USAGE_DEFAULT;
-            else
-               dst_usage = PIPE_USAGE_STREAM;
+            for (unsigned size = MIN_SIZE; size <= MAX_SIZE; size <<= SIZE_SHIFT) {
+               struct pipe_resource *dst, *src;
+               enum pipe_resource_usage dst_usage = PIPE_USAGE_DEFAULT;
+               enum pipe_resource_usage src_usage = PIPE_USAGE_DEFAULT;
 
-            if (placement == 2 || placement == 3)
-               src_usage = PIPE_USAGE_DEFAULT;
-            else
-               src_usage = PIPE_USAGE_STREAM;
+               if (test_flavor == TEST_FILL_GTT || test_flavor == TEST_FILL_GTT_12B ||
+                   test_flavor == TEST_COPY_VRAM_GTT)
+                  dst_usage = PIPE_USAGE_STREAM;
 
-            dst = pipe_aligned_buffer_create(screen, flags, dst_usage, size, 256);
-            src = is_copy ? pipe_aligned_buffer_create(screen, flags, src_usage, size, 256) : NULL;
+               if (test_flavor == TEST_COPY_GTT_VRAM)
+                  src_usage = PIPE_USAGE_STREAM;
 
-            /* Wait for idle before testing, so that other processes don't mess up the results. */
-            sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH |
-                           SI_CONTEXT_FLUSH_AND_INV_CB |
-                           SI_CONTEXT_FLUSH_AND_INV_DB;
-            si_emit_cache_flush_direct(sctx);
+               /* Don't test large sizes with GTT because it's slow. */
+               if ((dst_usage == PIPE_USAGE_STREAM || src_usage == PIPE_USAGE_STREAM) &&
+                   size > 32 * 1024 * 1024) {
+                  printf("%8s,", "n/a");
+                  continue;
+               }
 
-            struct pipe_query *q = ctx->create_query(ctx, query_type, 0);
-            ctx->begin_query(ctx, q);
+               dst = pipe_aligned_buffer_create(screen, 0, dst_usage, dst_offset + size, 256);
+               src = is_copy ? pipe_aligned_buffer_create(screen, 0, src_usage, src_offset + size, 256) : NULL;
 
-            /* Run tests. */
-            for (unsigned iter = 0; iter < NUM_RUNS; iter++) {
-               if (test_cp) {
-                  /* CP DMA */
-                  if (is_copy) {
-                     si_cp_dma_copy_buffer(sctx, dst, src, 0, 0, size, SI_OP_SYNC_BEFORE_AFTER,
-                                           SI_COHERENCY_NONE, cache_policy);
+               struct pipe_query *q = ctx->create_query(ctx, PIPE_QUERY_TIME_ELAPSED, 0);
+               bool success = true;
+
+               /* Run tests. */
+               for (unsigned iter = 0; iter < WARMUP_RUNS + NUM_RUNS; iter++) {
+                  const uint32_t clear_value[4] = {0x12345678, 0x23456789, 0x34567890, 0x45678901};
+
+                  if (iter == WARMUP_RUNS)
+                     ctx->begin_query(ctx, q);
+
+                  if (method == METHOD_DEFAULT) {
+                     if (is_copy) {
+                        si_copy_buffer(sctx, dst, src, dst_offset, src_offset, size,
+                                       SI_OP_SYNC_BEFORE_AFTER);
+                     } else {
+                        sctx->b.clear_buffer(&sctx->b, dst, dst_offset, size, &clear_value,
+                                             clear_value_size);
+                     }
+                  } else if (method == METHOD_CP_DMA) {
+                     /* CP DMA */
+                     if (is_copy) {
+                        si_cp_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset, size,
+                                              SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_SHADER, L2_LRU);
+                     } else {
+                        /* CP DMA clears must be aligned to 4 bytes. */
+                        if (dst_offset % 4 || size % 4) {
+                           success = false;
+                           continue;
+                        }
+                        assert(clear_value_size == 4);
+                        si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, dst_offset, size,
+                                               clear_value[0], SI_OP_SYNC_BEFORE_AFTER,
+                                               SI_COHERENCY_SHADER, L2_LRU);
+                     }
                   } else {
-                     si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, 0, size, clear_value,
-                                            SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_NONE,
-                                            cache_policy);
-                  }
-               } else {
-                  /* Compute */
-                  /* The memory accesses are coalesced, meaning that the 1st instruction writes
-                   * the 1st contiguous block of data for the whole wave, the 2nd instruction
-                   * writes the 2nd contiguous block of data, etc.
-                   */
-                  unsigned instructions_per_thread = MAX2(1, cs_dwords_per_thread / 4);
-                  unsigned dwords_per_instruction = cs_dwords_per_thread / instructions_per_thread;
-                  unsigned dwords_per_wave = cs_dwords_per_thread * 64;
-
-                  unsigned num_dwords = size / 4;
-                  unsigned num_instructions = DIV_ROUND_UP(num_dwords, dwords_per_instruction);
-
-                  struct pipe_grid_info info = {};
-                  info.block[0] = MIN2(64, num_instructions);
-                  info.block[1] = 1;
-                  info.block[2] = 1;
-                  info.grid[0] = DIV_ROUND_UP(num_dwords, dwords_per_wave);
-                  info.grid[1] = 1;
-                  info.grid[2] = 1;
-
-                  struct pipe_shader_buffer sb[2] = {};
-                  sb[0].buffer = dst;
-                  sb[0].buffer_size = size;
-
-                  if (is_copy) {
-                     sb[1].buffer = src;
-                     sb[1].buffer_size = size;
-                  } else {
-                     for (unsigned i = 0; i < 4; i++)
-                        sctx->cs_user_data[i] = clear_value;
+                     /* Compute */
+                     success &=
+                        si_compute_clear_copy_buffer(sctx, dst, dst_offset, src, src_offset,
+                                                     size, clear_value, clear_value_size,
+                                                     SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_SHADER,
+                                                     dwords_per_thread, false);
                   }
 
-                  ctx->set_shader_buffers(ctx, PIPE_SHADER_COMPUTE, 0, is_copy ? 2 : 1, sb, 0x1);
-                  ctx->bind_compute_state(ctx, compute_shader);
-                  sctx->cs_max_waves_per_sh = cs_waves_per_sh;
-
-                  ctx->launch_grid(ctx, &info);
-
-                  ctx->bind_compute_state(ctx, NULL);
-                  sctx->cs_max_waves_per_sh = 0; /* disable the limit */
+                  sctx->flags |= SI_CONTEXT_INV_L2;
                }
 
-               /* Flush L2, so that we don't just test L2 cache performance except for L2_LRU. */
-               sctx->flags |= SI_CONTEXT_INV_VCACHE |
-                              (cache_policy == L2_LRU ? 0 : SI_CONTEXT_INV_L2) |
-                              SI_CONTEXT_CS_PARTIAL_FLUSH;
-               si_emit_cache_flush_direct(sctx);
-            }
+               ctx->end_query(ctx, q);
 
-            ctx->end_query(ctx, q);
-            ctx->flush(ctx, NULL, PIPE_FLUSH_ASYNC);
+               pipe_resource_reference(&dst, NULL);
+               pipe_resource_reference(&src, NULL);
 
-            pipe_resource_reference(&dst, NULL);
-            pipe_resource_reference(&src, NULL);
+               /* Get results. */
+               union pipe_query_result result;
 
-            /* Get results. */
+               ctx->get_query_result(ctx, q, true, &result);
+               ctx->destroy_query(ctx, q);
 
-            union pipe_query_result result;
-
-            ctx->get_query_result(ctx, q, true, &result);
-            ctx->destroy_query(ctx, q);
-
-            score = get_MBps_rate(size, result.u64 / (double)NUM_RUNS);
-            printf("%7.0f ,", score);
-            fflush(stdout);
-
-            struct si_result *r = &results[util_logbase2(size)][placement][method];
-            r->is_valid = true;
-            r->is_cp = test_cp;
-            r->is_cs = test_cs;
-            r->cache_policy = cache_policy;
-            r->dwords_per_thread = cs_dwords_per_thread;
-            r->waves_per_sh = cs_waves_per_sh;
-            r->score = score;
-            r->index = method;
-         }
-         puts("");
-
-         if (compute_shader)
-            ctx->delete_compute_state(ctx, compute_shader);
-      }
-   }
-
-   puts("");
-   puts("static struct si_method");
-   printf("get_best_clear_for_%s(enum radeon_bo_domain dst, uint64_t size64, bool async, bool "
-          "cached)\n",
-          sctx->screen->info.name);
-   puts("{");
-   puts("   unsigned size = MIN2(size64, UINT_MAX);\n");
-
-   /* Analyze results and find the best methods. */
-   for (unsigned placement = 0; placement < ARRAY_SIZE(placement_str); placement++) {
-      if (placement == 0)
-         puts("   if (dst == RADEON_DOMAIN_VRAM) {");
-      else if (placement == 1)
-         puts("   } else { /* GTT */");
-      else if (placement == 2) {
-         puts("}");
-         puts("");
-         puts("static struct si_method");
-         printf("get_best_copy_for_%s(enum radeon_bo_domain dst, enum radeon_bo_domain src,\n",
-                sctx->screen->info.name);
-         printf("                     uint64_t size64, bool async, bool cached)\n");
-         puts("{");
-         puts("   unsigned size = MIN2(size64, UINT_MAX);\n");
-         puts("   if (src == RADEON_DOMAIN_VRAM && dst == RADEON_DOMAIN_VRAM) {");
-      } else if (placement == 3)
-         puts("   } else if (src == RADEON_DOMAIN_VRAM && dst == RADEON_DOMAIN_GTT) {");
-      else
-         puts("   } else { /* GTT -> VRAM */");
-
-      for (unsigned mode = 0; mode < 3; mode++) {
-         bool async = mode == 0;
-         bool cached = mode == 1;
-
-         if (async)
-            puts("      if (async) { /* async compute */");
-         else if (cached)
-            puts("      if (cached) { /* gfx ring */");
-         else
-            puts("      } else { /* gfx ring - uncached */");
-
-         /* The list of best chosen methods. */
-         struct si_result *methods[32];
-         unsigned method_max_size[32];
-         unsigned num_methods = 0;
-
-         for (unsigned size = MIN_SIZE; size <= MAX_SIZE; size <<= SIZE_SHIFT) {
-            /* Find the best method. */
-            struct si_result *best = NULL;
-
-            for (unsigned i = 0; i < NUM_METHODS; i++) {
-               struct si_result *r = &results[util_logbase2(size)][placement][i];
-
-               if (!r->is_valid)
-                  continue;
-
-               /* Ban CP DMA clears via MC on <= GFX8. They are super slow
-                * on GTT, which we can get due to BO evictions.
-                */
-               if (sctx->gfx_level <= GFX8 && placement == 1 && r->is_cp &&
-                   r->cache_policy == L2_BYPASS)
-                  continue;
-
-               if (async) {
-                  /* The following constraints for compute IBs try to limit
-                   * resource usage so as not to decrease the performance
-                   * of gfx IBs too much.
-                   */
-
-                  /* Don't use CP DMA on asynchronous rings, because
-                   * the engine is shared with gfx IBs.
-                   */
-                  if (r->is_cp)
-                     continue;
-
-                  /* Don't use L2 caching on asynchronous rings to minimize
-                   * L2 usage.
-                   */
-                  if (r->cache_policy == L2_LRU)
-                     continue;
-
-                  /* Asynchronous compute recommends waves_per_sh != 0
-                   * to limit CU usage. */
-                  if (r->is_cs && r->waves_per_sh == 0)
-                     continue;
+               if (success) {
+                  double GB = 1024.0 * 1024.0 * 1024.0;
+                  double seconds = result.u64 / (double)NUM_RUNS / (1000.0 * 1000.0 * 1000.0);
+                  double GBps = (size / GB) / seconds * (test_flavor == TEST_COPY_VRAM_VRAM ? 2 : 1);
+                  printf("%8.2f,", GBps);
                } else {
-                  if (cached && r->cache_policy == L2_BYPASS)
-                     continue;
-                  if (!cached && r->cache_policy == L2_LRU)
-                     continue;
-               }
-
-               if (!best) {
-                  best = r;
-                  continue;
-               }
-
-               /* Assume some measurement error. Earlier methods occupy fewer
-                * resources, so the next method is always more greedy, and we
-                * don't want to select it due to a measurement error.
-                */
-               double min_improvement = 1.03;
-
-               if (best->score * min_improvement < r->score)
-                  best = r;
-            }
-
-            if (num_methods > 0) {
-               unsigned prev_index = num_methods - 1;
-               struct si_result *prev = methods[prev_index];
-               struct si_result *prev_this_size =
-                  &results[util_logbase2(size)][placement][prev->index];
-
-               /* If the best one is also the best for the previous size,
-                * just bump the size for the previous one.
-                *
-                * If there is no best, it means all methods were too slow
-                * for this size and were not tested. Use the best one for
-                * the previous size.
-                */
-               if (!best ||
-                   /* If it's the same method as for the previous size: */
-                   (prev->is_cp == best->is_cp &&
-                    prev->is_cs == best->is_cs && prev->cache_policy == best->cache_policy &&
-                    prev->dwords_per_thread == best->dwords_per_thread &&
-                    prev->waves_per_sh == best->waves_per_sh) ||
-                   /* If the method for the previous size is also the best
-                    * for this size: */
-                   (prev_this_size->is_valid && prev_this_size->score * 1.03 > best->score)) {
-                  method_max_size[prev_index] = size;
-                  continue;
+                  printf("%8s,", "n/a");
                }
             }
-
-            /* Add it to the list. */
-            assert(num_methods < ARRAY_SIZE(methods));
-            methods[num_methods] = best;
-            method_max_size[num_methods] = size;
-            num_methods++;
-         }
-
-         for (unsigned i = 0; i < num_methods; i++) {
-            struct si_result *best = methods[i];
-            unsigned size = method_max_size[i];
-
-            /* The size threshold is between the current benchmarked
-             * size and the next benchmarked size. */
-            if (i < num_methods - 1)
-               printf("         if (size <= %9u) ", (size + (size << SIZE_SHIFT)) / 2);
-            else if (i > 0)
-               printf("         else                   ");
-            else
-               printf("         ");
-            printf("return ");
-
-            assert(best);
-            const char *cache_policy_str =
-               best->cache_policy == L2_BYPASS ? "L2_BYPASS" :
-               best->cache_policy == L2_LRU ? "L2_LRU   " : "L2_STREAM";
-
-            if (best->is_cp) {
-               printf("CP_DMA(%s);\n", cache_policy_str);
-            }
-            if (best->is_cs) {
-               printf("COMPUTE(%s, %u, %u);\n", cache_policy_str,
-                      best->dwords_per_thread, best->waves_per_sh);
-            }
+            puts("");
          }
       }
-      puts("      }");
    }
-   puts("   }");
-   puts("}");
 
    ctx->destroy(ctx);
+   exit(0);
+}
+
+void
+si_test_mem_perf(struct si_screen *sscreen)
+{
+   struct radeon_winsys *ws = sscreen->ws;
+   const size_t buffer_size = 16 * 1024 * 1024;
+   const enum radeon_bo_domain domains[] = { 0, RADEON_DOMAIN_VRAM, RADEON_DOMAIN_GTT };
+   const uint64_t flags[] = { 0, RADEON_FLAG_GTT_WC };
+   const int n_loops = 2;
+   char *title[] = { "Write To", "Read From", "Stream From" };
+   char *domain_str[] = { "RAM", "VRAM", "GTT" };
+
+   for (int i = 0; i < 3; i++) {
+      printf("| %12s", title[i]);
+
+      printf(" | Size (kB) | Flags |");
+      for (int l = 0; l < n_loops; l++)
+          printf(" Run %d (MB/s) |", l + 1);
+      printf("\n");
+
+      printf("|--------------|-----------|-------|");
+      for (int l = 0; l < n_loops; l++)
+          printf("--------------|");
+      printf("\n");
+      for (int j = 0; j < ARRAY_SIZE(domains); j++) {
+         enum radeon_bo_domain domain = domains[j];
+         for (int k = 0; k < ARRAY_SIZE(flags); k++) {
+            if (k && domain != RADEON_DOMAIN_GTT)
+               continue;
+
+            struct pb_buffer_lean *bo = NULL;
+            void *ptr = NULL;
+
+            if (domains[j]) {
+               bo = ws->buffer_create(ws, buffer_size, 4096, domains[j],
+                                      RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_NO_SUBALLOC |
+                                      flags[k]);
+               if (!bo)
+                  continue;
+
+               ptr = ws->buffer_map(ws, bo, NULL, RADEON_MAP_TEMPORARY | (i ? PIPE_MAP_READ : PIPE_MAP_WRITE));
+               if (!ptr) {
+                  radeon_bo_reference(ws, &bo, NULL);
+                  continue;
+               }
+            } else {
+               ptr = malloc(buffer_size);
+            }
+
+            printf("| %12s |", domain_str[j]);
+
+            printf("%10zu |", buffer_size / 1024);
+
+            printf(" %5s |", domain == RADEON_DOMAIN_VRAM ? "(WC)" : (k == 0 ? "" : "WC "));
+
+            int *cpu = calloc(1, buffer_size);
+            memset(cpu, 'c', buffer_size);
+            fflush(stdout);
+
+            int64_t before, after;
+
+            for (int loop = 0; loop < n_loops; loop++) {
+               before = os_time_get_nano();
+
+               switch (i) {
+               case 0:
+                  memcpy(ptr, cpu, buffer_size);
+                  break;
+               case 1:
+                  memcpy(cpu, ptr, buffer_size);
+                  break;
+               case 2:
+               default:
+                  util_streaming_load_memcpy(cpu, ptr, buffer_size);
+                  break;
+               }
+
+               after = os_time_get_nano();
+
+               /* Pretend to do something with the result to make sure it's
+                * not skipped.
+                */
+               if (debug_get_num_option("AMD_DEBUG", 0) == 0x123)
+                   assert(memcmp(ptr, cpu, buffer_size));
+
+               float dt = (after - before) / (1000000000.0);
+               float bandwidth = (buffer_size / (1024 * 1024)) / dt;
+
+               printf("%13.3f |", bandwidth);
+            }
+            printf("\n");
+
+            free(cpu);
+            if (bo) {
+               ws->buffer_unmap(ws, bo);
+               radeon_bo_reference(ws, &bo, NULL);
+            } else {
+               free(ptr);
+            }
+         }
+      }
+      printf("\n");
+   }
+
+
    exit(0);
 }

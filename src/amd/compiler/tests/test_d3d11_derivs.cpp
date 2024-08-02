@@ -114,12 +114,10 @@ BEGIN_TEST(d3d11_derivs.discard)
    PipelineBuilder pbld(get_vk_device(GFX10_3));
    pbld.add_vsfs(vs, fs);
 
-   /* The interpolation must be done before the discard_if. */
-   //>> lv2: %wqm = p_start_linear_vgpr (kill)%_, (kill)%_
-   //>> s2: %_:exec, s1: (kill)%_:scc = s_andn2_b64 %_:exec, %_
-   //>> s2: %_, s1: %_:scc = s_andn2_b64 (kill)%_, (kill)%_
-   //>> p_exit_early_if (kill)%_:scc
-   //>> v4: %_ = image_sample (kill)%_, (kill)%_, v1: undef, (latekill)(kill)%wqm 2d
+   /* The discard gets emitted as demote_if. */
+   //>> s2: %_:exec,  s1: %cond:scc = s_wqm_b64 %_
+   //>> p_exit_early_if (kill)%cond:scc
+   //>> v4: %_ = image_sample (kill)%_, (kill)%_, v1: undef, (kill)%_, (kill)%_ 2d
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 END_TEST
 
@@ -429,8 +427,7 @@ BEGIN_TEST(d3d11_derivs.cube)
    //>> v_mov_b32_e32 v#rf, v#rf_tmp                                                         ; $_
    //>> v_fmaak_f32 v#rx_tmp, v#_, v#_, 0x3fc00000                                           ; $_ $_
    //>> v_fmaak_f32 v#ry_tmp, v#_, v#_, 0x3fc00000                                           ; $_ $_
-   //>> v_mov_b32_e32 v#ry, v#ry_tmp                                                         ; $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                         ; $_
+   //>> v_lshrrev_b64 v[#rx:#ry], 0, v[#rx_tmp:#ry_tmp]                                      ; $_ $_
    //; success = rx+1 == ry and rx+2 == rf
    //>> image_sample v[#_:#_], v[#rx:#rf], s[#_:#_], s[#_:#_] dmask:0xf dim:SQ_RSRC_IMG_CUBE ; $_ $_
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "Assembly");
@@ -477,9 +474,8 @@ BEGIN_TEST(d3d11_derivs.cube_array)
 
    //>> v_fmaak_f32 v#rx_tmp, v#_, v#_, 0x3fc00000                                            ; $_ $_
    //>> v_fmaak_f32 v#ry_tmp, v#_, v#_, 0x3fc00000                                            ; $_ $_
-   //>> v_mov_b32_e32 v#ry, v#ry_tmp                                                          ; $_
    //>> v_fmamk_f32 v#rlf_tmp, v#rl, 0x41000000, v#rf                                         ; $_ $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                          ; $_
+   //>> v_lshrrev_b64 v[#rx:#ry], 0, v[#rx_tmp:#ry_tmp]                                       ; $_ $_
    //>> v_mov_b32_e32 v#rlf, v#rlf_tmp                                                        ; $_
 
    //>> BB1:
@@ -606,22 +602,24 @@ BEGIN_TEST(d3d11_derivs.nsa_max)
       PhysReg reg_v6{256 + 6};
       PhysReg reg_v7{256 + 7};
       PhysReg reg_v8{256 + 8};
+      PhysReg reg_s0{0};
+      PhysReg reg_s8{8};
 
       //>> p_unit_test 0
       bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
 
       //~gfx10! v2: %_:v[0-1] = v_lshrrev_b64 0, %_:v[6-7]
       //~gfx10! v1: %_:v[2] = v_mov_b32 %_:v[8]
-      //~gfx10! v4: %_:v[0-3] = image_sample_c_b_o  s8: undef,  s4: undef,  v1: undef, %_:v[0-5] 2darray da
+      //~gfx10! v4: %_:v[0-3] = image_sample_c_b_o  %0:s[0-7], %0:s[8-11],  v1: undef, %_:v[0-5] 2darray da
 
-      //~gfx10_3! v4: %_:v[0-3] = image_sample_c_b_o  s8: undef,  s4: undef,  v1: undef, %_:v[6], %_:v[7], %_:v[8], %_:v[3], %_:v[4], %_:v[5] 2darray da
+      //~gfx10_3! v4: %_:v[0-3] = image_sample_c_b_o  %0:s[0-7], %0:s[8-11],  v1: undef, %_:v[6], %_:v[7], %_:v[8], %_:v[3], %_:v[4], %_:v[5] 2darray da
 
-      //~gfx11! v4: %_:v[0-3] = image_sample_c_b_o  s8: undef,  s4: undef,  v1: undef, %_:v[6], %_:v[7], %_:v[8], %_:v[3], %_:v[4-5] 2darray da
+      //~gfx11! v4: %_:v[0-3] = image_sample_c_b_o  %0:s[0-7], %0:s[8-11],  v1: undef, %_:v[6], %_:v[7], %_:v[8], %_:v[3], %_:v[4-5] 2darray da
 
       Instruction* instr =
-         bld.mimg(aco_opcode::image_sample_c_b_o, Definition(reg_v0, v4), Operand(s8), Operand(s4),
-                  Operand(v1), Operand(reg_v0, v6.as_linear()), Operand(reg_v6, v1),
-                  Operand(reg_v7, v1), Operand(reg_v8, v1));
+         bld.mimg(aco_opcode::image_sample_c_b_o, Definition(reg_v0, v4), Operand(reg_s0, s8),
+                  Operand(reg_s8, s4), Operand(v1), Operand(reg_v0, v6.as_linear()),
+                  Operand(reg_v6, v1), Operand(reg_v7, v1), Operand(reg_v8, v1));
       instr->mimg().dim = ac_image_2darray;
       instr->mimg().da = true;
       instr->mimg().strict_wqm = true;

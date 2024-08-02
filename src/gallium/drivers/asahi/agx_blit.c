@@ -391,7 +391,7 @@ agx_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
    agx_flush_writer(ctx, agx_resource(info->dst.resource), "Blit");
 
    agx_blitter_save(ctx, ctx->blitter, info->render_condition_enable);
-   util_blitter_blit(ctx->blitter, info);
+   util_blitter_blit(ctx->blitter, info, NULL);
 }
 
 static bool

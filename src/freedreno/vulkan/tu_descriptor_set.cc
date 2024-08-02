@@ -21,10 +21,14 @@
 
 #include <fcntl.h>
 
+#include "vulkan/vulkan_android.h"
+
 #include "util/mesa-sha1.h"
 #include "vk_descriptors.h"
 #include "vk_util.h"
 
+#include "tu_buffer.h"
+#include "tu_buffer_view.h"
 #include "tu_device.h"
 #include "tu_image.h"
 #include "tu_formats.h"
@@ -59,14 +63,14 @@ descriptor_size(struct tu_device *dev,
       return A6XX_TEX_CONST_DWORDS * 4 * 2;
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-      /* When we support 16-bit storage, we need an extra descriptor setup as
-       * a 32-bit array for isam to work.
+      /* isam.v allows using a single 16-bit descriptor for both 16-bit and
+       * 32-bit loads. If not available but 16-bit storage is still supported,
+       * two separate descriptors are required.
        */
-      if (dev->physical_device->info->a6xx.storage_16bit) {
-         return A6XX_TEX_CONST_DWORDS * 4 * 2;
-      } else {
-         return A6XX_TEX_CONST_DWORDS * 4;
-      }
+      return A6XX_TEX_CONST_DWORDS * 4 * (1 +
+         COND(dev->physical_device->info->a6xx.storage_16bit &&
+              !dev->physical_device->info->a6xx.has_isam_v, 1) +
+         COND(dev->physical_device->info->a7xx.storage_8bit, 1));
    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
       return binding->descriptorCount;
    default:
@@ -141,7 +145,7 @@ tu_CreateDescriptorSetLayout(
 
          bool has_ycbcr_sampler = false;
          for (unsigned i = 0; i < pCreateInfo->pBindings[j].descriptorCount; ++i) {
-            if (tu_sampler_from_handle(pCreateInfo->pBindings[j].pImmutableSamplers[i])->ycbcr_sampler)
+            if (tu_sampler_from_handle(pCreateInfo->pBindings[j].pImmutableSamplers[i])->vk.ycbcr_conversion)
                has_ycbcr_sampler = true;
          }
 
@@ -157,7 +161,7 @@ tu_CreateDescriptorSetLayout(
     * but using struct tu_sampler makes things simpler */
    uint32_t size = samplers_offset +
       immutable_sampler_count * sizeof(struct tu_sampler) +
-      ycbcr_sampler_count * sizeof(struct tu_sampler_ycbcr_conversion);
+      ycbcr_sampler_count * sizeof(struct vk_ycbcr_conversion);
 
    set_layout =
       (struct tu_descriptor_set_layout *) vk_descriptor_set_layout_zalloc(
@@ -171,8 +175,8 @@ tu_CreateDescriptorSetLayout(
    /* We just allocate all the immutable samplers at the end of the struct */
    struct tu_sampler *samplers =
       (struct tu_sampler *) &set_layout->binding[num_bindings];
-   struct tu_sampler_ycbcr_conversion *ycbcr_samplers =
-      (struct tu_sampler_ycbcr_conversion *) &samplers[immutable_sampler_count];
+   struct vk_ycbcr_conversion_state *ycbcr_samplers =
+      (struct vk_ycbcr_conversion_state *) &samplers[immutable_sampler_count];
 
    VkDescriptorSetLayoutBinding *bindings = NULL;
    VkResult result = vk_create_sorted_bindings(
@@ -240,7 +244,7 @@ tu_CreateDescriptorSetLayout(
 
          bool has_ycbcr_sampler = false;
          for (unsigned i = 0; i < pCreateInfo->pBindings[j].descriptorCount; ++i) {
-            if (tu_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler)
+            if (tu_sampler_from_handle(binding->pImmutableSamplers[i])->vk.ycbcr_conversion)
                has_ycbcr_sampler = true;
          }
 
@@ -249,8 +253,8 @@ tu_CreateDescriptorSetLayout(
                (const char*)ycbcr_samplers - (const char*)set_layout;
             for (uint32_t i = 0; i < binding->descriptorCount; i++) {
                struct tu_sampler *sampler = tu_sampler_from_handle(binding->pImmutableSamplers[i]);
-               if (sampler->ycbcr_sampler)
-                  ycbcr_samplers[i] = *sampler->ycbcr_sampler;
+               if (sampler->vk.ycbcr_conversion)
+                  ycbcr_samplers[i] = sampler->vk.ycbcr_conversion->state;
                else
                   ycbcr_samplers[i].ycbcr_model = VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY;
             }
@@ -287,7 +291,7 @@ tu_CreateDescriptorSetLayout(
          return vk_error(device, result);
       }
 
-      result = tu_bo_map(device, set_layout->embedded_samplers);
+      result = tu_bo_map(device, set_layout->embedded_samplers, NULL);
       if (result != VK_SUCCESS) {
          tu_bo_finish(device, set_layout->embedded_samplers);
          vk_object_free(&device->vk, pAllocator, set_layout);
@@ -443,7 +447,7 @@ tu_GetDescriptorSetLayoutBindingOffsetEXT(
 
 static void
 sha1_update_ycbcr_sampler(struct mesa_sha1 *ctx,
-                          const struct tu_sampler_ycbcr_conversion *sampler)
+                          const struct vk_ycbcr_conversion_state *sampler)
 {
    SHA1_UPDATE_VALUE(ctx, sampler->ycbcr_model);
    SHA1_UPDATE_VALUE(ctx, sampler->ycbcr_range);
@@ -462,7 +466,7 @@ sha1_update_descriptor_set_binding_layout(struct mesa_sha1 *ctx,
    SHA1_UPDATE_VALUE(ctx, layout->dynamic_offset_offset);
    SHA1_UPDATE_VALUE(ctx, layout->immutable_samplers_offset);
 
-   const struct tu_sampler_ycbcr_conversion *ycbcr_samplers =
+   const struct vk_ycbcr_conversion_state *ycbcr_samplers =
       tu_immutable_ycbcr_samplers(set_layout, layout);
 
    if (ycbcr_samplers) {
@@ -805,7 +809,7 @@ tu_CreateDescriptorPool(VkDevice _device,
          if (ret)
             goto fail_alloc;
 
-         ret = tu_bo_map(device, pool->bo);
+         ret = tu_bo_map(device, pool->bo, NULL);
          if (ret)
             goto fail_map;
       } else {
@@ -1008,45 +1012,68 @@ write_buffer_descriptor_addr(const struct tu_device *device,
                              uint32_t *dst,
                              const VkDescriptorAddressInfoEXT *buffer_info)
 {
-   bool storage_16bit = device->physical_device->info->a6xx.storage_16bit;
-   /* newer a6xx allows using 16-bit descriptor for both 16-bit and 32-bit
-    * access, but we need to keep a 32-bit descriptor for readonly access via
-    * isam.
+   const struct fd_dev_info *info = device->physical_device->info;
+   /* This prevents any misconfiguration, but 16-bit descriptor capable of both
+    * 16-bit and 32-bit access through isam.v will of course only be functional
+    * when 16-bit storage is supported. */
+   assert(!info->a6xx.has_isam_v || info->a6xx.storage_16bit);
+   /* Any configuration enabling 8-bit storage support will also provide 16-bit
+    * storage support and 16-bit descriptors capable of 32-bit isam loads. This
+    * indirectly ensures we won't need more than two descriptors for access of
+    * any size.
     */
-   unsigned descriptors = storage_16bit ? 2 : 1;
+   assert(!info->a7xx.storage_8bit || (info->a6xx.storage_16bit &&
+                                       info->a6xx.has_isam_v));
 
-   if (!buffer_info || buffer_info->address == 0) {
-      memset(dst, 0, descriptors * A6XX_TEX_CONST_DWORDS * sizeof(uint32_t));
+   unsigned num_descriptors = 1 +
+      COND(info->a6xx.storage_16bit && !info->a6xx.has_isam_v, 1) +
+      COND(info->a7xx.storage_8bit, 1);
+   memset(dst, 0, num_descriptors * A6XX_TEX_CONST_DWORDS * sizeof(uint32_t));
+
+   if (!buffer_info || buffer_info->address == 0)
       return;
-   }
 
    uint64_t va = buffer_info->address;
    uint64_t base_va = va & ~0x3full;
    unsigned offset = va & 0x3f;
    uint32_t range = buffer_info->range;
 
-   for (unsigned i = 0; i < descriptors; i++) {
-      if (storage_16bit && i == 0) {
-         dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_16_UINT);
-         dst[1] = DIV_ROUND_UP(range, 2);
-         dst[2] =
-            A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
-            A6XX_TEX_CONST_2_STARTOFFSETTEXELS(offset / 2) |
-            A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
-      } else {
-         dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_32_UINT);
-         dst[1] = DIV_ROUND_UP(range, 4);
-         dst[2] =
-            A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
-            A6XX_TEX_CONST_2_STARTOFFSETTEXELS(offset / 4) |
-            A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
-      }
-      dst[3] = 0;
+   if (info->a6xx.storage_16bit) {
+      dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_16_UINT);
+      dst[1] = DIV_ROUND_UP(range, 2);
+      dst[2] =
+         A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
+         A6XX_TEX_CONST_2_STARTOFFSETTEXELS(offset / 2) |
+         A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
       dst[4] = A6XX_TEX_CONST_4_BASE_LO(base_va);
       dst[5] = A6XX_TEX_CONST_5_BASE_HI(base_va >> 32);
-      for (int j = 6; j < A6XX_TEX_CONST_DWORDS; j++)
-         dst[j] = 0;
       dst += A6XX_TEX_CONST_DWORDS;
+   }
+
+   /* Set up the 32-bit descriptor when 16-bit storage isn't supported or the
+    * 16-bit descriptor cannot be used for 32-bit loads through isam.v.
+    */
+   if (!info->a6xx.storage_16bit || !info->a6xx.has_isam_v) {
+      dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_32_UINT);
+      dst[1] = DIV_ROUND_UP(range, 4);
+      dst[2] =
+         A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
+         A6XX_TEX_CONST_2_STARTOFFSETTEXELS(offset / 4) |
+         A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
+      dst[4] = A6XX_TEX_CONST_4_BASE_LO(base_va);
+      dst[5] = A6XX_TEX_CONST_5_BASE_HI(base_va >> 32);
+      dst += A6XX_TEX_CONST_DWORDS;
+   }
+
+   if (info->a7xx.storage_8bit) {
+      dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_8_UINT);
+      dst[1] = range;
+      dst[2] =
+         A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
+         A6XX_TEX_CONST_2_STARTOFFSETTEXELS(offset) |
+         A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
+      dst[4] = A6XX_TEX_CONST_4_BASE_LO(base_va);
+      dst[5] = A6XX_TEX_CONST_5_BASE_HI(base_va >> 32);
    }
 }
 
@@ -1650,46 +1677,4 @@ tu_UpdateDescriptorSetWithTemplate(
    VK_FROM_HANDLE(tu_descriptor_set, set, descriptorSet);
 
    tu_update_descriptor_set_with_template(device, set, descriptorUpdateTemplate, pData);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-tu_CreateSamplerYcbcrConversion(
-   VkDevice _device,
-   const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,
-   const VkAllocationCallbacks *pAllocator,
-   VkSamplerYcbcrConversion *pYcbcrConversion)
-{
-   VK_FROM_HANDLE(tu_device, device, _device);
-   struct tu_sampler_ycbcr_conversion *conversion;
-
-   conversion = (struct tu_sampler_ycbcr_conversion *) vk_object_alloc(
-      &device->vk, pAllocator, sizeof(*conversion),
-      VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION);
-   if (!conversion)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   conversion->format = pCreateInfo->format;
-   conversion->ycbcr_model = pCreateInfo->ycbcrModel;
-   conversion->ycbcr_range = pCreateInfo->ycbcrRange;
-   conversion->components = pCreateInfo->components;
-   conversion->chroma_offsets[0] = pCreateInfo->xChromaOffset;
-   conversion->chroma_offsets[1] = pCreateInfo->yChromaOffset;
-   conversion->chroma_filter = pCreateInfo->chromaFilter;
-
-   *pYcbcrConversion = tu_sampler_ycbcr_conversion_to_handle(conversion);
-   return VK_SUCCESS;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-tu_DestroySamplerYcbcrConversion(VkDevice _device,
-                                 VkSamplerYcbcrConversion ycbcrConversion,
-                                 const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(tu_device, device, _device);
-   VK_FROM_HANDLE(tu_sampler_ycbcr_conversion, ycbcr_conversion, ycbcrConversion);
-
-   if (!ycbcr_conversion)
-      return;
-
-   vk_object_free(&device->vk, pAllocator, ycbcr_conversion);
 }

@@ -150,25 +150,21 @@ private:
 
 nir_shader *
 glsl_to_nir(const struct gl_constants *consts,
-            const struct gl_shader_program *shader_prog,
-            gl_shader_stage stage,
+            struct exec_list **ir, shader_info *si, gl_shader_stage stage,
             const nir_shader_compiler_options *options)
 {
-   struct gl_linked_shader *sh = shader_prog->_LinkedShaders[stage];
-
    MESA_TRACE_FUNC();
 
-   nir_shader *shader = nir_shader_create(NULL, stage, options,
-                                          &sh->Program->info);
+   nir_shader *shader = nir_shader_create(NULL, stage, options, si);
 
    nir_visitor v1(consts, shader);
    nir_function_visitor v2(&v1);
-   v2.run(sh->ir);
-   visit_exec_list(sh->ir, &v1);
+   v2.run(*ir);
+   visit_exec_list(*ir, &v1);
 
    /* The GLSL IR won't be needed anymore. */
-   ralloc_free(sh->ir);
-   sh->ir = NULL;
+   ralloc_free(*ir);
+   *ir = NULL;
 
    nir_validate_shader(shader, "after glsl to nir, before function inline");
    if (should_print_nir(shader)) {
@@ -176,17 +172,7 @@ glsl_to_nir(const struct gl_constants *consts,
       nir_print_shader(shader, stdout);
    }
 
-   shader->info.name = ralloc_asprintf(shader, "GLSL%d", shader_prog->Name);
-   if (shader_prog->Label)
-      shader->info.label = ralloc_strdup(shader, shader_prog->Label);
-
    shader->info.subgroup_size = SUBGROUP_SIZE_UNIFORM;
-
-   if (shader->info.stage == MESA_SHADER_FRAGMENT) {
-      shader->info.fs.pixel_center_integer = sh->Program->info.fs.pixel_center_integer;
-      shader->info.fs.origin_upper_left = sh->Program->info.fs.origin_upper_left;
-      shader->info.fs.advanced_blend_modes = sh->Program->info.fs.advanced_blend_modes;
-   }
 
    return shader;
 }
@@ -515,28 +501,16 @@ nir_visitor::visit(ir_variable *ir)
 
    var->interface_type = ir->get_interface_type();
 
-   /* For UBO and SSBO variables, we need explicit types */
    if (var->data.mode & (nir_var_mem_ubo | nir_var_mem_ssbo)) {
-      const glsl_type *explicit_ifc_type =
-         glsl_get_explicit_interface_type(ir->get_interface_type(), supports_std430);
-
-      var->interface_type = explicit_ifc_type;
-
-      if (glsl_type_is_interface(glsl_without_array(ir->type))) {
-         /* If the type contains the interface, wrap the explicit type in the
-          * right number of arrays.
-          */
-         var->type = glsl_type_wrap_in_arrays(explicit_ifc_type, ir->type);
-      } else {
-         /* Otherwise, this variable is one entry in the interface */
+      if (!glsl_type_is_interface(glsl_without_array(ir->type))) {
+         /* This variable is one entry in the interface */
          UNUSED bool found = false;
-         for (unsigned i = 0; i < explicit_ifc_type->length; i++) {
+         for (unsigned i = 0; i < ir->get_interface_type()->length; i++) {
             const glsl_struct_field *field =
-               &explicit_ifc_type->fields.structure[i];
+               &ir->get_interface_type()->fields.structure[i];
             if (strcmp(ir->name, field->name) != 0)
                continue;
 
-            var->type = field->type;
             if (field->memory_read_only)
                mem_access |= ACCESS_NON_WRITEABLE;
             if (field->memory_write_only)
@@ -1167,7 +1141,7 @@ nir_visitor::visit(ir_call *ir)
          /* Set the intrinsic parameters. */
          if (!param->is_tail_sentinel()) {
             instr->src[1] =
-               nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
+               nir_src_for_ssa(evaluate_rvalue((ir_rvalue *)param));
             param = param->get_next();
          }
 
@@ -1248,7 +1222,7 @@ nir_visitor::visit(ir_call *ir)
           * components.
           */
          nir_def *src_addr =
-            evaluate_rvalue((ir_dereference *)param);
+            evaluate_rvalue((ir_rvalue *)param);
          nir_def *srcs[4];
 
          for (int i = 0; i < 4; i++) {
@@ -1275,7 +1249,7 @@ nir_visitor::visit(ir_call *ir)
          /* Set the intrinsic parameters. */
          if (!param->is_tail_sentinel()) {
             instr->src[3] =
-               nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
+               nir_src_for_ssa(evaluate_rvalue((ir_rvalue *)param));
             param = param->get_next();
          } else if (op == nir_intrinsic_image_deref_load ||
                     op == nir_intrinsic_image_deref_sparse_load) {
@@ -1284,7 +1258,7 @@ nir_visitor::visit(ir_call *ir)
 
          if (!param->is_tail_sentinel()) {
             instr->src[4] =
-               nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
+               nir_src_for_ssa(evaluate_rvalue((ir_rvalue *)param));
             param = param->get_next();
          } else if (op == nir_intrinsic_image_deref_store) {
             instr->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0)); /* LOD */
@@ -1757,9 +1731,6 @@ nir_visitor::visit(ir_expression *ir)
       ir_dereference *deref = ir->operands[0]->as_dereference();
       ir_swizzle *swizzle = NULL;
       if (!deref) {
-         /* the api does not allow a swizzle here, but the varying packing code
-          * may have pushed one into here.
-          */
          swizzle = ir->operands[0]->as_swizzle();
          assert(swizzle);
          deref = swizzle->val->as_dereference();
@@ -2444,7 +2415,8 @@ nir_visitor::visit(ir_texture *ir)
 
    if (ir->offset != NULL) {
       if (glsl_type_is_array(ir->offset->type)) {
-         for (int i = 0; i < glsl_array_size(ir->offset->type); i++) {
+         const int size = MIN2(glsl_array_size(ir->offset->type), 4);
+         for (int i = 0; i < size; i++) {
             const ir_constant *c =
                ir->offset->as_constant()->get_array_element(i);
 

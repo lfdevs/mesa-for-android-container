@@ -148,21 +148,14 @@ get_slice_type_from_desc(const struct lower_cmat_state *state,
 
    const unsigned element_bits = 32;
    const unsigned bits = glsl_base_type_get_bit_size(desc.element_type);
-   unsigned packing_factor = MIN2(elements_per_invocation,
-                                  element_bits / bits);
 
-   /* Adjust the packing factor so that each row of the matrix fills and
-    * entire GRF.
-    *
-    * The in-register layout of B matrices is different, so those are handled
-    * more like column major (for row major matrices). See the file comment
-    * for more details.
+   /* Each invocation must have at least one dword of data, and that dword
+    * must be tightly packed with values. No matter the matrix dimensions, a
+    * matrix of uint8_t data must pack 4 values in each entry.
     */
-   const unsigned actual_cols = desc.use != GLSL_CMAT_USE_B ? desc.cols : desc.rows;
-   while ((actual_cols / packing_factor) < 8) {
-      assert(packing_factor > 1);
-      packing_factor /= 2;
-   }
+   const unsigned packing_factor = element_bits / bits;
+
+   assert(elements_per_invocation >= packing_factor);
 
    switch (desc.element_type) {
    case GLSL_TYPE_FLOAT:
@@ -172,12 +165,12 @@ get_slice_type_from_desc(const struct lower_cmat_state *state,
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_UINT8:
    case GLSL_TYPE_UINT16:
-      base_type = glsl_get_base_type(glsl_uintN_t_type(packing_factor * bits));
+      base_type = GLSL_TYPE_UINT;
       break;
    case GLSL_TYPE_INT:
    case GLSL_TYPE_INT8:
    case GLSL_TYPE_INT16:
-      base_type = glsl_get_base_type(glsl_intN_t_type(packing_factor * bits));
+      base_type = GLSL_TYPE_INT;
       break;
    default:
       unreachable("Invalid cooperative matrix element type.");
@@ -186,19 +179,18 @@ get_slice_type_from_desc(const struct lower_cmat_state *state,
    unsigned len = elements_per_invocation / packing_factor;
 
    /* Supported matrix sizes are designed to fill either 4 or 8 SIMD8
-    * registers. That means:
+    * registers on DG2. That means:
     *
     *          4 regsiters   8 registers
     * SIMD32     len = 1       len = 2
     * SIMD16     len = 2       len = 4
     * SIMD8      len = 4       len = 8
     *
-    * If configurations are added that result in other values of len, at the
-    * very least this assertion will need to be updated. The only value of len
-    * that makes sense to add would be 16, and that would be a lot of
-    * registers.
+    * On Xe2, supported matrix sizes are still designed to fill 4 registers
+    * (e.g., 8x32 uint8_t) or 8 registers (e.g., 16x16 float16). However, the
+    * 16x16 float16 matrix will assign 16 elements per channel at SIMD16.
     */
-   assert(len == 1 || len == 2 || len == 4 || len == 8);
+   assert(len == 1 || len == 2 || len == 4 || len == 8 || len == 16);
 
    const struct glsl_type *slice_type = glsl_vector_type(base_type, len);
 
@@ -264,10 +256,64 @@ lower_cmat_load_store(nir_builder *b, nir_intrinsic_instr *intrin,
                                                ptr_comp_width * ptr_num_comps),
                                   glsl_base_type_get_bit_size(desc->element_type));
 
-   if ((nir_intrinsic_matrix_layout(intrin) == GLSL_MATRIX_LAYOUT_ROW_MAJOR) ==
-       (desc->use != GLSL_CMAT_USE_B)) {
-      stride = nir_udiv_imm(b, stride, packing_factor);
+   /* The data that will be packed is in successive columns for A and
+    * accumulator matrices. The data that will be packed for B matrices is in
+    * successive rows.
+    */
+   const unsigned cols =
+      desc->use != GLSL_CMAT_USE_B ? desc->cols / packing_factor : desc->cols;
 
+   nir_def *invocation = nir_load_subgroup_invocation(b);
+   nir_def *invocation_div_cols = nir_udiv_imm(b, invocation, cols);
+   nir_def *invocation_mod_cols = nir_umod_imm(b, invocation, cols);
+
+   nir_def *i_stride;
+
+   const bool memory_layout_matches_register_layout =
+      (nir_intrinsic_matrix_layout(intrin) == GLSL_MATRIX_LAYOUT_ROW_MAJOR) ==
+      (desc->use != GLSL_CMAT_USE_B);
+
+   if (memory_layout_matches_register_layout) {
+      /* In the row-major arrangement, data is loaded a dword at a time
+       * instead of a single element at a time. For this reason the stride is
+       * divided by the packing factor.
+       */
+      i_stride = nir_udiv_imm(b, stride, packing_factor);
+   } else {
+      /* In the column-major arrangement, data is loaded a single element at a
+       * time. Because the data elements are transposed, the step direction
+       * that moves a single (packed) element in the row-major arrangement has
+       * to explicitly step over the packing factor count of elements. For
+       * this reason the stride is multiplied by the packing factor.
+       *
+       * NOTE: The unscaled stride is also still needed when stepping from one
+       * packed element to the next. This occurs in the for-j loop below.
+       */
+      i_stride = nir_imul_imm(b, stride, packing_factor);
+   }
+
+   nir_def *base_offset;
+   nir_def *i_step;
+
+   if (nir_intrinsic_matrix_layout(intrin) == GLSL_MATRIX_LAYOUT_ROW_MAJOR) {
+      base_offset = nir_iadd(b,
+                             nir_imul(b,
+                                      invocation_div_cols,
+                                      i_stride),
+                             invocation_mod_cols);
+
+      i_step = nir_imul_imm(b, i_stride, state->subgroup_size / cols);
+   } else {
+      base_offset = nir_iadd(b,
+                             nir_imul(b,
+                                      invocation_mod_cols,
+                                      i_stride),
+                             invocation_div_cols);
+
+      i_step = nir_imm_int(b, state->subgroup_size / cols);
+   }
+
+   if (memory_layout_matches_register_layout) {
       const struct glsl_type *element_type =
          glsl_scalar_type(glsl_get_base_type(slice->type));
 
@@ -275,30 +321,8 @@ lower_cmat_load_store(nir_builder *b, nir_intrinsic_instr *intrin,
                                      element_type,
                                      glsl_get_bit_size(element_type) / 8);
 
-      nir_def *invocation = nir_load_subgroup_invocation(b);
-      nir_def *base_offset;
-      nir_def *step;
-
-      if (desc->use != GLSL_CMAT_USE_B) {
-         base_offset = nir_iadd(b,
-                                nir_imul(b,
-                                         nir_udiv_imm(b, invocation, 8),
-                                         stride),
-                                nir_umod_imm(b, invocation, 8));
-
-         step = nir_imul_imm(b, stride, state->subgroup_size / 8);
-      } else {
-         base_offset = nir_iadd(b,
-                                nir_imul(b,
-                                         nir_umod_imm(b, invocation, 8),
-                                         stride),
-                                nir_udiv_imm(b, invocation, 8));
-
-         step = nir_imm_int(b, state->subgroup_size / 8);
-      }
-
       for (unsigned i = 0; i < num_components; i++) {
-         nir_def *offset = nir_imul_imm(b, step, i);
+         nir_def *offset = nir_imul_imm(b, i_step, i);
 
          nir_deref_instr *memory_deref =
             nir_build_deref_ptr_as_array(b, pointer,
@@ -323,45 +347,19 @@ lower_cmat_load_store(nir_builder *b, nir_intrinsic_instr *intrin,
       pointer = nir_build_deref_cast(b, &pointer->def, pointer->modes, element_type,
                                      element_stride);
 
-      nir_def *invocation_div_8 = nir_udiv_imm(b, nir_load_subgroup_invocation(b), 8);
-      nir_def *invocation_mod_8 = nir_umod_imm(b, nir_load_subgroup_invocation(b), 8);
-
-      nir_def *packed_stride = nir_imul_imm(b, stride, packing_factor);
-
       for (unsigned i = 0; i < num_components; i++) {
-         const unsigned i_offset = i * (state->subgroup_size / 8);
+         nir_def *i_offset = nir_imul_imm(b, i_step, i);
          nir_def *v[4];
 
          for (unsigned j = 0; j < packing_factor; j++) {
-            nir_def *j_offset = nir_imul_imm(b, stride, j);
-            nir_def *offset;
-
-            if (desc->use != GLSL_CMAT_USE_B) {
-               offset = nir_iadd(b,
-                                 nir_iadd(b,
-                                          nir_imul(b,
-                                                   invocation_mod_8,
-                                                   packed_stride),
-                                          invocation_div_8),
-                                 nir_iadd_imm(b, j_offset, i_offset));
-            } else {
-               offset = nir_iadd(b,
-                                 nir_iadd(b,
-                                          nir_imul(b,
-                                                   invocation_div_8,
-                                                   packed_stride),
-                                          invocation_mod_8),
-                                 nir_iadd(b,
-                                          nir_imul_imm(b,
-                                                       packed_stride,
-                                                       i_offset),
-                                          j_offset));
-            }
+            nir_def *offset = nir_iadd(b, nir_imul_imm(b, stride, j), i_offset);
 
             nir_deref_instr *memory_deref =
                nir_build_deref_ptr_as_array(b, pointer,
                                             nir_i2iN(b,
-                                                     offset,
+                                                     nir_iadd(b,
+                                                              base_offset,
+                                                              offset),
                                                      pointer->def.bit_size));
 
             if (load) {
@@ -422,54 +420,30 @@ lower_cmat_unary_op(nir_builder *b, nir_intrinsic_instr *intrin,
 
    const nir_op op = nir_intrinsic_alu_op(intrin);
 
-   /* There are three possible cases:
-    *
-    * 1. dst_packing_factor == src_packing_factor. This is the common case,
-    *    and handling it is straightforward.
-    *
-    * 2. dst_packing_factor > src_packing_factor. This occurs when converting a
-    *    float32_t matrix slice to a packed float16_t slice. Loop over the size
-    *    of the destination slice, but read multiple entries from the source
-    *    slice on each iteration.
-    *
-    * 3. dst_packing_factor < src_packing_factor. This occurs when converting a
-    *    packed int8_t matrix slice to an int32_t slice. Loop over the size of
-    *    the source slice, but write multiple entries to the destination slice
-    *    on each iteration.
-    *
-    * Handle all cases by iterating over the total (non-packed) number of
-    * elements in the slice. When dst_packing_factor values have been
-    * calculated, store them.
+   /* With the combinations of formats exposed on all platforms, matrices with
+    * the same dimensions will always have the same data size. The only real
+    * type conversion possible is int32 <-> float32. As a result
+    * dst_packing_factor == src_packing_factor.
     */
-   assert((dst_packing_factor * glsl_get_vector_elements(dst_slice->type)) ==
-          (src_packing_factor * glsl_get_vector_elements(src_slice->type)));
+   assert(dst_packing_factor == src_packing_factor);
 
    /* Stores at most dst_packing_factor partial results. */
    nir_def *v[4];
    assert(dst_packing_factor <= 4);
 
-   for (unsigned i = 0; i < num_components * dst_packing_factor; i++) {
-      const unsigned dst_chan_index = i % dst_packing_factor;
-      const unsigned src_chan_index = i % src_packing_factor;
-      const unsigned dst_index = i / dst_packing_factor;
-      const unsigned src_index = i / src_packing_factor;
+   for (unsigned i = 0; i < num_components; i++) {
+      nir_def *chan = nir_channel(b, nir_load_deref(b, src_slice), i);
 
-      nir_def *src =
-         nir_channel(b,
-                     nir_unpack_bits(b,
-                                     nir_channel(b,
-                                                 nir_load_deref(b, src_slice),
-                                                 src_index),
-                                     src_bits),
-                     src_chan_index);
+      for (unsigned j = 0; j < dst_packing_factor; j++) {
+         nir_def *src =
+            nir_channel(b, nir_unpack_bits(b, chan, src_bits), j);
 
-      v[dst_chan_index] = nir_build_alu1(b, op, src);
-
-      if (dst_chan_index == (dst_packing_factor - 1)) {
-         results[dst_index] =
-            nir_pack_bits(b, nir_vec(b, v, dst_packing_factor),
-                          dst_packing_factor * dst_bits);
+         v[j] = nir_build_alu1(b, op, src);
       }
+
+      results[i] =
+         nir_pack_bits(b, nir_vec(b, v, dst_packing_factor),
+                       dst_packing_factor * dst_bits);
    }
 
    nir_store_deref(b, dst_slice, nir_vec(b, results, num_components),

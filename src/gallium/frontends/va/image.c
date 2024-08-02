@@ -51,6 +51,7 @@ static const VAImageFormat formats[] =
    {VA_FOURCC('U','Y','V','Y')},
    {VA_FOURCC('Y','8','0','0')},
    {VA_FOURCC('4','4','4','P')},
+   {VA_FOURCC('4','2','2','V')},
    {VA_FOURCC('R','G','B','P')},
    {.fourcc = VA_FOURCC('B','G','R','A'), .byte_order = VA_LSB_FIRST, 32, 32,
     0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
@@ -61,7 +62,15 @@ static const VAImageFormat formats[] =
    {.fourcc = VA_FOURCC('B','G','R','X'), .byte_order = VA_LSB_FIRST, 32, 24,
     0x00ff0000, 0x0000ff00, 0x000000ff, 0x00000000},
    {.fourcc = VA_FOURCC('R','G','B','X'), .byte_order = VA_LSB_FIRST, 32, 24,
-    0x000000ff, 0x0000ff00, 0x00ff0000, 0x00000000}
+    0x000000ff, 0x0000ff00, 0x00ff0000, 0x00000000},
+   {.fourcc = VA_FOURCC('A','R','3','0'), .byte_order = VA_LSB_FIRST, 32, 30,
+    0x3ff00000, 0x000ffc00, 0x000003ff, 0x30000000},
+   {.fourcc = VA_FOURCC('A','B','3','0'), .byte_order = VA_LSB_FIRST, 32, 30,
+    0x000003ff, 0x000ffc00, 0x3ff00000, 0x30000000},
+   {.fourcc = VA_FOURCC('X','R','3','0'), .byte_order = VA_LSB_FIRST, 32, 30,
+    0x3ff00000, 0x000ffc00, 0x000003ff, 0x00000000},
+   {.fourcc = VA_FOURCC('X','B','3','0'), .byte_order = VA_LSB_FIRST, 32, 30,
+    0x000003ff, 0x000ffc00, 0x3ff00000, 0x00000000},
 };
 
 static void
@@ -179,6 +188,10 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
    case VA_FOURCC('A','R','G','B'):
    case VA_FOURCC('B','G','R','X'):
    case VA_FOURCC('R','G','B','X'):
+   case VA_FOURCC('A','R','3','0'):
+   case VA_FOURCC('A','B','3','0'):
+   case VA_FOURCC('X','R','3','0'):
+   case VA_FOURCC('X','B','3','0'):
       img->num_planes = 1;
       img->pitches[0] = w * 4;
       img->offsets[0] = 0;
@@ -202,6 +215,17 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
       img->pitches[1] = w;
       img->pitches[2] = w;
       img->data_size  = w * h * 3;
+      break;
+
+   case VA_FOURCC('4','2','2', 'V'):
+      img->num_planes = 3;
+      img->offsets[0] = 0;
+      img->offsets[1] = w * h;
+      img->offsets[2] = w * h * 3 / 2;
+      img->pitches[0] = w;
+      img->pitches[1] = w;
+      img->pitches[2] = w;
+      img->data_size  = w * h * 2;
       break;
 
    default:
@@ -335,6 +359,10 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    case VA_FOURCC('R','G','B','A'):
    case VA_FOURCC('B','G','R','X'):
    case VA_FOURCC('R','G','B','X'):
+   case VA_FOURCC('A','R','3','0'):
+   case VA_FOURCC('A','B','3','0'):
+   case VA_FOURCC('X','R','3','0'):
+   case VA_FOURCC('X','B','3','0'):
       img->pitches[0] = stride > 0 ? stride : w * 4;
       assert(img->pitches[0] >= (w * 4));
       img->data_size  = img->pitches[0] * h;
@@ -689,7 +717,9 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
       surf->templat.buffer_format = format;
       if (format == PIPE_FORMAT_YUYV || format == PIPE_FORMAT_UYVY ||
           format == PIPE_FORMAT_B8G8R8A8_UNORM || format == PIPE_FORMAT_B8G8R8X8_UNORM ||
-          format == PIPE_FORMAT_R8G8B8A8_UNORM || format == PIPE_FORMAT_R8G8B8X8_UNORM)
+          format == PIPE_FORMAT_R8G8B8A8_UNORM || format == PIPE_FORMAT_R8G8B8X8_UNORM ||
+          format == PIPE_FORMAT_B10G10R10A2_UNORM || format == PIPE_FORMAT_B10G10R10X2_UNORM ||
+          format == PIPE_FORMAT_R10G10B10A2_UNORM || format == PIPE_FORMAT_R10G10B10X2_UNORM)
          surf->templat.interlaced = false;
       tmp_buf = drv->pipe->create_video_buffer(drv->pipe, &surf->templat);
 

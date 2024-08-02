@@ -70,7 +70,7 @@ bool ir3_nir_lower_64b_global(nir_shader *shader);
 bool ir3_nir_lower_64b_regs(nir_shader *shader);
 
 bool ir3_nir_opt_branch_and_or_not(nir_shader *nir);
-void ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s);
+bool ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s);
 void ir3_nir_lower_io_to_temporaries(nir_shader *s);
 void ir3_finalize_nir(struct ir3_compiler *compiler, nir_shader *s);
 void ir3_nir_post_finalize(struct ir3_shader *shader);
@@ -84,6 +84,7 @@ bool ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_fixup_load_uniform(nir_shader *nir);
 bool ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v);
+bool ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v);
 
 nir_def *ir3_nir_try_propagate_bit_shift(nir_builder *b,
@@ -100,6 +101,13 @@ nir_def *ir3_load_driver_ubo_indirect(nir_builder *b, unsigned components,
                                       struct ir3_driver_ubo *ubo,
                                       unsigned base, nir_def *offset,
                                       unsigned range);
+
+bool ir3_def_is_rematerializable_for_preamble(nir_def *def,
+                                              nir_def **preamble_defs);
+
+nir_def *ir3_rematerialize_def_for_preamble(nir_builder *b, nir_def *def,
+                                            struct set *instr_set,
+                                            nir_def **preamble_defs);
 
 struct driver_param_info {
    uint32_t offset;
@@ -155,6 +163,8 @@ is_intrinsic_load(nir_intrinsic_op op)
       return false;
    }
 }
+
+uint32_t ir3_nir_max_imm_offset(nir_intrinsic_instr *intrin, const void *data);
 
 ENDC;
 

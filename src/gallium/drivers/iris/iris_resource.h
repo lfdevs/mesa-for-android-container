@@ -106,12 +106,8 @@ struct iris_resource {
       /** Offset into 'bo' where the auxiliary surface starts. */
       uint32_t offset;
 
-      struct {
-         struct isl_surf surf;
-
-         /** Offset into 'bo' where the auxiliary surface starts. */
-         uint32_t offset;
-      } extra_aux;
+      /** Offset into 'bo' where the compression control surface starts. */
+      uint32_t comp_ctrl_surf_offset;
 
       /**
        * When importing resources with a clear color, we may not know the

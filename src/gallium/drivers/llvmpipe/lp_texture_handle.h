@@ -31,8 +31,6 @@
 #include "gallivm/lp_bld_sample.h"
 #include "gallivm/lp_bld_jit_sample.h"
 
-#define LP_SAMPLE_KEY_COUNT (1 << 11)
-
 struct lp_sampler_matrix {
    struct lp_texture_functions **textures;
    struct lp_static_sampler_state *samplers;
@@ -52,7 +50,7 @@ struct lp_sampler_matrix {
    struct llvmpipe_context *ctx;
 
    /* Use a separate LLVMContext since it is not thread safe but can be accessed by shaders. */
-   LLVMContextRef context;
+   lp_context_ref context;
 
    struct util_dynarray gallivms;
 };

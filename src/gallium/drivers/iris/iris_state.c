@@ -96,6 +96,7 @@
 #include "util/u_trace_gallium.h"
 #include "nir.h"
 #include "intel/common/intel_aux_map.h"
+#include "intel/common/intel_compute_slm.h"
 #include "intel/common/intel_l3_config.h"
 #include "intel/common/intel_sample_positions.h"
 #include "intel/ds/intel_tracepoints.h"
@@ -309,17 +310,6 @@ translate_wrap(unsigned pipe_wrap)
       [PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER] = -1,
    };
    return map[pipe_wrap];
-}
-
-
-static inline uint32_t
-iris_encode_slm_size(unsigned gen, uint32_t bytes)
-{
-#if GFX_VER >= 9
-   return encode_slm_size(gen, bytes);
-#else
-   return elk_encode_slm_size(gen, bytes);
-#endif
 }
 
 /**
@@ -1242,6 +1232,12 @@ toggle_protected(struct iris_batch *batch)
 #endif
 }
 
+#if GFX_VER >= 20
+#define _3DSTATE_DRAWING_RECTANGLE GENX(3DSTATE_DRAWING_RECTANGLE_FAST)
+#else
+#define _3DSTATE_DRAWING_RECTANGLE GENX(3DSTATE_DRAWING_RECTANGLE)
+#endif
+
 /**
  * Upload the initial GPU state for a render context.
  *
@@ -1379,6 +1375,13 @@ iris_init_render_context(struct iris_batch *batch)
    };
 #endif
 
+#if GFX_VER >= 20
+   iris_emit_cmd(batch, GENX(3DSTATE_3D_MODE), p) {
+      p.DX10OGLBorderModeforYCRCB = true;
+      p.DX10OGLBorderModeforYCRCBMask = true;
+   }
+#endif
+
    upload_pixel_hashing_tables(batch);
 
    /* 3DSTATE_DRAWING_RECTANGLE is non-pipelined, so we want to avoid
@@ -1386,7 +1389,7 @@ iris_init_render_context(struct iris_batch *batch)
     * instead include the render target dimensions in the viewport, so
     * viewport extents clipping takes care of pruning stray geometry.
     */
-   iris_emit_cmd(batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
+   iris_emit_cmd(batch, _3DSTATE_DRAWING_RECTANGLE, rect) {
       rect.ClippedDrawingRectangleXMax = UINT16_MAX;
       rect.ClippedDrawingRectangleYMax = UINT16_MAX;
    }
@@ -1420,8 +1423,14 @@ iris_init_render_context(struct iris_batch *batch)
    iris_emit_cmd(batch, GENX(3DSTATE_TASK_CONTROL), foo);
 #endif
 
-   iris_alloc_push_constants(batch);
+#if INTEL_NEEDS_WA_14019857787
+   iris_emit_cmd(batch, GENX(3DSTATE_3D_MODE), p) {
+      p.EnableOOOreadsinRCPB = true;
+      p.EnableOOOreadsinRCPBMask = true;
+   }
+#endif
 
+   iris_alloc_push_constants(batch);
 
 #if GFX_VER >= 12
    init_aux_map_state(batch);
@@ -3126,11 +3135,11 @@ iris_create_surface(struct pipe_context *ctx,
        * have a renderable view format.  We must be attempting to upload
        * blocks of compressed data via an uncompressed view.
        *
-       * In this case, we can assume there are no auxiliary buffers, a single
+       * In this case, we can assume there are no auxiliary surfaces, a single
        * miplevel, and that the resource is single-sampled.  Gallium may try
        * and create an uncompressed view with multiple layers, however.
        */
-      assert(res->aux.usage == ISL_AUX_USAGE_NONE);
+      assert(res->aux.surf.size_B == 0);
       assert(res->surf.samples == 1);
       assert(view->levels == 1);
 
@@ -4970,13 +4979,25 @@ encode_sampler_count(const struct iris_compiled_shader *shader)
       INIT_THREAD_SCRATCH_SIZE(pkt)                                       \
    }
 
+/* Note that on Gfx12HP we pass a scratch space surface state offset
+ * shifted by 2 relative to the value specified on the BSpec, since
+ * that allows the compiler to save a shift instruction while
+ * constructing the extended descriptor for SS addressing.  That
+ * worked because we limit the scratch surface state pool to 8 MB and
+ * because we relied on the legacy (ExBSO=0) encoding of the extended
+ * descriptor in order to save the shift, which is no longer supported
+ * for the UGM shared function on Xe2 platforms, so we no longer
+ * attempt to do that trick.
+ */
+#define SCRATCH_SPACE_BUFFER_SHIFT (GFX_VER >= 20 ? 6 : 4)
+
 #if GFX_VERx10 >= 125
 #define INIT_THREAD_SCRATCH_SIZE(pkt)
 #define MERGE_SCRATCH_ADDR(name)                                          \
 {                                                                         \
    uint32_t pkt2[GENX(name##_length)] = {0};                              \
    _iris_pack_command(batch, GENX(name), pkt2, p) {                       \
-      p.ScratchSpaceBuffer = scratch_addr >> 4;                           \
+      p.ScratchSpaceBuffer = scratch_addr >> SCRATCH_SPACE_BUFFER_SHIFT;  \
    }                                                                      \
    iris_emit_merge(batch, pkt, pkt2, GENX(name##_length));                \
 }
@@ -5090,6 +5111,9 @@ iris_store_tes_state(const struct intel_device_info *devinfo,
 
    iris_pack_command(GENX(3DSTATE_TE), te_state, te) {
       te.Partitioning = tes_data->partitioning;
+#if GFX_VER >= 20
+      te.NumberOfRegionsPerPatch = 2;
+#endif
       te.OutputTopology = tes_data->output_topology;
       te.TEDomain = tes_data->domain;
       te.TEEnable = true;
@@ -5230,6 +5254,17 @@ iris_store_fs_state(const struct intel_device_info *devinfo,
       psx.PixelShaderPullsBary = fs_data->pulls_bary;
 #endif
       psx.PixelShaderComputesStencil = fs_data->computed_stencil;
+#endif
+
+#if GFX_VER >= 11
+      psx.PixelShaderRequiresSubpixelSampleOffsets =
+         fs_data->uses_sample_offsets;
+      psx.PixelShaderRequiresNonPerspectiveBaryPlaneCoefficients =
+         fs_data->uses_npc_bary_coefficients;
+      psx.PixelShaderRequiresPerspectiveBaryPlaneCoefficients =
+         fs_data->uses_pc_bary_coefficients;
+      psx.PixelShaderRequiresSourceDepthandorWPlaneCoefficients =
+         fs_data->uses_depth_w_coefficients;
 #endif
    }
 }
@@ -6532,6 +6567,9 @@ calculate_tile_dimensions(struct iris_context *ice,
    struct iris_screen *screen = (void *)ice->ctx.screen;
    const struct intel_device_info *devinfo = screen->devinfo;
 
+   assert(GFX_VER == 12);
+   const unsigned aux_scale = ISL_MAIN_TO_CCS_SIZE_RATIO_XE;
+
    /* Perform a rough calculation of the tile cache footprint of the
     * pixel pipeline, approximating it as the sum of the amount of
     * memory used per pixel by every render target, depth, stencil and
@@ -6557,7 +6595,11 @@ calculate_tile_dimensions(struct iris_context *ice,
           */
          if (ice->state.draw_aux_usage[i]) {
             pixel_size += intel_calculate_surface_pixel_size(&res->aux.surf);
-            pixel_size += intel_calculate_surface_pixel_size(&res->aux.extra_aux.surf);
+
+            if (isl_aux_usage_has_ccs(res->aux.usage)) {
+               pixel_size += DIV_ROUND_UP(intel_calculate_surface_pixel_size(
+                                             &res->surf), aux_scale);
+            }
          }
       }
    }
@@ -6575,7 +6617,11 @@ calculate_tile_dimensions(struct iris_context *ice,
           */
          if (iris_resource_level_has_hiz(devinfo, zres, cso->zsbuf->u.tex.level)) {
             pixel_size += intel_calculate_surface_pixel_size(&zres->aux.surf);
-            pixel_size += intel_calculate_surface_pixel_size(&zres->aux.extra_aux.surf);
+
+            if (isl_aux_usage_has_ccs(zres->aux.usage)) {
+               pixel_size += DIV_ROUND_UP(intel_calculate_surface_pixel_size(
+                                             &zres->surf), aux_scale);
+            }
          }
       }
 
@@ -6903,7 +6949,6 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       struct iris_blend_state *cso_blend = ice->state.cso_blend;
       struct pipe_framebuffer_state *cso_fb = &ice->state.framebuffer;
       struct iris_depth_stencil_alpha_state *cso_zsa = ice->state.cso_zsa;
-      const int header_dwords = GENX(BLEND_STATE_length);
 
       bool color_blend_zero = false;
       bool alpha_blend_zero = false;
@@ -6919,7 +6964,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       uint32_t *blend_map =
          stream_state(batch, ice->state.dynamic_uploader,
                       &ice->state.last_res.blend,
-                      4 * (header_dwords + rt_dwords), 64, &blend_offset);
+                      96, 64, &blend_offset);
 
       /* Copy of blend entries for merging dynamic changes. */
       uint32_t blend_entries[4 * rt_dwords];
@@ -7282,7 +7327,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 #endif
 
 #if GFX_VERx10 >= 125
-               ps.ScratchSpaceBuffer = scratch_addr >> 4;
+               ps.ScratchSpaceBuffer = scratch_addr >> SCRATCH_SPACE_BUFFER_SHIFT;
 #else
                ps.ScratchSpaceBasePointer =
                   rw_bo(NULL, scratch_addr, IRIS_DOMAIN_NONE);
@@ -7329,7 +7374,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             uint32_t ds_state[GENX(3DSTATE_DS_length)] = { 0 };
             iris_pack_command(GENX(3DSTATE_DS), ds_state, ds) {
                if (scratch_addr)
-                  ds.ScratchSpaceBuffer = scratch_addr >> 4;
+                  ds.ScratchSpaceBuffer =
+                     scratch_addr >> SCRATCH_SPACE_BUFFER_SHIFT;
             }
 
             uint32_t *shader_ds = (uint32_t *) shader->derived_data;
@@ -7539,6 +7585,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       bool points_or_lines = cso_rast->fill_mode_point_or_line ||
          (gs_or_tes ? ice->shaders.output_topology_is_points_or_lines
                     : ice->state.prim_is_points_or_lines);
+      const struct intel_vue_map *last =
+         &iris_vue_data(ice->shaders.last_vue_shader)->vue_map;
 
       uint32_t dynamic_clip[GENX(3DSTATE_CLIP_length)];
       iris_pack_command(GENX(3DSTATE_CLIP), &dynamic_clip, cl) {
@@ -7555,7 +7603,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
          cl.NonPerspectiveBarycentricEnable = fs_data->uses_nonperspective_interp_modes;
 
-         cl.ForceZeroRTAIndexEnable = cso_fb->layers <= 1;
+         cl.ForceZeroRTAIndexEnable = cso_fb->layers <= 1 ||
+                                      !(last->slots_valid & VARYING_BIT_LAYER);
          cl.MaximumVPIndex = ice->state.num_viewports - 1;
       }
       iris_emit_merge(batch, cso_rast->clip, dynamic_clip,
@@ -8905,7 +8954,7 @@ iris_upload_compute_walker(struct iris_context *ice,
             devinfo->max_cs_threads * devinfo->subslice_total;
          uint32_t scratch_addr = pin_scratch_space(ice, batch, shader,
                                                    MESA_SHADER_COMPUTE);
-         cfe.ScratchSpaceBuffer = scratch_addr >> 4;
+         cfe.ScratchSpaceBuffer = scratch_addr >> SCRATCH_SPACE_BUFFER_SHIFT;
       }
    }
 
@@ -8913,14 +8962,18 @@ iris_upload_compute_walker(struct iris_context *ice,
    idd.KernelStartPointer = KSP(shader);
    idd.NumberofThreadsinGPGPUThreadGroup = dispatch.threads;
    idd.SharedLocalMemorySize =
-      iris_encode_slm_size(GFX_VER, shader->total_shared);
+      intel_compute_slm_encode_size(GFX_VER, shader->total_shared);
+   idd.PreferredSLMAllocationSize =
+      intel_compute_preferred_slm_calc_encode_size(devinfo,
+                                                   shader->total_shared,
+                                                   dispatch.group_size,
+                                                   dispatch.simd_size);
    idd.SamplerStatePointer = shs->sampler_table.offset;
    idd.SamplerCount = encode_sampler_count(shader),
    idd.BindingTablePointer = binder->bt_offset[MESA_SHADER_COMPUTE];
    /* Typically set to 0 to avoid prefetching on every thread dispatch. */
    idd.BindingTableEntryCount = devinfo->verx10 == 125 ?
       0 : MIN2(shader->bt.size_bytes / 4, 31);
-   idd.PreferredSLMAllocationSize = preferred_slm_allocation_size(devinfo);
    idd.NumberOfBarriers = cs_data->uses_barrier;
 
    iris_measure_snapshot(ice, batch, INTEL_SNAPSHOT_COMPUTE, NULL, NULL, NULL);
@@ -9071,7 +9124,7 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
 
       iris_pack_state(GENX(INTERFACE_DESCRIPTOR_DATA), desc, idd) {
          idd.SharedLocalMemorySize =
-            iris_encode_slm_size(GFX_VER, ish->kernel_shared_size + grid->variable_shared_mem);
+            intel_compute_slm_encode_size(GFX_VER, ish->kernel_shared_size + grid->variable_shared_mem);
          idd.KernelStartPointer =
             KSP(shader) + iris_cs_data_prog_offset(cs_data, dispatch.simd_size);
          idd.SamplerStatePointer = shs->sampler_table.offset;

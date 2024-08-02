@@ -55,12 +55,11 @@
 #define GL_LIB_NAME "libGL.so.1"
 #endif
 
+const __DRIextension **
+dri_loader_get_extensions(const char *driver_name);
+
 /**
  * Try to \c dlopen the named driver.
- *
- * This function adds the "_dri.so" suffix to the driver name and searches the
- * directories specified by the \c LIBGL_DRIVERS_PATH environment variable in
- * order to find the driver.
  *
  * \param driverName - a name like "i965", "radeon", "nouveau", etc.
  * \param out_driver_handle - Address to return the resulting dlopen() handle.
@@ -70,21 +69,19 @@
  * file not found.
  */
 _X_HIDDEN const __DRIextension **
-driOpenDriver(const char *driverName, void **out_driver_handle)
+driOpenDriver(const char *driverName, bool driver_name_is_inferred)
 {
    void *glhandle;
 
    /* Attempt to make sure libGL symbols will be visible to the driver */
    glhandle = dlopen(GL_LIB_NAME, RTLD_NOW | RTLD_GLOBAL);
 
-   static const char *search_path_vars[] = {
-      "LIBGL_DRIVERS_PATH",
-      "LIBGL_DRIVERS_DIR", /* deprecated */
-      NULL
-   };
+   const __DRIextension **extensions = dri_loader_get_extensions(driverName);
 
-   const __DRIextension **extensions =
-      loader_open_driver(driverName, out_driver_handle, search_path_vars);
+   if (!extensions && driver_name_is_inferred) {
+      glx_message(_LOADER_WARNING,
+           "MESA-LOADER: glx: failed to open %s: driver not built!\n", driverName);
+   }
 
    if (glhandle)
       dlclose(glhandle);
@@ -742,9 +739,8 @@ clear_driver_config_cache()
 static char *
 get_driver_config(const char *driverName)
 {
-   void *handle;
    char *config = NULL;
-   const __DRIextension **extensions = driOpenDriver(driverName, &handle);
+   const __DRIextension **extensions = driOpenDriver(driverName, false);
    if (extensions) {
       for (int i = 0; extensions[i]; i++) {
          if (strcmp(extensions[i]->name, __DRI_CONFIG_OPTIONS) != 0)
@@ -759,8 +755,6 @@ get_driver_config(const char *driverName)
          break;
       }
    }
-
-   dlclose(handle);
 
    return config;
 }

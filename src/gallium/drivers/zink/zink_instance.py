@@ -111,10 +111,10 @@ zink_verify_instance_extensions(struct zink_screen *screen);
 %for ext in extensions:
 %if registry.in_registry(ext.name):
 %for cmd in registry.get_registry_entry(ext.name).instance_commands:
-void zink_stub_${cmd.lstrip("vk")}(void);
+void VKAPI_PTR zink_stub_${cmd.lstrip("vk")}(void);
 %endfor
 %for cmd in registry.get_registry_entry(ext.name).pdevice_commands:
-void zink_stub_${cmd.lstrip("vk")}(void);
+void VKAPI_PTR zink_stub_${cmd.lstrip("vk")}(void);
 %endfor
 %endif
 %endfor
@@ -329,7 +329,7 @@ zink_verify_instance_extensions(struct zink_screen *screen)
 %if ext.platform_guard:
 #ifdef ${ext.platform_guard}
 %endif
-void
+void VKAPI_PTR
 zink_stub_${cmd.lstrip("vk")}()
 {
    mesa_loge("ZINK: ${cmd} is not loaded properly!");

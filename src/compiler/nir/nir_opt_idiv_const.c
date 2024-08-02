@@ -213,8 +213,7 @@ nir_opt_idiv_const_instr(nir_builder *b, nir_instr *instr, void *user_data)
    }
 
    nir_def *qvec = nir_vec(b, q, alu->def.num_components);
-   nir_def_rewrite_uses(&alu->def, qvec);
-   nir_instr_remove(&alu->instr);
+   nir_def_replace(&alu->def, qvec);
 
    return true;
 }
@@ -223,7 +222,6 @@ bool
 nir_opt_idiv_const(nir_shader *shader, unsigned min_bit_size)
 {
    return nir_shader_instructions_pass(shader, nir_opt_idiv_const_instr,
-                                       nir_metadata_block_index |
-                                          nir_metadata_dominance,
+                                       nir_metadata_control_flow,
                                        &min_bit_size);
 }

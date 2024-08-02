@@ -242,10 +242,23 @@ xe_vm_bind_op(struct anv_device *device,
    if (signal_bind_timeline)
       intel_bind_timeline_bind_end(&device->bind_timeline);
 
+   /* The vm_bind ioctl can return a wide variety of error codes, but most of
+    * them shouldn't happen in the real world. Here we list the interesting
+    * error case:
+    *
+    * - EINVAL: shouldn't happen. This is most likely a bug in our driver.
+    * - ENOMEM: generic out-of-memory error.
+    * - ENOBUFS: an out-of-memory error that is related to having too many
+    *   bind operations in the same ioctl, so the recommendation here is to
+    *   try to issue fewer binds per ioctl (ideally 1).
+    *
+    * The xe.ko team has plans to differentiate between lack of device memory
+    * vs lack of host memory in the future.
+    */
    if (ret) {
       assert(errno_ != EINVAL);
-      if (errno_ == ENOMEM)
-         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      if (errno_ == ENOMEM || errno_ == ENOBUFS)
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
       else
          result = vk_device_set_lost(&device->vk,
                                      "vm_bind failed with errno %d", errno_);
@@ -346,10 +359,8 @@ anv_xe_kmd_backend_get(void)
       .vm_bind = xe_vm_bind,
       .vm_bind_bo = xe_vm_bind_bo,
       .vm_unbind_bo = xe_vm_unbind_bo,
-      .execute_simple_batch = xe_execute_simple_batch,
-      .execute_trtt_batch = xe_execute_trtt_batch,
       .queue_exec_locked = xe_queue_exec_locked,
-      .queue_exec_trace = xe_queue_exec_utrace_locked,
+      .queue_exec_async = xe_queue_exec_async,
       .bo_alloc_flags_to_bo_flags = xe_bo_alloc_flags_to_bo_flags,
    };
    return &xe_backend;

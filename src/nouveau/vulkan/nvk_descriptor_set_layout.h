@@ -10,6 +10,8 @@
 #include "vk_descriptor_set_layout.h"
 #include "vk_object.h"
 
+#include "util/bitset.h"
+
 struct nvk_device;
 struct nvk_physical_device;
 struct nvk_sampler;
@@ -49,6 +51,9 @@ struct nvk_descriptor_set_layout {
 
    /* Number of dynamic UBO bindings in this set */
    uint8_t dynamic_buffer_count;
+
+   /* Which dynamic buffers are UBOs */
+   BITSET_DECLARE(dynamic_ubos, NVK_MAX_DYNAMIC_BUFFERS);
 
    /* Number of bindings in this descriptor set */
    uint32_t binding_count;

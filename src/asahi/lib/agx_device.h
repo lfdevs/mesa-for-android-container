@@ -5,12 +5,19 @@
 
 #pragma once
 
+#include <xf86drm.h>
 #include "util/simple_mtx.h"
 #include "util/sparse_array.h"
 #include "util/timespec.h"
 #include "util/vma.h"
 #include "agx_bo.h"
 #include "agx_formats.h"
+#include "decode.h"
+#include "unstable_asahi_drm.h"
+
+// TODO: this is a lie right now
+static const uint64_t AGX_SUPPORTED_INCOMPAT_FEATURES =
+   DRM_ASAHI_FEAT_MANDATORY_ZS_COMPRESSION;
 
 enum agx_dbg {
    AGX_DBG_TRACE = BITFIELD_BIT(0),
@@ -36,29 +43,6 @@ enum agx_dbg {
    AGX_DBG_FEEDBACK = BITFIELD_BIT(20),
 };
 
-/* Dummy partial declarations, pending real UAPI */
-enum drm_asahi_cmd_type { DRM_ASAHI_CMD_TYPE_PLACEHOLDER_FOR_DOWNSTREAM_UAPI };
-enum drm_asahi_sync_type { DRM_ASAHI_SYNC_SYNCOBJ };
-struct drm_asahi_sync {
-   uint32_t sync_type;
-   uint32_t handle;
-};
-struct drm_asahi_params_global {
-   uint64_t vm_page_size;
-   uint64_t vm_user_start;
-   uint64_t vm_user_end;
-   uint64_t vm_shader_start;
-   uint64_t vm_shader_end;
-   uint32_t chip_id;
-   uint32_t num_clusters_total;
-   uint32_t gpu_generation;
-   uint32_t gpu_variant;
-   uint32_t num_dies;
-   uint32_t timer_frequency_hz;
-   uint32_t num_cores_per_cluster;
-   uint64_t core_masks[32];
-};
-
 /* How many power-of-two levels in the BO cache do we want? 2^14 minimum chosen
  * as it is the page size that all allocations are rounded to
  */
@@ -71,6 +55,20 @@ struct drm_asahi_params_global {
 /* Forward decl only, do not pull in all of NIR */
 struct nir_shader;
 
+#define BARRIER_RENDER  (1 << DRM_ASAHI_SUBQUEUE_RENDER)
+#define BARRIER_COMPUTE (1 << DRM_ASAHI_SUBQUEUE_COMPUTE)
+
+typedef struct {
+   struct agx_bo *(*bo_alloc)(struct agx_device *dev, size_t size, size_t align,
+                              enum agx_bo_flags flags);
+   int (*bo_bind)(struct agx_device *dev, struct agx_bo *bo, uint64_t addr,
+                  uint32_t flags);
+   void (*bo_mmap)(struct agx_bo *bo);
+   ssize_t (*get_params)(struct agx_device *dev, void *buf, size_t size);
+   int (*submit)(struct agx_device *dev, struct drm_asahi_submit *submit,
+                 uint32_t vbo_res_id);
+} agx_device_ops_t;
+
 struct agx_device {
    uint32_t debug;
 
@@ -80,6 +78,12 @@ struct agx_device {
    char name[64];
    struct drm_asahi_params_global params;
    uint64_t next_global_id, last_global_id;
+   bool is_virtio;
+   agx_device_ops_t ops;
+
+   /* vdrm device */
+   struct vdrm_device *vdrm;
+   uint32_t next_blob_id;
 
    /* Device handle */
    int fd;
@@ -121,6 +125,8 @@ struct agx_device {
    } bo_cache;
 
    struct agx_bo *helper;
+
+   struct agxdecode_ctx *agxdecode;
 };
 
 bool agx_open_device(void *memctx, struct agx_device *dev);
@@ -133,11 +139,11 @@ agx_lookup_bo(struct agx_device *dev, uint32_t handle)
    return util_sparse_array_get(&dev->bo_map, handle);
 }
 
-void agx_bo_mmap(struct agx_bo *bo);
-
 uint64_t agx_get_global_id(struct agx_device *dev);
 
-uint32_t agx_create_command_queue(struct agx_device *dev, uint32_t caps);
+uint32_t agx_create_command_queue(struct agx_device *dev, uint32_t caps,
+                                  uint32_t priority);
+int agx_destroy_command_queue(struct agx_device *dev, uint32_t queue_id);
 
 int agx_import_sync_file(struct agx_device *dev, struct agx_bo *bo, int fd);
 int agx_export_sync_file(struct agx_device *dev, struct agx_bo *bo);
@@ -151,3 +157,6 @@ agx_gpu_time_to_ns(struct agx_device *dev, uint64_t gpu_time)
 {
    return (gpu_time * NSEC_PER_SEC) / dev->params.timer_frequency_hz;
 }
+
+void agx_get_device_uuid(const struct agx_device *dev, void *uuid);
+void agx_get_driver_uuid(void *uuid);

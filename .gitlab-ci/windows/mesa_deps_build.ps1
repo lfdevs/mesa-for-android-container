@@ -96,6 +96,7 @@ cmake ../llvm `
 -DLLVM_ENABLE_DIA_SDK=OFF `
 -DCLANG_BUILD_TOOLS=ON `
 -DLLVM_SPIRV_INCLUDE_TESTS=OFF `
+-DLLVM_ENABLE_ZLIB=OFF `
 -Wno-dev && `
 ninja -j32 install
 $buildstatus = $?

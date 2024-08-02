@@ -94,6 +94,8 @@ unsigned panfrost_query_core_count(const struct pan_kmod_dev_props *props,
 
 bool panfrost_query_afbc(const struct pan_kmod_dev_props *props);
 
+bool panfrost_query_afrc(const struct pan_kmod_dev_props *props);
+
 unsigned panfrost_query_optimal_tib_size(const struct panfrost_model *model);
 
 uint64_t panfrost_clamp_to_usable_va_range(const struct pan_kmod_dev *dev,

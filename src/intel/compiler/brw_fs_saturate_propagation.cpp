@@ -45,7 +45,7 @@ using namespace brw;
  */
 
 static bool
-opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
+opt_saturate_propagation_local(fs_visitor &s, bblock_t *block)
 {
    bool progress = false;
    int ip = block->end_ip + 1;
@@ -61,6 +61,7 @@ opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
           inst->src[0].abs)
          continue;
 
+      const fs_live_variables &live = s.live_analysis.require();
       int src_var = live.var_from_reg(inst->src[0]);
       int src_end_ip = live.end[src_var];
 
@@ -93,7 +94,7 @@ opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
                      } else if (scan_inst->opcode == BRW_OPCODE_MAD) {
                         for (int i = 0; i < 2; i++) {
                            if (scan_inst->src[i].file == IMM) {
-                              fs_reg_negate_immediate(&scan_inst->src[i]);
+                              brw_reg_negate_immediate(&scan_inst->src[i]);
                            } else {
                               scan_inst->src[i].negate = !scan_inst->src[i].negate;
                            }
@@ -101,7 +102,7 @@ opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
                         inst->src[0].negate = false;
                      } else if (scan_inst->opcode == BRW_OPCODE_ADD) {
                         if (scan_inst->src[1].file == IMM) {
-                           if (!fs_reg_negate_immediate(&scan_inst->src[1])) {
+                           if (!brw_reg_negate_immediate(&scan_inst->src[1])) {
                               break;
                            }
                         } else {
@@ -150,11 +151,10 @@ opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
 bool
 brw_fs_opt_saturate_propagation(fs_visitor &s)
 {
-   const fs_live_variables &live = s.live_analysis.require();
    bool progress = false;
 
    foreach_block (block, s.cfg) {
-      progress = opt_saturate_propagation_local(live, block) || progress;
+      progress = opt_saturate_propagation_local(s, block) || progress;
    }
 
    /* Live intervals are still valid. */

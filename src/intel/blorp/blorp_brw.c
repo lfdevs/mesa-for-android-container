@@ -9,6 +9,14 @@
 #include "compiler/brw_nir.h"
 #include "dev/intel_debug.h"
 
+static const nir_shader_compiler_options *
+blorp_nir_options_brw(struct blorp_context *blorp,
+                      gl_shader_stage stage)
+{
+   const struct brw_compiler *compiler = blorp->compiler->brw;
+   return compiler->nir_options[stage];
+}
+
 static struct blorp_program
 blorp_compile_fs_brw(struct blorp_context *blorp, void *mem_ctx,
                      struct nir_shader *nir,
@@ -16,7 +24,6 @@ blorp_compile_fs_brw(struct blorp_context *blorp, void *mem_ctx,
                      bool use_repclear)
 {
    const struct brw_compiler *compiler = blorp->compiler->brw;
-   nir->options = compiler->nir_options[MESA_SHADER_FRAGMENT];
 
    struct brw_wm_prog_data *wm_prog_data = rzalloc(mem_ctx, struct brw_wm_prog_data);
    wm_prog_data->base.nr_params = 0;
@@ -60,8 +67,6 @@ blorp_compile_vs_brw(struct blorp_context *blorp, void *mem_ctx,
                      struct nir_shader *nir)
 {
    const struct brw_compiler *compiler = blorp->compiler->brw;
-
-   nir->options = compiler->nir_options[MESA_SHADER_VERTEX];
 
    struct brw_nir_compiler_opts opts = {};
    brw_preprocess_nir(compiler, nir, &opts);
@@ -116,8 +121,6 @@ blorp_compile_cs_brw(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct brw_compiler *compiler = blorp->compiler->brw;
 
-   nir->options = compiler->nir_options[MESA_SHADER_COMPUTE];
-
    struct brw_nir_compiler_opts opts = {};
    brw_preprocess_nir(compiler, nir, &opts);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -137,7 +140,7 @@ blorp_compile_cs_brw(struct blorp_context *blorp, void *mem_ctx,
    NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics, compiler->devinfo,
               cs_prog_data);
    NIR_PASS_V(nir, nir_shader_intrinsics_pass, lower_base_workgroup_id,
-              nir_metadata_block_index | nir_metadata_dominance, NULL);
+              nir_metadata_control_flow, NULL);
 
    struct brw_cs_prog_key cs_key;
    memset(&cs_key, 0, sizeof(cs_key));
@@ -200,7 +203,7 @@ blorp_params_get_layer_offset_vs_brw(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_VERTEX,
+   blorp_nir_init_shader(&b, blorp, mem_ctx, MESA_SHADER_VERTEX,
                          blorp_shader_type_to_name(blorp_key.base.shader_type));
 
    const struct glsl_type *uvec4_type = glsl_vector_type(GLSL_TYPE_UINT, 4);
@@ -267,6 +270,7 @@ blorp_init_brw(struct blorp_context *blorp, void *driver_ctx,
    assert(brw);
 
    blorp->compiler->brw = brw;
+   blorp->compiler->nir_options = blorp_nir_options_brw;
    blorp->compiler->compile_fs = blorp_compile_fs_brw;
    blorp->compiler->compile_vs = blorp_compile_vs_brw;
    blorp->compiler->compile_cs = blorp_compile_cs_brw;

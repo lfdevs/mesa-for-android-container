@@ -324,6 +324,11 @@ index("unsigned", "repeat_count")
 
 intrinsic("nop", flags=[CAN_ELIMINATE])
 
+# Uses a value and cannot be eliminated.
+#
+# This is helpful when writing unit tests
+intrinsic("use", src_comp=[0], flags=[])
+
 intrinsic("convert_alu_types", dest_comp=0, src_comp=[0],
           indices=[SRC_TYPE, DEST_TYPE, ROUNDING_MODE, SATURATE],
           flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -414,8 +419,6 @@ intrinsic("is_sparse_resident_zink", dest_comp=1, src_comp=[0], bit_sizes=[1],
 def barrier(name):
     intrinsic(name)
 
-barrier("discard")
-
 # Demote fragment shader invocation to a helper invocation.  Any stores to
 # memory after this instruction are suppressed and the fragment does not write
 # outputs to the framebuffer.  Unlike discard, demote needs to ensure that
@@ -480,8 +483,7 @@ intrinsic("inverse_ballot", src_comp=[0], dest_comp=1, flags=[CAN_ELIMINATE])
 barrier("begin_invocation_interlock")
 barrier("end_invocation_interlock")
 
-# A conditional discard/demote/terminate, with a single boolean source.
-intrinsic("discard_if", src_comp=[1])
+# A conditional demote/terminate, with a single boolean source.
 intrinsic("demote_if", src_comp=[1])
 intrinsic("terminate_if", src_comp=[1])
 
@@ -543,6 +545,11 @@ intrinsic("write_invocation_amd", src_comp=[0, 0, 1], dest_comp=0, bit_sizes=src
 intrinsic("mbcnt_amd", src_comp=[1, 1], dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE])
 # Compiled to v_permlane16_b32. src = [ value, lanesel_lo, lanesel_hi ]
 intrinsic("lane_permute_16_amd", src_comp=[1, 1, 1], dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE])
+# subgroup shuffle up/down with cluster size 16.
+# base in [-15, -1]: DPP_ROW_SR
+# base in [  1, 15]: DPP_ROW_SL, otherwise invalid.
+# Returns zero for invocations that try to read out of bounds
+intrinsic("dpp16_shift_amd", src_comp=[0], dest_comp=0, bit_sizes=src0, indices=[BASE], flags=[CAN_ELIMINATE])
 
 # Basic Geometry Shader intrinsics.
 #
@@ -886,13 +893,12 @@ system_value("tess_level_inner_default", 2)
 system_value("patch_vertices_in", 1)
 system_value("local_invocation_id", 3)
 system_value("local_invocation_index", 1)
-# zero_base indicates it starts from 0 for the current dispatch
-# non-zero_base indicates the base is included
+# workgroup_id does not include the base_workgroup_id
 system_value("workgroup_id", 3)
-system_value("workgroup_id_zero_base", 3)
 # The workgroup_index is intended for situations when a 3 dimensional
 # workgroup_id is not available on the HW, but a 1 dimensional index is.
 system_value("workgroup_index", 1)
+# API specific base added to the workgroup_id, e.g. baseGroup* of vkCmdDispatchBase
 system_value("base_workgroup_id", 3, bit_sizes=[32, 64])
 system_value("user_clip_plane", 4, indices=[UCP_ID])
 system_value("num_workgroups", 3)
@@ -926,12 +932,11 @@ system_value("subgroup_lt_mask", 0, bit_sizes=[32, 64])
 system_value("num_subgroups", 1)
 system_value("subgroup_id", 1)
 system_value("workgroup_size", 3)
-# note: the definition of global_invocation_id_zero_base is based on
-# (workgroup_id * workgroup_size) + local_invocation_id.
-# it is *not* based on workgroup_id_zero_base, meaning the work group
-# base is already accounted for, and the global base is additive on top of that
+# note: the definition of global_invocation_id is based on
+# ((workgroup_id + base_workgroup_id) * workgroup_size) + local_invocation_id.
 system_value("global_invocation_id", 3, bit_sizes=[32, 64])
-system_value("global_invocation_id_zero_base", 3, bit_sizes=[32, 64])
+# API specific base added to the global_invocation_id
+# e.g. global_work_offset of clEnqueueNDRangeKernel
 system_value("base_global_invocation_id", 3, bit_sizes=[32, 64])
 system_value("global_invocation_index", 1, bit_sizes=[32, 64])
 system_value("work_dim", 1)
@@ -1229,6 +1234,10 @@ intrinsic("printf", src_comp=[1, 1], dest_comp=1, bit_sizes=[32])
 # in a buffer, nir_lower_printf will do that, but requires
 # the driver to at least provide a base location
 system_value("printf_buffer_address", 1, bit_sizes=[32,64])
+# If driver wants to have all printfs from various shaders merged into a
+# single output buffer, it needs each shader to have its own base identifier
+# from which each printf is indexed.
+system_value("printf_base_identifier", 1, bit_sizes=[32])
 
 # Mesh shading MultiView intrinsics
 system_value("mesh_view_count", 1)
@@ -1284,9 +1293,9 @@ intrinsic("cmat_copy", src_comp=[-1, -1])
 # The float versions are not handled because those are not supported
 # by the backend.
 store("ssbo_ir3", [1, 1, 1],
-      indices=[WRITE_MASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+      indices=[BASE, WRITE_MASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
 load("ssbo_ir3",  [1, 1, 1],
-     indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE])
+     indices=[BASE, ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE])
 intrinsic("ssbo_atomic_ir3",       src_comp=[1, 1, 1, 1],    dest_comp=1,
           indices=[ACCESS, ATOMIC_OP])
 intrinsic("ssbo_atomic_swap_ir3",  src_comp=[1, 1, 1, 1, 1], dest_comp=1,
@@ -1338,6 +1347,13 @@ store("global_ir3", [2, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET])
 # the alignment applies to the base address
 load("global_ir3", [2, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET, RANGE_BASE, RANGE], flags=[CAN_ELIMINATE])
 
+# Etnaviv-specific load/glboal intrinsics. They take a 32-bit base address and
+# a 32-bit offset, which doesn't need to be an immediate.
+# src[] = { value, address, 32-bit offset }.
+store("global_etna", [1, 1], [WRITE_MASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+# src[] = { address, 32-bit offset }.
+load("global_etna", [1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
+
 # IR3-specific bindless handle specifier. Similar to vulkan_resource_index, but
 # without the binding because the hardware expects a single flattened index
 # rather than a (binding, index) pair. We may also want to use this with GL.
@@ -1360,6 +1376,10 @@ intrinsic("bindless_resource_ir3", [1], dest_comp=1, indices=[DESC_SET], flags=[
 intrinsic("preamble_start_ir3", [], dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 
 barrier("preamble_end_ir3")
+
+# IR3-specific intrinsic to choose any invocation. This is implemented the same
+# as elect, except that it doesn't require helper invocations. Used by preambles.
+intrinsic("elect_any_ir3", dest_comp=1, flags=[CAN_ELIMINATE])
 
 # IR3-specific intrinsic for stc. Should be used in the shader preamble.
 store("uniform_ir3", [], indices=[BASE])
@@ -1386,6 +1406,11 @@ intrinsic("inclusive_scan_clusters_ir3", dest_comp=1, src_comp=[1],
           bit_sizes=src0, indices=[REDUCTION_OP])
 intrinsic("exclusive_scan_clusters_ir3", dest_comp=1, src_comp=[1, 1],
           bit_sizes=src0, indices=[REDUCTION_OP])
+
+# IR3-specific intrinsics for prefetching descriptors in preambles.
+intrinsic("prefetch_sam_ir3", [1, 1], flags=[CAN_REORDER])
+intrinsic("prefetch_tex_ir3", [1], flags=[CAN_REORDER])
+intrinsic("prefetch_ubo_ir3", [1], flags=[CAN_REORDER])
 
 # Intrinsics used by the Midgard/Bifrost blend pipeline. These are defined
 # within a blend shader to read/write the raw value from the tile buffer,
@@ -1561,6 +1586,8 @@ system_value("pipeline_stat_query_enabled_amd", dest_comp=1, bit_sizes=[1])
 system_value("prim_gen_query_enabled_amd", dest_comp=1, bit_sizes=[1])
 # Whether NGG should execute shader query for primitive streamouted.
 system_value("prim_xfb_query_enabled_amd", dest_comp=1, bit_sizes=[1])
+# 64-bit memory address to struct {uint32_t ordered_id; uint32_t dwords_written;}[4]
+system_value("xfb_state_address_gfx12_amd", dest_comp=1, bit_sizes=[64])
 # Merged wave info. Bits 0-7 are the ES thread count, 8-15 are the GS thread count, 16-24 is the
 # GS Wave ID, 24-27 is the wave index in the workgroup, and 28-31 is the workgroup size in waves.
 system_value("merged_wave_info_amd", dest_comp=1)
@@ -1612,9 +1639,6 @@ system_value("intersection_opaque_amd", 1, bit_sizes=[1])
 # pointer to the next resume shader
 system_value("resume_shader_address_amd", 1, bit_sizes=[64], indices=[CALL_IDX])
 
-# Scratch base of callable stack for ray tracing.
-system_value("rt_dynamic_callable_stack_base_amd", 1)
-
 # Ray Tracing Traversal inputs
 system_value("sbt_offset_amd", 1)
 system_value("sbt_stride_amd", 1)
@@ -1650,6 +1674,10 @@ store("scalar_arg_amd", [], [BASE])
 store("vector_arg_amd", [], [BASE])
 
 # src[] = { 32/64-bit base address, 32-bit offset }.
+#
+# Similar to load_global_constant, the memory accessed must be read-only. This
+# restriction justifies the CAN_REORDER flag. Additionally, the base/offset must
+# be subgroup uniform.
 intrinsic("load_smem_amd", src_comp=[1, 1], dest_comp=0, bit_sizes=[32],
                            indices=[ALIGN_MUL, ALIGN_OFFSET],
                            flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -1687,6 +1715,27 @@ system_value("ordered_id_amd", 1)
 # src[] = { ordered_id, counter }
 # WRITE_MASK = mask for counter channel to update
 intrinsic("ordered_xfb_counter_add_gfx11_amd", dest_comp=0, src_comp=[1, 0], indices=[WRITE_MASK], bit_sizes=[32])
+
+# Execute the atomic ordered add loop. This does what ds_ordered_count did in previous generations.
+# This is implemented with inline assembly to get the most optimal code.
+#
+# Inputs:
+#   exec = one lane per counter (use nir_push_if, streamout should always enable 4 lanes)
+#   src[0] = 64-bit SGPR atomic base address (streamout should use nir_load_xfb_state_address_gfx12_amd)
+#   src[1] = 32-bit VGPR voffset (streamout should set local_invocation_index * 8)
+#   src[2] = 32-bit SGPR ordered_id (use nir_load_ordered_id_amd for streamout, compute shaders
+#            should generated it manually)
+#   src[3] = 64-bit VGPR atomic src, use pack_64_2x32_split(ordered_id, value), streamout should do:
+#            pack_64_2x32_split(ordered_id, "dwords written per workgroup" for each buffer)
+#
+# dst = 32-bit VGPR of the previous value of 32-bit value in memory, returned for all enabled lanes
+
+# Example - streamout: It's used to add dwords_written[] to global streamout offsets.
+# * Exactly 4 lanes must be active, one for each buffer binding.
+# * Disabled buffers must set dwords_written=0 for their lane, but the lane
+#   must be enabled.
+#
+intrinsic("ordered_add_loop_gfx12_amd", dest_comp=1, src_comp=[1, 1, 1, 1], bit_sizes=[32])
 
 # Subtract from global streamout buffer offsets. Used to fix up the offsets
 # when we overflow streamout buffers.
@@ -1744,18 +1793,26 @@ intrinsic("cmat_muladd_amd", src_comp=[16, 16, 0], dest_comp=0, bit_sizes=src2,
 # Get the debug log buffer descriptor.
 intrinsic("load_debug_log_desc_amd", bit_sizes=[32], dest_comp=4, flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# s_sleep BASE (sleep for 64*BASE cycles). BASE must be in [0, 0xffff].
+# BASE=0 is valid but isn't useful.
+# GFX12+: If BASE & 0x8000, sleep forever (until wakeup, trap, or kill).
+intrinsic("sleep_amd", indices=[BASE])
+
+# s_nop BASE (sleep for BASE+1 cycles, BASE must be in [0, 15]).
+intrinsic("nop_amd", indices=[BASE])
+
 system_value("ray_tracing_stack_base_lvp", 1)
 
 system_value("shader_call_data_offset_lvp", 1)
 
-# V3D-specific instrinc for tile buffer color reads.
+# Broadcom-specific instrinc for tile buffer color reads.
 #
 # The hardware requires that we read the samples and components of a pixel
 # in order, so we cannot eliminate or remove any loads in a sequence.
 #
 # src[] = { render_target }
 # BASE = sample index
-load("tlb_color_v3d", [1], [BASE, COMPONENT], [])
+load("tlb_color_brcm", [1], [BASE, COMPONENT], [])
 
 # V3D-specific instrinc for per-sample tile buffer color writes.
 #
@@ -1775,13 +1832,20 @@ intrinsic("load_fep_w_v3d", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Active invocation index within the subgroup.
 # Equivalent to popcount(ballot(true) & ((1 << subgroup_invocation) - 1))
-system_value("active_subgroup_invocation_agx", 1)
+intrinsic("load_active_subgroup_invocation_agx", dest_comp=1, flags=[CAN_ELIMINATE])
+
+# Like ballot() but only within a quad.
+intrinsic("quad_ballot_agx", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE])
 
 # With [0, 1] clipping, no transform is needed on the output z' = z. But with [-1,
 # 1] clipping, we need to transform z' = (z + w) / 2. We express both cases as a
 # lerp between z and w, where this is the lerp coefficient: 0 for [0, 1] and 0.5
 # for [-1, 1].
 system_value("clip_z_coeff_agx", 1)
+
+# True if drawing triangle fans with first vertex provoking, false otherwise.
+# This affects flatshading, which is defined weirdly for fans with first.
+system_value("is_first_fan_agx", 1, bit_sizes=[1])
 
 # mesa_prim for the input topology (in a geometry shader)
 system_value("input_topology_agx", 1)
@@ -1947,6 +2011,10 @@ system_value("sample_positions_agx", 1, bit_sizes=[32])
 # responsible for Z/S testing after its final discard. ~0/0 boolean.
 system_value("shader_part_tests_zs_agx", 1, bit_sizes=[16])
 
+# Returns whether the API depth test is NEVER. We emulate this in shader when
+# fragment side effects are used to ensure the fragment shader executes.
+system_value("depth_never_agx", 1, bit_sizes=[16])
+
 # In a fragment shader, returns the log2 of the number of samples in the
 # tilebuffer. This is the unprocessed value written in the corresponding USC
 # word. Used to determine whether sample mask writes have any effect when sample
@@ -1978,9 +2046,6 @@ barrier("fence_helper_exit_agx")
 
 # Pointer to the buffer passing outputs VS->TCS, VS->GS, or TES->GS linkage.
 system_value("vs_output_buffer_agx", 1, bit_sizes=[64])
-
-# Indirect for the above, used for indirect draws.
-system_value("vs_output_buffer_ptr_agx", 1, bit_sizes=[64])
 
 # Mask of VS->TCS, VS->GS, or TES->GS outputs. This is modelled as a sysval
 # directly so it can be dynamic with shader objects or constant folded with
@@ -2053,7 +2118,7 @@ system_value("simd_width_intel", 1)
 
 # Load a relocatable 32-bit value
 intrinsic("load_reloc_const_intel", dest_comp=1, bit_sizes=[32],
-          indices=[PARAM_IDX], flags=[CAN_ELIMINATE, CAN_REORDER])
+          indices=[PARAM_IDX, BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # 1 component 32bit surface index that can be used for bindless or BTI heaps
 #
@@ -2174,11 +2239,27 @@ system_value("ray_query_global_intel", 1, bit_sizes=[64])
 # The accumulator is source 0 because that is the source the intrinsic
 # infrastructure in NIR uses to determine the number of components in the
 # result.
-intrinsic("dpas_intel", dest_comp=0, src_comp=[0, 0, 0],
+#
+# The number of components for the second source is -1 to avoid validation of
+# its value. Some supported configurations will have the component count of
+# that matrix different than the others.
+intrinsic("dpas_intel", dest_comp=0, src_comp=[0, -1, 0],
           indices=[DEST_TYPE, SRC_TYPE, SATURATE, SYSTOLIC_DEPTH, REPEAT_COUNT],
           flags=[CAN_ELIMINATE])
 
 # NVIDIA-specific intrinsics
+# src[] = { index, offset }.
+intrinsic("ldc_nv", dest_comp=0, src_comp=[1, 1],
+          indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+# [Un]pins an LDCX handle around non-uniform control-flow sections
+# src[] = { handle }.
+intrinsic("pin_cx_handle_nv", src_comp=[1])
+intrinsic("unpin_cx_handle_nv", src_comp=[1])
+# src[] = { handle, offset }.
+intrinsic("ldcx_nv", dest_comp=0, src_comp=[1, 1],
+          indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
 intrinsic("load_sysval_nv", dest_comp=1, src_comp=[], bit_sizes=[32, 64],
           indices=[ACCESS, BASE], flags=[CAN_ELIMINATE])
 intrinsic("isberd_nv", dest_comp=1, src_comp=[1], bit_sizes=[32],

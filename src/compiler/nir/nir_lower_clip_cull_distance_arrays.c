@@ -519,10 +519,9 @@ nir_lower_clip_cull_distance_arrays(nir_shader *nir)
    nir_foreach_function_impl(impl, nir) {
       if (progress) {
          nir_metadata_preserve(impl,
-                               nir_metadata_block_index |
-                                  nir_metadata_dominance |
-                                  nir_metadata_live_defs |
-                                  nir_metadata_loop_analysis);
+                               nir_metadata_control_flow |
+                               nir_metadata_live_defs |
+                               nir_metadata_loop_analysis);
       } else {
          nir_metadata_preserve(impl, nir_metadata_all);
       }

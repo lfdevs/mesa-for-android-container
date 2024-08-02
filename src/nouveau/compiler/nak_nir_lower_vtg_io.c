@@ -252,7 +252,6 @@ bool
 nak_nir_lower_vtg_io(nir_shader *nir, const struct nak_compiler *nak)
 {
    return nir_shader_intrinsics_pass(nir, lower_vtg_io_intrin,
-                                     nir_metadata_block_index |
-                                     nir_metadata_dominance,
+                                     nir_metadata_control_flow,
                                      NULL);
 }

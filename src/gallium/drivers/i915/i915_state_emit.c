@@ -40,13 +40,6 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
-struct i915_tracked_hw_state {
-   const char *name;
-   void (*validate)(struct i915_context *, unsigned *batch_space);
-   void (*emit)(struct i915_context *);
-   unsigned dirty, batch_space;
-};
-
 static void
 validate_flush(struct i915_context *i915, unsigned *batch_space)
 {

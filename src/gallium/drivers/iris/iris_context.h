@@ -349,6 +349,11 @@ struct iris_fs_data {
    bool has_side_effects;
    bool pulls_bary;
 
+   bool uses_sample_offsets;
+   bool uses_npc_bary_coefficients;
+   bool uses_pc_bary_coefficients;
+   bool uses_depth_w_coefficients;
+
    bool uses_nonperspective_interp_modes;
 
    bool is_per_sample;

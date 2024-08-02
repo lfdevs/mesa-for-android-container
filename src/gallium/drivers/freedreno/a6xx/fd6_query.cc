@@ -52,7 +52,7 @@ struct PACKED fd6_query_sample {
    uint64_t result;
    uint64_t stop;
 };
-DEFINE_CAST(fd_acc_query_sample, fd6_query_sample);
+FD_DEFINE_CAST(fd_acc_query_sample, fd6_query_sample);
 
 /* offset of a single field of an array of fd6_query_sample: */
 #define query_sample_idx(aq, idx, field)                                       \
@@ -339,7 +339,7 @@ struct PACKED fd6_pipeline_stats_sample {
 
    uint64_t start, stop, result;
 };
-DEFINE_CAST(fd_acc_query_sample, fd6_pipeline_stats_sample);
+FD_DEFINE_CAST(fd_acc_query_sample, fd6_pipeline_stats_sample);
 
 #define stats_reloc(ring, aq, field)                                           \
    OUT_RELOC(ring, fd_resource((aq)->prsc)->bo,                                \
@@ -549,7 +549,7 @@ struct PACKED fd6_primitives_sample {
       uint64_t emitted, generated;
    } start[4], stop[4], result;
 };
-DEFINE_CAST(fd_acc_query_sample, fd6_primitives_sample);
+FD_DEFINE_CAST(fd_acc_query_sample, fd6_primitives_sample);
 
 #define primitives_reloc(ring, aq, field)                                      \
    OUT_RELOC(ring, fd_resource((aq)->prsc)->bo,                                \

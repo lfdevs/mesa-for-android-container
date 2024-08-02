@@ -795,14 +795,6 @@ pool_destroy(struct zink_screen *screen, struct zink_descriptor_pool *pool)
    FREE(pool);
 }
 
-static void
-multi_pool_destroy(struct zink_screen *screen, struct zink_descriptor_pool_multi *mpool)
-{
-   if (mpool->pool)
-      pool_destroy(screen, mpool->pool);
-   FREE(mpool);
-}
-
 static bool
 clear_multi_pool_overflow(struct zink_screen *screen, struct util_dynarray *overflowed_pools)
 {
@@ -813,6 +805,24 @@ clear_multi_pool_overflow(struct zink_screen *screen, struct util_dynarray *over
       found = true;
    }
    return found;
+}
+
+static void
+deinit_multi_pool_overflow(struct zink_screen *screen, struct zink_descriptor_pool_multi *mpool)
+{
+   for (unsigned i = 0; i < 2; i++) {
+      clear_multi_pool_overflow(screen, &mpool->overflowed_pools[i]);
+      util_dynarray_fini(&mpool->overflowed_pools[i]);
+   }
+}
+
+static void
+multi_pool_destroy(struct zink_screen *screen, struct zink_descriptor_pool_multi *mpool)
+{
+   deinit_multi_pool_overflow(screen, mpool);
+   if (mpool->pool)
+      pool_destroy(screen, mpool->pool);
+   FREE(mpool);
 }
 
 static VkDescriptorPool
@@ -1060,9 +1070,9 @@ static void
 enlarge_db(struct zink_context *ctx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
    /* ensure current db surives */
-   zink_batch_reference_resource(&ctx->batch, bs->dd.db);
+   zink_batch_reference_resource(ctx, bs->dd.db);
    /* rebinding a db mid-batch is extremely costly: if we start with a factor
     * 16 and then half the factor with each new allocation. It shouldn't need to
     * do this more than twice. */
@@ -1075,7 +1085,7 @@ static void
 update_separable(struct zink_context *ctx, struct zink_program *pg)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
 
    unsigned use_buffer = 0;
    VkDescriptorGetInfoEXT info;
@@ -1147,7 +1157,7 @@ static void
 zink_descriptors_update_masked_buffer(struct zink_context *ctx, bool is_compute, uint8_t changed_sets, uint8_t bind_sets)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
    struct zink_program *pg = is_compute ? &ctx->curr_compute->base : &ctx->curr_program->base;
 
    /* skip if no descriptors are updated */
@@ -1205,7 +1215,6 @@ zink_descriptors_update_masked_buffer(struct zink_context *ctx, bool is_compute,
          bs->dd.cur_db_offset[type] = bs->dd.db_offset;
          bs->dd.db_offset += pg->dd.db_size[type];
       }
-      zink_flush_dgc_if_enabled(ctx);
       /* templates are indexed by the set id, so increment type by 1
          * (this is effectively an optimization of indirecting through screen->desc_set_id)
          */
@@ -1223,7 +1232,7 @@ void
 zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_t changed_sets, uint8_t bind_sets)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
    struct zink_program *pg = is_compute ? &ctx->curr_compute->base : &ctx->curr_program->base;
    VkDescriptorSet desc_sets[ZINK_DESCRIPTOR_BASE_TYPES];
 
@@ -1237,12 +1246,11 @@ zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_
       return;
    }
    /* no flushing allowed: sets are allocated to the batch, so this breaks everything */
-   assert(ctx->batch.state == bs);
+   assert(ctx->bs == bs);
 
    u_foreach_bit(type, changed_sets) {
       assert(type + 1 < pg->num_dsl);
       if (pg->dd.pool_key[type]) {
-         zink_flush_dgc_if_enabled(ctx);
          /* templates are indexed by the set id, so increment type by 1
           * (this is effectively an optimization of indirecting through screen->desc_set_id)
           */
@@ -1263,7 +1271,6 @@ zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_
          continue;
       /* same set indexing as above */
       assert(bs->dd.sets[is_compute][type + 1]);
-      zink_flush_dgc_if_enabled(ctx);
       VKSCR(CmdBindDescriptorSets)(bs->cmdbuf,
                               is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
                               /* same set indexing as above */
@@ -1275,7 +1282,7 @@ zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_
 static void
 bind_bindless_db(struct zink_context *ctx, struct zink_program *pg)
 {
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    unsigned index = 1;
    VkDeviceSize offset = 0;
@@ -1296,7 +1303,7 @@ bind_bindless_db(struct zink_context *ctx, struct zink_program *pg)
 void
 zink_descriptors_update(struct zink_context *ctx, bool is_compute)
 {
-   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_batch_state *bs = ctx->bs;
    struct zink_program *pg = is_compute ? &ctx->curr_compute->base : &ctx->curr_program->base;
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    bool have_KHR_push_descriptor = screen->info.have_KHR_push_descriptor;
@@ -1358,7 +1365,6 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
          enlarge_db(ctx);
          changed_sets = pg->dd.binding_usage;
          ctx->dd.push_state_changed[is_compute] = true;
-         zink_flush_dgc_if_enabled(ctx);
       }
 
       if (!bs->dd.db_bound)
@@ -1402,7 +1408,6 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
             bs->dd.cur_db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS] = bs->dd.db_offset;
             bs->dd.db_offset += ctx->dd.db_size[is_compute];
          }
-         zink_flush_dgc_if_enabled(ctx);
          VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf,
                                                  is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                  pg->layout,
@@ -1410,9 +1415,6 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
                                                  &index,
                                                  &offset);
       } else {
-         if (ctx->dd.push_state_changed[0]) {
-            zink_flush_dgc_if_enabled(ctx);
-         }
          if (have_KHR_push_descriptor) {
             if (ctx->dd.push_state_changed[is_compute])
                VKCTX(CmdPushDescriptorSetWithTemplateKHR)(bs->cmdbuf, pg->dd.templates[0],
@@ -1444,7 +1446,7 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
       if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
          bind_bindless_db(ctx, pg);
       } else {
-         VKCTX(CmdBindDescriptorSets)(ctx->batch.state->cmdbuf, is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+         VKCTX(CmdBindDescriptorSets)(ctx->bs->cmdbuf, is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     pg->layout, screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS], 1, &ctx->dd.t.bindless_set,
                                     0, NULL);
       }
@@ -1477,15 +1479,6 @@ zink_context_invalidate_descriptor_state_compact(struct zink_context *ctx, gl_sh
    }
 }
 
-static void
-deinit_multi_pool_overflow(struct zink_screen *screen, struct zink_descriptor_pool_multi *mpool)
-{
-   for (unsigned i = 0; i < 2; i++) {
-      clear_multi_pool_overflow(screen, &mpool->overflowed_pools[i]);
-      util_dynarray_fini(&mpool->overflowed_pools[i]);
-   }
-}
-
 /* called during batch state destroy */
 void
 zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state *bs)
@@ -1493,10 +1486,8 @@ zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state
    for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++) {
       for (unsigned j = 0; j < bs->dd.pools[i].capacity / sizeof(struct zink_descriptor_pool_multi *); j++) {
          struct zink_descriptor_pool_multi **mppool = util_dynarray_element(&bs->dd.pools[i], struct zink_descriptor_pool_multi *, j);
-         if (mppool && *mppool) {
-            deinit_multi_pool_overflow(screen, *mppool);
+         if (mppool && *mppool)
             multi_pool_destroy(screen, *mppool);
-         }
       }
       util_dynarray_fini(&bs->dd.pools[i]);
    }

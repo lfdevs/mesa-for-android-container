@@ -114,15 +114,15 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
    radeon_uvd_enc_get_vui_param(enc, pic);
 }
 
-static void flush(struct radeon_uvd_encoder *enc)
+static void flush(struct radeon_uvd_encoder *enc, unsigned flags)
 {
-   enc->ws->cs_flush(&enc->cs, PIPE_FLUSH_ASYNC, NULL);
+   enc->ws->cs_flush(&enc->cs, flags, NULL);
 }
 
 static void radeon_uvd_enc_flush(struct pipe_video_codec *encoder)
 {
    struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
-   flush(enc);
+   flush(enc, PIPE_FLUSH_ASYNC);
 }
 
 static void radeon_uvd_enc_cs_flush(void *ctx, unsigned flags, struct pipe_fence_handle **fence)
@@ -201,7 +201,7 @@ static void radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
       si_vid_create_buffer(enc->screen, &fb, 4096, PIPE_USAGE_STAGING);
       enc->fb = &fb;
       enc->begin(enc, picture);
-      flush(enc);
+      flush(enc, PIPE_FLUSH_ASYNC);
       si_vid_destroy_buffer(&fb);
    }
 }
@@ -230,7 +230,7 @@ static void radeon_uvd_enc_end_frame(struct pipe_video_codec *encoder,
                                      struct pipe_picture_desc *picture)
 {
    struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
-   flush(enc);
+   flush(enc, picture->flush_flags);
 }
 
 static void radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
@@ -243,7 +243,7 @@ static void radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
       si_vid_create_buffer(enc->screen, &fb, 512, PIPE_USAGE_STAGING);
       enc->fb = &fb;
       enc->destroy(enc);
-      flush(enc);
+      flush(enc, PIPE_FLUSH_ASYNC);
       if (enc->si) {
          si_vid_destroy_buffer(enc->si);
          FREE(enc->si);

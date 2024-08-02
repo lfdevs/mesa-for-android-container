@@ -94,6 +94,13 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
    if (usage & PIPE_BIND_SHADER_IMAGE) {
       if (sample_count > 1)
          return false;
+
+      /* So, this only matters for image writes but 'usage' doesn't
+       * differentiate.  See f1c1b96
+       */
+      const struct util_format_description *desc = util_format_description(format);
+      if ((desc->nr_channels > 2) && (desc->block.bits == 16))
+         return false;
    }
 
    if ((usage &

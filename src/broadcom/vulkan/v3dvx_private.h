@@ -61,6 +61,9 @@ void
 v3dX(cmd_buffer_emit_line_width)(struct v3dv_cmd_buffer *cmd_buffer);
 
 void
+v3dX(cmd_buffer_emit_default_point_size)(struct v3dv_cmd_buffer *cmd_buffer);
+
+void
 v3dX(cmd_buffer_emit_sample_state)(struct v3dv_cmd_buffer *cmd_buffer);
 
 void
@@ -318,7 +321,8 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineRasterizationStateCreateInfo *rs_info,
                           const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
                           const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info,
-                          const VkPipelineMultisampleStateCreateInfo *ms_info);
+                          const VkPipelineMultisampleStateCreateInfo *ms_info,
+                          const struct vk_graphics_pipeline_state *state);
 void
 v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
                                   const VkPipelineVertexInputStateCreateInfo *vi_info,
@@ -337,7 +341,8 @@ v3dX(job_emit_noop)(struct v3dv_job *job);
 
 /* Used at v3dv_query */
 VkResult
-v3dX(enumerate_performance_query_counters)(uint32_t *pCounterCount,
+v3dX(enumerate_performance_query_counters)(struct v3dv_physical_device *pDevice,
+                                           uint32_t *pCounterCount,
                                            VkPerformanceCounterKHR *pCounters,
                                            VkPerformanceCounterDescriptionKHR *pCounterDescriptions);
 
@@ -356,9 +361,6 @@ uint32_t
 v3dX(clamp_for_format_and_type)(uint32_t rt_type,
                                 VkFormat vk_format);
 
-#define V3D42_CLIPPER_XY_GRANULARITY 256.0f
-#define V3D71_CLIPPER_XY_GRANULARITY 64.0f
-
 uint32_t
 v3dX(clamp_for_format_and_type)(uint32_t rt_type,
                                 VkFormat vk_format);
@@ -367,3 +369,6 @@ void
 v3dX(viewport_compute_xform)(const VkViewport *viewport,
                              float scale[3],
                              float translate[3]);
+
+uint32_t
+v3dX(translate_stencil_op)(VkStencilOp op);

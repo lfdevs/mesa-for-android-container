@@ -27,6 +27,7 @@
 #include "compiler/clc/clc.h"
 #include "compiler/glsl_types.h"
 #include "compiler/nir/nir_serialize.h"
+#include "compiler/spirv/spirv_info.h"
 #include "dev/intel_debug.h"
 #include "util/build_id.h"
 #include "util/disk_cache.h"
@@ -166,6 +167,8 @@ print_cs_prog_data_fields(FILE *fp, const char *prefix, const char *pad,
    PROG_DATA_FIELD("%u", base.const_data_offset);
    PROG_DATA_FIELD("%u", base.num_relocs);
    fprintf(fp, "%s.base.relocs = %s_relocs,\n", pad, prefix);
+   PROG_DATA_FIELD("%u", base.printf_info_count);
+   fprintf(fp, "%s.base.printf_info = (u_printf_info *)%s_printfs,\n", pad, prefix);
    assert(!cs_prog_data->base.has_ubo_pull);
    assert(cs_prog_data->base.dispatch_grf_start_reg == 0);
    assert(!cs_prog_data->base.use_alt_mode);
@@ -222,6 +225,28 @@ print_kernel(FILE *fp, const char *prefix,
    _mesa_sha1_update(&sha1_ctx, kernel->prog_data.base.relocs,
                      kernel->prog_data.base.num_relocs *
                      sizeof(kernel->prog_data.base.relocs[0]));
+
+   fprintf(fp, "static const u_printf_info %s_printfs[] = {\n",
+           prefix);
+   for (unsigned i = 0; i < kernel->prog_data.base.printf_info_count; i++) {
+      const u_printf_info *printf_info = &kernel->prog_data.base.printf_info[i];
+      fprintf(fp, "   {\n");
+      fprintf(fp, "      .num_args = %"PRIu32",\n", printf_info->num_args);
+      fprintf(fp, "      .arg_sizes = (unsigned []) {\n");
+      for (unsigned a = 0; a < printf_info->num_args; a++)
+         fprintf(fp, "         %"PRIu32",\n", printf_info->arg_sizes[a]);
+      fprintf(fp, "      },\n");
+      fprintf(fp, "      .string_size = %"PRIu32",\n", printf_info->string_size);
+      fprintf(fp, "      .strings = (char []) {");
+      for (unsigned c = 0; c < printf_info->string_size; c++) {
+         if (c % 8 == 0 )
+            fprintf(fp, "\n         ");
+         fprintf(fp, "0x%02hhx, ", printf_info->strings[c]);
+      }
+      fprintf(fp, "\n      },\n");
+      fprintf(fp, "   },\n");
+   }
+   fprintf(fp, "};\n");
 
    /* Get rid of the pointers before we hash */
    struct brw_cs_prog_data cs_prog_data = kernel->prog_data;
@@ -318,33 +343,33 @@ struct intel_clc_params {
 static int
 output_nir(const struct intel_clc_params *params, struct clc_binary *binary)
 {
+   const struct spirv_capabilities spirv_caps = {
+      .Addresses = true,
+      .Groups = true,
+      .StorageImageWriteWithoutFormat = true,
+      .Int8 = true,
+      .Int16 = true,
+      .Int64 = true,
+      .Int64Atomics = true,
+      .Kernel = true,
+      .Linkage = true, /* We receive linked kernel from clc */
+      .GenericPointer = true,
+      .GroupNonUniform = true,
+      .GroupNonUniformArithmetic = true,
+      .GroupNonUniformBallot = true,
+      .GroupNonUniformQuad = true,
+      .GroupNonUniformShuffle = true,
+      .GroupNonUniformVote = true,
+      .SubgroupDispatch = true,
+
+      .SubgroupShuffleINTEL = true,
+      .SubgroupBufferBlockIOINTEL = true,
+   };
+
    struct spirv_to_nir_options spirv_options = {
       .environment = NIR_SPIRV_OPENCL,
-      .caps = {
-         .address = true,
-         .groups = true,
-         .image_write_without_format = true,
-         .int8 = true,
-         .int16 = true,
-         .int64 = true,
-         .int64_atomics = true,
-         .kernel = true,
-         .linkage = true, /* We receive linked kernel from clc */
-         .float_controls = true,
-         .generic_pointers = true,
-         .storage_8bit = true,
-         .storage_16bit = true,
-         .subgroup_arithmetic = true,
-         .subgroup_basic = true,
-         .subgroup_ballot = true,
-         .subgroup_dispatch = true,
-         .subgroup_quad = true,
-         .subgroup_shuffle = true,
-         .subgroup_vote = true,
-
-         .intel_subgroup_shuffle = true,
-         .intel_subgroup_buffer_block_io = true,
-      },
+      .capabilities = &spirv_caps,
+      .printf = true,
       .shared_addr_format = nir_address_format_62bit_generic,
       .global_addr_format = nir_address_format_62bit_generic,
       .temp_addr_format = nir_address_format_62bit_generic,
@@ -642,7 +667,7 @@ int main(int argc, char **argv)
          goto fail;
       }
 
-      if (!intel_get_device_info_from_pci_id(pci_id, &params.devinfo)) {
+      if (!intel_get_device_info_for_build(pci_id, &params.devinfo)) {
          fprintf(stderr, "Failed to get device information.\n");
          goto fail;
       }

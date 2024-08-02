@@ -190,8 +190,10 @@ TEST_F(Optimizer, Copyprop)
 TEST_F(Optimizer, InlineHazards)
 {
    NEGCASE32({
+      agx_index zero = agx_mov_imm(b, AGX_SIZE_32, 0);
       agx_instr *I = agx_collect_to(b, out, 4);
-      I->src[0] = agx_mov_imm(b, AGX_SIZE_32, 0);
+
+      I->src[0] = zero;
       I->src[1] = wy;
       I->src[2] = wz;
       I->src[3] = wz;
@@ -288,6 +290,33 @@ TEST_F(Optimizer, BallotMultipleUses)
          agx_index ballot =
             agx_fcmp_quad_ballot(b, wx, wy, AGX_FCOND_GT, false);
          agx_fadd_to(b, out, cmp, ballot);
+      });
+}
+
+/*
+ * We had a bug where the ballot optimization didn't check the agx_index's type
+ * so would fuse constants with overlapping values. An unrelated common code
+ * change surfaced this in CTS case:
+ *
+ *    dEQP-VK.subgroups.vote.frag_helper.subgroupallequal_bool_fragment
+ *
+ * We passed Vulkan CTS without hitting it though, hence the targeted test.
+ */
+TEST_F(Optimizer, BallotConstant)
+{
+   CASE32(
+      {
+         agx_index cmp = agx_fcmp(b, wx, wy, AGX_FCOND_GT, false);
+         agx_index ballot = agx_quad_ballot(b, agx_immediate(cmp.value));
+         agx_index ballot2 = agx_quad_ballot(b, cmp);
+         agx_fadd_to(b, out, ballot, agx_fadd(b, ballot2, cmp));
+      },
+      {
+         agx_index cmp = agx_fcmp(b, wx, wy, AGX_FCOND_GT, false);
+         agx_index ballot = agx_quad_ballot(b, agx_immediate(cmp.value));
+         agx_index ballot2 =
+            agx_fcmp_quad_ballot(b, wx, wy, AGX_FCOND_GT, false);
+         agx_fadd_to(b, out, ballot, agx_fadd(b, ballot2, cmp));
       });
 }
 

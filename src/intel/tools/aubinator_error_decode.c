@@ -40,6 +40,7 @@
 
 #include "aubinator_error_decode_lib.h"
 #include "aubinator_error_decode_xe.h"
+#include "common/intel_debug_identifier.h"
 #include "compiler/brw_compiler.h"
 #include "compiler/elk/elk_compiler.h"
 #include "decoder/intel_decoder.h"

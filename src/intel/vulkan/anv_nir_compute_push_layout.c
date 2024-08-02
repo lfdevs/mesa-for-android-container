@@ -150,7 +150,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
    struct anv_push_range push_constant_range = {
       .set = ANV_DESCRIPTOR_SET_PUSH_CONSTANTS,
       .start = push_start / 32,
-      .length = DIV_ROUND_UP(push_end - push_start, 32),
+      .length = ALIGN(push_end - push_start, devinfo->grf_size) / 32,
    };
 
    if (has_push_intrinsic) {
@@ -341,11 +341,13 @@ anv_nir_compute_push_layout(nir_shader *nir,
 }
 
 void
-anv_nir_validate_push_layout(struct brw_stage_prog_data *prog_data,
+anv_nir_validate_push_layout(const struct anv_physical_device *pdevice,
+                             struct brw_stage_prog_data *prog_data,
                              struct anv_pipeline_bind_map *map)
 {
 #ifndef NDEBUG
-   unsigned prog_data_push_size = DIV_ROUND_UP(prog_data->nr_params, 8);
+   unsigned prog_data_push_size = ALIGN(prog_data->nr_params, pdevice->info.grf_size / 4) / 8;
+
    for (unsigned i = 0; i < 4; i++)
       prog_data_push_size += prog_data->ubo_ranges[i].length;
 

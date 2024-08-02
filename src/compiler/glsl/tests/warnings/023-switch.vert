@@ -24,5 +24,7 @@ void main()
   default:
     fooFloat = undefined;
   }
+
+  gl_Position = vec4(1.0);
 }
 

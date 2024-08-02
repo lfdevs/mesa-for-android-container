@@ -187,6 +187,9 @@ struct panfrost_context {
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
    uint32_t vb_mask;
 
+   /* Bound CL global buffers */
+   struct util_dynarray global_buffers;
+
    struct pipe_shader_buffer ssbo[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
    uint32_t ssbo_mask[PIPE_SHADER_TYPES];
 

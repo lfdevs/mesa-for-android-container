@@ -104,13 +104,7 @@ nir_inline_function_impl(struct nir_builder *b,
 
             unsigned param_idx = nir_intrinsic_param_idx(load);
             assert(param_idx < impl->function->num_params);
-            nir_def_rewrite_uses(&load->def,
-                                 params[param_idx]);
-
-            /* Remove any left-over load_param intrinsics because they're soon
-             * to be in another function and therefore no longer valid.
-             */
-            nir_instr_remove(&load->instr);
+            nir_def_replace(&load->def, params[param_idx]);
             break;
          }
 

@@ -179,15 +179,15 @@ static void
 dump_blit_info(const struct pipe_blit_info *info)
 {
    util_dump_blit_info(stderr, info);
-   fprintf(stderr, "\ndst resource: ");
+   fprintf(stderr, "\n\tdst resource: ");
    util_dump_resource(stderr, info->dst.resource);
    if (is_ubwc(info->dst.resource, info->dst.level))
       fprintf(stderr, " (ubwc)");
-   fprintf(stderr, "\nsrc resource: ");
+   fprintf(stderr, "\n\tsrc resource: ");
    util_dump_resource(stderr, info->src.resource);
    if (is_ubwc(info->src.resource, info->src.level))
       fprintf(stderr, " (ubwc)");
-   fprintf(stderr, "\n");
+   fprintf(stderr, "\n\n");
 }
 
 static bool
@@ -216,6 +216,18 @@ can_do_blit(const struct pipe_blit_info *info)
    fail_if(info->dst.resource->nr_samples > 1);
 
    fail_if(info->window_rectangle_include);
+
+   /* The blitter can't handle the needed swizzle gymnastics to convert
+    * to/from L/A formats:
+    */
+   if (info->src.format != info->dst.format) {
+      fail_if(util_format_is_luminance(info->dst.format));
+      fail_if(util_format_is_alpha(info->dst.format));
+      fail_if(util_format_is_luminance_alpha(info->dst.format));
+      fail_if(util_format_is_luminance(info->src.format));
+      fail_if(util_format_is_alpha(info->src.format));
+      fail_if(util_format_is_luminance_alpha(info->src.format));
+   }
 
    const struct util_format_description *src_desc =
       util_format_description(info->src.format);
@@ -1216,8 +1228,7 @@ handle_zs_blit(struct fd_context *ctx,
       dump_blit_info(info);
    }
 
-   if (info->src.format != info->dst.format)
-      return false;
+   fail_if(info->src.format != info->dst.format);
 
    struct fd_resource *src = fd_resource(info->src.resource);
    struct fd_resource *dst = fd_resource(info->dst.resource);
@@ -1362,8 +1373,7 @@ handle_snorm_copy_blit(struct fd_context *ctx,
    assert_dt
 {
    /* If we're interpolating the pixels, we can't just treat the values as unorm. */
-   if (info->filter == PIPE_TEX_FILTER_LINEAR)
-      return false;
+   fail_if(info->filter == PIPE_TEX_FILTER_LINEAR);
 
    struct pipe_blit_info blit = *info;
 

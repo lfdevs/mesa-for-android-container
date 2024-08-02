@@ -34,7 +34,7 @@
 #ifndef KOPPER_INTERFACE_H
 #define KOPPER_INTERFACE_H
 
-#include <GL/internal/dri_interface.h>
+#include "mesa_interface.h"
 #include <vulkan/vulkan_core.h>
 
 typedef struct __DRIkopperExtensionRec          __DRIkopperExtension;

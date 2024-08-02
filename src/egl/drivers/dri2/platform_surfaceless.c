@@ -45,7 +45,7 @@ surfaceless_alloc_image(struct dri2_egl_display *dri2_dpy,
 {
    return dri2_dpy->image->createImage(
       dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
-      dri2_surf->base.Height, dri2_surf->visual, 0, NULL);
+      dri2_surf->base.Height, dri2_surf->visual, NULL, 0, 0, NULL);
 }
 
 static void
@@ -189,6 +189,8 @@ surfaceless_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
    /* Note: loaderPrivate is _EGLDisplay* */
    switch (cap) {
    case DRI_LOADER_CAP_FP16:
+      return 1;
+   case DRI_LOADER_CAP_RGBA_ORDERING:
       return 1;
    default:
       return 0;

@@ -221,7 +221,7 @@ ir3_nir_move_varying_inputs(nir_shader *shader)
 
       if (progress) {
          nir_metadata_preserve(
-            function->impl, nir_metadata_block_index | nir_metadata_dominance);
+            function->impl, nir_metadata_control_flow);
       }
    }
 

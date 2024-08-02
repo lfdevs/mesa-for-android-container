@@ -754,26 +754,17 @@ nv50_draw_vbo_kick_notify(struct nouveau_context *context)
    _nouveau_fence_update(context->screen, true);
 }
 
-void
-nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
-              unsigned drawid_offset,
-              const struct pipe_draw_indirect_info *indirect,
-              const struct pipe_draw_start_count_bias *draws,
-              unsigned num_draws)
+static void
+nv50_draw_single_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                     unsigned drawid_offset,
+                     const struct pipe_draw_indirect_info *indirect,
+                     const struct pipe_draw_start_count_bias *draws)
 {
-   if (num_draws > 1) {
-      util_draw_multi(pipe, info, drawid_offset, indirect, draws, num_draws);
-      return;
-   }
-
-   if (!indirect && (!draws[0].count || !info->instance_count))
-      return;
-
    /* We don't actually support indirect draws, so add a fallback for ES 3.1's
     * benefit.
     */
    if (indirect && indirect->buffer) {
-      util_draw_indirect(pipe, info, indirect);
+      util_draw_indirect(pipe, info, drawid_offset, indirect);
       return;
    }
 
@@ -782,41 +773,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    bool tex_dirty = false;
    int s;
 
-   if (info->index_size && !info->has_user_indices)
-      BCTX_REFN(nv50->bufctx_3d, 3D_INDEX, nv04_resource(info->index.resource), RD);
-
-   /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
-   if (info->index_bounds_valid) {
-      nv50->vb_elt_first = info->min_index + (info->index_size ? draws->index_bias : 0);
-      nv50->vb_elt_limit = info->max_index - info->min_index;
-   } else {
-      nv50->vb_elt_first = 0;
-      nv50->vb_elt_limit = ~0;
-   }
-   nv50->instance_off = info->start_instance;
-   nv50->instance_max = info->instance_count - 1;
-
-   /* For picking only a few vertices from a large user buffer, push is better,
-    * if index count is larger and we expect repeated vertices, suggest upload.
-    */
-   nv50->vbo_push_hint = /* the 64 is heuristic */
-      !(info->index_size && ((nv50->vb_elt_limit + 64) < draws[0].count));
-
-   if (nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))
-      nv50->vbo_constant = nv50->vertex->vbo_constant & nv50->vbo_user;
-   if (nv50->vbo_user && !(nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))) {
-      if (!!nv50->vbo_fifo != nv50->vbo_push_hint)
-         nv50->dirty_3d |= NV50_NEW_3D_ARRAYS;
-      else
-      if (!nv50->vbo_fifo)
-         nv50_update_user_vbufs(nv50);
-   }
-
-   if (unlikely(nv50->num_so_targets && !nv50->gmtyprog))
-      nv50->state.prim_size = nv50_pipe_prim_to_prim_size[info->mode];
-
-   simple_mtx_lock(&nv50->screen->state_lock);
-   nv50_state_validate_3d(nv50, ~0);
+   simple_mtx_assert_locked(&nv50->screen->state_lock);
 
    nv50->base.kick_notify = nv50_draw_vbo_kick_notify;
 
@@ -869,7 +826,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
 
    if (nv50->vbo_fifo) {
       nv50_push_vbo(nv50, info, indirect, &draws[0]);
-      goto cleanup;
+      return;
    }
 
    if (nv50->state.instance_base != info->start_instance) {
@@ -923,8 +880,73 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                        info->mode, draws[0].start, draws[0].count,
                        info->instance_count);
    }
+}
 
-cleanup:
+/* Thin wrapper to avoid kicking every 3 ns during multidraw */
+
+void
+nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+              unsigned drawid_offset,
+              const struct pipe_draw_indirect_info *indirect,
+              const struct pipe_draw_start_count_bias *draws,
+              unsigned num_draws)
+{
+   struct nv50_context *nv50 = nv50_context(pipe);
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+
+   /* The rest is copied straight from util_multi_draw
+    *
+    * XXX: Properly rewrite vbo handling in nvc0/nv50
+    *
+     */
+
+   unsigned drawid = drawid_offset;
+
+   /* dont wanna start trippin */
+   simple_mtx_lock(&nv50->screen->state_lock);
+
+   if (info->index_size && !info->has_user_indices)
+      BCTX_REFN(nv50->bufctx_3d, 3D_INDEX, nv04_resource(info->index.resource), RD);
+
+   /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
+   if (info->index_bounds_valid) {
+      nv50->vb_elt_first = info->min_index + (info->index_size ? draws->index_bias : 0);
+      nv50->vb_elt_limit = info->max_index - info->min_index;
+   } else {
+      nv50->vb_elt_first = 0;
+      nv50->vb_elt_limit = ~0;
+   }
+   nv50->instance_off = info->start_instance;
+   nv50->instance_max = info->instance_count - 1;
+
+   /* For picking only a few vertices from a large user buffer, push is better,
+    * if index count is larger and we expect repeated vertices, suggest upload.
+    */
+   nv50->vbo_push_hint = /* the 64 is heuristic */
+      !(info->index_size && ((nv50->vb_elt_limit + 64) < draws[0].count));
+
+   if (nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))
+      nv50->vbo_constant = nv50->vertex->vbo_constant & nv50->vbo_user;
+   if (nv50->vbo_user && !(nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))) {
+      if (!!nv50->vbo_fifo != nv50->vbo_push_hint)
+         nv50->dirty_3d |= NV50_NEW_3D_ARRAYS;
+      else
+      if (!nv50->vbo_fifo)
+         nv50_update_user_vbufs(nv50);
+   }
+
+   if (unlikely(nv50->num_so_targets && !nv50->gmtyprog))
+      nv50->state.prim_size = nv50_pipe_prim_to_prim_size[info->mode];
+
+   nv50_state_validate_3d(nv50, ~0);
+
+   for (unsigned i = 0; i < num_draws; i++) {
+      if (indirect || (draws[i].count && info->instance_count))
+         nv50_draw_single_vbo(pipe, info, drawid, indirect, &draws[i]);
+      if (info->increment_draw_id)
+         drawid++;
+   }
+
    PUSH_KICK(push);
    simple_mtx_unlock(&nv50->screen->state_lock);
 

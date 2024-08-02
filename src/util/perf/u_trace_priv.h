@@ -46,11 +46,9 @@ struct u_tracepoint {
    unsigned payload_sz;
    const char *name;
    /**
-    * Whether this tracepoint's timestamp must be recorded with as an
-    * end-of-pipe timestamp (for some GPUs the recording timestamp instruction
-    * might be different for top/end of pipe).
+    * A bitfield of driver agnostic flags
     */
-   bool end_of_pipe:1;
+   uint16_t flags;
    /**
     * Index of this tracepoint in <basename>_tracepoint_names in the generated
     * u_trace perfetto header. By associating these names with iids in setup,

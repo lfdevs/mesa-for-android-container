@@ -39,6 +39,8 @@ pub const ${s.name}_${f.name}_${e.name}: u32 = ${e.value};
 """)
 
 STRUCTS = [
+    'SPHV3',
+    'SPHV4',
     'TEXHEADV2',
     'TEXHEADV3',
     'TEXHEAD_BL',

@@ -19,5 +19,7 @@ void main()
    * scope. FWIW, gcc doesn't detect this neither.
    */
   fooFloat = fooStruct.x;
+
+  gl_Position = vec4(1.0);
 }
 

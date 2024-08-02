@@ -50,6 +50,7 @@ compar_cbufs(const void *_a, const void *_b)
 struct lower_descriptors_ctx {
    const struct nvk_descriptor_set_layout *set_layouts[NVK_MAX_SETS];
 
+   bool use_bindless_cbuf;
    bool clamp_desc_array_bounds;
    nir_address_format ubo_addr_format;
    nir_address_format ssbo_addr_format;
@@ -57,6 +58,33 @@ struct lower_descriptors_ctx {
    struct hash_table *cbufs;
    struct nvk_cbuf_map *cbuf_map;
 };
+
+static bool
+descriptor_type_is_ubo(VkDescriptorType desc_type)
+{
+   switch (desc_type) {
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
+      return true;
+
+   default:
+      return false;
+   }
+}
+
+static bool
+descriptor_type_is_ssbo(VkDescriptorType desc_type)
+{
+   switch (desc_type) {
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+      return true;
+
+   default:
+      return false;
+   }
+}
 
 static void
 record_cbuf_use(const struct nvk_cbuf *key, uint64_t start, uint64_t end,
@@ -128,11 +156,9 @@ record_vulkan_resource_cbuf_use(nir_intrinsic_instr *intrin,
                                 struct lower_descriptors_ctx *ctx)
 {
    assert(intrin->intrinsic == nir_intrinsic_vulkan_resource_index);
-   const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
 
    /* These we'll handle later */
-   if (desc_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-       desc_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+   if (descriptor_type_is_ubo(nir_intrinsic_desc_type(intrin)))
       return;
 
    record_descriptor_cbuf_use(nir_intrinsic_desc_set(intrin),
@@ -267,6 +293,7 @@ ubo_deref_to_cbuf(nir_deref_instr *deref,
       get_binding_layout(set, binding, ctx);
 
    switch (binding_layout->type) {
+   case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
       *offset_out = 0;
       *start_out = offset;
@@ -375,8 +402,21 @@ record_cbuf_uses_instr(UNUSED nir_builder *b, nir_instr *instr, void *_ctx)
 static void
 build_cbuf_map(nir_shader *nir, struct lower_descriptors_ctx *ctx)
 {
-   ctx->cbufs = nvk_cbuf_table_create(NULL);
+   ctx->cbuf_map->cbuf_count = 0;
 
+   /* Root descriptors always go in cbuf 0 */
+   ctx->cbuf_map->cbufs[ctx->cbuf_map->cbuf_count++] = (struct nvk_cbuf) {
+      .type = NVK_CBUF_TYPE_ROOT_DESC,
+   };
+
+   /* If we have constant data, put it at cbuf 1 */
+   if (nir->constant_data_size > 0) {
+      ctx->cbuf_map->cbufs[ctx->cbuf_map->cbuf_count++] = (struct nvk_cbuf) {
+         .type = NVK_CBUF_TYPE_SHADER_DATA,
+      };
+   }
+
+   ctx->cbufs = nvk_cbuf_table_create(NULL);
    nir_shader_instructions_pass(nir, record_cbuf_uses_instr,
                                 nir_metadata_all, (void *)ctx);
 
@@ -399,19 +439,6 @@ build_cbuf_map(nir_shader *nir, struct lower_descriptors_ctx *ctx)
 
    qsort(cbufs, num_cbufs, sizeof(*cbufs), compar_cbufs);
 
-   uint32_t mapped_cbuf_count = 0;
-
-   /* Root descriptors always go in cbuf 0 */
-   ctx->cbuf_map->cbufs[mapped_cbuf_count++] = (struct nvk_cbuf) {
-      .type = NVK_CBUF_TYPE_ROOT_DESC,
-   };
-
-   if (nir->constant_data_size > 0) {
-      ctx->cbuf_map->cbufs[mapped_cbuf_count++] = (struct nvk_cbuf) {
-         .type = NVK_CBUF_TYPE_SHADER_DATA,
-      };
-   }
-
    uint8_t max_cbuf_bindings;
    if (nir->info.stage == MESA_SHADER_COMPUTE ||
        nir->info.stage == MESA_SHADER_KERNEL) {
@@ -421,7 +448,7 @@ build_cbuf_map(nir_shader *nir, struct lower_descriptors_ctx *ctx)
    }
 
    for (uint32_t i = 0; i < num_cbufs; i++) {
-      if (mapped_cbuf_count >= max_cbuf_bindings)
+      if (ctx->cbuf_map->cbuf_count >= max_cbuf_bindings)
          break;
 
       /* We can't support indirect cbufs in compute yet */
@@ -430,9 +457,8 @@ build_cbuf_map(nir_shader *nir, struct lower_descriptors_ctx *ctx)
           cbufs[i].key.type == NVK_CBUF_TYPE_UBO_DESC)
          continue;
 
-      ctx->cbuf_map->cbufs[mapped_cbuf_count++] = cbufs[i].key;
+      ctx->cbuf_map->cbufs[ctx->cbuf_map->cbuf_count++] = cbufs[i].key;
    }
-   ctx->cbuf_map->cbuf_count = mapped_cbuf_count;
 
    ralloc_free(ctx->cbufs);
    ctx->cbufs = NULL;
@@ -512,16 +538,14 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *load,
    assert(cbuf_idx >= 0);
 
    uint32_t base = nir_intrinsic_base(load);
-   uint32_t range = nir_intrinsic_range(load);
 
    b->cursor = nir_before_instr(&load->instr);
 
    nir_def *offset = nir_iadd_imm(b, load->src[0].ssa, base);
-   nir_def *data = nir_load_ubo(b, load->def.num_components, load->def.bit_size,
-                                nir_imm_int(b, cbuf_idx), offset,
-                                .align_mul = nir_intrinsic_align_mul(load),
-                                .align_offset = nir_intrinsic_align_offset(load),
-                                .range_base = base, .range = range);
+   nir_def *data = nir_ldc_nv(b, load->def.num_components, load->def.bit_size,
+                              nir_imm_int(b, cbuf_idx), offset,
+                              .align_mul = nir_intrinsic_align_mul(load),
+                              .align_offset = nir_intrinsic_align_offset(load));
 
    nir_def_rewrite_uses(&load->def, data);
 
@@ -532,12 +556,12 @@ static nir_def *
 load_descriptor_set_addr(nir_builder *b, uint32_t set,
                          UNUSED const struct lower_descriptors_ctx *ctx)
 {
-   uint32_t set_addr_offset =
-      nvk_root_descriptor_offset(sets) + set * sizeof(uint64_t);
+   uint32_t set_addr_offset = nvk_root_descriptor_offset(sets) +
+      set * sizeof(struct nvk_buffer_address);
 
-   return nir_load_ubo(b, 1, 64, nir_imm_int(b, 0),
-                       nir_imm_int(b, set_addr_offset),
-                       .align_mul = 8, .align_offset = 0, .range = ~0);
+   return nir_ldc_nv(b, 1, 64, nir_imm_int(b, 0),
+                     nir_imm_int(b, set_addr_offset),
+                     .align_mul = 8, .align_offset = 0);
 }
 
 static nir_def *
@@ -560,10 +584,9 @@ load_dynamic_buffer_start(nir_builder *b, uint32_t set,
       uint32_t root_offset =
          nvk_root_descriptor_offset(set_dynamic_buffer_start) + set;
 
-      return nir_u2u32(b, nir_load_ubo(b, 1, 8, nir_imm_int(b, 0),
-                                       nir_imm_int(b, root_offset),
-                                       .align_mul = 1, .align_offset = 0,
-                                       .range = ~0));
+      return nir_u2u32(b, nir_ldc_nv(b, 1, 8, nir_imm_int(b, 0),
+                                     nir_imm_int(b, root_offset),
+                                     .align_mul = 1, .align_offset = 0));
    }
 }
 
@@ -587,20 +610,15 @@ load_descriptor(nir_builder *b, unsigned num_components, unsigned bit_size,
       index = nir_iadd(b, index,
                        nir_iadd_imm(b, dynamic_buffer_start,
                                     binding_layout->dynamic_buffer_index));
-
+      uint32_t desc_size = sizeof(union nvk_buffer_descriptor);
       nir_def *root_desc_offset =
-         nir_iadd_imm(b, nir_imul_imm(b, index, sizeof(struct nvk_buffer_address)),
+         nir_iadd_imm(b, nir_imul_imm(b, index, desc_size),
                       nvk_root_descriptor_offset(dynamic_buffers));
 
-      assert(num_components == 4 && bit_size == 32);
-      nir_def *desc =
-         nir_load_ubo(b, 4, 32, nir_imm_int(b, 0), root_desc_offset,
-                      .align_mul = 16, .align_offset = 0, .range = ~0);
-      /* We know a priori that the the .w compnent (offset) is zero */
-      return nir_vec4(b, nir_channel(b, desc, 0),
-                         nir_channel(b, desc, 1),
-                         nir_channel(b, desc, 2),
-                         nir_imm_int(b, 0));
+      assert(num_components * bit_size <= desc_size * 8);
+      return nir_ldc_nv(b, num_components, bit_size,
+                        nir_imm_int(b, 0), root_desc_offset,
+                        .align_mul = 16, .align_offset = 0);
    }
 
    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK: {
@@ -611,12 +629,19 @@ load_descriptor(nir_builder *b, unsigned num_components, unsigned bit_size,
       assert(binding_layout->stride == 1);
       const uint32_t binding_size = binding_layout->array_size;
 
-      /* Convert it to nir_address_format_64bit_bounded_global */
-      assert(num_components == 4 && bit_size == 32);
-      return nir_vec4(b, nir_unpack_64_2x32_split_x(b, base_addr),
-                         nir_unpack_64_2x32_split_y(b, base_addr),
-                         nir_imm_int(b, binding_size),
-                         nir_imm_int(b, 0));
+      if (ctx->use_bindless_cbuf) {
+         assert(num_components == 1 && bit_size == 64);
+         const uint32_t size = align(binding_size, 16);
+         return nir_ior_imm(b, nir_ishr_imm(b, base_addr, 4),
+                               ((uint64_t)size >> 4) << 45);
+      } else {
+         /* Convert it to nir_address_format_64bit_bounded_global */
+         assert(num_components == 4 && bit_size == 32);
+         return nir_vec4(b, nir_unpack_64_2x32_split_x(b, base_addr),
+                            nir_unpack_64_2x32_split_y(b, base_addr),
+                            nir_imm_int(b, binding_size),
+                            nir_imm_int(b, 0));
+      }
    }
 
    default: {
@@ -639,31 +664,19 @@ load_descriptor(nir_builder *b, unsigned num_components, unsigned bit_size,
       };
       int cbuf_idx = get_mapped_cbuf_idx(&cbuf_key, ctx);
 
-      nir_def *desc;
       if (cbuf_idx >= 0 && max_desc_ubo_offset <= NVK_MAX_CBUF_SIZE) {
-         desc = nir_load_ubo(b, num_components, bit_size,
-                             nir_imm_int(b, cbuf_idx),
-                             desc_ubo_offset,
-                             .align_mul = desc_align_mul,
-                             .align_offset = desc_align_offset,
-                             .range = ~0);
+         return nir_ldc_nv(b, num_components, bit_size,
+                           nir_imm_int(b, cbuf_idx),
+                           desc_ubo_offset,
+                           .align_mul = desc_align_mul,
+                           .align_offset = desc_align_offset);
       } else {
          nir_def *set_addr = load_descriptor_set_addr(b, set, ctx);
-         desc = nir_load_global_constant_offset(b, num_components, bit_size,
+         return nir_load_global_constant_offset(b, num_components, bit_size,
                                                 set_addr, desc_ubo_offset,
                                                 .align_mul = desc_align_mul,
                                                 .align_offset = desc_align_offset);
       }
-      if (binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-          binding_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
-         /* We know a priori that the the .w compnent (offset) is zero */
-         assert(num_components == 4 && bit_size == 32);
-         desc = nir_vec4(b, nir_channel(b, desc, 0),
-                            nir_channel(b, desc, 1),
-                            nir_channel(b, desc, 2),
-                            nir_imm_int(b, 0));
-      }
-      return desc;
    }
    }
 }
@@ -678,6 +691,29 @@ is_idx_intrin(nir_intrinsic_instr *intrin)
    }
 
    return intrin->intrinsic == nir_intrinsic_vulkan_resource_index;
+}
+
+static nir_def *
+buffer_address_to_ldcx_handle(nir_builder *b, nir_def *addr)
+{
+   nir_def *base_addr = nir_pack_64_2x32(b, nir_channels(b, addr, 0x3));
+   nir_def *size = nir_channel(b, addr, 2);
+   nir_def *offset = nir_channel(b, addr, 3);
+
+   nir_def *addr16 = nir_ushr_imm(b, base_addr, 4);
+   nir_def *addr16_lo = nir_unpack_64_2x32_split_x(b, addr16);
+   nir_def *addr16_hi = nir_unpack_64_2x32_split_y(b, addr16);
+
+   /* If we assume the top bis of the address are 0 as well as the bottom two
+    * bits of the size. (We can trust it since it's a descriptor) then
+    *
+    *    ((size >> 4) << 13) | addr
+    *
+    * is just an imad.
+    */
+   nir_def *handle_hi = nir_imad(b, size, nir_imm_int(b, 1 << 9), addr16_hi);
+
+   return nir_vec3(b, addr16_lo, handle_hi, offset);
 }
 
 static nir_def *
@@ -696,7 +732,23 @@ load_descriptor_for_idx_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    uint32_t binding = nir_intrinsic_binding(intrin);
    index = nir_iadd(b, index, intrin->src[0].ssa);
 
-   return load_descriptor(b, 4, 32, set, binding, index, 0, ctx);
+   const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
+   if (descriptor_type_is_ubo(desc_type) && ctx->use_bindless_cbuf) {
+      nir_def *desc = load_descriptor(b, 1, 64, set, binding, index, 0, ctx);
+
+      /* The descriptor is just the handle.  NIR also needs an offset. */
+      return nir_vec3(b, nir_unpack_64_2x32_split_x(b, desc),
+                         nir_unpack_64_2x32_split_y(b, desc),
+                         nir_imm_int(b, 0));
+   } else {
+      nir_def *desc = load_descriptor(b, 4, 32, set, binding, index, 0, ctx);
+
+      /* We know a priori that the the .w compnent (offset) is zero */
+      return nir_vec4(b, nir_channel(b, desc, 0),
+                         nir_channel(b, desc, 1),
+                         nir_channel(b, desc, 2),
+                         nir_imm_int(b, 0));
+   }
 }
 
 static bool
@@ -708,8 +760,7 @@ try_lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin,
 
    nir_intrinsic_instr *idx_intrin = nir_src_as_intrinsic(intrin->src[0]);
    if (idx_intrin == NULL || !is_idx_intrin(idx_intrin)) {
-      assert(desc_type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-             desc_type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
+      assert(descriptor_type_is_ssbo(desc_type));
       return false;
    }
 
@@ -727,13 +778,12 @@ _lower_sysval_to_root_table(nir_builder *b, nir_intrinsic_instr *intrin,
 {
    b->cursor = nir_instr_remove(&intrin->instr);
 
-   nir_def *val = nir_load_ubo(b, intrin->def.num_components,
-                               intrin->def.bit_size,
-                               nir_imm_int(b, 0), /* Root table */
-                               nir_imm_int(b, root_table_offset),
-                               .align_mul = 4,
-                               .align_offset = 0,
-                               .range = root_table_offset + 3 * 4);
+   nir_def *val = nir_ldc_nv(b, intrin->def.num_components,
+                             intrin->def.bit_size,
+                             nir_imm_int(b, 0), /* Root table */
+                             nir_imm_int(b, root_table_offset),
+                             .align_mul = 4,
+                             .align_offset = 0);
 
    nir_def_rewrite_uses(&intrin->def, val);
 
@@ -759,12 +809,10 @@ lower_load_push_constant(nir_builder *b, nir_intrinsic_instr *load,
                                          push_region_offset + base);
 
    nir_def *val =
-      nir_load_ubo(b, load->def.num_components, load->def.bit_size,
-                   nir_imm_int(b, 0), offset,
-                   .align_mul = load->def.bit_size / 8,
-                   .align_offset = 0,
-                   .range = push_region_offset + base +
-                            nir_intrinsic_range(load));
+      nir_ldc_nv(b, load->def.num_components, load->def.bit_size,
+                 nir_imm_int(b, 0), offset,
+                 .align_mul = load->def.bit_size / 8,
+                 .align_offset = 0);
 
    nir_def_rewrite_uses(&load->def, val);
 
@@ -903,12 +951,11 @@ lower_interp_at_sample(nir_builder *b, nir_intrinsic_instr *interp,
 
    b->cursor = nir_before_instr(&interp->instr);
 
-   nir_def *loc = nir_load_ubo(b, 1, 64,
-                               nir_imm_int(b, 0), /* Root table */
-                               nir_imm_int(b, root_table_offset),
-                               .align_mul = 8,
-                               .align_offset = 0,
-                               .range = root_table_offset + 8);
+   nir_def *loc = nir_ldc_nv(b, 1, 64,
+                             nir_imm_int(b, 0), /* Root table */
+                             nir_imm_int(b, root_table_offset),
+                             .align_mul = 8,
+                             .align_offset = 0);
 
    /* Yay little endian */
    loc = nir_ushr(b, loc, nir_imul_imm(b, sample, 8));
@@ -956,7 +1003,7 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       return lower_sysval_to_root_table(b, intrin, draw.base_instance, ctx);
 
    case nir_intrinsic_load_draw_id:
-      return lower_sysval_to_root_table(b, intrin, draw.draw_id, ctx);
+      return lower_sysval_to_root_table(b, intrin, draw.draw_index, ctx);
 
    case nir_intrinsic_load_view_index:
       return lower_sysval_to_root_table(b, intrin, draw.view_index, ctx);
@@ -1058,13 +1105,13 @@ try_lower_descriptors_instr(nir_builder *b, nir_instr *instr,
    }
 }
 
+#define ROOT_DESC_BASE_ADDR_HI 0x0057de3c
+
 static bool
 lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
                           const struct lower_descriptors_ctx *ctx)
 {
-   const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
-   if (desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
-       desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+   if (!descriptor_type_is_ssbo(nir_intrinsic_desc_type(intrin)))
       return false;
 
    b->cursor = nir_instr_remove(&intrin->instr);
@@ -1088,14 +1135,6 @@ lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
-      const uint32_t root_desc_addr_offset =
-         nvk_root_descriptor_offset(root_desc_addr);
-
-      nir_def *root_desc_addr =
-         nir_load_ubo(b, 1, 64, nir_imm_int(b, 0),
-                      nir_imm_int(b, root_desc_addr_offset),
-                      .align_mul = 8, .align_offset = 0, .range = ~0);
-
       nir_def *dynamic_buffer_start =
          nir_iadd_imm(b, load_dynamic_buffer_start(b, set, ctx),
                       binding_layout->dynamic_buffer_index);
@@ -1105,8 +1144,9 @@ lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
                                       sizeof(struct nvk_buffer_address)),
                       nvk_root_descriptor_offset(dynamic_buffers));
 
-      binding_addr = nir_iadd(b, root_desc_addr,
-                                 nir_u2u64(b, dynamic_binding_offset));
+      binding_addr =
+         nir_pack_64_2x32_split(b, dynamic_binding_offset,
+                                nir_imm_int(b, ROOT_DESC_BASE_ADDR_HI));
       binding_stride = sizeof(struct nvk_buffer_address);
       break;
    }
@@ -1120,6 +1160,9 @@ lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
 
    const uint32_t binding_size = binding_layout->array_size * binding_stride;
    nir_def *offset_in_binding = nir_imul_imm(b, index, binding_stride);
+
+   /* We depend on this when we load descrptors */
+   assert(binding_layout->array_size >= 1);
 
    nir_def *addr;
    switch (ctx->ssbo_addr_format) {
@@ -1144,9 +1187,7 @@ static bool
 lower_ssbo_resource_reindex(nir_builder *b, nir_intrinsic_instr *intrin,
                             const struct lower_descriptors_ctx *ctx)
 {
-   const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
-   if (desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
-       desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+   if (!descriptor_type_is_ssbo(nir_intrinsic_desc_type(intrin)))
       return false;
 
    b->cursor = nir_instr_remove(&intrin->instr);
@@ -1179,43 +1220,67 @@ static bool
 lower_load_ssbo_descriptor(nir_builder *b, nir_intrinsic_instr *intrin,
                            const struct lower_descriptors_ctx *ctx)
 {
-   const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
-   if (desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
-       desc_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+   if (!descriptor_type_is_ssbo(nir_intrinsic_desc_type(intrin)))
       return false;
 
    b->cursor = nir_instr_remove(&intrin->instr);
 
    nir_def *addr = intrin->src[0].ssa;
 
-   nir_def *desc;
+   nir_def *base, *offset, *size = NULL;
    switch (ctx->ssbo_addr_format) {
    case nir_address_format_64bit_global_32bit_offset: {
-      nir_def *base = nir_pack_64_2x32(b, nir_trim_vector(b, addr, 2));
-      nir_def *offset = nir_channel(b, addr, 3);
-      /* Mask off the binding stride */
-      base = nir_iand_imm(b, base, BITFIELD64_MASK(56));
-      desc = nir_load_global_constant_offset(b, 4, 32, base, offset,
-                                             .align_mul = 16,
-                                             .align_offset = 0);
+      base = nir_pack_64_2x32(b, nir_trim_vector(b, addr, 2));
+      offset = nir_channel(b, addr, 3);
       break;
    }
 
    case nir_address_format_64bit_bounded_global: {
-      nir_def *base = nir_pack_64_2x32(b, nir_trim_vector(b, addr, 2));
-      nir_def *size = nir_channel(b, addr, 2);
-      nir_def *offset = nir_channel(b, addr, 3);
-      /* Mask off the binding stride */
-      base = nir_iand_imm(b, base, BITFIELD64_MASK(56));
-      desc = nir_load_global_constant_bounded(b, 4, 32, base, offset, size,
-                                              .align_mul = 16,
-                                              .align_offset = 0);
+      base = nir_pack_64_2x32(b, nir_trim_vector(b, addr, 2));
+      size = nir_channel(b, addr, 2);
+      offset = nir_channel(b, addr, 3);
       break;
    }
 
    default:
       unreachable("Unknown address mode");
    }
+
+   /* Mask off the binding stride */
+   base = nir_iand_imm(b, base, BITFIELD64_MASK(56));
+
+   nir_def *base_lo = nir_unpack_64_2x32_split_x(b, base);
+   nir_def *base_hi = nir_unpack_64_2x32_split_y(b, base);
+
+   nir_def *desc_root, *desc_global;
+   nir_push_if(b, nir_ieq_imm(b, base_hi, ROOT_DESC_BASE_ADDR_HI));
+   {
+      desc_root = nir_load_ubo(b, 4, 32, nir_imm_int(b, 0),
+                               nir_iadd(b, base_lo, offset),
+                               .align_mul = 16, .align_offset = 0,
+                               .range = ~0);
+      if (size != NULL) {
+         /* assert(binding_layout->array_size >= 1); */
+         nir_def *is_oob = nir_ult(b, nir_iadd_imm(b, size, -16), offset);
+         desc_root = nir_bcsel(b, is_oob, nir_imm_zero(b, 4, 32), desc_root);
+      }
+   }
+   nir_push_else(b, NULL);
+   {
+      if (size != NULL) {
+         desc_global = nir_load_global_constant_bounded(b, 4, 32, base,
+                                                        offset, size,
+                                                        .align_mul = 16,
+                                                        .align_offset = 0);
+      } else {
+         desc_global = nir_load_global_constant_offset(b, 4, 32, base,
+                                                       offset,
+                                                       .align_mul = 16,
+                                                       .align_offset = 0);
+      }
+   }
+   nir_pop_if(b, NULL);
+   nir_def *desc = nir_if_phi(b, desc_root, desc_global);
 
    nir_def_rewrite_uses(&intrin->def, desc);
 
@@ -1246,18 +1311,20 @@ lower_ssbo_descriptor_instr(nir_builder *b, nir_instr *instr,
 
 bool
 nvk_nir_lower_descriptors(nir_shader *nir,
+                          const struct nvk_physical_device *pdev,
                           const struct vk_pipeline_robustness_state *rs,
                           uint32_t set_layout_count,
                           struct vk_descriptor_set_layout * const *set_layouts,
                           struct nvk_cbuf_map *cbuf_map_out)
 {
    struct lower_descriptors_ctx ctx = {
+      .use_bindless_cbuf = nvk_use_bindless_cbuf(&pdev->info),
       .clamp_desc_array_bounds =
          rs->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
          rs->uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
          rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
-      .ssbo_addr_format = nvk_buffer_addr_format(rs->storage_buffers),
-      .ubo_addr_format = nvk_buffer_addr_format(rs->uniform_buffers),
+      .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs->storage_buffers),
+      .ubo_addr_format = nvk_ubo_addr_format(pdev, rs->uniform_buffers),
    };
 
    assert(set_layout_count <= NVK_MAX_SETS);
@@ -1289,20 +1356,17 @@ nvk_nir_lower_descriptors(nir_shader *nir,
 
       pass_lower_ubo =
          nir_shader_intrinsics_pass(nir, lower_load_ubo_intrin,
-                                    nir_metadata_block_index |
-                                    nir_metadata_dominance,
+                                    nir_metadata_control_flow,
                                     (void *)&ctx);
    }
 
    bool pass_lower_descriptors =
       nir_shader_instructions_pass(nir, try_lower_descriptors_instr,
-                                   nir_metadata_block_index |
-                                   nir_metadata_dominance,
+                                   nir_metadata_control_flow,
                                    (void *)&ctx);
    bool pass_lower_ssbo =
       nir_shader_instructions_pass(nir, lower_ssbo_descriptor_instr,
-                                   nir_metadata_block_index |
-                                   nir_metadata_dominance,
+                                   nir_metadata_control_flow,
                                    (void *)&ctx);
    return pass_lower_ubo || pass_lower_descriptors || pass_lower_ssbo;
 }

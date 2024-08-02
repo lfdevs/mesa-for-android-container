@@ -33,6 +33,7 @@
 #include "util/enum_operators.h"
 #include "util/ralloc.h"
 #include "util/u_math.h"
+#include "util/u_printf.h"
 #include "brw_isa_info.h"
 #include "intel_shader_enums.h"
 
@@ -463,6 +464,9 @@ enum brw_shader_reloc_id {
    BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE,
    BRW_SHADER_RELOC_LAST_EMBEDDED_SAMPLER_HANDLE =
    BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE + BRW_MAX_EMBEDDED_SAMPLERS - 1,
+   BRW_SHADER_RELOC_PRINTF_BUFFER_ADDR_LOW,
+   BRW_SHADER_RELOC_PRINTF_BUFFER_ADDR_HIGH,
+   BRW_SHADER_RELOC_PRINTF_BASE_IDENTIFIER,
 };
 
 enum brw_shader_reloc_type {
@@ -560,6 +564,10 @@ struct brw_stage_prog_data {
 
    /* Whether shader uses atomic operations. */
    bool uses_atomic_load_store;
+
+   /* Printf descriptions contained by the shader */
+   uint32_t printf_info_count;
+   u_printf_info *printf_info;
 };
 
 static inline uint32_t *
@@ -573,6 +581,11 @@ brw_stage_prog_data_add_params(struct brw_stage_prog_data *prog_data,
                                prog_data->nr_params);
    return prog_data->param + old_nr_params;
 }
+
+void
+brw_stage_prog_data_add_printf(struct brw_stage_prog_data *prog_data,
+                               void *mem_ctx,
+                               const u_printf_info *print);
 
 enum brw_barycentric_mode {
    BRW_BARYCENTRIC_PERSPECTIVE_PIXEL       = 0,
@@ -661,6 +674,13 @@ struct brw_wm_prog_data {
     * GL_MIN_SAMPLE_SHADING_VALUE in GL or minSampleShading in Vulkan.
     */
    bool sample_shading;
+
+   /** Min sample shading value
+    *
+    * Not used by the compiler, but useful for restore from the cache. The
+    * driver is expected to write the value it wants.
+    */
+   float min_sample_shading;
 
    /** Should this shader be dispatched per-sample */
    enum brw_sometimes persample_dispatch;
@@ -1236,6 +1256,7 @@ struct brw_mesh_prog_data {
    enum brw_mesh_index_format index_format;
 
    bool uses_drawid;
+   bool autostrip_enable;
 };
 
 /* brw_any_prog_data is prog_data for any stage that maps to an API stage */
@@ -1539,52 +1560,6 @@ void brw_debug_key_recompile(const struct brw_compiler *c, void *log,
                              const struct brw_base_prog_key *old_key,
                              const struct brw_base_prog_key *key);
 
-/* Shared Local Memory Size is specified as powers of two,
- * and also have a Gen-dependent minimum value if not zero.
- */
-static inline uint32_t
-intel_calculate_slm_size(unsigned gen, uint32_t bytes)
-{
-   assert(bytes <= 64 * 1024);
-   if (bytes > 0)
-      return MAX2(util_next_power_of_two(bytes), gen >= 9 ? 1024 : 4096);
-   else
-      return 0;
-}
-
-static inline uint32_t
-encode_slm_size(unsigned gen, uint32_t bytes)
-{
-   uint32_t slm_size = 0;
-
-   /* Shared Local Memory is specified as powers of two, and encoded in
-    * INTERFACE_DESCRIPTOR_DATA with the following representations:
-    *
-    * Size   | 0 kB | 1 kB | 2 kB | 4 kB | 8 kB | 16 kB | 32 kB | 64 kB |
-    * -------------------------------------------------------------------
-    * Gfx7-8 |    0 | none | none |    1 |    2 |     4 |     8 |    16 |
-    * -------------------------------------------------------------------
-    * Gfx9+  |    0 |    1 |    2 |    3 |    4 |     5 |     6 |     7 |
-    */
-
-   if (bytes > 0) {
-      slm_size = intel_calculate_slm_size(gen, bytes);
-      assert(util_is_power_of_two_nonzero(slm_size));
-
-      if (gen >= 9) {
-         /* Turn an exponent of 10 (1024 kB) into 1. */
-         assert(slm_size >= 1024);
-         slm_size = ffs(slm_size) - 10;
-      } else {
-         assert(slm_size >= 4096);
-         /* Convert to the pre-Gfx9 representation. */
-         slm_size = slm_size / 4096;
-      }
-   }
-
-   return slm_size;
-}
-
 unsigned
 brw_cs_push_const_total_size(const struct brw_cs_prog_data *cs_prog_data,
                              unsigned threads);
@@ -1624,9 +1599,11 @@ brw_stage_has_packed_dispatch(ASSERTED const struct intel_device_info *devinfo,
    /* The code below makes assumptions about the hardware's thread dispatch
     * behavior that could be proven wrong in future generations -- Make sure
     * to do a full test run with brw_fs_test_dispatch_packing() hooked up to
-    * the NIR front-end before changing this assertion.
+    * the NIR front-end before changing this assertion. It can be temporarily
+    * enabled by setting the macro below to true.
     */
-   assert(devinfo->ver <= 12);
+   #define ENABLE_FS_TEST_DISPATCH_PACKING false
+   assert(devinfo->ver <= 20);
 
    switch (stage) {
    case MESA_SHADER_FRAGMENT: {

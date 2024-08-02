@@ -242,6 +242,9 @@ pandecode_texture_payload(struct pandecode_context *ctx, mali_ptr payload,
    unsigned nr_samples =
       tex->dimension == MALI_TEXTURE_DIMENSION_3D ? 1 : tex->sample_count;
 
+   if (!payload)
+      return;
+
    /* A bunch of bitmap pointers follow.
     * We work out the correct number,
     * based on the mipmap/cubemap

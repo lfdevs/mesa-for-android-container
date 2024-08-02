@@ -39,11 +39,6 @@ algebraic_lowering = [
     (('umax', 'a', 'b'), ('bcsel', ('ult', a, b), b, a), volta),
 ]
 
-late_optimizations = [
-    (('iadd@32', ('imul(nak_is_only_used_by_iadd)', a, b), c),
-     ('imad', a, b, c), 'nak->sm >= 70'),
-]
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', required=True, help='Output file.')
@@ -58,7 +53,7 @@ def main():
             f.write('#include "nak_private.h"')
             f.write(nir_algebraic.AlgebraicPass(
                 "nak_nir_lower_algebraic_late",
-                algebraic_lowering + late_optimizations,
+                algebraic_lowering,
                 [
                     ("const struct nak_compiler *", "nak"),
                 ]).render())
