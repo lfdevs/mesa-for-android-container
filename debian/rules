@@ -226,7 +226,6 @@ override_dh_clean: regen_control
 override_dh_auto_configure: rewrite_wrap_files
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
 	$(buildflags) dh_auto_configure -- \
-		--wrap-mode=default \
 		$(confflags)
 
 override_dh_auto_install:
@@ -318,6 +317,7 @@ regen_control:
 	sed -e"s,@LLVM_VERSION@,$(LLVM_VERSION),g" \
 	    -e"s,@LLVM_ARCHS@,$(LLVM_ARCHS),g" \
 	    -e"s,@RUSTICL_ARCHS@,$(RUSTICL_ARCHS),g" \
+	    -e"s,@NVK_ARCHS@,$(NVK_ARCHS),g" \
 	    -e"s,@VALGRIND_ARCHS@,$(VALGRIND_ARCHS),g" \
 	    -e"s,@WINE_ARCHS@,$(WINE_ARCHS),g" \
 	    debian/control.in > debian/control

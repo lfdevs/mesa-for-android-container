@@ -12,7 +12,7 @@ Build-Depends:
  meson (>= 1.4.0),
  quilt (>= 0.63-8.2~),
  pkgconf,
- libdrm-dev (>= 2.4.119),
+ libdrm-dev (>= 2.4.121),
  libx11-dev,
  libxxf86vm-dev,
  libexpat1-dev,
@@ -64,8 +64,8 @@ Build-Depends:
  llvm-spirv-18 [amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32],
  libclc-18 [amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32],
  libllvmspirvlib-18-dev [amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
- librust-paste-dev [amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
- librust-syn-dev [amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32],
+ librust-paste-dev [amd64 arm64 armel armhf i386 loong64 mips64el ppc64 riscv64 x32],
+ librust-syn-dev [amd64 arm64 armel armhf i386 loong64 mips64el ppc64 riscv64 x32],
 Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/xorg-team/lib/mesa.git
 Vcs-Browser: https://salsa.debian.org/xorg-team/lib/mesa

@@ -1,3 +1,10 @@
+mesa (24.2.0~rc3-2) experimental; urgency=medium
+
+  * Add ldconfig trigger for mesa-drm-shim.
+  * control: Bump libdrm-dev build-dep.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 05 Aug 2024 09:38:13 +0300
+
 mesa (24.2.0~rc3-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]
@@ -14,6 +21,14 @@ mesa (24.2.0~rc3-1) experimental; urgency=medium
   * Add a new private shared library package for libgallium.so
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 02 Aug 2024 11:53:58 +0300
+
+mesa (24.1.5-3) unstable; urgency=medium
+
+  * control: Mark NVK build-deps accordingly.
+  * rules: Drop --wrap-mode=default, leftover from previous testing.
+    (Closes: #1077729)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 02 Aug 2024 17:45:45 +0300
 
 mesa (24.1.5-2) unstable; urgency=medium
 
