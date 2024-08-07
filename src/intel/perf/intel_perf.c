@@ -342,14 +342,6 @@ compute_topology_builtins(struct intel_perf_config *perf)
    perf->sys_vars.n_eu_sub_slices = intel_device_info_subslice_total(devinfo);
    perf->sys_vars.n_eus = intel_device_info_eu_total(devinfo);
 
-   /* Xe2+ OA equations expects actual EU count but KMD returns legacy EU
-    * count.
-    */
-   if (devinfo->verx10 >= 200) {
-      perf->sys_vars.n_eu_slice0123 /= 2;
-      perf->sys_vars.n_eus /= 2;
-   }
-
    /* The subslice mask builtin contains bits for all slices. Prior to Gfx11
     * it had groups of 3bits for each slice, on Gfx11 and above it's 8bits for
     * each slice.

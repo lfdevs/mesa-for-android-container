@@ -163,13 +163,20 @@ files_libnouveau = files(
 
 libnouveau = static_library(
   'nouveau',
-  files_libnouveau,
+  [files_libnouveau, sha1_h],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
   link_with : [libnouveauwinsys],
-  dependencies : [dep_libdrm, idep_libnouveauwinsys, idep_nouveau_codegen, idep_mesautil, idep_nir_headers],
+  dependencies : [
+    dep_libdrm,
+    idep_libnouveauwinsys,
+    idep_mesautil,
+    idep_nir_headers,
+    idep_nouveau_codegen,
+    idep_nvidia_headers,
+  ],
 )
 
 driver_nouveau = declare_dependency(

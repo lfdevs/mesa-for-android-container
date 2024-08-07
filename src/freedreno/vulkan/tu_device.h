@@ -70,6 +70,8 @@ enum tu_kgsl_dma_type
    TU_KGSL_DMA_TYPE_DMAHEAP,
 };
 
+extern uint64_t os_page_size;
+
 struct tu_physical_device
 {
    struct vk_physical_device vk;

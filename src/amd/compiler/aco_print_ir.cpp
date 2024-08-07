@@ -371,7 +371,7 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
       }
       case aco_opcode::s_delay_alu: {
          unsigned delay[2] = {imm & 0xfu, (imm >> 7) & 0xfu};
-         unsigned skip = (imm >> 4) & 0x3;
+         unsigned skip = (imm >> 4) & 0x7;
          for (unsigned i = 0; i < 2; i++) {
             if (i == 1 && skip) {
                if (skip == 1)

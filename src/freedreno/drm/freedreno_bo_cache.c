@@ -123,13 +123,13 @@ fd_bo_cache_init(struct fd_bo_cache *cache, int coarse, const char *name)
     * width/height alignment and rounding of sizes to pages will
     * get us useful cache hit rates anyway)
     */
-   add_bucket(cache, 4096);
-   add_bucket(cache, 4096 * 2);
+   add_bucket(cache, os_page_size);
+   add_bucket(cache, os_page_size * 2);
    if (!coarse)
-      add_bucket(cache, 4096 * 3);
+      add_bucket(cache, os_page_size * 3);
 
    /* Initialize the linked lists for BO reuse cache. */
-   for (size = 4 * 4096; size <= cache_max_size; size *= 2) {
+   for (size = 4 * os_page_size; size <= cache_max_size; size *= 2) {
       add_bucket(cache, size);
       if (!coarse) {
          add_bucket(cache, size + size * 1 / 4);
@@ -241,7 +241,7 @@ fd_bo_cache_alloc(struct fd_bo_cache *cache, uint32_t *size, uint32_t flags)
    struct fd_bo *bo = NULL;
    struct fd_bo_bucket *bucket;
 
-   *size = align(*size, 4096);
+   *size = align(*size, os_page_size);
    bucket = get_bucket(cache, *size);
 
    struct list_head freelist;

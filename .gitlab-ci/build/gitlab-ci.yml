@@ -138,7 +138,7 @@ debian-testing-msan:
     # GLSL has some issues in sexpression reading.
     # gtest has issues in its test initialization.
     MESON_TEST_ARGS: "--suite glcpp --suite format"
-    GALLIUM_DRIVERS: "freedreno,iris,nouveau,kmsro,r300,r600,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus"
+    GALLIUM_DRIVERS: "freedreno,iris,nouveau,r300,r600,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus"
     VULKAN_DRIVERS: intel,amd,broadcom,virtio
     # Do a host build for intel-clc (msan complains about
     # uninitialized values in the LLVM libs)
@@ -176,7 +176,7 @@ debian-testing-msan:
       -D gallium-xa=enabled
       -D gallium-nine=false
       -D gallium-rusticl=false
-    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,asahi,crocus"
+    GALLIUM_DRIVERS: "iris,nouveau,r300,r600,freedreno,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,asahi,crocus"
     VULKAN_DRIVERS: swrast
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
@@ -240,7 +240,7 @@ debian-release:
       -D gallium-nine=false
       -D gallium-rusticl=false
       -D llvm=enabled
-    GALLIUM_DRIVERS: "i915,iris,nouveau,kmsro,freedreno,r300,svga,llvmpipe,softpipe,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,crocus"
+    GALLIUM_DRIVERS: "i915,iris,nouveau,freedreno,r300,svga,llvmpipe,softpipe,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,crocus"
     VULKAN_DRIVERS: "amd,imagination-experimental,microsoft-experimental"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
@@ -273,7 +273,7 @@ alpine-build-testing:
       -D glvnd=disabled
       -D platforms=wayland
     LLVM_VERSION: "16"
-    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,iris,kmsro,lima,nouveau,panfrost,r300,r600,radeonsi,svga,llvmpipe,softpipe,tegra,v3d,vc4,virgl,zink"
+    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,iris,lima,nouveau,panfrost,r300,r600,radeonsi,svga,llvmpipe,softpipe,tegra,v3d,vc4,virgl,zink"
     GALLIUM_ST: >
       -D dri3=enabled
       -D gallium-extra-hud=true
@@ -321,7 +321,7 @@ fedora-release:
       -D intel-rt=enabled
       -D imagination-srv=true
       -D teflon=true
-    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,i915,iris,kmsro,lima,nouveau,panfrost,r300,r600,radeonsi,svga,llvmpipe,softpipe,tegra,v3d,vc4,virgl,zink"
+    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,i915,iris,lima,nouveau,panfrost,r300,r600,radeonsi,svga,llvmpipe,softpipe,tegra,v3d,vc4,virgl,zink"
     GALLIUM_ST: >
       -D dri3=enabled
       -D gallium-extra-hud=true
@@ -433,7 +433,7 @@ debian-android:
     - debian/arm64_build
   variables:
     VULKAN_DRIVERS: freedreno,broadcom
-    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,llvmpipe,softpipe,tegra,v3d,vc4,zink"
+    GALLIUM_DRIVERS: "etnaviv,freedreno,lima,nouveau,panfrost,llvmpipe,softpipe,tegra,v3d,vc4,zink"
     BUILDTYPE: "debugoptimized"
   tags:
     - aarch64
@@ -447,7 +447,7 @@ debian-arm32:
     DRI_LOADERS:
       -D glvnd=disabled
     # remove llvmpipe from the .meson-arm list because here we have llvm=disabled
-    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,softpipe,tegra,v3d,vc4,zink"
+    GALLIUM_DRIVERS: "etnaviv,freedreno,lima,nouveau,panfrost,softpipe,tegra,v3d,vc4,zink"
     EXTRA_OPTION: >
       -D llvm=disabled
       -D valgrind=disabled
@@ -575,7 +575,7 @@ debian-clang:
       -D shared-llvm=enabled
       -D opencl-spirv=true
       -D shared-glapi=enabled
-    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
+    GALLIUM_DRIVERS: "iris,nouveau,r300,r600,freedreno,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
     VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio,swrast,panfrost,imagination-experimental,microsoft-experimental,nouveau
     EXTRA_OPTION:
       -D spirv-to-dxil=true

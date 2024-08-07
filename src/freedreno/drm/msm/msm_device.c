@@ -65,7 +65,7 @@ msm_device_new(int fd, drmVersionPtr version)
 
    if (version->version_minor >= FD_VERSION_CACHED_COHERENT) {
       struct drm_msm_gem_new new_req = {
-         .size = 0x1000,
+         .size = os_page_size,
          .flags = MSM_BO_CACHED_COHERENT,
       };
 

@@ -126,7 +126,7 @@ struct fd_autotune_results {
     */
    struct {
       uint64_t samples_start;
-      uint64_t __pad0;
+      uint64_t samples_result;
       uint64_t samples_end;
       uint64_t __pad1;
    } result[127];

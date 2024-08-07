@@ -343,12 +343,15 @@ init_dri2_configs(int fd)
    EGLBoolean (*peglGetConfigAttrib)(EGLDisplay, EGLConfig, EGLint, EGLint *) = peglGetProcAddress("eglGetConfigAttrib");
    const char *(*peglQueryString)(EGLDisplay, EGLint) = peglGetProcAddress("eglQueryString");
 
-   /* try opening GBM for hardware driver info */
-   struct gbm_device *gbm = gbm_create_device(fd);
-   if (!gbm)
-      goto out;
+   struct gbm_device *gbm = NULL;
+   if (fd != -1) {
+      /* try opening GBM for hardware driver info */
+      gbm = gbm_create_device(fd);
+      if (!gbm)
+         goto out;
+   }
 
-   EGLDisplay dpy = peglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_MESA, gbm, NULL);
+   EGLDisplay dpy = peglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_MESA, gbm ? gbm : EGL_DEFAULT_DISPLAY, NULL);
    if (!dpy)
       goto out_gbm;
    int maj, min;
@@ -415,7 +418,8 @@ out_egl:
    peglTerminate(dpy);
 
 out_gbm:
-   gbm_device_destroy(gbm);
+   if (gbm)
+      gbm_device_destroy(gbm);
 out:
    dlclose(egl);
    if (c)
@@ -430,19 +434,9 @@ drilCreateNewScreen(int scrn, int fd,
                     const __DRIextension **driver_extensions,
                     const __DRIconfig ***driver_configs, void *data)
 {
-   /* multiply for possible 1/2/4/8/16/32 MSAA configs */
-   // allocate an array of pointers
-   const __DRIconfig **configs = NULL;
-   /* try dri2 if fd is valid */
-   if (fd >= 0)
-      configs = init_dri2_configs(fd);
-   if (!configs) {
-      configs = calloc(ARRAY_SIZE(drilConfigs) + 1, sizeof(void *));
-      // otherwise set configs to point to our config list
-      for (int i = 0; i < ARRAY_SIZE(drilConfigs); i++) {
-         configs[i] = mem_dup(&drilConfigs[i], sizeof(drilConfigs[i]));
-      }
-   }
+   const __DRIconfig **configs = init_dri2_configs(fd);
+   if (!configs)
+      return NULL;
 
    // outpointer it
    *driver_configs = configs;

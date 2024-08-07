@@ -250,6 +250,8 @@ freedreno_cpp_args += cpp.get_supported_arguments([
   '-Wno-array-bounds',
   '-Wno-overflow',
   '-Wno-c++11-narrowing',
+  '-Wno-vla-cxx-extension',
+  '-Wno-address-of-packed-member',
 ])
 
 # HACK compiler.get_supported_arguments()/has_argument() do not seem

@@ -13,10 +13,6 @@ LibGL environment variables
    If defined debug information will be printed to stderr. If set to
    ``verbose`` additional information will be printed.
 
-.. envvar:: LIBGL_DRIVERS_PATH
-
-   colon-separated list of paths to search for DRI drivers
-
 .. envvar:: LIBGL_ALWAYS_INDIRECT
 
    if set to ``true``, forces an indirect rendering context/connection.
@@ -1489,8 +1485,6 @@ RADV driver environment variables
       disable ACO IR validation in debug/debugoptimized builds
    ``validatera``
       validate register assignment of ACO IR and catches many RA bugs
-   ``perfwarn``
-      abort on some suboptimal code generation
    ``force-waitcnt``
       force emitting waitcnt states if there is something to wait for
    ``force-waitdeps``
@@ -1500,7 +1494,11 @@ RADV driver environment variables
    ``noopt``
       disable various optimizations
    ``nosched``
-      disable instructions scheduling
+      disable pre-RA, ILP and VOPD instruction scheduling
+   ``nosched-ilp``
+      disable ILP instruction scheduling
+   ``nosched-vopd``
+      disable VOPD instruction scheduling
    ``perfinfo``
       print information used to calculate some pipeline statistics
    ``liveinfo``

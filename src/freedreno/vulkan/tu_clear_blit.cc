@@ -25,6 +25,7 @@
 #include "tu_lrz.h"
 
 #include "common/freedreno_gpu_event.h"
+#include "common/freedreno_lrz.h"
 
 static const VkOffset2D blt_no_coord = { ~0, ~0 };
 
@@ -1833,7 +1834,7 @@ tu6_dirty_lrz_fc(struct tu_cmd_buffer *cmd,
    VkClearValue clear = {};
    clear.color.uint32[0] = 0xffffffff;
 
-   using LRZFC = tu_lrzfc_layout<CHIP>;
+   using LRZFC = fd_lrzfc_layout<CHIP>;
    uint64_t lrz_fc_iova = image->iova + image->lrz_fc_offset;
    ops->setup(cmd, cs, PIPE_FORMAT_R32_UINT, PIPE_FORMAT_R32_UINT,
               VK_IMAGE_ASPECT_COLOR_BIT, 0, true, false,

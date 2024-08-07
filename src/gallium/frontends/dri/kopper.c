@@ -417,12 +417,6 @@ kopper_allocate_textures(struct dri_context *ctx,
    bool is_window = drawable->is_window;
    bool is_pixmap = !is_window && drawable->info.bos.sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
 
-   width  = drawable->w;
-   height = drawable->h;
-
-   resized = (drawable->old_w != width ||
-              drawable->old_h != height);
-
    /* Wait for glthread to finish because we can't use pipe_context from
     * multiple threads.
     */
@@ -472,7 +466,16 @@ kopper_allocate_textures(struct dri_context *ctx,
       } else {
          ctx->is_shared_buffer_bound = false;
       }
-   } else {
+   }
+
+   /* check size after possible loader image resize */
+   width  = drawable->w;
+   height = drawable->h;
+
+   resized = (drawable->old_w != width ||
+              drawable->old_h != height);
+
+   if (!image) {
       /* remove outdated textures */
       if (resized) {
          for (i = 0; i < ST_ATTACHMENT_COUNT; i++) {

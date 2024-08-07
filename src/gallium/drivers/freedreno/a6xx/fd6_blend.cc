@@ -58,6 +58,7 @@ blend_func(unsigned func)
    }
 }
 
+template <chip CHIP>
 struct fd6_blend_variant *
 __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
                           unsigned sample_mask)
@@ -118,18 +119,21 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
       }
    }
 
-   OUT_REG(
-      ring,
+   /* sRGB + dither on a7xx goes badly: */
+   bool dither = (CHIP < A7XX) ? cso->dither : false;
+
+   OUT_REG(ring,
       A6XX_RB_DITHER_CNTL(
-            .dither_mode_mrt0 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt1 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt2 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt3 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt4 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt5 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt6 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
-            .dither_mode_mrt7 =
-               cso->dither ? DITHER_ALWAYS : DITHER_DISABLE, ));
+            .dither_mode_mrt0 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt1 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt2 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt3 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt4 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt5 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt6 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+            .dither_mode_mrt7 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
+      )
+   );
 
    OUT_REG(ring,
            A6XX_SP_BLEND_CNTL(
@@ -157,6 +161,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
 
    return so;
 }
+FD_GENX(__fd6_setup_blend_variant);
 
 void *
 fd6_blend_state_create(struct pipe_context *pctx,

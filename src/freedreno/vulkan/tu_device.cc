@@ -48,6 +48,8 @@
 #include <vndk/hardware_buffer.h>
 #endif
 
+uint64_t os_page_size = 4096;
+
 static int
 tu_device_get_cache_uuid(struct tu_physical_device *device, void *uuid)
 {
@@ -1059,7 +1061,6 @@ tu_get_properties(struct tu_physical_device *pdevice,
           sizeof(props->shaderModuleIdentifierAlgorithmUUID));
 
    /* VK_EXT_map_memory_placed */
-   uint64_t os_page_size = 4096;
    os_get_page_size(&os_page_size);
    props->minPlacedMemoryMapAlignment = os_page_size,
 
@@ -2261,7 +2262,7 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
    if (physical_device->has_set_iova) {
       mtx_init(&device->vma_mutex, mtx_plain);
       util_vma_heap_init(&device->vma, physical_device->va_start,
-                         ROUND_DOWN_TO(physical_device->va_size, 4096));
+                         ROUND_DOWN_TO(physical_device->va_size, os_page_size));
    }
 
    if (TU_DEBUG(BOS))

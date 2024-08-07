@@ -1,3 +1,5 @@
+#include "git_sha1.h"
+
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
@@ -281,6 +283,26 @@ nouveau_screen_get_fd(struct pipe_screen *pscreen)
    return screen->drm->fd;
 }
 
+static void
+nouveau_driver_uuid(struct pipe_screen *screen, char *uuid)
+{
+   const char* driver = PACKAGE_VERSION MESA_GIT_SHA1;
+   struct mesa_sha1 sha1_ctx;
+   uint8_t sha1[20];
+
+   _mesa_sha1_init(&sha1_ctx);
+   _mesa_sha1_update(&sha1_ctx, driver, strlen(driver));
+   _mesa_sha1_final(&sha1_ctx, sha1);
+   memcpy(uuid, sha1, PIPE_UUID_SIZE);
+}
+
+static void
+nouveau_device_uuid(struct pipe_screen *pscreen, char *uuid)
+{
+   const struct nouveau_screen *screen = nouveau_screen(pscreen);
+   nv_device_uuid(&screen->device->info, (void *)uuid, PIPE_UUID_SIZE, false);
+}
+
 int
 nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 {
@@ -421,6 +443,8 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
    pscreen->fence_finish = nouveau_screen_fence_finish;
 
    pscreen->query_memory_info = nouveau_query_memory_info;
+   pscreen->get_driver_uuid = nouveau_driver_uuid;
+   pscreen->get_device_uuid = nouveau_device_uuid;
 
    nouveau_disk_cache_create(screen);
 

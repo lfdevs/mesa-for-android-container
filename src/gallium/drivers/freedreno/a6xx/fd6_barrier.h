@@ -41,9 +41,11 @@ enum fd6_flush {
    FD6_WAIT_FOR_ME          = BIT(8),
 };
 
+template <chip CHIP>
 void fd6_emit_flushes(struct fd_context *ctx, struct fd_ringbuffer *ring,
                       unsigned flushes);
 
+template <chip CHIP>
 void fd6_barrier_flush(struct fd_batch *batch) assert_dt;
 
 void fd6_barrier_init(struct pipe_context *pctx);

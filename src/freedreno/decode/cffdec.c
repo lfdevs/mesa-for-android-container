@@ -1900,7 +1900,7 @@ static void dump_register_summary(int level);
 static void
 cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-   const char *name = rnn_enumname(rnn, "vgt_event_type", dwords[0]);
+   const char *name = rnn_enumname(rnn, "vgt_event_type", dwords[0] & 0xff);
    printl(2, "%sevent %s\n", levels[level], name);
 
    if (name && (options->info->chip > 5)) {
@@ -2955,6 +2955,7 @@ static const struct type3_op {
    /* for a7xx */
    CP(THREAD_CONTROL, cp_set_thread_control),
    CP(CONTEXT_REG_BUNCH2, cp_context_reg_bunch2),
+   CP(EVENT_WRITE7, cp_event_write),
 };
 
 static void

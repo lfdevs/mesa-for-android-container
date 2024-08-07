@@ -100,19 +100,14 @@ VkResult anv_rmv_SetDebugUtilsObjectNameEXT(
       return VK_SUCCESS;
    }
 
-   size_t name_len = strlen(pNameInfo->pObjectName);
-   char *name_buf = malloc(name_len + 1);
-   if (!name_buf) {
-      /*
-       * Silently fail, so that applications may still continue if possible.
-       */
-      return VK_SUCCESS;
-   }
-   strcpy(name_buf, pNameInfo->pObjectName);
+   struct vk_object_base *object =
+      vk_object_base_from_u64_handle(pNameInfo->objectHandle,
+                                     pNameInfo->objectType);
 
    simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
    struct vk_rmv_userdata_token token;
-   token.name = name_buf;
+   token.name = vk_strdup(&device->vk.alloc, object->object_name,
+                          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    token.resource_id = vk_rmv_get_resource_id_locked(&device->vk, pNameInfo->objectHandle);
 
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_USERDATA, &token);

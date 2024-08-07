@@ -134,7 +134,7 @@ fd_acc_end_query(struct fd_context *ctx, struct fd_query *q) assert_dt
 
    /* mark the result available: */
    struct fd_batch *batch = fd_context_batch(ctx);
-   struct fd_ringbuffer *ring = batch->draw;
+   struct fd_ringbuffer *ring = fd_batch_get_tile_epilogue(batch);
    struct fd_resource *rsc = fd_resource(aq->prsc);
 
    if (ctx->screen->gen < 5) {

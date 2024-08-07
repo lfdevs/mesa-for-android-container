@@ -2136,7 +2136,7 @@ static void si_draw(struct pipe_context *ctx,
                  si_resource(indexbuf)->TC_L2_dirty) {
          /* GFX8-GFX11 reads index buffers through TC L2, so it doesn't
           * need this. */
-         sctx->flags |= SI_CONTEXT_WB_L2;
+         sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
          si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
          si_resource(indexbuf)->TC_L2_dirty = false;
       }
@@ -2149,14 +2149,14 @@ static void si_draw(struct pipe_context *ctx,
       /* Indirect buffers use TC L2 on GFX9-GFX11, but not other hw. */
       if (GFX_VERSION <= GFX8 || GFX_VERSION == GFX12) {
          if (indirect->buffer && si_resource(indirect->buffer)->TC_L2_dirty) {
-            sctx->flags |= SI_CONTEXT_WB_L2;
+            sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
             si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
             si_resource(indirect->buffer)->TC_L2_dirty = false;
          }
 
          if (indirect->indirect_draw_count &&
              si_resource(indirect->indirect_draw_count)->TC_L2_dirty) {
-            sctx->flags |= SI_CONTEXT_WB_L2;
+            sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
             si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
             si_resource(indirect->indirect_draw_count)->TC_L2_dirty = false;
          }

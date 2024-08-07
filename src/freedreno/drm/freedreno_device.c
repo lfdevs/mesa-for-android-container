@@ -42,12 +42,16 @@ struct fd_device *msm_device_new(int fd, drmVersionPtr version);
 struct fd_device *virtio_device_new(int fd, drmVersionPtr version);
 #endif
 
+uint64_t os_page_size = 4096;
+
 struct fd_device *
 fd_device_new(int fd)
 {
    struct fd_device *dev = NULL;
    drmVersionPtr version;
    bool use_heap = false;
+
+   os_get_page_size(&os_page_size);
 
    /* figure out if we are kgsl or msm drm driver: */
    version = drmGetVersion(fd);

@@ -1055,9 +1055,6 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    free(mods_filtered);
    mods_filtered = NULL;
 
-   if (modifiers)
-      assert(gbm_dri_bo_get_modifier(&bo->base) != DRM_FORMAT_MOD_INVALID);
-
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HANDLE,
                           &bo->base.v0.handle.s32);
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_STRIDE,

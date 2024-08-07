@@ -784,6 +784,10 @@
    DRI_CONF_OPT_B(anv_disable_fcv, def, \
                   "Disable FCV optimization")
 
+#define DRI_CONF_ANV_DISABLE_XE2_CCS(def) \
+   DRI_CONF_OPT_B(anv_disable_xe2_ccs, def, \
+                  "Disable CCS optimization on Xe2")
+
 #define DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(def) \
    DRI_CONF_OPT_B(anv_external_memory_implicit_sync, def, "Implicit sync on external BOs")
 

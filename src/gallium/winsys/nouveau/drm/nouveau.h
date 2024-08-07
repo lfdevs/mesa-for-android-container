@@ -7,6 +7,7 @@
 #include "util/list.h"
 
 #include "drm-uapi/nouveau_drm.h"
+#include "nv_device_info.h"
 
 #define NOUVEAU_FIFO_CHANNEL_CLASS 0x80000001
 #define NOUVEAU_NOTIFIER_CLASS     0x80000002
@@ -50,6 +51,10 @@ struct nouveau_device {
    uint64_t gart_size;
    uint64_t vram_limit;
    uint64_t gart_limit;
+
+   /* only pci info and device type are set */
+   struct nv_device_info info;
+
    /* classes for common push buf dumping */
    uint32_t cls_eng3d;
    uint32_t cls_compute;

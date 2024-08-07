@@ -187,11 +187,9 @@ void si_launch_grid_internal_ssbos(struct si_context *sctx, struct pipe_grid_inf
    si_launch_grid_internal(sctx, info, shader, flags);
 
    /* Do cache flushing at the end. */
-   if (get_cache_policy(sctx, coher, 0) == L2_BYPASS) {
-      if (flags & SI_OP_SYNC_AFTER) {
-         sctx->flags |= SI_CONTEXT_WB_L2;
-         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
-      }
+   if (flags & SI_OP_SYNC_AFTER && get_cache_policy(sctx, coher, 0) == L2_BYPASS) {
+      sctx->flags |= SI_CONTEXT_WB_L2;
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
    } else {
       while (writeable_bitmask)
          si_resource(buffers[u_bit_scan(&writeable_bitmask)].buffer)->TC_L2_dirty = true;

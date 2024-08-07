@@ -10,6 +10,7 @@
 #include "tu_image.h"
 
 #include "fdl/fd6_format_table.h"
+#include "common/freedreno_lrz.h"
 
 #include "util/u_debug.h"
 #include "util/format/u_format.h"
@@ -593,12 +594,12 @@ tu_image_update_layout(struct tu_device *device, struct tu_image *image,
       /* Fast-clear buffer cannot be larger than 512 bytes on A6XX and 1024 bytes on A7XX (HW limitation) */
       image->has_lrz_fc =
          device->physical_device->info->a6xx.enable_lrz_fast_clear &&
-         lrz_fc_size <= tu_lrzfc_layout<CHIP>::FC_SIZE &&
+         lrz_fc_size <= fd_lrzfc_layout<CHIP>::FC_SIZE &&
          !TU_DEBUG(NOLRZFC);
 
       if (image->has_lrz_fc || device->physical_device->info->a6xx.has_lrz_dir_tracking) {
          image->lrz_fc_offset = image->total_size + lrz_size;
-         lrz_size += sizeof(tu_lrzfc_layout<CHIP>);
+         lrz_size += sizeof(fd_lrzfc_layout<CHIP>);
       }
 
       image->total_size += lrz_size;

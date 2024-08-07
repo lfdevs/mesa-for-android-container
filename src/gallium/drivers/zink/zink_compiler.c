@@ -1370,7 +1370,10 @@ zink_screen_init_compiler(struct zink_screen *screen)
       .lower_uadd_sat = true,
       .lower_usub_sat = true,
       .lower_vector_cmp = true,
-      .lower_int64_options = 0,
+      .lower_int64_options =
+         nir_lower_bit_count64 |
+         nir_lower_find_lsb64 |
+         nir_lower_ufind_msb64,
       .lower_doubles_options = nir_lower_dround_even,
       .lower_uniforms_to_ubo = true,
       .has_fsub = true,
@@ -5792,6 +5795,27 @@ lower_vec816_alu(const nir_instr *instr, const void *cb_data)
    return 4;
 }
 
+static unsigned
+zink_lower_bit_size_cb(const nir_instr *instr, void *data)
+{
+   switch (instr->type) {
+   case nir_instr_type_alu: {
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+      switch (alu->op) {
+      case nir_op_bit_count:
+      case nir_op_find_lsb:
+      case nir_op_ifind_msb:
+      case nir_op_ufind_msb:
+         return alu->src[0].src.ssa->bit_size == 32 ? 0 : 32;
+      default:
+         return 0;
+      }
+   }
+   default:
+      return 0;
+   }
+}
+
 static bool
 fix_vertex_input_locations_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
@@ -6233,6 +6257,7 @@ zink_shader_init(struct zink_screen *screen, struct zink_shader *zs)
          .cb_data = screen,
       };
       NIR_PASS_V(nir, nir_lower_mem_access_bit_sizes, &lower_mem_access_options);
+      NIR_PASS_V(nir, nir_lower_bit_size, zink_lower_bit_size_cb, NULL);
       NIR_PASS_V(nir, alias_scratch_memory);
       NIR_PASS_V(nir, nir_lower_alu_width, lower_vec816_alu, NULL);
       NIR_PASS_V(nir, nir_lower_alu_vec8_16_srcs);

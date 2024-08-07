@@ -131,30 +131,9 @@
 #define MAX_FDM_TEXEL_SIZE_LOG2 10
 #define MAX_FDM_TEXEL_SIZE (1u << MAX_FDM_TEXEL_SIZE_LOG2)
 
-#define TU_GPU_GENS A6XX, A7XX
-#define TU_GENX(FUNC_NAME)                                                   \
-   template <chip... CHIPs> constexpr auto FUNC_NAME##instantiate()          \
-   {                                                                         \
-      return std::tuple_cat(std::make_tuple(FUNC_NAME<CHIPs>)...);           \
-   }                                                                         \
-   static constexpr auto FUNC_NAME##tmpl __attribute__((used)) =             \
-      FUNC_NAME##instantiate<TU_GPU_GENS>();
+#define TU_GENX(FUNC_NAME) FD_GENX(FUNC_NAME)
 
-#define TU_CALLX(device, thing)                                              \
-   ({                                                                        \
-      decltype(&thing<A6XX>) genX_thing;                                     \
-      switch ((device)->physical_device->info->chip) {                       \
-      case 6:                                                                \
-         genX_thing = &thing<A6XX>;                                          \
-         break;                                                              \
-      case 7:                                                                \
-         genX_thing = &thing<A7XX>;                                          \
-         break;                                                              \
-      default:                                                               \
-         unreachable("Unknown hardware generation");                         \
-      }                                                                      \
-      genX_thing;                                                            \
-   })
+#define TU_CALLX(device, thing) FD_CALLX((device)->physical_device->info, thing)
 
 /* vk object types */
 struct tu_buffer;

@@ -1,6 +1,9 @@
 #ifndef NV_DEVINFO_H
 #define NV_DEVINFO_H
 
+#include <stdbool.h>
+#include <string.h>
+
 #include "util/macros.h"
 
 #define NVIDIA_VENDOR_ID 0x10de
@@ -20,7 +23,7 @@ struct nv_device_info {
    char device_name[64];
    char chipset_name[16];
 
-   /* Populated if type == NV_DEVICE_TYPE_DIS */
+   /* Populated if type != NV_DEVICE_TYPE_SOC */
    struct {
       uint16_t domain;
       uint8_t bus;
@@ -45,5 +48,26 @@ struct nv_device_info {
    uint64_t vram_size_B;
    uint64_t bar_size_B;
 };
+
+static inline void
+nv_device_uuid(const struct nv_device_info *info, uint8_t *uuid, size_t len, bool vm_bind)
+{
+   uint16_t vendor_id = NVIDIA_VENDOR_ID;
+
+   assert(len >= 16);
+
+   memset(uuid, 0, len);
+   memcpy(&uuid[0], &info->chipset, 2);
+   memcpy(&uuid[2], &vendor_id, 2);
+   memcpy(&uuid[4], &info->device_id, 2);
+
+   if (info->type != NV_DEVICE_TYPE_SOC) {
+      memcpy(&uuid[6], &info->pci.domain, 2);
+      uuid[8]  = info->pci.bus;
+      uuid[9]  = info->pci.dev;
+      uuid[10] = info->pci.func;
+   }
+   uuid[11] = vm_bind;
+}
 
 #endif /* NV_DEVINFO_H */

@@ -384,8 +384,42 @@ pipe_loader_drm_get_driconf_by_name(const char *driver_name, unsigned *count)
    } else {
       *count = dd->driconf_count;
       size_t size = sizeof(*driconf) * *count;
+      size_t base_size = size;
+      /* factor in all the statically allocated string lengths */
+      for (unsigned i = 0; i < dd->driconf_count; i++) {
+         if (dd->driconf[i].desc)
+            size += strlen(dd->driconf[i].desc) + 1;
+         if (dd->driconf[i].info.name)
+            size += strlen(dd->driconf[i].info.name) + 1;
+         if (dd->driconf[i].info.type == DRI_STRING)
+            size += strlen(dd->driconf[i].value._string) + 1;
+      }
       driconf = malloc(size);
       memcpy(driconf, dd->driconf, size);
+
+      uint8_t *ptr = (void*)driconf;
+      ptr += base_size;
+      /* manually set up pointers and copy in all the statically allocated strings */
+      for (unsigned i = 0; i < dd->driconf_count; i++) {
+         if (dd->driconf[i].desc) {
+            driconf[i].desc = (void*)ptr;
+            size_t str_size = strlen(dd->driconf[i].desc) + 1;
+            memcpy((void*)driconf[i].desc, dd->driconf[i].desc, str_size);
+            ptr += str_size;
+         }
+         if (dd->driconf[i].info.name) {
+            driconf[i].info.name = (void*)ptr;
+            size_t str_size = strlen(dd->driconf[i].info.name) + 1;
+            memcpy((void*)driconf[i].info.name, dd->driconf[i].info.name, str_size);
+            ptr += str_size;
+         }
+         if (dd->driconf[i].info.type == DRI_STRING) {
+            driconf[i].value._string = (void*)ptr;
+            size_t str_size = strlen(dd->driconf[i].value._string) + 1;
+            memcpy((void*)driconf[i].value._string, dd->driconf[i].value._string, str_size);
+            ptr += str_size;
+         }
+      }
    }
    if (lib)
       util_dl_close(lib);

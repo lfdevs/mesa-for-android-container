@@ -35,8 +35,6 @@
 
 #include "fd6_context.h"
 
-BEGINC;
-
 #define FD6_ZSA_NO_ALPHA    (1 << 0)
 #define FD6_ZSA_DEPTH_CLAMP (1 << 1)
 
@@ -82,11 +80,10 @@ fd6_zsa_state(struct fd_context *ctx, bool no_alpha, bool depth_clamp) assert_dt
    return fd6_zsa_stateobj(ctx->zsa)->stateobj[variant];
 }
 
+template <chip CHIP>
 void *fd6_zsa_state_create(struct pipe_context *pctx,
                            const struct pipe_depth_stencil_alpha_state *cso);
 
 void fd6_zsa_state_delete(struct pipe_context *pctx, void *hwcso);
-
-ENDC;
 
 #endif /* FD6_ZSA_H_ */

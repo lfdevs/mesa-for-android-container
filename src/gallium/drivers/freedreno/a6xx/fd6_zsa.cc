@@ -90,6 +90,7 @@ update_lrz_stencil(struct fd6_zsa_stateobj *so, enum pipe_compare_func func,
    }
 }
 
+template <chip CHIP>
 void *
 fd6_zsa_state_create(struct pipe_context *pctx,
                      const struct pipe_depth_stencil_alpha_state *cso)
@@ -238,6 +239,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
    /* Build the four state permutations (with/without alpha/depth-clamp)*/
    for (int i = 0; i < 4; i++) {
       struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 12 * 4);
+      bool depth_clamp_enable = (i & FD6_ZSA_DEPTH_CLAMP);
 
       OUT_PKT4(ring, REG_A6XX_RB_ALPHA_CONTROL, 1);
       OUT_RING(ring,
@@ -250,21 +252,31 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 
       OUT_PKT4(ring, REG_A6XX_RB_DEPTH_CNTL, 1);
       OUT_RING(ring,
-               so->rb_depth_cntl | COND(i & FD6_ZSA_DEPTH_CLAMP,
+               so->rb_depth_cntl | COND(depth_clamp_enable || CHIP >= A7XX,
                                         A6XX_RB_DEPTH_CNTL_Z_CLAMP_ENABLE));
 
       OUT_PKT4(ring, REG_A6XX_RB_STENCILMASK, 2);
       OUT_RING(ring, so->rb_stencilmask);
       OUT_RING(ring, so->rb_stencilwrmask);
 
-      OUT_REG(ring, A6XX_RB_Z_BOUNDS_MIN(cso->depth_bounds_min),
-                    A6XX_RB_Z_BOUNDS_MAX(cso->depth_bounds_max));
+      if (CHIP >= A7XX && !depth_clamp_enable) {
+         OUT_REG(ring,
+            A6XX_RB_Z_BOUNDS_MIN(0.0f),
+            A6XX_RB_Z_BOUNDS_MAX(1.0f),
+         );
+      } else {
+         OUT_REG(ring,
+            A6XX_RB_Z_BOUNDS_MIN(cso->depth_bounds_min),
+            A6XX_RB_Z_BOUNDS_MAX(cso->depth_bounds_max),
+         );
+      }
 
       so->stateobj[i] = ring;
    }
 
    return so;
 }
+FD_GENX(fd6_zsa_state_create);
 
 void
 fd6_zsa_state_delete(struct pipe_context *pctx, void *hwcso)

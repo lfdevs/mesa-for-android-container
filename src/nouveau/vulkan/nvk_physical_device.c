@@ -994,16 +994,7 @@ nvk_get_device_properties(const struct nvk_instance *instance,
             vk_shaderModuleIdentifierAlgorithmUUID,
             sizeof(properties->shaderModuleIdentifierAlgorithmUUID));
 
-   const struct {
-      uint16_t vendor_id;
-      uint16_t device_id;
-      uint8_t pad[12];
-   } dev_uuid = {
-      .vendor_id = NVIDIA_VENDOR_ID,
-      .device_id = info->device_id,
-   };
-   STATIC_ASSERT(sizeof(dev_uuid) == VK_UUID_SIZE);
-   memcpy(properties->deviceUUID, &dev_uuid, VK_UUID_SIZE);
+   nv_device_uuid(info, properties->deviceUUID, VK_UUID_SIZE, true);
    STATIC_ASSERT(sizeof(instance->driver_build_sha) >= VK_UUID_SIZE);
    memcpy(properties->driverUUID, instance->driver_build_sha, VK_UUID_SIZE);
 

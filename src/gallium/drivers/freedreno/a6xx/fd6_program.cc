@@ -27,6 +27,8 @@
 
 #define FD_BO_NO_HARDPIN 1
 
+#include <initializer_list>
+
 #include "pipe/p_state.h"
 #include "util/bitset.h"
 #include "util/format/u_format.h"
@@ -58,50 +60,62 @@ struct program_builder {
    bool binning_pass;
 };
 
-static const struct xs_config {
+template <chip CHIP>
+struct xs_config {
    uint16_t reg_sp_xs_instrlen;
    uint16_t reg_hlsq_xs_ctrl;
    uint16_t reg_sp_xs_first_exec_offset;
    uint16_t reg_sp_xs_pvt_mem_hw_stack_offset;
-} xs_config[] = {
+   uint16_t reg_sp_xs_vgpr_config;
+};
+
+template <chip CHIP>
+static const struct xs_config<CHIP> xs_configs[] = {
    [MESA_SHADER_VERTEX] = {
       REG_A6XX_SP_VS_INSTRLEN,
-      REG_A6XX_HLSQ_VS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_VS_CNTL : REG_A7XX_HLSQ_VS_CNTL,
       REG_A6XX_SP_VS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_VS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_VS_VGPR_CONFIG,
    },
    [MESA_SHADER_TESS_CTRL] = {
       REG_A6XX_SP_HS_INSTRLEN,
-      REG_A6XX_HLSQ_HS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_HS_CNTL : REG_A7XX_HLSQ_HS_CNTL,
       REG_A6XX_SP_HS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_HS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_HS_VGPR_CONFIG,
    },
    [MESA_SHADER_TESS_EVAL] = {
       REG_A6XX_SP_DS_INSTRLEN,
-      REG_A6XX_HLSQ_DS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_DS_CNTL : REG_A7XX_HLSQ_DS_CNTL,
       REG_A6XX_SP_DS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_DS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_DS_VGPR_CONFIG,
    },
    [MESA_SHADER_GEOMETRY] = {
       REG_A6XX_SP_GS_INSTRLEN,
-      REG_A6XX_HLSQ_GS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_GS_CNTL : REG_A7XX_HLSQ_GS_CNTL,
       REG_A6XX_SP_GS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_GS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_GS_VGPR_CONFIG,
    },
    [MESA_SHADER_FRAGMENT] = {
       REG_A6XX_SP_FS_INSTRLEN,
-      REG_A6XX_HLSQ_FS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_FS_CNTL : REG_A7XX_HLSQ_FS_CNTL,
       REG_A6XX_SP_FS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_FS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_FS_VGPR_CONFIG,
    },
    [MESA_SHADER_COMPUTE] = {
       REG_A6XX_SP_CS_INSTRLEN,
-      REG_A6XX_HLSQ_CS_CNTL,
+      CHIP == A6XX ? REG_A6XX_HLSQ_CS_CNTL : REG_A7XX_HLSQ_CS_CNTL,
       REG_A6XX_SP_CS_OBJ_FIRST_EXEC_OFFSET,
       REG_A6XX_SP_CS_PVT_MEM_HW_STACK_OFFSET,
+      REG_A7XX_SP_CS_VGPR_CONFIG,
    },
 };
 
+template <chip CHIP>
 void
 fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                 const struct ir3_shader_variant *so)
@@ -189,7 +203,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
       unreachable("bad shader stage");
    }
 
-   const struct xs_config *cfg = &xs_config[type];
+   const struct xs_config<CHIP> *cfg = &xs_configs<CHIP>[type];
 
    OUT_PKT4(ring, cfg->reg_sp_xs_instrlen, 1);
    OUT_RING(ring, so->instrlen);
@@ -221,20 +235,28 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
    OUT_PKT4(ring, cfg->reg_sp_xs_pvt_mem_hw_stack_offset, 1);
    OUT_RING(ring, A6XX_SP_VS_PVT_MEM_HW_STACK_OFFSET_OFFSET(per_sp_size));
 
-   uint32_t shader_preload_size =
-      MIN2(so->instrlen, ctx->screen->info->a6xx.instr_cache_size);
+   if (CHIP >= A7XX) {
+      OUT_PKT4(ring, cfg->reg_sp_xs_vgpr_config, 1);
+      OUT_RING(ring, 0);
+   }
 
-   enum a6xx_state_block sb = fd6_stage2shadersb(so->type);
-   OUT_PKT7(ring, fd6_stage2opcode(so->type), 3);
-   OUT_RING(ring, CP_LOAD_STATE6_0_DST_OFF(0) |
-                     CP_LOAD_STATE6_0_STATE_TYPE(ST6_SHADER) |
-                     CP_LOAD_STATE6_0_STATE_SRC(SS6_INDIRECT) |
-                     CP_LOAD_STATE6_0_STATE_BLOCK(sb) |
-                     CP_LOAD_STATE6_0_NUM_UNIT(shader_preload_size));
-   OUT_RELOC(ring, so->bo, 0, 0, 0);
+   if (CHIP == A6XX) {
+      uint32_t shader_preload_size =
+         MIN2(so->instrlen, ctx->screen->info->a6xx.instr_cache_size);
+
+      enum a6xx_state_block sb = fd6_stage2shadersb(so->type);
+      OUT_PKT7(ring, fd6_stage2opcode(so->type), 3);
+      OUT_RING(ring, CP_LOAD_STATE6_0_DST_OFF(0) |
+                        CP_LOAD_STATE6_0_STATE_TYPE(ST6_SHADER) |
+                        CP_LOAD_STATE6_0_STATE_SRC(SS6_INDIRECT) |
+                        CP_LOAD_STATE6_0_STATE_BLOCK(sb) |
+                        CP_LOAD_STATE6_0_NUM_UNIT(shader_preload_size));
+      OUT_RELOC(ring, so->bo, 0, 0, 0);
+   }
 
    fd6_emit_immediates(so, ring);
 }
+FD_GENX(fd6_emit_shader);
 
 /**
  * Build a pre-baked state-obj to disable SO, so that we aren't dynamically
@@ -577,6 +599,7 @@ emit_vs_system_values(struct fd_ringbuffer *ring,
    OUT_RING(ring, COND(b->fs->reads_primid, A6XX_VFD_CONTROL_6_PRIMID4PSEN)); /* VFD_CONTROL_6 */
 }
 
+template <chip CHIP>
 static void
 emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
 {
@@ -824,6 +847,11 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
 
    OUT_REG(ring, A6XX_PC_PS_CNTL(b->fs->reads_primid));
 
+   if (CHIP >= A7XX) {
+      OUT_REG(ring, A6XX_GRAS_UNKNOWN_8110(0x2));
+      OUT_REG(ring, A7XX_HLSQ_FS_UNKNOWN_A9AA(.consts_load_disable = false));
+   }
+
    OUT_PKT4(ring, REG_A6XX_VPC_CNTL_0, 1);
    OUT_RING(ring, A6XX_VPC_CNTL_0_NUMNONPOSVAR(b->fs->total_in) |
                   COND(b->fs->total_in, A6XX_VPC_CNTL_0_VARYING) |
@@ -848,7 +876,7 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
       } else {
          fd6_emit_link_map(b->vs, b->gs, ring);
       }
-      vertices_out = b->gs->gs.vertices_out - 1;
+      vertices_out = MAX2(1, b->gs->gs.vertices_out) - 1;
       enum a6xx_tess_output output =
          primitive_to_tess((enum mesa_prim)b->gs->gs.output_primitive);
       invocations = b->gs->gs.invocations - 1;
@@ -862,8 +890,18 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
             A6XX_PC_PRIMITIVE_CNTL_5_GS_OUTPUT(output) |
             A6XX_PC_PRIMITIVE_CNTL_5_GS_INVOCATIONS(invocations));
 
-      OUT_PKT4(ring, REG_A6XX_VPC_GS_PARAM, 1);
-      OUT_RING(ring, 0xff);
+      if (CHIP >= A7XX) {
+         OUT_REG(ring,
+            A7XX_VPC_PRIMITIVE_CNTL_5(
+               .gs_vertices_out = vertices_out,
+               .gs_invocations = invocations,
+               .gs_output = output,
+            )
+         );
+      } else {
+         OUT_PKT4(ring, REG_A6XX_VPC_GS_PARAM, 1);
+         OUT_RING(ring, 0xff);
+      }
 
       OUT_PKT4(ring, REG_A6XX_PC_PRIMITIVE_CNTL_6, 1);
       OUT_RING(ring, A6XX_PC_PRIMITIVE_CNTL_6_STRIDE_IN_VPC(vec4_size));
@@ -918,6 +956,8 @@ emit_fs_inputs(struct fd_ringbuffer *ring, const struct program_builder *b)
 
    OUT_PKT4(ring, REG_A6XX_SP_FS_PREFETCH_CNTL, 1 + fs->num_sampler_prefetch);
    OUT_RING(ring, A6XX_SP_FS_PREFETCH_CNTL_COUNT(fs->num_sampler_prefetch) |
+                     COND(CHIP >= A7XX, A6XX_SP_FS_PREFETCH_CNTL_CONSTSLOTID(0x1ff)) |
+                     COND(CHIP >= A7XX, A6XX_SP_FS_PREFETCH_CNTL_CONSTSLOTID4COORD(0x1ff)) |
                      COND(!VALIDREG(ij_regid[IJ_PERSP_PIXEL]),
                           A6XX_SP_FS_PREFETCH_CNTL_IJ_WRITE_DISABLE) |
                      COND(fs->prefetch_end_of_quad,
@@ -927,8 +967,12 @@ emit_fs_inputs(struct fd_ringbuffer *ring, const struct program_builder *b)
       OUT_RING(ring, SP_FS_PREFETCH_CMD(
             CHIP, i,
             .src = prefetch->src,
-            .samp_id = prefetch->samp_id,
-            .tex_id = prefetch->tex_id,
+            /* For a7xx, samp_id/tex_id is always in SP_FS_BINDLESS_PREFETCH_CMD[n]
+             * even in the non-bindless case (which probably makes the reg name
+             * wrong)
+             */
+            .samp_id = (CHIP == A6XX) ? prefetch->samp_id : 0,
+            .tex_id = (CHIP == A6XX) ? prefetch->tex_id : 0,
             .dst = prefetch->dst,
             .wrmask = prefetch->wrmask,
             .half = prefetch->half_precision,
@@ -936,6 +980,18 @@ emit_fs_inputs(struct fd_ringbuffer *ring, const struct program_builder *b)
             .cmd = tex_opc_to_prefetch_cmd(prefetch->tex_opc),
          ).value
       );
+   }
+
+   if (CHIP == A7XX) {
+      for (int i = 0; i < fs->num_sampler_prefetch; i++) {
+         const struct ir3_sampler_prefetch *prefetch = &fs->sampler_prefetch[i];
+         OUT_REG(ring,
+            A6XX_SP_FS_BINDLESS_PREFETCH_CMD(i,
+               .samp_id = prefetch->samp_id,
+               .tex_id = prefetch->tex_id,
+            )
+         );
+      }
    }
 
    OUT_REG(ring,
@@ -968,6 +1024,36 @@ emit_fs_inputs(struct fd_ringbuffer *ring, const struct program_builder *b)
                  .foveationqualityregid = INVALID_REG,
            ),
    );
+
+   if (CHIP >= A7XX) {
+      uint32_t sysval_regs = 0;
+      for (unsigned i = 0; i < ARRAY_SIZE(ij_regid); i++) {
+         if (VALIDREG(ij_regid[i])) {
+            if (i == IJ_PERSP_CENTER_RHW)
+               sysval_regs += 1;
+            else
+               sysval_regs += 2;
+         }
+      }
+
+      for (uint32_t sysval : { face_regid, samp_id_regid, smask_in_regid }) {
+         if (VALIDREG(sysval))
+            sysval_regs += 1;
+      }
+
+      for (uint32_t sysval : { coord_regid, zwcoord_regid }) {
+         if (VALIDREG(sysval))
+            sysval_regs += 2;
+      }
+
+      OUT_REG(ring,
+         A7XX_HLSQ_UNKNOWN_A9AE(
+            .sysval_regs_count = sysval_regs,
+            .unk8 = 1,
+            .unk9 = 1,
+         )
+      );
+   }
 
    enum a6xx_threadsize thrsz = fs->info.double_threadsize ? THREAD128 : THREAD64;
    OUT_REG(ring,
@@ -1084,19 +1170,19 @@ static void
 setup_stateobj(struct fd_ringbuffer *ring, const struct program_builder *b)
    assert_dt
 {
-   fd6_emit_shader(b->ctx, ring, b->vs);
-   fd6_emit_shader(b->ctx, ring, b->hs);
-   fd6_emit_shader(b->ctx, ring, b->ds);
-   fd6_emit_shader(b->ctx, ring, b->gs);
+   fd6_emit_shader<CHIP>(b->ctx, ring, b->vs);
+   fd6_emit_shader<CHIP>(b->ctx, ring, b->hs);
+   fd6_emit_shader<CHIP>(b->ctx, ring, b->ds);
+   fd6_emit_shader<CHIP>(b->ctx, ring, b->gs);
    if (!b->binning_pass)
-      fd6_emit_shader(b->ctx, ring, b->fs);
+      fd6_emit_shader<CHIP>(b->ctx, ring, b->fs);
 
    OUT_PKT4(ring, REG_A6XX_PC_MULTIVIEW_CNTL, 1);
    OUT_RING(ring, 0);
 
    emit_vfd_dest(ring, b->vs);
 
-   emit_vpc(ring, b);
+   emit_vpc<CHIP>(ring, b);
 
    emit_fs_inputs<CHIP>(ring, b);
    emit_fs_outputs(ring, b);
@@ -1479,7 +1565,4 @@ fd6_prog_init(struct pipe_context *pctx)
 
    fd_prog_init(pctx);
 }
-
-/* Teach the compiler about needed variants: */
-template void fd6_prog_init<A6XX>(struct pipe_context *pctx);
-template void fd6_prog_init<A7XX>(struct pipe_context *pctx);
+FD_GENX(fd6_prog_init);

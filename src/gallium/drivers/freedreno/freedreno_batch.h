@@ -437,7 +437,9 @@ fd_reset_wfi(struct fd_batch *batch)
 void fd_wfi(struct fd_batch *batch, struct fd_ringbuffer *ring) assert_dt;
 
 /* emit a CP_EVENT_WRITE:
+ * (a6xx+ cannot use this, use fd6_event_write<chip>.)
  */
+#ifndef __cplusplus
 static inline void
 fd_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
                enum vgt_event_type evt)
@@ -446,6 +448,7 @@ fd_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
    OUT_RING(ring, evt);
    fd_reset_wfi(batch);
 }
+#endif
 
 /* Get per-tile epilogue */
 static inline struct fd_ringbuffer *

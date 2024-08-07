@@ -111,7 +111,7 @@ load_sample_pos_u4_at(nir_builder *b, nir_def *sample_id,
                              nir_imm_int(b, fs_key->sample_locations_cb),
                              nir_iadd_imm(b, sample_id,
                                           fs_key->sample_locations_offset),
-                             .align_mul = 8, .align_offset = 0);
+                             .align_mul = 1, .align_offset = 0);
 
    /* The rest of these calculations are in 32-bit */
    loc = nir_u2u32(b, loc);

@@ -173,8 +173,8 @@ option. For example:
    meson --prefix="${PWD}/build/install" build/
 
 will put the final libraries and drivers into the build/install/
-directory. Then you can set LD_LIBRARY_PATH and LIBGL_DRIVERS_PATH to
-that location to run/test the driver.
+directory. Then you can set LD_LIBRARY_PATH to that location to run/test
+the driver.
 
 Meson also honors ``DESTDIR`` for installs.
 

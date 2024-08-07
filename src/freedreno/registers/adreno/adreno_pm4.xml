@@ -1684,12 +1684,7 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	</reg32>
 
 	<stripe varset="event_write_dst" variants="EV_DST_RAM">
-		<reg32 offset="1" name="1">
-			<bitfield name="ADDR_0_LO" low="0" high="31"/>
-		</reg32>
-		<reg32 offset="2" name="2">
-			<bitfield name="ADDR_0_HI" low="0" high="31"/>
-		</reg32>
+		<reg64 offset="1" name="1" type="waddress"/>
 		<reg32 offset="3" name="3">
 			<bitfield name="PAYLOAD_0" low="0" high="31"/>
 		</reg32>

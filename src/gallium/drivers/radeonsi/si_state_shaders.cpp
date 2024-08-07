@@ -1391,6 +1391,26 @@ static unsigned si_get_vs_out_cntl(const struct si_shader_selector *sel,
                                              shader->info.nr_pos_exports > 1));
 }
 
+/* Return the number of allocated param exports. This can be more than the number of param
+ * exports in the shader.
+ */
+unsigned si_shader_num_alloc_param_exports(struct si_shader *shader)
+{
+   unsigned num_params = shader->info.nr_param_exports;
+
+   /* Since there is no alloc/dealloc mechanism for the 12-bit ordered IDs on GFX12, they can wrap
+    * around if there are more than 2^12 workgroups, causing 2 workgroups to get the same
+    * ordered ID, which can deadlock the "ordered add" loop.
+    *
+    * The recommended solution is to use the alloc/dealloc mechanism of the attribute ring to limit
+    * the number of workgroups in flight and thus the number of ordered IDs in flight.
+    */
+   if (shader->selector->screen->info.gfx_level >= GFX12 && si_shader_uses_streamout(shader))
+      num_params = MAX2(num_params, 8);
+
+   return num_params;
+}
+
 /**
  * Prepare the PM4 image for \p shader, which will run as a merged ESGS shader
  * in NGG mode.
@@ -1541,16 +1561,7 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
                                         gs_sel->info.writes_primid);
 
    if (sscreen->info.gfx_level >= GFX12) {
-      unsigned num_params = shader->info.nr_param_exports;
-
-      /* Since there is no alloc/dealloc mechanism for the 12-bit ordered IDs, they can wrap
-       * around if there are more than 2^12 workgroups, causing 2 workgroups to get the same
-       * ordered ID, which would break the streamout algorithm.
-       * The recommended solution is to use the alloc/dealloc mechanism of the attribute ring,
-       * which is enough to limit the range of ordered IDs that can be in flight.
-       */
-      if (si_shader_uses_streamout(shader))
-         num_params = MAX2(num_params, 8);
+      unsigned num_params = si_shader_num_alloc_param_exports(shader);
 
       shader->ngg.spi_shader_pgm_rsrc4_gs = S_00B220_SPI_SHADER_LATE_ALLOC_GS(127) |
                                             S_00B220_GLG_FORCE_DISABLE(1) |

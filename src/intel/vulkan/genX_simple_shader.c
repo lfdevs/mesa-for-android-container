@@ -695,6 +695,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
          ggw.RightExecutionMask           = dispatch.right_mask;
          ggw.BottomExecutionMask          = 0xffffffff;
       }
+      anv_batch_emit(batch, GENX(MEDIA_STATE_FLUSH), msf);
 #endif
    }
 }

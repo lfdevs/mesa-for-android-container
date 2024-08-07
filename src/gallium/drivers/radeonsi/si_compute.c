@@ -1036,6 +1036,8 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
        * - Only supported by the gfx queue.
        * - Max 16 workgroups per SE can be launched, max 4 in each dimension.
        * - PARTIAL_TG_EN, USE_THREAD_DIMENSIONS, and ORDERED_APPEND_ENBL must be 0.
+       * - COMPUTE_START_X/Y are in units of 2D subgrids, not workgroups
+       *   (program COMPUTE_START_X to start_x >> log_x, COMPUTE_START_Y to start_y >> log_y).
        */
       if (sctx->has_graphics && !partial_block_en &&
           (info->indirect || info->grid[1] >= 4) && MIN2(info->block[0], info->block[1]) >= 4 &&
@@ -1208,7 +1210,7 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
       /* Indirect buffers use TC L2 on GFX9-GFX11, but not other hw. */
       if ((sctx->gfx_level <= GFX8 || sctx->gfx_level == GFX12) &&
           si_resource(info->indirect)->TC_L2_dirty) {
-         sctx->flags |= SI_CONTEXT_WB_L2;
+         sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
          si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
          si_resource(info->indirect)->TC_L2_dirty = false;
       }

@@ -1,3 +1,11 @@
+mesa (24.2.0~rc4-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control: Add python3-yaml to build-depends.
+  * control: Move libclc-NN dependency to LLVM_ARCHS.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 07 Aug 2024 16:34:17 +0300
+
 mesa (24.2.0~rc3-2) experimental; urgency=medium
 
   * Add ldconfig trigger for mesa-drm-shim.

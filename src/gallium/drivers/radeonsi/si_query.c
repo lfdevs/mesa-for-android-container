@@ -1698,7 +1698,7 @@ static void si_render_condition(struct pipe_context *ctx, struct pipe_query *que
          /* Settings this in the render cond atom is too late,
           * so set it here. */
          if (sctx->gfx_level <= GFX8) {
-            sctx->flags |= SI_CONTEXT_WB_L2;
+            sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
             si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
          }
 

@@ -86,7 +86,7 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
     * the effects of the fragment on the framebuffer contents are undefined."
     */
    unsigned max_layer_index = 0;
-   enum a6xx_format mrt0_format = (enum a6xx_format)0;
+   enum a6xx_format mrt0_format = FMT6_NONE;
 
    for (i = 0; i < pfb->nr_cbufs; i++) {
       enum a3xx_color_swap swap = WZYX;
@@ -129,10 +129,13 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
       /* Batch with no draws? */
       fd_ringbuffer_attach_bo(ring, rsc->bo);
 
-      OUT_REG(
-         ring,
-         RB_MRT_BUF_INFO(CHIP, i, .color_format = format,
-                              .color_tile_mode = tile_mode, .color_swap = swap),
+      OUT_REG(ring,
+         RB_MRT_BUF_INFO(CHIP, i,
+            .color_format = format,
+            .color_tile_mode = tile_mode,
+            .color_swap = swap,
+            .losslesscompen = fd_resource_ubwc_enabled(rsc, psurf->u.tex.level),
+         ),
          A6XX_RB_MRT_PITCH(i, stride),
          A6XX_RB_MRT_ARRAY_PITCH(i, array_stride),
          A6XX_RB_MRT_BASE(i, .bo = rsc->bo, .bo_offset = offset),
@@ -161,8 +164,8 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
 
 template <chip CHIP>
 static void
-emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
-        const struct fd_gmem_stateobj *gmem)
+emit_zs(struct fd_context *ctx, struct fd_ringbuffer *ring,
+        struct pipe_surface *zsbuf, const struct fd_gmem_stateobj *gmem)
 {
    if (zsbuf) {
       struct fd_resource *rsc = fd_resource(zsbuf->texture);
@@ -183,8 +186,12 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
          /* S8 is implemented as Z32_S8 minus the Z32 plane: */
          enum a6xx_depth_format fmt = DEPTH6_32;
 
-         OUT_REG(
-            ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
+         OUT_REG(ring,
+            RB_DEPTH_BUFFER_INFO(CHIP,
+               .depth_format = fmt,
+               .tilemode = TILE6_3,
+               .losslesscompen = fd_resource_ubwc_enabled(rsc, zsbuf->u.tex.level),
+            ),
             A6XX_RB_DEPTH_BUFFER_PITCH(0),
             A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(0),
             A6XX_RB_DEPTH_BUFFER_BASE(.qword = 0),
@@ -196,8 +203,12 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
       } else {
          enum a6xx_depth_format fmt = fd6_pipe2depth(zsbuf->format);
 
-         OUT_REG(
-            ring, RB_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt),
+         OUT_REG(ring,
+            RB_DEPTH_BUFFER_INFO(CHIP,
+               .depth_format = fmt,
+               .tilemode = TILE6_3,
+               .losslesscompen = fd_resource_ubwc_enabled(rsc, zsbuf->u.tex.level),
+            ),
             A6XX_RB_DEPTH_BUFFER_PITCH(stride),
             A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(array_stride),
             A6XX_RB_DEPTH_BUFFER_BASE(.bo = rsc->bo, .bo_offset = offset),
@@ -208,12 +219,6 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
          OUT_PKT4(ring, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE, 3);
          fd6_emit_flag_reference(ring, rsc, zsbuf->u.tex.level,
                                  zsbuf->u.tex.first_layer);
-
-         /* NOTE: blob emits GRAS_LRZ_CNTL plus GRAZ_LRZ_BUFFER_BASE
-          * plus this CP_EVENT_WRITE at the end in it's own IB..
-          */
-         OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-         OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(LRZ_CLEAR));
       }
 
       if (stencil) {
@@ -225,11 +230,17 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
 
          fd_ringbuffer_attach_bo(ring, stencil->bo);
 
-         OUT_REG(ring, RB_STENCIL_INFO(CHIP, .separate_stencil = true),
-                 A6XX_RB_STENCIL_BUFFER_PITCH(stride),
-                 A6XX_RB_STENCIL_BUFFER_ARRAY_PITCH(array_stride),
-                 A6XX_RB_STENCIL_BUFFER_BASE(.bo = stencil->bo, .bo_offset = offset),
-                 A6XX_RB_STENCIL_BUFFER_BASE_GMEM(base));
+         OUT_REG(ring,
+            RB_STENCIL_INFO(
+               CHIP,
+               .separate_stencil = true,
+               .tilemode = TILE6_3,
+            ),
+            A6XX_RB_STENCIL_BUFFER_PITCH(stride),
+            A6XX_RB_STENCIL_BUFFER_ARRAY_PITCH(array_stride),
+            A6XX_RB_STENCIL_BUFFER_BASE(.bo = stencil->bo, .bo_offset = offset),
+            A6XX_RB_STENCIL_BUFFER_BASE_GMEM(base)
+         );
       } else {
          OUT_REG(ring, RB_STENCIL_INFO(CHIP, 0));
       }
@@ -248,17 +259,11 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
       OUT_REG(ring,
               A6XX_GRAS_SU_DEPTH_BUFFER_INFO(.depth_format = DEPTH6_NONE));
 
-      OUT_PKT4(ring, REG_A6XX_GRAS_LRZ_BUFFER_BASE, 5);
-      OUT_RING(ring, 0x00000000); /* GRAS_LRZ_BUFFER_BASE_LO */
-      OUT_RING(ring, 0x00000000); /* GRAS_LRZ_BUFFER_BASE_HI */
-      OUT_RING(ring, 0x00000000); /* GRAS_LRZ_BUFFER_PITCH */
-      OUT_RING(ring, 0x00000000); /* GRAS_LRZ_FAST_CLEAR_BUFFER_BASE_LO */
-      OUT_RING(ring, 0x00000000); /* GRAS_LRZ_FAST_CLEAR_BUFFER_BASE_HI */
-
       OUT_REG(ring, RB_STENCIL_INFO(CHIP, 0));
    }
 }
 
+template <chip CHIP>
 static void
 emit_lrz(struct fd_batch *batch, struct fd_batch_subpass *subpass)
 {
@@ -269,6 +274,8 @@ emit_lrz(struct fd_batch *batch, struct fd_batch_subpass *subpass)
       OUT_REG(ring, A6XX_GRAS_LRZ_BUFFER_BASE(),
               A6XX_GRAS_LRZ_BUFFER_PITCH(),
               A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE());
+      if (CHIP >= A7XX)
+         OUT_REG(ring, A7XX_GRAS_LRZ_DEPTH_BUFFER_INFO());
       return;
    }
 
@@ -278,13 +285,26 @@ emit_lrz(struct fd_batch *batch, struct fd_batch_subpass *subpass)
     * we change the LRZ buffer after a sub-pass, but get a
     * cache-hit on stale data from the previous LRZ buffer.
     */
-   fd6_emit_lrz_flush(ring);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_LRZ_FLUSH);
 
    struct fd_resource *zsbuf = fd_resource(pfb->zsbuf->texture);
-   OUT_REG(ring, A6XX_GRAS_LRZ_BUFFER_BASE(.bo = subpass->lrz),
-           A6XX_GRAS_LRZ_BUFFER_PITCH(.pitch = zsbuf->lrz_pitch),
-           A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE());
+   OUT_REG(ring,
+      A6XX_GRAS_LRZ_BUFFER_BASE(.bo = subpass->lrz),
+      A6XX_GRAS_LRZ_BUFFER_PITCH(.pitch = zsbuf->lrz_pitch),
+      A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE(
+         .bo = zsbuf->lrz_fc_offset ? subpass->lrz : NULL,
+         .bo_offset = zsbuf->lrz_fc_offset
+      ),
+   );
    fd_ringbuffer_attach_bo(ring, subpass->lrz);
+
+   if (CHIP >= A7XX) {
+      OUT_REG(ring,
+         A7XX_GRAS_LRZ_DEPTH_BUFFER_INFO(
+            .depth_format = fd6_pipe2depth(pfb->zsbuf->format),
+         )
+      );
+   }
 }
 
 /* Emit any needed lrz clears to the prologue cmds
@@ -319,12 +339,12 @@ emit_lrz_clears(struct fd_batch *batch)
       if (count == 0) {
          struct fd_ringbuffer *ring = fd_batch_get_prologue(batch);
 
-         fd6_emit_ccu_cntl(ring, ctx->screen, false);
+         fd6_emit_ccu_cntl<CHIP>(ring, ctx->screen, false);
 
          OUT_PKT7(ring, CP_SET_MARKER, 1);
          OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
 
-         fd6_emit_flushes(ctx, ring, FD6_FLUSH_CACHE);
+         fd6_emit_flushes<CHIP>(ctx, ring, FD6_FLUSH_CACHE);
 
          if (ctx->screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit !=
              ctx->screen->info->a6xx.magic.RB_DBG_ECO_CNTL) {
@@ -358,9 +378,9 @@ emit_lrz_clears(struct fd_batch *batch)
        * has_ccu_flush_bug (and it is added by fd6_emit_flushes() already
        * in that case)
        */
-      fd6_emit_flushes(batch->ctx, ring,
-                       FD6_FLUSH_CCU_COLOR |
-                       FD6_INVALIDATE_CACHE);
+      fd6_emit_flushes<CHIP>(batch->ctx, ring,
+                             FD6_FLUSH_CCU_COLOR |
+                             FD6_INVALIDATE_CACHE);
    }
 }
 
@@ -432,6 +452,7 @@ patch_fb_read_gmem(struct fd_batch *batch)
    util_dynarray_clear(&batch->fb_read_patches);
 }
 
+template <chip CHIP>
 static void
 patch_fb_read_sysmem(struct fd_batch *batch)
 {
@@ -457,7 +478,7 @@ patch_fb_read_sysmem(struct fd_batch *batch)
       fdl6_get_ubwc_blockwidth(&rsc->layout, &block_width, &block_height);
 
       struct fdl_view_args args = {
-         .chip = A6XX,
+         .chip = CHIP,
 
          .iova = fd_bo_get_iova(rsc->bo),
 
@@ -491,6 +512,24 @@ update_render_cntl(struct fd_batch *batch, struct pipe_framebuffer_state *pfb,
                    bool binning)
 {
    struct fd_ringbuffer *ring = batch->gmem;
+
+   if (CHIP >= A7XX) {
+      OUT_REG(ring,
+         RB_RENDER_CNTL(
+            CHIP,
+            .binning = binning,
+            .raster_mode = TYPE_TILED,
+            .raster_direction = LR_TB
+         )
+      );
+      OUT_REG(ring,
+         A7XX_GRAS_SU_RENDER_CNTL(
+            .binning = binning,
+         )
+      );
+      return;
+   }
+
    struct fd_screen *screen = batch->ctx->screen;
    bool depth_ubwc_enable = false;
    uint32_t mrts_ubwc_enable = 0;
@@ -723,9 +762,11 @@ check_vsc_overflow(struct fd_context *ctx)
    }
 }
 
+template <chip CHIP>
 static void
 emit_common_init(struct fd_batch *batch)
 {
+   struct fd_context *ctx = batch->ctx;
    struct fd_ringbuffer *ring = batch->gmem;
    struct fd_autotune *at = &batch->ctx->autotune;
    struct fd_batch_result *result = batch->autotune_result;
@@ -738,40 +779,68 @@ emit_common_init(struct fd_batch *batch)
    OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_CONTROL, 1);
    OUT_RING(ring, A6XX_RB_SAMPLE_COUNT_CONTROL_COPY);
 
-   OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR, 2);
-   OUT_RELOC(ring, results_ptr(at, result[result->idx].samples_start));
+   if (!ctx->screen->info->a7xx.has_event_write_sample_count) {
+      OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR, 2);
+      OUT_RELOC(ring, results_ptr(at, result[result->idx].samples_start));
 
-   fd6_event_write(batch, ring, ZPASS_DONE, false);
+      fd6_event_write<CHIP>(ctx, ring, FD_ZPASS_DONE);
+
+      /* Copied from blob's cmdstream, not sure why it is done. */
+      if (CHIP == A7XX) {
+         fd6_event_write<CHIP>(ctx, ring, FD_CCU_CLEAN_DEPTH);
+      }
+   } else {
+      OUT_PKT(ring, CP_EVENT_WRITE7,
+         CP_EVENT_WRITE7_0(
+            .event = ZPASS_DONE,
+            .write_sample_count = true,
+         ),
+         EV_DST_RAM_CP_EVENT_WRITE7_1(
+            results_ptr(at, result[result->idx].samples_start)
+         ),
+      );
+   }
 }
 
+template <chip CHIP>
 static void
 emit_common_fini(struct fd_batch *batch)
 {
+   struct fd_context *ctx = batch->ctx;
    struct fd_ringbuffer *ring = batch->gmem;
    struct fd_autotune *at = &batch->ctx->autotune;
    struct fd_batch_result *result = batch->autotune_result;
 
-   fd6_emit_flushes(batch->ctx, ring, batch->barrier);
+   fd6_emit_flushes<CHIP>(batch->ctx, ring, batch->barrier);
 
    if (!result)
       return;
 
-   // TODO attach directly to submit:
    fd_ringbuffer_attach_bo(ring, at->results_mem);
 
    OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_CONTROL, 1);
    OUT_RING(ring, A6XX_RB_SAMPLE_COUNT_CONTROL_COPY);
 
-   OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR, 2);
-   OUT_RELOC(ring, results_ptr(at, result[result->idx].samples_end));
+   if (!ctx->screen->info->a7xx.has_event_write_sample_count) {
+      OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR, 2);
+      OUT_RELOC(ring, results_ptr(at, result[result->idx].samples_end));
 
-   fd6_event_write(batch, ring, ZPASS_DONE, false);
+      fd6_event_write<CHIP>(batch->ctx, ring, FD_ZPASS_DONE);
+   } else {
+      OUT_PKT(ring, CP_EVENT_WRITE7,
+         CP_EVENT_WRITE7_0(
+            .event = ZPASS_DONE,
+            .write_sample_count = true,
+            .sample_count_end_offset = true,
+            .write_accum_sample_count_diff = true,
+         ),
+         EV_DST_RAM_CP_EVENT_WRITE7_1(
+            results_ptr(at, result[result->idx].samples_start)
+         ),
+      );
+   }
 
-   // TODO is there a better event to use.. a single ZPASS_DONE_TS would be nice
-   OUT_PKT7(ring, CP_EVENT_WRITE, 4);
-   OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS));
-   OUT_RELOC(ring, results_ptr(at, fence));
-   OUT_RING(ring, result->fence);
+   fd6_fence_write<CHIP>(ring, result->fence, results_ptr(at, fence));
 }
 
 /*
@@ -850,13 +919,22 @@ set_bin_size(struct fd_ringbuffer *ring, const struct fd_gmem_stateobj *gmem,
    unsigned w = gmem ? gmem->bin_w : 0;
    unsigned h = gmem ? gmem->bin_h : 0;
 
-   OUT_REG(ring, A6XX_GRAS_BIN_CONTROL(
-         .binw = w, .binh = h,
-         .render_mode = p.render_mode,
-         .force_lrz_write_dis = p.force_lrz_write_dis,
-         .buffers_location = p.buffers_location,
-         .lrz_feedback_zmode_mask = p.lrz_feedback_zmode_mask,
-   ));
+   if (CHIP == A6XX) {
+      OUT_REG(ring, A6XX_GRAS_BIN_CONTROL(
+            .binw = w, .binh = h,
+            .render_mode = p.render_mode,
+            .force_lrz_write_dis = p.force_lrz_write_dis,
+            .buffers_location = p.buffers_location,
+            .lrz_feedback_zmode_mask = p.lrz_feedback_zmode_mask,
+      ));
+   } else {
+      OUT_REG(ring, A6XX_GRAS_BIN_CONTROL(
+            .binw = w, .binh = h,
+            .render_mode = p.render_mode,
+            .force_lrz_write_dis = p.force_lrz_write_dis,
+            .lrz_feedback_zmode_mask = p.lrz_feedback_zmode_mask,
+      ));
+   }
    OUT_REG(ring, RB_BIN_CONTROL(
          CHIP,
          .binw = w, .binh = h,
@@ -869,6 +947,7 @@ set_bin_size(struct fd_ringbuffer *ring, const struct fd_gmem_stateobj *gmem,
    OUT_REG(ring, A6XX_RB_BIN_CONTROL2(.binw = w, .binh = h));
 }
 
+template <chip CHIP>
 static void
 emit_binning_pass(struct fd_batch *batch) assert_dt
 {
@@ -916,7 +995,7 @@ emit_binning_pass(struct fd_batch *batch) assert_dt
    /* emit IB to binning drawcmds: */
    trace_start_binning_ib(&batch->trace, ring);
    foreach_subpass (subpass, batch) {
-      emit_lrz(batch, subpass);
+      emit_lrz<CHIP>(batch, subpass);
       fd6_emit_ib(ring, subpass->draw);
    }
    trace_end_binning_ib(&batch->trace, ring);
@@ -939,10 +1018,10 @@ emit_binning_pass(struct fd_batch *batch) assert_dt
     * emit_vsc_overflow_test) or the VSC_DATA buffer directly (implicitly
     * as part of draws).
     */
-   fd6_emit_flushes(batch->ctx, ring,
-                    FD6_FLUSH_CACHE |
-                    FD6_WAIT_FOR_IDLE |
-                    FD6_WAIT_FOR_ME);
+   fd6_emit_flushes<CHIP>(batch->ctx, ring,
+                          FD6_FLUSH_CACHE |
+                          FD6_WAIT_FOR_IDLE |
+                          FD6_WAIT_FOR_ME);
 
    trace_start_vsc_overflow_test(&batch->trace, batch->gmem);
    emit_vsc_overflow_test(batch);
@@ -956,7 +1035,7 @@ emit_binning_pass(struct fd_batch *batch) assert_dt
 
    OUT_WFI5(ring);
 
-   fd6_emit_ccu_cntl(ring, screen, true);
+   fd6_emit_ccu_cntl<CHIP>(ring, screen, true);
 }
 
 static void
@@ -986,6 +1065,7 @@ emit_msaa(struct fd_ringbuffer *ring, unsigned nr)
    OUT_RING(ring, A6XX_RB_BLIT_GMEM_MSAA_CNTL_SAMPLES(samples));
 }
 
+template <chip CHIP>
 static void prepare_tile_setup(struct fd_batch *batch);
 template <chip CHIP>
 static void prepare_tile_fini(struct fd_batch *batch);
@@ -1004,7 +1084,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
 
    fd6_emit_restore<CHIP>(batch, ring);
 
-   fd6_emit_lrz_flush(ring);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_LRZ_FLUSH);
 
    if (batch->prologue) {
       trace_start_prologue(&batch->trace, ring);
@@ -1012,9 +1092,9 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
       trace_end_prologue(&batch->trace, ring);
    }
 
-   fd6_cache_inv(batch, ring);
+   fd6_cache_inv<CHIP>(batch->ctx, ring);
 
-   prepare_tile_setup(batch);
+   prepare_tile_setup<CHIP>(batch);
    prepare_tile_fini<CHIP>(batch);
 
    OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
@@ -1025,12 +1105,20 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
    OUT_RING(ring, 0x1);
 
    OUT_WFI5(ring);
-   fd6_emit_ccu_cntl(ring, screen, true);
+   fd6_emit_ccu_cntl<CHIP>(ring, screen, true);
 
-   emit_zs<CHIP>(ring, pfb->zsbuf, batch->gmem_state);
+   emit_zs<CHIP>(batch->ctx, ring, pfb->zsbuf, batch->gmem_state);
    emit_mrt<CHIP>(ring, pfb, batch->gmem_state);
    emit_msaa(ring, pfb->samples);
    patch_fb_read_gmem(batch);
+
+   if (CHIP >= A7XX) {
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8812(0x0));
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8E06(0x0));
+      OUT_REG(ring, A7XX_GRAS_UNKNOWN_8007(0x0));
+      OUT_REG(ring, A6XX_GRAS_UNKNOWN_8110(0x2));
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8E09(0x4));
+   }
 
    if (use_hw_binning(batch)) {
       /* enable stream-out during binning pass: */
@@ -1042,7 +1130,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
             .lrz_feedback_zmode_mask = LRZ_FEEDBACK_NONE,
       });
       update_render_cntl<CHIP>(batch, pfb, true);
-      emit_binning_pass(batch);
+      emit_binning_pass<CHIP>(batch);
 
       /* and disable stream-out for draw pass: */
       OUT_REG(ring, A6XX_VPC_SO_DISABLE(true));
@@ -1090,7 +1178,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
 
    update_render_cntl<CHIP>(batch, pfb, false);
 
-   emit_common_init(batch);
+   emit_common_init<CHIP>(batch);
 }
 
 template <chip CHIP>
@@ -1200,6 +1288,7 @@ set_blit_scissor(struct fd_batch *batch, struct fd_ringbuffer *ring)
                      A6XX_RB_BLIT_SCISSOR_BR_Y(blit_scissor.maxy - 1));
 }
 
+template <chip CHIP>
 static void
 emit_blit(struct fd_batch *batch, struct fd_ringbuffer *ring, uint32_t base,
           struct pipe_surface *psurf, bool stencil)
@@ -1252,9 +1341,13 @@ emit_blit(struct fd_batch *batch, struct fd_ringbuffer *ring, uint32_t base,
                               psurf->u.tex.first_layer);
    }
 
-   fd6_emit_blit(batch, ring);
+   if (CHIP >= A7XX)
+      OUT_REG(ring, A7XX_RB_UNKNOWN_88E4(.unk0 = 1));
+
+   fd6_emit_blit<CHIP>(batch->ctx, ring);
 }
 
+template <chip CHIP>
 static void
 emit_restore_blit(struct fd_batch *batch, struct fd_ringbuffer *ring,
                   uint32_t base, struct pipe_surface *psurf, unsigned buffer)
@@ -1270,9 +1363,10 @@ emit_restore_blit(struct fd_batch *batch, struct fd_ringbuffer *ring,
            ),
    );
 
-   emit_blit(batch, ring, base, psurf, stencil);
+   emit_blit<CHIP>(batch, ring, base, psurf, stencil);
 }
 
+template <chip CHIP>
 static void
 emit_subpass_clears(struct fd_batch *batch, struct fd_batch_subpass *subpass)
 {
@@ -1350,7 +1444,10 @@ emit_subpass_clears(struct fd_batch *batch, struct fd_batch_subpass *subpass)
          OUT_RING(ring, uc.ui[2]);
          OUT_RING(ring, uc.ui[3]);
 
-         fd6_emit_blit(batch, ring);
+         if (CHIP >= A7XX)
+            OUT_REG(ring, A7XX_RB_UNKNOWN_88E4(.unk0 = 1));
+
+         fd6_emit_blit<CHIP>(batch->ctx, ring);
       }
    }
 
@@ -1401,7 +1498,7 @@ emit_subpass_clears(struct fd_batch *batch, struct fd_batch_subpass *subpass)
       OUT_PKT4(ring, REG_A6XX_RB_BLIT_CLEAR_COLOR_DW0, 1);
       OUT_RING(ring, clear_value);
 
-      fd6_emit_blit(batch, ring);
+      fd6_emit_blit<CHIP>(batch->ctx, ring);
    }
 
    /* Then clear the separate stencil buffer in case of 32 bit depth
@@ -1427,13 +1524,14 @@ emit_subpass_clears(struct fd_batch *batch, struct fd_batch_subpass *subpass)
       OUT_PKT4(ring, REG_A6XX_RB_BLIT_CLEAR_COLOR_DW0, 1);
       OUT_RING(ring, subpass->clear_stencil & 0xff);
 
-      fd6_emit_blit(batch, ring);
+      fd6_emit_blit<CHIP>(batch->ctx, ring);
    }
 }
 
 /*
  * transfer from system memory to gmem
  */
+template <chip CHIP>
 static void
 emit_restore_blits(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
@@ -1447,8 +1545,8 @@ emit_restore_blits(struct fd_batch *batch, struct fd_ringbuffer *ring)
             continue;
          if (!(batch->restore & (PIPE_CLEAR_COLOR0 << i)))
             continue;
-         emit_restore_blit(batch, ring, gmem->cbuf_base[i], pfb->cbufs[i],
-                           FD_BUFFER_COLOR);
+         emit_restore_blit<CHIP>(batch, ring, gmem->cbuf_base[i], pfb->cbufs[i],
+                                 FD_BUFFER_COLOR);
       }
    }
 
@@ -1456,16 +1554,17 @@ emit_restore_blits(struct fd_batch *batch, struct fd_ringbuffer *ring)
       struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
 
       if (!rsc->stencil || (batch->restore & FD_BUFFER_DEPTH)) {
-         emit_restore_blit(batch, ring, gmem->zsbuf_base[0], pfb->zsbuf,
-                           FD_BUFFER_DEPTH);
+         emit_restore_blit<CHIP>(batch, ring, gmem->zsbuf_base[0], pfb->zsbuf,
+                                 FD_BUFFER_DEPTH);
       }
       if (rsc->stencil && (batch->restore & FD_BUFFER_STENCIL)) {
-         emit_restore_blit(batch, ring, gmem->zsbuf_base[1], pfb->zsbuf,
-                           FD_BUFFER_STENCIL);
+         emit_restore_blit<CHIP>(batch, ring, gmem->zsbuf_base[1], pfb->zsbuf,
+                                 FD_BUFFER_STENCIL);
       }
    }
 }
 
+template <chip CHIP>
 static void
 prepare_tile_setup(struct fd_batch *batch)
 {
@@ -1474,7 +1573,7 @@ prepare_tile_setup(struct fd_batch *batch)
          fd_submit_new_ringbuffer(batch->submit, 0x1000, FD_RINGBUFFER_STREAMING);
 
       set_blit_scissor(batch, batch->tile_loads);
-      emit_restore_blits(batch, batch->tile_loads);
+      emit_restore_blits<CHIP>(batch, batch->tile_loads);
    }
 
    foreach_subpass (subpass, batch) {
@@ -1485,7 +1584,7 @@ prepare_tile_setup(struct fd_batch *batch)
          fd_submit_new_ringbuffer(batch->submit, 0x1000, FD_RINGBUFFER_STREAMING);
 
       set_blit_scissor(batch, subpass->subpass_clears);
-      emit_subpass_clears(batch, subpass);
+      emit_subpass_clears<CHIP>(batch, subpass);
    }
 }
 
@@ -1617,7 +1716,7 @@ emit_resolve_blit(struct fd_batch *batch, struct fd_ringbuffer *ring,
    OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
    OUT_RING(ring, info);
 
-   emit_blit(batch, ring, base, psurf, stencil);
+   emit_blit<CHIP>(batch, ring, base, psurf, stencil);
 }
 
 /*
@@ -1665,6 +1764,7 @@ prepare_tile_fini(struct fd_batch *batch)
    }
 }
 
+template <chip CHIP>
 static void
 fd6_emit_tile(struct fd_batch *batch, const struct fd_tile *tile)
 {
@@ -1675,7 +1775,7 @@ fd6_emit_tile(struct fd_batch *batch, const struct fd_tile *tile)
          trace_end_clears(&batch->trace, batch->gmem);
       }
 
-      emit_lrz(batch, subpass);
+      emit_lrz<CHIP>(batch, subpass);
 
       fd6_emit_ib(batch->gmem, subpass->draw);
    }
@@ -1719,19 +1819,19 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
    }
 }
 
+template <chip CHIP>
 static void
 fd6_emit_tile_fini(struct fd_batch *batch)
 {
    struct fd_ringbuffer *ring = batch->gmem;
 
-   emit_common_fini(batch);
+   emit_common_fini<CHIP>(batch);
 
    OUT_PKT4(ring, REG_A6XX_GRAS_LRZ_CNTL, 1);
    OUT_RING(ring, A6XX_GRAS_LRZ_CNTL_ENABLE);
 
-   fd6_emit_lrz_flush(ring);
-
-   fd6_event_write(batch, ring, PC_CCU_RESOLVE_TS, true);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_LRZ_FLUSH);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_CCU_CLEAN_BLIT_CACHE);
 
    if (use_hw_binning(batch)) {
       check_vsc_overflow(batch->ctx);
@@ -1797,7 +1897,7 @@ emit_sysmem_clears(struct fd_batch *batch, struct fd_batch_subpass *subpass)
       }
    }
 
-   fd6_emit_flushes(ctx, ring, FD6_FLUSH_CCU_COLOR | FD6_INVALIDATE_CCU_COLOR);
+   fd6_emit_flushes<CHIP>(ctx, ring, FD6_FLUSH_CCU_COLOR | FD6_INVALIDATE_CCU_COLOR);
 
    trace_end_clears(&batch->trace, ring);
 }
@@ -1811,7 +1911,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
    emit_lrz_clears<CHIP>(batch);
 
    fd6_emit_restore<CHIP>(batch, ring);
-   fd6_emit_lrz_flush(ring);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_LRZ_FLUSH);
 
    if (batch->prologue) {
       if (!batch->nondraw) {
@@ -1841,6 +1941,14 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
          .buffers_location = BUFFERS_IN_SYSMEM,
    });
 
+   if (CHIP >= A7XX) {
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8812(0x3ff)); // all buffers in sysmem
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8E06(batch->ctx->screen->info->a6xx.magic.RB_UNKNOWN_8E06));
+      OUT_REG(ring, A7XX_GRAS_UNKNOWN_8007(0x0));
+      OUT_REG(ring, A6XX_GRAS_UNKNOWN_8110(0x2));
+      OUT_REG(ring, A7XX_RB_UNKNOWN_8E09(0x4));
+   }
+
    emit_marker6(ring, 7);
    OUT_PKT7(ring, CP_SET_MARKER, 1);
    OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_BYPASS));
@@ -1859,12 +1967,12 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
    OUT_PKT7(ring, CP_SET_VISIBILITY_OVERRIDE, 1);
    OUT_RING(ring, 0x1);
 
-   emit_zs<CHIP>(ring, pfb->zsbuf, NULL);
+   emit_zs<CHIP>(batch->ctx, ring, pfb->zsbuf, NULL);
    emit_mrt<CHIP>(ring, pfb, NULL);
    emit_msaa(ring, pfb->samples);
-   patch_fb_read_sysmem(batch);
+   patch_fb_read_sysmem<CHIP>(batch);
 
-   emit_common_init(batch);
+   emit_common_init<CHIP>(batch);
 }
 
 template <chip CHIP>
@@ -1883,28 +1991,29 @@ fd6_emit_sysmem(struct fd_batch *batch)
          if (subpass->fast_cleared & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
             flushes |= FD6_INVALIDATE_CCU_DEPTH;
 
-         fd6_emit_flushes(batch->ctx, ring, flushes);
+         fd6_emit_flushes<CHIP>(batch->ctx, ring, flushes);
          emit_sysmem_clears<CHIP>(batch, subpass);
       }
 
       OUT_WFI5(ring);
-      fd6_emit_ccu_cntl(ring, screen, false);
+      fd6_emit_ccu_cntl<CHIP>(ring, screen, false);
 
       struct pipe_framebuffer_state *pfb = &batch->framebuffer;
       update_render_cntl<CHIP>(batch, pfb, false);
 
-      emit_lrz(batch, subpass);
+      emit_lrz<CHIP>(batch, subpass);
 
       fd6_emit_ib(ring, subpass->draw);
    }
 }
 
+template <chip CHIP>
 static void
 fd6_emit_sysmem_fini(struct fd_batch *batch) assert_dt
 {
    struct fd_ringbuffer *ring = batch->gmem;
 
-   emit_common_fini(batch);
+   emit_common_fini<CHIP>(batch);
 
    if (batch->tile_epilogue)
       fd6_emit_ib(batch->gmem, batch->tile_epilogue);
@@ -1915,11 +2024,11 @@ fd6_emit_sysmem_fini(struct fd_batch *batch) assert_dt
    OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
    OUT_RING(ring, 0x0);
 
-   fd6_emit_lrz_flush(ring);
+   fd6_event_write<CHIP>(batch->ctx, ring, FD_LRZ_FLUSH);
 
-   fd6_emit_flushes(batch->ctx, ring,
-                    FD6_FLUSH_CCU_COLOR |
-                    FD6_FLUSH_CCU_DEPTH);
+   fd6_emit_flushes<CHIP>(batch->ctx, ring,
+                          FD6_FLUSH_CCU_COLOR |
+                          FD6_FLUSH_CCU_DEPTH);
 }
 
 template <chip CHIP>
@@ -1933,14 +2042,11 @@ fd6_gmem_init(struct pipe_context *pctx)
    ctx->emit_tile_prep = fd6_emit_tile_prep<CHIP>;
    ctx->emit_tile_mem2gmem = fd6_emit_tile_mem2gmem;
    ctx->emit_tile_renderprep = fd6_emit_tile_renderprep;
-   ctx->emit_tile = fd6_emit_tile;
+   ctx->emit_tile = fd6_emit_tile<CHIP>;
    ctx->emit_tile_gmem2mem = fd6_emit_tile_gmem2mem;
-   ctx->emit_tile_fini = fd6_emit_tile_fini;
+   ctx->emit_tile_fini = fd6_emit_tile_fini<CHIP>;
    ctx->emit_sysmem_prep = fd6_emit_sysmem_prep<CHIP>;
    ctx->emit_sysmem = fd6_emit_sysmem<CHIP>;
-   ctx->emit_sysmem_fini = fd6_emit_sysmem_fini;
+   ctx->emit_sysmem_fini = fd6_emit_sysmem_fini<CHIP>;
 }
-
-/* Teach the compiler about needed variants: */
-template void fd6_gmem_init<A6XX>(struct pipe_context *pctx);
-template void fd6_gmem_init<A7XX>(struct pipe_context *pctx);
+FD_GENX(fd6_gmem_init);

@@ -782,7 +782,7 @@ fd_ringbuffer_sp_new_object(struct fd_pipe *pipe, uint32_t size)
       if (dev->suballoc_bo)
          fd_bo_del(dev->suballoc_bo);
       dev->suballoc_bo =
-         fd_bo_new_ring(dev, MAX2(SUBALLOC_SIZE, align(size, 4096)));
+         fd_bo_new_ring(dev, MAX2(SUBALLOC_SIZE, align(size, os_page_size)));
       fd_ring->offset = 0;
    }
 

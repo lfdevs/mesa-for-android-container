@@ -1354,9 +1354,14 @@ wsi_common_queue_present(const struct wsi_device *wsi,
       uint32_t image_index = pPresentInfo->pImageIndices[i];
       VkResult result;
 
-      /* Update the present mode for this present and any subsequent present. */
-      if (present_mode_info && present_mode_info->pPresentModes && swapchain->set_present_mode)
+      /* Update the present mode for this present and any subsequent present.
+       * Only update the present mode when MESA_VK_WSI_PRESENT_MODE is not used.
+       * We should also turn any VkSwapchainPresentModesCreateInfoEXT into a nop,
+       * but none of the WSI backends use that currently. */
+      if (present_mode_info && present_mode_info->pPresentModes &&
+          swapchain->set_present_mode && wsi->override_present_mode == VK_PRESENT_MODE_MAX_ENUM_KHR) {
          swapchain->set_present_mode(swapchain, present_mode_info->pPresentModes[i]);
+      }
 
       if (swapchain->fences[image_index] == VK_NULL_HANDLE) {
          const VkFenceCreateInfo fence_info = {

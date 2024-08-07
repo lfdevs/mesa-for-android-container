@@ -57,6 +57,7 @@
 
 extern simple_mtx_t table_lock;
 extern simple_mtx_t fence_lock;
+extern uint64_t os_page_size;
 
 #define SUBALLOC_SIZE (32 * 1024)
 /* Maximum known alignment requirement is a6xx's TEX_CONST at 16 dwords */

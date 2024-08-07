@@ -200,8 +200,17 @@ uint32_t
 fd_pipe_emit_fence(struct fd_pipe *pipe, struct fd_ringbuffer *ring)
 {
    uint32_t fence = ++pipe->last_fence;
+   unsigned gen = fd_dev_gen(&pipe->dev_id);
 
-   if (pipe->is_64bit) {
+   if (gen >= A7XX) {
+      OUT_PKT7(ring, CP_EVENT_WRITE7, 4);
+      OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS) |
+               CP_EVENT_WRITE7_0_WRITE_SRC(EV_WRITE_USER_32B) |
+               CP_EVENT_WRITE7_0_WRITE_DST(EV_DST_RAM) |
+               CP_EVENT_WRITE7_0_WRITE_ENABLED);
+      OUT_RELOC(ring, control_ptr(pipe, fence));   /* ADDR_LO/HI */
+      OUT_RING(ring, fence);
+   } else if (gen >= A5XX) {
       OUT_PKT7(ring, CP_EVENT_WRITE, 4);
       OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS));
       OUT_RELOC(ring, control_ptr(pipe, fence));   /* ADDR_LO/HI */

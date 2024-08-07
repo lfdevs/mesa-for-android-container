@@ -73,7 +73,7 @@ fd6_image_descriptor(struct fd_context *ctx, const struct pipe_image_view *buf,
                             size);
    } else {
       struct fdl_view_args args = {
-         .chip = A6XX,
+         .chip = ctx->screen->gen,
 
          .iova = rsc_iova(buf->resource, 0),
 
@@ -259,7 +259,12 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
    fd_ringbuffer_attach_bo(ring, set->bo);
 
    if (shader == PIPE_SHADER_COMPUTE) {
-      OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP, .cs_bindless = 0x1f));
+      OUT_REG(ring,
+         HLSQ_INVALIDATE_CMD(
+            CHIP,
+            .cs_bindless = CHIP == A6XX ? 0x1f : 0xff,
+         )
+      );
       OUT_REG(ring, SP_CS_BINDLESS_BASE_DESCRIPTOR(CHIP,
             idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
       ));
@@ -301,13 +306,20 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
          );
       }
    } else {
-      OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP, .gfx_bindless = 0x1f));
+      OUT_REG(ring,
+         HLSQ_INVALIDATE_CMD(
+            CHIP,
+            .gfx_bindless = CHIP == A6XX ? 0x1f : 0xff,
+         )
+      );
       OUT_REG(ring, SP_BINDLESS_BASE_DESCRIPTOR(CHIP,
             idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
       ));
-      OUT_REG(ring, A6XX_HLSQ_BINDLESS_BASE_DESCRIPTOR(
-            idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
-      ));
+      if (CHIP == A6XX) {
+         OUT_REG(ring, A6XX_HLSQ_BINDLESS_BASE_DESCRIPTOR(
+               idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
+         ));
+      }
 
       if (bufso->enabled_mask) {
          OUT_PKT(ring, CP_LOAD_STATE6,
@@ -346,9 +358,7 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
 
    return ring;
 }
-
-template struct fd_ringbuffer *fd6_build_bindless_state<A6XX>(struct fd_context *ctx, enum pipe_shader_type shader, bool append_fb_read);
-template struct fd_ringbuffer *fd6_build_bindless_state<A7XX>(struct fd_context *ctx, enum pipe_shader_type shader, bool append_fb_read);
+FD_GENX(fd6_build_bindless_state);
 
 static void
 fd6_set_shader_buffers(struct pipe_context *pctx, enum pipe_shader_type shader,

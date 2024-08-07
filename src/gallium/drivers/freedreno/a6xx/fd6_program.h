@@ -99,6 +99,7 @@ fd6_last_shader(const struct fd6_program_state *state)
       return state->vs;
 }
 
+template <chip CHIP>
 void fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                      const struct ir3_shader_variant *so) assert_dt;
 

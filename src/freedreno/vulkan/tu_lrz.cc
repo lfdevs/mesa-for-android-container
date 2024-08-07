@@ -11,6 +11,7 @@
 #include "tu_image.h"
 
 #include "common/freedreno_gpu_event.h"
+#include "common/freedreno_lrz.h"
 
 /* See lrz.rst for how HW works. Here are only the implementation notes.
  *

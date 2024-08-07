@@ -132,6 +132,19 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
    return impl;
 }
 
+static void
+build_accept_ray(nir_builder *b)
+{
+   /* Set the "valid" bit in mem_hit */
+   nir_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
+   nir_def *flags_dw_addr = nir_iadd_imm(b, ray_addr, 12);
+   nir_store_global(b, flags_dw_addr, 4,
+                    nir_ior(b, nir_load_global(b, flags_dw_addr, 4, 1, 32),
+                            nir_imm_int(b, 1 << 16)), 0x1 /* write_mask */);
+
+   nir_accept_ray_intersection(b);
+}
+
 void
 brw_nir_lower_intersection_shader(nir_shader *intersection,
                                   const nir_shader *any_hit,
@@ -164,14 +177,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
       b->cursor = nir_after_block_before_jump(block);
       nir_push_if(b, nir_load_var(b, commit));
       {
-         /* Set the "valid" bit in mem_hit */
-         nir_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
-         nir_def *flags_dw_addr = nir_iadd_imm(b, ray_addr, 12);
-         nir_store_global(b, flags_dw_addr, 4,
-            nir_ior(b, nir_load_global(b, flags_dw_addr, 4, 1, 32),
-                       nir_imm_int(b, 1 << 16)), 0x1 /* write_mask */);
-
-         nir_accept_ray_intersection(b);
+         build_accept_ray(b);
       }
       nir_push_else(b, NULL);
       {
@@ -238,6 +244,19 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                      nir_store_global(b, t_addr, 4,
                                       nir_vec2(b, nir_fmin(b, hit_t, hit_in.t), hit_kind),
                                       0x3);
+
+                     /* There may be multiple reportIntersection() calls in
+                      * the shader, so if terminateOnFirstHit was requested,
+                      * accept the hit now. The lowering of
+                      * accept_ray_intersection will handle the rest.
+                      */
+                     nir_def *terminate = nir_test_mask(b, nir_load_ray_flags(b),
+                                                        BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT);
+                     nir_push_if(b, terminate);
+                     {
+                        build_accept_ray(b);
+                     }
+                     nir_pop_if(b, NULL);
                   }
                   nir_pop_if(b, NULL);
                }

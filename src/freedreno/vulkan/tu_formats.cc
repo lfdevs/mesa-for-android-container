@@ -7,6 +7,7 @@
 #include "tu_formats.h"
 
 #include "fdl/fd6_format_table.h"
+#include "common/freedreno_ubwc.h"
 
 #include "vk_android.h"
 #include "vk_enum_defines.h"
@@ -95,109 +96,10 @@ tu6_format_texture(enum pipe_format format, enum a6xx_tile_mode tile_mode)
    return fmt;
 }
 
-enum tu6_ubwc_compat_type {
-   TU6_UBWC_UNKNOWN_COMPAT,
-   TU6_UBWC_R8G8_UNORM,
-   TU6_UBWC_R8G8_INT,
-   TU6_UBWC_R8G8B8A8_UNORM,
-   TU6_UBWC_R8G8B8A8_INT,
-   TU6_UBWC_B8G8R8A8_UNORM,
-   TU6_UBWC_R16G16_UNORM,
-   TU6_UBWC_R16G16_INT,
-   TU6_UBWC_R16G16B16A16_UNORM,
-   TU6_UBWC_R16G16B16A16_INT,
-   TU6_UBWC_R32_INT,
-   TU6_UBWC_R32G32_INT,
-   TU6_UBWC_R32G32B32A32_INT,
-   TU6_UBWC_R32_FLOAT,
-};
-
-static enum tu6_ubwc_compat_type
+static enum fd6_ubwc_compat_type
 tu6_ubwc_compat_mode(const struct fd_dev_info *info, VkFormat format)
 {
-   switch (format) {
-   case VK_FORMAT_R8G8_UNORM:
-   case VK_FORMAT_R8G8_SRGB:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R8G8_INT : TU6_UBWC_R8G8_UNORM;
-
-   case VK_FORMAT_R8G8_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R8G8_INT : TU6_UBWC_UNKNOWN_COMPAT;
-
-   case VK_FORMAT_R8G8_UINT:
-   case VK_FORMAT_R8G8_SINT:
-      return TU6_UBWC_R8G8_INT;
-
-   case VK_FORMAT_R8G8B8A8_UNORM:
-   case VK_FORMAT_R8G8B8A8_SRGB:
-   case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-   case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R8G8B8A8_INT : TU6_UBWC_R8G8B8A8_UNORM;
-
-   case VK_FORMAT_R8G8B8A8_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R8G8B8A8_INT : TU6_UBWC_UNKNOWN_COMPAT;
-
-   case VK_FORMAT_R8G8B8A8_UINT:
-   case VK_FORMAT_R8G8B8A8_SINT:
-   case VK_FORMAT_A8B8G8R8_UINT_PACK32:
-   case VK_FORMAT_A8B8G8R8_SINT_PACK32:
-      return TU6_UBWC_R8G8B8A8_INT;
-
-   case VK_FORMAT_R16G16_UNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R16G16_INT : TU6_UBWC_R16G16_UNORM;
-
-   case VK_FORMAT_R16G16_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R16G16_INT : TU6_UBWC_UNKNOWN_COMPAT;
-
-   case VK_FORMAT_R16G16_UINT:
-   case VK_FORMAT_R16G16_SINT:
-      return TU6_UBWC_R16G16_INT;
-
-   case VK_FORMAT_R16G16B16A16_UNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R16G16B16A16_INT : TU6_UBWC_R16G16B16A16_UNORM;
-
-   case VK_FORMAT_R16G16B16A16_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
-         TU6_UBWC_R16G16B16A16_INT : TU6_UBWC_UNKNOWN_COMPAT;
-
-   case VK_FORMAT_R16G16B16A16_UINT:
-   case VK_FORMAT_R16G16B16A16_SINT:
-      return TU6_UBWC_R16G16B16A16_INT;
-
-   case VK_FORMAT_R32_UINT:
-   case VK_FORMAT_R32_SINT:
-      return TU6_UBWC_R32_INT;
-
-   case VK_FORMAT_R32G32_UINT:
-   case VK_FORMAT_R32G32_SINT:
-      return TU6_UBWC_R32G32_INT;
-
-   case VK_FORMAT_R32G32B32A32_UINT:
-   case VK_FORMAT_R32G32B32A32_SINT:
-      return TU6_UBWC_R32G32B32A32_INT;
-
-   case VK_FORMAT_D32_SFLOAT:
-   case VK_FORMAT_R32_SFLOAT:
-      /* TODO: a630 blob allows these, but not a660.  When is it legal? */
-      return TU6_UBWC_UNKNOWN_COMPAT;
-
-   case VK_FORMAT_B8G8R8A8_UNORM:
-   case VK_FORMAT_B8G8R8A8_SRGB:
-      /* The blob doesn't list these as compatible, but they surely are.
-       * freedreno's happy to cast between them, and zink would really like
-       * to.
-       */
-      return TU6_UBWC_B8G8R8A8_UNORM;
-
-   default:
-      return TU6_UBWC_UNKNOWN_COMPAT;
-   }
+   return fd6_ubwc_compat_mode(info, vk_format_to_pipe_format(format));
 }
 
 bool
@@ -213,9 +115,9 @@ tu6_mutable_format_list_ubwc_compatible(const struct fd_dev_info *info,
    if (fmt_list->viewFormatCount == 1)
       return true;
 
-   enum tu6_ubwc_compat_type type =
+   enum fd6_ubwc_compat_type type =
       tu6_ubwc_compat_mode(info, fmt_list->pViewFormats[0]);
-   if (type == TU6_UBWC_UNKNOWN_COMPAT)
+   if (type == FD6_UBWC_UNKNOWN_COMPAT)
       return false;
 
    for (uint32_t i = 1; i < fmt_list->viewFormatCount; i++) {

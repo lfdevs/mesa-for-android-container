@@ -425,7 +425,9 @@ validate_ir(Program* program)
 
                if (instr->isVOPC() || instr->opcode == aco_opcode::v_readfirstlane_b32 ||
                    instr->opcode == aco_opcode::v_readlane_b32 ||
-                   instr->opcode == aco_opcode::v_readlane_b32_e64) {
+                   instr->opcode == aco_opcode::v_readlane_b32_e64 ||
+                   instr_info.classes[(int)instr->opcode] ==
+                      instr_class::valu_pseudo_scalar_trans) {
                   check(instr->definitions[0].regClass().type() == RegType::sgpr,
                         "Wrong Definition type for VALU instruction", instr.get());
                } else {

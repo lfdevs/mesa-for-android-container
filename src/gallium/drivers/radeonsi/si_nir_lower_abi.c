@@ -43,7 +43,7 @@ static nir_def *build_attr_ring_desc(nir_builder *b, struct si_shader *shader,
                                 sel->info.base.vs.blit_sgprs_amd - 1) :
       ac_nir_load_arg(b, &args->ac, args->gs_attr_address);
 
-   unsigned stride = 16 * shader->info.nr_param_exports;
+   unsigned stride = 16 * si_shader_num_alloc_param_exports(shader);
    uint32_t desc[4];
 
    ac_build_attr_ring_descriptor(sel->screen->info.gfx_level,

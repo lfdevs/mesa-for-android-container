@@ -308,7 +308,7 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
 
    const char *name;
    if (drm_device->bustype == DRM_BUS_PCI) {
-      assert(device->info.type == NV_DEVICE_TYPE_DIS);
+      assert(device->info.type != NV_DEVICE_TYPE_SOC);
       assert(device->info.device_id == drm_device->deviceinfo.pci->device_id);
 
       device->info.pci.domain       = drm_device->businfo.pci->domain;

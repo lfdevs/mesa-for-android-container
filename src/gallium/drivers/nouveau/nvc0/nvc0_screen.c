@@ -1491,7 +1491,7 @@ nvc0_screen_create(struct nouveau_device *dev)
                                         screen->eng3d->oclass,
                                         screen->compute->oclass,
                                         screen->m2mf->oclass,
-                                        screen->copy->oclass);
+                                        screen->copy ? screen->copy->oclass : 0);
    return &screen->base;
 
 fail:

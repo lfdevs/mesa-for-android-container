@@ -730,7 +730,6 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
    lpr->size_required = lpr->sample_stride;
 
    if (whandle->type != WINSYS_HANDLE_TYPE_UNBACKED) {
-      void *data;
 #ifdef HAVE_LINUX_UDMABUF_H
       struct llvmpipe_memory_allocation *alloc;
       uint64_t size;
@@ -741,13 +740,16 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
           _screen->import_memory_fd(_screen, whandle->handle,
                                     (struct pipe_memory_allocation**)&alloc,
                                     &size, true)) {
-         data = alloc->cpu_addr;
+         void *data = alloc->cpu_addr;
          lpr->dt = winsys->displaytarget_create_mapped(winsys, template->bind,
                                                        template->format, template->width0, template->height0,
                                                        whandle->stride, data);
          if (!lpr->dt)
             goto no_dt;
          lpr->dmabuf_alloc = alloc;
+         lpr->dmabuf = true;
+         lpr->tex_data = data;
+         lpr->row_stride[0] = whandle->stride;
          whandle->size = size;
       } else
 #endif
@@ -758,26 +760,16 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
                                                      &lpr->row_stride[0]);
          if (!lpr->dt)
             goto no_dt;
-         data = winsys->displaytarget_map(winsys, lpr->dt, PIPE_MAP_READ_WRITE);
-         if (!data) {
-            winsys->displaytarget_destroy(winsys, lpr->dt);
-            goto no_dt;
-         }
-
-         whandle->size = lpr->size_required;
       }
 
       assert(llvmpipe_resource_is_texture(&lpr->base));
-      lpr->tex_data = data;
    } else {
       whandle->size = lpr->size_required;
       lpr->backable = true;
    }
 
-   lpr->row_stride[0] = whandle->stride;
 
    lpr->id = id_counter++;
-   lpr->dmabuf = true;
 
 #if MESA_DEBUG
    simple_mtx_lock(&resource_list_mutex);
@@ -805,9 +797,7 @@ llvmpipe_resource_get_handle(struct pipe_screen *_screen,
    struct sw_winsys *winsys = screen->winsys;
    struct llvmpipe_resource *lpr = llvmpipe_resource(pt);
 
-   whandle->stride = lpr->row_stride[0];
 #ifdef HAVE_LINUX_UDMABUF_H
-   whandle->modifier = DRM_FORMAT_MOD_LINEAR;
    if (!lpr->dt && whandle->type == WINSYS_HANDLE_TYPE_FD) {
       if (!lpr->dmabuf_alloc) {
          lpr->dmabuf_alloc = (struct llvmpipe_memory_allocation*)_screen->allocate_memory_fd(_screen, lpr->size_required, (int*)&whandle->handle, true);
@@ -833,11 +823,14 @@ llvmpipe_resource_get_handle(struct pipe_screen *_screen,
          lpr->backable = true;
       }
       whandle->handle = lpr->dmabuf_alloc->dmabuf_fd;
+      whandle->modifier = DRM_FORMAT_MOD_LINEAR;
+      whandle->stride = lpr->row_stride[0];
       return true;
    } else if (!lpr->dt && whandle->type == WINSYS_HANDLE_TYPE_KMS) {
       /* dri winsys code will use this to query the drm modifiers
        * We can just return an null handle and return DRM_FORMAT_MOD_LINEAR */
       whandle->handle = 0;
+      whandle->modifier = DRM_FORMAT_MOD_LINEAR;
       return true;
     }
 #endif
@@ -1683,7 +1676,7 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
 
    switch (param) {
    case PIPE_RESOURCE_PARAM_NPLANES:
-      *value = lpr->dt ? util_format_get_num_planes(lpr->dt_format) : 1;
+      *value = lpr->dmabuf ? util_format_get_num_planes(lpr->dt_format) : 1;
       return true;
    case PIPE_RESOURCE_PARAM_STRIDE:
       *value = lpr->row_stride[level];
@@ -1696,7 +1689,7 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
       return true;
 #ifndef _WIN32
    case PIPE_RESOURCE_PARAM_MODIFIER:
-      *value = lpr->dt ? DRM_FORMAT_MOD_LINEAR : DRM_FORMAT_MOD_INVALID;
+      *value = lpr->dmabuf ? DRM_FORMAT_MOD_LINEAR : DRM_FORMAT_MOD_INVALID;
       return true;
 #endif
    case PIPE_RESOURCE_PARAM_HANDLE_TYPE_SHARED:

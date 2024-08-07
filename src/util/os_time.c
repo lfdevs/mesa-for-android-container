@@ -97,7 +97,9 @@ os_time_get_absolute_timeout(uint64_t timeout)
       return OS_TIMEOUT_INFINITE;
 
    time = os_time_get_nano();
-   abs_timeout = time + (int64_t)timeout;
+
+   /* Do the addition in unsigned, because signed overflow is UB, then convert to signed again. */
+   abs_timeout = (uint64_t)time + (uint64_t)timeout;
 
    /* Check for overflow. */
    if (abs_timeout < time)

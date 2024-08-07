@@ -267,7 +267,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    pctx->destroy = fd6_context_destroy;
    pctx->create_blend_state = fd6_blend_state_create;
    pctx->create_rasterizer_state = fd6_rasterizer_state_create;
-   pctx->create_depth_stencil_alpha_state = fd6_zsa_state_create;
+   pctx->create_depth_stencil_alpha_state = fd6_zsa_state_create<CHIP>;
    pctx->create_vertex_elements_state = fd6_vertex_state_create;
 
    fd6_draw_init<CHIP>(pctx);
@@ -275,7 +275,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    fd6_gmem_init<CHIP>(pctx);
    fd6_texture_init(pctx);
    fd6_prog_init<CHIP>(pctx);
-   fd6_query_context_init(pctx);
+   fd6_query_context_init<CHIP>(pctx);
 
    setup_state_map(&fd6_ctx->base);
 
@@ -331,7 +331,4 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
 
    return fd_context_init_tc(pctx, flags);
 }
-
-/* Teach the compiler about needed variants: */
-template struct pipe_context *fd6_context_create<A6XX>(struct pipe_screen *pscreen, void *priv, unsigned flags);
-template struct pipe_context *fd6_context_create<A7XX>(struct pipe_screen *pscreen, void *priv, unsigned flags);
+FD_GENX(fd6_context_create);

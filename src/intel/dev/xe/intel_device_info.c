@@ -296,6 +296,7 @@ xe_query_topology(int fd, struct intel_device_info *devinfo)
             geo_dss_num_bytes = topology->num_bytes;
             break;
          case DRM_XE_TOPO_EU_PER_DSS:
+         case DRM_XE_TOPO_SIMD16_EU_PER_DSS:
             eu_per_dss_mask = (uint32_t *)topology->mask;
             break;
          }

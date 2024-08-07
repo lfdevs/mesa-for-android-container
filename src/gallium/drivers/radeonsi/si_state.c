@@ -5777,7 +5777,7 @@ static void gfx12_init_gfx_preamble_state(struct si_context *sctx)
 
    /* Context registers */
    ac_pm4_set_reg(&pm4->base, R_028000_DB_RENDER_CONTROL, 0);
-   ac_pm4_set_reg(&pm4->base, R_02800C_DB_RENDER_OVERRIDE, S_02800C_FORCE_STENCIL_VALID(1));
+   ac_pm4_set_reg(&pm4->base, R_02800C_DB_RENDER_OVERRIDE, S_02800C_FORCE_STENCIL_READ(1));
    ac_pm4_set_reg(&pm4->base, R_028040_DB_GL1_INTERFACE_CONTROL, 0);
    ac_pm4_set_reg(&pm4->base, R_028048_DB_MEM_TEMPORAL,
                   S_028048_Z_TEMPORAL_READ(zs_read_temporal_hint) |
@@ -5886,7 +5886,8 @@ static void gfx12_init_gfx_preamble_state(struct si_context *sctx)
    ac_pm4_set_reg(&pm4->base, R_028C50_PA_SC_NGG_MODE_CNTL, S_028C50_MAX_DEALLOCS_IN_WAVE(64));
    ac_pm4_set_reg(&pm4->base, R_028C54_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
                   S_028C54_NULL_SQUAD_AA_MASK_ENABLE(1));
-   ac_pm4_set_reg(&pm4->base, R_028C58_PA_SC_SHADER_CONTROL, 0);
+   ac_pm4_set_reg(&pm4->base, R_028C58_PA_SC_SHADER_CONTROL,
+                  S_028C58_REALIGN_DQUADS_AFTER_N_WAVES(1));
 
    for (unsigned i = 0; i < 8; i++) {
       ac_pm4_set_reg(&pm4->base, R_028F00_CB_MEM0_INFO + i * 4,

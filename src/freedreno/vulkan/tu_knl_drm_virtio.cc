@@ -1005,8 +1005,16 @@ setup_fence_cmds(struct tu_device *dev)
 
       memset(c, 0, sizeof(*c));
 
-      c->pkt[0] = pm4_pkt7_hdr((uint8_t)CP_EVENT_WRITE, 4);
-      c->pkt[1] = CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS);
+      if (fd_dev_gen(&dev->physical_device->dev_id) >= A7XX) {
+         c->pkt[0] = pm4_pkt7_hdr((uint8_t)CP_EVENT_WRITE7, 4);
+         c->pkt[1] = CP_EVENT_WRITE7_0(.event = CACHE_FLUSH_TS,
+                           .write_src = EV_WRITE_USER_32B,
+                           .write_dst = EV_DST_RAM,
+                           .write_enabled = true).value;
+      } else {
+         c->pkt[0] = pm4_pkt7_hdr((uint8_t)CP_EVENT_WRITE, 4);
+         c->pkt[1] = CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS);
+      }
       c->pkt[2] = fence_iova;
       c->pkt[3] = fence_iova >> 32;
    }

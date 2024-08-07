@@ -34,11 +34,11 @@ tu_allocate_userspace_iova(struct tu_device *dev,
           * them from the other end of the address space.
           */
          dev->vma.alloc_high = true;
-         *iova = util_vma_heap_alloc(&dev->vma, size, 0x1000);
+         *iova = util_vma_heap_alloc(&dev->vma, size, os_page_size);
       }
    } else {
       dev->vma.alloc_high = false;
-      *iova = util_vma_heap_alloc(&dev->vma, size, 0x1000);
+      *iova = util_vma_heap_alloc(&dev->vma, size, os_page_size);
    }
 
    if (!*iova)

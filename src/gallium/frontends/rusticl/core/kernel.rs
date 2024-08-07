@@ -898,7 +898,7 @@ impl Kernel {
         let total_threads = block.iter().take(work_dim).product::<usize>();
         if threads != 1 && total_threads < subgroups {
             for i in 0..work_dim {
-                if grid[i] * total_threads < threads {
+                if grid[i] * total_threads < threads && grid[i] * block[i] <= dim_threads[i] {
                     block[i] *= grid[i];
                     grid[i] = 1;
                     // can only do it once as nothing is cleanly divisible

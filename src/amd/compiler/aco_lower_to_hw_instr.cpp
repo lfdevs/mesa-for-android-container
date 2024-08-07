@@ -1408,9 +1408,28 @@ swap_subdword_gfx11(Builder& bld, Definition def, Operand op)
    if (def.bytes() == 2) {
       Operand def_as_op = Operand(def.physReg(), def.regClass());
       Definition op_as_def = Definition(op.physReg(), op.regClass());
-      Instruction* instr = bld.vop1(aco_opcode::v_swap_b16, def, op_as_def, op, def_as_op);
-      instr->valu().opsel[0] = op.physReg().byte();
-      instr->valu().opsel[3] = def.physReg().byte();
+      /* v_swap_b16 is not offically supported as VOP3, so it can't be used with v128-255.
+       * Tests show that VOP3 appears to work correctly, but according to AMD that should
+       * not be relied on.
+       */
+      if (def.physReg() < (256 + 128) && op.physReg() < (256 + 128)) {
+         Instruction* instr = bld.vop1(aco_opcode::v_swap_b16, def, op_as_def, op, def_as_op);
+         instr->valu().opsel[0] = op.physReg().byte();
+         instr->valu().opsel[3] = def.physReg().byte();
+      } else {
+         Instruction* instr = bld.vop3(aco_opcode::v_xor_b16, def, op, def_as_op);
+         instr->valu().opsel[0] = op.physReg().byte();
+         instr->valu().opsel[1] = def_as_op.physReg().byte();
+         instr->valu().opsel[3] = def.physReg().byte();
+         instr = bld.vop3(aco_opcode::v_xor_b16, op_as_def, op, def_as_op);
+         instr->valu().opsel[0] = op.physReg().byte();
+         instr->valu().opsel[1] = def_as_op.physReg().byte();
+         instr->valu().opsel[3] = op_as_def.physReg().byte();
+         instr = bld.vop3(aco_opcode::v_xor_b16, def, op, def_as_op);
+         instr->valu().opsel[0] = op.physReg().byte();
+         instr->valu().opsel[1] = def_as_op.physReg().byte();
+         instr->valu().opsel[3] = def.physReg().byte();
+      }
    } else {
       PhysReg op_half = op.physReg();
       op_half.reg_b &= ~1;

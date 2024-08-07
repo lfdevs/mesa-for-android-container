@@ -168,6 +168,7 @@ struct fd_resource {
    uint16_t lrz_width; // for lrz clear, does this differ from lrz_pitch?
    uint16_t lrz_height;
    uint16_t lrz_pitch;
+   uint16_t lrz_fc_offset;
    struct fd_bo *lrz;
 };
 
