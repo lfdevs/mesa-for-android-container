@@ -18,7 +18,7 @@ DEPS=(
     bash
     bison
     ccache
-    clang16-dev
+    clang${LLVM_VERSION}-dev
     cmake
     clang-dev
     coreutils
@@ -31,8 +31,8 @@ DEPS=(
     glslang
     graphviz
     linux-headers
-    llvm16-static
-    llvm16-dev
+    llvm${LLVM_VERSION}-static
+    llvm${LLVM_VERSION}-dev
     meson
     mold
     musl-dev

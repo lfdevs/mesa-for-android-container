@@ -39,6 +39,8 @@ struct Mapping<T> {
     layout: Layout,
     writes: bool,
     ptr: Option<MutMemoryPtr>,
+    /// reference count from the API perspective. Once it reaches 0, we need to write back the
+    /// mappings content to the GPU resource.
     count: u32,
     inner: T,
 }
@@ -152,10 +154,17 @@ impl Mem {
         }
     }
 
-    pub fn unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
+    pub fn sync_unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
         match self {
-            Self::Buffer(b) => b.unmap(q, ctx, ptr),
-            Self::Image(i) => i.unmap(q, ctx, ptr),
+            Self::Buffer(b) => b.sync_unmap(q, ctx, ptr),
+            Self::Image(i) => i.sync_unmap(q, ctx, ptr),
+        }
+    }
+
+    pub fn unmap(&self, ptr: MutMemoryPtr) -> CLResult<bool> {
+        match self {
+            Self::Buffer(b) => b.unmap(ptr),
+            Self::Image(i) => i.unmap(ptr),
         }
     }
 }
@@ -712,7 +721,9 @@ impl MemBase {
 
     fn is_pure_user_memory(&self, d: &Device) -> CLResult<bool> {
         let r = self.get_res_of_dev(d)?;
-        Ok(r.is_user())
+        // 1Dbuffer objects are weird. The parent memory object can be a host_ptr thing, but we are
+        // not allowed to actually return a pointer based on the host_ptr when mapping.
+        Ok(r.is_user() && !self.host_ptr().is_null())
     }
 
     fn map<T>(
@@ -912,7 +923,9 @@ impl Buffer {
     }
 
     fn is_mapped_ptr(&self, ptr: *mut c_void) -> bool {
-        self.maps.lock().unwrap().contains_key(ptr as usize)
+        let mut maps = self.maps.lock().unwrap();
+        let entry = maps.entry(ptr as usize);
+        matches!(entry, Entry::Occupied(entry) if entry.get().count > 0)
     }
 
     pub fn map(&self, size: usize, offset: usize, writes: bool) -> CLResult<MutMemoryPtr> {
@@ -993,6 +1006,31 @@ impl Buffer {
         self.read(q, ctx, mapping.offset, ptr, mapping.size())
     }
 
+    pub fn sync_unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
+        // no need to update
+        if self.is_pure_user_memory(q.device)? {
+            return Ok(());
+        }
+
+        match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
+            Entry::Vacant(_) => Err(CL_INVALID_VALUE),
+            Entry::Occupied(entry) => {
+                let mapping = entry.get();
+
+                if mapping.writes {
+                    self.write(q, ctx, mapping.offset, ptr.into(), mapping.size())?;
+                }
+
+                // only remove if the mapping wasn't reused in the meantime
+                if mapping.count == 0 {
+                    entry.remove();
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     fn tx<'a>(
         &self,
         q: &Queue,
@@ -1014,22 +1052,16 @@ impl Buffer {
     }
 
     // TODO: only sync on unmap when the memory is not mapped for writing
-    pub fn unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
-        let mapping = match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
-            Entry::Vacant(_) => return Err(CL_INVALID_VALUE),
+    pub fn unmap(&self, ptr: MutMemoryPtr) -> CLResult<bool> {
+        match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
+            Entry::Vacant(_) => Err(CL_INVALID_VALUE),
             Entry::Occupied(mut entry) => {
-                entry.get_mut().count -= 1;
-                (entry.get().count == 0).then(|| entry.remove())
+                let entry = entry.get_mut();
+                debug_assert!(entry.count > 0);
+                entry.count -= 1;
+                Ok(entry.count == 0)
             }
-        };
-
-        if let Some(mapping) = mapping {
-            if mapping.writes && !self.is_pure_user_memory(q.device)? {
-                self.write(q, ctx, mapping.offset, ptr.into(), mapping.size())?;
-            }
-        };
-
-        Ok(())
+        }
     }
 
     pub fn write(
@@ -1289,7 +1321,9 @@ impl Image {
     }
 
     fn is_mapped_ptr(&self, ptr: *mut c_void) -> bool {
-        self.maps.lock().unwrap().contains_key(ptr as usize)
+        let mut maps = self.maps.lock().unwrap();
+        let entry = maps.entry(ptr as usize);
+        matches!(entry, Entry::Occupied(entry) if entry.get().count > 0)
     }
 
     pub fn is_parent_buffer(&self) -> bool {
@@ -1309,8 +1343,33 @@ impl Image {
         *row_pitch = self.image_desc.row_pitch()? as usize;
         *slice_pitch = self.image_desc.slice_pitch();
 
-        let (offset, size) =
-            CLVec::calc_offset_size(origin, region, [pixel_size, *row_pitch, *slice_pitch]);
+        let offset = CLVec::calc_offset(origin, [pixel_size, *row_pitch, *slice_pitch]);
+
+        // From the CL Spec:
+        //
+        //   The pointer returned maps a 1D, 2D or 3D region starting at origin and is at least
+        //   region[0] pixels in size for a 1D image, 1D image buffer or 1D image array,
+        //   (image_row_pitch × region[1]) pixels in size for a 2D image or 2D image array, and
+        //   (image_slice_pitch × region[2]) pixels in size for a 3D image. The result of a memory
+        //   access outside this region is undefined.
+        //
+        // It's not guaranteed that the row_pitch is taken into account for 1D images, but the CL
+        // CTS relies on this behavior.
+        //
+        // Also note, that the spec wording is wrong in regards to arrays, which need to take the
+        // image_slice_pitch into account.
+        let size = if self.image_desc.is_array() || self.image_desc.dims() == 3 {
+            debug_assert_ne!(*slice_pitch, 0);
+            // the slice count is in region[1] for 1D array images
+            if self.mem_type == CL_MEM_OBJECT_IMAGE1D_ARRAY {
+                region[1] * *slice_pitch
+            } else {
+                region[2] * *slice_pitch
+            }
+        } else {
+            debug_assert_ne!(*row_pitch, 0);
+            region[1] * *row_pitch
+        };
 
         let layout;
         unsafe {
@@ -1418,6 +1477,41 @@ impl Image {
         )
     }
 
+    pub fn sync_unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
+        // no need to update
+        if self.is_pure_user_memory(q.device)? {
+            return Ok(());
+        }
+
+        match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
+            Entry::Vacant(_) => Err(CL_INVALID_VALUE),
+            Entry::Occupied(entry) => {
+                let mapping = entry.get();
+                let row_pitch = self.image_desc.row_pitch()? as usize;
+                let slice_pitch = self.image_desc.slice_pitch();
+
+                if mapping.writes {
+                    self.write(
+                        ptr.into(),
+                        q,
+                        ctx,
+                        &mapping.region,
+                        row_pitch,
+                        slice_pitch,
+                        &mapping.origin,
+                    )?;
+                }
+
+                // only remove if the mapping wasn't reused in the meantime
+                if mapping.count == 0 {
+                    entry.remove();
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     fn tx_image<'a>(
         &self,
         q: &Queue,
@@ -1430,33 +1524,16 @@ impl Image {
     }
 
     // TODO: only sync on unmap when the memory is not mapped for writing
-    pub fn unmap(&self, q: &Queue, ctx: &PipeContext, ptr: MutMemoryPtr) -> CLResult<()> {
-        let mapping = match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
-            Entry::Vacant(_) => return Err(CL_INVALID_VALUE),
+    pub fn unmap(&self, ptr: MutMemoryPtr) -> CLResult<bool> {
+        match self.maps.lock().unwrap().entry(ptr.as_ptr() as usize) {
+            Entry::Vacant(_) => Err(CL_INVALID_VALUE),
             Entry::Occupied(mut entry) => {
-                entry.get_mut().count -= 1;
-                (entry.get().count == 0).then(|| entry.remove())
-            }
-        };
-
-        let row_pitch = self.image_desc.row_pitch()? as usize;
-        let slice_pitch = self.image_desc.slice_pitch();
-
-        if let Some(mapping) = mapping {
-            if mapping.writes && !self.is_pure_user_memory(q.device)? {
-                self.write(
-                    ptr.into(),
-                    q,
-                    ctx,
-                    &mapping.region,
-                    row_pitch,
-                    slice_pitch,
-                    &mapping.origin,
-                )?;
+                let entry = entry.get_mut();
+                debug_assert!(entry.count > 0);
+                entry.count -= 1;
+                Ok(entry.count == 0)
             }
         }
-
-        Ok(())
     }
 
     pub fn write(

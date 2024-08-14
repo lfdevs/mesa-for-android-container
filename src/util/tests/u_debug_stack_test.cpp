@@ -49,7 +49,8 @@ func_b(void)
    debug_backtrace_dump(backtrace, 16);
 }
 
-static void ATTRIBUTE_NOINLINE
+/* This function must emit a stack frame for the unit test to work */
+static void ATTRIBUTE_NOINLINE ATTRIBUTE_OPTIMIZE("no-omit-frame-pointer")
 func_c(struct debug_stack_frame *frames)
 {
    debug_backtrace_capture(frames, 0, 16);

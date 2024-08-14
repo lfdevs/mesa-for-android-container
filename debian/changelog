@@ -1,3 +1,11 @@
+mesa (24.2.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * rules: Build llvmpipe only where llvm is enabled.
+  * rules: Build softpipe or llvmpipe depending on the arch, not both.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 14 Aug 2024 22:13:47 +0300
+
 mesa (24.2.0~rc4-1) experimental; urgency=medium
 
   * New upstream release candidate.
@@ -29,6 +37,12 @@ mesa (24.2.0~rc3-1) experimental; urgency=medium
   * Add a new private shared library package for libgallium.so
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 02 Aug 2024 11:53:58 +0300
+
+mesa (24.1.6-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 14 Aug 2024 22:04:49 +0300
 
 mesa (24.1.5-3) unstable; urgency=medium
 

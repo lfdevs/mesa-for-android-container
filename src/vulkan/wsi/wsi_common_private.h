@@ -225,7 +225,7 @@ struct wsi_swapchain {
 };
 
 bool
-wsi_device_matches_drm_fd(const struct wsi_device *wsi, int drm_fd);
+wsi_device_matches_drm_fd(VkPhysicalDevice pdevice, int drm_fd);
 
 void
 wsi_wl_surface_destroy(VkIcdSurfaceBase *icd_surface, VkInstance _instance,

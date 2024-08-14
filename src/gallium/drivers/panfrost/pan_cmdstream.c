@@ -47,6 +47,7 @@
 #include "pan_cmdstream.h"
 #include "pan_context.h"
 #include "pan_csf.h"
+#include "pan_format.h"
 #include "pan_indirect_dispatch.h"
 #include "pan_jm.h"
 #include "pan_job.h"
@@ -195,7 +196,12 @@ panfrost_create_sampler_state(struct pipe_context *pctx,
     * swizzle derived from the format, to allow more formats than the
     * hardware otherwise supports. When packing border colours, we need to
     * undo this bijection, by swizzling with its inverse.
+    * On v10+, watch out for depth+stencil formats, because those have a
+    * swizzle that doesn't really apply to the border color
     */
+#if PAN_ARCH >= 10
+   if (!util_format_is_depth_and_stencil(cso->border_color_format)) {
+#endif
    unsigned mali_format =
       GENX(panfrost_format_from_pipe_format)(cso->border_color_format)->hw;
    enum mali_rgb_component_order order = mali_format & BITFIELD_MASK(12);
@@ -207,6 +213,10 @@ panfrost_create_sampler_state(struct pipe_context *pctx,
    util_format_apply_color_swizzle(&so->base.border_color, &cso->border_color,
                                    inverted_swizzle,
                                    false /* is_integer (irrelevant) */);
+#if PAN_ARCH >= 10
+   }
+#endif
+
 #endif
 
    bool using_nearest = cso->min_img_filter == PIPE_TEX_MIPFILTER_NEAREST;
@@ -378,6 +388,17 @@ panfrost_emit_blend(struct panfrost_batch *batch, void *rts,
                panfrost_dithered_format_from_pipe_format)(format, dithered);
             cfg.fixed_function.rt = i;
 
+#if PAN_ARCH >= 7
+            if (cfg.mode == MALI_BLEND_MODE_FIXED_FUNCTION &&
+                (cfg.fixed_function.conversion.memory_format & 0xff) ==
+                   MALI_RGB_COMPONENT_ORDER_RGB1) {
+               /* fixed function does not like RGB1 as the component order */
+               /* force this field to be the default 0 (RGBA) */
+               cfg.fixed_function.conversion.memory_format &= ~0xff;
+               cfg.fixed_function.conversion.memory_format |=
+                  MALI_RGB_COMPONENT_ORDER_RGBA;
+            }
+#endif
 #if PAN_ARCH <= 7
             if (!info.opaque) {
                cfg.fixed_function.alpha_zero_nop = info.alpha_zero_nop;

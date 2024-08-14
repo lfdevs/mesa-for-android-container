@@ -75,6 +75,9 @@ opt_saturate_propagation_local(fs_visitor &s, bblock_t *block)
                  !scan_inst->can_change_types()))
                break;
 
+            if (scan_inst->flags_written(s.devinfo) != 0)
+               break;
+
             if (scan_inst->saturate) {
                inst->saturate = false;
                progress = true;

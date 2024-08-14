@@ -1090,6 +1090,7 @@ d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_h264(enum pipe_video_pr
 {
    switch (profile) {
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
+      case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
       {
          return D3D12_VIDEO_ENCODER_PROFILE_H264_MAIN;

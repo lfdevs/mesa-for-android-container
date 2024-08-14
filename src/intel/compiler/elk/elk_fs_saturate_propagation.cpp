@@ -45,7 +45,8 @@ using namespace elk;
  */
 
 static bool
-opt_saturate_propagation_local(const fs_live_variables &live, elk_bblock_t *block)
+opt_saturate_propagation_local(const intel_device_info *devinfo,
+                               const fs_live_variables &live, elk_bblock_t *block)
 {
    bool progress = false;
    int ip = block->end_ip + 1;
@@ -73,6 +74,16 @@ opt_saturate_propagation_local(const fs_live_variables &live, elk_bblock_t *bloc
                 (scan_inst->dst.type != inst->dst.type &&
                  !scan_inst->can_change_types()))
                break;
+
+            /* min and max pseudo ops modify the flags on Gfx4 and Gfx5, but
+             * it's not based on the result of the operation. This is the one
+             * case where it is always safe to propagate a saturate to an
+             * instruction that writes the flags.
+             */
+            if (scan_inst->flags_written(devinfo) != 0 &&
+                scan_inst->opcode != ELK_OPCODE_SEL) {
+               break;
+            }
 
             if (scan_inst->saturate) {
                inst->saturate = false;
@@ -156,7 +167,7 @@ elk_fs_visitor::opt_saturate_propagation()
    bool progress = false;
 
    foreach_block (block, cfg) {
-      progress = opt_saturate_propagation_local(live, block) || progress;
+      progress = opt_saturate_propagation_local(devinfo, live, block) || progress;
    }
 
    /* Live intervals are still valid. */

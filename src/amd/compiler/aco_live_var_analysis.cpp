@@ -199,6 +199,21 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
          }
       }
 
+      if (ctx.program->gfx_level >= GFX10 && insn->isVALU() &&
+          insn->definitions.back().regClass() == s2) {
+         /* RDNA2 ISA doc, 6.2.4. Wave64 Destination Restrictions:
+          * The first pass of a wave64 VALU instruction may not overwrite a scalar value used by
+          * the second half.
+          */
+         bool carry_in = insn->opcode == aco_opcode::v_addc_co_u32 ||
+                         insn->opcode == aco_opcode::v_subb_co_u32 ||
+                         insn->opcode == aco_opcode::v_subbrev_co_u32;
+         for (unsigned op_idx = 0; op_idx < (carry_in ? 2 : insn->operands.size()); op_idx++) {
+            if (insn->operands[op_idx].isOfType(RegType::sgpr))
+               insn->operands[op_idx].setLateKill(true);
+         }
+      }
+
       /* we need to do this in a separate loop because the next one can
        * setKill() for several operands at once and we don't want to
        * overwrite that in a later iteration */

@@ -2924,8 +2924,14 @@ begin_rendering(struct zink_context *ctx, bool check_msaa_expand)
    if (has_swapchain) {
       ASSERTED struct zink_resource *res = zink_resource(ctx->fb_state.cbufs[0]->texture);
       zink_render_fixup_swapchain(ctx);
-      if (res->use_damage)
+      if (res->use_damage) {
          ctx->dynamic_fb.info.renderArea = res->damage;
+      } else {
+         ctx->dynamic_fb.info.renderArea.offset.x = 0;
+         ctx->dynamic_fb.info.renderArea.offset.y = 0;
+         ctx->dynamic_fb.info.renderArea.extent.width = ctx->fb_state.width;
+         ctx->dynamic_fb.info.renderArea.extent.height = ctx->fb_state.height;
+      }
       /* clamp for late swapchain resize */
       if (res->base.b.width0 < ctx->dynamic_fb.info.renderArea.extent.width)
          ctx->dynamic_fb.info.renderArea.extent.width = res->base.b.width0;

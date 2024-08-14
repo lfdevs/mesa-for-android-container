@@ -1825,7 +1825,13 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
-   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_VIEWPORT_CC)) {
+   /* Force CC_VIEWPORT reallocation on Gfx9 when reprogramming
+    * 3DSTATE_VIEWPORT_STATE_POINTERS_CC :
+    *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/11647
+    */
+   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_VIEWPORT_CC) ||
+       (GFX_VER == 9 &&
+        BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_VIEWPORT_CC_PTR))) {
       hw_state->vp_cc.state =
          anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                             hw_state->vp_cc.count * 8, 32);

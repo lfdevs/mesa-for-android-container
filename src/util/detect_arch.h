@@ -112,6 +112,14 @@
 #endif
 #endif
 
+#if defined(__loongarch__)
+#ifdef __loongarch_lp64
+#define DETECT_ARCH_LOONGARCH64 1
+#else
+#error "detect_arch: unknown target loongarch base ABI type"
+#endif
+#endif
+
 #ifndef DETECT_ARCH_X86
 #define DETECT_ARCH_X86 0
 #endif
@@ -166,6 +174,10 @@
 
 #ifndef DETECT_ARCH_RISCV64
 #define DETECT_ARCH_RISCV64 0
+#endif
+
+#ifndef DETECT_ARCH_LOONGARCH64
+#define DETECT_ARCH_LOONGARCH64 0
 #endif
 
 #endif /* UTIL_DETECT_ARCH_H_ */

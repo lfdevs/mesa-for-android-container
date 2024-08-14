@@ -367,7 +367,14 @@ fn set_kernel_arg(
                     return Err(CL_INVALID_ARG_SIZE);
                 }
             }
-            _ => {
+
+            KernelArgType::Sampler => {
+                if arg_size != std::mem::size_of::<cl_sampler>() {
+                    return Err(CL_INVALID_ARG_SIZE);
+                }
+            }
+
+            KernelArgType::Constant => {
                 if arg.size != arg_size {
                     return Err(CL_INVALID_ARG_SIZE);
                 }

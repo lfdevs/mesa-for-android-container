@@ -2192,13 +2192,20 @@ fn enqueue_unmap_mem_object(
 
     // SAFETY: it's required that applications do not cause data races
     let mapped_ptr = unsafe { MutMemoryPtr::from_ptr(mapped_ptr) };
+    let needs_sync = m.unmap(mapped_ptr)?;
     create_and_queue(
         q,
         CL_COMMAND_UNMAP_MEM_OBJECT,
         evs,
         event,
         false,
-        Box::new(move |q, ctx| m.unmap(q, ctx, mapped_ptr)),
+        Box::new(move |q, ctx| {
+            if needs_sync {
+                m.sync_unmap(q, ctx, mapped_ptr)
+            } else {
+                Ok(())
+            }
+        }),
     )
 }
 

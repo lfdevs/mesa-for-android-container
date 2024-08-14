@@ -208,7 +208,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
     * handles this but we need to fix up the border colour.
     */
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
-      if (dev->arch == 7)
+      if (dev->arch == 7 || dev->arch >= 10)
          return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO;
       else
          return 0;

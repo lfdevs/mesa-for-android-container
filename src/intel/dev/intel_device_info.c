@@ -2023,15 +2023,15 @@ intel_device_info_wa_stepping(struct intel_device_info *devinfo)
 uint32_t
 intel_device_info_get_max_slm_size(const struct intel_device_info *devinfo)
 {
-   uint32_t k_bytes = 0;
+   uint32_t bytes = 0;
 
    if (devinfo->verx10 >= 200) {
-      k_bytes = intel_device_info_get_max_preferred_slm_size(devinfo);
+      bytes = intel_device_info_get_max_preferred_slm_size(devinfo);
    } else {
-      k_bytes = 64;
+      bytes = 64 * 1024;
    }
 
-   return k_bytes * 1024;
+   return bytes;
 }
 
 uint32_t

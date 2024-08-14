@@ -527,7 +527,7 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
 };
 
 enum dri2_egl_driver_fail
-dri3_x11_connect(struct dri2_egl_display *dri2_dpy, bool swrast)
+dri3_x11_connect(struct dri2_egl_display *dri2_dpy, bool zink, bool swrast)
 {
    dri2_dpy->fd_render_gpu =
       loader_dri3_open(dri2_dpy->conn, dri2_dpy->screen->root, 0);
@@ -549,15 +549,16 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy, bool swrast)
    if (!dri2_dpy->driver_name)
       dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
 
-   if (!strcmp(dri2_dpy->driver_name, "zink") &&
-       !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false)) {
+   if (!zink && !strcmp(dri2_dpy->driver_name, "zink")) {
       close(dri2_dpy->fd_render_gpu);
+      dri2_dpy->fd_render_gpu = -1;
       return DRI2_EGL_DRIVER_PREFER_ZINK;
    }
 
    if (!dri2_dpy->driver_name) {
       _eglLog(_EGL_WARNING, "DRI3: No driver found");
       close(dri2_dpy->fd_render_gpu);
+      dri2_dpy->fd_render_gpu = -1;
       return DRI2_EGL_DRIVER_FAILED;
    }
 

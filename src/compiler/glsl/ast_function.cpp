@@ -2398,6 +2398,24 @@ ast_function_expression::hir(exec_list *instructions,
 
          ir_rvalue *result = convert_component(ir, desired_type);
 
+         /* If the bindless packing constructors are used directly as function
+          * params to bultin functions the compiler doesn't know what to do
+          * with them. To avoid this make sure we always copy the results from
+          * the pack to a temp first.
+          */
+         if (result->as_expression() &&
+             result->as_expression()->operation == ir_unop_pack_sampler_2x32) {
+            ir_variable *var =
+               new(ctx) ir_variable(desired_type, "sampler_ctor",
+                                    ir_var_temporary);
+            instructions->push_tail(var);
+
+            ir_dereference *lhs = new(ctx) ir_dereference_variable(var);
+            ir_instruction *assignment = new(ctx) ir_assignment(lhs, result);
+            instructions->push_tail(assignment);
+            result = lhs;
+         }
+
          /* Attempt to convert the parameter to a constant valued expression.
           * After doing so, track whether or not all the parameters to the
           * constructor are trivially constant valued expressions.

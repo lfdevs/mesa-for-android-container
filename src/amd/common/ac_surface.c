@@ -3015,7 +3015,7 @@ static bool gfx12_compute_hiz_his_info(struct ac_addrlib *addrlib, const struct 
 {
    assert(surf_in->flags.depth != surf_in->flags.stencil);
 
-   if (surf->flags & RADEON_SURF_NO_HTILE)
+   if (surf->flags & RADEON_SURF_NO_HTILE || (info->gfx_level == GFX12 && info->chip_rev == 0))
       return true;
 
    ADDR3_COMPUTE_SURFACE_INFO_OUTPUT out = {0};

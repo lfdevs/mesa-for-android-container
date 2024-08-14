@@ -2976,8 +2976,10 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
                           dri2_dpy->formats.num_formats))
       goto cleanup;
 
-   if (disp->Options.Zink)
-      dri2_initialize_wayland_drm_extensions(dri2_dpy);
+   if (disp->Options.Zink) {
+      if (!dri2_initialize_wayland_drm_extensions(dri2_dpy) && !disp->Options.ForceSoftware)
+         goto cleanup;
+   }
 
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
    if (!dri2_load_driver_swrast(disp))

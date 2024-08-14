@@ -1778,7 +1778,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
    if (disp->Options.Zink &&
        !debug_get_bool_option("LIBGL_DRI3_DISABLE", false) &&
        !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
-      dri3_x11_connect(dri2_dpy, disp->Options.ForceSoftware);
+      dri3_x11_connect(dri2_dpy, disp->Options.Zink, disp->Options.ForceSoftware);
 #endif
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
@@ -1863,7 +1863,7 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
    if (!dri2_get_xcb_connection(disp, dri2_dpy))
       goto cleanup;
 
-   status = dri3_x11_connect(dri2_dpy, disp->Options.ForceSoftware);
+   status = dri3_x11_connect(dri2_dpy, disp->Options.Zink, disp->Options.ForceSoftware);
    if (status != DRI2_EGL_DRIVER_LOADED)
       goto cleanup;
 

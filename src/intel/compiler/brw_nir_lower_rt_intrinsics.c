@@ -25,6 +25,24 @@
 #include "brw_nir_rt_builder.h"
 
 static nir_def *
+nir_build_vec3_mat_mult_col_major(nir_builder *b, nir_def *vec,
+                                  nir_def *matrix[], bool translation)
+{
+   nir_def *result_components[3] = {
+      nir_channel(b, matrix[3], 0),
+      nir_channel(b, matrix[3], 1),
+      nir_channel(b, matrix[3], 2),
+   };
+   for (unsigned i = 0; i < 3; ++i) {
+      for (unsigned j = 0; j < 3; ++j) {
+         nir_def *v = nir_fmul(b, nir_channels(b, vec, 1 << j), nir_channels(b, matrix[j], 1 << i));
+         result_components[i] = (translation || j) ? nir_fadd(b, result_components[i], v) : v;
+      }
+   }
+   return nir_vec(b, result_components, 3);
+}
+
+static nir_def *
 build_leaf_is_procedural(nir_builder *b, struct brw_nir_rt_mem_hit_defs *hit)
 {
    switch (b->shader->info.stage) {
@@ -163,11 +181,27 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             break;
 
          case nir_intrinsic_load_ray_object_origin:
-            sysval = object_ray_in.orig;
+            if (stage == MESA_SHADER_CLOSEST_HIT) {
+               struct brw_nir_rt_bvh_instance_leaf_defs leaf;
+               brw_nir_rt_load_bvh_instance_leaf(b, &leaf, hit_in.inst_leaf_ptr);
+
+               sysval = nir_build_vec3_mat_mult_col_major(
+                  b, world_ray_in.orig, leaf.world_to_object, true);
+            } else {
+               sysval = object_ray_in.orig;
+            }
             break;
 
          case nir_intrinsic_load_ray_object_direction:
-            sysval = object_ray_in.dir;
+            if (stage == MESA_SHADER_CLOSEST_HIT) {
+               struct brw_nir_rt_bvh_instance_leaf_defs leaf;
+               brw_nir_rt_load_bvh_instance_leaf(b, &leaf, hit_in.inst_leaf_ptr);
+
+               sysval = nir_build_vec3_mat_mult_col_major(
+                  b, world_ray_in.dir, leaf.world_to_object, false);
+            } else {
+               sysval = object_ray_in.dir;
+            }
             break;
 
          case nir_intrinsic_load_ray_t_min:

@@ -416,7 +416,7 @@ init_program_db(struct zink_screen *screen, struct zink_program *pg, enum zink_d
 {
    VkDeviceSize val;
    VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, dsl, &val);
-   pg->dd.db_size[type] = val;
+   pg->dd.db_size[type] = align64(val, screen->info.db_props.descriptorBufferOffsetAlignment);
    pg->dd.db_offset[type] = rzalloc_array(pg, uint32_t, num_bindings);
    for (unsigned i = 0; i < num_bindings; i++) {
       VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, dsl, bindings[i].binding, &val);
@@ -740,7 +740,7 @@ zink_descriptor_shader_init(struct zink_screen *screen, struct zink_shader *shad
       shader->precompile.num_bindings = num_bindings;
       VkDeviceSize val;
       VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, shader->precompile.dsl, &val);
-      shader->precompile.db_size = val;
+      shader->precompile.db_size = align64(val, screen->info.db_props.descriptorBufferOffsetAlignment);
       shader->precompile.db_offset = rzalloc_array(shader, uint32_t, num_bindings);
       for (unsigned i = 0; i < num_bindings; i++) {
          VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, shader->precompile.dsl, bindings[i].binding, &val);
@@ -1146,6 +1146,7 @@ update_separable(struct zink_context *ctx, struct zink_program *pg)
       }
       bs->dd.cur_db_offset[use_buffer] = bs->dd.db_offset;
       bs->dd.db_offset += zs->precompile.db_size;
+
       /* TODO: maybe compile multiple variants for different set counts for compact mode? */
       int set_idx = screen->info.have_EXT_shader_object ? j : j == MESA_SHADER_FRAGMENT;
       VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pg->layout, set_idx, 1, &use_buffer, &offset);
@@ -1633,7 +1634,7 @@ zink_descriptors_init(struct zink_context *ctx)
       VkDeviceSize val;
       for (unsigned i = 0; i < 2; i++) {
          VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, ctx->dd.push_dsl[i]->layout, &val);
-         ctx->dd.db_size[i] = val;
+         ctx->dd.db_size[i] = align64(val, screen->info.db_props.descriptorBufferOffsetAlignment);
       }
       for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++) {
          VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, i, &val);
@@ -1709,7 +1710,7 @@ zink_descriptor_util_init_fbfetch(struct zink_context *ctx)
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
       VkDeviceSize val;
       VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, &val);
-      ctx->dd.db_size[0] = val;
+      ctx->dd.db_size[0] = align64(val, screen->info.db_props.descriptorBufferOffsetAlignment);
       for (unsigned i = 0; i < ARRAY_SIZE(ctx->dd.db_offset); i++) {
          VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, i, &val);
          ctx->dd.db_offset[i] = val;

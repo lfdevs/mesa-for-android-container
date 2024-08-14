@@ -1100,7 +1100,7 @@ wsi_display_surface_get_present_rectangles(VkIcdSurfaceBase *surface_base,
    wsi_display_mode *mode = wsi_display_mode_from_handle(surface->displayMode);
    VK_OUTARRAY_MAKE_TYPED(VkRect2D, out, pRects, pRectCount);
 
-   if (wsi_device_matches_drm_fd(wsi_device, mode->connector->wsi->fd)) {
+   if (wsi_device->can_present_on_device(wsi_device->pdevice, mode->connector->wsi->fd)) {
       vk_outarray_append_typed(VkRect2D, &out, rect) {
          *rect = (VkRect2D) {
             .offset = { 0, 0 },
@@ -3114,7 +3114,7 @@ wsi_AcquireDrmDisplayEXT(VkPhysicalDevice physicalDevice,
    VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
    struct wsi_device *wsi_device = pdevice->wsi_device;
 
-   if (!wsi_device_matches_drm_fd(wsi_device, drmFd))
+   if (!wsi_device->can_present_on_device(wsi_device->pdevice, drmFd))
       return VK_ERROR_UNKNOWN;
 
    struct wsi_display *wsi =
@@ -3148,7 +3148,7 @@ wsi_GetDrmDisplayEXT(VkPhysicalDevice physicalDevice,
    VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
    struct wsi_device *wsi_device = pdevice->wsi_device;
 
-   if (!wsi_device_matches_drm_fd(wsi_device, drmFd)) {
+   if (!wsi_device->can_present_on_device(wsi_device->pdevice, drmFd)) {
       *pDisplay = VK_NULL_HANDLE;
       return VK_ERROR_UNKNOWN;
    }

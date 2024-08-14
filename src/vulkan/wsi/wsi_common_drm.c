@@ -440,10 +440,10 @@ wsi_common_drm_devices_equal(int fd_a, int fd_b)
 }
 
 bool
-wsi_device_matches_drm_fd(const struct wsi_device *wsi, int drm_fd)
+wsi_device_matches_drm_fd(VkPhysicalDevice physicalDevice, int drm_fd)
 {
-   if (wsi->can_present_on_device)
-      return wsi->can_present_on_device(wsi->pdevice, drm_fd);
+   VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
+   const struct wsi_device *wsi = pdevice->wsi_device;
 
    drmDevicePtr fd_device;
    int ret = drmGetDevice2(drm_fd, 0, &fd_device);

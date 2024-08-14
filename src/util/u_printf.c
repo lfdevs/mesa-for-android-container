@@ -166,10 +166,9 @@ u_printf_impl(FILE *out, const char *buffer, size_t buffer_size,
          int arg_size = fmt->arg_sizes[i];
          size_t spec_pos = util_printf_next_spec_pos(format, 0);
 
-         if (spec_pos == -1) {
-            u_printf_plain(out, format);
-            continue;
-         }
+         /* If we hit an unused argument we skip all remaining ones */
+         if (spec_pos == -1)
+            break;
 
          const char *token = util_printf_prev_tok(&format[spec_pos]);
          const char *next_format = &format[spec_pos + 1];

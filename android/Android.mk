@@ -157,9 +157,9 @@ endif
 endef
 
 ifneq ($(strip $(BOARD_MESA3D_GALLIUM_DRIVERS)),)
-# Module 'libgallium_dri', produces '/vendor/lib{64}/dri/libgallium_dri.so'
+# Module 'libgallium_dri', produces '/vendor/lib{64}/libgallium_dri.so'
 # This module also trigger DRI symlinks creation process
-$(eval $(call mesa3d-lib,libgallium_dri,dri,MESA3D_GALLIUM_DRI_BIN))
+$(eval $(call mesa3d-lib,libgallium_dri,,MESA3D_GALLIUM_BIN))
 # Module 'libglapi', produces '/vendor/lib{64}/libglapi.so'
 $(eval $(call mesa3d-lib,libglapi,,MESA3D_LIBGLAPI_BIN))
 

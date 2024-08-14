@@ -267,6 +267,9 @@ vk_image_usage_to_format_features(VkImageUsageFlagBits usage_flag)
       return VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT;
    case VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT:
       return VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT;
+   case VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT:
+      return VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
+             VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT;
    default:
       return 0;
    }

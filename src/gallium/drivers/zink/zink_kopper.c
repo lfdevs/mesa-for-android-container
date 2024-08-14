@@ -887,6 +887,8 @@ zink_kopper_present_queue(struct zink_screen *screen, struct zink_resource *res,
       kopper_present(cpi, screen, -1);
    }
    res->obj->indefinite_acquire = false;
+   res->use_damage = false;
+   memset(&res->damage, 0, sizeof(res->damage));
    cdt->swapchain->images[res->obj->dt_idx].acquired = NULL;
    res->obj->dt_idx = UINT32_MAX;
 }

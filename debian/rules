@@ -35,7 +35,7 @@ else
 endif
 
 EGL_PLATFORMS = x11
-GALLIUM_DRIVERS = softpipe llvmpipe
+GALLIUM_DRIVERS =
 VULKAN_DRIVERS =
 VULKAN_LAYERS =
 
@@ -52,6 +52,7 @@ WINE_ARCHS     = amd64 arm64 armel armhf i386
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
+  GALLIUM_DRIVERS += softpipe
   confflags_DIRECT_RENDERING = -Dglx-direct=false
   confflags_GBM = -Dgbm=disabled
 else
@@ -107,7 +108,7 @@ else
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
   ifneq (,$(filter $(DEB_HOST_ARCH), $(LLVM_ARCHS)))
-	GALLIUM_DRIVERS += radeonsi zink
+	GALLIUM_DRIVERS += radeonsi zink llvmpipe
 
 	# Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
 	ifneq (,$(filter $(DEB_HOST_ARCH), riscv64))
@@ -140,6 +141,7 @@ else
 		confflags_GALLIUM += -Dgallium-nine=true
 	endif
   else
+	GALLIUM_DRIVERS += softpipe
 	confflags_GALLIUM += -Dllvm=disabled
   endif
 

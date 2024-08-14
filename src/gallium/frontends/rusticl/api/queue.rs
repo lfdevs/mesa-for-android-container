@@ -41,6 +41,22 @@ impl CLInfo<cl_command_queue_info> for cl_command_queue {
     }
 }
 
+#[cl_entrypoint(clSetCommandQueueProperty)]
+fn set_command_queue_property(
+    _command_queue: cl_command_queue,
+    _properties: cl_command_queue_properties,
+    _enable: cl_bool,
+    _old_properties: *mut cl_command_queue_properties,
+) -> CLResult<()> {
+    // clSetCommandQueueProperty may unconditionally return an error if no devices in the context
+    // associated with command_queue support modifying the properties of a command-queue. Support
+    // for modifying the properties of a command-queue is required only for OpenCL 1.0 devices.
+    //
+    // CL_INVALID_OPERATION if no devices in the context associated with command_queue support
+    // modifying the properties of a command-queue.
+    Err(CL_INVALID_OPERATION)
+}
+
 fn valid_command_queue_properties(properties: cl_command_queue_properties) -> bool {
     let valid_flags = cl_bitfield::from(
         CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE

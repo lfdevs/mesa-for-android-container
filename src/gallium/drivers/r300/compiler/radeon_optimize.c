@@ -627,7 +627,10 @@ static int peephole_mad_presub_bias(
 		if (rc_inline_to_float(src1_reg.Index) != 2.0f)
 			 return 0;
 	} else {
-	        struct rc_constant *constant = &c->Program.Constants.Constants[src1_reg.Index];
+		if (src1_reg.File != RC_FILE_CONSTANT)
+			return 0;
+
+		struct rc_constant *constant = &c->Program.Constants.Constants[src1_reg.Index];
 		if (constant->Type != RC_CONSTANT_IMMEDIATE)
 			return 0;
 	        for (i = 0; i < 4; i++) {

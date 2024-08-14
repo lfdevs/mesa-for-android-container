@@ -593,7 +593,10 @@ blorp_emit_cc_viewport(struct blorp_batch *batch)
 {
    uint32_t cc_vp_offset;
 
-   if (batch->blorp->config.use_cached_dynamic_states) {
+   /* Somehow reusing CC_VIEWPORT on Gfx9 is causing issues :
+    *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/11647
+    */
+   if (GFX_VER != 9 && batch->blorp->config.use_cached_dynamic_states) {
       cc_vp_offset = blorp_get_dynamic_state(batch, BLORP_DYNAMIC_STATE_CC_VIEWPORT);
    } else {
       blorp_emit_dynamic(batch, GENX(CC_VIEWPORT), vp, 32, &cc_vp_offset) {

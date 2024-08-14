@@ -1542,10 +1542,25 @@ zink_set_damage_region(struct pipe_screen *pscreen, struct pipe_resource *pres, 
 
    for (unsigned i = 0; i < nrects; i++) {
       int y = pres->height0 - rects[i].y - rects[i].height;
-      res->damage.extent.width = MAX2(res->damage.extent.width, rects[i].x + rects[i].width);
-      res->damage.extent.height = MAX2(res->damage.extent.height, y + rects[i].height);
-      res->damage.offset.x = MIN2(res->damage.offset.x, rects[i].x);
-      res->damage.offset.y = MIN2(res->damage.offset.y, y);
+      /* convert back to coord-based rects to use coordinate calcs */
+      struct u_rect currect = {
+         .x0 = res->damage.offset.x,
+         .y0 = res->damage.offset.y,
+         .x1 = res->damage.offset.x + res->damage.extent.width,
+         .y1 = res->damage.offset.y + res->damage.extent.height,
+      };
+      struct u_rect newrect = {
+         .x0 = rects[i].x,
+         .y0 = y,
+         .x1 = rects[i].x + rects[i].width,
+         .y1 = y + rects[i].height,
+      };
+      struct u_rect u;
+      u_rect_union(&u, &currect, &newrect);
+      res->damage.extent.width = u.y1 - u.y0;
+      res->damage.extent.height = u.x1 - u.x0;
+      res->damage.offset.x = u.x0;
+      res->damage.offset.y = u.y0;
    }
 
    res->use_damage = nrects > 0;

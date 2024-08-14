@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <cstdlib>
 #include "lp_bld.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_init.h"
@@ -57,7 +58,7 @@
 /* conflict with ObjectLinkingLayer.h */
 #include "util/u_memory.h"
 
-#if DETECT_ARCH_RISCV64 == 1 || DETECT_ARCH_RISCV32 == 1 || (defined(_WIN32) && LLVM_VERSION_MAJOR >= 15)
+#if DETECT_ARCH_RISCV64 == 1 || DETECT_ARCH_RISCV32 == 1 || DETECT_ARCH_LOONGARCH64 == 1 || (defined(_WIN32) && LLVM_VERSION_MAJOR >= 15)
 /* use ObjectLinkingLayer (JITLINK backend) */
 #define USE_JITLINK
 #endif
@@ -101,6 +102,8 @@ public:
 };
 
 class LPJit;
+
+void lpjit_exit();
 
 class LLVMEnsureMultithreaded {
 public:
@@ -270,15 +273,19 @@ private:
    LPJit(const LPJit&) = delete;
    LPJit& operator=(const LPJit&) = delete;
 
+   friend void lpjit_exit();
+
    static void init_native_targets();
    llvm::orc::JITTargetMachineBuilder create_jtdb();
 
    static void init_lpjit() {
       jit = new LPJit;
+      std::atexit(lpjit_exit);
    }
    static LPJit* jit;
 
    std::unique_ptr<llvm::orc::LLJIT> lljit;
+   std::unique_ptr<llvm::TargetMachine> tm_unique;
    /* avoid name conflict */
    unsigned jit_dylib_count;
 
@@ -291,6 +298,11 @@ private:
 };
 
 LPJit* LPJit::jit = NULL;
+
+void lpjit_exit()
+{
+   delete LPJit::jit;
+}
 
 LLVMErrorRef module_transform(void *Ctx, LLVMModuleRef mod) {
    struct lp_passmgr *mgr;
@@ -318,7 +330,8 @@ LPJit::LPJit() :jit_dylib_count(0) {
 
    init_native_targets();
    JITTargetMachineBuilder JTMB = create_jtdb();
-   tm = wrap(ExitOnErr(JTMB.createTargetMachine()).release());
+   tm_unique = ExitOnErr(JTMB.createTargetMachine());
+   tm = wrap(tm_unique.get());
 
    /* Create an LLJIT instance with an ObjectLinkingLayer (JITLINK)
     * or RuntimeDyld as the base layer.
@@ -409,6 +422,14 @@ llvm::orc::JITTargetMachineBuilder LPJit::create_jtdb() {
    options.MCOptions.ABIName = "ilp32d";
 #else
 #error "GALLIVM: unknown target riscv float abi"
+#endif
+#endif
+
+#if DETECT_ARCH_LOONGARCH64 == 1
+#if defined(__loongarch_lp64) && defined(__loongarch_double_float)
+   options.MCOptions.ABIName = "lp64d";
+#else
+#error "GALLIVM: unknown target loongarch float abi"
 #endif
 #endif
 

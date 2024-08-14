@@ -58,6 +58,10 @@ static const struct debug_control debug_control[] = {
    { NULL, },
 };
 
+static bool present_false(VkPhysicalDevice pdevice, int fd) {
+   return false;
+}
+
 VkResult
 wsi_device_init(struct wsi_device *wsi,
                 VkPhysicalDevice pdevice,
@@ -269,6 +273,21 @@ wsi_device_init(struct wsi_device *wsi,
             driQueryOptionb(dri_options, "vk_wsi_force_swapchain_to_current_extent");
       }
    }
+
+   /* can_present_on_device is a function pointer used to determine if images
+    * can be presented directly on a given device file descriptor (fd).
+    * If HAVE_LIBDRM is defined, it will be initialized to a platform-specific
+    * function (wsi_device_matches_drm_fd). Otherwise, it is initialized to
+    * present_false to ensure that it always returns false, preventing potential
+    * segmentation faults from unchecked calls.
+    * Drivers for non-PCI based GPUs are expected to override this after calling
+    * wsi_device_init().
+    */
+#ifdef HAVE_LIBDRM
+   wsi->can_present_on_device = wsi_device_matches_drm_fd;
+#else
+   wsi->can_present_on_device = present_false;
+#endif
 
    return VK_SUCCESS;
 fail:

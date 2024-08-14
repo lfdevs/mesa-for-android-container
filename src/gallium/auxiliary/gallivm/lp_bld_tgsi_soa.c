@@ -3848,7 +3848,7 @@ atomic_emit(
       LLVMValueRef atom_res = lp_build_alloca(gallivm,
                                               uint_bld->vec_type, "");
 
-      LLVMValueRef ssbo_limit;
+      LLVMValueRef ssbo_limit = NULL;
       if (!is_shared) {
          ssbo_limit = LLVMBuildAShr(gallivm->builder, bld->ssbo_sizes[buf], lp_build_const_int32(gallivm, 2), "");
          ssbo_limit = lp_build_broadcast_scalar(uint_bld, ssbo_limit);
