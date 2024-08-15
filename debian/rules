@@ -19,20 +19,25 @@ export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
 export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 
-ifeq (,$(filter $(DEB_HOST_ARCH), armhf ppc64el sh3 sh4))
-buildflags = \
-	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
-else
-  ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
+DEB_CFLAGS_MAINT_APPEND := -Wall
+DEB_CXXFLAGS_MAINT_APPEND := -Wall
+ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
   # Workaround for a variant of LP: #725126
-  buildflags = \
-	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" DEB_CXXFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" dpkg-buildflags --export=configure)
-  else
-    # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
-    buildflags = \
-	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -O1" DEB_CXXFLAGS_MAINT_APPEND="-Wall -O1" dpkg-buildflags --export=configure)
-  endif
+  DEB_CFLAGS_MAINT_APPEND += -fno-optimize-sibling-calls
+  DEB_CXXFLAGS_MAINT_APPEND += -fno-optimize-sibling-calls
+else ifneq (,$(filter $(DEB_HOST_ARCH), m68k))
+  # This library has huge jump tables: Debian #1067207
+  DEB_CFLAGS_MAINT_APPEND += -mlong-jump-table-offsets
+  DEB_CXXFLAGS_MAINT_APPEND += -mlong-jump-table-offsets
+else ifneq (,$(filter $(DEB_HOST_ARCH), sh4))
+  # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
+  DEB_CFLAGS_MAINT_APPEND += -freorder-blocks-algorithm=simple
+  DEB_CXXFLAGS_MAINT_APPEND += -freorder-blocks-algorithm=simple
 endif
+buildflags = $(shell \
+	DEB_CFLAGS_MAINT_APPEND='$(DEB_CFLAGS_MAINT_APPEND)' \
+	DEB_CXXFLAGS_MAINT_APPEND='$(DEB_CXXFLAGS_MAINT_APPEND)' \
+	dpkg-buildflags --export=configure)
 
 EGL_PLATFORMS = x11
 GALLIUM_DRIVERS =
@@ -46,7 +51,7 @@ confflags_TEFLON = -Dteflon=false
 
 LLVM_ARCHS     = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
 RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 loong64 mips64el powerpc ppc64 ppc64el riscv64 s390x x32
-NVK_ARCHS      = amd64 arm64 armel armhf i386 loong64 mips64el ppc64 riscv64 x32
+NVK_ARCHS      = amd64 arm64 armhf i386 ppc64 riscv64 x32
 VALGRIND_ARCHS = amd64 arm64 armhf i386 mips64el powerpc ppc64 ppc64el s390x
 WINE_ARCHS     = amd64 arm64 armel armhf i386
 
@@ -110,17 +115,11 @@ else
   ifneq (,$(filter $(DEB_HOST_ARCH), $(LLVM_ARCHS)))
 	GALLIUM_DRIVERS += radeonsi zink llvmpipe
 
-	# Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
-	ifneq (,$(filter $(DEB_HOST_ARCH), riscv64))
-		VULKAN_DRIVERS += amd
-		confflags_GALLIUM += -Ddraw-use-llvm=false
-	else
-	  # drop virtio from armel, it doesn't build
-	  ifneq (,$(filter $(DEB_HOST_ARCH), armel))
+	# drop virtio from armel, it doesn't build
+	ifneq (,$(filter $(DEB_HOST_ARCH), armel))
 		VULKAN_DRIVERS += amd swrast
-	  else
+	else
 		VULKAN_DRIVERS += amd swrast virtio
-	  endif
 	endif
 
 	VULKAN_LAYERS += device-select intel-nullhw overlay

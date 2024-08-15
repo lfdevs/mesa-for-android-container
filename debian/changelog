@@ -1,3 +1,16 @@
+mesa (24.2.0-2) experimental; urgency=medium
+
+  * control, rules: Drop armel, mips64el, loong64 from NVK_ARCHS (FTBFS).
+  * rules: ORCJIT is enabled by default now, so don't force draw-use-
+    llvm=false on riscv64.
+  * rules: Fix m68k build, and rework setting buildflags. (Closes:
+    #1067207)
+  * rules: Really drop ppc64el from optimization workaround, drop sh3 as
+    it's an obsolete arch, and for sh4 limit it to just setting a single
+    flag.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Aug 2024 09:14:51 +0300
+
 mesa (24.2.0-1) experimental; urgency=medium
 
   * New upstream release.
