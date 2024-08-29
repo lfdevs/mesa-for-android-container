@@ -1082,6 +1082,11 @@ intrinsic("load_persp_center_rhw_ir3", dest_comp=1,
 intrinsic("load_texture_scale", src_comp=[1], dest_comp=2,
           flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# Gets the texture src. This intrinsic will be lowered once functions have
+# been inlined and we know if the src is bindless or not.
+intrinsic("deref_texture_src", src_comp=[1], dest_comp=1,
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Fragment shader input interpolation delta intrinsic.
 #
 # For hw where fragment shader input interpolation is handled in shader, the

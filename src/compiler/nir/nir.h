@@ -2330,6 +2330,15 @@ typedef enum nir_tex_src_type {
     */
    nir_tex_src_sampler_handle,
 
+   /** Tex src intrinsic
+    *
+    * This is an intrinsic used before function inlining i.e. before we know
+    * if a bindless value has been given as function param for use as a tex
+    * src.
+    */
+   nir_tex_src_sampler_deref_intrinsic,
+   nir_tex_src_texture_deref_intrinsic,
+
    /** Plane index for multi-plane YCbCr textures */
    nir_tex_src_plane,
 

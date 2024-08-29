@@ -879,6 +879,7 @@ handle_dst(struct ra_ctx *ctx, struct ir3_instruction *instr,
       free_space(ctx, physreg, size);
    }
 
+   ra_update_affinity(reg_file_size(dst), dst, physreg);
    interval->physreg_start = physreg;
    interval->physreg_end = physreg + reg_size(dst);
    dst->num = ra_physreg_to_num(physreg, dst->flags);

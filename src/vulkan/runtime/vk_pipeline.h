@@ -76,6 +76,8 @@ struct vk_pipeline_robustness_state {
    VkPipelineRobustnessBufferBehaviorEXT uniform_buffers;
    VkPipelineRobustnessBufferBehaviorEXT vertex_inputs;
    VkPipelineRobustnessImageBehaviorEXT images;
+   bool null_uniform_buffer_descriptor;
+   bool null_storage_buffer_descriptor;
 };
 
 /** Hash VkPipelineShaderStageCreateInfo info

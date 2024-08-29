@@ -777,6 +777,10 @@ anv_state_pool_return_blocks(struct anv_state_pool *pool,
    }
 
    uint32_t block_bucket = anv_state_pool_get_bucket(block_size);
+
+   if (block_bucket >= ARRAY_SIZE(pool->buckets))
+      return;
+
    anv_free_list_push(&pool->buckets[block_bucket].free_list,
                       &pool->table, st_idx, count);
 }
@@ -838,6 +842,9 @@ anv_state_pool_alloc_no_vg(struct anv_state_pool *pool,
                            uint32_t size, uint32_t align)
 {
    uint32_t bucket = anv_state_pool_get_bucket(MAX2(size, align));
+
+   if (bucket >= ARRAY_SIZE(pool->buckets))
+      return ANV_STATE_NULL;
 
    struct anv_state *state;
    uint32_t alloc_size = anv_state_pool_get_bucket_size(bucket);
@@ -948,6 +955,9 @@ anv_state_pool_free_no_vg(struct anv_state_pool *pool, struct anv_state state)
    unsigned bucket = anv_state_pool_get_bucket(state.alloc_size);
 
    assert(state.offset >= pool->start_offset);
+
+   if (bucket >= ARRAY_SIZE(pool->buckets))
+      return;
 
    anv_free_list_push(&pool->buckets[bucket].free_list,
                       &pool->table, state.idx, 1);

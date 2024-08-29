@@ -11,6 +11,9 @@ use std::ptr::addr_of;
 use std::ptr::addr_of_mut;
 use std::sync::Once;
 
+/// Maximum size a pixel can be across all supported image formats.
+pub const MAX_PIXEL_SIZE_BYTES: u64 = 4 * 4;
+
 #[repr(C)]
 pub struct Platform {
     dispatch: &'static cl_icd_dispatch,

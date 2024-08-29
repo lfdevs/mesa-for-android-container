@@ -417,6 +417,8 @@ vn_physical_device_sanitize_properties(struct vn_physical_device *physical_dev)
    if (!forward_driver_version)
       props->driverVersion = vk_get_driver_version();
 
+   physical_dev->wa_min_fb_align = strstr(props->deviceName, "JSL") ? 128 : 1;
+
    char device_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
    int device_name_len = snprintf(device_name, sizeof(device_name),
                                   "Virtio-GPU Venus (%s)", props->deviceName);

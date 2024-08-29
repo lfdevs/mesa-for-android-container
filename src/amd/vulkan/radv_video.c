@@ -759,11 +759,18 @@ radv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
                                                uint32_t *pVideoFormatPropertyCount,
                                                VkVideoFormatPropertiesKHR *pVideoFormatProperties)
 {
+   VK_FROM_HANDLE(radv_physical_device, pdev, physicalDevice);
+
+   if ((pVideoFormatInfo->imageUsage & (VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
+                                        VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR)) &&
+       !pdev->video_encode_enabled)
+      return VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR;
+
    /* radv requires separate allocates for DPB and decode video. */
    if ((pVideoFormatInfo->imageUsage &
         (VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR)) ==
        (VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR))
-      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+      return VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR;
 
    VK_OUTARRAY_MAKE_TYPED(VkVideoFormatPropertiesKHR, out, pVideoFormatProperties, pVideoFormatPropertyCount);
 

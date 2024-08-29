@@ -101,4 +101,15 @@ i915_winsys_batchbuffer_reloc(struct i915_winsys_batchbuffer *batch,
    return batch->iws->batchbuffer_reloc(batch, buffer, usage, offset, fenced);
 }
 
+static inline void
+i915_winsys_batchbuffer_emit_start(struct i915_winsys_batchbuffer *batch)
+{
+   batch->iws->emit_start(batch);
+}
+
+static inline void
+i915_winsys_batchbuffer_emit_restart(struct i915_winsys_batchbuffer *batch)
+{
+   batch->iws->emit_restart(batch);
+}
 #endif

@@ -872,10 +872,6 @@ use_hw_binning(struct tu_cmd_buffer *cmd)
    const struct tu_framebuffer *fb = cmd->state.framebuffer;
    const struct tu_tiling_config *tiling = &fb->tiling[cmd->state.gmem_layout];
 
-   if (cmd->state.rp.has_gs &&
-       cmd->device->physical_device->info->a7xx.no_gs_hw_binning_quirk)
-      return false;
-
    /* XFB commands are emitted for BINNING || SYSMEM, which makes it
     * incompatible with non-hw binning GMEM rendering. this is required because
     * some of the XFB commands need to only be executed once.
@@ -926,21 +922,17 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
    if (cmd->state.rp.disable_gmem)
       return true;
 
-   if (!cmd->state.tiling->binning_possible ||
-       (cmd->state.rp.has_gs &&
-        cmd->device->physical_device->info->a7xx.no_gs_hw_binning_quirk)) {
-      /* XFB is incompatible with non-hw binning GMEM rendering, see
-       * use_hw_binning */
-      if (cmd->state.rp.xfb_used)
-         return true;
+   /* XFB is incompatible with non-hw binning GMEM rendering, see use_hw_binning */
+   if (cmd->state.rp.xfb_used && !cmd->state.tiling->binning_possible)
+      return true;
 
-      /* QUERY_TYPE_PRIMITIVES_GENERATED is incompatible with non-hw binning
-       * GMEM rendering, see use_hw_binning.
-       */
-      if (cmd->state.rp.has_prim_generated_query_in_rp ||
-          cmd->state.prim_generated_query_running_before_rp)
-         return true;
-   }
+   /* QUERY_TYPE_PRIMITIVES_GENERATED is incompatible with non-hw binning
+    * GMEM rendering, see use_hw_binning.
+    */
+   if ((cmd->state.rp.has_prim_generated_query_in_rp ||
+        cmd->state.prim_generated_query_running_before_rp) &&
+       !cmd->state.tiling->binning_possible)
+      return true;
 
    if (TU_DEBUG(GMEM))
       return false;
@@ -3414,9 +3406,6 @@ tu_pipeline_update_rp_state(struct tu_cmd_state *cmd_state)
    if (cmd_state->pipeline_has_tess) {
       cmd_state->rp.has_tess = true;
    }
-   if (cmd_state->pipeline_has_gs) {
-      cmd_state->rp.has_gs = true;
-   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -3467,7 +3456,6 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
    cmd->state.prim_order_gmem = pipeline->prim_order.state_gmem;
    cmd->state.pipeline_sysmem_single_prim_mode = pipeline->prim_order.sysmem_single_prim_mode;
    cmd->state.pipeline_has_tess = pipeline->active_stages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-   cmd->state.pipeline_has_gs = pipeline->active_stages & VK_SHADER_STAGE_GEOMETRY_BIT;
    cmd->state.pipeline_disable_gmem = gfx_pipeline->feedback_loop_may_involve_textures;
 
    tu_pipeline_update_rp_state(&cmd->state);
@@ -3973,7 +3961,6 @@ tu_render_pass_state_merge(struct tu_render_pass_state *dst,
 {
    dst->xfb_used |= src->xfb_used;
    dst->has_tess |= src->has_tess;
-   dst->has_gs |= src->has_gs;
    dst->has_prim_generated_query_in_rp |= src->has_prim_generated_query_in_rp;
    dst->has_zpass_done_sample_count_write_in_rp |= src->has_zpass_done_sample_count_write_in_rp;
    dst->disable_gmem |= src->disable_gmem;

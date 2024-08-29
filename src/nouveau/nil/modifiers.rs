@@ -207,6 +207,14 @@ pub fn drm_format_mods_for_format(
         return;
     }
 
+    // These formats don't have a corresponding fourcc format
+    let p_format: nil_rs_bindings::pipe_format = format.into();
+    if p_format == nil_rs_bindings::PIPE_FORMAT_R11G11B10_FLOAT
+        || p_format == nil_rs_bindings::PIPE_FORMAT_R9G9B9E5_FLOAT
+    {
+        return;
+    }
+
     let compression_type = CompressionType::None;
     let sector_layout = SectorLayout::for_dev(dev);
     let gob_kind_version = GOBKindVersion::for_dev(dev);

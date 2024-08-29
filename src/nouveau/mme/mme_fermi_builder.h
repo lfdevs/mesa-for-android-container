@@ -90,20 +90,13 @@ mme_fermi_alu_to(struct mme_builder *b,
                  struct mme_value x,
                  struct mme_value y);
 
-static inline void
+void
 mme_fermi_alu64_to(struct mme_builder *b,
                    struct mme_value64 dst,
                    enum mme_alu_op op_lo,
                    enum mme_alu_op op_hi,
                    struct mme_value64 x,
-                   struct mme_value64 y)
-{
-   assert(dst.lo.type == MME_VALUE_TYPE_REG);
-   assert(dst.hi.type == MME_VALUE_TYPE_REG);
-
-   mme_fermi_alu_to(b, dst.lo, op_lo, x.lo, y.lo);
-   mme_fermi_alu_to(b, dst.hi, op_hi, x.hi, y.hi);
-}
+                   struct mme_value64 y);
 
 void
 mme_fermi_bfe_to(struct mme_builder *b, struct mme_value dst,

@@ -600,6 +600,10 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
          fprintf(output, " BB%d", branch.target[0]);
       if (branch.target[1] != 0)
          fprintf(output, ", BB%d", branch.target[1]);
+      if (branch.rarely_taken)
+         fprintf(output, " rarely_taken");
+      if (branch.never_taken)
+         fprintf(output, " never_taken");
       break;
    }
    case Format::PSEUDO_REDUCTION: {

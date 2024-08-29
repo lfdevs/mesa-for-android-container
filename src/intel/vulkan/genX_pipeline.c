@@ -974,19 +974,6 @@ emit_3dstate_clip(struct anv_graphics_pipeline *pipeline,
 
          /* From the Vulkan 1.0.45 spec:
           *
-          *    "If the last active vertex processing stage shader entry
-          *    point's interface does not include a variable decorated with
-          *    ViewportIndex, then the first viewport is used."
-          */
-         if (vp && (last->vue_map.slots_valid & VARYING_BIT_VIEWPORT)) {
-            clip.MaximumVPIndex = vp->viewport_count > 0 ?
-               vp->viewport_count - 1 : 0;
-         } else {
-            clip.MaximumVPIndex = 0;
-         }
-
-         /* From the Vulkan 1.0.45 spec:
-          *
           *    "If the last active vertex processing stage shader entry point's
           *    interface does not include a variable decorated with Layer, then
           *    the first layer is used."
@@ -996,12 +983,6 @@ emit_3dstate_clip(struct anv_graphics_pipeline *pipeline,
 
       } else if (anv_pipeline_is_mesh(pipeline)) {
          const struct brw_mesh_prog_data *mesh_prog_data = get_mesh_prog_data(pipeline);
-         if (vp && vp->viewport_count > 0 &&
-             mesh_prog_data->map.start_dw[VARYING_SLOT_VIEWPORT] >= 0) {
-            clip.MaximumVPIndex = vp->viewport_count - 1;
-         } else {
-            clip.MaximumVPIndex = 0;
-         }
 
          clip.ForceZeroRTAIndexEnable =
             mesh_prog_data->map.start_dw[VARYING_SLOT_LAYER] < 0;

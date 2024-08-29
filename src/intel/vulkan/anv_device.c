@@ -79,6 +79,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_VK_KHR_PRESENT_WAIT(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
+      DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_BARRIER(false)
       DRI_CONF_ANV_DISABLE_FCV(false)
       DRI_CONF_ANV_DISABLE_XE2_CCS(false)
       DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(true)
@@ -2731,6 +2732,8 @@ anv_init_dri_options(struct anv_instance *instance)
 
     instance->assume_full_subgroups =
             driQueryOptioni(&instance->dri_options, "anv_assume_full_subgroups");
+   instance->assume_full_subgroups_with_barrier =
+         driQueryOptionb(&instance->dri_options, "anv_assume_full_subgroups_with_barrier");
     instance->limit_trig_input_range =
             driQueryOptionb(&instance->dri_options, "limit_trig_input_range");
     instance->sample_mask_out_opengl_behaviour =
@@ -5053,7 +5056,7 @@ static void
 anv_get_buffer_memory_requirements(struct anv_device *device,
                                    VkBufferCreateFlags flags,
                                    VkDeviceSize size,
-                                   VkBufferUsageFlags usage,
+                                   VkBufferUsageFlags2KHR usage,
                                    bool is_sparse,
                                    VkMemoryRequirements2* pMemoryRequirements)
 {
@@ -5069,8 +5072,8 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
    uint32_t memory_types;
    if (flags & VK_BUFFER_CREATE_PROTECTED_BIT)
       memory_types = device->physical->memory.protected_mem_types;
-   else if (usage & (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-                     VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
+   else if (usage & (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                     VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
       memory_types = device->physical->memory.dynamic_visible_mem_types;
    else
       memory_types = device->physical->memory.default_buffer_mem_types;
@@ -5124,6 +5127,15 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
    }
 }
 
+static VkBufferUsageFlags2KHR
+get_buffer_usages(const VkBufferCreateInfo *create_info)
+{
+   const VkBufferUsageFlags2CreateInfoKHR *usage2_info =
+      vk_find_struct_const(create_info->pNext,
+                           BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   return usage2_info != NULL ? usage2_info->usage : create_info->usage;
+}
+
 void anv_GetDeviceBufferMemoryRequirements(
     VkDevice                                    _device,
     const VkDeviceBufferMemoryRequirements*     pInfo,
@@ -5132,6 +5144,7 @@ void anv_GetDeviceBufferMemoryRequirements(
    ANV_FROM_HANDLE(anv_device, device, _device);
    const bool is_sparse =
       pInfo->pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+   VkBufferUsageFlags2KHR usages = get_buffer_usages(pInfo->pCreateInfo);
 
    if ((device->physical->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) &&
        INTEL_DEBUG(DEBUG_SPARSE) &&
@@ -5144,7 +5157,7 @@ void anv_GetDeviceBufferMemoryRequirements(
    anv_get_buffer_memory_requirements(device,
                                       pInfo->pCreateInfo->flags,
                                       pInfo->pCreateInfo->size,
-                                      pInfo->pCreateInfo->usage,
+                                      usages,
                                       is_sparse,
                                       pMemoryRequirements);
 }

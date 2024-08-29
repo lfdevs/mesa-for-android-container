@@ -746,7 +746,7 @@ panvk_emit_viewport(const struct vk_viewport_state *vp, void *vpd)
    int maxy = MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
 
    assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
-   miny = MAX2(scissor->offset.x, minx);
+   minx = MAX2(scissor->offset.x, minx);
    miny = MAX2(scissor->offset.y, miny);
    maxx = MIN2(scissor->offset.x + scissor->extent.width, maxx);
    maxy = MIN2(scissor->offset.y + scissor->extent.height, maxy);

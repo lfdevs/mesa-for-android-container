@@ -9,7 +9,7 @@ test(
       pre_args,
     ],
     include_directories: [inc_etnaviv, inc_src],
-    dependencies : [idep_gtest, idep_libetnaviv_decode],
+    dependencies : [idep_gtest, idep_etnaviv_enums_h, idep_libetnaviv_decode],
     link_with : [libetnaviv_isa_rs, libetnaviv_encode],
   )
 )

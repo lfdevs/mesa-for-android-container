@@ -538,7 +538,6 @@ dEQP-VK.api.maintenance3_check.support_count_uniform_buffer_no_variable_size,Fai
 dEQP-VK.api.maintenance3_check.support_count_uniform_buffer,Fail
 dEQP-VK.api.maintenance3_check.support_count_uniform_texel_buffer,Fail
 dEQP-VK.api.version_check.unavailable_entry_points,Fail
-dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.partial_binding_depth_stencil,Fail
 dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.after_pipelines.null_color_blend_state,Crash
 dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.after_pipelines.null_rasterization_state,Crash
 dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.before_good_static.null_rasterization_state,Crash

@@ -693,6 +693,9 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    pan_kmod_dev_query_props(device->kmod.dev, &device->kmod.props);
 
+   device->model = panfrost_get_model(device->kmod.props.gpu_prod_id,
+                                      device->kmod.props.gpu_variant);
+
    unsigned arch = pan_arch(device->kmod.props.gpu_prod_id);
 
    if (arch <= 5 || arch >= 8) {
@@ -710,8 +713,6 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    device->master_fd = master_fd;
 
-   device->model = panfrost_get_model(device->kmod.props.gpu_prod_id,
-                                      device->kmod.props.gpu_variant);
    device->formats.all = panfrost_format_table(arch);
    device->formats.blendable = panfrost_blendable_format_table(arch);
 

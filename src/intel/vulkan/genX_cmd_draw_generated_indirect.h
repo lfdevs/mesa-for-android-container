@@ -290,11 +290,11 @@ genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cm
    if (start_generation_batch)
       genX(cmd_buffer_emit_indirect_generated_draws_init)(cmd_buffer);
 
-   if (cmd_buffer->state.conditional_render_enabled)
-      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
-
    /* Emit the 3D state in the main batch. */
    genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+
+   if (cmd_buffer->state.conditional_render_enabled)
+      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
    const uint32_t draw_cmd_stride =
       genX(cmd_buffer_get_generated_draw_stride)(cmd_buffer);
@@ -524,11 +524,11 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
 
    trace_intel_end_generate_draws(&cmd_buffer->trace);
 
-   if (cmd_buffer->state.conditional_render_enabled)
-      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
-
    /* Emit the 3D state in the main batch. */
    genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+
+   if (cmd_buffer->state.conditional_render_enabled)
+      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
    if (max_draw_count > 0) {
 #if GFX_VER >= 12

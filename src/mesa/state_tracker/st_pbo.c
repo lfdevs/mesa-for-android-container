@@ -111,6 +111,9 @@ st_pbo_addresses_pixelstore(struct st_context *st,
    if (buf_offset % addr->bytes_per_pixel)
       return false;
 
+   if (store->RowLength && store->RowLength < addr->width)
+      return false;
+
    /* Convert to texels */
    buf_offset = buf_offset / addr->bytes_per_pixel;
 

@@ -295,6 +295,8 @@ vk_pipeline_robustness_state_fill(const struct vk_device *device,
    rs->storage_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT;
    rs->vertex_inputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT;
    rs->images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT;
+   rs->null_uniform_buffer_descriptor = device->enabled_features.nullDescriptor;
+   rs->null_storage_buffer_descriptor = device->enabled_features.nullDescriptor;
 
    const VkPipelineRobustnessCreateInfoEXT *shader_info =
       vk_find_struct_const(shader_stage_pNext,

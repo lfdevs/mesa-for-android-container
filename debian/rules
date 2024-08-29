@@ -25,6 +25,10 @@ ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
   # Workaround for a variant of LP: #725126
   DEB_CFLAGS_MAINT_APPEND += -fno-optimize-sibling-calls
   DEB_CXXFLAGS_MAINT_APPEND += -fno-optimize-sibling-calls
+else ifneq (,$(filter $(DEB_HOST_ARCH), loong64))
+  # Workaround loong64 BFD linker crash related to TLSDESC
+  DEB_CFLAGS_MAINT_APPEND += -mtls-dialect=trad
+  DEB_CXXFLAGS_MAINT_APPEND += -mtls-dialect=trad
 else ifneq (,$(filter $(DEB_HOST_ARCH), m68k))
   # This library has huge jump tables: Debian #1067207
   DEB_CFLAGS_MAINT_APPEND += -mlong-jump-table-offsets

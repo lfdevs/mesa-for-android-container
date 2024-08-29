@@ -237,6 +237,19 @@ emit_blend_desc(const struct pan_shader_info *fs_info, mali_ptr fs_code,
          cfg.internal.fixed_function.num_comps = 4;
          cfg.internal.fixed_function.conversion.memory_format =
             GENX(panfrost_dithered_format_from_pipe_format)(rt->format, false);
+
+#if PAN_ARCH >= 7
+         if (cfg.internal.mode == MALI_BLEND_MODE_FIXED_FUNCTION &&
+             (cfg.internal.fixed_function.conversion.memory_format & 0xff) ==
+                MALI_RGB_COMPONENT_ORDER_RGB1) {
+            /* fixed function does not like RGB1 as the component order */
+            /* force this field to be the RGBA. */
+            cfg.internal.fixed_function.conversion.memory_format &= ~0xff;
+            cfg.internal.fixed_function.conversion.memory_format |=
+               MALI_RGB_COMPONENT_ORDER_RGBA;
+         }
+#endif
+
          cfg.internal.fixed_function.rt = rt_idx;
 
          if (fs_info->fs.untyped_color_outputs) {

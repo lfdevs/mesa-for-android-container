@@ -74,6 +74,9 @@ struct i915_winsys_batchbuffer {
    size_t size;
 
    size_t relocs;
+
+   uint8_t *ptr_start;
+   int reloc_count_start;
    /*@}*/
 };
 
@@ -130,6 +133,16 @@ struct i915_winsys {
     * Destroy a batchbuffer.
     */
    void (*batchbuffer_destroy)(struct i915_winsys_batchbuffer *batch);
+
+   /**
+    * Store start values of emit
+    */
+   void (*emit_start)(struct i915_winsys_batchbuffer *batch);
+
+   /**
+    * Go back to start values
+    */
+   void (*emit_restart)(struct i915_winsys_batchbuffer *batch);
    /*@}*/
 
    /**

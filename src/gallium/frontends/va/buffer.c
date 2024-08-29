@@ -216,10 +216,19 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
             *pbuff = buf->data;
 
             for (size_t i = 0; i < buf->extended_metadata.codec_unit_metadata_count - 1; i++) {
-               curr_buf_ptr->next = CALLOC(1, sizeof(VACodedBufferSegment));
+               if (!curr_buf_ptr->next)
+                  curr_buf_ptr->next = CALLOC(1, sizeof(VACodedBufferSegment));
                if (!curr_buf_ptr->next)
                   return VA_STATUS_ERROR_ALLOCATION_FAILED;
                curr_buf_ptr = curr_buf_ptr->next;
+            }
+            if (curr_buf_ptr->next) {
+               VACodedBufferSegment *node = curr_buf_ptr->next;
+               while (node) {
+                  VACodedBufferSegment *next = node->next;
+                  FREE(node);
+                  node = next;
+               }
             }
             curr_buf_ptr->next = NULL;
 

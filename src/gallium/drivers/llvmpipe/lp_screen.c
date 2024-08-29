@@ -123,12 +123,12 @@ llvmpipe_get_name(struct pipe_screen *screen)
 static int
 llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
 {
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    struct llvmpipe_screen *lscreen = llvmpipe_screen(screen);
 #endif
 
    switch (param) {
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    case PIPE_CAP_DMABUF:
       if (lscreen->udmabuf_fd != -1)
          return DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT;
@@ -1173,7 +1173,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
                                               screen->num_threads);
    screen->num_threads = MIN2(screen->num_threads, LP_MAX_THREADS);
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    screen->udmabuf_fd = open("/dev/udmabuf", O_RDWR);
 #endif
 

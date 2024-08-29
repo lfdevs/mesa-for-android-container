@@ -63,7 +63,7 @@
 #include "drm-uapi/drm_fourcc.h"
 #endif
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
@@ -303,7 +303,7 @@ llvmpipe_resource_create_all(struct pipe_screen *_screen,
    pipe_reference_init(&lpr->base.reference, 1);
    lpr->base.screen = &screen->base;
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    lpr->dmabuf_alloc = NULL;
 #endif
 
@@ -410,7 +410,7 @@ llvmpipe_resource_create(struct pipe_screen *_screen,
    return llvmpipe_resource_create_front(_screen, templat, NULL);
 }
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
 static struct pipe_resource *
 llvmpipe_resource_create_with_modifiers(struct pipe_screen *_screen,
                                         const struct pipe_resource *templat,
@@ -566,7 +566,7 @@ llvmpipe_resource_destroy(struct pipe_screen *pscreen,
       }
    }
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    if (lpr->dmabuf_alloc)
       pscreen->free_memory_fd(pscreen, (struct pipe_memory_allocation*)lpr->dmabuf_alloc);
 #endif
@@ -730,7 +730,7 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
    lpr->size_required = lpr->sample_stride;
 
    if (whandle->type != WINSYS_HANDLE_TYPE_UNBACKED) {
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
       struct llvmpipe_memory_allocation *alloc;
       uint64_t size;
       /* Not all winsys implement displaytarget_create_mapped so we need to check
@@ -765,6 +765,7 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
       assert(llvmpipe_resource_is_texture(&lpr->base));
    } else {
       whandle->size = lpr->size_required;
+      lpr->row_stride[0] = whandle->stride;
       lpr->backable = true;
    }
 
@@ -797,7 +798,7 @@ llvmpipe_resource_get_handle(struct pipe_screen *_screen,
    struct sw_winsys *winsys = screen->winsys;
    struct llvmpipe_resource *lpr = llvmpipe_resource(pt);
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    if (!lpr->dt && whandle->type == WINSYS_HANDLE_TYPE_FD) {
       if (!lpr->dmabuf_alloc) {
          lpr->dmabuf_alloc = (struct llvmpipe_memory_allocation*)_screen->allocate_memory_fd(_screen, lpr->size_required, (int*)&whandle->handle, true);
@@ -821,8 +822,9 @@ llvmpipe_resource_get_handle(struct pipe_screen *_screen,
             lpr->data = lpr->dmabuf_alloc->cpu_addr;
          /* reuse lavapipe codepath to handle destruction */
          lpr->backable = true;
+      } else {
+         whandle->handle = os_dupfd_cloexec(lpr->dmabuf_alloc->dmabuf_fd);
       }
-      whandle->handle = lpr->dmabuf_alloc->dmabuf_fd;
       whandle->modifier = DRM_FORMAT_MOD_LINEAR;
       whandle->stride = lpr->row_stride[0];
       return true;
@@ -1345,7 +1347,7 @@ llvmpipe_free_memory(struct pipe_screen *pscreen,
 }
 
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
 static void*
 llvmpipe_resource_alloc_udmabuf(struct llvmpipe_screen *screen,
                                 struct llvmpipe_memory_allocation *alloc,
@@ -1421,7 +1423,7 @@ llvmpipe_allocate_memory_fd(struct pipe_screen *pscreen,
 
    alloc->mem_fd = -1;
    alloc->dmabuf_fd = -1;
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    if (dmabuf) {
       struct llvmpipe_screen *screen = llvmpipe_screen(pscreen);
       alloc->type = LLVMPIPE_MEMORY_FD_TYPE_DMA_BUF;
@@ -1460,7 +1462,7 @@ llvmpipe_import_memory_fd(struct pipe_screen *screen,
    struct llvmpipe_memory_allocation *alloc = CALLOC_STRUCT(llvmpipe_memory_allocation);
    alloc->mem_fd = -1;
    alloc->dmabuf_fd = -1;
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    if (dmabuf) {
       off_t mmap_size = lseek(fd, 0, SEEK_END);
       lseek(fd, 0, SEEK_SET);
@@ -1505,7 +1507,7 @@ llvmpipe_free_memory_fd(struct pipe_screen *screen,
    if (alloc->type == LLVMPIPE_MEMORY_FD_TYPE_OPAQUE) {
       os_free_fd(alloc->cpu_addr);
    }
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    else {
       munmap(alloc->cpu_addr, alloc->size);
       if (alloc->dmabuf_fd >= 0)
@@ -1720,7 +1722,7 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
    return false;
 }
 
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
 static void
 llvmpipe_query_dmabuf_modifiers(struct pipe_screen *pscreen, enum pipe_format format, int max, uint64_t *modifiers, unsigned int *external_only, int *count)
 {
@@ -1781,7 +1783,7 @@ llvmpipe_init_screen_resource_funcs(struct pipe_screen *screen)
    screen->import_memory_fd = llvmpipe_import_memory_fd;
    screen->free_memory_fd = llvmpipe_free_memory_fd;
 #endif
-#ifdef HAVE_LINUX_UDMABUF_H
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    screen->query_dmabuf_modifiers = llvmpipe_query_dmabuf_modifiers;
    screen->is_dmabuf_modifier_supported = llvmpipe_is_dmabuf_modifier_supported;
    screen->get_dmabuf_modifier_planes = llvmpipe_get_dmabuf_modifier_planes;

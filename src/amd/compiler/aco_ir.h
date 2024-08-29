@@ -1673,10 +1673,11 @@ struct Pseudo_branch_instruction : public Instruction {
     */
    uint32_t target[2];
 
-   /* Indicates that selection control prefers to remove this instruction if possible.
-    * This is set when the branch is divergent and always taken, or flattened.
-    */
-   bool selection_control_remove;
+   /* Indicates that this rarely or never jumps to target[0]. */
+   bool rarely_taken;
+   bool never_taken;
+
+   uint16_t padding;
 };
 static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 12, "Unexpected padding");
 

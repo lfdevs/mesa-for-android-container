@@ -129,6 +129,7 @@ function_parameter_decoration_cb(struct vtn_builder *b, struct vtn_value *val,
    case SpvDecorationRelaxedPrecision:
    case SpvDecorationRestrict:
    case SpvDecorationRestrictPointer:
+   case SpvDecorationVolatile:
       break;
 
    default:

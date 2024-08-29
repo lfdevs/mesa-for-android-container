@@ -38,7 +38,6 @@ Build-Depends:
  libxshmfence-dev (>= 1.1),
  libxtensor-dev [linux-arm64],
  libzstd-dev,
- lua5.4 [arm64 armel armhf],
  python3,
  python3-mako,
  python3-ply,
@@ -66,7 +65,7 @@ Build-Depends:
  llvm-spirv-@LLVM_VERSION@ [@RUSTICL_ARCHS@],
  libllvmspirvlib-@LLVM_VERSION@-dev [@LLVM_ARCHS@],
  librust-paste-dev [@NVK_ARCHS@],
- librust-syn-dev [@NVK_ARCHS@],
+ librust-syn-dev (>= 2.0.68) [@NVK_ARCHS@],
 Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/xorg-team/lib/mesa.git
 Vcs-Browser: https://salsa.debian.org/xorg-team/lib/mesa

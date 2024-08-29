@@ -355,11 +355,12 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       hiz.HierarchicalDepthBufferWriteThruEnable =
          info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS_WT;
 
-      /* The bspec docs for this bit are fairly unclear about exactly what is
-       * and isn't supported with HiZ write-through.  It's fairly clear that
-       * you can't sample from a multisampled depth buffer with CCS.  This
-       * limitation isn't called out explicitly but the docs for the CCS_E
-       * value of RENDER_SURFACE_STATE::AuxiliarySurfaceMode say:
+#if GFX_VER == 12
+      /* The bspec docs up to GFX 12 for this bit are fairly unclear about
+       * exactly what is and isn't supported with HiZ write-through.  It's
+       * fairly clear that you can't sample from a multisampled depth buffer
+       * with CCS.  This limitation isn't called out explicitly but the docs
+       * for the CCS_E value of RENDER_SURFACE_STATE::AuxiliarySurfaceMode say:
        *
        *    "If Number of multisamples > 1, programming this value means MSAA
        *    compression is enabled for that surface. Auxiliary surface is MSC
@@ -386,7 +387,8 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
        */
       if (hiz.HierarchicalDepthBufferWriteThruEnable)
          assert(info->depth_surf->samples == 1);
-#endif
+#endif /* #if GFX_VER == 12 */
+#endif /* #if GFX_VER >= 12 */
 
 #if GFX_VER >= 8
       /* From the SKL PRM Vol2a:

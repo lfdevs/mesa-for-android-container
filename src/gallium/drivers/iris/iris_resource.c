@@ -673,6 +673,26 @@ want_ccs_e_for_format(const struct intel_device_info *devinfo,
    return true;
 }
 
+static bool
+want_hiz_wt_for_res(const struct intel_device_info *devinfo,
+                    const struct iris_resource *res)
+{
+   /* Gen12 only supports single-sampled while Gen20+ supports
+    * multi-sampled images.
+    */
+   if (devinfo->ver < 20 && res->surf.samples > 1)
+      return false;
+
+   if (!(res->surf.usage & ISL_SURF_USAGE_TEXTURE_BIT))
+      return false;
+
+   /* If this resource has the maximum number of samples supported by
+    * running platform and will be used as a texture, put the HiZ surface
+    * in write-through mode so that we can sample from it.
+    */
+   return true;
+}
+
 static enum isl_surf_dim
 target_to_isl_surf_dim(enum pipe_texture_target target)
 {
@@ -861,12 +881,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
       assert(!has_mcs);
       if (!has_ccs) {
          res->aux.usage = ISL_AUX_USAGE_HIZ;
-      } else if (res->surf.samples == 1 &&
-                 (res->surf.usage & ISL_SURF_USAGE_TEXTURE_BIT)) {
-         /* If this resource is single-sampled and will be used as a texture,
-          * put the HiZ surface in write-through mode so that we can sample
-          * from it.
-          */
+      } else if (want_hiz_wt_for_res(devinfo, res)) {
          res->aux.usage = ISL_AUX_USAGE_HIZ_CCS_WT;
       } else {
          res->aux.usage = ISL_AUX_USAGE_HIZ_CCS;
@@ -1035,12 +1050,6 @@ iris_resource_image_is_pat_compressible(const struct iris_screen *screen,
       assert(!isl_drm_modifier_has_aux(res->mod_info->modifier));
       return false;
    }
-
-   /* TODO: Enable compression on depth surfaces.
-    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/11361
-    */
-   if (isl_surf_usage_is_depth(res->surf.usage))
-      return false;
 
    /* Bspec 58797 (r58646):
     *

@@ -369,6 +369,8 @@ DataFile
 Converter::getFile(nir_intrinsic_op op)
 {
    switch (op) {
+   case nir_intrinsic_ldc_nv:
+      return FILE_MEMORY_CONST;
    case nir_intrinsic_load_global:
    case nir_intrinsic_store_global:
    case nir_intrinsic_load_global_constant:

@@ -1858,7 +1858,7 @@ swsb(FILE *file, const struct brw_isa_info *isa, const brw_inst *inst)
       opcode == BRW_OPCODE_MATH || opcode == BRW_OPCODE_DPAS ||
       (devinfo->has_64bit_float_via_math_pipe &&
        inst_has_type(isa, inst, BRW_TYPE_DF));
-   const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, is_unordered, x);
+   const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, is_unordered, x, opcode);
    if (swsb.regdist)
       format(file, " %s@%d",
              (swsb.pipe == TGL_PIPE_FLOAT ? "F" :

@@ -964,7 +964,18 @@ fs_visitor::emit_urb_fence()
                              brw_imm_ud(true),
                              brw_imm_ud(0));
    fence->sfid = BRW_SFID_URB;
-   fence->desc = lsc_fence_msg_desc(devinfo, LSC_FENCE_LOCAL,
+   /* The logical thing here would likely be a THREADGROUP fence but that's
+    * still failing some tests like in dEQP-VK.mesh_shader.ext.query.*
+    *
+    * Gfx12.5 has a comment about this on BSpec 53533 :
+    *
+    *    "If fence scope is Local or Threadgroup, HW ignores the flush type
+    *     and operates as if it was set to None (no flush)"
+    *
+    * Software workaround from HSD-22014129519 indicates that a GPU fence
+    * resolves the issue.
+    */
+   fence->desc = lsc_fence_msg_desc(this->devinfo, LSC_FENCE_GPU,
                                     LSC_FLUSH_TYPE_NONE, true);
 
    bld.exec_all().group(1, 0).emit(FS_OPCODE_SCHEDULING_FENCE,

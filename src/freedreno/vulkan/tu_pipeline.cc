@@ -615,7 +615,7 @@ tu6_emit_const(struct tu_cs *cs, uint32_t opcode, enum tu_geom_consts_type type,
    assert(size % 4 == 0);
    dwords = (uint32_t *)&((uint8_t *)dwords)[offset];
 
-   if (block == SB6_VS_SHADER || !cs->device->physical_device->info->a7xx.load_shader_consts_via_preamble) {
+   if (!cs->device->physical_device->info->a7xx.load_shader_consts_via_preamble) {
       uint32_t base;
       switch (type) {
       case TU_CONSTS_PRIMITIVE_MAP:
@@ -1110,7 +1110,7 @@ tu6_patch_control_points_size(struct tu_device *dev,
                               uint32_t patch_control_points)
 {
    if (dev->physical_device->info->a7xx.load_shader_consts_via_preamble) {
-#define EMIT_CONST_DWORDS(const_dwords) (5 + const_dwords + 4)
+#define EMIT_CONST_DWORDS(const_dwords) (6 + const_dwords + 4)
       return EMIT_CONST_DWORDS(4) +
          EMIT_CONST_DWORDS(HS_PARAMS_SIZE) + 2 + 2 + 2;
 #undef EMIT_CONST_DWORDS

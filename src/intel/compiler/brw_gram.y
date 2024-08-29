@@ -291,8 +291,10 @@ i965_asm_set_instruction_options(struct brw_codegen *p,
 		brw_inst_set_no_dd_clear(p->devinfo, brw_last_inst,
 					 options.no_dd_clear);
 	} else {
+		enum opcode opcode = brw_inst_opcode(p->isa, brw_last_inst);
 		brw_inst_set_swsb(p->devinfo, brw_last_inst,
-		                  tgl_swsb_encode(p->devinfo, options.depinfo));
+		                  tgl_swsb_encode(p->devinfo, options.depinfo,
+						  opcode));
 	}
 	brw_inst_set_debug_control(p->devinfo, brw_last_inst,
 			           options.debug_control);

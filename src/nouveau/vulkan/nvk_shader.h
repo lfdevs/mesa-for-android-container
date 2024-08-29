@@ -102,10 +102,10 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev);
 
 nir_address_format
 nvk_ubo_addr_format(const struct nvk_physical_device *pdev,
-                    VkPipelineRobustnessBufferBehaviorEXT robustness);
+                    const struct vk_pipeline_robustness_state *rs);
 nir_address_format
 nvk_ssbo_addr_format(const struct nvk_physical_device *pdev,
-                     VkPipelineRobustnessBufferBehaviorEXT robustness);
+                     const struct vk_pipeline_robustness_state *rs);
 
 bool
 nvk_nir_lower_descriptors(nir_shader *nir,

@@ -21,7 +21,6 @@ incs_gbm = [
 
 if with_dri2
   files_gbm += files('backends/dri/gbm_dri.c', 'backends/dri/gbm_driint.h')
-  deps_gbm += dep_libdrm # TODO: pthread-stubs
 endif
 if with_platform_wayland
   deps_gbm += dep_wayland_server
@@ -41,7 +40,7 @@ libgbm = shared_library(
   c_args : [args_gbm],
   link_args : [ld_args_gc_sections],
   link_with : [libloader, libgallium_dri],
-  dependencies : [deps_gbm, dep_dl, dep_thread, idep_mesautil, idep_xmlconfig],
+  dependencies : [deps_gbm, dep_dl, dep_thread, dep_libdrm, idep_mesautil, idep_xmlconfig],
   gnu_symbol_visibility : 'hidden',
   version : '1.0.0',
   install : true,

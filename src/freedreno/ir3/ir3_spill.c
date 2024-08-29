@@ -2097,7 +2097,7 @@ fixup_merge_sets(struct ir3_liveness *live, struct ir3 *ir)
 {
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
-         ra_foreach_dst (dst, instr) {
+         foreach_dst (dst, instr) {
             dst->merge_set = NULL;
             dst->merge_set_offset = 0;
          }

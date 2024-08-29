@@ -1798,6 +1798,14 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
       case nir_tex_src_ddy:
          fprintf(fp, "(ddy)");
          break;
+      case nir_tex_src_sampler_deref_intrinsic:
+         has_texture_deref = true;
+         fprintf(fp, "(sampler_deref_intrinsic)");
+         break;
+      case nir_tex_src_texture_deref_intrinsic:
+         has_texture_deref = true;
+         fprintf(fp, "(texture_deref_intrinsic)");
+         break;
       case nir_tex_src_texture_deref:
          has_texture_deref = true;
          fprintf(fp, "(texture_deref)");

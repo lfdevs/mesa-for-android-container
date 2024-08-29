@@ -1363,6 +1363,23 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
          SET(VIEWPORT_CC, vp_cc.elem[i].MinimumDepth, min_depth);
          SET(VIEWPORT_CC, vp_cc.elem[i].MaximumDepth, max_depth);
 
+         /* From the Vulkan 1.0.45 spec:
+          *
+          *    "If the last active vertex processing stage shader entry point's
+          *     interface does not include a variable decorated with
+          *     ViewportIndex, then the first viewport is used."
+          *
+          * This could mean that we might need to set the MaximumVPIndex based on
+          * the pipeline's last stage, but if the last shader doesn't write the
+          * viewport index and the VUE header is used, the compiler will force
+          * the value to 0 (which is what the spec requires above). Otherwise it
+          * seems like the HW should be pulling 0 if the VUE header is not
+          * present.
+          *
+          * Avoiding a check on the pipeline seems to prevent additional
+          * emissions of 3DSTATE_CLIP which appear to impact performance on
+          * Assassin's Creed Valhalla..
+          */
          SET(CLIP, clip.MaximumVPIndex, dyn->vp.viewport_count > 0 ?
                                         dyn->vp.viewport_count - 1 : 0);
       }

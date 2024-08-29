@@ -310,7 +310,7 @@ void brw_dump_shader_bin(void *assembly, int start_offset, int end_offset,
                                 debug_get_option_shader_bin_dump_path(),
                                 identifier);
 
-   int fd = open(name, O_CREAT | O_WRONLY, 0777);
+   int fd = open(name, O_CREAT | O_WRONLY | O_TRUNC, 0644);
    ralloc_free(name);
 
    if (fd < 0)

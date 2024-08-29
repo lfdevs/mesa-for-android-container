@@ -644,7 +644,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
              * need to wait for previous ones.
              */
             foreach_src (reg, n) {
-               if (reg->flags & IR3_REG_SHARED) {
+               if ((reg->flags & IR3_REG_SHARED) || is_reg_a0(reg)) {
                   regmask_set(&state->needs_ss_scalar_war, reg);
                }
             }

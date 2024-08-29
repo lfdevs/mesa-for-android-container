@@ -699,7 +699,7 @@ struct anv_fixed_size_state_pool {
 };
 
 #define ANV_MIN_STATE_SIZE_LOG2 6
-#define ANV_MAX_STATE_SIZE_LOG2 22
+#define ANV_MAX_STATE_SIZE_LOG2 24
 
 #define ANV_STATE_BUCKETS (ANV_MAX_STATE_SIZE_LOG2 - ANV_MIN_STATE_SIZE_LOG2 + 1)
 
@@ -1262,6 +1262,7 @@ struct anv_instance {
      * Workarounds for game bugs.
      */
     uint8_t                                     assume_full_subgroups;
+    bool                                        assume_full_subgroups_with_barrier;
     bool                                        limit_trig_input_range;
     bool                                        sample_mask_out_opengl_behaviour;
     bool                                        force_filter_addr_rounding;

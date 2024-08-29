@@ -133,6 +133,15 @@ gl_nir_opts(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_var_copies);
 }
 
+static void
+replace_tex_src(nir_tex_src *dst, nir_tex_src_type src_type, nir_def *src_def,
+                nir_instr *src_parent)
+{
+   *dst = nir_tex_src_for_ssa(src_type, src_def);
+   nir_src_set_parent_instr(&dst->src, src_parent);
+   list_addtail(&dst->src.use_link, &dst->src.ssa->uses);
+}
+
 void
 gl_nir_inline_functions(nir_shader *shader)
 {
@@ -145,14 +154,54 @@ gl_nir_inline_functions(nir_shader *shader)
    NIR_PASS(_, shader, nir_inline_functions);
    NIR_PASS(_, shader, nir_opt_deref);
 
-   nir_validate_shader(shader, "after function inlining and return lowering");
-
    /* We set func->is_entrypoint after nir_function_create if the function
     * is named "main", so we can use nir_remove_non_entrypoints() for this.
     * Now that we have inlined everything remove all of the functions except
     * func->is_entrypoint.
     */
    nir_remove_non_entrypoints(shader);
+
+   /* Now that functions have been inlined remove deref_texture_src intrinisic
+    * as we can now see if the texture source is bindless or not.
+    */
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+   nir_builder b = nir_builder_create(impl);
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type == nir_instr_type_tex) {
+            nir_tex_instr *intr = nir_instr_as_tex(instr);
+
+            b.cursor = nir_before_instr(instr);
+
+            if (intr->src[0].src_type == nir_tex_src_sampler_deref_intrinsic) {
+               assert(intr->src[1].src_type == nir_tex_src_texture_deref_intrinsic);
+               nir_intrinsic_instr *intrin =
+                  nir_instr_as_intrinsic(intr->src[0].src.ssa->parent_instr);
+               nir_deref_instr *deref =
+                  nir_instr_as_deref(intrin->src[0].ssa->parent_instr);
+
+               /* check for bindless handles */
+               if (!nir_deref_mode_is(deref, nir_var_uniform) ||
+                   nir_deref_instr_get_variable(deref)->data.bindless) {
+                  nir_def *load = nir_load_deref(&b, deref);
+                  replace_tex_src(&intr->src[0], nir_tex_src_texture_handle,
+                                  load, instr);
+                  replace_tex_src(&intr->src[1], nir_tex_src_sampler_handle,
+                                  load, instr);
+               } else {
+                  replace_tex_src(&intr->src[0], nir_tex_src_texture_deref,
+                                  &deref->def, instr);
+                  replace_tex_src(&intr->src[1], nir_tex_src_sampler_deref,
+                                  &deref->def, instr);
+               }
+               nir_instr_remove(&intrin->instr);
+            }
+         }
+      }
+   }
+
+   nir_validate_shader(shader, "after function inlining and return lowering");
 }
 
 struct emit_vertex_state {

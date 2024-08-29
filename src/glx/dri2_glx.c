@@ -989,7 +989,7 @@ dri2_get_driver_name(struct glx_screen *glx_screen)
 {
     struct dri2_screen *psc = (struct dri2_screen *)glx_screen;
 
-    return psc->driverName;
+    return strdup(psc->driverName);
 }
 
 static const struct glx_screen_vtable dri2_screen_vtable = {

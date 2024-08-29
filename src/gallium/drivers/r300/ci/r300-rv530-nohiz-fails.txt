@@ -643,7 +643,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE16_ALPHA16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8_ALPHA8,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE_ALPHA,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10_A2,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB12,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGBA12,Fail

@@ -106,7 +106,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
                 cl_prop::<cl_uint>(dev.image_base_address_alignment())
             }
             CL_DEVICE_IMAGE_MAX_ARRAY_SIZE => cl_prop::<usize>(dev.image_array_size()),
-            CL_DEVICE_IMAGE_MAX_BUFFER_SIZE => cl_prop::<usize>(dev.image_buffer_size()),
+            CL_DEVICE_IMAGE_MAX_BUFFER_SIZE => cl_prop::<usize>(dev.image_buffer_max_size_pixels()),
             CL_DEVICE_IMAGE_PITCH_ALIGNMENT => cl_prop::<cl_uint>(dev.image_pitch_alignment()),
             CL_DEVICE_IMAGE_SUPPORT => cl_prop::<bool>(dev.caps.has_images),
             CL_DEVICE_IMAGE2D_MAX_HEIGHT => cl_prop::<usize>(dev.caps.image_2d_size as usize),

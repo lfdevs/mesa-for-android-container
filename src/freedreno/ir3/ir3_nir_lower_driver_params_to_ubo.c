@@ -14,9 +14,6 @@ lower_driver_param_to_ubo(nir_builder *b, nir_intrinsic_instr *intr, void *in)
 {
    struct ir3_const_state *const_state = in;
 
-   if (b->shader->info.stage == MESA_SHADER_VERTEX)
-      return false;
-
    unsigned components = nir_intrinsic_dest_components(intr);
 
    b->cursor = nir_before_instr(&intr->instr);
@@ -52,6 +49,14 @@ lower_driver_param_to_ubo(nir_builder *b, nir_intrinsic_instr *intr, void *in)
       result = ir3_load_driver_ubo(b, components,
                                    &const_state->primitive_param_ubo, 6);
       break;
+   /* These are still loaded using CP_LOAD_STATE for compatibility with indirect
+    * draws where the CP does a CP_LOAD_STATE for us internally:
+    */
+   case nir_intrinsic_load_draw_id:
+   case nir_intrinsic_load_base_vertex:
+   case nir_intrinsic_load_first_vertex:
+   case nir_intrinsic_load_base_instance:
+      return false;
    default: {
       struct driver_param_info param_info;
       if (!ir3_get_driver_param_info(b->shader, intr, &param_info))

@@ -66,6 +66,11 @@ files_libvc4 = files(
 
 vc4_c_args = []
 
+vc4_deps = [
+  dep_simpenrose, dep_libdrm, dep_valgrind,
+  idep_nir_headers, idep_mesautil,
+]
+
 libvc4_neon = []
 if host_machine.cpu_family() == 'arm'
   libvc4_neon = static_library(
@@ -75,6 +80,7 @@ if host_machine.cpu_family() == 'arm'
       inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom
     ],
     c_args : '-mfpu=neon',
+    dependencies : vc4_deps,
   )
   vc4_c_args += '-DUSE_ARM_ASM'
 endif
@@ -93,10 +99,7 @@ libvc4 = static_library(
   link_with: libvc4_neon,
   c_args : [vc4_c_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [
-    dep_simpenrose, dep_libdrm, dep_valgrind,
-    idep_nir_headers, idep_mesautil,
-  ],
+  dependencies : vc4_deps,
   build_by_default : false,
 )
 

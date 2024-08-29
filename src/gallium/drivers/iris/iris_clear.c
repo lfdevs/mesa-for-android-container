@@ -552,6 +552,22 @@ fast_clear_depth(struct iris_context *ice,
       const union isl_color_value clear_value = { .f32 = {depth, } };
       iris_resource_set_clear_color(ice, res, clear_value);
       update_clear_depth = true;
+
+      if (res->aux.clear_color_bo) {
+         /* From the TGL PRMs, Volume 9: Render Engine, State Caching :
+          *
+          *    "Any values referenced by pointers within the
+          *    RENDER_SURFACE_STATE or SAMPLER_STATE (e.g. Clear Color
+          *    Pointer, Border Color or Indirect State Pointer) are considered
+          *    to be part of that state and any changes to these referenced
+          *    values requires an invalidation of the L1 state cache to ensure
+          *    the new values are being used as part of the state."
+          *
+          * Invalidate the state cache as suggested.
+          */
+         iris_emit_pipe_control_flush(batch, "flush fast clear values (z)",
+                                      PIPE_CONTROL_STATE_CACHE_INVALIDATE);
+      }
    }
 
    if (res->aux.usage == ISL_AUX_USAGE_HIZ_CCS_WT) {

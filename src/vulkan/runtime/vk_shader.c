@@ -393,6 +393,17 @@ vk_common_CreateShadersEXT(VkDevice _device,
       .uniform_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
       .vertex_inputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
       .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
+      /* From the Vulkan 1.3.292 spec:
+       *
+       *    "This extension [VK_EXT_robustness2] also adds support for “null
+       *    descriptors”, where VK_NULL_HANDLE can be used instead of a valid
+       *    handle. Accesses to null descriptors have well-defined behavior,
+       *    and do not rely on robustness."
+       *
+       * For now, default these to true.
+       */
+      .null_uniform_buffer_descriptor = true,
+      .null_storage_buffer_descriptor = true,
    };
 
    /* From the Vulkan 1.3.274 spec:

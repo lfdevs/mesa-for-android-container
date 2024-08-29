@@ -1,6 +1,5 @@
 dEQP-VK.api.get_device_proc_addr.non_enabled,Fail
 dEQP-VK.api.version_check.unavailable_entry_points,Fail
-dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.partial_binding_depth_stencil,Fail
 
 gmem-dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert_geom.6_2,Fail
 gmem-dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert_geom.6_2_fragmentshader_read,Fail

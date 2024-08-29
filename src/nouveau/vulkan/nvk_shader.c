@@ -114,12 +114,15 @@ nvk_get_nir_options(struct vk_physical_device *vk_pdev,
 
 nir_address_format
 nvk_ubo_addr_format(const struct nvk_physical_device *pdev,
-                    VkPipelineRobustnessBufferBehaviorEXT robustness)
+                    const struct vk_pipeline_robustness_state *rs)
 {
    if (nvk_use_bindless_cbuf(&pdev->info)) {
       return nir_address_format_vec2_index_32bit_offset;
+   } else if (rs->null_uniform_buffer_descriptor) {
+      /* We need bounds checking for null descriptors */
+      return nir_address_format_64bit_bounded_global;
    } else {
-      switch (robustness) {
+      switch (rs->uniform_buffers) {
       case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT:
          return nir_address_format_64bit_global_32bit_offset;
       case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT:
@@ -133,16 +136,21 @@ nvk_ubo_addr_format(const struct nvk_physical_device *pdev,
 
 nir_address_format
 nvk_ssbo_addr_format(const struct nvk_physical_device *pdev,
-                     VkPipelineRobustnessBufferBehaviorEXT robustness)
+                    const struct vk_pipeline_robustness_state *rs)
 {
-   switch (robustness) {
-   case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT:
-      return nir_address_format_64bit_global_32bit_offset;
-   case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT:
-   case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT:
+   if (rs->null_storage_buffer_descriptor) {
+      /* We need bounds checking for null descriptors */
       return nir_address_format_64bit_bounded_global;
-   default:
-      unreachable("Invalid robust buffer access behavior");
+   } else {
+      switch (rs->storage_buffers) {
+      case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT:
+         return nir_address_format_64bit_global_32bit_offset;
+      case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT:
+      case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT:
+         return nir_address_format_64bit_bounded_global;
+      default:
+         unreachable("Invalid robust buffer access behavior");
+      }
    }
 }
 
@@ -155,9 +163,9 @@ nvk_get_spirv_options(struct vk_physical_device *vk_pdev,
       container_of(vk_pdev, struct nvk_physical_device, vk);
 
    return (struct spirv_to_nir_options) {
-      .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs->storage_buffers),
+      .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
-      .ubo_addr_format = nvk_ubo_addr_format(pdev, rs->uniform_buffers),
+      .ubo_addr_format = nvk_ubo_addr_format(pdev, rs),
       .shared_addr_format = nir_address_format_32bit_offset,
       .min_ssbo_alignment = NVK_MIN_SSBO_ALIGNMENT,
       .min_ubo_alignment = nvk_min_cbuf_alignment(&pdev->info),
@@ -462,9 +470,9 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
             nir_address_format_64bit_global);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ssbo,
-            nvk_ssbo_addr_format(pdev, rs->storage_buffers));
+            nvk_ssbo_addr_format(pdev, rs));
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo,
-            nvk_ubo_addr_format(pdev, rs->uniform_buffers));
+            nvk_ubo_addr_format(pdev, rs));
    NIR_PASS(_, nir, nir_shader_intrinsics_pass,
             lower_load_intrinsic, nir_metadata_none, NULL);
 

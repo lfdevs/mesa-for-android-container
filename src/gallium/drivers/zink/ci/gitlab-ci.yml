@@ -97,7 +97,7 @@ zink-tu-a618:
 zink-tu-a618-full:
   extends:
     - zink-tu-a618
-    - .collabora-turnip-manual-rules
+    - .zink-turnip-collabora-manual-rules
   variables:
     DEQP_FRACTION: 1
 

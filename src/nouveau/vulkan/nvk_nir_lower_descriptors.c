@@ -1323,8 +1323,8 @@ nvk_nir_lower_descriptors(nir_shader *nir,
          rs->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
          rs->uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
          rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
-      .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs->storage_buffers),
-      .ubo_addr_format = nvk_ubo_addr_format(pdev, rs->uniform_buffers),
+      .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs),
+      .ubo_addr_format = nvk_ubo_addr_format(pdev, rs),
    };
 
    assert(set_layout_count <= NVK_MAX_SETS);

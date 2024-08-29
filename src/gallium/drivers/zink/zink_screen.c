@@ -1714,7 +1714,8 @@ choose_pdev(struct zink_screen *screen, int64_t dev_major, int64_t dev_minor)
          return;
       }
 
-      assert(pdev_count > 0);
+      if (!pdev_count)
+         return;
 
       pdevs = malloc(sizeof(*pdevs) * pdev_count);
       if (!pdevs) {
@@ -1750,6 +1751,8 @@ choose_pdev(struct zink_screen *screen, int64_t dev_major, int64_t dev_minor)
             mesa_loge("ZINK: vkEnumeratePhysicalDevices failed (%s)", vk_Result_to_str(result));
          return;
       }
+      if (!pdev_count)
+         return;
       screen->pdev = pdev;
    }
    VKSCR(GetPhysicalDeviceProperties)(screen->pdev, &screen->info.props);

@@ -2832,8 +2832,7 @@ lower_to_hw_instr(Program* program)
              * - The application prefers to remove control flow
              * - The compiler stack knows that it's a divergent branch always taken
              */
-            const bool prefer_remove =
-               branch->selection_control_remove && ctx.program->gfx_level >= GFX10;
+            const bool prefer_remove = branch->rarely_taken && ctx.program->gfx_level >= GFX10;
             bool can_remove = block->index < target;
             unsigned num_scalar = 0;
             unsigned num_vector = 0;
@@ -2890,9 +2889,9 @@ lower_to_hw_instr(Program* program)
                      can_remove = prefer_remove;
                   } else if (inst->isSMEM()) {
                      /* SMEM are at least as expensive as branches */
-                     can_remove = prefer_remove;
+                     can_remove = prefer_remove && branch->never_taken;
                   } else if (inst->isBarrier()) {
-                     can_remove = prefer_remove;
+                     can_remove = prefer_remove && branch->never_taken;
                   } else {
                      can_remove = false;
                      assert(false && "Pseudo instructions should be lowered by this point.");

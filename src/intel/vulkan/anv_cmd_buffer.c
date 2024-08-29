@@ -463,7 +463,7 @@ anv_cmd_buffer_set_ray_query_buffer(struct anv_cmd_buffer *cmd_buffer,
 
          bo = p_atomic_cmpxchg(&device->ray_query_shadow_bos[bucket], NULL, new_bo);
          if (bo != NULL) {
-            anv_device_release_bo(device, bo);
+            anv_device_release_bo(device, new_bo);
          } else {
             bo = new_bo;
          }

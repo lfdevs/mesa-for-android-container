@@ -37,14 +37,10 @@ i915_fill_blit(struct i915_context *i915, unsigned cpp, unsigned rgba_mask,
                unsigned color)
 {
    unsigned BR13, CMD;
+   bool flushed = false;
 
    I915_DBG(DBG_BLIT, "%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n", __func__,
             dst_buffer, dst_pitch, dst_offset, x, y, w, h);
-
-   if (!i915_winsys_validate_buffers(i915->batch, &dst_buffer, 1)) {
-      FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
-      assert(i915_winsys_validate_buffers(i915->batch, &dst_buffer, 1));
-   }
 
    switch (cpp) {
    case 1:
@@ -61,17 +57,25 @@ i915_fill_blit(struct i915_context *i915, unsigned cpp, unsigned rgba_mask,
       return;
    }
 
-   if (!BEGIN_BATCH(6)) {
+   i915_winsys_batchbuffer_emit_start(i915->batch);
+   while (true) {
+      if (!BEGIN_BATCH(6)) {
+         FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
+         assert(BEGIN_BATCH(6));
+      }
+      OUT_BATCH(CMD);
+      OUT_BATCH(BR13);
+      OUT_BATCH((y << 16) | x);
+      OUT_BATCH(((y + h) << 16) | (x + w));
+      OUT_RELOC_FENCED(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
+      OUT_BATCH(color);
+      if (flushed || i915_winsys_validate_buffers(i915->batch, &dst_buffer, 0)) 
+         break;
+      i915_winsys_batchbuffer_emit_restart(i915->batch);
       FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
-      assert(BEGIN_BATCH(6));
+      assert(i915_winsys_validate_buffers(i915->batch, &dst_buffer, 0));
+      flushed = true;
    }
-   OUT_BATCH(CMD);
-   OUT_BATCH(BR13);
-   OUT_BATCH((y << 16) | x);
-   OUT_BATCH(((y + h) << 16) | (x + w));
-   OUT_RELOC_FENCED(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
-   OUT_BATCH(color);
-
    i915_set_flush_dirty(i915, I915_FLUSH_CACHE);
 }
 
@@ -86,17 +90,12 @@ i915_copy_blit(struct i915_context *i915, unsigned cpp,
    unsigned CMD, BR13;
    int dst_y2 = dst_y + h;
    int dst_x2 = dst_x + w;
-   struct i915_winsys_buffer *buffers[2] = {src_buffer, dst_buffer};
+   bool flushed = false;
 
    I915_DBG(DBG_BLIT,
             "%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
             __func__, src_buffer, src_pitch, src_offset, src_x, src_y,
             dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
-
-   if (!i915_winsys_validate_buffers(i915->batch, buffers, 2)) {
-      FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
-      assert(i915_winsys_validate_buffers(i915->batch, buffers, 2));
-   }
 
    switch (cpp) {
    case 1:
@@ -123,19 +122,27 @@ i915_copy_blit(struct i915_context *i915, unsigned cpp,
     * need for either at this stage.
     */
    assert(dst_pitch > 0 && src_pitch > 0);
-
-   if (!BEGIN_BATCH(8)) {
+   
+   i915_winsys_batchbuffer_emit_start(i915->batch);
+   while (true) {
+      if (!BEGIN_BATCH(8)) {
+         FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
+         assert(BEGIN_BATCH(8));
+      }
+      OUT_BATCH(CMD);
+      OUT_BATCH(BR13);
+      OUT_BATCH((dst_y << 16) | dst_x);
+      OUT_BATCH((dst_y2 << 16) | dst_x2);
+      OUT_RELOC_FENCED(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
+      OUT_BATCH((src_y << 16) | src_x);
+      OUT_BATCH(((int)src_pitch & 0xffff));
+      OUT_RELOC_FENCED(src_buffer, I915_USAGE_2D_SOURCE, src_offset);
+      if (flushed || i915_winsys_validate_buffers(i915->batch, &dst_buffer, 0)) 
+         break;
+      i915_winsys_batchbuffer_emit_restart(i915->batch);
       FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
-      assert(BEGIN_BATCH(8));
+      assert(i915_winsys_validate_buffers(i915->batch, &dst_buffer, 0));
+      flushed = true;
    }
-   OUT_BATCH(CMD);
-   OUT_BATCH(BR13);
-   OUT_BATCH((dst_y << 16) | dst_x);
-   OUT_BATCH((dst_y2 << 16) | dst_x2);
-   OUT_RELOC_FENCED(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
-   OUT_BATCH((src_y << 16) | src_x);
-   OUT_BATCH(((int)src_pitch & 0xffff));
-   OUT_RELOC_FENCED(src_buffer, I915_USAGE_2D_SOURCE, src_offset);
-
    i915_set_flush_dirty(i915, I915_FLUSH_CACHE);
 }

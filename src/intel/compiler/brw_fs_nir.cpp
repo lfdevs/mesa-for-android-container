@@ -2609,11 +2609,13 @@ emit_gs_input_load(nir_to_brw_state &ntb, const brw_reg &dst,
 
    brw_reg start = s.gs_payload().icp_handle_start;
    brw_reg icp_handle = ntb.bld.vgrf(BRW_TYPE_UD);
+   const unsigned grf_size_bytes = REG_SIZE * reg_unit(devinfo);
 
    if (gs_prog_data->invocations == 1) {
       if (nir_src_is_const(vertex_src)) {
          /* The vertex index is constant; just select the proper URB handle. */
-         icp_handle = offset(start, ntb.bld, nir_src_as_uint(vertex_src));
+         icp_handle =
+            byte_offset(start, nir_src_as_uint(vertex_src) * grf_size_bytes);
       } else {
          /* The vertex index is non-constant.  We need to use indirect
           * addressing to fetch the proper URB handle.
@@ -2623,7 +2625,7 @@ emit_gs_input_load(nir_to_brw_state &ntb, const brw_reg &dst,
           * DWord <n>.  We convert that to bytes by multiplying by 4.
           *
           * Next, we convert the vertex index to bytes by multiplying
-          * by 32 (shifting by 5), and add the two together.  This is
+          * by 32/64 (shifting by 5/6), and add the two together.  This is
           * the final indirect byte offset.
           */
          brw_reg sequence =
@@ -2631,10 +2633,11 @@ emit_gs_input_load(nir_to_brw_state &ntb, const brw_reg &dst,
 
          /* channel_offsets = 4 * sequence = <28, 24, 20, 16, 12, 8, 4, 0> */
          brw_reg channel_offsets = bld.SHL(sequence, brw_imm_ud(2u));
-         /* Convert vertex_index to bytes (multiply by 32) */
+         /* Convert vertex_index to bytes (multiply by 32/64) */
+         assert(util_is_power_of_two_nonzero(grf_size_bytes)); /* for ffs() */
          brw_reg vertex_offset_bytes =
             bld.SHL(retype(get_nir_src(ntb, vertex_src), BRW_TYPE_UD),
-                    brw_imm_ud(5u));
+                    brw_imm_ud(ffs(grf_size_bytes) - 1));
          brw_reg icp_offset_bytes =
             bld.ADD(vertex_offset_bytes, channel_offsets);
 
@@ -2644,7 +2647,7 @@ emit_gs_input_load(nir_to_brw_state &ntb, const brw_reg &dst,
           */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle, start,
                   brw_reg(icp_offset_bytes),
-                  brw_imm_ud(s.nir->info.gs.vertices_in * REG_SIZE));
+                  brw_imm_ud(s.nir->info.gs.vertices_in * grf_size_bytes));
       }
    } else {
       assert(gs_prog_data->invocations > 1);
@@ -2669,7 +2672,7 @@ emit_gs_input_load(nir_to_brw_state &ntb, const brw_reg &dst,
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle, start,
                   brw_reg(icp_offset_bytes),
                   brw_imm_ud(DIV_ROUND_UP(s.nir->info.gs.vertices_in, 8) *
-                             REG_SIZE));
+                             grf_size_bytes));
       }
    }
 
@@ -8035,8 +8038,18 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
       srcs[RT_LOGICAL_SRC_BVH_LEVEL] = get_nir_src(ntb, instr->src[1]);
       srcs[RT_LOGICAL_SRC_TRACE_RAY_CONTROL] = get_nir_src(ntb, instr->src[2]);
       srcs[RT_LOGICAL_SRC_SYNCHRONOUS] = brw_imm_ud(synchronous);
-      bld.emit(RT_OPCODE_TRACE_RAY_LOGICAL, bld.null_reg_ud(),
-               srcs, RT_LOGICAL_NUM_SRCS);
+
+      /* Bspec 57508: Structure_SIMD16TraceRayMessage:: RayQuery Enable
+       *
+       *    "When this bit is set in the header, Trace Ray Message behaves like
+       *    a Ray Query. This message requires a write-back message indicating
+       *    RayQuery for all valid Rays (SIMD lanes) have completed."
+       */
+      brw_reg dst = (devinfo->ver >= 20 && synchronous) ?
+                    bld.vgrf(BRW_TYPE_UD) :
+                    bld.null_reg_ud();
+
+      bld.emit(RT_OPCODE_TRACE_RAY_LOGICAL, dst, srcs, RT_LOGICAL_NUM_SRCS);
 
       /* There is no actual value to use in the destination register of the
        * synchronous trace instruction. All of the communication with the HW
@@ -8138,32 +8151,9 @@ fs_nir_emit_surface_atomic(nir_to_brw_state &ntb, const fs_builder &bld,
    }
    srcs[SURFACE_LOGICAL_SRC_DATA] = data;
 
-   fs_inst *inst;
-   unsigned size_written = 0;
    /* Emit the actual atomic operation */
-   switch (instr->def.bit_size) {
-      case 16: {
-         brw_reg dest32 = bld.vgrf(BRW_TYPE_UD);
-         inst = bld.emit(SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL,
-                         retype(dest32, dest.type),
-                         srcs, SURFACE_LOGICAL_NUM_SRCS);
-         size_written = dest32.component_size(inst->exec_size);
-         bld.MOV(retype(dest, BRW_TYPE_UW), dest32);
-         break;
-      }
-
-      case 32:
-      case 64:
-         inst = bld.emit(SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL,
-                         dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
-         size_written = dest.component_size(inst->exec_size);
-         break;
-      default:
-         unreachable("Unsupported bit size");
-   }
-
-   assert(size_written);
-   inst->size_written = size_written * instr->def.num_components;
+   bld.emit(SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL, dest, srcs,
+            SURFACE_LOGICAL_NUM_SRCS);
 }
 
 static void
@@ -8197,30 +8187,8 @@ fs_nir_emit_global_atomic(nir_to_brw_state &ntb, const fs_builder &bld,
    srcs[A64_LOGICAL_ARG] = brw_imm_ud(op);
    srcs[A64_LOGICAL_ENABLE_HELPERS] = brw_imm_ud(0);
 
-   fs_inst *inst;
-   unsigned size_written = 0;
-   switch (instr->def.bit_size) {
-   case 16: {
-      brw_reg dest32 = bld.vgrf(BRW_TYPE_UD);
-      inst = bld.emit(SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL,
-                      retype(dest32, dest.type),
-                      srcs, A64_LOGICAL_NUM_SRCS);
-      size_written = dest32.component_size(inst->exec_size);
-      bld.MOV(retype(dest, BRW_TYPE_UW), dest32);
-      break;
-   }
-   case 32:
-   case 64:
-      inst = bld.emit(SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL, dest,
-                      srcs, A64_LOGICAL_NUM_SRCS);
-      size_written = dest.component_size(inst->exec_size);
-      break;
-   default:
-      unreachable("Unsupported bit size");
-   }
-
-   assert(size_written);
-   inst->size_written = size_written * instr->def.num_components;
+   bld.emit(SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL, dest,
+            srcs, A64_LOGICAL_NUM_SRCS);
 }
 
 static void

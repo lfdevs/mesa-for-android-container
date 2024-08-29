@@ -8640,7 +8640,7 @@ iris_upload_indirect_render_state(struct iris_context *ice,
 
    iris_emit_cmd(batch, GENX(EXECUTE_INDIRECT_DRAW), ind) {
       ind.ArgumentFormat             =
-         draw->index_size > 0 ? DRAWINDEXED : DRAW;
+         draw->index_size > 0 ? XI_DRAWINDEXED : XI_DRAW;
       ind.PredicateEnable            = use_predicate;
       ind.TBIMREnabled               = ice->state.use_tbimr;
       ind.MaxCount                   = indirect->draw_count;

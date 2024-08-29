@@ -1164,6 +1164,13 @@ opt_if_merge(nir_if *nif)
           nir_block_ends_in_jump(nir_if_last_else_block(nif)))
          return false;
 
+      /* This optimization is not prepared to handle updating phis other than
+       * immediately after the second if-statement.
+       */
+      if (nir_block_ends_in_jump(nir_if_last_then_block(next_if)) ||
+          nir_block_ends_in_jump(nir_if_last_else_block(next_if)))
+         return false;
+
       simple_merge_if(nif, next_if, true, true);
       simple_merge_if(nif, next_if, false, false);
 

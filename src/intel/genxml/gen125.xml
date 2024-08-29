@@ -1669,7 +1669,7 @@
     <field name="DWord Length" start="0" end="7" type="uint" default="4" />
     <field name="Predicate Enable" start="8" end="8" type="bool" />
     <field name="TBIMR Enabled" start="9" end="9" type="uint" />
-    <field name="Argument Format" start="10" end="11" type="uint">
+    <field name="Argument Format" start="10" end="11" type="uint" prefix="XI">
       <value name="DRAW" value="0" />
       <value name="DRAWINDEXED" value="1" />
       <value name="MESH_3D" value="2" />

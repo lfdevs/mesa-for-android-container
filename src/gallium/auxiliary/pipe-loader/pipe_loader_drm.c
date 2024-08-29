@@ -51,7 +51,7 @@
 
 #include "virtio/virtio-gpu/drm_hw.h"
 #include "virtio/virtio-gpu/virglrenderer_hw.h"
-#include "virtgpu_drm.h"
+#include "drm-uapi/virtgpu_drm.h"
 
 #define DRM_RENDER_NODE_DEV_NAME_FORMAT "%s/renderD%d"
 #define DRM_RENDER_NODE_MAX_NODES 63
