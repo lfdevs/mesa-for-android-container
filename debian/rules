@@ -17,7 +17,6 @@ LLVM_VERSION = 18
 export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
-export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 
 DEB_CFLAGS_MAINT_APPEND := -Wall
 DEB_CXXFLAGS_MAINT_APPEND := -Wall
@@ -136,6 +135,7 @@ else
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
+		export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 		VULKAN_DRIVERS += nouveau
 	endif
 
