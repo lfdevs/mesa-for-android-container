@@ -1,3 +1,10 @@
+mesa (24.2.1-4) unstable; urgency=medium
+
+  * patches: Add patches to fix autopkgtest regressions in dril.
+  * rules: Enable softpipe everywhere again. (Closes: #1080475)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 05 Sep 2024 11:49:34 +0300
+
 mesa (24.2.1-3) unstable; urgency=medium
 
   * rules: Set MESON_PACKAGE_CACHE_DIR only for archs where nvk is
