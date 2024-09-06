@@ -6481,6 +6481,8 @@ bool nir_shader_uses_view_index(nir_shader *shader);
 bool nir_can_lower_multiview(nir_shader *shader);
 bool nir_lower_multiview(nir_shader *shader, uint32_t view_mask);
 
+bool nir_lower_view_index_to_device_index(nir_shader *shader);
+
 typedef enum {
    nir_lower_fp16_rtz = (1 << 0),
    nir_lower_fp16_rtne = (1 << 1),

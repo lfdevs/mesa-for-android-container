@@ -86,7 +86,7 @@ gc2000_piglit:
   variables:
     DEQP_SUITE: etnaviv-gc2000-piglit
     FLAKES_CHANNEL: "#etnaviv-ci"
-    TEST_PHASE_TIMEOUT: 40
+    TEST_PHASE_TIMEOUT: 35
   timeout: 40m
 
 gc7000_gles2:

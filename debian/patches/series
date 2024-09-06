@@ -1,4 +1,2 @@
 path_max.diff
 src_glx_dri_common.h.diff
-0001-dril-use-the-super-fallback-path-for-software-fallba.patch
-0001-dril-also-create-double-buffered-configs-in-swrast-f.patch

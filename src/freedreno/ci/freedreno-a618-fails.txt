@@ -338,7 +338,6 @@ gmem-dEQP-VK.transform_feedback.primitives_generated_query.concurrent.pipeline_s
 
 # New CTS failures in 1.3.8.0
 dEQP-VK.binding_model.descriptor_buffer.basic.limits,Fail
-dEQP-VK.info.device_mandatory_features,Fail
 gmem-dEQP-VK.transform_feedback.primitives_generated_query.concurrent.pipeline_statistics_1.32bit.line_strip.indirect,Fail
 gmem-dEQP-VK.transform_feedback.primitives_generated_query.concurrent.pipeline_statistics_1.32bit.triangle_list_with_adjacency.indirect,Fail
 gmem-dEQP-VK.transform_feedback.primitives_generated_query.concurrent.pipeline_statistics_1.pgq_64bit_xfb_32bit.point_list.draw,Fail

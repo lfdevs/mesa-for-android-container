@@ -157,6 +157,7 @@ struct tu_instance
 
    const struct tu_knl *knl;
 
+   uint32_t instance_idx;
    uint32_t api_version;
 
    struct driOptionCache dri_options;

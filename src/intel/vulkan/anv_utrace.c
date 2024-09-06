@@ -50,7 +50,19 @@ union anv_utrace_timestamp {
     *        [2] = 32b Context Timestamp End
     *        [3] = 32b Global Timestamp End"
     */
-   uint32_t compute_walker[8];
+   uint32_t gfx125_postsync_data[4];
+
+   /* Timestamp written by COMPUTE_WALKER::PostSync
+    *
+    * BSpec 56591:
+    *
+    *    "The timestamp layout :
+    *       [0] = 64b Context Timestamp Start
+    *       [1] = 64b Global Timestamp Start
+    *       [2] = 64b Context Timestamp End
+    *       [3] = 64b Global Timestamp End"
+    */
+   uint64_t gfx20_postsync_data[4];
 };
 
 static uint32_t
@@ -410,8 +422,15 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
    if (ts[idx].timestamp == U_TRACE_NO_TIMESTAMP)
       return U_TRACE_NO_TIMESTAMP;
 
-   /* Detect a 16bytes timestamp write */
-   if (ts[idx].compute_walker[2] != 0 || ts[idx].compute_walker[3] != 0) {
+   /* Detect a 16/32 bytes timestamp write */
+   if (ts[idx].gfx20_postsync_data[1] != 0 ||
+       ts[idx].gfx20_postsync_data[2] != 0 ||
+       ts[idx].gfx20_postsync_data[3] != 0) {
+      if (device->info->ver >= 20) {
+         return intel_device_info_timebase_scale(device->info,
+                                                 ts[idx].gfx20_postsync_data[3]);
+      }
+
       /* The timestamp written by COMPUTE_WALKER::PostSync only as 32bits. We
        * need to rebuild the full 64bits using the previous timestamp. We
        * assume that utrace is reading the timestamp in order. Anyway
@@ -420,7 +439,7 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
        */
       uint64_t timestamp =
          (submit->last_full_timestamp & 0xffffffff00000000) |
-         (uint64_t) ts[idx].compute_walker[3];
+         (uint64_t) ts[idx].gfx125_postsync_data[3];
 
       return intel_device_info_timebase_scale(device->info, timestamp);
    }

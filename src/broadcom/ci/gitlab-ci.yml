@@ -194,5 +194,5 @@ v3dv-rpi5-vk-full:arm64:
   timeout: 2h
   variables:
     # Keep 10 minutes for boot + setup + uploading the artifacts at the end
-    TEST_PHASE_TIMEOUT: 170
+    TEST_PHASE_TIMEOUT: 110
     DEQP_FRACTION: 1

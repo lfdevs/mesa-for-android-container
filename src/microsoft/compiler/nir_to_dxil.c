@@ -6313,7 +6313,6 @@ optimize_nir(struct nir_shader *s, const struct nir_to_dxil_options *opts)
       NIR_PASS(progress, s, nir_lower_alu);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
-      NIR_PASS(progress, s, nir_lower_undef_to_zero);
       NIR_PASS(progress, s, nir_opt_deref);
       NIR_PASS(progress, s, dxil_nir_lower_upcast_phis, opts->lower_int16 ? 32 : 16);
       NIR_PASS(progress, s, nir_lower_64bit_phis);
@@ -6328,6 +6327,8 @@ optimize_nir(struct nir_shader *s, const struct nir_to_dxil_options *opts)
       progress = false;
       NIR_PASS(progress, s, nir_opt_algebraic_late);
    } while (progress);
+
+   NIR_PASS_V(s, nir_lower_undef_to_zero);
 }
 
 static
@@ -6599,7 +6600,7 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
     * might be too opaque for the pass to see that they're next to each other. */
    optimize_nir(s, opts);
 
-   /* Vectorize UBO/SSBO accesses aggressively. This can help increase alignment to enable us to do better
+/* Vectorize UBO/SSBO accesses aggressively. This can help increase alignment to enable us to do better
     * chunking of loads and stores after lowering bit sizes. Ignore load/store size limitations here, we'll
     * address them with lower_mem_access_bit_sizes */
    nir_load_store_vectorize_options vectorize_opts = {

@@ -943,7 +943,7 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
 
    fs->spilled_any_registers = true;
 
-   fs->last_scratch += size * REG_SIZE;
+   fs->last_scratch += align(size * REG_SIZE, REG_SIZE * reg_unit(devinfo));
 
    /* We're about to replace all uses of this register.  It no longer
     * conflicts with anything so we can get rid of its interference.
@@ -967,7 +967,7 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
              inst->src[i].nr == spill_reg) {
             int count = regs_read(inst, i);
             int subset_spill_offset = spill_offset +
-               ROUND_DOWN_TO(inst->src[i].offset, REG_SIZE);
+               ROUND_DOWN_TO(inst->src[i].offset, REG_SIZE * reg_unit(devinfo));
             brw_reg unspill_dst = alloc_spill_reg(count, ip);
 
             inst->src[i].nr = unspill_dst.nr;
@@ -996,7 +996,7 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
           inst->dst.nr == spill_reg &&
           inst->opcode != SHADER_OPCODE_UNDEF) {
          int subset_spill_offset = spill_offset +
-            ROUND_DOWN_TO(inst->dst.offset, REG_SIZE);
+            ROUND_DOWN_TO(inst->dst.offset, reg_unit(devinfo) * REG_SIZE);
          brw_reg spill_src = alloc_spill_reg(regs_written(inst), ip);
 
          inst->dst.nr = spill_src.nr;

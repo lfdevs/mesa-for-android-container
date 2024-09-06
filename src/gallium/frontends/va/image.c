@@ -248,7 +248,7 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    vlVaDriver *drv;
    vlVaSurface *surf;
    vlVaBuffer *img_buf;
-   VAImage *img;
+   VAImage *img = NULL;
    VAStatus status;
    struct pipe_screen *screen;
    struct pipe_resource *buf_resources[VL_NUM_COMPONENTS];
@@ -285,10 +285,12 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    if (!screen)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   mtx_lock(&drv->mutex);
    surf = handle_table_get(drv->htab, surface);
-
-   if (!surf || !surf->buffer)
-      return VA_STATUS_ERROR_INVALID_SURFACE;
+   if (!surf || !surf->buffer) {
+      status = VA_STATUS_ERROR_INVALID_SURFACE;
+      goto exit_on_error;
+   }
 
    if (surf->buffer->interlaced) {
       for (i = 0; i < ARRAY_SIZE(derive_interlaced_allowlist); i++)
@@ -298,25 +300,32 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
       if (i >= ARRAY_SIZE(derive_interlaced_allowlist) ||
           !screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
                                    PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-                                   PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE))
-         return VA_STATUS_ERROR_OPERATION_FAILED;
+                                   PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE)) {
+         status = VA_STATUS_ERROR_OPERATION_FAILED;
+         goto exit_on_error;
+      }
    } else if (util_format_get_num_planes(surf->buffer->buffer_format) >= 2 &&
               (!screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
                                        PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
                                        PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP) ||
                !surf->buffer->contiguous_planes)) {
-      return VA_STATUS_ERROR_OPERATION_FAILED;
+      status = VA_STATUS_ERROR_OPERATION_FAILED;
+      goto exit_on_error;
    }
 
    memset(buf_resources, 0, sizeof(buf_resources));
    surf->buffer->get_resources(surf->buffer, buf_resources);
 
-   if (!buf_resources[0])
-      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   if (!buf_resources[0]) {
+      status = VA_STATUS_ERROR_ALLOCATION_FAILED;
+      goto exit_on_error;
+   }
 
    img = CALLOC(1, sizeof(VAImage));
-   if (!img)
-      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   if (!img) {
+      status = VA_STATUS_ERROR_ALLOCATION_FAILED;
+      goto exit_on_error;
+   }
 
    img->format.fourcc = PipeFormatToVaFourcc(surf->buffer->buffer_format);
    img->buf = VA_INVALID_ID;
@@ -336,7 +345,6 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
       }
    }
 
-   mtx_lock(&drv->mutex);
    if (screen->resource_get_info) {
       screen->resource_get_info(screen, buf_resources[0], &stride,
                                 &offset);

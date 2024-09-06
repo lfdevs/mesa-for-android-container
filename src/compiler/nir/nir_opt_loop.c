@@ -557,7 +557,13 @@ merge_terminators(nir_builder *b, nir_if *dest_if, nir_if *src_if)
    }
 
    b->cursor = nir_before_src(&dest_if->condition);
-   nir_def *new_c = nir_ior(b, dest_if->condition.ssa, src_if->condition.ssa);
+
+   nir_def *new_c = NULL;
+   if (then_break)
+      new_c = nir_ior(b, dest_if->condition.ssa, src_if->condition.ssa);
+   else
+      new_c = nir_iand(b, dest_if->condition.ssa, src_if->condition.ssa);
+
    nir_src_rewrite(&dest_if->condition, new_c);
 }
 

@@ -1403,8 +1403,9 @@ get_reg_specified(ra_ctx& ctx, const RegisterFile& reg_file, RegClass rc,
       return false;
 
    if (rc.is_subdword()) {
-      PhysReg test_reg;
-      test_reg.reg_b = reg.reg_b & ~(sdw_def_info.second - 1);
+      PhysReg test_reg = reg;
+      if (sdw_def_info.second > rc.bytes())
+         test_reg.reg_b &= ~(align(sdw_def_info.first, sdw_def_info.second) - 1);
       if (reg_file.test(test_reg, sdw_def_info.second))
          return false;
    } else {

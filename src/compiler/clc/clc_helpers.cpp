@@ -886,10 +886,16 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
       return {};
    }
 
-   // GetResourcePath is a way to retrive the actual libclang resource dir based on a given binary
+   // GetResourcePath is a way to retrieve the actual libclang resource dir based on a given binary
    // or library.
-   auto clang_res_path =
-      fs::path(Driver::GetResourcesPath(std::string(clang_path), CLANG_RESOURCE_DIR)) / "include";
+   auto tmp_res_path =
+#if LLVM_VERSION_MAJOR >= 20
+      Driver::GetResourcesPath(std::string(clang_path));
+#else
+      Driver::GetResourcesPath(std::string(clang_path), CLANG_RESOURCE_DIR);
+#endif
+   auto clang_res_path = fs::path(tmp_res_path) / "include";
+
    free(clang_path);
 
    c->getHeaderSearchOpts().UseBuiltinIncludes = true;

@@ -1073,6 +1073,7 @@ vk_color_attachment_location_state_init(struct vk_color_attachment_location_stat
    for (uint32_t a = 0; a < MIN2(cal_info->colorAttachmentCount,
                                  MESA_VK_MAX_COLOR_ATTACHMENTS); a++) {
       cal->color_map[a] =
+         cal_info->pColorAttachmentLocations == NULL ? a :
          cal_info->pColorAttachmentLocations[a] == VK_ATTACHMENT_UNUSED ?
          MESA_VK_ATTACHMENT_UNUSED : cal_info->pColorAttachmentLocations[a];
    }
@@ -3103,6 +3104,7 @@ vk_common_CmdSetRenderingAttachmentLocationsKHR(
    assert(pLocationInfo->colorAttachmentCount <= MESA_VK_MAX_COLOR_ATTACHMENTS);
    for (uint32_t i = 0; i < pLocationInfo->colorAttachmentCount; i++) {
       uint8_t val =
+         pLocationInfo->pColorAttachmentLocations == NULL ? i :
          pLocationInfo->pColorAttachmentLocations[i] == VK_ATTACHMENT_UNUSED ?
          MESA_VK_ATTACHMENT_UNUSED : pLocationInfo->pColorAttachmentLocations[i];
       SET_DYN_VALUE(dyn, COLOR_ATTACHMENT_MAP, cal.color_map[i], val);

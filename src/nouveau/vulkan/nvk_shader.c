@@ -252,6 +252,15 @@ nvk_hash_graphics_state(struct vk_physical_device *device,
 
       const bool is_multiview = state->rp->view_mask != 0;
       _mesa_blake3_update(&blake3_ctx, &is_multiview, sizeof(is_multiview));
+
+      /* This doesn't impact the shader compile but it does go in the
+       * nvk_shader and gets [de]serialized along with the binary so we
+       * need to hash it.
+       */
+      if (state->ms && state->ms->sample_shading_enable) {
+         _mesa_blake3_update(&blake3_ctx, &state->ms->min_sample_shading,
+                             sizeof(state->ms->min_sample_shading));
+      }
    }
    _mesa_blake3_final(&blake3_ctx, blake3_out);
 }

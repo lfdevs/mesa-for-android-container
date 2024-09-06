@@ -281,6 +281,7 @@ get_interface_descriptor_data(struct anv_cmd_buffer *cmd_buffer,
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
 
    return (struct GENX(INTERFACE_DESCRIPTOR_DATA)) {
+      .SamplerCount = DIV_ROUND_UP(CLAMP(shader->bind_map.sampler_count, 0, 16), 4),
       .KernelStartPointer = shader->kernel.offset,
       .SamplerStatePointer = cmd_buffer->state.samplers[MESA_SHADER_COMPUTE].offset,
       .BindingTablePointer = cmd_buffer->state.binding_tables[MESA_SHADER_COMPUTE].offset,

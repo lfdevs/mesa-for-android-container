@@ -217,9 +217,13 @@ apply_hwconfig_item(struct intel_device_info *devinfo,
       break;
    case INTEL_HWCONFIG_TOTAL_VS_THREADS_POCS:
       break; /* ignore */
-   case INTEL_HWCONFIG_TOTAL_PS_THREADS:
-      DEVINFO_HWCONFIG(max_threads_per_psd, item->val[0] / 2);
+   case INTEL_HWCONFIG_TOTAL_PS_THREADS: {
+      unsigned threads = item->val[0];
+      if (devinfo->verx10 == 125)
+         threads /= 2;
+      DEVINFO_HWCONFIG(max_threads_per_psd, threads);
       break;
+   }
    case INTEL_HWCONFIG_URB_SIZE_PER_SLICE_IN_KB:
       DEVINFO_HWCONFIG(urb.size, item->val[0]);
       break;

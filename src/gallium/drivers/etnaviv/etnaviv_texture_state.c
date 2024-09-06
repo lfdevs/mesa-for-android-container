@@ -363,7 +363,6 @@ etna_emit_new_texture_state(struct etna_context *ctx)
       }
    }
    if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS))) {
-      struct etna_sampler_state *ss;
       struct etna_sampler_view *sv;
 
       for (int x = 0; x < VIVS_NTE_SAMPLER__LEN; ++x) {
@@ -372,6 +371,11 @@ etna_emit_new_texture_state(struct etna_context *ctx)
             /*10080*/ EMIT_STATE(NTE_SAMPLER_SIZE(x), sv->size);
          }
       }
+   }
+   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_SAMPLERS))) {
+      struct etna_sampler_state *ss;
+      struct etna_sampler_view *sv;
+
       for (int x = 0; x < VIVS_NTE_SAMPLER__LEN; ++x) {
          if ((1 << x) & active_samplers) {
             ss = etna_sampler_state(ctx->sampler[x]);
@@ -384,11 +388,6 @@ etna_emit_new_texture_state(struct etna_context *ctx)
             /*10100*/ EMIT_STATE(NTE_SAMPLER_LOG_SIZE(x), log_size);
          }
       }
-   }
-   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_SAMPLERS))) {
-      struct etna_sampler_state *ss;
-      struct etna_sampler_view *sv;
-
       for (int x = 0; x < VIVS_NTE_SAMPLER__LEN; ++x) {
          if ((1 << x) & active_samplers) {
             ss = etna_sampler_state(ctx->sampler[x]);
@@ -404,6 +403,7 @@ etna_emit_new_texture_state(struct etna_context *ctx)
                                  VIVS_TE_SAMPLER_LOD_CONFIG_MIN(min_lod));
          }
       }
+   }
    if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS))) {
       /* only LOD0 is valid for this register */
       for (int x = 0; x < VIVS_NTE_SAMPLER__LEN; ++x) {
@@ -413,6 +413,10 @@ etna_emit_new_texture_state(struct etna_context *ctx)
          }
       }
    }
+   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_SAMPLERS))) {
+      struct etna_sampler_state *ss;
+      struct etna_sampler_view *sv;
+
       for (int x = 0; x < VIVS_NTE_SAMPLER__LEN; ++x) {
          if ((1 << x) & active_samplers) {
             ss = etna_sampler_state(ctx->sampler[x]);
@@ -499,7 +503,6 @@ etna_emit_texture_state(struct etna_context *ctx)
       }
    }
    if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS))) {
-      struct etna_sampler_state *ss;
       struct etna_sampler_view *sv;
 
       for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
@@ -508,6 +511,11 @@ etna_emit_texture_state(struct etna_context *ctx)
             /*02040*/ EMIT_STATE(TE_SAMPLER_SIZE(x), sv->size);
          }
       }
+   }
+   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_SAMPLERS))) {
+      struct etna_sampler_state *ss;
+      struct etna_sampler_view *sv;
+
       for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
          if ((1 << x) & active_samplers) {
             ss = etna_sampler_state(ctx->sampler[x]);
@@ -520,11 +528,6 @@ etna_emit_texture_state(struct etna_context *ctx)
             /*02080*/ EMIT_STATE(TE_SAMPLER_LOG_SIZE(x), log_size);
          }
       }
-   }
-   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_SAMPLERS))) {
-      struct etna_sampler_state *ss;
-      struct etna_sampler_view *sv;
-
       for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
          if ((1 << x) & active_samplers) {
             ss = etna_sampler_state(ctx->sampler[x]);

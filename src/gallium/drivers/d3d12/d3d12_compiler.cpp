@@ -470,6 +470,8 @@ needs_vertex_reordering(struct d3d12_selection_context *sel_ctx, const struct pi
       return false;
 
    /* TODO add support for line primitives */
+   if (u_reduced_prim((mesa_prim)dinfo->mode) == MESA_PRIM_LINES)
+      return false;
 
    /* When flat shading a triangle and provoking vertex is not the first one, we use load_at_vertex.
       If not available for this adapter, or if it's a triangle strip, we need to reorder the vertices */
@@ -657,7 +659,7 @@ validate_geometry_shader_variant(struct d3d12_selection_context *sel_ctx)
    } else if (sel_ctx->needs_point_sprite_lowering) {
       key.passthrough = true;
    } else if (sel_ctx->needs_vertex_reordering) {
-      /* TODO support cases where flat shading (pv != 0) and xfb are enabled */
+      /* TODO support cases where flat shading (pv != 0) and xfb are enabled, or lines */
       key.provoking_vertex = sel_ctx->provoking_vertex;
       key.alternate_tri = sel_ctx->alternate_tri;
    }

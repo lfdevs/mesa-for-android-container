@@ -798,14 +798,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          const uint8_t ip = iview->planes[0].image_plane;
          const struct nvk_image_plane *plane = &image->planes[ip];
 
-         const VkAttachmentLoadOp load_op =
-            pRenderingInfo->pColorAttachments[i].loadOp;
-         if (!all_linear && !plane->nil.levels[0].tiling.is_tiled) {
-            if (load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
-               nvk_linear_render_copy(cmd, iview, render->area, true);
-
+         if (!all_linear && !plane->nil.levels[0].tiling.is_tiled)
             plane = &image->linear_tiled_shadow;
-         }
 
          const struct nil_image *nil_image = &plane->nil;
          const struct nil_image_level *level =
@@ -824,9 +818,11 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
             addr += nil_image_level_z_offset_B(nil_image,
                                                iview->vk.base_mip_level,
                                                iview->vk.base_array_layer);
+            assert(layer_count <= iview->vk.extent.depth);
          } else {
             addr += iview->vk.base_array_layer *
                     (uint64_t)nil_image->array_stride_B;
+            assert(layer_count <= iview->vk.layer_count);
          }
 
          P_MTHD(p, NV9097, SET_COLOR_TARGET_A(i));
@@ -937,7 +933,6 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       uint64_t addr = nvk_image_base_address(image, ip);
       uint32_t mip_level = iview->vk.base_mip_level;
       uint32_t base_array_layer = iview->vk.base_array_layer;
-      uint32_t layer_count = iview->vk.layer_count;
 
       if (nil_image.dim == NIL_IMAGE_DIM_3D) {
          uint64_t level_offset_B;
@@ -946,7 +941,9 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          addr += level_offset_B;
          mip_level = 0;
          base_array_layer = 0;
-         layer_count = iview->vk.extent.depth;
+         assert(layer_count <= iview->vk.extent.depth);
+      } else {
+         assert(layer_count <= iview->vk.layer_count);
       }
 
       const struct nil_image_level *level = &nil_image.levels[mip_level];
@@ -1032,6 +1029,23 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
    if (render->flags & VK_RENDERING_RESUMING_BIT)
       return;
 
+   for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++) {
+      const struct nvk_image_view *iview = render->color_att[i].iview;
+      if (iview == NULL)
+         continue;
+
+      const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
+      assert(iview->plane_count == 1);
+      const uint8_t ip = iview->planes[0].image_plane;
+      const struct nvk_image_plane *plane = &image->planes[ip];
+
+      const VkAttachmentLoadOp load_op =
+         pRenderingInfo->pColorAttachments[i].loadOp;
+      if (!all_linear && !plane->nil.levels[0].tiling.is_tiled &&
+          load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
+         nvk_linear_render_copy(cmd, iview, render->area, true);
+   }
+
    uint32_t clear_count = 0;
    VkClearAttachment clear_att[NVK_MAX_RTS + 1];
    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++) {
@@ -1092,18 +1106,20 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
 
-   const bool all_linear = nvk_rendering_all_linear(render);
-   for (uint32_t i = 0; i < render->color_att_count; i++) {
-      struct nvk_image_view *iview = render->color_att[i].iview;
-      if (iview == NULL)
-         continue;
+   if (!(render->flags & VK_RENDERING_SUSPENDING_BIT)) {
+      const bool all_linear = nvk_rendering_all_linear(render);
+      for (uint32_t i = 0; i < render->color_att_count; i++) {
+         struct nvk_image_view *iview = render->color_att[i].iview;
+         if (iview == NULL)
+            continue;
 
-      struct nvk_image *image = (struct nvk_image *)iview->vk.image;
-      const uint8_t ip = iview->planes[0].image_plane;
-      const struct nvk_image_plane *plane = &image->planes[ip];
-      if (!all_linear && !plane->nil.levels[0].tiling.is_tiled &&
-          render->color_att[i].store_op == VK_ATTACHMENT_STORE_OP_STORE)
-         nvk_linear_render_copy(cmd, iview, render->area, false);
+         struct nvk_image *image = (struct nvk_image *)iview->vk.image;
+         const uint8_t ip = iview->planes[0].image_plane;
+         const struct nvk_image_plane *plane = &image->planes[ip];
+         if (!all_linear && !plane->nil.levels[0].tiling.is_tiled &&
+             render->color_att[i].store_op == VK_ATTACHMENT_STORE_OP_STORE)
+            nvk_linear_render_copy(cmd, iview, render->area, false);
+      }
    }
 
    bool need_resolve = false;

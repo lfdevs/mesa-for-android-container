@@ -1,3 +1,10 @@
+mesa (24.2.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: dril fixes dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 06 Sep 2024 07:13:53 +0300
+
 mesa (24.2.1-4) unstable; urgency=medium
 
   * patches: Add patches to fix autopkgtest regressions in dril.

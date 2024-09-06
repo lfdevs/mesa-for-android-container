@@ -1638,7 +1638,7 @@ vk_video_encode_h264_sps(const StdVideoH264SequenceParameterSet *sps,
       if (vui->flags.timing_info_present_flag) {
          vl_bitstream_put_bits(&enc, 32, vui->num_units_in_tick);
          vl_bitstream_put_bits(&enc, 32, vui->time_scale);
-         vl_bitstream_put_bits(&enc, 32, vui->flags.fixed_frame_rate_flag);
+         vl_bitstream_put_bits(&enc, 1, vui->flags.fixed_frame_rate_flag);
       }
       vl_bitstream_put_bits(&enc, 1, vui->flags.nal_hrd_parameters_present_flag);
       if (vui->flags.nal_hrd_parameters_present_flag)

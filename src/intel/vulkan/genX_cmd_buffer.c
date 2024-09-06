@@ -520,7 +520,7 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
             MIN2(layer_count, aux_layers - base_layer);
 
          anv_image_hiz_op(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
-                          l, base_layer, level_layer_count, hiz_op);
+                          level, base_layer, level_layer_count, hiz_op);
       }
    }
 
