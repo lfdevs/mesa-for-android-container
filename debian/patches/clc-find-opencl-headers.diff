@@ -1,0 +1,35 @@
+From 1074d3ae313761e565f45709cb652f552d176291 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <llandwerlin@gmail.com>
+Date: Wed, 19 Jun 2024 23:52:57 +0300
+Subject: [PATCH] clc: find opencl headers from the installed llvm/clang
+ location
+
+A number of people report the headers not being found when running
+intel-clc. I've run into the same issue but only on the most recent
+Ubuntu version.
+
+Signed-off-by: Lionel Landwerlin <llandwerlin@gmail.com>
+---
+ src/compiler/clc/clc_helpers.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/compiler/clc/clc_helpers.cpp b/src/compiler/clc/clc_helpers.cpp
+index c95ed657038cf..49e3ea1ed0290 100644
+--- a/src/compiler/clc/clc_helpers.cpp
++++ b/src/compiler/clc/clc_helpers.cpp
+@@ -900,6 +900,12 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
+    c->getHeaderSearchOpts().AddPath(clang_res_path.string(),
+                                     clang::frontend::Angled,
+                                     false, false);
++
++   auto clang_install_res_path =
++      fs::path(LLVM_LIB_DIR) / "clang" / std::to_string(LLVM_VERSION_MAJOR) / "include";
++   c->getHeaderSearchOpts().AddPath(clang_install_res_path.string(),
++                                    clang::frontend::Angled,
++                                    false, false);
+ #endif
+ 
+    // Enable/Disable optional OpenCL C features. Some can be toggled via `OpenCLExtensionsAsWritten`
+-- 
+GitLab
+

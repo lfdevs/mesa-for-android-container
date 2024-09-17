@@ -1,3 +1,11 @@
+mesa (24.2.2-1+exp1) experimental; urgency=medium
+
+  * rules: Migrate to llvm-19.
+  * clc-find-opencl-headers.diff: Fix finding the opencl headers with
+    llvm-19.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 17 Sep 2024 14:43:27 +0300
+
 mesa (24.2.2-1) unstable; urgency=medium
 
   * New upstream release.
