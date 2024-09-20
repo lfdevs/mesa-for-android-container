@@ -201,6 +201,23 @@ if with_gallium_rusticl
   subdir('frontends/rusticl')
   subdir('targets/rusticl')
 endif
+if with_glx == 'xlib'
+  subdir('winsys/sw/xlib')
+  subdir('frontends/glx/xlib')
+  subdir('targets/libgl-xlib')
+endif
+if with_gallium_va
+  subdir('frontends/va')
+  if not with_dri
+    subdir('targets/va')
+  endif
+endif
+if with_gallium_vdpau
+  subdir('frontends/vdpau')
+  if not with_dri
+    subdir('targets/vdpau')
+  endif
+endif
 if with_dri
   subdir('frontends/dri')
   subdir('targets/dri')
@@ -209,22 +226,9 @@ if with_osmesa
   subdir('frontends/osmesa')
   subdir('targets/osmesa')
 endif
-if with_glx == 'xlib'
-  subdir('winsys/sw/xlib')
-  subdir('frontends/glx/xlib')
-  subdir('targets/libgl-xlib')
-endif
-if with_gallium_vdpau
-  subdir('frontends/vdpau')
-  subdir('targets/vdpau')
-endif
 if with_gallium_omx != 'disabled'
   subdir('frontends/omx')
   subdir('targets/omx')
-endif
-if with_gallium_va
-  subdir('frontends/va')
-  subdir('targets/va')
 endif
 if with_gallium_xa
   subdir('frontends/xa')

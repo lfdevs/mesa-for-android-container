@@ -1229,18 +1229,18 @@ iris_resource_from_user_memory(struct pipe_screen *pscreen,
                                const struct pipe_resource *templ,
                                void *user_memory)
 {
-   struct iris_screen *screen = (struct iris_screen *)pscreen;
-   struct iris_bufmgr *bufmgr = screen->bufmgr;
-   struct iris_resource *res = iris_alloc_resource(pscreen, templ);
-   if (!res)
-      return NULL;
-
    if (templ->target != PIPE_BUFFER &&
        templ->target != PIPE_TEXTURE_1D &&
        templ->target != PIPE_TEXTURE_2D)
       return NULL;
 
    if (templ->array_size > 1)
+      return NULL;
+
+   struct iris_screen *screen = (struct iris_screen *)pscreen;
+   struct iris_bufmgr *bufmgr = screen->bufmgr;
+   struct iris_resource *res = iris_alloc_resource(pscreen, templ);
+   if (!res)
       return NULL;
 
    size_t res_size = templ->width0;
@@ -2545,6 +2545,15 @@ iris_transfer_map(struct pipe_context *ctx,
    if (!(usage & PIPE_MAP_UNSYNCHRONIZED) &&
        can_promote_to_async(res, box, usage)) {
       usage |= PIPE_MAP_UNSYNCHRONIZED;
+   }
+
+   /* We are dealing with external memory object PIPE_BUFFER, disable
+    * async mapping because of sync issues.
+    */
+   if (!res->mod_info &&
+       res->external_format != PIPE_FORMAT_NONE &&
+       resource->target == PIPE_BUFFER) {
+      usage &= ~PIPE_MAP_UNSYNCHRONIZED;
    }
 
    /* Avoid using GPU copies for persistent/coherent buffers, as the idea

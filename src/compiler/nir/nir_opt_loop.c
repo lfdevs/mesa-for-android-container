@@ -6,6 +6,7 @@
 #include "nir/nir_builder.h"
 #include "nir.h"
 #include "nir_control_flow.h"
+#include "nir_loop_analyze.h"
 
 static bool
 is_block_empty(nir_block *block)
@@ -298,23 +299,6 @@ opt_loop_last_block(nir_block *block, bool is_trivial_continue, bool is_trivial_
 }
 
 static bool
-block_contains_work(nir_block *block)
-{
-   if (!nir_cf_node_is_last(&block->cf_node))
-      return true;
-   if (exec_list_is_empty(&block->instr_list))
-      return false;
-
-   /* Return false if the block contains only move-instructions. */
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_alu ||
-          !nir_op_is_vec_or_mov(nir_instr_as_alu(instr)->op))
-         return true;
-   }
-   return false;
-}
-
-static bool
 can_constant_fold(nir_scalar scalar, nir_block *loop_header)
 {
    if (nir_scalar_is_const(scalar))
@@ -393,17 +377,18 @@ opt_loop_peel_initial_break(nir_loop *loop)
    nir_if *nif = nir_cf_node_as_if(if_node);
    nir_block *last_then = nir_if_last_then_block(nif);
    if (!nir_block_ends_in_break(last_then) ||
-       !is_block_empty(nir_if_first_else_block(nif)))
+       !is_block_empty(nir_if_first_else_block(nif)) ||
+       !nir_is_trivial_loop_if(nif, last_then))
       return false;
 
-   /* If do_work_2() ends in a break (presumably with a continue somewhere)
-    * then we can't move it to the top of the loop ahead of do_work_1()
+   /* If do_work_2() ends in a break or other kind of jump then we can't move
+    * it to the top of the loop ahead of do_work_1().
     */
-   if (nir_block_ends_in_break(nir_loop_last_block(loop)))
+   if (nir_block_ends_in_jump(nir_loop_last_block(loop)))
       return false;
 
    /* Check that there is actual work to be done after the initial break. */
-   if (!block_contains_work(nir_cf_node_cf_tree_next(if_node)))
+   if (!nir_block_contains_work(nir_cf_node_cf_tree_next(if_node)))
       return false;
 
    /* For now, we restrict this optimization to cases where the outer IF
@@ -437,14 +422,7 @@ opt_loop_peel_initial_break(nir_loop *loop)
    header_block = nir_loop_first_block(loop);
 
    /* Clone and re-insert at the continue block. */
-   nir_block *cont_block = NULL;
-   set_foreach(header_block->predecessors, pred_entry) {
-      if (pred_entry->key != prev_block) {
-         cont_block = (nir_block *)pred_entry->key;
-         break;
-      }
-   }
-   assert(cont_block);
+   nir_block *cont_block = nir_loop_last_block(loop);
    struct hash_table *remap_table = _mesa_pointer_hash_table_create(NULL);
    nir_cf_list_clone_and_reinsert(&tmp, &loop->cf_node, nir_after_block(cont_block), remap_table);
    _mesa_hash_table_destroy(remap_table, NULL);

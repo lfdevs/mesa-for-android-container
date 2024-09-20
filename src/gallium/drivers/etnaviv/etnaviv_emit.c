@@ -180,7 +180,7 @@ emit_pre_halti5_state(struct etna_context *ctx)
       /*00838*/ EMIT_STATE(VS_START_PC, ctx->shader_state.VS_START_PC);
    }
    if (unlikely(dirty & (ETNA_DIRTY_SHADER))) {
-      for (int x = 0; x < 10; ++x) {
+      for (int x = 0; x < VIVS_PA_SHADER_ATTRIBUTES__LEN; ++x) {
          /*00A40*/ EMIT_STATE(PA_SHADER_ATTRIBUTES(x), ctx->shader_state.PA_SHADER_ATTRIBUTES[x]);
       }
    }

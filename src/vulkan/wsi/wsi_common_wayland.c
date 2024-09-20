@@ -1907,8 +1907,11 @@ wsi_wl_swapchain_acquire_next_image_explicit(struct wsi_swapchain *wsi_chain,
 #endif
    STACK_ARRAY_FINISH(images);
 
-   if (result == VK_SUCCESS)
+   if (result == VK_SUCCESS) {
       chain->images[*image_index].flow_id = id;
+      if (chain->suboptimal)
+         result = VK_SUBOPTIMAL_KHR;
+   }
 
    return result;
 }

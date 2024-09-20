@@ -64,7 +64,7 @@ can_omit_write(const fs_inst *inst)
       /* We can eliminate the destination write for ordinary instructions,
        * but not most SENDs.
        */
-      if (inst->opcode < 128 && inst->mlen == 0)
+      if (inst->opcode < NUM_BRW_OPCODES && inst->mlen == 0)
          return true;
 
       /* It might not be safe for other virtual opcodes. */

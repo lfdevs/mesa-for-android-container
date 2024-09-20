@@ -3093,6 +3093,8 @@ nir_block_ends_in_break(nir_block *block)
           nir_instr_as_jump(instr)->type == nir_jump_break;
 }
 
+bool nir_block_contains_work(nir_block *block);
+
 #define nir_foreach_instr(instr, block) \
    foreach_list_typed(nir_instr, instr, node, &(block)->instr_list)
 #define nir_foreach_instr_reverse(instr, block) \

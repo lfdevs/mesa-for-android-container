@@ -233,6 +233,7 @@ traces:
       label: [skip, timeout]
       checksum: 512c305e645e2ec62d94976d86f42f1b
     broadcom-rpi5:
+      label: [skip, timeout]
       checksum: 512c305e645e2ec62d94976d86f42f1b
 
   valve/portal-2-v2.trace:

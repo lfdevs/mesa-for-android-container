@@ -1,6 +1,5 @@
 dEQP-VK.memory.mapping.suballocation.sub.1048577.offset_0.size_1048575.subinvalidate_overlapping
 
-dEQP-VK.ray_tracing_pipeline.pipeline_library.configurations.(single|multi)threaded_compilation.*
 dEQP-VK.ray_tracing_pipeline.pipeline_no_null_shaders_flag.*
 
 # New CTS flakes in 1.3.8.0

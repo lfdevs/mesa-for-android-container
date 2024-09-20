@@ -304,13 +304,6 @@ is_trivial_bcsel(const nir_instr *instr, bool allow_non_phi_src)
    return true;
 }
 
-static bool
-is_block_empty(nir_block *block)
-{
-   return nir_cf_node_is_last(&block->cf_node) &&
-          exec_list_is_empty(&block->instr_list);
-}
-
 /**
  * Splits ALU instructions that have a source that is a phi node
  *
@@ -395,8 +388,10 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop, nir_opt_if_options options)
    if (continue_block == header_block)
       return false;
 
-   /* If the continue block is otherwise empty, leave it that way. */
-   if (is_block_empty(continue_block))
+   /* If the continue block is otherwise empty, leave it that way. This must match
+    * opt_loop_peel_initial_break so that this optimization doesn't fight that one.
+    */
+   if (!nir_block_contains_work(continue_block))
       return false;
 
    nir_foreach_instr_safe(instr, header_block) {
@@ -699,6 +694,13 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
    }
 
    return progress;
+}
+
+static bool
+is_block_empty(nir_block *block)
+{
+   return nir_cf_node_is_last(&block->cf_node) &&
+          exec_list_is_empty(&block->instr_list);
 }
 
 /* Walk all the phis in the block immediately following the if statement and

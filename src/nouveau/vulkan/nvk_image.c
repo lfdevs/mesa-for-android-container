@@ -717,6 +717,7 @@ nvk_image_init(struct nvk_device *dev,
       usage |= NIL_IMAGE_USAGE_SPARSE_RESIDENCY_BIT;
    }
 
+   uint32_t explicit_row_stride_B = 0;
    if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       /* Modifiers are not supported with YCbCr */
       assert(image->plane_count == 1);
@@ -726,6 +727,12 @@ nvk_image_init(struct nvk_device *dev,
                               IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
       if (mod_explicit_info) {
          image->vk.drm_format_mod = mod_explicit_info->drmFormatModifier;
+         /* Normally with explicit modifiers, the client specifies all strides,
+          * however in our case, we can only really make use of this in the linear
+          * case, and we can only create 2D non-array linear images, so ultimately
+          * we only care about the row stride. 
+          */
+         explicit_row_stride_B = mod_explicit_info->pPlaneLayouts->rowPitch;
       } else {
          const struct VkImageDrmFormatModifierListCreateInfoEXT *mod_list_info =
             vk_find_struct_const(pCreateInfo->pNext,
@@ -757,6 +764,7 @@ nvk_image_init(struct nvk_device *dev,
             .levels = pCreateInfo->mipLevels,
             .samples = pCreateInfo->samples,
             .usage = usage & ~NIL_IMAGE_USAGE_LINEAR_BIT,
+            .explicit_row_stride_B = 0,
          };
          image->linear_tiled_shadow.nil =
             nil_image_new(&pdev->info, &tiled_shadow_nil_info);
@@ -785,6 +793,7 @@ nvk_image_init(struct nvk_device *dev,
          .levels = pCreateInfo->mipLevels,
          .samples = pCreateInfo->samples,
          .usage = usage,
+         .explicit_row_stride_B = explicit_row_stride_B,
       };
 
       image->planes[plane].nil = nil_image_new(&pdev->info, &nil_info);
@@ -804,6 +813,7 @@ nvk_image_init(struct nvk_device *dev,
          .levels = pCreateInfo->mipLevels,
          .samples = pCreateInfo->samples,
          .usage = usage,
+         .explicit_row_stride_B = 0,
       };
 
       image->stencil_copy_temp.nil =

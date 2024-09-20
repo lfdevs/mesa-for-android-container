@@ -101,10 +101,6 @@ v3d_resource_bo_alloc(struct v3d_resource *rsc)
         struct pipe_screen *pscreen = prsc->screen;
         struct v3d_bo *bo;
 
-        /* never replace a mapped bo */
-        if (rsc->bo && rsc->bo->map)
-                return false;
-
         /* Buffers may be read using ldunifa, which prefetches the next
          * 4 bytes after a read. If the buffer's size is exactly a multiple
          * of a page size and the shader reads the last 4 bytes with ldunifa
@@ -177,6 +173,10 @@ rebind_sampler_views(struct v3d_context *v3d,
 
                         struct v3d_sampler_view *sview =
                                 v3d_sampler_view(psview);
+
+                        if (sview->serial_id == rsc->serial_id)
+                                continue;
+
                         struct v3d_device_info *devinfo =
                                 &v3d->screen->devinfo;
 
@@ -842,6 +842,7 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
         v3d_setup_slices(rsc, 0, tmpl->bind & PIPE_BIND_SHARED);
 
         if (screen->ro && (tmpl->bind & PIPE_BIND_SCANOUT)) {
+                assert(!rsc->tiled);
                 struct winsys_handle handle;
                 struct pipe_resource scanout_tmpl = {
                         .target = prsc->target,
@@ -912,7 +913,7 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                 rsc->tiled = true;
                 break;
         case DRM_FORMAT_MOD_INVALID:
-                rsc->tiled = screen->ro == NULL;
+                rsc->tiled = false;
                 break;
         default:
                 switch(fourcc_mod_broadcom_mod(whandle->modifier)) {

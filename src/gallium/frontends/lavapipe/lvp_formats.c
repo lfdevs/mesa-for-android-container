@@ -518,9 +518,9 @@ fill_sparse_image_format_properties(struct lvp_physical_device *pdev, VkImageTyp
    prop->aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
    prop->flags = 0;
    prop->imageGranularity = (VkExtent3D){
-      .width = util_format_get_tilesize(pformat, type + 1, samples, 0) * util_format_get_blockwidth(pformat),
-      .height = util_format_get_tilesize(pformat, type + 1, samples, 1) * util_format_get_blockheight(pformat),
-      .depth = util_format_get_tilesize(pformat, type + 1, samples, 2) * util_format_get_blockdepth(pformat),
+      .width = util_format_get_tilesize(pformat, type + 1, samples, 0),
+      .height = util_format_get_tilesize(pformat, type + 1, samples, 1),
+      .depth = util_format_get_tilesize(pformat, type + 1, samples, 2),
    };
 }
 

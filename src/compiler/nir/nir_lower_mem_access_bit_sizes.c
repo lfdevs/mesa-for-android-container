@@ -88,6 +88,8 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
                                bit_size, align_mul, whole_align_offset,
                                offset_is_const, cb_data);
 
+   assert(requested.num_components > 0);
+   assert(requested.bit_size > 0);
    assert(util_is_power_of_two_nonzero(align_mul));
    assert(util_is_power_of_two_nonzero(requested.align));
    if (requested.num_components == num_components &&
@@ -112,6 +114,8 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
                                            offset_is_const, cb_data);
 
       unsigned chunk_bytes;
+      assert(requested.num_components > 0);
+      assert(requested.bit_size > 0);
       assert(util_is_power_of_two_nonzero(requested.align));
       if (align_mul < requested.align) {
          /* For this case, we need to be able to shift the value so we assume
@@ -249,6 +253,8 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
                                bit_size, align_mul, whole_align_offset,
                                offset_is_const, cb_data);
 
+   assert(requested.num_components > 0);
+   assert(requested.bit_size > 0);
    assert(util_is_power_of_two_nonzero(align_mul));
    assert(util_is_power_of_two_nonzero(requested.align));
    if (requested.num_components == num_components &&
@@ -289,6 +295,8 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
 
       uint32_t chunk_bytes = requested.num_components * (requested.bit_size / 8);
 
+      assert(requested.num_components > 0);
+      assert(requested.bit_size > 0);
       assert(util_is_power_of_two_nonzero(requested.align));
       if (chunk_align < requested.align ||
           chunk_bytes > max_chunk_bytes) {

@@ -771,10 +771,10 @@ nir_instr_set_add_or_rewrite(struct set *instr_set, nir_instr *instr,
        * exactly identical in every other way so, once we've set the exact
        * bit, they are the same.
        */
-      if (instr->type == nir_instr_type_alu && nir_instr_as_alu(instr)->exact)
-         nir_instr_as_alu(match)->exact = true;
-      if (instr->type == nir_instr_type_alu)
-         nir_instr_as_alu(match)->fp_fast_math = nir_instr_as_alu(instr)->fp_fast_math;
+      if (instr->type == nir_instr_type_alu) {
+         nir_instr_as_alu(match)->exact |= nir_instr_as_alu(instr)->exact;
+         nir_instr_as_alu(match)->fp_fast_math |= nir_instr_as_alu(instr)->fp_fast_math;
+      }
 
       nir_def_rewrite_uses(def, new_def);
 

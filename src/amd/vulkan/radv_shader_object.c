@@ -565,6 +565,45 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
    return VK_SUCCESS;
 }
 
+static bool
+radv_shader_object_linking_enabled(uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos)
+{
+   const bool has_linked_spirv = createInfoCount > 1 &&
+                                 !!(pCreateInfos[0].flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) &&
+                                 pCreateInfos[0].codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT;
+
+   if (!has_linked_spirv)
+      return false;
+
+   /* Gather the available shader stages. */
+   VkShaderStageFlagBits stages = 0;
+   for (unsigned i = 0; i < createInfoCount; i++) {
+      const VkShaderCreateInfoEXT *pCreateInfo = &pCreateInfos[i];
+      stages |= pCreateInfo->stage;
+   }
+
+   for (unsigned i = 0; i < createInfoCount; i++) {
+      const VkShaderCreateInfoEXT *pCreateInfo = &pCreateInfos[i];
+
+      /* Force disable shaders linking when the next stage of VS/TES isn't present because the
+       * driver would need to compile all shaders twice due to shader variants. This is probably
+       * less optimal than compiling unlinked shaders.
+       */
+      if ((pCreateInfo->stage & VK_SHADER_STAGE_VERTEX_BIT) &&
+          (pCreateInfo->nextStage & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_GEOMETRY_BIT)) &&
+          !(stages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_GEOMETRY_BIT)))
+         return false;
+
+      if ((pCreateInfo->stage & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) &&
+          (pCreateInfo->nextStage & VK_SHADER_STAGE_GEOMETRY_BIT) && !(stages & VK_SHADER_STAGE_GEOMETRY_BIT))
+         return false;
+
+      assert(pCreateInfo->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT);
+   }
+
+   return true;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 radv_CreateShadersEXT(VkDevice _device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                       const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders)
@@ -572,14 +611,8 @@ radv_CreateShadersEXT(VkDevice _device, uint32_t createInfoCount, const VkShader
    VkResult result = VK_SUCCESS;
    unsigned i = 0;
 
-   if (createInfoCount > 1 && !!(pCreateInfos[0].flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) &&
-       pCreateInfos[0].codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
-      for (unsigned j = 0; j < createInfoCount; j++) {
-         assert(pCreateInfos[i].flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT);
-      }
-
+   if (radv_shader_object_linking_enabled(createInfoCount, pCreateInfos))
       return radv_shader_object_create_linked(_device, createInfoCount, pCreateInfos, pAllocator, pShaders);
-   }
 
    for (; i < createInfoCount; i++) {
       VkResult r;

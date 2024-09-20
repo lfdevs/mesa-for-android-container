@@ -1150,6 +1150,7 @@ static bool si_vid_is_target_buffer_supported(struct pipe_screen *screen,
             target->buffer_format == PIPE_FORMAT_R10G10B10X2_UNORM;
 
          if (sscreen->info.vcn_ip_version < VCN_2_0_0 ||
+             sscreen->info.vcn_ip_version == VCN_2_2_0 ||
              sscreen->info.vcn_ip_version >= VCN_5_0_0 ||
              sscreen->debug_flags & DBG(NO_EFC))
             return false;

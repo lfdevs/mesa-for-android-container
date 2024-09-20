@@ -114,6 +114,7 @@ st_convert_image(const struct st_context *st, const struct gl_image_unit *u,
          } else {
             img->u.tex.first_layer = u->_Layer;
             img->u.tex.last_layer = u->_Layer;
+            img->u.tex.is_2d_view_of_3d = true;
          }
       } else {
          img->u.tex.first_layer = u->_Layer + stObj->Attrib.MinLayer;

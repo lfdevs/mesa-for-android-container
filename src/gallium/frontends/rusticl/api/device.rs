@@ -196,7 +196,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             // TODO proper retrival from devices
             CL_DEVICE_MEM_BASE_ADDR_ALIGN => cl_prop::<cl_uint>(0x1000),
             CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE => {
-                cl_prop::<cl_uint>(size_of::<cl_ulong16>() as cl_uint)
+                cl_prop::<cl_uint>(16 * size_of::<cl_ulong>() as cl_uint)
             }
             CL_DEVICE_NAME => cl_prop::<&str>(&dev.screen().name()),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_CHAR => cl_prop::<cl_uint>(1),

@@ -327,6 +327,9 @@ lvp_create_imageview(const struct lvp_image_view *iv, VkFormat plane_format, uns
    } else {
       view.u.tex.first_layer = iv->vk.base_array_layer,
       view.u.tex.last_layer = iv->vk.base_array_layer + iv->vk.layer_count - 1;
+
+      if (view.resource->target == PIPE_TEXTURE_3D)
+         view.u.tex.is_2d_view_of_3d = true;
    }
    view.u.tex.level = iv->vk.base_mip_level;
    return view;

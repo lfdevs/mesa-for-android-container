@@ -89,7 +89,8 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
       enum radeon_bo_flag flags = RADEON_FLAG_VIRTUAL;
       if (pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
          flags |= RADEON_FLAG_REPLAYABLE;
-      if (pCreateInfo->usage & VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)
+      if (buffer->vk.usage &
+          (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
          flags |= RADEON_FLAG_32BIT;
 
       uint64_t replay_address = 0;

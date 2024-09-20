@@ -682,10 +682,14 @@ _mesa_PopAttrib(void)
    unsigned mask = attr->Mask;
 
    /* Flush current attribs. This must be done before PopAttribState is
-    * applied.
+    * applied. Also reset the attributes stored in vbo, as after this we'll
+    * change Current directly, and these changed values would've been then
+    * overridden by another flush in the future.
     */
-   if (mask & GL_CURRENT_BIT)
+   if ((mask & GL_CURRENT_BIT) && ctx->Driver.NeedFlush) {
       FLUSH_CURRENT(ctx, 0);
+      vbo_reset_all_attr(ctx);
+   }
 
    /* Only restore states that have been changed since glPushAttrib. */
    mask &= ctx->PopAttribState;

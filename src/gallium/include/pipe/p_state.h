@@ -533,6 +533,7 @@ struct pipe_image_view
          unsigned last_layer:16;      /**< last layer to use for array textures */
          unsigned level:8;            /**< mipmap level to use */
          bool single_layer_view;      /**< single layer view of array */
+         bool is_2d_view_of_3d;
       } tex;
       struct {
          unsigned offset;   /**< offset in bytes */

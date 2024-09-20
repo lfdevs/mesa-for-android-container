@@ -281,7 +281,7 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
 
       /* Add excess constant offset to the index. */
       unsigned const_off = attrib_offset + count_format_bytes(f, 0, start);
-      if (attrib_stride && const_off > attrib_stride) {
+      if (attrib_stride && const_off >= attrib_stride) {
          index = nir_iadd_imm(b, base_index, const_off / attrib_stride);
          const_off %= attrib_stride;
       }

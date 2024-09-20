@@ -4796,7 +4796,8 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
                    nir_def *resource_def, bool a64 = false)
 {
    /* Create a build at the location of the resource_intel intrinsic */
-   fs_builder ubld8 = bld.exec_all().group(8, 0);
+   fs_builder ubld = bld.exec_all().group(8 * reg_unit(ntb.devinfo), 0);
+   const unsigned grf_size = REG_SIZE * reg_unit(ntb.devinfo);
 
    struct rebuild_resource resources = {};
    resources.idx = 0;
@@ -4872,8 +4873,8 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
       case nir_instr_type_load_const: {
          nir_load_const_instr *load_const =
             nir_instr_as_load_const(instr);
-         ubld8.MOV(brw_imm_d(load_const->value[0].i32),
-                   &ntb.resource_insts[def->index]);
+         ubld.MOV(brw_imm_d(load_const->value[0].i32),
+                  &ntb.resource_insts[def->index]);
          break;
       }
 
@@ -4888,72 +4889,72 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
          for (unsigned s = 0; s < nir_op_infos[alu->op].num_inputs; s++) {
             srcs[s] = offset(
                ntb.resource_insts[alu->src[s].src.ssa->index]->dst,
-               ubld8, alu->src[s].swizzle[0]);
+               ubld, alu->src[s].swizzle[0]);
             assert(srcs[s].file != BAD_FILE);
          }
 
          switch (alu->op) {
          case nir_op_iadd:
-            ubld8.ADD(srcs[0].file != IMM ? srcs[0] : srcs[1],
-                      srcs[0].file != IMM ? srcs[1] : srcs[0],
-                      &ntb.resource_insts[def->index]);
+            ubld.ADD(srcs[0].file != IMM ? srcs[0] : srcs[1],
+                     srcs[0].file != IMM ? srcs[1] : srcs[0],
+                     &ntb.resource_insts[def->index]);
             break;
          case nir_op_iadd3: {
-            brw_reg dst = ubld8.vgrf(srcs[0].type);
+            brw_reg dst = ubld.vgrf(srcs[0].type);
             ntb.resource_insts[def->index] =
-               ubld8.ADD3(dst,
-                          srcs[1].file == IMM ? srcs[1] : srcs[0],
-                          srcs[1].file == IMM ? srcs[0] : srcs[1],
-                          srcs[2]);
+               ubld.ADD3(dst,
+                         srcs[1].file == IMM ? srcs[1] : srcs[0],
+                         srcs[1].file == IMM ? srcs[0] : srcs[1],
+                         srcs[2]);
             break;
          }
          case nir_op_ushr: {
             enum brw_reg_type utype =
                brw_type_with_size(srcs[0].type,
                                   brw_type_size_bits(srcs[0].type));
-            ubld8.SHR(retype(srcs[0], utype),
-                      retype(srcs[1], utype),
-                      &ntb.resource_insts[def->index]);
+            ubld.SHR(retype(srcs[0], utype),
+                     retype(srcs[1], utype),
+                     &ntb.resource_insts[def->index]);
             break;
          }
          case nir_op_iand:
-            ubld8.AND(srcs[0], srcs[1], &ntb.resource_insts[def->index]);
+            ubld.AND(srcs[0], srcs[1], &ntb.resource_insts[def->index]);
             break;
          case nir_op_ishl:
-            ubld8.SHL(srcs[0], srcs[1], &ntb.resource_insts[def->index]);
+            ubld.SHL(srcs[0], srcs[1], &ntb.resource_insts[def->index]);
             break;
          case nir_op_mov:
             break;
          case nir_op_ult32: {
             if (brw_type_size_bits(srcs[0].type) != 32)
                break;
-            brw_reg dst = ubld8.vgrf(srcs[0].type);
+            brw_reg dst = ubld.vgrf(srcs[0].type);
             enum brw_reg_type utype =
                brw_type_with_size(srcs[0].type,
                                   brw_type_size_bits(srcs[0].type));
             ntb.resource_insts[def->index] =
-               ubld8.CMP(dst,
-                         retype(srcs[0], utype),
-                         retype(srcs[1], utype),
-                         brw_cmod_for_nir_comparison(alu->op));
+               ubld.CMP(dst,
+                        retype(srcs[0], utype),
+                        retype(srcs[1], utype),
+                        brw_cmod_for_nir_comparison(alu->op));
             break;
          }
          case nir_op_b2i32:
-            ubld8.MOV(negate(retype(srcs[0], BRW_TYPE_D)),
-                      &ntb.resource_insts[def->index]);
+            ubld.MOV(negate(retype(srcs[0], BRW_TYPE_D)),
+                     &ntb.resource_insts[def->index]);
             break;
          case nir_op_unpack_64_2x32_split_x:
-            ubld8.MOV(subscript(srcs[0], BRW_TYPE_D, 0),
-                      &ntb.resource_insts[def->index]);
+            ubld.MOV(subscript(srcs[0], BRW_TYPE_D, 0),
+                     &ntb.resource_insts[def->index]);
             break;
          case nir_op_unpack_64_2x32_split_y:
-            ubld8.MOV(subscript(srcs[0], BRW_TYPE_D, 1),
-                      &ntb.resource_insts[def->index]);
+            ubld.MOV(subscript(srcs[0], BRW_TYPE_D, 1),
+                     &ntb.resource_insts[def->index]);
             break;
          case nir_op_pack_64_2x32_split: {
-            brw_reg dst = ubld8.vgrf(BRW_TYPE_Q);
+            brw_reg dst = ubld.vgrf(BRW_TYPE_Q);
             ntb.resource_insts[def->index] =
-               ubld8.emit(FS_OPCODE_PACK, dst, srcs[0], srcs[1]);
+               ubld.emit(FS_OPCODE_PACK, dst, srcs[0], srcs[1]);
          }
          default:
             break;
@@ -4975,10 +4976,18 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
 
             unsigned base_offset = nir_intrinsic_base(intrin);
             unsigned load_offset = nir_src_as_uint(intrin->src[0]);
-            brw_reg src = brw_uniform_reg(base_offset / 4,
-                                          brw_type_with_size(BRW_TYPE_D, intrin->def.bit_size));
-            src.offset = load_offset + base_offset % 4;
-            ubld8.MOV(src, &ntb.resource_insts[def->index]);
+
+            enum brw_reg_type type =
+               brw_type_with_size(BRW_TYPE_D, intrin->def.bit_size);
+            brw_reg dst_data = ubld.vgrf(type, intrin->def.num_components);
+
+            for (unsigned i = 0; i < intrin->def.num_components; i++) {
+               brw_reg src = brw_uniform_reg(base_offset / 4, type);
+               src.offset = load_offset + base_offset % 4 + i * intrin->def.bit_size / 8;
+               fs_inst *inst = ubld.MOV(byte_offset(dst_data, i * grf_size), src);
+               if (i == 0)
+                  ntb.resource_insts[def->index] = inst;
+            }
             break;
          }
 
@@ -4986,36 +4995,44 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
             assert(ntb.s.stage == MESA_SHADER_MESH ||
                    ntb.s.stage == MESA_SHADER_TASK);
             const task_mesh_thread_payload &payload = ntb.s.task_mesh_payload();
-            brw_reg data = retype(
-               offset(payload.inline_parameter, 1,
-                      nir_intrinsic_align_offset(intrin)),
-               brw_type_with_size(BRW_TYPE_D, intrin->def.bit_size));
-            ubld8.MOV(data, &ntb.resource_insts[def->index]);
+            enum brw_reg_type type =
+               brw_type_with_size(BRW_TYPE_D, intrin->def.bit_size);
+            brw_reg dst_data = ubld.vgrf(type, intrin->def.num_components);
+
+            for (unsigned i = 0; i < intrin->def.num_components; i++) {
+               brw_reg src = retype(
+                  offset(payload.inline_parameter, 1,
+                         nir_intrinsic_align_offset(intrin) + i * intrin->def.bit_size / 8),
+                  brw_type_with_size(BRW_TYPE_D, intrin->def.bit_size));
+               fs_inst *inst = ubld.MOV(byte_offset(dst_data, i * grf_size), src);
+               if (i == 0)
+                  ntb.resource_insts[def->index] = inst;
+            }
             break;
          }
 
          case nir_intrinsic_load_btd_local_arg_addr_intel: {
             assert(brw_shader_stage_is_bindless(ntb.s.stage));
             const bs_thread_payload &payload = ntb.s.bs_payload();
-            ubld8.MOV(retype(payload.local_arg_ptr, BRW_TYPE_Q),
-                      &ntb.resource_insts[def->index]);
+            ubld.MOV(retype(payload.local_arg_ptr, BRW_TYPE_Q),
+                     &ntb.resource_insts[def->index]);
             break;
          }
 
          case nir_intrinsic_load_btd_global_arg_addr_intel: {
             assert(brw_shader_stage_is_bindless(ntb.s.stage));
             const bs_thread_payload &payload = ntb.s.bs_payload();
-            ubld8.MOV(retype(payload.global_arg_ptr, BRW_TYPE_Q),
-                      &ntb.resource_insts[def->index]);
+            ubld.MOV(retype(payload.global_arg_ptr, BRW_TYPE_Q),
+                     &ntb.resource_insts[def->index]);
             break;
          }
 
          case nir_intrinsic_load_reloc_const_intel: {
             uint32_t id = nir_intrinsic_param_idx(intrin);
-            brw_reg dst = ubld8.vgrf(BRW_TYPE_D);
+            brw_reg dst = ubld.vgrf(BRW_TYPE_D);
             ntb.resource_insts[def->index] =
-               ubld8.emit(SHADER_OPCODE_MOV_RELOC_IMM, dst,
-                          brw_imm_ud(id), brw_imm_ud(0));
+               ubld.emit(SHADER_OPCODE_MOV_RELOC_IMM, dst,
+                         brw_imm_ud(id), brw_imm_ud(0));
             break;
          }
 
@@ -5026,11 +5043,11 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
             brw_reg src_data = retype(ntb.ssa_values[def->index], type);
             unsigned n_components = ntb.s.alloc.sizes[src_data.nr] /
                                     (bld.dispatch_width() / 8);
-            brw_reg dst_data = ubld8.vgrf(type, n_components);
-            ntb.resource_insts[def->index] = ubld8.MOV(dst_data, src_data);
+            brw_reg dst_data = ubld.vgrf(type, n_components);
+            ntb.resource_insts[def->index] = ubld.MOV(dst_data, src_data);
             for (unsigned i = 1; i < n_components; i++) {
-               ubld8.MOV(offset(dst_data, ubld8, i),
-                         offset(src_data, bld, i));
+               ubld.MOV(offset(dst_data, ubld, i),
+                        offset(src_data, bld, i));
             }
             break;
          }

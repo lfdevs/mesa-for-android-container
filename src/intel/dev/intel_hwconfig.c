@@ -219,7 +219,7 @@ apply_hwconfig_item(struct intel_device_info *devinfo,
       break; /* ignore */
    case INTEL_HWCONFIG_TOTAL_PS_THREADS: {
       unsigned threads = item->val[0];
-      if (devinfo->verx10 == 125)
+      if (devinfo->ver == 12)
          threads /= 2;
       DEVINFO_HWCONFIG(max_threads_per_psd, threads);
       break;

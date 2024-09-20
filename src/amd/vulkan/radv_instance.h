@@ -50,6 +50,7 @@ struct radv_instance {
       bool disable_shrink_image_store;
       bool disable_aniso_single_level;
       bool disable_trunc_coord;
+      bool disable_depth_storage;
       bool zero_vram;
       bool disable_sinking_load_input_fs;
       bool flush_before_query_copy;

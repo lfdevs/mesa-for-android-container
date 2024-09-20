@@ -887,8 +887,11 @@ radv_rt_pipeline_compile(struct radv_device *device, const VkRayTracingPipelineC
    /* Skip the shaders cache when any of the below are true:
     * - shaders are captured because it's for debugging purposes
     * - ray history is enabled
+    * - group handles are saved and reused on a subsequent run (ie. capture/replay)
     */
-   if (keep_executable_info || emit_ray_history) {
+   if (keep_executable_info || emit_ray_history ||
+       (pipeline->base.base.create_flags &
+        VK_PIPELINE_CREATE_2_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR)) {
       skip_shaders_cache = true;
    }
 

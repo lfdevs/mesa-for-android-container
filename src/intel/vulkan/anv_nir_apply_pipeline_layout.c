@@ -43,6 +43,7 @@ enum binding_property {
    BINDING_PROPERTY_NORMAL            = BITFIELD_BIT(0),
    BINDING_PROPERTY_PUSHABLE          = BITFIELD_BIT(1),
    BINDING_PROPERTY_EMBEDDED_SAMPLER  = BITFIELD_BIT(2),
+   BINDING_PROPERTY_NO_BINDING_TABLE  = BITFIELD_BIT(3),
 };
 
 struct apply_pipeline_layout_state {
@@ -64,7 +65,7 @@ struct apply_pipeline_layout_state {
       bool desc_buffer_used;
       uint8_t desc_offset;
 
-      struct {
+      struct anv_binding_apply_layout {
          uint8_t use_count;
 
          /* Binding table offset */
@@ -123,7 +124,7 @@ addr_format_for_desc_type(VkDescriptorType desc_type,
    }
 }
 
-static void
+static struct anv_binding_apply_layout *
 add_binding(struct apply_pipeline_layout_state *state,
             uint32_t set, uint32_t binding)
 {
@@ -152,6 +153,8 @@ add_binding(struct apply_pipeline_layout_state *state,
 
    if (set_layout->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT)
       state->set[set].binding[binding].properties |= BINDING_PROPERTY_EMBEDDED_SAMPLER;
+
+   return &state->set[set].binding[binding];
 }
 
 const VkDescriptorSetLayoutCreateFlags non_pushable_set_flags =
@@ -191,12 +194,12 @@ add_binding_type(struct apply_pipeline_layout_state *state,
       state->set[set].binding[binding].properties |= BINDING_PROPERTY_PUSHABLE;
 }
 
-static void
+static struct anv_binding_apply_layout *
 add_deref_src_binding(struct apply_pipeline_layout_state *state, nir_src src)
 {
    nir_deref_instr *deref = nir_src_as_deref(src);
    nir_variable *var = nir_deref_instr_get_variable(deref);
-   add_binding(state, var->data.descriptor_set, var->data.binding);
+   return add_binding(state, var->data.descriptor_set, var->data.binding);
 }
 
 static void
@@ -207,7 +210,33 @@ add_tex_src_binding(struct apply_pipeline_layout_state *state,
    if (deref_src_idx < 0)
       return;
 
-   add_deref_src_binding(state, tex->src[deref_src_idx].src);
+   struct anv_binding_apply_layout *layout =
+      add_deref_src_binding(state, tex->src[deref_src_idx].src);
+
+   /* This is likely a fallout of Wa_14020375314 but hasn't fully be
+    * understood by HW people yet.
+    *
+    * In HSD-18037984222 we reported that the render target index given
+    * through a descriptor in the address register is broken. I think the same
+    * issue happening here when we use a descriptor given by the address
+    * register for the sampler and when the
+    * RENDER_SURFACE_STATE::EnableSamplerRoutetoLSC bit is enabled. This seems
+    * to affect only texelFetch() operations.
+    *
+    * We probably don't want to loose the performance benefit of the route to
+    * LSC so instead we disable dynamic descriptors by checking if a binding
+    * array is accessed with a non constant value.
+    *
+    * Fixes a bunch of tests in dEQP-VK.binding_model.*.index_push_constant.*
+    */
+   if (state->pdevice->info.ver >= 20 && tex->op == nir_texop_txf) {
+      nir_deref_instr *deref = nir_src_as_deref(tex->src[deref_src_idx].src);
+      if (deref->deref_type != nir_deref_type_var) {
+         assert(deref->deref_type == nir_deref_type_array);
+         if (!nir_src_is_const(deref->arr.index))
+            layout->properties |= BINDING_PROPERTY_NO_BINDING_TABLE;
+      }
+   }
 }
 
 static bool
@@ -2078,13 +2107,18 @@ add_embedded_sampler_entry(struct apply_pipeline_layout_state *state,
 
 static bool
 binding_should_use_surface_binding_table(const struct apply_pipeline_layout_state *state,
-                                         const struct anv_descriptor_set_binding_layout *binding)
+                                         const struct anv_descriptor_set_binding_layout *bind_layout,
+                                         uint32_t set, uint32_t binding)
 {
-   if ((binding->data & ANV_DESCRIPTOR_BTI_SURFACE_STATE) == 0)
+   if ((bind_layout->data & ANV_DESCRIPTOR_BTI_SURFACE_STATE) == 0)
       return false;
 
    if (state->pdevice->always_use_bindless &&
-       (binding->data & ANV_DESCRIPTOR_SURFACE))
+       (bind_layout->data & ANV_DESCRIPTOR_SURFACE))
+      return false;
+
+   if (state->set[set].binding[binding].properties &
+       BINDING_PROPERTY_NO_BINDING_TABLE)
       return false;
 
    return true;
@@ -2281,7 +2315,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
       state.set[set].binding[b].surface_offset = BINDLESS_OFFSET;
       state.set[set].binding[b].sampler_offset = BINDLESS_OFFSET;
 
-      if (binding_should_use_surface_binding_table(&state, binding)) {
+      if (binding_should_use_surface_binding_table(&state, binding, set, b)) {
          if (map->surface_count + array_size * array_multiplier > MAX_BINDING_TABLE_SIZE ||
              anv_descriptor_requires_bindless(pdevice, set_layout, binding) ||
              brw_shader_stage_requires_bindless_resources(shader->info.stage)) {

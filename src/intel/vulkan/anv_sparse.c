@@ -741,11 +741,13 @@ anv_sparse_bind_vm_bind(struct anv_device *device,
 {
    struct anv_queue *queue = submit->queue;
 
-   if (!queue)
-      assert(submit->wait_count == 0 && submit->signal_count == 0);
-
    VkResult result = device->kmd_backend->vm_bind(device, submit,
                                                   ANV_VM_BIND_FLAG_NONE);
+   if (!queue) {
+      assert(submit->wait_count == 0 && submit->signal_count == 0 &&
+             submit->binds_len == 1);
+      return result;
+   }
 
    if (result == VK_ERROR_OUT_OF_HOST_MEMORY) {
       /* If we get this, the system is under memory pressure. First we

@@ -728,6 +728,36 @@ lower_ucp_vs(struct ir3_shader_variant *so)
    return so->type == last_geom_stage;
 }
 
+static nir_mem_access_size_align
+ir3_mem_access_size_align(nir_intrinsic_op intrin, uint8_t bytes,
+                 uint8_t bit_size, uint32_t align,
+                 uint32_t align_offset, bool offset_is_const,
+                 const void *cb_data)
+{
+   align = nir_combined_align(align, align_offset);
+   assert(util_is_power_of_two_nonzero(align));
+
+   /* But if we're only aligned to 1 byte, use 8-bit loads. If we're only
+    * aligned to 2 bytes, use 16-bit loads, unless we needed 8-bit loads due to
+    * the size.
+    */
+   if ((bytes & 1) || (align == 1))
+      bit_size = 8;
+   else if ((bytes & 2) || (align == 2))
+      bit_size = 16;
+   else if (bit_size >= 32)
+      bit_size = 32;
+
+   if (intrin == nir_intrinsic_load_ubo)
+      bit_size = 32;
+
+   return (nir_mem_access_size_align){
+      .num_components = MAX2(1, MIN2(bytes / (bit_size / 8), 4)),
+      .bit_size = bit_size,
+      .align = bit_size / 8,
+   };
+}
+
 void
 ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 {
@@ -817,7 +847,14 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
       OPT_V(s, ir3_nir_lower_64b_regs);
    }
 
-   progress |= OPT(s, ir3_nir_lower_wide_load_store);
+   nir_lower_mem_access_bit_sizes_options mem_bit_size_options = {
+      .modes = nir_var_mem_constant | nir_var_mem_ubo |
+               nir_var_mem_global | nir_var_mem_shared |
+               nir_var_function_temp,
+      .callback = ir3_mem_access_size_align,
+   };
+
+   progress |= OPT(s, nir_lower_mem_access_bit_sizes, &mem_bit_size_options);
    progress |= OPT(s, ir3_nir_lower_64b_global);
    progress |= OPT(s, ir3_nir_lower_64b_intrinsics);
    progress |= OPT(s, ir3_nir_lower_64b_undef);

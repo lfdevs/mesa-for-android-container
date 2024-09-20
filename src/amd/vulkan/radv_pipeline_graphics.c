@@ -1177,9 +1177,6 @@ radv_link_shaders(const struct radv_device *device, struct radv_shader_stage *pr
           !(producer->info.outputs_written & VARYING_BIT_VIEWPORT)) {
          NIR_PASS(_, consumer, radv_nir_lower_viewport_to_zero);
       }
-
-      /* Lower the view index to map on the layer. */
-      NIR_PASS(_, consumer, radv_nir_lower_view_index, producer->info.stage == MESA_SHADER_MESH);
    }
 
    if (producer_stage->key.optimisations_disabled || consumer_stage->key.optimisations_disabled)
@@ -1424,6 +1421,9 @@ static void
 radv_link_fs(struct radv_shader_stage *fs_stage, const struct radv_graphics_state_key *gfx_state)
 {
    assert(fs_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
+
+   /* Lower the view index to map on the layer. */
+   NIR_PASS(_, fs_stage->nir, radv_nir_lower_view_index);
 
    radv_remove_color_exports(gfx_state, fs_stage->nir);
 }

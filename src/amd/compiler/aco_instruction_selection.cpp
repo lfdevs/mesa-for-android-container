@@ -12889,7 +12889,7 @@ load_unaligned_vs_attrib(Builder& bld, PhysReg dst, Operand desc, Operand index,
    } else {
       for (unsigned i = 0; i < size; i++) {
          Definition def(i ? scratch.advance(i * 4 - 4) : dst, v1);
-         bld.mubuf(aco_opcode::buffer_load_ubyte, def, desc, index, Operand::c32(0u), offset + i,
+         bld.mubuf(aco_opcode::buffer_load_ubyte, def, desc, index, Operand::c32(offset + i), 0,
                    false, true);
       }
    }
@@ -13072,11 +13072,11 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
                else if (vtx_info->chan_byte_size == 8)
                   bld.mtbuf(aco_opcode::tbuffer_load_format_xy,
                             Definition(dest.advance(j * 8u), v2), Operand(cur_desc, s4),
-                            fetch_index, Operand::c32(0u), dfmt, nfmt, offset, false, true);
+                            fetch_index, Operand::c32(offset), dfmt, nfmt, 0, false, true);
                else
                   bld.mtbuf(aco_opcode::tbuffer_load_format_x, Definition(dest.advance(j * 4u), v1),
-                            Operand(cur_desc, s4), fetch_index, Operand::c32(0u), dfmt, nfmt,
-                            offset, false, true);
+                            Operand(cur_desc, s4), fetch_index, Operand::c32(offset), dfmt, nfmt,
+                            0, false, true);
             }
 
             unsigned slots = vtx_info->chan_byte_size == 8 && vtx_info->num_channels > 2 ? 2 : 1;

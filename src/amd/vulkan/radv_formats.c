@@ -108,12 +108,16 @@ radv_is_atomic_format_supported(VkFormat format)
 bool
 radv_is_storage_image_format_supported(const struct radv_physical_device *pdev, VkFormat format)
 {
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    const struct util_format_description *desc = vk_format_description(format);
    unsigned data_format, num_format;
    if (format == VK_FORMAT_UNDEFINED)
       return false;
 
    if (vk_format_has_stencil(format))
+      return false;
+
+   if (instance->drirc.disable_depth_storage && vk_format_has_depth(format))
       return false;
 
    data_format = radv_translate_tex_dataformat(pdev, desc, vk_format_get_first_non_void_channel(format));

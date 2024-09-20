@@ -131,10 +131,10 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
 
    zink_batch_descriptor_reset(screen, bs);
 
-   util_dynarray_foreach(&bs->freed_sparse_backing_bos, struct zink_bo, bo) {
+   while (util_dynarray_contains(&bs->freed_sparse_backing_bos, struct zink_bo*)) {
+      struct zink_bo *bo = util_dynarray_pop(&bs->freed_sparse_backing_bos, struct zink_bo*);
       zink_bo_unref(screen, bo);
    }
-   util_dynarray_clear(&bs->freed_sparse_backing_bos);
 
    /* programs are refcounted and batch-tracked */
    set_foreach_remove(&bs->programs, entry) {

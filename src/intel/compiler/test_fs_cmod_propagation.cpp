@@ -1542,6 +1542,49 @@ TEST_F(cmod_propagation_test, ior_f2i_nz)
    EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 1)->conditional_mod);
 }
 
+TEST_F(cmod_propagation_test, uand_b2f_g)
+{
+   brw_reg dest = bld.vgrf(BRW_TYPE_UD);
+   brw_reg src0 = bld.vgrf(BRW_TYPE_UD);
+   brw_reg src1 = bld.vgrf(BRW_TYPE_UD);
+
+   bld.AND(dest, src0, src1);
+   bld.MOV(bld.null_reg_f(), negate(retype(dest, BRW_TYPE_D)))
+   ->conditional_mod = BRW_CONDITIONAL_G;
+
+   /* = Before =
+    * 0: and(8)           dest:UD  src0:UD  src1:UD
+    * 1: mov.g(8)         null:F  -dest:D
+    *
+    * = After =
+    * No changes.
+    *
+    * If src0 and src1 are 0xffffffff, then dest:D will be interpreted as -1,
+    * and -dest:D will be 1, which is > 0.
+    * If the cmod was propagated (and.l(8) dest:UD  src0:UD  src1:UD),
+    * dest:UD can never be < 0.
+    *
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+
+   EXPECT_EQ(BRW_OPCODE_AND, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+
+   /* This is ASSERT_EQ because if end_ip is 0, the instruction(block0, 1)
+    * calls will not work properly, and the test will give weird results.
+    */
+   ASSERT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_G, instruction(block0, 1)->conditional_mod);
+   EXPECT_TRUE(instruction(block0, 1)->src[0].negate);
+}
 
 void
 cmod_propagation_test::test_mov_prop(enum brw_conditional_mod cmod,

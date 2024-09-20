@@ -858,8 +858,7 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
    bind_ops =
       pan_kmod_dev_alloc_transient(vm->dev, sizeof(*bind_ops) * op_count);
    if (!bind_ops) {
-      mesa_loge("drm_panthor_vm_bind_op[%d] array allocation failed",
-                MIN2(op_count, 1));
+      mesa_loge("drm_panthor_vm_bind_op[%d] array allocation failed", op_count);
       goto out_free_sync_ops;
    }
 
@@ -867,7 +866,7 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
       .vm_id = vm->handle,
       .flags =
          mode != PAN_KMOD_VM_OP_MODE_IMMEDIATE ? DRM_PANTHOR_VM_BIND_ASYNC : 0,
-      .ops = DRM_PANTHOR_OBJ_ARRAY(MIN2(op_count, 1), bind_ops),
+      .ops = DRM_PANTHOR_OBJ_ARRAY(op_count, bind_ops),
    };
 
    uint64_t vm_orig_sync_point = 0, vm_new_sync_point = 0;

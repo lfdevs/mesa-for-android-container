@@ -82,6 +82,7 @@ pub struct ImageInitInfo {
     pub samples: u32,
     pub usage: ImageUsageFlags,
     pub modifier: u64,
+    pub explicit_row_stride_B: u32,
 }
 
 /// Represents the data layout of a single slice (level + lod) of an image.
@@ -203,6 +204,10 @@ impl Image {
                 // Align the size to tiles
                 let lvl_tiling_ext_B = lvl_tiling.extent_B();
                 lvl_ext_B = lvl_ext_B.align(&lvl_tiling_ext_B);
+                assert!(
+                    info.explicit_row_stride_B == 0
+                        || info.explicit_row_stride_B == lvl_ext_B.width
+                );
 
                 image.levels[level as usize] = ImageLevel {
                     offset_B: layer_size_B,
@@ -217,11 +222,19 @@ impl Image {
                 // NVIDIA can't do linear and multisampling
                 assert!(image.sample_layout == SampleLayout::_1x1);
 
+                let row_stride = if info.explicit_row_stride_B > 0 {
+                    assert!(info.modifier == DRM_FORMAT_MOD_LINEAR);
+                    assert!(info.explicit_row_stride_B % 128 == 0);
+                    info.explicit_row_stride_B
+                } else {
+                    lvl_ext_B.width.next_multiple_of(128)
+                };
+
                 image.levels[level as usize] = ImageLevel {
                     offset_B: layer_size_B,
                     tiling,
                     // Row stride needs to be aligned to 128B for render to work
-                    row_stride_B: lvl_ext_B.width.next_multiple_of(128),
+                    row_stride_B: row_stride,
                 };
 
                 assert!(lvl_ext_B.depth == 1);

@@ -252,6 +252,8 @@ can_sink_out_of_loop(nir_intrinsic_instr *intrin)
     * by nir_lower_non_uniform_access.
     */
    return intrin->intrinsic != nir_intrinsic_load_ubo &&
+          intrin->intrinsic != nir_intrinsic_load_ubo_vec4 &&
+          intrin->intrinsic != nir_intrinsic_inverse_ballot &&
           intrin->intrinsic != nir_intrinsic_load_ssbo;
 }
 

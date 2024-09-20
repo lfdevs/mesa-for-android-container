@@ -375,7 +375,7 @@ radv_enc_flush_headers(struct radv_cmd_buffer *cmd_buffer)
 static void
 radv_enc_code_ue(struct radv_cmd_buffer *cmd_buffer, unsigned int value)
 {
-   int x = -1;
+   unsigned int x = 0;
    unsigned int ue_code = value + 1;
    value += 1;
 
@@ -383,9 +383,9 @@ radv_enc_code_ue(struct radv_cmd_buffer *cmd_buffer, unsigned int value)
       value = (value >> 1);
       x += 1;
    }
-
-   unsigned int ue_length = (x << 1) + 1;
-   radv_enc_code_fixed_bits(cmd_buffer, ue_code, ue_length);
+   if (x > 1)
+     radv_enc_code_fixed_bits(cmd_buffer, 0, x - 1);
+   radv_enc_code_fixed_bits(cmd_buffer, ue_code, x);
 }
 
 static void
@@ -1135,11 +1135,21 @@ radv_enc_ctx(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInfoKHR *inf
    struct radv_image_plane *dpb_chroma = NULL;
    uint64_t va = 0;
    uint32_t luma_pitch = 0;
+   int max_ref_slot_idx = 0;
 
-   if (info->pSetupReferenceSlot)
+   if (info->pSetupReferenceSlot) {
       dpb_iv = radv_image_view_from_handle(info->pSetupReferenceSlot->pPictureResource->imageViewBinding);
-   else if (info->referenceSlotCount > 0)
+      if (info->pSetupReferenceSlot->slotIndex > max_ref_slot_idx)
+         max_ref_slot_idx = info->pSetupReferenceSlot->slotIndex;
+   }
+
+   if (info->referenceSlotCount > 0) {
       dpb_iv = radv_image_view_from_handle(info->pReferenceSlots[0].pPictureResource->imageViewBinding);
+      for (unsigned i = 0; i < info->referenceSlotCount; i++) {
+         if (info->pReferenceSlots[i].slotIndex > max_ref_slot_idx)
+            max_ref_slot_idx = info->pReferenceSlots[i].slotIndex;
+      }
+   }
 
    if (dpb_iv) {
       dpb = dpb_iv->image;
@@ -1163,10 +1173,10 @@ radv_enc_ctx(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInfoKHR *inf
    radeon_emit(cs, swizzle_mode);
    radeon_emit(cs, luma_pitch);                   // rec_luma_pitch
    radeon_emit(cs, luma_pitch);                   // rec_luma_pitch0); //rec_chromma_pitch
-   radeon_emit(cs, info->referenceSlotCount + 1); // num_reconstructed_pictures
+   radeon_emit(cs, max_ref_slot_idx + 1); // num_reconstructed_pictures
 
    int i;
-   for (i = 0; i < info->referenceSlotCount + 1; i++) {
+   for (i = 0; i < max_ref_slot_idx + 1; i++) {
       radeon_emit(cs, dpb_luma ? dpb_luma->surface.u.gfx9.surf_offset + i * dpb_luma->surface.u.gfx9.surf_slice_size
                                : 0); // luma offset
       radeon_emit(cs, dpb_chroma
@@ -1944,41 +1954,55 @@ radv_GetEncodedVideoSessionParametersKHR(VkDevice device,
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR: {
       const struct VkVideoEncodeH264SessionParametersGetInfoKHR *h264_get_info =
          vk_find_struct_const(pVideoSessionParametersInfo->pNext, VIDEO_ENCODE_H264_SESSION_PARAMETERS_GET_INFO_KHR);
+      size_t sps_size = 0, pps_size = 0;
       if (h264_get_info->writeStdSPS) {
          const StdVideoH264SequenceParameterSet *sps =
             vk_video_find_h264_enc_std_sps(&templ->vk, h264_get_info->stdSPSId);
          assert(sps);
-         vk_video_encode_h264_sps(sps, size_limit, &total_size, pData);
+         vk_video_encode_h264_sps(sps, size_limit, &sps_size, pData);
       }
       if (h264_get_info->writeStdPPS) {
          const StdVideoH264PictureParameterSet *pps =
             vk_video_find_h264_enc_std_pps(&templ->vk, h264_get_info->stdPPSId);
          assert(pps);
+         char *data_ptr = pData ? (char *)pData + sps_size : NULL;
          vk_video_encode_h264_pps(pps, templ->vk.h264_enc.profile_idc == STD_VIDEO_H264_PROFILE_IDC_HIGH, size_limit,
-                                  &total_size, pData);
+                                  &pps_size, data_ptr);
       }
+      total_size = sps_size + pps_size;
       break;
    }
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR: {
       const struct VkVideoEncodeH265SessionParametersGetInfoKHR *h265_get_info =
          vk_find_struct_const(pVideoSessionParametersInfo->pNext, VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_KHR);
+      size_t sps_size = 0, pps_size = 0, vps_size = 0;
       if (h265_get_info->writeStdVPS) {
          const StdVideoH265VideoParameterSet *vps = vk_video_find_h265_enc_std_vps(&templ->vk, h265_get_info->stdVPSId);
          assert(vps);
-         vk_video_encode_h265_vps(vps, size_limit, &total_size, pData);
+         vk_video_encode_h265_vps(vps, size_limit, &vps_size, pData);
       }
       if (h265_get_info->writeStdSPS) {
          const StdVideoH265SequenceParameterSet *sps =
             vk_video_find_h265_enc_std_sps(&templ->vk, h265_get_info->stdSPSId);
          assert(sps);
-         vk_video_encode_h265_sps(sps, size_limit, &total_size, pData);
+         char *data_ptr = pData ? (char *)pData + vps_size : NULL;
+         vk_video_encode_h265_sps(sps, size_limit, &sps_size, data_ptr);
       }
       if (h265_get_info->writeStdPPS) {
          const StdVideoH265PictureParameterSet *pps =
             vk_video_find_h265_enc_std_pps(&templ->vk, h265_get_info->stdPPSId);
          assert(pps);
-         vk_video_encode_h265_pps(pps, size_limit, &total_size, pData);
+         char *data_ptr = pData ? (char *)pData + vps_size + sps_size : NULL;
+         vk_video_encode_h265_pps(pps, size_limit, &pps_size, data_ptr);
+
+         if (pFeedbackInfo) {
+            struct VkVideoEncodeH265SessionParametersFeedbackInfoKHR *h265_feedback_info =
+               vk_find_struct(pFeedbackInfo->pNext, VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_KHR);
+            pFeedbackInfo->hasOverrides = VK_TRUE;
+            h265_feedback_info->hasStdPPSOverrides = VK_TRUE;
+         }
       }
+      total_size = sps_size + pps_size + vps_size;
       break;
    }
    default:

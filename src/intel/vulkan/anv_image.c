@@ -1598,16 +1598,12 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
       if (isl_drm_modifier_needs_display_layout(image->vk.drm_format_mod))
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISPLAY_BIT;
 
-      if (device->info->ver >= 20 &&
+      /* Disable compression on gen12+ if the selected/requested modifier
+       * doesn't support it. Prior to that we can use a private binding for
+       * the aux surface and it should be transparent to users.
+       */
+      if (device->info->ver >= 12 &&
           !isl_drm_modifier_has_aux(image->vk.drm_format_mod)) {
-         /* TODO: On Xe2+, we cannot support modifiers that don't support
-          * compression because such support requires an explicit resolve
-          * that hasn't been implemented.
-          *
-          * We disable this in anv_AllocateMemory() as well.
-          *
-          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/11537
-          */
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
    }
@@ -1893,18 +1889,6 @@ anv_image_init_from_create_info(struct anv_device *device,
       .vk_info = pCreateInfo,
       .no_private_binding_alloc = no_private_binding_alloc,
    };
-
-   /* For dmabuf imports, configure the primary surface without support for
-    * compression if the modifier doesn't specify it. This helps to create
-    * VkImages with memory requirements that are compatible with the buffers
-    * apps provide.
-    */
-   const struct VkImageDrmFormatModifierExplicitCreateInfoEXT *mod_explicit_info =
-      vk_find_struct_const(pCreateInfo->pNext,
-                           IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
-   if (mod_explicit_info &&
-       !isl_drm_modifier_has_aux(mod_explicit_info->drmFormatModifier))
-      create_info.isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
 
    return anv_image_init(device, image, &create_info);
 }

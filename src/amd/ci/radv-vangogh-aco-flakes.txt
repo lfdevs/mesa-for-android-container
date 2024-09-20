@@ -1,6 +1,5 @@
 dEQP-VK.fragment_shading_barycentric.fast_linked_library.data.provoking_last.dynamic.triangle_list.array2.dvec2
 
-dEQP-VK.ray_tracing_pipeline.pipeline_library.configurations.(single|multi)threaded_compilation.*
 dEQP-VK.ray_tracing_pipeline.pipeline_no_null_shaders_flag.*
 
 # Nightly run expectations update

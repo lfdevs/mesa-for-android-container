@@ -197,6 +197,7 @@ struct lp_static_texture_state
 
    /* pipe_texture's state */
    enum pipe_texture_target target:5;        /**< PIPE_TEXTURE_* */
+   enum pipe_texture_target res_target:5;
    unsigned pot_width:1;     /**< is the width a power of two? */
    unsigned pot_height:1;
    unsigned pot_depth:1;

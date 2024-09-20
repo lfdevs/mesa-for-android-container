@@ -123,6 +123,8 @@ lp_sampler_static_texture_state(struct lp_static_texture_state *state,
    else
       state->target = view->target;
 
+   state->res_target = texture->target;
+
    state->pot_width = util_is_power_of_two_or_zero(texture->width0);
    state->pot_height = util_is_power_of_two_or_zero(texture->height0);
    state->pot_depth = util_is_power_of_two_or_zero(texture->depth0);
@@ -166,13 +168,17 @@ lp_sampler_static_texture_state_image(struct lp_static_texture_state *state,
    assert(state->swizzle_a < PIPE_SWIZZLE_NONE);
 
    state->target = resource->target;
+   state->res_target = resource->target;
    state->pot_width = util_is_power_of_two_or_zero(resource->width0);
    state->pot_height = util_is_power_of_two_or_zero(resource->height0);
    state->pot_depth = util_is_power_of_two_or_zero(resource->depth0);
    state->level_zero_only = view->u.tex.level == 0;
    state->tiled = !!(resource->flags & PIPE_RESOURCE_FLAG_SPARSE);
-   if (state->tiled)
+   if (state->tiled) {
       state->tiled_samples = resource->nr_samples;
+      if (view->u.tex.is_2d_view_of_3d)
+         state->target = PIPE_TEXTURE_2D;
+   }
 
    /*
     * the layer / element / level parameters are all either dynamic
@@ -2222,6 +2228,21 @@ lp_build_tiled_sample_offset(struct lp_build_context *bld,
 
    assert(static_texture_state->tiled);
 
+   uint32_t res_dimensions = 1;
+   switch (static_texture_state->res_target) {
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_2D_ARRAY:
+      res_dimensions = 2;
+      break;
+   case PIPE_TEXTURE_3D:
+      res_dimensions = 3;
+      break;
+   default:
+      break;
+   }
+
    uint32_t dimensions = 1;
    switch (static_texture_state->target) {
    case PIPE_TEXTURE_2D:
@@ -2244,9 +2265,9 @@ lp_build_tiled_sample_offset(struct lp_build_context *bld,
    };
 
    uint32_t sparse_tile_size[3] = {
-      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 0) * block_size[0],
-      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 1) * block_size[1],
-      util_format_get_tilesize(format, dimensions, static_texture_state->tiled_samples, 2) * block_size[2],
+      util_format_get_tilesize(format, res_dimensions, static_texture_state->tiled_samples, 0) * block_size[0],
+      util_format_get_tilesize(format, res_dimensions, static_texture_state->tiled_samples, 1) * block_size[1],
+      util_format_get_tilesize(format, res_dimensions, static_texture_state->tiled_samples, 2) * block_size[2],
    };
 
    LLVMValueRef sparse_tile_size_log2[3] = {

@@ -1,3 +1,10 @@
+mesa (24.2.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Fix build on armel/armhf with llvm-19.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 20 Sep 2024 21:57:00 +0300
+
 mesa (24.2.2-1+exp1) experimental; urgency=medium
 
   * rules: Migrate to llvm-19.

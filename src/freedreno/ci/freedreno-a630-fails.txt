@@ -15,8 +15,6 @@ spec@ext_external_objects@vk-image-overwrite@RGBA 8 UINT optimal: Failed to crea
 spec@ext_external_objects@vk-image-overwrite@RGBA 8 UNORM optimal: Failed to create texture from GL memory object.,Fail
 spec@ext_external_objects@vk-stencil-display@D32S8,Fail
 
-KHR-GL46.gpu_shader_fp64.fp64.max_uniform_components,Fail
-
 KHR-GL46.shader_image_load_store.basic-allFormats-store,Fail
 KHR-GL46.shading_language_420pack.binding_images,Fail
 

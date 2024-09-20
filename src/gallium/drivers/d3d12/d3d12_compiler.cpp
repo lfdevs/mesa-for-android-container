@@ -804,9 +804,9 @@ d3d12_shader_key_hash(const d3d12_shader_key *key)
    hash += key->prev_varying_outputs;
    hash += key->common_all;
    if (key->next_has_frac_inputs)
-      hash = _mesa_hash_data_with_seed(&key->next_varying_frac_inputs, sizeof(d3d12_shader_selector::varying_frac_inputs), hash);
+      hash = _mesa_hash_data_with_seed(key->next_varying_frac_inputs, sizeof(d3d12_shader_selector::varying_frac_inputs), hash);
    if (key->prev_has_frac_outputs)
-      hash = _mesa_hash_data_with_seed(&key->prev_varying_frac_outputs, sizeof(d3d12_shader_selector::varying_frac_outputs), hash);
+      hash = _mesa_hash_data_with_seed(key->prev_varying_frac_outputs, sizeof(d3d12_shader_selector::varying_frac_outputs), hash);
    switch (key->stage) {
    case PIPE_SHADER_VERTEX:
       /* (Probably) not worth the bit extraction for needs_format_emulation and
