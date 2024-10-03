@@ -1040,6 +1040,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_WRITE_MASKS) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_BLEND_ENABLES) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS)) {
@@ -1624,6 +1625,20 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
    const bool protected = cmd_buffer->vk.pool->flags &
                           VK_COMMAND_POOL_CREATE_PROTECTED_BIT;
+
+#if INTEL_WA_16011107343_GFX_VER
+   /* Will be emitted in front of every draw instead */
+   if (intel_needs_workaround(cmd_buffer->device->info, 16011107343) &&
+       anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_CTRL))
+      BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_HS);
+#endif
+
+#if INTEL_WA_22018402687_GFX_VER
+   /* Will be emitted in front of every draw instead */
+   if (intel_needs_workaround(cmd_buffer->device->info, 22018402687) &&
+       anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
+      BITSET_CLEAR(hw_state->dirty, ANV_GFX_STATE_DS);
+#endif
 
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_URB)) {
       genX(urb_workaround)(cmd_buffer, &pipeline->urb_cfg);

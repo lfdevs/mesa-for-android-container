@@ -635,6 +635,9 @@ struct iris_binding_table {
    uint64_t used_mask[IRIS_SURFACE_GROUP_COUNT];
 
    uint64_t samplers_used_mask;
+
+   /** Whether the first render target is a null fb surface */
+   uint8_t use_null_rt;
 };
 
 /**

@@ -2660,12 +2660,6 @@ dri2_wl_swrast_put_image2(__DRIdrawable *draw, int op, int x, int y, int w,
    char *src, *dst;
 
    assert(copy_width <= stride);
-   if (wl_proxy_get_version((struct wl_proxy *)dri2_surf->wl_surface_wrapper) <
-       WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION)
-      wl_surface_damage(dri2_surf->wl_surface_wrapper, 0, 0, INT32_MAX, INT32_MAX);
-   else
-      wl_surface_damage_buffer(dri2_surf->wl_surface_wrapper,
-                               x, y, w, h);
 
    dst = dri2_wl_swrast_get_backbuffer_data(dri2_surf);
 
@@ -2746,6 +2740,13 @@ dri2_wl_swrast_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
    (void)swrast_update_buffers(dri2_surf);
 
    dri2_wl_swrast_attach_backbuffer(dri2_surf);
+
+   /* If the compositor doesn't support damage_buffer, we deliberately
+    * ignore the damage region and post maximum damage, due to
+    * https://bugs.freedesktop.org/78190 */
+   if (!n_rects || !try_damage_buffer(dri2_surf, rects, n_rects))
+      wl_surface_damage(dri2_surf->wl_surface_wrapper, 0, 0, INT32_MAX,
+                        INT32_MAX);
 
    /* guarantee full copy for partial update */
    int w = n_rects == 1 ? (rects[2] - rects[0]) : 0;

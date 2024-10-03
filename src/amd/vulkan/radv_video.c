@@ -692,6 +692,9 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
            pVideoProfile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR))
          return VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR;
 
+      pCapabilities->pictureAccessGranularity.width = VK_VIDEO_H265_CTU_MAX_WIDTH;
+      pCapabilities->pictureAccessGranularity.height = VK_VIDEO_H265_CTU_MAX_HEIGHT;
+
       pCapabilities->maxDpbSlots = NUM_H2645_REFS;
       pCapabilities->maxActiveReferencePictures = NUM_H2645_REFS;
       ext->flags = VK_VIDEO_ENCODE_H265_CAPABILITY_PER_PICTURE_TYPE_MIN_MAX_QP_BIT_KHR;

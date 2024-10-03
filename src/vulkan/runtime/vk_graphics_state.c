@@ -782,7 +782,7 @@ vk_multisample_sample_locations_state_init(
 
    assert(ms->sample_locations == NULL);
    if (!IS_DYNAMIC(MS_SAMPLE_LOCATIONS)) {
-      if (ms->sample_locations_enable) {
+      if (sl_info && ms->sample_locations_enable) {
          vk_sample_locations_state_init(sl, &sl_info->sampleLocationsInfo);
          ms->sample_locations = sl;
       } else if (!IS_DYNAMIC(MS_RASTERIZATION_SAMPLES)) {

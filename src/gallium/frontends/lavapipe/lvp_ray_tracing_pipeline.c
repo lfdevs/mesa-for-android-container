@@ -502,7 +502,9 @@ lvp_lower_isec_intrinsic(nir_builder *b, nir_intrinsic_instr *instr, void *data)
    nir_variable *commit = nir_local_variable_create(b->impl, glsl_bool_type(), "commit");
    nir_store_var(b, commit, nir_imm_false(b), 0x1);
 
-   nir_push_if(b, nir_iand(b, nir_fge(b, t, nir_load_var(b, state->tmin)), nir_fge(b, nir_load_var(b, state->tmax), t)));
+   nir_def *in_range = nir_iand(b, nir_fge(b, t, nir_load_var(b, state->tmin)), nir_fge(b, nir_load_var(b, state->tmax), t));
+   nir_def *terminated = nir_iand(b, nir_load_var(b, state->terminate), nir_load_var(b, state->accept));
+   nir_push_if(b, nir_iand(b, in_range, nir_inot(b, terminated)));
    {
       nir_store_var(b, state->accept, nir_imm_true(b), 0x1);
 
@@ -521,10 +523,6 @@ lvp_lower_isec_intrinsic(nir_builder *b, nir_intrinsic_instr *instr, void *data)
 
          nir_def *terminate = nir_load_var(b, state->terminate);
          nir_store_var(b, state->terminate, nir_ior(b, terminate, prev_terminate), 0x1);
-
-         nir_push_if(b, terminate);
-         nir_jump(b, nir_jump_return);
-         nir_pop_if(b, NULL);
       }
 
       nir_push_if(b, nir_load_var(b, state->accept));

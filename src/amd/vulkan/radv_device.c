@@ -1269,6 +1269,10 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    /* Initialize the per-device cache key before compiling meta shaders. */
    radv_device_init_cache_key(device);
 
+   result = radv_device_init_tools(device);
+   if (result != VK_SUCCESS)
+      goto fail;
+
    result = radv_device_init_meta(device);
    if (result != VK_SUCCESS)
       goto fail;
@@ -1321,10 +1325,6 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    if (device->vk.enabled_features.rayTracingPipelineShaderGroupHandleCaptureReplay) {
       device->capture_replay_arena_vas = _mesa_hash_table_u64_create(NULL);
    }
-
-   result = radv_device_init_tools(device);
-   if (result != VK_SUCCESS)
-      goto fail_cache;
 
    if (pdev->info.gfx_level == GFX11 && pdev->info.has_dedicated_vram && instance->drirc.force_pstate_peak_gfx11_dgpu) {
       if (!radv_device_acquire_performance_counters(device))

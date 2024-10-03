@@ -139,6 +139,3 @@ spec@!opengl 1.0@gl-1.0-dlist-beginend,Crash
 spec@nv_texture_barrier@blending-in-shader,Crash
 
 spec@arb_viewport_array@display-list,Fail
-
-# passes locally
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Fail

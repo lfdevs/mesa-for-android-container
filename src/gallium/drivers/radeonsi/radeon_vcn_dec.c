@@ -2396,6 +2396,8 @@ static void radeon_dec_destroy(struct pipe_video_codec *decoder)
 
    dec->ws->fence_reference(dec->ws, &dec->prev_fence, NULL);
    dec->ws->cs_destroy(&dec->cs);
+   if (dec->ectx)
+      dec->ectx->destroy(dec->ectx);
 
    if (dec->stream_type == RDECODE_CODEC_JPEG) {
       for (i = 0; i < dec->njctx; i++) {
@@ -2742,8 +2744,14 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    if (!dec)
       return NULL;
 
+   if (sctx->vcn_has_ctx) {
+      dec->ectx = pipe_create_multimedia_context(context->screen);
+      if (!dec->ectx)
+         sctx->vcn_has_ctx = false;
+   }
+
    dec->base = *templ;
-   dec->base.context = context;
+   dec->base.context = (sctx->vcn_has_ctx) ? dec->ectx : context;
    dec->base.width = width;
    dec->base.height = height;
    dec->max_width = width;
@@ -2772,7 +2780,9 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    dec->sq.ib_total_size_in_dw = NULL;
    dec->sq.ib_checksum = NULL;
 
-   if (!ws->cs_create(&dec->cs, sctx->ctx, ring, NULL, NULL)) {
+   if (!ws->cs_create(&dec->cs,
+                      (sctx->vcn_has_ctx) ? ((struct si_context *)dec->ectx)->ctx : sctx->ctx,
+                      ring, NULL, NULL)) {
       RVID_ERR("Can't get command submission context.\n");
       goto error;
    }
@@ -3036,6 +3046,8 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 
 error:
    dec->ws->cs_destroy(&dec->cs);
+   if (dec->ectx)
+      dec->ectx->destroy(dec->ectx);
 
    if (dec->stream_type == RDECODE_CODEC_JPEG) {
       for (i = 0; i < dec->njctx; i++) {

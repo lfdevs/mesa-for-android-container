@@ -2303,11 +2303,15 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       bi_index src = bi_src_index(&instr->src[0].src);
 
       assert(sz == 32 && src_sz == 32);
-      bi_mkvec_v4i8_to(
-         b, dst, bi_byte(bi_extract(b, src, instr->src[0].swizzle[0]), 0),
-         bi_byte(bi_extract(b, src, instr->src[0].swizzle[1]), 0),
-         bi_byte(bi_extract(b, src, instr->src[0].swizzle[2]), 0),
-         bi_byte(bi_extract(b, src, instr->src[0].swizzle[3]), 0));
+
+      bi_index srcs[4] = {
+         bi_extract(b, src, instr->src[0].swizzle[0]),
+         bi_extract(b, src, instr->src[0].swizzle[1]),
+         bi_extract(b, src, instr->src[0].swizzle[2]),
+         bi_extract(b, src, instr->src[0].swizzle[3]),
+      };
+      unsigned channels[4] = {0};
+      bi_make_vec_to(b, dst, srcs, channels, 4, 8);
       return;
    }
 

@@ -389,6 +389,10 @@ nvk_GetPhysicalDeviceImageFormatProperties2(
                                    VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)))
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
+   if (pImageFormatInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+       pImageFormatInfo->type != VK_IMAGE_TYPE_2D)
+      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+
    const uint32_t max_dim =
       nvk_image_max_dimension(&pdev->info, VK_IMAGE_TYPE_1D);
    VkExtent3D maxExtent;
@@ -416,6 +420,11 @@ nvk_GetPhysicalDeviceImageFormatProperties2(
    uint32_t maxMipLevels = util_logbase2(max_dim) + 1;
    if (ycbcr_info != NULL || pImageFormatInfo->tiling == VK_IMAGE_TILING_LINEAR)
        maxMipLevels = 1;
+
+   if (pImageFormatInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      maxArraySize = 1;
+      maxMipLevels = 1;
+   }
 
    VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
    if (pImageFormatInfo->tiling == VK_IMAGE_TILING_OPTIMAL &&

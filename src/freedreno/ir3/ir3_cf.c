@@ -45,6 +45,10 @@ is_safe_conv(struct ir3_instruction *instr, type_t src_type, opc_t *src_opc)
        type_size(instr->cat1.src_type) == 16)
       return false;
 
+   /* mad.x24 doesn't work with 16-bit in/out */
+   if (*src_opc == OPC_MAD_S24 || *src_opc == OPC_MAD_U24)
+      return false;
+
    struct ir3_register *dst = instr->dsts[0];
    struct ir3_register *src = instr->srcs[0];
 

@@ -357,41 +357,21 @@ dri_sw_displaytarget_display(struct sw_winsys *ws,
    struct dri_sw_winsys *dri_sw_ws = dri_sw_winsys(ws);
    struct dri_sw_displaytarget *dri_sw_dt = dri_sw_displaytarget(dt);
    struct dri_drawable *dri_drawable = (struct dri_drawable *)context_private;
-   unsigned width, height, x = 0, y = 0;
+   unsigned width, height;
    unsigned blsize = util_format_get_blocksize(dri_sw_dt->format);
    bool is_shm = dri_sw_dt->shmid != -1;
    /* Set the width to 'stride / cpp'.
     *
     * PutImage correctly clips to the width of the dst drawable.
     */
-   if (!nboxes) {
-      width = dri_sw_dt->stride / blsize;
-      height = dri_sw_dt->height;
-      if (is_shm)
-         dri_sw_ws->lf->put_image_shm(dri_drawable, dri_sw_dt->shmid, dri_sw_dt->data, 0, 0,
-                                    0, 0, width, height, dri_sw_dt->stride);
-      else
-         dri_sw_ws->lf->put_image(dri_drawable, dri_sw_dt->data, width, height);
-      return;
-   }
-   for (unsigned i = 0; i < nboxes; i++) {
-      unsigned offset = dri_sw_dt->stride * box[i].y;
-      unsigned offset_x = box[i].x * blsize;
-      char *data = dri_sw_dt->data + offset;
-      x = box[i].x;
-      y = box[i].y;
-      width = box[i].width;
-      height = box[i].height;
-      if (is_shm) {
-         /* don't add x offset for shm, the put_image_shm will deal with it */
-         dri_sw_ws->lf->put_image_shm(dri_drawable, dri_sw_dt->shmid, dri_sw_dt->data, offset, offset_x,
-                                      x, y, width, height, dri_sw_dt->stride);
-      } else {
-         data += offset_x;
-         dri_sw_ws->lf->put_image2(dri_drawable, data,
-                                   x, y, width, height, dri_sw_dt->stride);
-      }
-   }
+   width = dri_sw_dt->stride / blsize;
+   height = dri_sw_dt->height;
+   if (is_shm)
+      dri_sw_ws->lf->put_image_shm(dri_drawable, dri_sw_dt->shmid, dri_sw_dt->data, 0, 0,
+            0, 0, width, height, dri_sw_dt->stride);
+   else
+      dri_sw_ws->lf->put_image(dri_drawable, dri_sw_dt->data, width, height);
+   return;
 }
 
 static void

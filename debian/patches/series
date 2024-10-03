@@ -1,4 +1,3 @@
 path_max.diff
 src_glx_dri_common.h.diff
-clc-find-opencl-headers.diff
 fix-armhf-build.diff

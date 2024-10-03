@@ -49,18 +49,21 @@ brw_fs_opt_split_virtual_grfs(fs_visitor &s)
    bool *split_points = new bool[reg_count];
    memset(split_points, 0, reg_count * sizeof(*split_points));
 
-   /* Mark all used registers as fully splittable */
+   /* Mark all used registers as fully splittable following the physical
+    * register size.
+    */
+   const unsigned reg_inc = reg_unit(s.devinfo);
    foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
       if (inst->dst.file == VGRF) {
          unsigned reg = vgrf_to_reg[inst->dst.nr];
-         for (unsigned j = 1; j < s.alloc.sizes[inst->dst.nr]; j++)
+         for (unsigned j = reg_inc; j < s.alloc.sizes[inst->dst.nr]; j += reg_inc)
             split_points[reg + j] = true;
       }
 
       for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
             unsigned reg = vgrf_to_reg[inst->src[i].nr];
-            for (unsigned j = 1; j < s.alloc.sizes[inst->src[i].nr]; j++)
+            for (unsigned j = reg_inc; j < s.alloc.sizes[inst->src[i].nr]; j += reg_inc)
                split_points[reg + j] = true;
          }
       }

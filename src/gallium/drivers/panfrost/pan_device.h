@@ -213,7 +213,7 @@ void panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev);
 void panfrost_close_device(struct panfrost_device *dev);
 
 bool panfrost_supports_compressed_format(struct panfrost_device *dev,
-                                         unsigned fmt);
+                                         unsigned texfeat_bit);
 
 static inline struct panfrost_bo *
 pan_lookup_bo(struct panfrost_device *dev, uint32_t gem_handle)

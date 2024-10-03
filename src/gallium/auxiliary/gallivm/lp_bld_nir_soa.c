@@ -55,22 +55,43 @@ static int bit_size_to_shift_size(int bit_size)
 }
 
 /*
- * combine the execution mask if there is one with the current mask.
+ * Combine the global mask if there is one with the current execution mask.
  */
 static LLVMValueRef
 mask_vec(struct lp_build_nir_context *bld_base)
 {
-   struct lp_build_nir_soa_context * bld = (struct lp_build_nir_soa_context *)bld_base;
-   LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
+   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+
    struct lp_exec_mask *exec_mask = &bld->exec_mask;
    LLVMValueRef bld_mask = bld->mask ? lp_build_mask_value(bld->mask) : NULL;
-   if (!exec_mask->has_mask) {
+   if (!exec_mask->has_mask)
       return bld_mask;
-   }
    if (!bld_mask)
       return exec_mask->exec_mask;
+
+   LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
    return LLVMBuildAnd(builder, lp_build_mask_value(bld->mask),
                        exec_mask->exec_mask, "");
+}
+
+/*
+ * Use the execution mask if there is one, otherwise don't mask (ignore global mask).
+ * This allows helper invocations to run, which are necessary for correct derivatives.
+ */
+static LLVMValueRef
+mask_vec_with_helpers(struct lp_build_nir_context *bld_base)
+{
+   if (bld_base->shader->info.stage != MESA_SHADER_FRAGMENT)
+      return mask_vec(bld_base); /* No helper invocations needed. */
+
+   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+
+   struct lp_exec_mask *exec_mask = &bld->exec_mask;
+   if (exec_mask->has_mask)
+      return exec_mask->exec_mask;
+
+   return lp_build_const_int_vec(bld_base->base.gallivm,
+                                 bld_base->uint_bld.type, -1);
 }
 
 static bool
@@ -547,12 +568,19 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
       }
       break;
    case nir_var_shader_out:
-      if (bld->fs_iface && bld->fs_iface->fb_fetch) {
+      if (var->data.fb_fetch_output && bld->fs_iface && bld->fs_iface->fb_fetch) {
          bld->fs_iface->fb_fetch(bld->fs_iface, &bld_base->base, var->data.location, result);
-         return;
+         break;
       }
+
       for (unsigned i = 0; i < num_components; i++) {
          int idx = (i * dmul) + location_frac;
+         int comp_loc = location;
+         if (bit_size == 64 && idx >= 4) {
+            comp_loc++;
+            idx = idx % 4;
+         }
+
          if (bld->tcs_iface) {
             LLVMValueRef vertex_index_val = lp_build_const_int32(gallivm, vertex_index);
             LLVMValueRef attrib_index_val;
@@ -561,7 +589,7 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
             if (indir_index)
                attrib_index_val = lp_build_add(&bld_base->uint_bld, indir_index, lp_build_const_int_vec(gallivm, bld_base->uint_bld.type, var->data.driver_location));
             else
-               attrib_index_val = lp_build_const_int32(gallivm, location);
+               attrib_index_val = lp_build_const_int32(gallivm, comp_loc);
 
             result[i] = bld->tcs_iface->emit_fetch_output(bld->tcs_iface, &bld_base->base,
                                                           indir_vertex_index ? true : false, indir_vertex_index ? indir_vertex_index : vertex_index_val,
@@ -574,6 +602,17 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
                                                                         indir_index ? true : false, attrib_index_val,
                                                                         false, swizzle_index_val, 0);
                result[i] = emit_fetch_64bit(bld_base, result[i], result2);
+            }
+         } else {
+            /* Output variable behave like private variables during the shader execution.
+               GLSL 4.60 spec, section 4.3.6.
+               Vulkan 1.3 spec, Helper Invocations */
+            if (bit_size == 64) {
+               result[i] = emit_fetch_64bit(bld_base,
+                     LLVMBuildLoad2(gallivm->builder, bld_base->base.vec_type, bld->outputs[comp_loc][idx], "output0_ptr"),
+                     LLVMBuildLoad2(gallivm->builder, bld_base->base.vec_type, bld->outputs[comp_loc][idx + 1], "output1_ptr"));
+            } else {
+               result[i] = LLVMBuildLoad2(gallivm->builder, bld_base->base.vec_type, bld->outputs[comp_loc][idx], "output_ptr");
             }
          }
       }
@@ -1032,7 +1071,6 @@ static void emit_load_global(struct lp_build_nir_context *bld_base,
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
    struct lp_build_context *res_bld;
-   LLVMValueRef exec_mask = mask_vec(bld_base);
 
    res_bld = get_int_bld(bld_base, true, bit_size);
 
@@ -1055,14 +1093,13 @@ static void emit_load_global(struct lp_build_nir_context *bld_base,
       return;
    }
 
+   LLVMValueRef mask = mask_vec_with_helpers(bld_base);
    for (unsigned c = 0; c < nc; c++) {
       LLVMValueRef chan_offset = lp_build_const_int_vec(gallivm, uint_bld->type, c * (bit_size / 8));
 
-      outval[c] = lp_build_masked_gather(gallivm, res_bld->type.length,
-                                         bit_size,
-                                         res_bld->vec_type,
+      outval[c] = lp_build_masked_gather(gallivm, res_bld->type.length, bit_size, res_bld->vec_type,
                                          lp_vec_add_offset_ptr(bld_base, bit_size, addr, chan_offset),
-                                         exec_mask);
+                                         mask);
       outval[c] = LLVMBuildBitCast(builder, outval[c], res_bld->vec_type, "");
    }
 }
@@ -1431,14 +1468,14 @@ static void emit_load_mem(struct lp_build_nir_context *bld_base,
    for (unsigned c = 0; c < nc; c++)
       result[c] = lp_build_alloca(gallivm, load_bld->vec_type, "");
 
-   LLVMValueRef exec_mask = mask_vec(bld_base);
-   LLVMValueRef cond = LLVMBuildICmp(gallivm->builder, LLVMIntNE, exec_mask, uint_bld->zero, "");
+   LLVMValueRef gather_mask = mask_vec_with_helpers(bld_base);
+   LLVMValueRef gather_cond = LLVMBuildICmp(gallivm->builder, LLVMIntNE, gather_mask, uint_bld->zero, "");
    for (unsigned i = 0; i < uint_bld->type.length; i++) {
       LLVMValueRef counter = lp_build_const_int32(gallivm, i);
-      LLVMValueRef loop_cond = LLVMBuildExtractElement(gallivm->builder, cond, counter, "");
+      LLVMValueRef element_gather_cond = LLVMBuildExtractElement(gallivm->builder, gather_cond, counter, "");
 
-      struct lp_build_if_state exec_ifthen;
-      lp_build_if(&exec_ifthen, gallivm, loop_cond);
+      struct lp_build_if_state if_gather_element;
+      lp_build_if(&if_gather_element, gallivm, element_gather_cond);
 
       LLVMValueRef ssbo_limit;
       LLVMValueRef mem_ptr = mem_access_base_pointer(bld_base, load_bld, bit_size, payload, index,
@@ -1473,7 +1510,7 @@ static void emit_load_mem(struct lp_build_nir_context *bld_base,
          lp_build_endif(&ifthen);
       }
 
-      lp_build_endif(&exec_ifthen);
+      lp_build_endif(&if_gather_element);
    }
    for (unsigned c = 0; c < nc; c++)
       outval[c] = LLVMBuildLoad2(gallivm->builder, load_bld->vec_type, result[c], "");

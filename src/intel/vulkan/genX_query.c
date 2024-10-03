@@ -146,9 +146,15 @@ VkResult genX(CreateQueryPool)(
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR: {
       const struct intel_perf_query_field_layout *layout =
          &pdevice->perf->query_layout;
+      const struct anv_queue_family *queue_family;
 
       perf_query_info = vk_find_struct_const(pCreateInfo->pNext,
                                              QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR);
+      /* Same restriction as in EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR() */
+      queue_family = &pdevice->queue.families[perf_query_info->queueFamilyIndex];
+      if (!queue_family->supports_perf)
+         return vk_error(device, VK_ERROR_UNKNOWN);
+
       n_passes = intel_perf_get_n_passes(pdevice->perf,
                                          perf_query_info->pCounterIndices,
                                          perf_query_info->counterIndexCount,
@@ -803,7 +809,7 @@ void genX(CmdResetQueryPool)(
     * mode.
     */
    if (anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer) &&
-       (cmd_buffer->vk.pool->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT) != 0 &&
+       (cmd_buffer->vk.pool->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT) == 0 &&
        queryCount >= pdevice->instance->query_clear_with_blorp_threshold) {
       trace_intel_begin_query_clear_blorp(&cmd_buffer->trace);
 

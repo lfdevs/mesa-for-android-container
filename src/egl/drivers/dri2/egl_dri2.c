@@ -2417,9 +2417,10 @@ dri2_create_image_mesa_drm_buffer(_EGLDisplay *disp, _EGLContext *ctx,
       return NULL;
    }
 
+   int offset = 0;
    dri_image = dri2_dpy->image->createImageFromNames(
       dri2_dpy->dri_screen_render_gpu, attrs.Width, attrs.Height, fourcc,
-      (int *) &name, 1, (int *) &pitch, 0, NULL);
+      (int *) &name, 1, (int *) &pitch, &offset, NULL);
 
    return dri2_create_image_from_dri(disp, dri_image);
 }

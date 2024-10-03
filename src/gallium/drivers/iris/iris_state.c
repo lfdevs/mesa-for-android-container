@@ -5698,7 +5698,7 @@ iris_populate_binding_table(struct iris_context *ice,
             }
             push_bt_entry(addr);
          }
-      } else if (GFX_VER < 11) {
+      } else if (bt->use_null_rt) {
          uint32_t addr = use_null_fb_surface(batch, ice);
          push_bt_entry(addr);
       }

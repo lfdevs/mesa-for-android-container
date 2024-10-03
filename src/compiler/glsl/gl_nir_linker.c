@@ -2622,23 +2622,6 @@ analyze_clip_cull_usage(struct gl_shader_program *prog, nir_shader *shader,
 
       if (cull_dist_written)
          info->cull_distance_array_size = glsl_get_length(cull_dist->type);
-
-      /* From the ARB_cull_distance spec:
-       *
-       * It is a compile-time or link-time error for the set of shaders forming
-       * a program to have the sum of the sizes of the gl_ClipDistance and
-       * gl_CullDistance arrays to be larger than
-       * gl_MaxCombinedClipAndCullDistances.
-       */
-      if ((uint32_t)(info->clip_distance_array_size + info->cull_distance_array_size) >
-          consts->MaxClipPlanes) {
-          linker_error(prog, "%s shader: the combined size of "
-                       "'gl_ClipDistance' and 'gl_CullDistance' size cannot "
-                       "be larger than "
-                       "gl_MaxCombinedClipAndCullDistances (%u)",
-                       _mesa_shader_stage_to_string(info->stage),
-                       consts->MaxClipPlanes);
-      }
    }
 }
 

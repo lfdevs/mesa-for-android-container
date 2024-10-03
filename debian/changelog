@@ -1,3 +1,10 @@
+mesa (24.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * clc-find-opencl-headers.diff: Dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 03 Oct 2024 22:18:55 +0300
+
 mesa (24.2.3-1) unstable; urgency=medium
 
   * New upstream release.

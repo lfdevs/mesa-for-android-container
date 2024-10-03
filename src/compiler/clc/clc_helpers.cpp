@@ -906,6 +906,12 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    c->getHeaderSearchOpts().AddPath(clang_res_path.string(),
                                     clang::frontend::Angled,
                                     false, false);
+
+   auto clang_install_res_path =
+      fs::path(LLVM_LIB_DIR) / "clang" / std::to_string(LLVM_VERSION_MAJOR) / "include";
+   c->getHeaderSearchOpts().AddPath(clang_install_res_path.string(),
+                                    clang::frontend::Angled,
+                                    false, false);
 #endif
 
    // Enable/Disable optional OpenCL C features. Some can be toggled via `OpenCLExtensionsAsWritten`

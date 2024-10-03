@@ -43,15 +43,12 @@
  * compressed formats, so we offer a helper to test if a format is supported */
 
 bool
-panfrost_supports_compressed_format(struct panfrost_device *dev, unsigned fmt)
+panfrost_supports_compressed_format(struct panfrost_device *dev,
+                                    unsigned texfeat_bit)
 {
-   if (MALI_EXTRACT_TYPE(fmt) != MALI_FORMAT_COMPRESSED)
-      return true;
-
-   unsigned idx = fmt & ~MALI_FORMAT_COMPRESSED;
-   assert(idx < 32);
-
-   return panfrost_query_compressed_formats(&dev->kmod.props) & (1 << idx);
+   assert(texfeat_bit < 32);
+   return panfrost_query_compressed_formats(&dev->kmod.props) &
+          BITFIELD_BIT(texfeat_bit);
 }
 
 void

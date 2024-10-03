@@ -589,7 +589,8 @@ panfrost_is_format_supported(struct pipe_screen *screen,
     * differences. */
 
    bool supported =
-      panfrost_supports_compressed_format(dev, MALI_EXTRACT_INDEX(fmt.hw));
+      !util_format_is_compressed(format) ||
+      panfrost_supports_compressed_format(dev, fmt.texfeat_bit);
 
    if (!supported)
       return false;

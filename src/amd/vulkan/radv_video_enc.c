@@ -476,6 +476,9 @@ radv_enc_session_init(struct radv_cmd_buffer *cmd_buffer, const struct VkVideoEn
       radeon_emit(cs, 0); // slice output enabled.
    }
    radeon_emit(cs, vid->enc_session.display_remote);
+   if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_4) {
+      radeon_emit(cs, 0);
+   }
    ENC_END;
 }
 
@@ -940,7 +943,7 @@ radv_enc_slice_header_hevc(struct radv_cmd_buffer *cmd_buffer, const VkVideoEnco
    radv_enc_code_fixed_bits(cmd_buffer, 0x0, 1);
    radv_enc_code_fixed_bits(cmd_buffer, nal_unit_type, 6);
    radv_enc_code_fixed_bits(cmd_buffer, 0x0, 6);
-   radv_enc_code_fixed_bits(cmd_buffer, 0x1, 3);
+   radv_enc_code_fixed_bits(cmd_buffer, pic->TemporalId + 1, 3);
 
    radv_enc_flush_headers(cmd_buffer);
    instruction[inst_index] = RENCODE_HEADER_INSTRUCTION_COPY;
@@ -1999,7 +2002,8 @@ radv_GetEncodedVideoSessionParametersKHR(VkDevice device,
             struct VkVideoEncodeH265SessionParametersFeedbackInfoKHR *h265_feedback_info =
                vk_find_struct(pFeedbackInfo->pNext, VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_KHR);
             pFeedbackInfo->hasOverrides = VK_TRUE;
-            h265_feedback_info->hasStdPPSOverrides = VK_TRUE;
+            if (h265_feedback_info)
+               h265_feedback_info->hasStdPPSOverrides = VK_TRUE;
          }
       }
       total_size = sps_size + pps_size + vps_size;

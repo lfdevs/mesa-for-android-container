@@ -73,12 +73,12 @@ nvkmd_nouveau_try_create_pdev(struct _drmDevice *drm_device,
 
    struct nouveau_ws_device *ws_dev = nouveau_ws_device_new(drm_device);
    if (!ws_dev)
-      return vk_error(log_obj, VK_ERROR_INCOMPATIBLE_DRIVER);
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
 
    if (!ws_dev->has_vm_bind) {
       nouveau_ws_device_destroy(ws_dev);
-      return vk_errorf(log_obj, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "NVK Requires a Linux kernel version 6.6 or later");
+      /* NVK Requires a Linux kernel version 6.6 or later */
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
    }
 
    struct stat st;

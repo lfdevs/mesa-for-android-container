@@ -2293,6 +2293,7 @@ anv_physical_device_init_queue_families(struct anv_physical_device *pdevice)
                           protected_flag,
             .queueCount = gc_count,
             .engine_class = INTEL_ENGINE_CLASS_RENDER,
+            .supports_perf = true,
          };
       }
       if (g_count > 0) {
@@ -5177,6 +5178,16 @@ VkResult anv_CreateBuffer(
       fprintf(stderr, "=== %s %s:%d flags:0x%08x\n", __func__, __FILE__,
               __LINE__, pCreateInfo->flags);
 
+   if ((pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) &&
+       device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT) {
+      VkBufferUsageFlags2KHR usages = get_buffer_usages(pCreateInfo);
+      if (usages & (VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                    VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)) {
+         return vk_errorf(device, VK_ERROR_UNKNOWN,
+                          "Cannot support sparse descriptor buffers with TRTT.");
+      }
+   }
+
    /* Don't allow creating buffers bigger than our address space.  The real
     * issue here is that we may align up the buffer size and we don't want
     * doing so to cause roll-over.  However, no one has any business
@@ -5212,6 +5223,14 @@ VkResult anv_CreateBuffer(
                                  OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
          if (opaque_info)
             client_address = *((const uint64_t *)opaque_info->opaqueCaptureDescriptorData);
+      }
+
+      /* If this buffer will be used as a descriptor buffer, make sure we
+       * allocate it on the correct heap.
+       */
+      if (buffer->vk.usage & (VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                              VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)) {
+         alloc_flags |= ANV_BO_ALLOC_DYNAMIC_VISIBLE_POOL;
       }
 
       VkResult result = anv_init_sparse_bindings(device, buffer->vk.size,

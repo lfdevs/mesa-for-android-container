@@ -1332,6 +1332,10 @@ anv_queue_exec_locked(struct anv_queue *queue,
       }
    }
 
+   if (perf_query_pool && device->perf_queue != queue)
+      debug_warn_once("Mismatch between queue that OA stream was open and "
+                      "queue were query will be executed.");
+
    result =
       device->kmd_backend->queue_exec_locked(
          queue,

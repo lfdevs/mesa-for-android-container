@@ -410,6 +410,12 @@ opt_loop_peel_initial_break(nir_loop *loop)
    /* We need LCSSA because we are going to wrap the loop into an IF. */
    nir_convert_loop_to_lcssa(loop);
 
+   /* We can't lower some derefs to regs or create phis using them, so rematerialize them instead. */
+   nir_foreach_instr_safe(instr, header_block) {
+      if (instr->type == nir_instr_type_deref)
+         nir_rematerialize_deref_in_use_blocks(nir_instr_as_deref(instr));
+   }
+
    /* Lower loop header and LCSSA-phis to regs. */
    nir_lower_phis_to_regs_block(header_block);
    nir_lower_ssa_defs_to_regs_block(header_block);

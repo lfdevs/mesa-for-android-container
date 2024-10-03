@@ -3536,6 +3536,8 @@ brw_compute_flat_inputs(struct brw_wm_prog_data *prog_data,
 {
    prog_data->flat_inputs = 0;
 
+   const unsigned per_vertex_start = prog_data->num_per_primitive_inputs;
+
    nir_foreach_shader_in_variable(var, shader) {
       /* flat shading */
       if (var->data.interpolation != INTERP_MODE_FLAT)
@@ -3546,7 +3548,7 @@ brw_compute_flat_inputs(struct brw_wm_prog_data *prog_data,
 
       unsigned slots = glsl_count_attribute_slots(var->type, false);
       for (unsigned s = 0; s < slots; s++) {
-         int input_index = prog_data->urb_setup[var->data.location + s];
+         int input_index = prog_data->urb_setup[var->data.location + s] - per_vertex_start;
 
          if (input_index >= 0)
             prog_data->flat_inputs |= 1 << input_index;

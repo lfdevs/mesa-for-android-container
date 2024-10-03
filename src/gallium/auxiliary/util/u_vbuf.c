@@ -932,20 +932,17 @@ u_vbuf_create_vertex_elements(struct u_vbuf *mgr, unsigned count,
          ve->compatible_vb_mask_any |= vb_index_bit;
          if (component_size == 2) {
             ve->vb_align_mask[0] |= vb_index_bit;
-            if (ve->ve[i].src_stride % 2 != 0)
-               ve->incompatible_vb_mask |= vb_index_bit;
          }
          else if (component_size == 4) {
             ve->vb_align_mask[1] |= vb_index_bit;
-            if (ve->ve[i].src_stride % 4 != 0)
-               ve->incompatible_vb_mask |= vb_index_bit;
          }
       }
       ve->strides[ve->ve[i].vertex_buffer_index] = ve->ve[i].src_stride;
       if (ve->ve[i].src_stride) {
          ve->nonzero_stride_vb_mask |= 1 << ve->ve[i].vertex_buffer_index;
       }
-      if (!mgr->caps.buffer_stride_unaligned && ve->ve[i].src_stride % 4 != 0)
+      if ((!mgr->caps.buffer_stride_unaligned && ve->ve[i].src_stride % 4 != 0) ||
+          (!mgr->caps.attrib_component_unaligned && ve->ve[i].src_stride % component_size != 0))
          ve->incompatible_vb_mask |= vb_index_bit;
    }
 

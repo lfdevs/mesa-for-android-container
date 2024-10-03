@@ -526,27 +526,32 @@ fs_visitor::emit_interpolation_setup()
 fs_inst *
 fs_visitor::emit_single_fb_write(const fs_builder &bld,
                                  brw_reg color0, brw_reg color1,
-                                 brw_reg src0_alpha, unsigned components)
+                                 brw_reg src0_alpha, unsigned components,
+                                 bool null_rt)
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
 
    /* Hand over gl_FragDepth or the payload depth. */
    const brw_reg dst_depth = fetch_payload_reg(bld, fs_payload().dest_depth_reg);
-   brw_reg src_depth, src_stencil;
+
+   brw_reg sources[FB_WRITE_LOGICAL_NUM_SRCS];
+   sources[FB_WRITE_LOGICAL_SRC_COLOR0]     = color0;
+   sources[FB_WRITE_LOGICAL_SRC_COLOR1]     = color1;
+   sources[FB_WRITE_LOGICAL_SRC_SRC0_ALPHA] = src0_alpha;
+   sources[FB_WRITE_LOGICAL_SRC_DST_DEPTH]  = dst_depth;
+   sources[FB_WRITE_LOGICAL_SRC_COMPONENTS] = brw_imm_ud(components);
+   sources[FB_WRITE_LOGICAL_SRC_NULL_RT]    = brw_imm_ud(null_rt);
+
+   if (prog_data->uses_omask)
+      sources[FB_WRITE_LOGICAL_SRC_OMASK] = sample_mask;
 
    if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
-      src_depth = frag_depth;
+      sources[FB_WRITE_LOGICAL_SRC_SRC_DEPTH] = frag_depth;
 
    if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))
-      src_stencil = frag_stencil;
+      sources[FB_WRITE_LOGICAL_SRC_SRC_STENCIL] = frag_stencil;
 
-   const brw_reg sources[] = {
-      color0, color1, src0_alpha, src_depth, dst_depth, src_stencil,
-      (prog_data->uses_omask ? sample_mask : brw_reg()),
-      brw_imm_ud(components)
-   };
-   assert(ARRAY_SIZE(sources) - 1 == FB_WRITE_LOGICAL_SRC_COMPONENTS);
    fs_inst *write = bld.emit(FS_OPCODE_FB_WRITE_LOGICAL, brw_reg(),
                              sources, ARRAY_SIZE(sources));
 
@@ -577,11 +582,23 @@ fs_visitor::do_emit_fb_writes(int nr_color_regions, bool replicate_alpha)
          src0_alpha = offset(outputs[0], bld, 3);
 
       inst = emit_single_fb_write(abld, this->outputs[target],
-                                  this->dual_src_output, src0_alpha, 4);
+                                  this->dual_src_output, src0_alpha, 4,
+                                  false);
       inst->target = target;
    }
 
    if (inst == NULL) {
+      struct brw_wm_prog_key *wm_key = (brw_wm_prog_key*) key;
+      struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(prog_data);
+      /* Disable null_rt if any non color output is written or if
+       * alpha_to_coverage can be enabled. Since the alpha_to_coverage bit is
+       * coming from the BLEND_STATE structure and the HW will avoid reading
+       * it if null_rt is enabled.
+       */
+      const bool use_null_rt =
+         wm_key->alpha_to_coverage == BRW_NEVER &&
+         !wm_prog_data->uses_omask;
+
       /* Even if there's no color buffers enabled, we still need to send
        * alpha out the pipeline to our null renderbuffer to support
        * alpha-testing, alpha-to-coverage, and so on.
@@ -594,7 +611,8 @@ fs_visitor::do_emit_fb_writes(int nr_color_regions, bool replicate_alpha)
       const brw_reg tmp = bld.vgrf(BRW_TYPE_UD, 4);
       bld.LOAD_PAYLOAD(tmp, srcs, 4, 0);
 
-      inst = emit_single_fb_write(bld, tmp, reg_undef, reg_undef, 4);
+      inst = emit_single_fb_write(bld, tmp, reg_undef, reg_undef, 4,
+                                  use_null_rt);
       inst->target = 0;
    }
 

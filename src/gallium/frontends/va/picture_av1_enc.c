@@ -756,42 +756,31 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeAV1(vlVaContext *context, vlVaBuffer *b
    struct vl_vlc vlc = {0};
    vl_vlc_init(&vlc, 1, (const void * const*)&buf->data, &buf->size);
 
-   while (vl_vlc_bits_left(&vlc) > 0) {
-      unsigned obu_type = 0;
-      /* search sequece header in the first 8 bytes */
-      for (int i = 0; i < 8 && vl_vlc_bits_left(&vlc) >= 8; ++i) {
-         /* then start decoding , first 5 bits has to be 0000 1xxx for sequence header */
-         obu_type = vl_vlc_peekbits(&vlc, 5);
-         if (obu_type == OBU_TYPE_SEQUENCE_HEADER
-            || obu_type == OBU_TYPE_FRAME_HEADER
-            || obu_type == OBU_TYPE_FRAME)
-            break;
-         vl_vlc_eatbits(&vlc, 8);
-         vl_vlc_fillbits(&vlc);
-      }
+   av1_f(&vlc, 1); /* obu_forbidden_bit */
+   uint32_t obu_type = av1_f(&vlc, 4);
 
-      av1_f(&vlc, 5); /* eat known bits */
-      uint32_t extension_flag = av1_f(&vlc, 1);
-      uint32_t has_size = av1_f(&vlc, 1);
-      av1_f(&vlc, 1);
-      if (extension_flag) {
-         context->desc.av1enc.temporal_id = av1_f(&vlc, 3);
-         context->desc.av1enc.spatial_id = av1_f(&vlc, 2);
-         av1_f(&vlc, 3);
-      }
+   if (obu_type != OBU_TYPE_SEQUENCE_HEADER &&
+       obu_type != OBU_TYPE_FRAME_HEADER &&
+       obu_type != OBU_TYPE_FRAME)
+      return VA_STATUS_SUCCESS;
 
-      if (has_size)
-          av1_uleb128(&vlc);
+   uint32_t extension_flag = av1_f(&vlc, 1);
+   uint32_t has_size = av1_f(&vlc, 1);
+   av1_f(&vlc, 1); /* obu_reserved_1bit */
 
-      if (obu_type == OBU_TYPE_SEQUENCE_HEADER)
-         av1_sequence_header(context, &vlc);
-      else if (obu_type == OBU_TYPE_FRAME_HEADER || obu_type == OBU_TYPE_FRAME)
-         av1_frame_header(context, &vlc);
-      else
-         assert(0);
-
-      break;
+   if (extension_flag) {
+      context->desc.av1enc.temporal_id = av1_f(&vlc, 3);
+      context->desc.av1enc.spatial_id = av1_f(&vlc, 2);
+      av1_f(&vlc, 3); /* extension_header_reserved_3bits */
    }
+
+   if (has_size)
+       av1_uleb128(&vlc);
+
+   if (obu_type == OBU_TYPE_SEQUENCE_HEADER)
+      av1_sequence_header(context, &vlc);
+   else if (obu_type == OBU_TYPE_FRAME_HEADER || obu_type == OBU_TYPE_FRAME)
+      av1_frame_header(context, &vlc);
 
    return VA_STATUS_SUCCESS;
 }

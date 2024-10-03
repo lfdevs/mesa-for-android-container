@@ -1262,7 +1262,7 @@ check_builtin_array_max_size(const char *name, unsigned size,
                        state->Const.MaxTextureCoords);
    } else if (strcmp("gl_ClipDistance", name) == 0) {
       state->clip_dist_size = size;
-      if (size + state->cull_dist_size > state->Const.MaxClipPlanes) {
+      if (size > state->Const.MaxClipPlanes) {
          /* From section 7.1 (Vertex Shader Special Variables) of the
           * GLSL 1.30 spec:
           *
@@ -1278,7 +1278,7 @@ check_builtin_array_max_size(const char *name, unsigned size,
       }
    } else if (strcmp("gl_CullDistance", name) == 0) {
       state->cull_dist_size = size;
-      if (size + state->clip_dist_size > state->Const.MaxClipPlanes) {
+      if (size > state->Const.MaxClipPlanes) {
          /* From the ARB_cull_distance spec:
           *
           *   "The gl_CullDistance array is predeclared as unsized and
@@ -1292,6 +1292,21 @@ check_builtin_array_max_size(const char *name, unsigned size,
                           "be larger than gl_MaxCullDistances (%u)",
                           state->Const.MaxClipPlanes);
       }
+   }
+
+   /* From the ARB_cull_distance spec:
+    *
+    * It is a compile-time or link-time error for the set of shaders forming
+    * a program to have the sum of the sizes of the gl_ClipDistance and
+    * gl_CullDistance arrays to be larger than
+    * gl_MaxCombinedClipAndCullDistances.
+    */
+   if (state->clip_dist_size + state->cull_dist_size >
+       state->Const.MaxClipPlanes) {
+       _mesa_glsl_error(&loc, state, "The combined size of 'gl_ClipDistance' "
+                        "and 'gl_CullDistance' size cannot be larger than "
+                        "gl_MaxCombinedClipAndCullDistances (%u)",
+                        state->Const.MaxClipPlanes);
    }
 }
 

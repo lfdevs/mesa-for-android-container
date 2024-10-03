@@ -370,8 +370,10 @@ lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
    /* All avx512 have avx512f */
    MAttrs.push_back(util_get_cpu_caps()->has_avx512f ? "+avx512f"  : "-avx512f");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512cd ? "+avx512cd"  : "-avx512cd");
+#if LLVM_VERSION_MAJOR < 19
    MAttrs.push_back(util_get_cpu_caps()->has_avx512er ? "+avx512er"  : "-avx512er");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512pf ? "+avx512pf"  : "-avx512pf");
+#endif
    MAttrs.push_back(util_get_cpu_caps()->has_avx512bw ? "+avx512bw"  : "-avx512bw");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512dq ? "+avx512dq"  : "-avx512dq");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512vl ? "+avx512vl"  : "-avx512vl");

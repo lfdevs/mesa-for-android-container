@@ -289,6 +289,7 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
                             const fs_thread_payload &fs_payload)
 {
    assert(inst->src[FB_WRITE_LOGICAL_SRC_COMPONENTS].file == IMM);
+   assert(inst->src[FB_WRITE_LOGICAL_SRC_NULL_RT].file == IMM);
    const intel_device_info *devinfo = bld.shader->devinfo;
    const brw_reg color0 = inst->src[FB_WRITE_LOGICAL_SRC_COLOR0];
    const brw_reg color1 = inst->src[FB_WRITE_LOGICAL_SRC_COLOR1];
@@ -299,6 +300,7 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
    brw_reg sample_mask = inst->src[FB_WRITE_LOGICAL_SRC_OMASK];
    const unsigned components =
       inst->src[FB_WRITE_LOGICAL_SRC_COMPONENTS].ud;
+   const bool null_rt = inst->src[FB_WRITE_LOGICAL_SRC_NULL_RT].ud != 0;
 
    assert(inst->target != 0 || src0_alpha.file == BAD_FILE);
 
@@ -483,7 +485,7 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
    uint32_t ex_desc = 0;
    if (devinfo->ver >= 20) {
       ex_desc = inst->target << 21 |
-                (key->nr_color_regions == 0) << 20 |
+                null_rt << 20 |
                 (src0_alpha.file != BAD_FILE) << 15 |
                 (src_stencil.file != BAD_FILE) << 14 |
                 (src_depth.file != BAD_FILE) << 13 |
@@ -492,10 +494,9 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
       /* Set the "Render Target Index" and "Src0 Alpha Present" fields
        * in the extended message descriptor, in lieu of using a header.
        */
-      ex_desc = inst->target << 12 | (src0_alpha.file != BAD_FILE) << 15;
-
-      if (key->nr_color_regions == 0)
-         ex_desc |= 1 << 20; /* Null Render Target */
+      ex_desc = inst->target << 12 |
+                null_rt << 20 |
+                (src0_alpha.file != BAD_FILE) << 15;
    }
    inst->ex_desc = ex_desc;
 

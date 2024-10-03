@@ -344,7 +344,8 @@ public:
 
    fs_inst *emit_single_fb_write(const brw::fs_builder &bld,
                                  brw_reg color1, brw_reg color2,
-                                 brw_reg src0_alpha, unsigned components);
+                                 brw_reg src0_alpha, unsigned components,
+                                 bool null_rt);
    void do_emit_fb_writes(int nr_color_regions, bool replicate_alpha);
    void emit_fb_writes();
    void emit_urb_writes(const brw_reg &gs_vertex_count = brw_reg());

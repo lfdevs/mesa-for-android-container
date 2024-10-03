@@ -137,6 +137,28 @@ brw_nir_ubo_surface_index_get_bti(nir_src src)
    return nir_src_as_uint(intrin->src[1]);
 }
 
+/* Returns true if a fragment shader needs at least one render target */
+static inline bool
+brw_nir_fs_needs_null_rt(const struct intel_device_info *devinfo,
+                         nir_shader *nir,
+                         bool multisample_fbo, bool alpha_to_coverage)
+{
+   assert(nir->info.stage == MESA_SHADER_FRAGMENT);
+
+   /* Null-RT bit in the render target write extended descriptor is only
+    * available on Gfx11+.
+    */
+   if (devinfo->ver < 11)
+      return true;
+
+   uint64_t relevant_outputs = 0;
+   if (multisample_fbo)
+      relevant_outputs |= BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+
+   return (alpha_to_coverage ||
+           (nir->info.outputs_written & relevant_outputs) != 0);
+}
+
 void brw_preprocess_nir(const struct brw_compiler *compiler,
                         nir_shader *nir,
                         const struct brw_nir_compiler_opts *opts);

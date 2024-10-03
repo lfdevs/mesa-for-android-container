@@ -140,6 +140,8 @@ struct radeon_decoder {
    struct pipe_fence_handle *destroy_fence;
    bool dpb_use_surf;
    uint64_t dpb_modifier;
+
+   struct pipe_context *ectx;
 };
 
 void send_cmd_dec(struct radeon_decoder *dec, struct pipe_video_buffer *target,

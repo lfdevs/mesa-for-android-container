@@ -4883,15 +4883,24 @@ void genX(CmdBeginRendering)(
    };
 
    const uint32_t color_att_count = pRenderingInfo->colorAttachmentCount;
+
    result = anv_cmd_buffer_init_attachments(cmd_buffer, color_att_count);
    if (result != VK_SUCCESS)
       return;
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
+   UNUSED bool render_target_change = false;
    for (uint32_t i = 0; i < gfx->color_att_count; i++) {
-      if (pRenderingInfo->pColorAttachments[i].imageView == VK_NULL_HANDLE)
+      if (pRenderingInfo->pColorAttachments[i].imageView == VK_NULL_HANDLE) {
+         render_target_change |= gfx->color_att[i].iview != NULL;
+
+         gfx->color_att[i].vk_format = VK_FORMAT_UNDEFINED;
+         gfx->color_att[i].iview = NULL;
+         gfx->color_att[i].layout = VK_IMAGE_LAYOUT_UNDEFINED;
+         gfx->color_att[i].aux_usage = ISL_AUX_USAGE_NONE;
          continue;
+      }
 
       const VkRenderingAttachmentInfo *att =
          &pRenderingInfo->pColorAttachments[i];
@@ -4917,6 +4926,13 @@ void genX(CmdBeginRendering)(
                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                                  att->imageLayout,
                                  cmd_buffer->queue_family->queueFlags);
+
+      render_target_change |= gfx->color_att[i].iview != iview;
+
+      gfx->color_att[i].vk_format = iview->vk.format;
+      gfx->color_att[i].iview = iview;
+      gfx->color_att[i].layout = att->imageLayout;
+      gfx->color_att[i].aux_usage = aux_usage;
 
       union isl_color_value fast_clear_color = { .u32 = { 0, } };
 
@@ -5025,11 +5041,6 @@ void genX(CmdBeginRendering)(
          /* If not LOAD_OP_CLEAR, we shouldn't have a layout transition. */
          assert(att->imageLayout == initial_layout);
       }
-
-      gfx->color_att[i].vk_format = iview->vk.format;
-      gfx->color_att[i].iview = iview;
-      gfx->color_att[i].layout = att->imageLayout;
-      gfx->color_att[i].aux_usage = aux_usage;
 
       struct isl_view isl_view = iview->planes[0].isl;
       if (pRenderingInfo->viewMask) {
@@ -5314,14 +5325,7 @@ void genX(CmdBeginRendering)(
    gfx->dirty |= ANV_CMD_DIRTY_PIPELINE;
 
 #if GFX_VER >= 11
-   bool has_color_att = false;
-   for (uint32_t i = 0; i < gfx->color_att_count; i++) {
-      if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE) {
-         has_color_att = true;
-         break;
-      }
-   }
-   if (has_color_att) {
+   if (render_target_change) {
       /* The PIPE_CONTROL command description says:
       *
       *    "Whenever a Binding Table Index (BTI) used by a Render Target Message
@@ -5934,45 +5938,6 @@ genX(batch_emit_return)(struct anv_batch *batch)
                           GENX(MI_BATCH_BUFFER_START),
                           .AddressSpaceIndicator = ASI_PPGTT,
                           .SecondLevelBatchBuffer = Firstlevelbatch);
-}
-
-void
-genX(batch_emit_post_3dprimitive_was)(struct anv_batch *batch,
-                                      const struct anv_device *device,
-                                      uint32_t primitive_topology,
-                                      uint32_t vertex_count)
-{
-#if INTEL_WA_22014412737_GFX_VER || INTEL_WA_16014538804_GFX_VER
-   if (intel_needs_workaround(device->info, 22014412737) &&
-       (primitive_topology == _3DPRIM_POINTLIST ||
-        primitive_topology == _3DPRIM_LINELIST ||
-        primitive_topology == _3DPRIM_LINESTRIP ||
-        primitive_topology == _3DPRIM_LINELIST_ADJ ||
-        primitive_topology == _3DPRIM_LINESTRIP_ADJ ||
-        primitive_topology == _3DPRIM_LINELOOP ||
-        primitive_topology == _3DPRIM_POINTLIST_BF ||
-        primitive_topology == _3DPRIM_LINESTRIP_CONT ||
-        primitive_topology == _3DPRIM_LINESTRIP_BF ||
-        primitive_topology == _3DPRIM_LINESTRIP_CONT_BF) &&
-       (vertex_count == 1 || vertex_count == 2)) {
-      genx_batch_emit_pipe_control_write
-         (batch, device->info, 0, WriteImmediateData,
-          device->workaround_address, 0, 0);
-
-      /* Reset counter because we just emitted a PC */
-      batch->num_3d_primitives_emitted = 0;
-   } else if (intel_needs_workaround(device->info, 16014538804)) {
-      batch->num_3d_primitives_emitted++;
-      /* WA 16014538804:
-       *    After every 3 3D_Primitive command,
-       *    atleast 1 pipe_control must be inserted.
-       */
-      if (batch->num_3d_primitives_emitted == 3) {
-         anv_batch_emit(batch, GENX(PIPE_CONTROL), pc);
-         batch->num_3d_primitives_emitted = 0;
-      }
-   }
-#endif
 }
 
 /* Wa_16018063123 */

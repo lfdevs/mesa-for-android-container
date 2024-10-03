@@ -947,6 +947,7 @@ struct anv_queue_family {
    uint32_t       queueCount;
 
    enum intel_engine_class engine_class;
+   bool supports_perf;
 };
 
 #define ANV_MAX_QUEUE_FAMILIES 5
@@ -1936,6 +1937,7 @@ struct anv_device {
 
     int                                         perf_fd; /* -1 if no opened */
     uint64_t                                    perf_metric; /* 0 if unset */
+    struct anv_queue                            *perf_queue;
 
     struct intel_aux_map_context                *aux_map_ctx;
 
@@ -3771,6 +3773,12 @@ struct anv_cmd_graphics_state {
    struct anv_attachment depth_att;
    struct anv_attachment stencil_att;
    struct anv_state null_surface_state;
+
+   /* Bitfield of color attachments disabled by a pipeline (pointing a null
+    * surface state in the last emitted binding table for the fragment
+    * stage)
+    */
+   uint8_t disabled_color_atts;
 
    anv_cmd_dirty_mask_t dirty;
    uint32_t vb_dirty;

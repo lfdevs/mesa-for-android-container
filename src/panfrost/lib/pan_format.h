@@ -43,7 +43,8 @@ typedef uint32_t mali_pixel_format;
 #define PAN_BIND_VERTEX_BUFFER (1 << 4)
 
 struct panfrost_format {
-   mali_pixel_format hw;
+   uint32_t hw : 22;
+   uint32_t texfeat_bit : 5;
    unsigned bind;
 };
 

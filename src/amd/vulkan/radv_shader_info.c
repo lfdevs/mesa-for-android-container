@@ -393,6 +393,69 @@ assign_outinfo_params(struct radv_vs_output_info *outinfo, uint64_t mask, unsign
    }
 }
 
+static void
+radv_get_output_masks(const struct nir_shader *nir, const struct radv_graphics_state_key *gfx_state,
+                      uint64_t *per_vtx_mask, uint64_t *per_prim_mask)
+{
+   /* These are not compiled into neither output param nor position exports. */
+   const uint64_t special_mask = BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_COUNT) |
+                                 BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_INDICES) |
+                                 BITFIELD64_BIT(VARYING_SLOT_CULL_PRIMITIVE);
+
+   *per_prim_mask = nir->info.outputs_written & nir->info.per_primitive_outputs & ~special_mask;
+   *per_vtx_mask = nir->info.outputs_written & ~nir->info.per_primitive_outputs & ~special_mask;
+
+   /* Mesh multiview is only lowered in ac_nir_lower_ngg, so we have to fake it here. */
+   if (nir->info.stage == MESA_SHADER_MESH && gfx_state->has_multiview_view_index)
+      *per_prim_mask |= VARYING_BIT_LAYER;
+}
+
+static void
+radv_set_vs_output_param(struct radv_device *device, const struct nir_shader *nir,
+                         const struct radv_graphics_state_key *gfx_state, struct radv_shader_info *info,
+                         bool export_prim_id, bool export_clip_cull_dists)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct radv_vs_output_info *outinfo = &info->outinfo;
+   uint64_t per_vtx_mask, per_prim_mask;
+
+   radv_get_output_masks(nir, gfx_state, &per_vtx_mask, &per_prim_mask);
+
+   memset(outinfo->vs_output_param_offset, AC_EXP_PARAM_UNDEFINED, sizeof(outinfo->vs_output_param_offset));
+
+   unsigned total_param_exports = 0;
+
+   /* Per-vertex outputs */
+   assign_outinfo_params(outinfo, per_vtx_mask, &total_param_exports, 0);
+
+   if (export_prim_id && (nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_TESS_EVAL)) {
+      /* Mark the primitive ID as output when it's implicitly exported by VS or TES. */
+      if (outinfo->vs_output_param_offset[VARYING_SLOT_PRIMITIVE_ID] == AC_EXP_PARAM_UNDEFINED)
+         outinfo->vs_output_param_offset[VARYING_SLOT_PRIMITIVE_ID] = total_param_exports++;
+
+      outinfo->export_prim_id = true;
+   }
+
+   if (export_clip_cull_dists) {
+      if (nir->info.outputs_written & VARYING_BIT_CLIP_DIST0)
+         outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST0] = total_param_exports++;
+      if (nir->info.outputs_written & VARYING_BIT_CLIP_DIST1)
+         outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST1] = total_param_exports++;
+   }
+
+   outinfo->param_exports = total_param_exports;
+
+   /* The HW always assumes that there is at least 1 per-vertex param.
+    * so if there aren't any, we have to offset per-primitive params by 1.
+    */
+   const unsigned extra_offset = !!(total_param_exports == 0 && pdev->info.gfx_level >= GFX11);
+
+   /* Per-primitive outputs: the HW needs these to be last. */
+   assign_outinfo_params(outinfo, per_prim_mask, &total_param_exports, extra_offset);
+
+   outinfo->prim_param_exports = total_param_exports - outinfo->param_exports;
+}
+
 static uint8_t
 radv_get_wave_size(struct radv_device *device, gl_shader_stage stage, const struct radv_shader_info *info,
                    const struct radv_shader_stage_key *stage_key)
@@ -1142,19 +1205,13 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
    if (nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_TESS_EVAL ||
        nir->info.stage == MESA_SHADER_GEOMETRY || nir->info.stage == MESA_SHADER_MESH) {
       struct radv_vs_output_info *outinfo = &info->outinfo;
+      uint64_t per_vtx_mask, per_prim_mask;
 
-      /* These are not compiled into neither output param nor position exports. */
-      uint64_t special_mask = BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_COUNT) |
-                              BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_INDICES) |
-                              BITFIELD64_BIT(VARYING_SLOT_CULL_PRIMITIVE);
-      uint64_t per_prim_mask = nir->info.outputs_written & nir->info.per_primitive_outputs & ~special_mask;
-      uint64_t per_vtx_mask = nir->info.outputs_written & ~nir->info.per_primitive_outputs & ~special_mask;
+      radv_get_output_masks(nir, gfx_state, &per_vtx_mask, &per_prim_mask);
 
-      /* Mesh multivew is only lowered in ac_nir_lower_ngg, so we have to fake it here. */
-      if (nir->info.stage == MESA_SHADER_MESH && gfx_state->has_multiview_view_index) {
-         per_prim_mask |= VARYING_BIT_LAYER;
+      /* Mesh multiview is only lowered in ac_nir_lower_ngg, so we have to fake it here. */
+      if (nir->info.stage == MESA_SHADER_MESH && gfx_state->has_multiview_view_index)
          info->uses_view_index = true;
-      }
 
       /* Per vertex outputs. */
       outinfo->writes_pointsize = per_vtx_mask & VARYING_BIT_PSIZ;
@@ -1188,25 +1245,6 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
          pos_written |= 1 << 3;
 
       outinfo->pos_exports = util_bitcount(pos_written);
-
-      memset(outinfo->vs_output_param_offset, AC_EXP_PARAM_UNDEFINED, sizeof(outinfo->vs_output_param_offset));
-
-      unsigned total_param_exports = 0;
-
-      /* Per-vertex outputs */
-      assign_outinfo_params(outinfo, per_vtx_mask, &total_param_exports, 0);
-
-      outinfo->param_exports = total_param_exports;
-
-      /* The HW always assumes that there is at least 1 per-vertex param.
-       * so if there aren't any, we have to offset per-primitive params by 1.
-       */
-      const unsigned extra_offset = !!(total_param_exports == 0 && pdev->info.gfx_level >= GFX11);
-
-      /* Per-primitive outputs: the HW needs these to be last. */
-      assign_outinfo_params(outinfo, per_prim_mask, &total_param_exports, extra_offset);
-
-      outinfo->prim_param_exports = total_param_exports - outinfo->param_exports;
    }
 
    info->vs.needs_draw_id |= BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID);
@@ -1687,24 +1725,10 @@ radv_link_shaders_info(struct radv_device *device, struct radv_shader_stage *pro
     */
    if (producer->info.next_stage == MESA_SHADER_FRAGMENT ||
        !(gfx_state->lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)) {
-      struct radv_vs_output_info *outinfo = &producer->info.outinfo;
       const bool ps_prim_id_in = !consumer || consumer->info.ps.prim_id_input;
       const bool ps_clip_dists_in = !consumer || !!consumer->info.ps.input_clips_culls_mask;
 
-      if (ps_prim_id_in && (producer->stage == MESA_SHADER_VERTEX || producer->stage == MESA_SHADER_TESS_EVAL)) {
-         /* Mark the primitive ID as output when it's implicitly exported by VS or TES. */
-         if (outinfo->vs_output_param_offset[VARYING_SLOT_PRIMITIVE_ID] == AC_EXP_PARAM_UNDEFINED)
-            outinfo->vs_output_param_offset[VARYING_SLOT_PRIMITIVE_ID] = outinfo->param_exports++;
-
-         outinfo->export_prim_id = true;
-      }
-
-      if (ps_clip_dists_in) {
-         if (producer->nir->info.outputs_written & VARYING_BIT_CLIP_DIST0)
-            outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST0] = outinfo->param_exports++;
-         if (producer->nir->info.outputs_written & VARYING_BIT_CLIP_DIST1)
-            outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST1] = outinfo->param_exports++;
-      }
+      radv_set_vs_output_param(device, producer->nir, gfx_state, &producer->info, ps_prim_id_in, ps_clip_dists_in);
    }
 
    if (producer->stage == MESA_SHADER_VERTEX || producer->stage == MESA_SHADER_TESS_EVAL) {

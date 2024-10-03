@@ -171,6 +171,7 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .lower_vector_cmp = true,
    .lower_device_index_to_zero = true,
    /* .support_16bit_alu = true, */
+   .no_integers = true,
 };
 
 static const void *

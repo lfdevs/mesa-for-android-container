@@ -315,11 +315,14 @@ xe_queue_exec_locked(struct anv_queue *queue,
                        perf_query_pass, &exec);
 
    if (perf_query_pool && perf_query_pass >= 0 && cmd_buffer_count) {
+      struct drm_xe_sync xe_syncs[1] = {};
       struct drm_xe_exec perf_query_exec = {
             .exec_queue_id = queue->exec_queue_id,
             .num_batch_buffer = 1,
             .address = perf_query_pool->bo->offset +
                        khr_perf_query_preamble_offset(perf_query_pool, perf_query_pass),
+            .num_syncs = 1,
+            .syncs = (uintptr_t)xe_syncs,
       };
       assert(perf_query_pass < perf_query_pool->n_passes);
       struct intel_perf_query_info *query_info = perf_query_pool->pass_query[perf_query_pass];
@@ -339,6 +342,11 @@ xe_queue_exec_locked(struct anv_queue *queue,
                                         strerror(errno));
          }
       }
+
+      xe_syncs[0].type = DRM_XE_SYNC_TYPE_TIMELINE_SYNCOBJ;
+      xe_syncs[0].flags = 0;/* wait */
+      xe_syncs[0].handle = intel_bind_timeline_get_syncobj(&device->bind_timeline);
+      xe_syncs[0].timeline_value = intel_bind_timeline_get_last_point(&device->bind_timeline);
 
       if (!device->info->no_hw && result == VK_SUCCESS) {
          if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &perf_query_exec))

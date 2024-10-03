@@ -161,6 +161,7 @@ print_asm_clrx(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
 #else
    char path[] = "/tmp/fileXXXXXX";
    char line[2048], command[128];
+   bool ret = false;
    FILE* p;
    int fd;
 
@@ -172,8 +173,10 @@ print_asm_clrx(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
       return true;
 
    for (unsigned i = 0; i < exec_size; i++) {
-      if (write(fd, &binary[i], 4) == -1)
+      if (write(fd, &binary[i], 4) == -1) {
+         ret = true;
          goto fail;
+      }
    }
 
    sprintf(command, "clrxdisasm --gpuType=%s -r %s", gpu_type, path);
@@ -183,6 +186,7 @@ print_asm_clrx(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
       if (!fgets(line, sizeof(line), p)) {
          fprintf(output, "clrxdisasm not found\n");
          pclose(p);
+         ret = true;
          goto fail;
       }
 
@@ -239,12 +243,10 @@ print_asm_clrx(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
       print_constant_data(output, program);
    }
 
-   return false;
-
 fail:
    close(fd);
    unlink(path);
-   return true;
+   return ret;
 #endif
 }
 

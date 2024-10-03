@@ -330,6 +330,15 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
 
       break;
    case 3:
+      switch (instr->opc) {
+      case OPC_MAD_S24:
+      case OPC_MAD_U24:
+         validate_assert(ctx, !(instr->dsts[0]->flags & IR3_REG_HALF));
+         validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
+         break;
+      default:
+         break;
+      }
       /* Validate that cat3 opc matches the src type.  We've already checked
        * that all the src regs are same type
        */

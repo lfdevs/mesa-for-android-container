@@ -828,10 +828,8 @@ r600_lower_and_optimize_nir(nir_shader *sh,
    if (lower_64bit)
       NIR_PASS_V(sh, r600::r600_nir_64_to_vec2);
 
-   if ((sh->info.bit_sizes_float | sh->info.bit_sizes_int) & 64) {
+   if ((sh->info.bit_sizes_float | sh->info.bit_sizes_int) & 64)
       NIR_PASS_V(sh, r600::r600_split_64bit_uniforms_and_ubo);
-      NIR_PASS_V(sh, nir_lower_doubles, NULL, sh->options->lower_doubles_options);
-   }
 
    /* Lower to scalar to let some optimization work out better */
    while (optimize_once(sh))

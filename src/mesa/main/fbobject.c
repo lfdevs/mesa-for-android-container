@@ -3966,6 +3966,28 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
 {
    FLUSH_VERTICES(ctx, _NEW_BUFFERS, 0);
 
+   /* EXT_multisampled_render_to_texture:
+
+      If samples is greater than the 
+      value of MAX_SAMPLES_EXT, then the error INVALID_VALUE is generated. 
+      An INVALID_OPERATION error is generated if samples is greater than
+      the maximum number of samples supported for target and its
+      internalformat. If samples is zero, then TEXTURE_SAMPLES_EXT is set
+      to zero, and FramebufferTexture2DMultisampleEXT behaves like
+      FramebufferTexture2D.
+    */
+   if (samples > ctx->Const.MaxSamples) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "invalid sample count %u",
+                  samples);
+      return;
+   }
+   if (samples > ctx->Const.MaxFramebufferSamples) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "invalid sample count %u",
+                  samples);
+      return;
+   }
+
+
    simple_mtx_lock(&fb->Mutex);
    if (texObj) {
       if (attachment == GL_DEPTH_ATTACHMENT &&

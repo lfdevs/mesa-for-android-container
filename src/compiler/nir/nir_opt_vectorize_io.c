@@ -449,8 +449,9 @@ nir_opt_vectorize_io(nir_shader *shader, nir_variable_mode modes)
        * but that is only done when outputs are ignored, so vectorize them
        * separately.
        */
-      return nir_opt_vectorize_io(shader, nir_var_shader_in) ||
-             nir_opt_vectorize_io(shader, nir_var_shader_out);
+      bool progress_in = nir_opt_vectorize_io(shader, nir_var_shader_in);
+      bool progress_out = nir_opt_vectorize_io(shader, nir_var_shader_out);
+      return progress_in || progress_out;
    }
 
    /* Initialize dynamic arrays. */

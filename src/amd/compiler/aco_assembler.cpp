@@ -1514,6 +1514,21 @@ emit_long_jump(asm_context& ctx, SALU_instruction* branch, bool backwards,
 {
    Builder bld(ctx.program);
 
+   auto emit = [&](Instruction *instr_ptr, uint32_t *size=NULL) {
+      aco_ptr<Instruction> instr(instr_ptr);
+      emit_instruction(ctx, out, instr.get());
+
+      if (size)
+         *size = out.size();
+
+      /* VALUMaskWriteHazard and VALUReadSGPRHazard needs sa_sdst=0 wait */
+      if (ctx.gfx_level >= GFX11 && !instr_ptr->definitions.empty() &&
+          instr_ptr->definitions[0].physReg() != scc) {
+         instr.reset(bld.sopp(aco_opcode::s_waitcnt_depctr, 0xfffe));
+         emit_instruction(ctx, out, instr.get());
+      }
+   };
+
    Definition def;
    if (branch->definitions.empty()) {
       assert(ctx.program->blocks[branch->imm].kind & block_kind_discard_early_exit);
@@ -1527,8 +1542,7 @@ emit_long_jump(asm_context& ctx, SALU_instruction* branch, bool backwards,
    Definition def_tmp_hi(def.physReg().advance(4), s1);
    Operand op_tmp_hi(def.physReg().advance(4), s1);
 
-   aco_ptr<Instruction> instr;
-
+   size_t conditional_br_imm = 0;
    if (branch->opcode != aco_opcode::s_branch) {
       /* for conditional branches, skip the long jump if the condition is false */
       aco_opcode inv;
@@ -1541,36 +1555,39 @@ emit_long_jump(asm_context& ctx, SALU_instruction* branch, bool backwards,
       case aco_opcode::s_cbranch_execnz: inv = aco_opcode::s_cbranch_execz; break;
       default: unreachable("Unhandled long jump.");
       }
-      unsigned size = ctx.gfx_level >= GFX12 ? 7 : 6;
-      instr.reset(bld.sopp(inv, size));
+      aco_ptr<Instruction> instr;
+      instr.reset(bld.sopp(inv, 0));
       emit_sopp_instruction(ctx, out, instr.get(), true);
+      conditional_br_imm = out.size() - 1;
    }
+
+   if (ctx.gfx_level == GFX10) /* VMEMtoScalarWriteHazard needs vm_vsrc=0 wait */
+      emit(bld.sopp(aco_opcode::s_waitcnt_depctr, 0xffe3));
 
    /* create the new PC and stash SCC in the LSB */
-   instr.reset(bld.sop1(aco_opcode::s_getpc_b64, def).instr);
-   emit_instruction(ctx, out, instr.get());
+   uint32_t getpc_loc, add_literal_loc;
+   emit(bld.sop1(aco_opcode::s_getpc_b64, def), &getpc_loc);
+   if (ctx.gfx_level >= GFX12)
+      emit(bld.sop1(aco_opcode::s_sext_i32_i16, def_tmp_hi, op_tmp_hi));
+   emit(bld.sop2(aco_opcode::s_addc_u32, def_tmp_lo, op_tmp_lo, Operand::literal32(0)),
+        &add_literal_loc);
 
-   if (ctx.gfx_level >= GFX12) {
-      instr.reset(bld.sop1(aco_opcode::s_sext_i32_i16, def_tmp_hi, op_tmp_hi).instr);
-      emit_instruction(ctx, out, instr.get());
-   }
-
-   instr.reset(
-      bld.sop2(aco_opcode::s_addc_u32, def_tmp_lo, op_tmp_lo, Operand::literal32(0)).instr);
-   emit_instruction(ctx, out, instr.get());
-   branch->pass_flags = out.size();
+   branch->pass_flags = getpc_loc | (add_literal_loc << 16);
 
    /* s_addc_u32 for high 32 bits not needed because the program is in a 32-bit VA range */
 
    /* restore SCC and clear the LSB of the new PC */
-   instr.reset(bld.sopc(aco_opcode::s_bitcmp1_b32, def_tmp_lo, op_tmp_lo, Operand::zero()).instr);
-   emit_instruction(ctx, out, instr.get());
-   instr.reset(bld.sop1(aco_opcode::s_bitset0_b32, def_tmp_lo, Operand::zero()).instr);
-   emit_instruction(ctx, out, instr.get());
+   emit(bld.sopc(aco_opcode::s_bitcmp1_b32, Definition(scc, s1), op_tmp_lo, Operand::zero()));
+   emit(bld.sop1(aco_opcode::s_bitset0_b32, def_tmp_lo, Operand::zero()));
 
    /* create the s_setpc_b64 to jump */
-   instr.reset(bld.sop1(aco_opcode::s_setpc_b64, Operand(def.physReg(), s2)).instr);
-   emit_instruction(ctx, out, instr.get());
+   emit(bld.sop1(aco_opcode::s_setpc_b64, Operand(def.physReg(), s2)));
+
+   if (branch->opcode != aco_opcode::s_branch) {
+      uint32_t imm = out.size() - conditional_br_imm - 1;
+      assert(imm != 0x3f || ctx.gfx_level != GFX10);
+      out[conditional_br_imm] |= imm;
+   }
 }
 
 void
@@ -1599,9 +1616,10 @@ fix_branches(asm_context& ctx, std::vector<uint32_t>& out)
          }
 
          if (branch.second->pass_flags) {
-            int after_getpc = branch.first + branch.second->pass_flags - 2;
+            uint32_t after_getpc = branch.first + (branch.second->pass_flags & 0xffff);
+            uint32_t add_literal = branch.first + (branch.second->pass_flags >> 16) - 1;
             offset = (int)ctx.program->blocks[branch.second->imm].offset - after_getpc;
-            out[branch.first + branch.second->pass_flags - 1] = offset * 4;
+            out[add_literal] = offset * 4;
          } else {
             out[branch.first] &= 0xffff0000u;
             out[branch.first] |= (uint16_t)offset;

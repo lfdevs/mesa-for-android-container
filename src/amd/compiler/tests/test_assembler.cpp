@@ -60,6 +60,7 @@ BEGIN_TEST(assembler.long_jump.unconditional_forwards)
       return;
 
    //!BB0:
+   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
    //! s_getpc_b64 s[0:1]                                          ; be801f00
    //! s_addc_u32 s0, s0, 0x20014                                  ; 8200ff00 00020014
    //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
@@ -91,12 +92,17 @@ BEGIN_TEST(assembler.long_jump.conditional_forwards)
 
       //! BB0:
       //! s_cbranch_scc1 BB1                                          ; $_
+      //~gfx10! s_waitcnt_depctr 0xffe3                               ; $_
       //! s_getpc_b64 s[0:1]                                          ; $_
+      //~gfx12! s_wait_alu 0xfffe                                     ; $_
       //~gfx12! s_sext_i32_i16 s1, s1                                 ; $_
+      //~gfx12! s_wait_alu 0xfffe                                     ; $_
       //~gfx10! s_addc_u32 s0, s0, 0x20014                            ; $_ $_
-      //~gfx12! s_add_co_ci_u32 s0, s0, 0x20014                       ; $_ $_
+      //~gfx12! s_add_co_ci_u32 s0, s0, 0x20028                       ; $_ $_
+      //~gfx12! s_wait_alu 0xfffe                                     ; $_
       //! s_bitcmp1_b32 s0, 0                                         ; $_
       //! s_bitset0_b32 s0, 0                                         ; $_
+      //~gfx12! s_wait_alu 0xfffe                                     ; $_
       //! s_setpc_b64 s[0:1]                                          ; $_
       bld.sopp(aco_opcode::s_cbranch_scc0, Definition(PhysReg(0), s2), 2);
 
@@ -130,8 +136,9 @@ BEGIN_TEST(assembler.long_jump.unconditional_backwards)
    for (unsigned i = 0; i < INT16_MAX + 1; i++)
       bld.sopp(aco_opcode::s_nop, 0);
 
+   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
    //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0xfffdfffc                               ; 8200ff00 fffdfffc
+   //! s_addc_u32 s0, s0, 0xfffdfff8                               ; 8200ff00 fffdfff8
    //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
    //! s_bitset0_b32 s0, 0                                         ; be801b80
    //! s_setpc_b64 s[0:1]                                          ; be802000
@@ -157,9 +164,10 @@ BEGIN_TEST(assembler.long_jump.conditional_backwards)
    for (unsigned i = 0; i < INT16_MAX + 1; i++)
       bld.sopp(aco_opcode::s_nop, 0);
 
-   //! s_cbranch_execz BB1                                         ; bf880006
+   //! s_cbranch_execz BB1                                         ; bf880007
+   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
    //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0xfffdfff8                               ; 8200ff00 fffdfff8
+   //! s_addc_u32 s0, s0, 0xfffdfff4                               ; 8200ff00 fffdfff4
    //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
    //! s_bitset0_b32 s0, 0                                         ; be801b80
    //! s_setpc_b64 s[0:1]                                          ; be802000
@@ -175,7 +183,7 @@ BEGIN_TEST(assembler.long_jump.conditional_backwards)
    finish_assembler_test();
 END_TEST
 
-BEGIN_TEST(assembler.long_jump .3f)
+BEGIN_TEST(assembler.long_jump._3f)
    if (!setup_cs(NULL, (amd_gfx_level)GFX10))
       return;
 
@@ -184,7 +192,7 @@ BEGIN_TEST(assembler.long_jump .3f)
    //! s_nop 0                                                     ; bf800000
    bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 1);
 
-   for (unsigned i = 0; i < 0x3f - 6; i++) // a unconditional long jump is 6 dwords
+   for (unsigned i = 0; i < 0x3f - 7; i++) // an unconditional long jump is 7 dwords
       bld.vop1(aco_opcode::v_nop);
    bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 2);
 
@@ -231,7 +239,8 @@ BEGIN_TEST(assembler.long_jump.discard_early_exit)
       return;
 
    //! BB0:
-   //! s_cbranch_scc1 BB1                                          ; bf850006
+   //! s_cbranch_scc1 BB1                                          ; bf850007
+   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
    //! s_getpc_b64 s[0:1]                                          ; be801f00
    //! s_addc_u32 s0, s0, 0x20014                                  ; 8200ff00 00020014
    //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
@@ -694,11 +703,19 @@ BEGIN_TEST(assembler.mtbuf)
          ->mtbuf()
          .cache = cache_sys_coherent;
 
-      //; if llvm_ver >= 16 and variant == 'gfx11':
+      //; if llvm_ver >= 19 and variant == 'gfx11':
+      //;    insert_pattern('(invalid instruction) ; e9900000')
+      //;    insert_pattern('s_add_u32 s40, 0, s42 ; 80282a80')
+      //; elif llvm_ver >= 19 and variant == 'gfx12':
+      //;    insert_pattern('(invalid instruction) ; c460007c')
+      //;    insert_pattern('v_mul_hi_u32_u24_e32 v128, s42, v32 ; 1900402a')
+      //;    insert_pattern('(invalid instruction) ; 00000080')
+      //; elif llvm_ver >= 16 and variant == 'gfx11':
       //;    insert_pattern('tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] ; e9900000 80282a80')
       //; elif variant == 'gfx11':
       //;    insert_pattern('tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] tfe ; e9900000 80282a80')
-      //~gfx12! tbuffer_load_format_x v42, off, s[32:35], null format:[BUF_FMT_32_32_FLOAT] ; c460007c 1900402a 00000080
+      //; elif variant == 'gfx12':
+      //;    insert_pattern('tbuffer_load_format_x v42, off, s[32:35], null format:[BUF_FMT_32_32_FLOAT] ; c460007c 1900402a 00000080')
       bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt,
                 nfmt, 0, false)
          ->mtbuf()
@@ -847,18 +864,18 @@ BEGIN_TEST(assembler.mimg)
       //~gfx12! image_store v[30:33], v10, s[64:71] dmask:0xf dim:SQ_RSRC_IMG_1D ; d3c18000 0000801e 0000000a
       bld.mimg(aco_opcode::image_store, op_s8, Operand(s4), op_v4, op_v1);
 
-      //~gfx11! image_atomic_add v10, v20, s[64:71] dmask:0xf dim:SQ_RSRC_IMG_2D ; f0300f04 00100a14
-      //~gfx12! image_atomic_add_uint v10, [v20, v21, v0, v0], s[64:71] dmask:0xf dim:SQ_RSRC_IMG_2D ; d3c30001 0000800a 00001514
+      //~gfx11! image_atomic_add v10, v[20:21], s[64:71] dmask:0x1 dim:SQ_RSRC_IMG_2D ; f0300104 00100a14
+      //~gfx12! image_atomic_add_uint v10, [v20, v21], s[64:71] dmask:0x1 dim:SQ_RSRC_IMG_2D ; d0430001 0000800a 00001514
       bld.mimg(aco_opcode::image_atomic_add, Definition(op_v1.physReg(), v1), op_s8, Operand(s4),
-               op_v1, op_v2)
+               op_v1, op_v2, 0x1)
          ->mimg()
          .dim = ac_image_2d;
 
       /* Atomic with return */
-      //~gfx11! image_atomic_add v10, v20, s[64:71] dmask:0xf dim:SQ_RSRC_IMG_2D glc ; f0304f04 00100a14
-      //~gfx12! image_atomic_add_uint v10, [v20, v21, v0, v0], s[64:71] dmask:0xf dim:SQ_RSRC_IMG_2D th:TH_ATOMIC_RETURN ; d3c30001 0010800a 00001514
+      //~gfx11! image_atomic_add v10, v[20:21], s[64:71] dmask:0x1 dim:SQ_RSRC_IMG_2D glc ; f0304104 00100a14
+      //~gfx12! image_atomic_add_uint v10, [v20, v21], s[64:71] dmask:0x1 dim:SQ_RSRC_IMG_2D th:TH_ATOMIC_RETURN ; d0430001 0010800a 00001514
       bld.mimg(aco_opcode::image_atomic_add, Definition(op_v1.physReg(), v1), op_s8, Operand(s4),
-               op_v1, op_v2, 0xf, false, false, false, cache_atomic_rtn)
+               op_v1, op_v2, 0x1, false, false, false, cache_atomic_rtn)
          ->mimg()
          .dim = ac_image_2d;
 
@@ -1303,6 +1320,8 @@ BEGIN_TEST(assembler.vopd)
    for (amd_gfx_level gfx : filter_gfx_levels({GFX11, GFX12})) {
       if (!setup_cs(NULL, gfx))
          continue;
+
+      program->wave_size = 32;
 
       Definition dst_v0 = bld.def(v1);
       dst_v0.setFixed(PhysReg(256));

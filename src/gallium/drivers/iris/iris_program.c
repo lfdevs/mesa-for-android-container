@@ -1381,7 +1381,8 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
                          struct iris_binding_table *bt,
                          unsigned num_render_targets,
                          unsigned num_system_values,
-                         unsigned num_cbufs)
+                         unsigned num_cbufs,
+                         bool use_null_rt)
 {
    const struct shader_info *info = &nir->info;
 
@@ -1404,6 +1405,8 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
          bt->used_mask[IRIS_SURFACE_GROUP_RENDER_TARGET_READ] =
             BITFIELD64_MASK(num_render_targets);
       }
+
+      bt->use_null_rt = use_null_rt;
    } else if (info->stage == MESA_SHADER_COMPUTE) {
       bt->sizes[IRIS_SURFACE_GROUP_CS_WORK_GROUPS] = 1;
    }
@@ -1858,7 +1861,7 @@ iris_compile_vs(struct iris_screen *screen,
 
    struct iris_binding_table bt;
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, false);
 
    const char *error;
    const unsigned *program;
@@ -2086,7 +2089,7 @@ iris_compile_tcs(struct iris_screen *screen,
    iris_setup_uniforms(devinfo, mem_ctx, nir, 0, &system_values,
                        &num_system_values, &num_cbufs);
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, false);
 
    const char *error = NULL;
    const unsigned *program;
@@ -2276,7 +2279,7 @@ iris_compile_tes(struct iris_screen *screen,
 
    struct iris_binding_table bt;
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, false);
 
    const char *error;
    const unsigned *program;
@@ -2458,7 +2461,7 @@ iris_compile_gs(struct iris_screen *screen,
 
    struct iris_binding_table bt;
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, false);
 
    const char *error;
    const unsigned *program;
@@ -2627,16 +2630,14 @@ iris_compile_fs(struct iris_screen *screen,
     */
    brw_nir_lower_fs_outputs(nir);
 
-   /* On Gfx11+, shader RT write messages have a "Null Render Target" bit
-    * and do not need a binding table entry with a null surface.  Earlier
-    * generations need an entry for a null surface.
-    */
-   int null_rts = devinfo->ver < 11 ? 1 : 0;
+   int null_rts = brw_nir_fs_needs_null_rt(devinfo, nir,
+                                           key->multisample_fbo,
+                                           key->alpha_to_coverage) ? 1 : 0;
 
    struct iris_binding_table bt;
    iris_setup_binding_table(devinfo, nir, &bt,
                             MAX2(key->nr_color_regions, null_rts),
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, null_rts != 0);
 
    const char *error;
    const unsigned *program;
@@ -2966,7 +2967,7 @@ iris_compile_cs(struct iris_screen *screen,
 
    struct iris_binding_table bt;
    iris_setup_binding_table(devinfo, nir, &bt, /* num_render_targets */ 0,
-                            num_system_values, num_cbufs);
+                            num_system_values, num_cbufs, false);
 
    const char *error;
    const unsigned *program;

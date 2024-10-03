@@ -90,7 +90,7 @@ endif
 
 libzink = static_library(
   'zink',
-  [files_libzink, zink_device_info, zink_instance, zink_nir_algebraic_c, vk_dispatch_table],
+  [files_libzink, zink_device_info, zink_instance, zink_nir_algebraic_c, vk_dispatch_table, spirv_info_h],
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_vulkan_util, inc_zink_vk],
   link_args : [ld_args_build_id],
