@@ -3211,6 +3211,9 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
    uint32_t dst_width = info->bufferRowLength ?: extent.width;
    uint32_t dst_height = info->bufferImageHeight ?: extent.height;
 
+   if (extent.width == 0 || extent.height == 0 || extent.depth == 0)
+      return;
+
    copy_compressed(src_image->vk.format, &offset, &extent, &dst_width, &dst_height);
 
    uint32_t block_size = util_format_get_blocksize(dst_format);
