@@ -249,6 +249,8 @@ struct wsi_device {
    WSI_CB(GetPhysicalDeviceQueueFamilyProperties);
    WSI_CB(GetQueryPoolResults);
    WSI_CB(GetSemaphoreFdKHR);
+   WSI_CB(ImportSemaphoreFdKHR);
+   WSI_CB(ImportFenceFdKHR);
    WSI_CB(ResetFences);
    WSI_CB(QueueSubmit2);
    WSI_CB(SetDebugUtilsObjectNameEXT);

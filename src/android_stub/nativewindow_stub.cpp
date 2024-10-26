@@ -44,6 +44,13 @@ AHardwareBuffer_getNativeHandle(const AHardwareBuffer *buffer)
    return NULL;
 }
 
+int
+AHardwareBuffer_sendHandleToUnixSocket(const AHardwareBuffer* buffer,
+                                       int socketFd)
+{
+   return 0;
+}
+
 void
 ANativeWindow_acquire(ANativeWindow *window)
 {

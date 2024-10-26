@@ -299,6 +299,7 @@ elif _vulkan_drivers.contains('all')
                       'nouveau', 'asahi', 'gfxstream', 'kosmickrisp']
 endif
 
+with_wrapper_vk = _vulkan_drivers.contains('wrapper')
 with_intel_vk = _vulkan_drivers.contains('intel')
 with_intel_hasvk = _vulkan_drivers.contains('intel_hasvk')
 with_amd_vk = _vulkan_drivers.contains('amd')
@@ -1117,6 +1118,9 @@ endif
 pre_args += '-DGLAPI_EXPORT_PROTO_ENTRY_POINTS=@0@'.format(with_glapi_export_proto_entry_points.to_int())
 
 with_android_stub = get_option('android-stub')
+if with_wrapper_vk
+  with_android_stub = true
+endif
 need_android_stub = with_platform_android or with_gfxstream_emulated_android
 if with_android_stub and not need_android_stub
   error('`-D android-stub=true` makes no sense without `-D platforms=android` or emulated Android')
