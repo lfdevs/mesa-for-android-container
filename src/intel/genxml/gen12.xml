@@ -1320,6 +1320,7 @@
     <field name="Protected Memory Disable" start="59" end="59" type="bool" />
     <field name="Tile Cache Flush Enable" start="60" end="60" type="bool" />
     <field name="Command Cache Invalidate Enable" start="61" end="61" type="bool" />
+    <field name="L3 Fabric Flush" start="62" end="62" type="bool" />
     <field name="Address" start="66" end="111" type="address" />
     <field name="Immediate Data" start="128" end="191" type="uint" />
   </instruction>

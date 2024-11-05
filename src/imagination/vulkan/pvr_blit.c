@@ -1726,8 +1726,11 @@ static VkResult pvr_clear_color_attachment_static(
    template.config.ispctl.upass =
       cmd_buffer->state.render_pass_info.isp_userpass;
 
-   if (template_idx & VK_IMAGE_ASPECT_STENCIL_BIT)
-      template.config.ispa.sref = stencil;
+   if (template_idx & VK_IMAGE_ASPECT_STENCIL_BIT) {
+      /* clang-format off */
+      template.config.ispa.sref = stencil & PVRX(TA_STATE_ISPA_SREF_SIZE_MAX);
+      /* clang-format on */
+   }
 
    if (vs_has_rt_id_output) {
       template.config.output_sel.rhw_pres = true;
@@ -2005,8 +2008,11 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
             cmd_buffer->device->static_clear_state.ppp_templates[template_idx];
 
          if (attachment->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
+            /* clang-format off */
             template.config.ispa.sref =
-               attachment->clearValue.depthStencil.stencil;
+               attachment->clearValue.depthStencil.stencil &
+                  PVRX(TA_STATE_ISPA_SREF_SIZE_MAX);
+            /* clang-format on */
          }
 
          if (vs_has_rt_id_output) {

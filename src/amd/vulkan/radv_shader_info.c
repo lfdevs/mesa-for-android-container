@@ -1685,12 +1685,22 @@ radv_determine_ngg_settings(struct radv_device *device, struct radv_shader_stage
                             struct radv_shader_stage *fs_stage, const struct radv_graphics_state_key *gfx_state)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   uint64_t ps_inputs_read;
 
    assert(es_stage->stage == MESA_SHADER_VERTEX || es_stage->stage == MESA_SHADER_TESS_EVAL);
    assert(!fs_stage || fs_stage->stage == MESA_SHADER_FRAGMENT);
 
-   /* NGG culling is implicitly disabled when the FS stage is unknown. */
-   uint64_t ps_inputs_read = fs_stage ? fs_stage->nir->info.inputs_read : ~0;
+   if (fs_stage) {
+      ps_inputs_read = fs_stage->nir->info.inputs_read;
+   } else {
+      /* Rely on the number of VS/TES outputs when the FS is unknown (for fast-link or unlinked ESO)
+       * because this should be a good approximation of the number of FS inputs.
+       */
+      ps_inputs_read = es_stage->nir->info.outputs_written;
+
+      /* Clear varyings that can't be PS inputs. */
+      ps_inputs_read &= ~(VARYING_BIT_POS | VARYING_BIT_PSIZ);
+   }
 
    unsigned num_vertices_per_prim = 0;
    if (es_stage->stage == MESA_SHADER_VERTEX) {

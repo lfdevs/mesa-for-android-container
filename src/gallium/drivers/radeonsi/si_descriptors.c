@@ -2751,6 +2751,9 @@ static uint64_t si_create_image_handle(struct pipe_context *ctx, const struct pi
 
    si_resource(view->resource)->image_handle_allocated = true;
 
+   if (view->access & PIPE_IMAGE_ACCESS_WRITE && view->resource)
+      si_mark_image_range_valid(view);
+
    return handle;
 }
 

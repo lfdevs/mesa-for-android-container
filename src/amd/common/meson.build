@@ -153,6 +153,7 @@ if with_tests and not with_platform_windows
       include_directories : [
         inc_amd, inc_include, inc_src,
       ],
+      c_args : cpp_args_addrlib,
       dependencies: [idep_amdgfxregs_h, dep_libdrm_amdgpu, idep_mesautil],
     ),
     suite: ['amd']
@@ -169,6 +170,7 @@ if with_tests and not with_platform_windows
         include_directories : [
           inc_amd, inc_include, inc_src,
         ],
+        c_args : cpp_args_addrlib,
         dependencies: [idep_amdgfxregs_h, dep_libdrm_amdgpu, idep_mesautil, dep_openmp],
       ),
       suite: ['amd']

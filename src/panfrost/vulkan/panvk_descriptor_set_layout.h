@@ -37,7 +37,6 @@ struct panvk_descriptor_set_binding_layout {
 struct panvk_descriptor_set_layout {
    struct vk_descriptor_set_layout vk;
    VkDescriptorSetLayoutCreateFlagBits flags;
-   blake3_hash hash;
    unsigned desc_count;
    unsigned dyn_buf_count;
 

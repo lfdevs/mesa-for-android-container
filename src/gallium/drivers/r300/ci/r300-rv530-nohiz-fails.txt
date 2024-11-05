@@ -801,7 +801,9 @@ spec@glsl-1.10@execution@loops@glsl-vs-loop-300,Fail
 
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
 
+# HW limitation (no support for gl_ClipVertex)
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-const-accept,Fail
+spec@glsl-1.20@execution@clipping@vs-clip-vertex-const-reject,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-different-from-position,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-homogeneity,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail

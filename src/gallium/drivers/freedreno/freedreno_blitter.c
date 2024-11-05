@@ -117,6 +117,7 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond) assert_dt
 static void
 fd_blitter_pipe_end(struct fd_context *ctx) assert_dt
 {
+   util_blitter_restore_constant_buffer_state(ctx->blitter);
 }
 
 static void
@@ -213,9 +214,6 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
     */
    fd_blitter_pipe_begin(ctx, false);
 
-   util_blitter_save_fragment_constant_buffer_slot(
-      ctx->blitter, ctx->constbuf[PIPE_SHADER_FRAGMENT].cb);
-
    util_blitter_common_clear_setup(blitter, pfb->width, pfb->height, buffers,
                                    NULL, NULL);
 
@@ -283,7 +281,6 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
    /* We expect that this should not have triggered a change in pfb: */
    assert(util_framebuffer_state_equal(pfb, &ctx->framebuffer));
 
-   util_blitter_restore_constant_buffer_state(blitter);
    util_blitter_restore_vertex_states(blitter);
    util_blitter_restore_fragment_states(blitter);
    util_blitter_restore_textures(blitter);

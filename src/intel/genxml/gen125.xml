@@ -1826,6 +1826,7 @@
     <field name="Protected Memory Disable" start="59" end="59" type="bool" />
     <field name="Tile Cache Flush Enable" start="60" end="60" type="bool" />
     <field name="Command Cache Invalidate Enable" start="61" end="61" type="bool" />
+    <field name="L3 Fabric Flush" start="62" end="62" type="bool" />
     <field name="TBIMR Force Batch Closure" start="63" end="63" type="uint">
       <value name="No Batch Closure" value="0" />
       <value name="Close Batch" value="1" />

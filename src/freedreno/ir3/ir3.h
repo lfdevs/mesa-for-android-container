@@ -1031,6 +1031,16 @@ is_const_mov(struct ir3_instruction *instr)
    type_t src_type = instr->cat1.src_type;
    type_t dst_type = instr->cat1.dst_type;
 
+   /* Allow a narrowing move, but not a widening one.  A narrowing
+    * move from full c1.x can be folded into a hc1.x use in an ALU
+    * instruction because it is doing the same thing as constant-
+    * demotion.  If CONSTANT_DEMOTION_ENABLE wasn't set, we'd need
+    * return false in all cases.
+    */
+   if ((type_size(dst_type) > type_size(src_type)) ||
+       (type_size(dst_type) == 8))
+      return false;
+
    return (type_float(src_type) && type_float(dst_type)) ||
           (type_uint(src_type) && type_uint(dst_type)) ||
           (type_sint(src_type) && type_sint(dst_type));

@@ -161,7 +161,7 @@ static void radeon_vcn_enc_get_roi_param(struct radeon_encoder *enc,
       qp_map->width_in_block = width_in_block;
       qp_map->height_in_block = height_in_block;
 
-      for (i = RENCODE_QP_MAP_MAX_REGIONS; i >= roi->num; i--)
+      for (i = RENCODE_QP_MAP_MAX_REGIONS - 1; i >= roi->num; i--)
          enc->enc_pic.enc_qp_map.map[i].is_valid = false;
 
       /* reverse the map sequence */

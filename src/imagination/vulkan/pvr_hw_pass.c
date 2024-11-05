@@ -590,9 +590,7 @@ pvr_subpass_setup_render_init(struct pvr_renderpass_context *ctx)
                                                    hw_subpass->color_initops[j],
                                                    &use_render_init);
             if (result != VK_SUCCESS) {
-               if (!first_use.tile_buffers)
-                  free(first_use.tile_buffers);
-
+               vk_free(ctx->allocator, first_use.tile_buffers);
                return result;
             }
 
@@ -610,8 +608,7 @@ pvr_subpass_setup_render_init(struct pvr_renderpass_context *ctx)
       }
    }
 
-   if (!first_use.tile_buffers)
-      free(first_use.tile_buffers);
+   vk_free(ctx->allocator, first_use.tile_buffers);
 
    return VK_SUCCESS;
 }

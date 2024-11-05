@@ -698,6 +698,7 @@ bool brw_fs_opt_zero_samples(fs_visitor &s);
 
 bool brw_fs_workaround_emit_dummy_mov_instruction(fs_visitor &s);
 bool brw_fs_workaround_memory_fence_before_eot(fs_visitor &s);
+bool brw_fs_workaround_source_arf_before_eot(fs_visitor &s);
 bool brw_fs_workaround_nomask_control_flow(fs_visitor &s);
 
 /* Helpers. */

@@ -91,22 +91,24 @@ v3dX(get_driver_query_info_perfcnt)(struct v3d_screen *screen, unsigned index,
         if (index >= max_perfcnt)
                 return 0;
 
-        if (screen->perfcnt_names[index]) {
-                info->name = screen->perfcnt_names[index];
-        } else if (devinfo->max_perfcnt) {
-                struct drm_v3d_perfmon_get_counter counter = {
-                        .counter = index,
-                };
-                int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_PERFMON_GET_COUNTER, &counter);
-                if (ret != 0) {
-                        fprintf(stderr, "Failed to get performance counter %d: %s\n",
-                                index, strerror(errno));
-                        return 0;
-                }
+        if (screen->perfcnt_names) {
+                if (screen->perfcnt_names[index]) {
+                        info->name = screen->perfcnt_names[index];
+                } else {
+                        struct drm_v3d_perfmon_get_counter counter = {
+                                .counter = index,
+                        };
+                        int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_PERFMON_GET_COUNTER, &counter);
+                        if (ret != 0) {
+                                fprintf(stderr, "Failed to get performance counter %d: %s\n",
+                                        index, strerror(errno));
+                                return 0;
+                        }
 
-                screen->perfcnt_names[index] = ralloc_strdup(screen->perfcnt_names,
-                                                             (const char *) counter.name);
-                info->name = screen->perfcnt_names[index];
+                        screen->perfcnt_names[index] = ralloc_strdup(screen->perfcnt_names,
+                                                                     (const char *) counter.name);
+                        info->name = screen->perfcnt_names[index];
+                }
         } else {
                 info->name = v3d_performance_counters[index][V3D_PERFCNT_NAME];
         }

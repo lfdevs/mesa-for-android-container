@@ -189,11 +189,13 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
       compiler->max_const_safe = 100;
 
       /* Compute shaders don't share a const file with the FS. Instead they
-       * have their own file, which is smaller than the FS one.
+       * have their own file, which is smaller than the FS one. On a7xx the size
+       * was doubled, although this doesn't work on X1-85.
        *
        * TODO: is this true on earlier gen's?
        */
-      compiler->max_const_compute = 256;
+      compiler->max_const_compute =
+         (compiler->gen >= 7 && !dev_info->a7xx.compute_constlen_quirk) ? 512 : 256;
 
       /* TODO: implement clip+cull distances on earlier gen's */
       compiler->has_clip_cull = true;

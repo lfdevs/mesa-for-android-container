@@ -271,6 +271,7 @@ CHIPSET(0x7d41, arl_u, "ARL", "Intel(R) Graphics")
 CHIPSET(0x7d51, arl_h, "ARL", "Intel(R) Graphics")
 CHIPSET(0x7d67, arl_u, "ARL", "Intel(R) Graphics")
 CHIPSET(0x7dd1, arl_h, "ARL", "Intel(R) Graphics")
+CHIPSET(0xb640, arl_u, "ARL", "Intel(R) Graphics")
 
 CHIPSET(0xe202, bmg, "BMG G21", "Intel(R) Graphics")
 CHIPSET(0xe20b, bmg, "BMG G21", "Intel(R) Graphics")

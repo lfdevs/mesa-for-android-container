@@ -82,5 +82,13 @@ ir3_nir_lower_driver_params_to_ubo(nir_shader *nir,
       nir, lower_driver_param_to_ubo,
       nir_metadata_control_flow, ir3_const_state(v));
 
+   if (result) {
+      const struct ir3_const_state *const_state = ir3_const_state(v);
+
+      ir3_update_driver_ubo(nir, &const_state->primitive_map_ubo, "$primitive_map");
+      ir3_update_driver_ubo(nir, &const_state->primitive_param_ubo, "$primitive_param");
+      ir3_update_driver_ubo(nir, &const_state->driver_params_ubo, "$driver_params");
+   }
+
    return result;
 }

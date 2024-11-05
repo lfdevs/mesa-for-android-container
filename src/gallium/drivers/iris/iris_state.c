@@ -6141,43 +6141,23 @@ invalidate_aux_map_state_per_engine(struct iris_batch *batch)
 
    switch (batch->name) {
    case IRIS_BATCH_RENDER: {
-      /* HSD 1209978178: docs say that before programming the aux table:
-       *
-       *    "Driver must ensure that the engine is IDLE but ensure it doesn't
-       *    add extra flushes in the case it knows that the engine is already
-       *    IDLE."
-       *
-       * An end of pipe sync is needed here, otherwise we see GPU hangs in
-       * dEQP-GLES31.functional.copy_image.* tests.
-       *
-       * HSD 22012751911: SW Programming sequence when issuing aux invalidation:
-       *
-       *    "Render target Cache Flush + L3 Fabric Flush + State Invalidation + CS Stall"
-       *
-       * Notice we don't set the L3 Fabric Flush here, because we have
-       * PIPE_CONTROL_CS_STALL. The PIPE_CONTROL::L3 Fabric Flush
-       * documentation says :
-       *
-       *    "L3 Fabric Flush will ensure all the pending transactions in the
-       *     L3 Fabric are flushed to global observation point. HW does
-       *     implicit L3 Fabric Flush on all stalling flushes (both explicit
-       *     and implicit) and on PIPECONTROL having Post Sync Operation
-       *     enabled."
-       *
-       * Therefore setting L3 Fabric Flush here would be redundant.
-       *
-       * From Bspec 43904 (Register_CCSAuxiliaryTableInvalidate):
+      /* From Bspec 43904 (Register_CCSAuxiliaryTableInvalidate):
        * RCS engine idle sequence:
+       *
+       *    Gfx12+:
+       *       PIPE_CONTROL:- DC Flush + L3 Fabric Flush + CS Stall + Render
+       *                      Target Cache Flush + Depth Cache
        *
        *    Gfx125+:
        *       PIPE_CONTROL:- DC Flush + L3 Fabric Flush + CS Stall + Render
        *                      Target Cache Flush + Depth Cache + CCS flush
-       *
        */
       iris_emit_end_of_pipe_sync(batch, "Invalidate aux map table",
+                                 PIPE_CONTROL_DATA_CACHE_FLUSH |
+                                 PIPE_CONTROL_L3_FABRIC_FLUSH |
                                  PIPE_CONTROL_CS_STALL |
                                  PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                 PIPE_CONTROL_STATE_CACHE_INVALIDATE |
+                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                                  (GFX_VERx10 == 125 ?
                                   PIPE_CONTROL_CCS_CACHE_FLUSH : 0));
 
@@ -6185,27 +6165,18 @@ invalidate_aux_map_state_per_engine(struct iris_batch *batch)
       break;
    }
    case IRIS_BATCH_COMPUTE: {
-      /*
-       * Notice we don't set the L3 Fabric Flush here, because we have
-       * PIPE_CONTROL_CS_STALL. The PIPE_CONTROL::L3 Fabric Flush
-       * documentation says :
-       *
-       *    "L3 Fabric Flush will ensure all the pending transactions in the
-       *     L3 Fabric are flushed to global observation point. HW does
-       *     implicit L3 Fabric Flush on all stalling flushes (both explicit
-       *     and implicit) and on PIPECONTROL having Post Sync Operation
-       *     enabled."
-       *
-       * Therefore setting L3 Fabric Flush here would be redundant.
-       *
-       * From Bspec 43904 (Register_CCSAuxiliaryTableInvalidate):
+      /* From Bspec 43904 (Register_CCSAuxiliaryTableInvalidate):
        * Compute engine idle sequence:
+       *
+       *    Gfx12+:
+       *       PIPE_CONTROL:- DC Flush + L3 Fabric Flush + CS Stall
        *
        *    Gfx125+:
        *       PIPE_CONTROL:- DC Flush + L3 Fabric Flush + CS Stall + CCS flush
        */
       iris_emit_end_of_pipe_sync(batch, "Invalidate aux map table",
                                  PIPE_CONTROL_DATA_CACHE_FLUSH |
+                                 PIPE_CONTROL_L3_FABRIC_FLUSH |
                                  PIPE_CONTROL_CS_STALL |
                                  (GFX_VERx10 == 125 ?
                                   PIPE_CONTROL_CCS_CACHE_FLUSH : 0));
@@ -8126,7 +8097,23 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       }
    }
 
+   if (dirty & IRIS_DIRTY_VF_STATISTICS) {
+      iris_emit_cmd(batch, GENX(3DSTATE_VF_STATISTICS), vf) {
+         vf.StatisticsEnable = true;
+      }
+   }
+
    if (dirty & IRIS_DIRTY_VF) {
+#if INTEL_WA_16012775297_GFX_VER
+      /* Emit dummy VF statistics before each 3DSTATE_VF. */
+      if (intel_needs_workaround(batch->screen->devinfo, 16012775297) &&
+          (dirty & IRIS_DIRTY_VF_STATISTICS) == 0) {
+         iris_emit_cmd(batch, GENX(3DSTATE_VF_STATISTICS), vfs) {
+            vfs.StatisticsEnable = true;
+         }
+      }
+#endif
+
       iris_emit_cmd(batch, GENX(3DSTATE_VF), vf) {
 #if GFX_VERx10 >= 125
          vf.GeometryDistributionEnable = true;
@@ -8172,12 +8159,6 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       }
    }
 #endif
-
-   if (dirty & IRIS_DIRTY_VF_STATISTICS) {
-      iris_emit_cmd(batch, GENX(3DSTATE_VF_STATISTICS), vf) {
-         vf.StatisticsEnable = true;
-      }
-   }
 
 #if GFX_VER == 8
    if (dirty & IRIS_DIRTY_PMA_FIX) {
@@ -9988,7 +9969,7 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
 
    if (INTEL_DEBUG(DEBUG_PIPE_CONTROL)) {
       fprintf(stderr,
-              "  PC [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%"PRIx64"]: %s\n",
+              "  PC [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%"PRIx64"]: %s\n",
               (flags & PIPE_CONTROL_FLUSH_ENABLE) ? "PipeCon " : "",
               (flags & PIPE_CONTROL_CS_STALL) ? "CS " : "",
               (flags & PIPE_CONTROL_STALL_AT_SCOREBOARD) ? "Scoreboard " : "",
@@ -9999,6 +9980,7 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
               (flags & PIPE_CONTROL_DATA_CACHE_FLUSH) ? "DC " : "",
               (flags & PIPE_CONTROL_DEPTH_CACHE_FLUSH) ? "ZFlush " : "",
               (flags & PIPE_CONTROL_TILE_CACHE_FLUSH) ? "Tile " : "",
+              (flags & PIPE_CONTROL_L3_FABRIC_FLUSH) ? "L3Fabric " : "",
               (flags & PIPE_CONTROL_CCS_CACHE_FLUSH) ? "CCS " : "",
               (flags & PIPE_CONTROL_DEPTH_STALL) ? "ZStall " : "",
               (flags & PIPE_CONTROL_STATE_CACHE_INVALIDATE) ? "State " : "",
@@ -10033,6 +10015,7 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
 #endif
 #if GFX_VER == 12
       pc.TileCacheFlushEnable = flags & PIPE_CONTROL_TILE_CACHE_FLUSH;
+      pc.L3FabricFlush = flags & PIPE_CONTROL_L3_FABRIC_FLUSH;
 #endif
 #if GFX_VER > 11
       pc.HDCPipelineFlushEnable = flags & PIPE_CONTROL_FLUSH_HDC;

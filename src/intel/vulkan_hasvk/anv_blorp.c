@@ -1339,12 +1339,14 @@ void anv_CmdClearAttachments(
    anv_blorp_batch_finish(&batch);
 }
 
-void
+static void
 anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
                        const struct anv_image *src_image,
+                       enum isl_format src_format_override,
                        enum isl_aux_usage src_aux_usage,
                        uint32_t src_level, uint32_t src_base_layer,
                        const struct anv_image *dst_image,
+                       enum isl_format dst_format_override,
                        enum isl_aux_usage dst_aux_usage,
                        uint32_t dst_level, uint32_t dst_base_layer,
                        VkImageAspectFlagBits aspect,
@@ -1397,15 +1399,103 @@ anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t l = 0; l < layer_count; l++) {
       blorp_blit(&batch,
                  &src_surf, src_level, src_base_layer + l,
-                 ISL_FORMAT_UNSUPPORTED, ISL_SWIZZLE_IDENTITY,
+                 src_format_override, ISL_SWIZZLE_IDENTITY,
                  &dst_surf, dst_level, dst_base_layer + l,
-                 ISL_FORMAT_UNSUPPORTED, ISL_SWIZZLE_IDENTITY,
+                 dst_format_override, ISL_SWIZZLE_IDENTITY,
                  src_x, src_y, src_x + width, src_y + height,
                  dst_x, dst_y, dst_x + width, dst_y + height,
                  filter, false, false);
    }
 
    anv_blorp_batch_finish(&batch);
+}
+
+static enum blorp_filter
+vk_to_blorp_resolve_mode(VkResolveModeFlagBits vk_mode)
+{
+   switch (vk_mode) {
+   case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT:
+      return BLORP_FILTER_SAMPLE_0;
+   case VK_RESOLVE_MODE_AVERAGE_BIT:
+      return BLORP_FILTER_AVERAGE;
+   case VK_RESOLVE_MODE_MIN_BIT:
+      return BLORP_FILTER_MIN_SAMPLE;
+   case VK_RESOLVE_MODE_MAX_BIT:
+      return BLORP_FILTER_MAX_SAMPLE;
+   default:
+      return BLORP_FILTER_NONE;
+   }
+}
+
+void
+anv_attachment_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
+                            const struct anv_attachment *att,
+                            VkImageLayout layout,
+                            VkImageAspectFlagBits aspect)
+{
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+   const struct anv_image_view *src_iview = att->iview;
+   const struct anv_image_view *dst_iview = att->resolve_iview;
+
+   enum isl_aux_usage src_aux_usage =
+      anv_layout_to_aux_usage(cmd_buffer->device->info,
+                              src_iview->image, aspect,
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                              layout);
+
+   enum isl_aux_usage dst_aux_usage =
+      anv_layout_to_aux_usage(cmd_buffer->device->info,
+                              dst_iview->image, aspect,
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                              att->resolve_layout);
+
+   enum blorp_filter filter = vk_to_blorp_resolve_mode(att->resolve_mode);
+
+   /* Depth/stencil should not use their view format for resolve because they
+    * go in pairs.
+    */
+   enum isl_format src_format = ISL_FORMAT_UNSUPPORTED;
+   enum isl_format dst_format = ISL_FORMAT_UNSUPPORTED;
+   if (!(aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
+      src_format = src_iview->planes[0].isl.format;
+      dst_format = dst_iview->planes[0].isl.format;
+   }
+
+   const VkRect2D render_area = gfx->render_area;
+   if (gfx->view_mask == 0) {
+      anv_image_msaa_resolve(cmd_buffer,
+                             src_iview->image, src_format, src_aux_usage,
+                             src_iview->planes[0].isl.base_level,
+                             src_iview->planes[0].isl.base_array_layer,
+                             dst_iview->image, dst_format, dst_aux_usage,
+                             dst_iview->planes[0].isl.base_level,
+                             dst_iview->planes[0].isl.base_array_layer,
+                             aspect,
+                             render_area.offset.x, render_area.offset.y,
+                             render_area.offset.x, render_area.offset.y,
+                             render_area.extent.width,
+                             render_area.extent.height,
+                             gfx->layer_count, filter);
+   } else {
+      uint32_t res_view_mask = gfx->view_mask;
+      while (res_view_mask) {
+         int i = u_bit_scan(&res_view_mask);
+
+         anv_image_msaa_resolve(cmd_buffer,
+                                src_iview->image, src_format, src_aux_usage,
+                                src_iview->planes[0].isl.base_level,
+                                src_iview->planes[0].isl.base_array_layer + i,
+                                dst_iview->image, dst_format, dst_aux_usage,
+                                dst_iview->planes[0].isl.base_level,
+                                dst_iview->planes[0].isl.base_array_layer + i,
+                                aspect,
+                                render_area.offset.x, render_area.offset.y,
+                                render_area.offset.x, render_area.offset.y,
+                                render_area.extent.width,
+                                render_area.extent.height,
+                                1, filter);
+      }
+   }
 }
 
 static void
@@ -1437,10 +1527,10 @@ resolve_image(struct anv_cmd_buffer *cmd_buffer,
                                  dst_image_layout);
 
       anv_image_msaa_resolve(cmd_buffer,
-                             src_image, src_aux_usage,
+                             src_image, ISL_FORMAT_UNSUPPORTED, src_aux_usage,
                              region->srcSubresource.mipLevel,
                              region->srcSubresource.baseArrayLayer,
-                             dst_image, dst_aux_usage,
+                             dst_image, ISL_FORMAT_UNSUPPORTED, dst_aux_usage,
                              region->dstSubresource.mipLevel,
                              region->dstSubresource.baseArrayLayer,
                              (1 << aspect_bit),

@@ -899,8 +899,8 @@ opcode("uror", 0, tuint, [0, 0], [tuint, tuint32], False, "", """
 
 opcode("shfr", 0, tuint32, [0, 0, 0], [tuint32, tuint32, tuint32], False, "", """
    uint32_t rotate_mask = sizeof(src0) * 8 - 1;
-   dst = (src1 >> (src2 & rotate_mask)) |
-         (src0 << (-src2 & rotate_mask));
+   uint64_t src = src1 | ((uint64_t)src0 << 32);
+   dst = src >> (src2 & rotate_mask);
 """)
 
 bitwise_description = """

@@ -43,7 +43,7 @@ struct gbm_dri_bo;
 
 struct gbm_dri_visual {
    uint32_t gbm_format;
-   int dri_image_format;
+   int pipe_format;
 };
 
 struct gbm_dri_device {

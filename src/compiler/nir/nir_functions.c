@@ -62,9 +62,18 @@ static void
 fixup_cast_deref_mode(nir_deref_instr *deref)
 {
    nir_deref_instr *parent = nir_src_as_deref(deref->parent);
-   if (parent && parent->modes & nir_var_uniform &&
-       deref->modes & nir_var_function_temp) {
-      deref->modes |= nir_var_uniform;
+   if (parent && deref->modes & nir_var_function_temp) {
+      if (parent->modes & nir_var_uniform) {
+         deref->modes |= nir_var_uniform;
+      } else if (parent->modes & nir_var_image) {
+         deref->modes |= nir_var_image;
+      } else if (parent->modes & nir_var_mem_ubo) {
+         deref->modes |= nir_var_mem_ubo;
+      } else if (parent->modes & nir_var_mem_ssbo) {
+         deref->modes |= nir_var_mem_ssbo;
+      } else
+         return;
+
       deref->modes ^= nir_var_function_temp;
 
       nir_foreach_use(use, &deref->def) {

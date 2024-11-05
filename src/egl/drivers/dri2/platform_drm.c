@@ -122,7 +122,7 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
    const struct util_format_description *fmt_c =
       util_format_description(gl_config->color_format);
    const struct util_format_description *fmt_s =
-      util_format_description(visual->dri_image_format);
+      util_format_description(visual->pipe_format);
 
    if (util_is_format_compatible(fmt_c, fmt_s) ||
        util_is_format_compatible(fmt_s, fmt_c))
@@ -507,7 +507,7 @@ drm_add_configs_for_visuals(_EGLDisplay *disp)
       for (unsigned j = 0; j < num_visuals; j++) {
          struct dri2_egl_config *dri2_conf;
 
-         if (visuals[j].dri_image_format != gl_config->color_format)
+         if (visuals[j].pipe_format != gl_config->color_format)
             continue;
 
          const EGLint attr_list[] = {

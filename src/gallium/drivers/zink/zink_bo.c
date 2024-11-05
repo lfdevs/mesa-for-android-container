@@ -130,7 +130,7 @@ bo_destroy(struct zink_screen *screen, struct pb_buffer *pbuf)
       simple_mtx_lock(&bo->u.real.export_lock);
       list_for_each_entry_safe(struct bo_export, export, &bo->u.real.exports, link) {
          struct drm_gem_close args = { .handle = export->gem_handle };
-         drmIoctl(export->drm_fd, DRM_IOCTL_GEM_CLOSE, &args);
+         drmIoctl(screen->drm_fd, DRM_IOCTL_GEM_CLOSE, &args);
          list_del(&export->link);
          free(export);
       }
@@ -1216,7 +1216,7 @@ zink_bo_get_kms_handle(struct zink_screen *screen, struct zink_bo *bo, int fd, u
    if (success) {
       list_addtail(&export->link, &bo->u.real.exports);
       export->gem_handle = *handle;
-      export->drm_fd = screen->drm_fd;
+      export->drm_fd = fd;
    } else {
       mesa_loge("zink: failed drmPrimeFDToHandle %s", strerror(errno));
       FREE(export);

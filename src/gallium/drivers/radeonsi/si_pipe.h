@@ -686,9 +686,6 @@ struct si_compute {
 
    unsigned ir_type;
    unsigned input_size;
-
-   int max_global_buffers;
-   struct pipe_resource **global_buffers;
 };
 
 struct si_sampler_view {
@@ -1124,6 +1121,10 @@ struct si_context {
    struct si_images images[SI_NUM_SHADERS];
    bool bo_list_add_all_resident_resources;
    bool bo_list_add_all_compute_resources;
+
+   /* tracked buffers for OpenCL */
+   int max_global_buffers;
+   struct pipe_resource **global_buffers;
 
    /* other shader resources */
    struct pipe_constant_buffer null_const_buf; /* used for set_constant_buffer(NULL) on GFX7 */

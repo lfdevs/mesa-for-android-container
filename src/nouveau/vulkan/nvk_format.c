@@ -17,6 +17,21 @@
 #include "cl9097.h"
 #include "cl90c0.h"
 
+bool
+nvk_format_supports_atomics(const struct nv_device_info *dev,
+                            enum pipe_format p_format)
+{
+   switch (p_format) {
+   case PIPE_FORMAT_R32_UINT:
+   case PIPE_FORMAT_R32_SINT:
+   case PIPE_FORMAT_R64_UINT:
+   case PIPE_FORMAT_R64_SINT:
+      return true;
+   default:
+      return false;
+   }
+}
+
 #define VA_FMT(vk_fmt, widths, swap_rb, type) \
    [VK_FORMAT_##vk_fmt] = \
    { NV9097_SET_VERTEX_ATTRIBUTE_A_COMPONENT_BIT_WIDTHS_##widths, \

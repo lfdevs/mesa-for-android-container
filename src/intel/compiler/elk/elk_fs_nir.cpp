@@ -3796,8 +3796,28 @@ fs_nir_emit_fs_intrinsic(nir_to_elk_state &ntb,
                /* The old sequence that would have been generated is,
                 * basically, bool_result == false.  This is equivalent to
                 * !bool_result, so negate the old modifier.
+                *
+                * Unfortunately, we can't do this to most float comparisons
+                * because of NaN, so we'll have to fallback to the old-style
+                * compare.
+                *
+                * For example, this code (after negation):
+                *    (+f1.0) cmp.ge.f1.0(8) null<1>F g30<8,8,1>F     0x0F
+                * will provide different results from this:
+                *    cmp.l.f0.0(8)   g31<1>F         g30<1,1,0>F     0x0F
+                *    (+f1.0) cmp.z.f1.0(8) null<1>D  g31<8,8,1>D     0D
+                * because both (NaN >= 0) == false and (NaN < 0) == false.
+                *
+                * It will still work for == and != though, because
+                * (NaN == x) == false and (NaN != x) == true.
                 */
-               cmp->conditional_mod = elk_negate_cmod(cmp->conditional_mod);
+               if (elk_type_is_float(cmp->src[0].type) &&
+                   cmp->conditional_mod != ELK_CONDITIONAL_EQ &&
+                   cmp->conditional_mod != ELK_CONDITIONAL_NEQ) {
+                  cmp = NULL;
+               } else {
+                  cmp->conditional_mod = elk_negate_cmod(cmp->conditional_mod);
+               }
             }
          }
 

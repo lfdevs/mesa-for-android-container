@@ -329,8 +329,14 @@ lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
     * which allows us to enable/disable code generation based
     * on the results of cpuid on these architectures.
     */
-   llvm::StringMap<bool> features;
-   llvm::sys::getHostCPUFeatures(features);
+   #if LLVM_VERSION_MAJOR >= 19
+      /* llvm-19+ returns StringMap from getHostCPUFeatures.
+      */
+      auto features = llvm::sys::getHostCPUFeatures();
+   #else
+      llvm::StringMap<bool> features;
+      llvm::sys::getHostCPUFeatures(features);
+   #endif
 
    for (llvm::StringMapIterator<bool> f = features.begin();
         f != features.end();

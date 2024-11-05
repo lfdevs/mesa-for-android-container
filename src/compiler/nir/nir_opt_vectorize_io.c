@@ -179,7 +179,12 @@ vectorize_store(nir_intrinsic_instr *chan[8], unsigned start, unsigned count,
     * because we need to read some info from "last" before overwriting it.
     */
    if (nir_intrinsic_has_io_xfb(last)) {
-      nir_io_xfb xfb[2] = {{{{0}}}};
+      /* 0 = low/full XY channels
+       * 1 = low/full ZW channels
+       * 2 = high XY channels
+       * 3 = high ZW channels
+       */
+      nir_io_xfb xfb[4] = {{{{0}}}};
 
       for (unsigned i = start; i < start + count; i++) {
          xfb[i / 2].out[i % 2] =
@@ -275,7 +280,7 @@ vectorize_store(nir_intrinsic_instr *chan[8], unsigned start, unsigned count,
 
       nir_src_rewrite(&last->src[0], nir_vec(&b, &value[start], count));
    } else {
-      nir_def *value[4];
+      nir_def *value[8];
       for (unsigned i = start; i < start + count; i++)
          value[i] = chan[i]->src[0].ssa;
 

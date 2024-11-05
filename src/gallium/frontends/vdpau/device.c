@@ -74,6 +74,12 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
    }
 
    pscreen = dev->vscreen->pscreen;
+   /* video cannot work if these are not supported */
+   if (!pscreen->get_video_param || !pscreen->is_video_format_supported) {
+      ret = VDP_STATUS_RESOURCES;
+      goto no_vscreen;
+   }
+
    dev->context = pipe_create_multimedia_context(pscreen);
    if (!dev->context) {
       ret = VDP_STATUS_RESOURCES;

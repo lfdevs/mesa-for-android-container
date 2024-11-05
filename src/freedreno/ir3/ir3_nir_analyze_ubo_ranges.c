@@ -872,6 +872,9 @@ ir3_nir_lower_load_constant(nir_shader *nir, struct ir3_shader_variant *v)
                compiler->const_upload_unit * 4 * sizeof(uint32_t));
       v->constant_data = rzalloc_size(v, v->constant_data_size);
       memcpy(v->constant_data, nir->constant_data, nir->constant_data_size);
+
+      const struct ir3_const_state *const_state = ir3_const_state(v);
+      ir3_update_driver_ubo(nir, &const_state->consts_ubo, "$consts");
    }
 
    return progress;

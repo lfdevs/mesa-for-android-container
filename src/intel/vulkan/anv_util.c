@@ -69,6 +69,8 @@ anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
       fputs("+rt_flush ", f);
    if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
       fputs("+tile_flush ", f);
+   if (bits & ANV_PIPE_L3_FABRIC_FLUSH_BIT)
+      fputs("+l3_fabric_flush ", f);
    if (bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT)
       fputs("+state_inval ", f);
    if (bits & ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT)

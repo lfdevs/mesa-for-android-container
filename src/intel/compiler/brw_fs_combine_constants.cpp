@@ -1144,31 +1144,35 @@ struct register_allocation {
    /**
     * Mask of currently available slots in this register.
     *
-    * Each register is 16, 16-bit slots.  Allocations require 1, 2, or 4 slots
-    * for word, double-word, or quad-word values, respectively.
+    * Each register is 16 (32 on Xe2), 16-bit slots.  Allocations require 1,
+    * 2, or 4 slots for word, double-word, or quad-word values, respectively.
     */
-   uint16_t avail;
+   uint32_t avail;
 };
 
 static brw_reg
-allocate_slots(struct register_allocation *regs, unsigned num_regs,
+allocate_slots(const intel_device_info *devinfo,
+               struct register_allocation *regs, unsigned num_regs,
                unsigned bytes, unsigned align_bytes,
                brw::simple_allocator &alloc)
 {
    assert(bytes == 2 || bytes == 4 || bytes == 8);
    assert(align_bytes == 2 || align_bytes == 4 || align_bytes == 8);
 
+   const unsigned slots_per_reg =
+      REG_SIZE * reg_unit(devinfo) / sizeof(uint16_t);
+
    const unsigned words = bytes / 2;
    const unsigned align_words = align_bytes / 2;
-   const uint16_t mask = (1U << words) - 1;
+   const uint32_t mask = (1U << words) - 1;
 
    for (unsigned i = 0; i < num_regs; i++) {
-      for (unsigned j = 0; j <= (16 - words); j += align_words) {
-         const uint16_t x = regs[i].avail >> j;
+      for (unsigned j = 0; j <= (slots_per_reg - words); j += align_words) {
+         const uint32_t x = regs[i].avail >> j;
 
          if ((x & mask) == mask) {
             if (regs[i].nr == UINT_MAX)
-               regs[i].nr = alloc.allocate(1);
+               regs[i].nr = alloc.allocate(reg_unit(devinfo));
 
             regs[i].avail &= ~(mask << j);
 
@@ -1184,16 +1188,17 @@ allocate_slots(struct register_allocation *regs, unsigned num_regs,
 }
 
 static void
-deallocate_slots(struct register_allocation *regs, unsigned num_regs,
+deallocate_slots(const struct intel_device_info *devinfo,
+                 struct register_allocation *regs, unsigned num_regs,
                  unsigned reg_nr, unsigned subreg_offset, unsigned bytes)
 {
    assert(bytes == 2 || bytes == 4 || bytes == 8);
    assert(subreg_offset % 2 == 0);
-   assert(subreg_offset + bytes <= 32);
+   assert(subreg_offset + bytes <= REG_SIZE * reg_unit(devinfo));
 
    const unsigned words = bytes / 2;
    const unsigned offset = subreg_offset / 2;
-   const uint16_t mask = ((1U << words) - 1) << offset;
+   const uint32_t mask = ((1U << words) - 1) << offset;
 
    for (unsigned i = 0; i < num_regs; i++) {
       if (regs[i].nr == reg_nr) {
@@ -1206,9 +1211,10 @@ deallocate_slots(struct register_allocation *regs, unsigned num_regs,
 }
 
 static void
-parcel_out_registers(struct imm *imm, unsigned len, const bblock_t *cur_block,
+parcel_out_registers(const intel_device_info *devinfo,
+                     struct imm *imm, unsigned len, const bblock_t *cur_block,
                      struct register_allocation *regs, unsigned num_regs,
-                     brw::simple_allocator &alloc, unsigned ver)
+                     brw::simple_allocator &alloc)
 {
    /* Each basic block has two distinct set of constants.  There is the set of
     * constants that only have uses in that block, and there is the set of
@@ -1229,24 +1235,10 @@ parcel_out_registers(struct imm *imm, unsigned len, const bblock_t *cur_block,
       for (unsigned i = 0; i < len; i++) {
          if (imm[i].block == cur_block &&
              imm[i].used_in_single_block == used_in_single_block) {
-            /* From the BDW and CHV PRM, 3D Media GPGPU, Special Restrictions:
-             *
-             *   "In Align16 mode, the channel selects and channel enables apply
-             *    to a pair of half-floats, because these parameters are defined
-             *    for DWord elements ONLY. This is applicable when both source
-             *    and destination are half-floats."
-             *
-             * This means that Align16 instructions that use promoted HF
-             * immediates and use a <0,1,0>:HF region would read 2 HF slots
-             * instead of replicating the single one we want. To avoid this, we
-             * always populate both HF slots within a DWord with the constant.
-             */
-            const unsigned width = ver == 8 && imm[i].is_half_float ? 2 : 1;
-
-            const brw_reg reg = allocate_slots(regs, num_regs,
-                                              imm[i].size * width,
-                                              get_alignment_for_imm(&imm[i]),
-                                              alloc);
+            const brw_reg reg = allocate_slots(devinfo, regs, num_regs,
+                                               imm[i].size,
+                                               get_alignment_for_imm(&imm[i]),
+                                               alloc);
 
             imm[i].nr = reg.nr;
             imm[i].subreg_offset = reg.offset;
@@ -1256,10 +1248,8 @@ parcel_out_registers(struct imm *imm, unsigned len, const bblock_t *cur_block,
 
    for (unsigned i = 0; i < len; i++) {
       if (imm[i].block == cur_block && imm[i].used_in_single_block) {
-         const unsigned width = ver == 8 && imm[i].is_half_float ? 2 : 1;
-
-         deallocate_slots(regs, num_regs, imm[i].nr, imm[i].subreg_offset,
-                          imm[i].size * width);
+         deallocate_slots(devinfo, regs, num_regs, imm[i].nr,
+                          imm[i].subreg_offset, imm[i].size);
       }
    }
 }
@@ -1486,14 +1476,16 @@ brw_fs_opt_combine_constants(fs_visitor &s)
    struct register_allocation *regs =
       (struct register_allocation *) calloc(table.len, sizeof(regs[0]));
 
+   const unsigned all_avail = devinfo->ver >= 20 ? 0xffffffff : 0xffff;
+
    for (int i = 0; i < table.len; i++) {
       regs[i].nr = UINT_MAX;
-      regs[i].avail = 0xffff;
+      regs[i].avail = all_avail;
    }
 
    foreach_block(block, s.cfg) {
-      parcel_out_registers(table.imm, table.len, block, regs, table.len,
-                           s.alloc, devinfo->ver);
+      parcel_out_registers(devinfo, table.imm, table.len, block, regs,
+                           table.len, s.alloc);
    }
 
    free(regs);
@@ -1582,7 +1574,7 @@ brw_fs_opt_combine_constants(fs_visitor &s)
       struct brw_reg imm_reg = build_imm_reg_for_copy(imm);
 
       /* Ensure we have enough space in the register to copy the immediate */
-      assert(reg.offset + brw_type_size_bytes(imm_reg.type) * width <= REG_SIZE);
+      assert(reg.offset + brw_type_size_bytes(imm_reg.type) * width <= REG_SIZE * reg_unit(devinfo));
 
       ibld.MOV(retype(reg, imm_reg.type), imm_reg);
    }

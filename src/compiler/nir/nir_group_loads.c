@@ -289,8 +289,9 @@ static void
 handle_load_range(nir_instr **first, nir_instr **last,
                   nir_instr *current, unsigned max_distance)
 {
+   assert(!current || !*first || current->index >= (*first)->index);
    if (*first && *last &&
-       (!current || current->index > (*first)->index + max_distance)) {
+       (!current || current->index - (*first)->index > max_distance)) {
       assert(*first != *last);
       group_loads(*first, *last);
       set_instr_indices((*first)->block);

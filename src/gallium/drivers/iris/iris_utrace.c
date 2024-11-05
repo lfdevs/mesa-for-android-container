@@ -236,6 +236,7 @@ iris_utrace_pipe_flush_bit_to_ds_stall_flag(uint32_t flags)
       { .iris = PIPE_CONTROL_DEPTH_CACHE_FLUSH,            .ds = INTEL_DS_DEPTH_CACHE_FLUSH_BIT, },
       { .iris = PIPE_CONTROL_DATA_CACHE_FLUSH,             .ds = INTEL_DS_DATA_CACHE_FLUSH_BIT, },
       { .iris = PIPE_CONTROL_TILE_CACHE_FLUSH,             .ds = INTEL_DS_TILE_CACHE_FLUSH_BIT, },
+      { .iris = PIPE_CONTROL_L3_FABRIC_FLUSH,              .ds = INTEL_DS_L3_FABRIC_FLUSH_BIT, },
       { .iris = PIPE_CONTROL_RENDER_TARGET_FLUSH,          .ds = INTEL_DS_RENDER_TARGET_CACHE_FLUSH_BIT, },
       { .iris = PIPE_CONTROL_STATE_CACHE_INVALIDATE,       .ds = INTEL_DS_STATE_CACHE_INVALIDATE_BIT, },
       { .iris = PIPE_CONTROL_CONST_CACHE_INVALIDATE,       .ds = INTEL_DS_CONST_CACHE_INVALIDATE_BIT, },

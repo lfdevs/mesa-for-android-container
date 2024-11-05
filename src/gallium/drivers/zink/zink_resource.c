@@ -1274,7 +1274,7 @@ create_image(struct zink_screen *screen, struct zink_resource_object *obj,
    /* we often need to be able to mutate between srgb and linear, but we don't need general
     * image view/shader image format compatibility (that path means losing fast clears or compression on some hardware).
     */
-   if (!(templ->bind & ZINK_BIND_MUTABLE)) {
+   if (!(templ->bind & ZINK_BIND_MUTABLE) && (!alloc_info->whandle || alloc_info->whandle->type == ZINK_EXTERNAL_MEMORY_HANDLE)) {
       srgb = util_format_is_srgb(templ->format) ? util_format_linear(templ->format) : util_format_srgb(templ->format);
       /* why do these helpers have different default return values? */
       if (srgb == templ->format)

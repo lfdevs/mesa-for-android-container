@@ -806,8 +806,9 @@ radv_get_htile_fast_clear_value(const struct radv_device *device, const struct r
 }
 
 static uint32_t
-radv_get_htile_mask(const struct radv_device *device, const struct radv_image *image, VkImageAspectFlags aspects)
+radv_get_htile_mask(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *image, VkImageAspectFlags aspects)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    uint32_t mask = 0;
 
    if (radv_image_tile_stencil_disabled(device, image)) {
@@ -818,6 +819,13 @@ radv_get_htile_mask(const struct radv_device *device, const struct radv_image *i
          mask |= 0xfffffc0f;
       if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT)
          mask |= 0x000003f0;
+
+      if (cmd_buffer->qf == RADV_QUEUE_TRANSFER) {
+         /* Clear both aspects on SDMA, it's not ideal but there is no other way to initialize the
+          * HTILE buffer.
+          */
+         mask = UINT32_MAX;
+      }
    }
 
    return mask;
@@ -1345,7 +1353,7 @@ radv_clear_htile(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
    uint32_t flush_bits = 0;
    uint32_t htile_mask;
 
-   htile_mask = radv_get_htile_mask(device, image, range->aspectMask);
+   htile_mask = radv_get_htile_mask(cmd_buffer, image, range->aspectMask);
 
    if (level_count != image->vk.mip_levels) {
       assert(pdev->info.gfx_level >= GFX10);

@@ -2399,9 +2399,19 @@ tc_create_image_handle(struct pipe_context *_pipe,
 {
    struct threaded_context *tc = threaded_context(_pipe);
    struct pipe_context *pipe = tc->pipe;
+   struct pipe_resource *resource = image->resource;
 
-   if (image->resource->target == PIPE_BUFFER)
-      tc_buffer_disable_cpu_storage(image->resource);
+   if (image->access & PIPE_IMAGE_ACCESS_WRITE &&
+       resource && resource->target == PIPE_BUFFER) {
+      struct threaded_resource *tres = threaded_resource(resource);
+
+      /* The CPU storage doesn't support writable buffer. */
+      tc_buffer_disable_cpu_storage(resource);
+
+      util_range_add(&tres->b, &tres->valid_buffer_range,
+                     image->u.buf.offset,
+                     image->u.buf.offset + image->u.buf.size);
+   }
 
    tc_sync(tc);
    return pipe->create_image_handle(pipe, image);

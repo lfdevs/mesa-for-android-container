@@ -2930,45 +2930,33 @@ emit_barrier(nir_to_brw_state &ntb)
 {
    const intel_device_info *devinfo = ntb.devinfo;
    const fs_builder &bld = ntb.bld;
+   const fs_builder ubld = bld.exec_all();
+   const fs_builder hbld = ubld.group(8 * reg_unit(devinfo), 0);
    fs_visitor &s = ntb.s;
 
    /* We are getting the barrier ID from the compute shader header */
    assert(gl_shader_stage_uses_workgroup(s.stage));
 
-   brw_reg payload = brw_vgrf(s.alloc.allocate(1), BRW_TYPE_UD);
-
-   /* Clear the message payload */
-   bld.exec_all().group(8, 0).MOV(payload, brw_imm_ud(0u));
+   /* Zero-initialize the payload */
+   brw_reg payload = hbld.MOV(brw_imm_ud(0u));
 
    if (devinfo->verx10 >= 125) {
       setup_barrier_message_payload_gfx125(bld, payload);
    } else {
       assert(gl_shader_stage_is_compute(s.stage));
 
-      uint32_t barrier_id_mask;
-      switch (devinfo->ver) {
-      case 7:
-      case 8:
-         barrier_id_mask = 0x0f000000u; break;
-      case 9:
-         barrier_id_mask = 0x8f000000u; break;
-      case 11:
-      case 12:
-         barrier_id_mask = 0x7f000000u; break;
-      default:
-         unreachable("barrier is only available on gen >= 7");
-      }
+      brw_reg barrier_id_mask =
+         brw_imm_ud(devinfo->ver == 9 ? 0x8f000000u : 0x7f000000u);
 
       /* Copy the barrier id from r0.2 to the message payload reg.2 */
       brw_reg r0_2 = brw_reg(retype(brw_vec1_grf(0, 2), BRW_TYPE_UD));
-      bld.exec_all().group(1, 0).AND(component(payload, 2), r0_2,
-                                     brw_imm_ud(barrier_id_mask));
+      ubld.group(1, 0).AND(component(payload, 2), r0_2, barrier_id_mask);
    }
 
    /* Emit a gateway "barrier" message using the payload we set up, followed
     * by a wait instruction.
     */
-   bld.exec_all().emit(SHADER_OPCODE_BARRIER, reg_undef, payload);
+   ubld.emit(SHADER_OPCODE_BARRIER, reg_undef, payload);
 }
 
 static void

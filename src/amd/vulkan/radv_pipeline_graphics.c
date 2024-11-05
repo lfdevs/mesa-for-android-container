@@ -2330,10 +2330,10 @@ radv_skip_graphics_pipeline_compile(const struct radv_device *device, const VkGr
          active_stages |= gfx_pipeline_lib->base.active_stages;
 
          for (uint32_t s = 0; s < MESA_VULKAN_SHADER_STAGES; s++) {
-            if (!gfx_pipeline_lib->base.base.shaders[i])
+            if (!gfx_pipeline_lib->base.base.shaders[s])
                continue;
 
-            binary_stages |= mesa_to_vk_shader_stage(i);
+            binary_stages |= mesa_to_vk_shader_stage(s);
          }
       }
    }

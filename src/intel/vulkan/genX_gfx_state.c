@@ -2311,6 +2311,13 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
     * because of another one is changing.
     */
 
+   /* Wa_16012775297 - Emit dummy VF statistics before each 3DSTATE_VF. */
+#if INTEL_WA_16012775297_GFX_VER
+   if (intel_needs_workaround(device->info, 16012775297) &&
+       BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_VF))
+      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
+#endif
+
    /* Since Wa_16011773973 will disable 3DSTATE_STREAMOUT, we need to reemit
     * it after.
     */

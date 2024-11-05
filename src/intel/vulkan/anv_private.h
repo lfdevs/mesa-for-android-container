@@ -3336,6 +3336,9 @@ enum anv_pipe_bits {
     * implement a workaround for Gfx9.
     */
    ANV_PIPE_POST_SYNC_BIT                    = (1 << 24),
+
+   /* L3 Fabric Flush */
+   ANV_PIPE_L3_FABRIC_FLUSH_BIT              = (1 << 25),
 };
 
 /* These bits track the state of buffer writes for queries. They get cleared
@@ -3398,7 +3401,8 @@ enum anv_query_bits {
    ANV_PIPE_HDC_PIPELINE_FLUSH_BIT | \
    ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT | \
    ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | \
-   ANV_PIPE_TILE_CACHE_FLUSH_BIT)
+   ANV_PIPE_TILE_CACHE_FLUSH_BIT | \
+   ANV_PIPE_L3_FABRIC_FLUSH_BIT)
 
 #define ANV_PIPE_STALL_BITS ( \
    ANV_PIPE_STALL_AT_SCOREBOARD_BIT | \

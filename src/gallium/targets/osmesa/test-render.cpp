@@ -229,7 +229,7 @@ TEST(OSMesaRenderTest, depth_get_no_attachment)
    uint32_t *depth;
    GLint dw = 1, dh = 1, depth_cpp = 1;
    ASSERT_EQ(false, OSMesaGetDepthBuffer(ctx.get(), &dw, &dh, &depth_cpp, (void **)&depth));
-   ASSERT_EQ(depth_cpp, NULL);
+   ASSERT_EQ(depth, nullptr);
    ASSERT_EQ(dw, 0);
    ASSERT_EQ(dh, 0);
    ASSERT_EQ(depth_cpp, 0);

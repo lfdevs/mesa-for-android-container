@@ -51,6 +51,37 @@ ir3_get_driver_ubo(nir_builder *b, struct ir3_driver_ubo *ubo)
    return nir_imm_int(b, ubo->idx);
 }
 
+static const struct glsl_type *
+get_driver_ubo_type(const struct ir3_driver_ubo *ubo)
+{
+   return glsl_array_type(glsl_uint_type(), ubo->size, 0);
+}
+
+/* Create or update the size of a driver-ubo: */
+void
+ir3_update_driver_ubo(nir_shader *nir, const struct ir3_driver_ubo *ubo, const char *name)
+{
+   if (ubo->idx < 0)
+      return;
+
+
+   nir_foreach_variable_in_shader(var, nir) {
+      if (var->data.mode != nir_var_mem_ubo)
+         continue;
+      if (var->data.binding != ubo->idx)
+         continue;
+
+      /* UBO already exists, make sure it is big enough: */
+      if (glsl_array_size(var->type) < ubo->size)
+         var->type = get_driver_ubo_type(ubo);
+   }
+
+   /* UBO variable does not exist yet, so create it: */
+   nir_variable *var =
+      nir_variable_create(nir, nir_var_mem_ubo, get_driver_ubo_type(ubo), name);
+   var->data.driver_location = ubo->idx;
+}
+
 nir_def *
 ir3_load_driver_ubo(nir_builder *b, unsigned components,
                     struct ir3_driver_ubo *ubo,

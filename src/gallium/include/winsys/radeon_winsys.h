@@ -873,10 +873,10 @@ static void radeon_canonicalize_bo_flags(enum radeon_bo_domain *_domain,
    unsigned flags = *_flags;
 
    /* Only set 1 domain, e.g. ignore GTT if VRAM is set. */
-   if (domain)
-      domain = BITFIELD_BIT(ffs(domain) - 1);
-   else
+   if (domain == RADEON_DOMAIN_VRAM_GTT)
       domain = RADEON_DOMAIN_VRAM;
+   else
+      assert(util_bitcount(domain) == 1);
 
    switch (domain) {
    case RADEON_DOMAIN_VRAM:

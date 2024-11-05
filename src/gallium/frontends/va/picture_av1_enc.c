@@ -84,17 +84,18 @@ static unsigned av1_uvlc(struct vl_vlc *vlc)
 
 static unsigned av1_uleb128(struct vl_vlc *vlc)
 {
-   unsigned value = 0;
+   uint64_t value = 0;
    unsigned leb128Bytes = 0;
    unsigned i;
 
    for (i = 0; i < 8; ++i) {
       leb128Bytes = av1_f(vlc, 8);
-      value |= ((leb128Bytes & 0x7f) << (i * 7));
+      value |= ((uint64_t)(leb128Bytes & 0x7f) << (i * 7));
       if (!(leb128Bytes & 0x80))
          break;
    }
 
+   assert(value <= UINT32_MAX);
    return value;
 }
 

@@ -3132,7 +3132,7 @@ pvr_isp_prim_block_tsp_vertex_block(const struct pvr_device_info *dev_info,
          [Z] = z_present ? 1.0f / (float)src->surface.depth : 0.0f,
       };
       float z_pos = (src->filter < PVR_FILTER_LINEAR)
-                       ? floor(src->surface.z_position + 0.5f)
+                       ? floor(src->surface.z_position) + 0.5f
                        : src->surface.z_position;
 
       pvr_tsp_floats(dev_info,

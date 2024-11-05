@@ -501,6 +501,20 @@ anv_trtt_bind_add(struct anv_device *device,
       anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
                                    trtt->l3_addr + l3_index *
                                    sizeof(uint64_t), l2_addr);
+
+      /* We have just created a new L2 table. Other resources may already have
+       * been pointing to this L2 table relying on the fact that it was marked
+       * as NULL, so now we need to mark every one of its entries as NULL in
+       * order to preserve behavior for those entries.
+       */
+      for (int i = 0; i < 512; i++) {
+         if (i != l2_index) {
+            trtt->l2_mirror[l3_index * 512 + i] = ANV_TRTT_L3L2_NULL_ENTRY;
+            anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
+                                         l2_addr + i * sizeof(uint64_t),
+                                         ANV_TRTT_L3L2_NULL_ENTRY);
+         }
+      }
    }
    assert(l2_addr != 0 && l2_addr != ANV_TRTT_L3L2_NULL_ENTRY);
 
@@ -638,6 +652,11 @@ anv_sparse_bind_trtt(struct anv_device *device,
     * numbers are so small that a little overestimation won't hurt.
     *
     * We have assertions below to catch estimation errors.
+    *
+    * TODO: a bug fix caused us to put that "+ 1024" in the l3l2 capacity so
+    * now our estimations are super overestimating things in most cases, as
+    * most cases are still using a total capacity of just 1 or 2. We should
+    * replace this whole thing with something more efficient.
     */
    int l3l2_binds_capacity = 1;
    int l1_binds_capacity = 0;
@@ -645,7 +664,7 @@ anv_sparse_bind_trtt(struct anv_device *device,
       assert(sparse_submit->binds[b].size % (64 * 1024) == 0);
       int pages = sparse_submit->binds[b].size / (64 * 1024);
       l1_binds_capacity += pages;
-      l3l2_binds_capacity += (pages / 1024 + 1) * 2;
+      l3l2_binds_capacity += (pages / 1024 + 1) * 2 + 1024;
    }
 
    /* Turn a series of virtual address maps, into a list of L3/L2/L1 TRTT page
@@ -656,7 +675,7 @@ anv_sparse_bind_trtt(struct anv_device *device,
    uint32_t n_l3l2_binds = 0, n_l1_binds = 0;
    for (int b = 0; b < sparse_submit->binds_len && result == VK_SUCCESS; b++) {
       struct anv_vm_bind *vm_bind = &sparse_submit->binds[b];
-      for (size_t i = 0; i < vm_bind->size && result == VK_SUCCESS; i += 64 * 1024) {
+      for (uint64_t i = 0; i < vm_bind->size && result == VK_SUCCESS; i += 64 * 1024) {
          uint64_t trtt_addr = vm_bind->address + i;
          uint64_t dest_addr =
             (vm_bind->op == ANV_VM_BIND && vm_bind->bo) ?
@@ -666,6 +685,8 @@ anv_sparse_bind_trtt(struct anv_device *device,
          result = anv_trtt_bind_add(device, trtt_addr, dest_addr,
                                     l3l2_binds, &n_l3l2_binds,
                                     l1_binds, &n_l1_binds);
+         if (result != VK_SUCCESS)
+            goto error_stack_arrays;
       }
    }
 
@@ -675,14 +696,12 @@ anv_sparse_bind_trtt(struct anv_device *device,
    /* Convert the L3/L2/L1 TRTT page table updates in anv_trtt_bind elements
     * into MI commands.
     */
-   if (result == VK_SUCCESS) {
-      sparse_debug("trtt_binds: num_vm_binds:%02d l3l2:%04d l1:%04d\n",
-                   sparse_submit->binds_len, n_l3l2_binds, n_l1_binds);
+   sparse_debug("trtt_binds: num_vm_binds:%02d l3l2:%04d l1:%04d\n",
+                sparse_submit->binds_len, n_l3l2_binds, n_l1_binds);
 
-      if (n_l3l2_binds || n_l1_binds) {
-         anv_genX(device->info, write_trtt_entries)(
-            &submit->base, l3l2_binds, n_l3l2_binds, l1_binds, n_l1_binds);
-      }
+   if (n_l3l2_binds || n_l1_binds) {
+      anv_genX(device->info, write_trtt_entries)(
+         &submit->base, l3l2_binds, n_l3l2_binds, l1_binds, n_l1_binds);
    }
 
    STACK_ARRAY_FINISH(l1_binds);
@@ -727,6 +746,9 @@ anv_sparse_bind_trtt(struct anv_device *device,
 
    return VK_SUCCESS;
 
+ error_stack_arrays:
+   STACK_ARRAY_FINISH(l1_binds);
+   STACK_ARRAY_FINISH(l3l2_binds);
  error_add_bind:
    simple_mtx_unlock(&trtt->mutex);
    anv_async_submit_fini(&submit->base);

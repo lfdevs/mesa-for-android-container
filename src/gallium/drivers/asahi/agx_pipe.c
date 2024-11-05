@@ -2631,10 +2631,6 @@ agx_screen_create(int fd, struct renderonly *ro,
    driParseConfigFiles(config->options, config->options_info, 0, "asahi", NULL,
                        NULL, NULL, 0, NULL, 0);
 
-   /* Forward no16 flag from driconf */
-   if (driQueryOptionb(config->options, "no_fp16"))
-      agx_screen->dev.debug |= AGX_DBG_NO16;
-
    agx_screen->dev.fd = fd;
    agx_screen->dev.ro = ro;
    u_rwlock_init(&agx_screen->destroy_lock);
@@ -2644,6 +2640,12 @@ agx_screen_create(int fd, struct renderonly *ro,
       ralloc_free(agx_screen);
       return NULL;
    }
+
+   /* Forward no16 flag from driconf. This must happen after opening the device,
+    * since agx_open_device sets debug.
+    */
+   if (driQueryOptionb(config->options, "no_fp16"))
+      agx_screen->dev.debug |= AGX_DBG_NO16;
 
    screen->destroy = agx_destroy_screen;
    screen->get_screen_fd = agx_screen_get_fd;

@@ -1347,6 +1347,16 @@ element_sz(struct elk_reg reg)
 int elk_float_to_vf(float f);
 float elk_vf_to_float(unsigned char vf);
 
+static inline bool
+elk_type_is_float(enum elk_reg_type type)
+{
+   return type == ELK_REGISTER_TYPE_DF ||
+      type == ELK_REGISTER_TYPE_NF ||
+      type == ELK_REGISTER_TYPE_F ||
+      type == ELK_REGISTER_TYPE_VF ||
+      type == ELK_REGISTER_TYPE_HF;
+}
+
 #ifdef __cplusplus
 }
 #endif

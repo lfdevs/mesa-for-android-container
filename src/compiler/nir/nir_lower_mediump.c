@@ -994,9 +994,11 @@ opt_16bit_tex_srcs(nir_builder *b, nir_tex_instr *tex,
       /* Zero-extension (u16) and sign-extension (i16) have
        * the same behavior here - txf returns 0 if bit 15 is set
        * because it's out of bounds and the higher bits don't
-       * matter.
+       * matter. With the exception of a texel buffer, which could
+       * be arbitrary large.
        */
-      if (!can_opt_16bit_src(src->ssa, src_type, false))
+      bool sext_matters = tex->sampler_dim == GLSL_SAMPLER_DIM_BUF;
+      if (!can_opt_16bit_src(src->ssa, src_type, sext_matters))
          return false;
 
       opt_srcs |= (1 << i);

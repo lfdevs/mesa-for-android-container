@@ -1845,8 +1845,17 @@ brw_fs_opt_copy_propagation_defs(fs_visitor &s)
          if (source_progress) {
             instruction_progress = true;
             ++uses_deleted[def->dst.nr];
-            if (defs.get_use_count(def->dst) == uses_deleted[def->dst.nr])
+
+            /* We can copy propagate through an instruction like
+             *
+             *    mov.nz.f0.0(8) %2:D, -%78:D
+             *
+             * but deleting the instruction may alter the program.
+             */
+            if (def->conditional_mod == BRW_CONDITIONAL_NONE &&
+                defs.get_use_count(def->dst) == uses_deleted[def->dst.nr]) {
                def->remove(defs.get_block(def->dst), true);
+            }
          }
       }
 

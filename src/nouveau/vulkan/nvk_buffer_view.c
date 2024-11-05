@@ -35,7 +35,7 @@ nvk_get_buffer_format_features(struct nvk_physical_device *pdev,
             features |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
       }
 
-      if (p_format == PIPE_FORMAT_R32_UINT || p_format == PIPE_FORMAT_R32_SINT)
+      if (nvk_format_supports_atomics(&pdev->info, p_format))
          features |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
    }
 

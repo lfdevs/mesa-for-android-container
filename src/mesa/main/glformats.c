@@ -1336,7 +1336,10 @@ _mesa_is_compressed_format(const struct gl_context *ctx, GLenum format)
    switch (_mesa_get_format_layout(m_format)) {
    case MESA_FORMAT_LAYOUT_S3TC:
       if (!_mesa_is_format_srgb(m_format)) {
-         return _mesa_has_EXT_texture_compression_s3tc(ctx);
+         return _mesa_has_EXT_texture_compression_s3tc(ctx) ||
+                (_mesa_has_EXT_texture_compression_dxt1(ctx) &&
+                 (m_format == PIPE_FORMAT_DXT1_RGB ||
+                  m_format == PIPE_FORMAT_DXT1_RGBA));
       } else {
          return (_mesa_has_EXT_texture_sRGB(ctx) ||
             _mesa_has_EXT_texture_compression_s3tc_srgb(ctx)) &&

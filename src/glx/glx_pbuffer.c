@@ -286,14 +286,13 @@ __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
 
    if (pdraw) {
       if (attribute == GLX_SWAP_INTERVAL_EXT) {
-         *value = pdraw->psc->driScreen->getSwapInterval(pdraw);
+         *value = abs(pdraw->psc->driScreen->getSwapInterval(pdraw));
          return 1;
       } else if (attribute == GLX_MAX_SWAP_INTERVAL_EXT) {
          *value = pdraw->psc->driScreen->maxSwapInterval;
          return 1;
       } else if (attribute == GLX_LATE_SWAPS_TEAR_EXT) {
-         *value = __glXExtensionBitIsEnabled(pdraw->psc,
-                                             EXT_swap_control_tear_bit);
+         *value = pdraw->psc->driScreen->getSwapInterval(pdraw) < 0;
          return 1;
       }
    }

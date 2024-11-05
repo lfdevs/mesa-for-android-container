@@ -226,11 +226,11 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
             flags |= RADEON_SURF_NO_HTILE;
       }
 
-      /* TODO: Set these for scanout after display DCC is enabled. The reason these are not set is
-       * because they overlap DCC_OFFSET_256B and the kernel driver incorrectly reads DCC_OFFSET_256B
-       * on GFX12, which completely breaks the display code.
+      /* The kernel code translating tiling flags into a modifier was wrong
+       * until .58, so don't set these attributes for older versions.
        */
-      if (!is_imported && !(ptex->bind & PIPE_BIND_SCANOUT)) {
+      bool supports_display_dcc = sscreen->info.drm_minor >= 58;
+      if (!is_imported && (!(ptex->bind & PIPE_BIND_SCANOUT) || supports_display_dcc)) {
          enum pipe_format format = util_format_get_depth_only(ptex->format);
 
          /* These should be set for both color and Z/S. */

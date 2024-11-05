@@ -138,7 +138,11 @@ gem_context_set_hw_image(int drm_fd, uint32_t ctx_id,
    param.param = I915_CONTEXT_PARAM_RECOVERABLE;
    param.value = (uint64_t)(uintptr_t)&val;
 
-   ret = intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &param);
+   /* Force i915 to convert the "proto" context to be a "live" context, since
+    * the I915_CONTEXT_PARAM_CONTEXT_IMAGE parameter cannot be set on a "proto"
+    * context. See kernel docs for i915_gem_proto_context.
+    */
+   ret = intel_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &param);
    if (ret)
       return false;
 
@@ -621,7 +625,6 @@ main(int argc, char *argv[])
             .relocs_ptr       = 0,
             .flags            = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
                                 EXEC_OBJECT_PINNED |
-                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */ |
                                 EXEC_OBJECT_CAPTURE,
             .offset           = intel_canonical_address(init_bo->offset),
          };
@@ -643,7 +646,6 @@ main(int argc, char *argv[])
             .relocs_ptr       = 0,
             .flags            = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
                                 EXEC_OBJECT_PINNED |
-                                EXEC_OBJECT_WRITE /* to be able to wait on the BO */ |
                                 EXEC_OBJECT_CAPTURE,
             .offset           = intel_canonical_address(batch_bo->offset),
          };

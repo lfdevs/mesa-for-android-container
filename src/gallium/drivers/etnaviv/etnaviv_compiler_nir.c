@@ -286,7 +286,7 @@ const_src(struct etna_compile *c, nir_const_value *value, unsigned num_component
 static const uint8_t
 reg_swiz[NUM_REG_TYPES] = {
    [REG_TYPE_VEC4] = INST_SWIZ_IDENTITY,
-   [REG_TYPE_VIRT_SCALAR_X] = INST_SWIZ_IDENTITY,
+   [REG_TYPE_VIRT_SCALAR_X] = SWIZZLE(X, X, X, X),
    [REG_TYPE_VIRT_SCALAR_Y] = SWIZZLE(Y, Y, Y, Y),
    [REG_TYPE_VIRT_VEC2_XY] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_VEC2T_XY] = INST_SWIZ_IDENTITY,

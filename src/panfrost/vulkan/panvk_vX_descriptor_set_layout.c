@@ -190,7 +190,7 @@ panvk_per_arch(CreateDescriptorSetLayout)(
       /* Immutable samplers are ignored for now */
    }
 
-   _mesa_blake3_final(&hash_ctx, layout->hash);
+   _mesa_blake3_final(&hash_ctx, layout->vk.blake3);
 
    free(bindings);
    *pSetLayout = panvk_descriptor_set_layout_to_handle(layout);

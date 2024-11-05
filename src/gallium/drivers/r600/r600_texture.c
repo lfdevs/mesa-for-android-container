@@ -191,9 +191,16 @@ static int r600_init_surface(struct r600_common_screen *rscreen,
 	bool is_depth, is_stencil;
 	int r;
 	unsigned i, bpe, flags = 0;
+	struct pipe_resource ptmp;
 
 	is_depth = util_format_has_depth(desc);
 	is_stencil = util_format_has_stencil(desc);
+
+	if (unlikely(rscreen->gfx_level >= EVERGREEN && ptex->format == PIPE_FORMAT_S8_UINT_Z24_UNORM && (ptex->width0 & 31))) {
+		memcpy(&ptmp, ptex, sizeof(ptmp));
+		ptmp.width0 = (ptex->width0 + 31) & ~31;
+		ptex = &ptmp;
+	}
 
 	if (rscreen->gfx_level >= EVERGREEN && !is_flushed_depth &&
 	    ptex->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {

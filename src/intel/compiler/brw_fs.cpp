@@ -2992,6 +2992,8 @@ fs_visitor::run_vs()
 
    allocate_registers(true /* allow_spilling */);
 
+   brw_fs_workaround_source_arf_before_eot(*this);
+
    return !failed;
 }
 
@@ -3118,6 +3120,8 @@ fs_visitor::run_tcs()
 
    allocate_registers(true /* allow_spilling */);
 
+   brw_fs_workaround_source_arf_before_eot(*this);
+
    return !failed;
 }
 
@@ -3147,6 +3151,8 @@ fs_visitor::run_tes()
    brw_fs_workaround_emit_dummy_mov_instruction(*this);
 
    allocate_registers(true /* allow_spilling */);
+
+   brw_fs_workaround_source_arf_before_eot(*this);
 
    return !failed;
 }
@@ -3195,6 +3201,8 @@ fs_visitor::run_gs()
    brw_fs_workaround_emit_dummy_mov_instruction(*this);
 
    allocate_registers(true /* allow_spilling */);
+
+   brw_fs_workaround_source_arf_before_eot(*this);
 
    return !failed;
 }
@@ -3298,6 +3306,8 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       allocate_registers(allow_spilling);
    }
 
+   brw_fs_workaround_source_arf_before_eot(*this);
+
    return !failed;
 }
 
@@ -3335,6 +3345,8 @@ fs_visitor::run_cs(bool allow_spilling)
 
    allocate_registers(allow_spilling);
 
+   brw_fs_workaround_source_arf_before_eot(*this);
+
    return !failed;
 }
 
@@ -3364,6 +3376,8 @@ fs_visitor::run_bs(bool allow_spilling)
    brw_fs_workaround_emit_dummy_mov_instruction(*this);
 
    allocate_registers(allow_spilling);
+
+   brw_fs_workaround_source_arf_before_eot(*this);
 
    return !failed;
 }
@@ -3396,6 +3410,8 @@ fs_visitor::run_task(bool allow_spilling)
 
    allocate_registers(allow_spilling);
 
+   brw_fs_workaround_source_arf_before_eot(*this);
+
    return !failed;
 }
 
@@ -3426,6 +3442,8 @@ fs_visitor::run_mesh(bool allow_spilling)
    brw_fs_workaround_emit_dummy_mov_instruction(*this);
 
    allocate_registers(allow_spilling);
+
+   brw_fs_workaround_source_arf_before_eot(*this);
 
    return !failed;
 }

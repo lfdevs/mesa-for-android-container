@@ -29,6 +29,7 @@
 #include "dev/intel_debug.h"
 #include "genxml/genX_bits.h"
 #include "util/log.h"
+#include "util/u_math.h"
 
 #include "isl.h"
 #include "isl_gfx4.h"
@@ -3797,10 +3798,15 @@ isl_surf_get_image_range_B_tile(const struct isl_surf *surf,
                                       &z_offset_el,
                                       &array_slice);
 
+   struct isl_tile_info tile_info;
+   isl_surf_get_tile_info(surf, &tile_info);
+
    /* We want the range we return to be exclusive but the tile containing the
-    * last pixel (what we just calculated) is inclusive.  Add one.
+    * last pixel (what we just calculated) is inclusive. Add one and round up
+    * to the tile size.
     */
-   (*end_tile_B)++;
+   *end_tile_B = ALIGN_NPOT(*end_tile_B + 1, tile_info.phys_extent_B.w *
+                                             tile_info.phys_extent_B.h);
 
    assert(*end_tile_B <= surf->size_B);
 }

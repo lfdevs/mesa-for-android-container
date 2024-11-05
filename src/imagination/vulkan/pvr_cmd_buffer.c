@@ -1167,6 +1167,7 @@ pvr_sub_cmd_gfx_align_ds_subtiles(struct pvr_cmd_buffer *const cmd_buffer,
     */
    assert(list_last_entry(&cmd_buffer->sub_cmds, struct pvr_sub_cmd, link) ==
           prev_sub_cmd);
+   assert(prev_sub_cmd == cmd_buffer->state.current_sub_cmd);
 
    if (!pvr_ds_attachment_requires_zls(ds))
       return VK_SUCCESS;
@@ -1221,12 +1222,16 @@ pvr_sub_cmd_gfx_align_ds_subtiles(struct pvr_cmd_buffer *const cmd_buffer,
    };
 
    if (ds->load.d || ds->load.s) {
+      struct pvr_sub_cmd *new_sub_cmd;
+
       cmd_buffer->state.current_sub_cmd = NULL;
 
       result =
          pvr_cmd_buffer_start_sub_cmd(cmd_buffer, PVR_SUB_CMD_TYPE_TRANSFER);
       if (result != VK_SUCCESS)
          return result;
+
+      new_sub_cmd = cmd_buffer->state.current_sub_cmd;
 
       result = pvr_copy_image_to_buffer_region_format(cmd_buffer,
                                                       ds_image,
@@ -1237,7 +1242,7 @@ pvr_sub_cmd_gfx_align_ds_subtiles(struct pvr_cmd_buffer *const cmd_buffer,
       if (result != VK_SUCCESS)
          return result;
 
-      cmd_buffer->state.current_sub_cmd->transfer.serialize_with_frag = true;
+      new_sub_cmd->transfer.serialize_with_frag = true;
 
       result = pvr_cmd_buffer_end_sub_cmd(cmd_buffer);
       if (result != VK_SUCCESS)
@@ -1245,9 +1250,11 @@ pvr_sub_cmd_gfx_align_ds_subtiles(struct pvr_cmd_buffer *const cmd_buffer,
 
       /* Now we have to fiddle with cmd_buffer to place this transfer command
        * *before* the target gfx subcommand.
+       *
+       * Note the doc for list_move_to() is subtly wrong - item is placed
+       * directly *after* loc in the list, not "in front of".
        */
-      list_move_to(&cmd_buffer->state.current_sub_cmd->link,
-                   &prev_sub_cmd->link);
+      list_move_to(&new_sub_cmd->link, prev_sub_cmd->link.prev);
 
       cmd_buffer->state.current_sub_cmd = prev_sub_cmd;
    }

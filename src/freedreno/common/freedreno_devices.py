@@ -863,6 +863,18 @@ a7xx_740v3 = A7XXProps(
         enable_tp_ubwc_flag_hint = True,
     )
 
+a7xx_x1_85 = A7XXProps(
+        stsc_duplication_quirk = True,
+        has_event_write_sample_count = True,
+        ubwc_unorm_snorm_int_compatible = True,
+        supports_ibo_ubwc = True,
+        fs_must_have_non_zero_constlen_quirk = True,
+        # Most devices with a740 have blob v6xx which doesn't have
+        # this hint set. Match them for better compatibility by default.
+        enable_tp_ubwc_flag_hint = False,
+        compute_constlen_quirk = True,
+    )
+
 a7xx_750 = A7XXProps(
         has_event_write_sample_count = True,
         load_inline_uniforms_via_preamble_ldgk = True,
@@ -940,6 +952,26 @@ a730_raw_magic_regs = [
         [A6XXRegs.REG_A7XX_HLSQ_UNKNOWN_A9AD, 0x00000000],
         [A6XXRegs.REG_A7XX_GRAS_UNKNOWN_80F4, 0x00000000],
     ]
+
+a740_magic_regs = dict(
+        # PC_POWER_CNTL = 7,
+        TPL1_DBG_ECO_CNTL = 0x11100000,
+        GRAS_DBG_ECO_CNTL = 0x00004800,
+        SP_CHICKEN_BITS = 0x10001400,
+        UCHE_CLIENT_PF = 0x00000084,
+        # Blob uses 0x1f or 0x1f1f, however these values cause vertices
+        # corruption in some tests.
+        PC_MODE_CNTL = 0x0000003f,
+        SP_DBG_ECO_CNTL = 0x10000000,
+        RB_DBG_ECO_CNTL = 0x00000000,
+        RB_DBG_ECO_CNTL_blit = 0x00000000,  # is it even needed?
+        # HLSQ_DBG_ECO_CNTL = 0x0,
+        RB_UNKNOWN_8E01 = 0x0,
+        VPC_DBG_ECO_CNTL = 0x02000000,
+        UCHE_UNKNOWN_0E12 = 0x00000000,
+
+        RB_UNKNOWN_8E06 = 0x02080000,
+    )
 
 a740_raw_magic_regs = [
         [A6XXRegs.REG_A6XX_UCHE_CACHE_WAYS, 0x00040004],
@@ -1033,7 +1065,6 @@ add_gpus([
         GPUId(740), # Deprecated, used for dev kernels.
         GPUId(chip_id=0x43050a01, name="FD740"), # KGSL, no speedbin data
         GPUId(chip_id=0xffff43050a01, name="FD740"), # Default no-speedbin fallback
-        GPUId(chip_id=0xffff43050c01, name="Adreno X1-85"),
     ], A6xxGPUInfo(
         CHIP.A7XX,
         [a7xx_base, a7xx_740],
@@ -1044,25 +1075,23 @@ add_gpus([
         cs_shared_mem_size = 32 * 1024,
         wave_granularity = 2,
         fibers_per_sp = 128 * 2 * 16,
-        magic_regs = dict(
-            # PC_POWER_CNTL = 7,
-            TPL1_DBG_ECO_CNTL = 0x11100000,
-            GRAS_DBG_ECO_CNTL = 0x00004800,
-            SP_CHICKEN_BITS = 0x10001400,
-            UCHE_CLIENT_PF = 0x00000084,
-            # Blob uses 0x1f or 0x1f1f, however these values cause vertices
-            # corruption in some tests.
-            PC_MODE_CNTL = 0x0000003f,
-            SP_DBG_ECO_CNTL = 0x10000000,
-            RB_DBG_ECO_CNTL = 0x00000000,
-            RB_DBG_ECO_CNTL_blit = 0x00000000,  # is it even needed?
-            # HLSQ_DBG_ECO_CNTL = 0x0,
-            RB_UNKNOWN_8E01 = 0x0,
-            VPC_DBG_ECO_CNTL = 0x02000000,
-            UCHE_UNKNOWN_0E12 = 0x00000000,
+        magic_regs = a740_magic_regs,
+        raw_magic_regs = a740_raw_magic_regs,
+    ))
 
-            RB_UNKNOWN_8E06 = 0x02080000,
-        ),
+add_gpus([
+        GPUId(chip_id=0xffff43050c01, name="Adreno X1-85"),
+    ], A6xxGPUInfo(
+        CHIP.A7XX,
+        [a7xx_base, a7xx_x1_85],
+        num_ccu = 6,
+        tile_align_w = 96,
+        tile_align_h = 32,
+        num_vsc_pipes = 32,
+        cs_shared_mem_size = 32 * 1024,
+        wave_granularity = 2,
+        fibers_per_sp = 128 * 2 * 16,
+        magic_regs = a740_magic_regs,
         raw_magic_regs = a740_raw_magic_regs,
     ))
 
@@ -1080,25 +1109,7 @@ add_gpus([
         cs_shared_mem_size = 32 * 1024,
         wave_granularity = 2,
         fibers_per_sp = 128 * 2 * 16,
-        magic_regs = dict(
-            # PC_POWER_CNTL = 7,
-            TPL1_DBG_ECO_CNTL = 0x11100000,
-            GRAS_DBG_ECO_CNTL = 0x00004800,
-            SP_CHICKEN_BITS = 0x10001400,
-            UCHE_CLIENT_PF = 0x00000084,
-            # Blob uses 0x1f or 0x1f1f, however these values cause vertices
-            # corruption in some tests.
-            PC_MODE_CNTL = 0x0000003f,
-            SP_DBG_ECO_CNTL = 0x10000000,
-            RB_DBG_ECO_CNTL = 0x00000000,
-            RB_DBG_ECO_CNTL_blit = 0x00000000,  # is it even needed?
-            # HLSQ_DBG_ECO_CNTL = 0x0,
-            RB_UNKNOWN_8E01 = 0x00000000,
-            VPC_DBG_ECO_CNTL = 0x02000000,
-            UCHE_UNKNOWN_0E12 = 0x00000000,
-
-            RB_UNKNOWN_8E06 = 0x02080000,
-        ),
+        magic_regs = a740_magic_regs,
         raw_magic_regs = [
             [A6XXRegs.REG_A6XX_UCHE_CACHE_WAYS, 0x00040004],
             [A6XXRegs.REG_A6XX_TPL1_DBG_ECO_CNTL1, 0x00000700],

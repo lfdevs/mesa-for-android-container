@@ -276,6 +276,9 @@ struct fd_dev_info {
       bool enable_tp_ubwc_flag_hint;
 
       bool storage_8bit;
+
+      /* Whether only 256 vec4 constants are available for compute */
+      bool compute_constlen_quirk;
    } a7xx;
 };
 

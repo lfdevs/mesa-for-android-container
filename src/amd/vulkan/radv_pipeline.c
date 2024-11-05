@@ -607,7 +607,7 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
    NIR_PASS_V(stage->nir, radv_nir_lower_abi, gfx_level, stage, gfx_state, pdev->info.address32_hi);
    radv_optimize_nir_algebraic(
       stage->nir, io_to_mem || lowered_ngg || stage->stage == MESA_SHADER_COMPUTE || stage->stage == MESA_SHADER_TASK,
-      gfx_level >= GFX7);
+      gfx_level >= GFX8);
 
    NIR_PASS(_, stage->nir, nir_lower_fp16_casts, nir_lower_fp16_split_fp64);
 
@@ -1097,7 +1097,7 @@ radv_GetPipelineExecutableStatisticsKHR(VkDevice _device, const VkPipelineExecut
          break;
 
       case MESA_SHADER_FRAGMENT:
-         s->value.u64 += shader->info.ps.colors_written + !!shader->info.ps.writes_z +
+         s->value.u64 += DIV_ROUND_UP(util_bitcount(shader->info.ps.colors_written), 4) + !!shader->info.ps.writes_z +
                          !!shader->info.ps.writes_stencil + !!shader->info.ps.writes_sample_mask +
                          !!shader->info.ps.writes_mrt0_alpha;
          break;

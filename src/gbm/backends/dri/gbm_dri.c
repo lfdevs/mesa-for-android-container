@@ -358,33 +358,37 @@ dri_screen_create_sw(struct gbm_dri_device *dri, bool driver_name_is_inferred)
 }
 
 static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
-   { GBM_FORMAT_R8, __DRI_IMAGE_FORMAT_R8 },
-   { GBM_FORMAT_R16, __DRI_IMAGE_FORMAT_R16 },
-   { GBM_FORMAT_GR88, __DRI_IMAGE_FORMAT_GR88 },
-   { GBM_FORMAT_GR1616, __DRI_IMAGE_FORMAT_GR1616 },
-   { GBM_FORMAT_ARGB1555, __DRI_IMAGE_FORMAT_ARGB1555 },
-   { GBM_FORMAT_RGB565, __DRI_IMAGE_FORMAT_RGB565 },
-   { GBM_FORMAT_XRGB8888, __DRI_IMAGE_FORMAT_XRGB8888 },
-   { GBM_FORMAT_ARGB8888, __DRI_IMAGE_FORMAT_ARGB8888 },
-   { GBM_FORMAT_XBGR8888, __DRI_IMAGE_FORMAT_XBGR8888 },
-   { GBM_FORMAT_ABGR8888, __DRI_IMAGE_FORMAT_ABGR8888 },
-   { GBM_FORMAT_XRGB2101010, __DRI_IMAGE_FORMAT_XRGB2101010 },
-   { GBM_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ARGB2101010 },
-   { GBM_FORMAT_XBGR2101010, __DRI_IMAGE_FORMAT_XBGR2101010 },
-   { GBM_FORMAT_ABGR2101010, __DRI_IMAGE_FORMAT_ABGR2101010 },
-   { GBM_FORMAT_XBGR16161616, __DRI_IMAGE_FORMAT_XBGR16161616 },
-   { GBM_FORMAT_ABGR16161616, __DRI_IMAGE_FORMAT_ABGR16161616 },
-   { GBM_FORMAT_XBGR16161616F, __DRI_IMAGE_FORMAT_XBGR16161616F },
-   { GBM_FORMAT_ABGR16161616F, __DRI_IMAGE_FORMAT_ABGR16161616F },
+   { GBM_FORMAT_R8, PIPE_FORMAT_R8_UNORM },
+   { GBM_FORMAT_R16, PIPE_FORMAT_R16_UNORM },
+   { GBM_FORMAT_GR88, PIPE_FORMAT_R8G8_UNORM },
+   { GBM_FORMAT_GR1616, PIPE_FORMAT_R16G16_UNORM },
+   { GBM_FORMAT_ARGB1555, PIPE_FORMAT_B5G5R5A1_UNORM },
+   { GBM_FORMAT_RGB565, PIPE_FORMAT_B5G6R5_UNORM },
+   { GBM_FORMAT_BGRX8888, PIPE_FORMAT_X8R8G8B8_UNORM },
+   { GBM_FORMAT_BGRA8888, PIPE_FORMAT_A8R8G8B8_UNORM },
+   { GBM_FORMAT_RGBX8888, PIPE_FORMAT_X8B8G8R8_UNORM },
+   { GBM_FORMAT_RGBA8888, PIPE_FORMAT_A8B8G8R8_UNORM },
+   { GBM_FORMAT_XRGB8888, PIPE_FORMAT_B8G8R8X8_UNORM },
+   { GBM_FORMAT_ARGB8888, PIPE_FORMAT_B8G8R8A8_UNORM },
+   { GBM_FORMAT_XBGR8888, PIPE_FORMAT_R8G8B8X8_UNORM },
+   { GBM_FORMAT_ABGR8888, PIPE_FORMAT_R8G8B8A8_UNORM },
+   { GBM_FORMAT_XRGB2101010, PIPE_FORMAT_B10G10R10X2_UNORM },
+   { GBM_FORMAT_ARGB2101010, PIPE_FORMAT_B10G10R10A2_UNORM },
+   { GBM_FORMAT_XBGR2101010, PIPE_FORMAT_R10G10B10X2_UNORM },
+   { GBM_FORMAT_ABGR2101010, PIPE_FORMAT_R10G10B10A2_UNORM },
+   { GBM_FORMAT_XBGR16161616, PIPE_FORMAT_R16G16B16X16_UNORM },
+   { GBM_FORMAT_ABGR16161616, PIPE_FORMAT_R16G16B16A16_UNORM },
+   { GBM_FORMAT_XBGR16161616F, PIPE_FORMAT_R16G16B16X16_FLOAT },
+   { GBM_FORMAT_ABGR16161616F, PIPE_FORMAT_R16G16B16A16_FLOAT },
 };
 
 static int
-gbm_format_to_dri_format(uint32_t gbm_format)
+gbm_format_to_pipe_format(uint32_t gbm_format)
 {
    gbm_format = gbm_core.v0.format_canonicalize(gbm_format);
    for (size_t i = 0; i < ARRAY_SIZE(gbm_dri_visuals_table); i++) {
       if (gbm_dri_visuals_table[i].gbm_format == gbm_format)
-         return gbm_dri_visuals_table[i].dri_image_format;
+         return gbm_dri_visuals_table[i].pipe_format;
    }
 
    return 0;
@@ -402,7 +406,7 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
       return 0;
 
    format = gbm_core.v0.format_canonicalize(format);
-   if (gbm_format_to_dri_format(format) == 0)
+   if (gbm_format_to_pipe_format(format) == 0)
       return 0;
 
    /* If there is no query, fall back to the small table which was originally
@@ -438,7 +442,7 @@ gbm_dri_get_format_modifier_plane_count(struct gbm_device *gbm,
       return -1;
 
    format = gbm_core.v0.format_canonicalize(format);
-   if (gbm_format_to_dri_format(format) == 0)
+   if (gbm_format_to_pipe_format(format) == 0)
       return -1;
 
    if (!dri->image->queryDmaBufFormatModifierAttribs(
@@ -923,7 +927,7 @@ gbm_dri_bo_create(struct gbm_device *gbm,
 {
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_bo *bo;
-   int dri_format;
+   int pipe_format;
    unsigned dri_use = 0;
    uint64_t *mods_comp = NULL;
    uint64_t *mods_filtered = NULL;
@@ -943,8 +947,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    bo->base.v0.height = height;
    bo->base.v0.format = format;
 
-   dri_format = gbm_format_to_dri_format(format);
-   if (dri_format == 0) {
+   pipe_format = gbm_format_to_pipe_format(format);
+   if (pipe_format == 0) {
       errno = EINVAL;
       goto failed;
    }
@@ -1045,7 +1049,7 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    }
 
    bo->image = loader_dri_create_image(dri->screen, dri->image, width, height,
-                                       dri_format, dri_use,
+                                       pipe_format, dri_use,
                                        mods_filtered ? mods_filtered : modifiers,
                                        mods_filtered ? count_filtered : count,
                                        bo);

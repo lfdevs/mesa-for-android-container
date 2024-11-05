@@ -182,6 +182,9 @@ etna_set_shader_uniforms_dirty_flags(struct etna_shader_variant *sobj)
 
       case ETNA_UNIFORM_TEXRECT_SCALE_X:
       case ETNA_UNIFORM_TEXRECT_SCALE_Y:
+      case ETNA_UNIFORM_TEXTURE_WIDTH:
+      case ETNA_UNIFORM_TEXTURE_HEIGHT:
+      case ETNA_UNIFORM_TEXTURE_DEPTH:
          dirty |= ETNA_DIRTY_SAMPLER_VIEWS;
          break;
       }

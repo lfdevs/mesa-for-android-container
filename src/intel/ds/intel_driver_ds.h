@@ -59,6 +59,7 @@ enum intel_ds_stall_flag {
    INTEL_DS_PSS_STALL_SYNC_BIT               = BITFIELD_BIT(14),
    INTEL_DS_END_OF_PIPE_BIT                  = BITFIELD_BIT(15),
    INTEL_DS_CCS_CACHE_FLUSH_BIT              = BITFIELD_BIT(16),
+   INTEL_DS_L3_FABRIC_FLUSH_BIT              = BITFIELD_BIT(17),
 };
 
 enum intel_ds_tracepoint_flags {
